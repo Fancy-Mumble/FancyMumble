@@ -1,4 +1,4 @@
-import { ChevronRightIcon, HeadphonesOffIcon, ListenBadgeIcon, MicOffSmallIcon, ScreenShareIcon } from "../../../icons";
+import { ChevronRightIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MicOffSmallIcon, ScreenShareIcon } from "../../../icons";
 /**
  * ModernChannelList - a flat, always-visible channel viewer.
  *
@@ -21,7 +21,7 @@ import { useUserStats } from "../../../hooks/useUserStats";
 import { useStreamThumbnail } from "../../chat/useStreamPreview";
 import SwipeableCard from "../../elements/SwipeableCard";
 import { isMobile } from "../../../utils/platform";
-import { PERM_MOVE } from "../../../utils/permissions";
+import { PERM_MOVE, PERM_ENTER } from "../../../utils/permissions";
 import { useUserDrag, useChannelDropTarget } from "../../../utils/userMoveDnd";
 import { useAppStore } from "../../../store";
 import { PchatBadge } from "../PchatBadge";
@@ -43,6 +43,7 @@ interface ModernChannelListProps {
   readonly onContextMenu: (e: React.MouseEvent, channelId: number) => void;
   readonly onUserContextMenu?: (e: React.MouseEvent, user: UserEntry) => void;
   readonly onUserClick?: (session: number) => void;
+  readonly shakingChannelId?: number;
 }
 
 // -- Channel drop-target wrapper (drag-to-move users) -------------
@@ -211,6 +212,7 @@ export default function ModernChannelList({
   unreadCounts,
   talkingSessions,
   broadcastingSessions,
+  shakingChannelId,
   onSelectChannel,
   onJoinChannel,
   onContextMenu,
@@ -285,11 +287,13 @@ export default function ModernChannelList({
     const isCurrent = currentChannel === channel.id;
     const isCollapsed = collapsed.has(channel.id);
     const hasUsers = chUsers.length > 0;
+    const isShaking = shakingChannelId === channel.id;
+    const isLocked = !isCurrent && channel.permissions !== null && (channel.permissions & PERM_ENTER) === 0;
 
     return (
       <ChannelDropWrapper channelId={channel.id}>
       <div
-        className={`${styles.channelCard} ${isSelected ? styles.selected : ""} ${isCurrent ? styles.current : ""}`}
+        className={`${styles.channelCard} ${isSelected ? styles.selected : ""} ${isCurrent ? styles.current : ""} ${isShaking ? styles.shaking : ""} ${isLocked ? styles.locked : ""}`}
       >
         {/* Channel header row */}
         <div className={styles.headerRow}>
@@ -317,6 +321,11 @@ export default function ModernChannelList({
           >
             <span className={styles.channelName}>
               {channel.name || "Root"}
+              {isLocked && (
+                <span className={styles.lockBadge} title="No permission to join">
+                  <LockIcon width={11} height={11} />
+                </span>
+              )}
               {isListened && (
                 <span className={styles.listenBadge} title="Listening">
                   <ListenBadgeIcon width={12} height={12} />
@@ -364,7 +373,7 @@ export default function ModernChannelList({
   }, [
     usersByChannel, unreadCounts, listenedChannels, selectedChannel,
     currentChannel, collapsed, talkingSessions, broadcastingSessions,
-    toggleCollapsed, onSelectChannel, onJoinChannel, onContextMenu, onUserContextMenu, onUserClick,
+    shakingChannelId, toggleCollapsed, onSelectChannel, onJoinChannel, onContextMenu, onUserContextMenu, onUserClick,
   ]);
 
   return (

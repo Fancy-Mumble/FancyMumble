@@ -1,4 +1,4 @@
-import { HashIcon, HeadphonesOffIcon, ListenBadgeIcon, MicOffSmallIcon, ScreenShareIcon } from "../../../icons";
+import { HashIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MicOffSmallIcon, ScreenShareIcon } from "../../../icons";
 /**
  * ChannelIconList - a "Modern" channel viewer.
  *
@@ -20,7 +20,7 @@ import { useStreamThumbnail } from "../../chat/useStreamPreview";
 import SwipeableCard from "../../elements/SwipeableCard";
 import { isMobile } from "../../../utils/platform";
 import { useUserDrag, useChannelDropTarget } from "../../../utils/userMoveDnd";
-import { PERM_MOVE } from "../../../utils/permissions";
+import { PERM_MOVE, PERM_ENTER } from "../../../utils/permissions";
 import { useAppStore } from "../../../store";
 import { PchatBadge } from "../PchatBadge";
 import styles from "./ChannelIconList.module.css";
@@ -45,6 +45,7 @@ export interface ChannelIconListProps {
   readonly onContextMenu: (e: React.MouseEvent, channelId: number) => void;
   readonly onUserContextMenu?: (e: React.MouseEvent, user: UserEntry) => void;
   readonly onUserClick?: (session: number) => void;
+  readonly shakingChannelId?: number;
 }
 
 // -- Channel icon (description image or initials fallback) ---------
@@ -216,6 +217,7 @@ export default function ChannelIconList({
   unreadCounts,
   talkingSessions,
   broadcastingSessions,
+  shakingChannelId,
   onSelectChannel,
   onJoinChannel,
   onContextMenu,
@@ -277,6 +279,8 @@ export default function ChannelIconList({
     const isCurrent = currentChannel === channel.id;
     const isCollapsed = collapsed.has(channel.id);
     const hasUsers = chUsers.length > 0;
+    const isShaking = shakingChannelId === channel.id;
+    const isLocked = !isCurrent && channel.permissions !== null && (channel.permissions & PERM_ENTER) === 0;
 
     return (
       <ChannelDropWrapper channelId={channel.id}>
@@ -285,6 +289,8 @@ export default function ChannelIconList({
           styles.channelRow,
           isSelected ? styles.selected : "",
           isCurrent ? styles.current : "",
+          isShaking ? styles.shaking : "",
+          isLocked ? styles.locked : "",
         ].filter(Boolean).join(" ")}
       >
         <div className={styles.channelMain}>
@@ -299,6 +305,11 @@ export default function ChannelIconList({
           >
             <span className={styles.channelName}>
               {channel.name || "Root"}
+              {isLocked && (
+                <span className={styles.lockBadge} title="No permission to join">
+                  <LockIcon width={11} height={11} />
+                </span>
+              )}
               {isListened && (
                 <span className={styles.listenBadge} title="Listening">
                   <ListenBadgeIcon width={11} height={11} />
@@ -347,7 +358,7 @@ export default function ChannelIconList({
   }, [
     usersByChannel, unreadCounts, listenedChannels, selectedChannel,
     currentChannel, collapsed, talkingSessions, broadcastingSessions,
-    toggleCollapsed, onSelectChannel, onJoinChannel, onContextMenu, onUserContextMenu, onUserClick,
+    shakingChannelId, toggleCollapsed, onSelectChannel, onJoinChannel, onContextMenu, onUserContextMenu, onUserClick,
   ]);
 
   return (

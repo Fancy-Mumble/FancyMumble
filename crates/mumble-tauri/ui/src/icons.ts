@@ -44,6 +44,7 @@ export {
   EllipsisVertical as KebabMenuIcon,
   Key as KeyIcon,
   Ear as ListenBadgeIcon,
+  Lock as LockIcon,
   Lock as LockSvg,
   LogOut as LogoutIcon,
   Maximize2 as MaximizeIcon,

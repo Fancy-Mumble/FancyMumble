@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } fro
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useAppStore } from "../../store";
+import { listen } from "@tauri-apps/api/event";
 import type { ChannelEntry, UserEntry, SidebarSections } from "../../types";
 import { getPreferences, updatePreferences } from "../../preferencesStorage";
 const SidebarSearchView = lazy(() => import("./SidebarSearchView").then((m) => ({ default: m.SidebarSearchView })));
@@ -150,7 +151,20 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Developer mode: show recording button.
+  const [shakingChannelId, setShakingChannelId] = useState<number | undefined>();
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const unlistenPromise = listen<{ channel_id: number }>("channel-denied", (event) => {
+      setShakingChannelId(event.payload.channel_id);
+      clearTimeout(timer);
+      timer = setTimeout(() => setShakingChannelId(undefined), 600);
+    });
+    return () => {
+      clearTimeout(timer);
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
   const [devMode, setDevMode] = useState(false);
   const [showRecordingModal, setShowRecordingModal] = useState(false);
   useEffect(() => {
@@ -425,6 +439,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             unreadCounts={unreadCounts}
             talkingSessions={talkingSessions}
             broadcastingSessions={broadcastingSessions}
+            shakingChannelId={shakingChannelId}
             onSelectChannel={(id) => { selectChannel(id); onChannelSelect?.(); }}
             onJoinChannel={(id) => { joinChannel(id); selectChannel(id); onChannelSelect?.(); }}
             onContextMenu={openCtxMenu}
@@ -443,6 +458,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             unreadCounts={unreadCounts}
             talkingSessions={talkingSessions}
             broadcastingSessions={broadcastingSessions}
+            shakingChannelId={shakingChannelId}
             onSelectChannel={(id) => { selectChannel(id); onChannelSelect?.(); }}
             onJoinChannel={(id) => { joinChannel(id); selectChannel(id); onChannelSelect?.(); }}
             onContextMenu={openCtxMenu}
@@ -459,6 +475,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             currentChannel={currentChannel}
             listenedChannels={listenedChannels}
             unreadCounts={unreadCounts}
+            shakingChannelId={shakingChannelId}
             onSelectChannel={(id) => { selectChannel(id); onChannelSelect?.(); }}
             onJoinChannel={(id) => { joinChannel(id); selectChannel(id); onChannelSelect?.(); }}
             onContextMenu={openCtxMenu}

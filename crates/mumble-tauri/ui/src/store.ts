@@ -962,7 +962,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   joinChannel: async (id) => {
     try {
       await invoke("join_channel", { channelId: id });
-      set({ currentChannel: id });
     } catch (e) {
       console.error("join_channel error:", e);
     }

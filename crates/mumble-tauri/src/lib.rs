@@ -38,6 +38,8 @@ pub(crate) static LOG_RELOAD_HANDLE: OnceLock<reload::Handle<EnvFilter, tracing_
 pub fn run() {
     let _ = rustls::crypto::ring::default_provider().install_default();
 
+    configure_runtime_env();
+
     if platform::try_single_instance() {
         return;
     }
@@ -94,6 +96,34 @@ pub fn run() {
                 platform::teardown();
             }
         });
+}
+
+/// Configure environment variables that influence the Tokio runtime
+/// that Tauri spawns.
+///
+/// Must be called before any Tokio code runs so the settings are picked
+/// up at initialisation time.
+///
+/// **Tokio** (`TOKIO_WORKER_THREADS`):
+/// Tauri uses `#[tokio::main]` internally with default worker count =
+/// number of logical CPUs.  Mumble I/O is light (a TCP socket, a UDP
+/// socket, occasional file I/O); 4 worker threads is plenty.  Each thread
+/// reserves ~2 MB of address space for its stack, so capping this saves
+/// stack reservations on machines with many cores.
+///
+/// We deliberately do NOT pass `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`
+/// flags here.  Experimenting with `--in-process-gpu` saved ~40 MB of
+/// private memory but cost ~7% sustained idle CPU (battery drain),
+/// because the in-process compositor never goes fully idle.  Keeping
+/// the WebView2 defaults turns out to be the better trade-off.
+fn configure_runtime_env() {
+    set_env_if_unset("TOKIO_WORKER_THREADS", "4");
+}
+
+fn set_env_if_unset(key: &str, value: &str) {
+    if std::env::var_os(key).is_none() {
+        std::env::set_var(key, value);
+    }
 }
 
 fn init_logging() {

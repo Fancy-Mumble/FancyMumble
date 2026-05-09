@@ -2,11 +2,9 @@
 
 use mumble_protocol::command;
 use mumble_protocol::persistent::PchatProtocol;
-use tauri::Emitter;
 use tracing::debug;
 
 use super::parse_pchat_protocol_str;
-use super::types::CurrentChannelPayload;
 use super::AppState;
 
 impl AppState {
@@ -33,8 +31,7 @@ impl AppState {
     pub async fn join_channel(&self, channel_id: u32) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
-            let mut state = __session.lock().map_err(|e| e.to_string())?;
-            state.current_channel = Some(channel_id);
+            let state = __session.lock().map_err(|e| e.to_string())?;
             state.conn.client_handle.clone()
         };
 
@@ -42,13 +39,6 @@ impl AppState {
             let _ = handle
                 .send(command::JoinChannel { channel_id })
                 .await;
-            let _ = handle
-                .send(command::PermissionQuery { channel_id })
-                .await;
-        }
-
-        if let Some(app) = self.app_handle() {
-            let _ = app.emit("current-channel-changed", CurrentChannelPayload { channel_id });
         }
 
         Ok(())

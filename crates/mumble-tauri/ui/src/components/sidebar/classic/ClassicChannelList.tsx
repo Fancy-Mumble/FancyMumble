@@ -1,4 +1,4 @@
-import { ChevronRightIcon, ListenBadgeIcon } from "../../../icons";
+import { ChevronRightIcon, ListenBadgeIcon, LockIcon } from "../../../icons";
 /**
  * ClassicChannelList - the traditional Mumble hierarchical channel tree.
  *
@@ -15,6 +15,7 @@ import { colorFor } from "../UserListItem";
 import { useUserAvatar } from "../../../lazyBlobs";
 import { PchatBadge } from "../PchatBadge";
 import { useChannelDropTarget } from "../../../utils/userMoveDnd";
+import { PERM_ENTER } from "../../../utils/permissions";
 import styles from "./ClassicChannelList.module.css";
 
 const MAX_STACKED = 3;
@@ -29,6 +30,7 @@ export interface ClassicChannelListProps {
   readonly onSelectChannel: (id: number) => void;
   readonly onJoinChannel: (id: number) => void;
   readonly onContextMenu: (e: React.MouseEvent, channelId: number) => void;
+  readonly shakingChannelId?: number;
 }
 
 // --- Stacked avatars ---------------------------------------------
@@ -128,6 +130,7 @@ export default function ClassicChannelList({
   currentChannel,
   listenedChannels,
   unreadCounts,
+  shakingChannelId,
   onSelectChannel,
   onJoinChannel,
   onContextMenu,
@@ -201,6 +204,8 @@ export default function ClassicChannelList({
     const isSelected = selectedChannel === channel.id;
     const isCurrent = channel.id === currentChannel;
     const indentPx = depth * 16;
+    const isShaking = shakingChannelId === channel.id;
+    const isLocked = !isCurrent && channel.permissions !== null && (channel.permissions & PERM_ENTER) === 0;
 
     if (hasChildren) {
       const totalUsers = subtreeUserCount(channel.id);
@@ -213,6 +218,8 @@ export default function ClassicChannelList({
               styles.folderHeader,
               isSelected ? styles.active : "",
               isCurrent ? styles.currentChannel : "",
+              isShaking ? styles.shaking : "",
+              isLocked ? styles.locked : "",
             ].filter(Boolean).join(" ")}
             style={{ paddingLeft: `${4 + indentPx}px` }}
             role="toolbar"
@@ -236,6 +243,11 @@ export default function ClassicChannelList({
             >
               <span className={styles.channelName}>
                 {channel.name || "Unnamed"}
+                {isLocked && (
+                  <span className={styles.lockIndicator} title="No permission to join">
+                    <LockIcon width={11} height={11} />
+                  </span>
+                )}
                 {isListened && (
                   <span className={styles.listenIndicator} title="Listening">
                     <ListenBadgeIcon width={12} height={12} />
@@ -269,6 +281,8 @@ export default function ClassicChannelList({
           styles.channelItem,
           isSelected ? styles.active : "",
           isCurrent ? styles.currentChannel : "",
+          isShaking ? styles.shaking : "",
+          isLocked ? styles.locked : "",
         ].filter(Boolean).join(" ")}
         style={{ paddingLeft: `${12 + indentPx}px` }}
         onClick={() => onSelectChannel(channel.id)}
@@ -278,6 +292,11 @@ export default function ClassicChannelList({
         <div className={styles.channelInfo}>
           <span className={styles.channelName}>
             {channel.name || "Root"}
+            {isLocked && (
+              <span className={styles.lockIndicator} title="No permission to join">
+                <LockIcon width={11} height={11} />
+              </span>
+            )}
             {isListened && (
               <span className={styles.listenIndicator} title="Listening">
                 <ListenBadgeIcon width={12} height={12} />

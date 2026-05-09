@@ -380,6 +380,11 @@ pub(crate) struct ListenDeniedPayload {
 }
 
 #[derive(Clone, Serialize)]
+pub(crate) struct ChannelDeniedPayload {
+    pub channel_id: u32,
+}
+
+#[derive(Clone, Serialize)]
 pub(crate) struct PermissionDeniedPayload {
     pub deny_type: Option<i32>,
     pub reason: Option<String>,
