@@ -57,6 +57,7 @@ export {
   Minus as MinimizeIcon,
   Moon as MoonIcon,
   Pause as PauseIcon,
+  PictureInPicture2 as PopoutIcon,
   Phone as PhoneIcon,
   PhoneOff as PhoneOffIcon,
   Play as PlayIcon,

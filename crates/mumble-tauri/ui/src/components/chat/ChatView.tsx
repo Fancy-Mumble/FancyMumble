@@ -503,21 +503,31 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch }: ChatV
 
   // Determine which screen share panel to show (own broadcast or watching someone).
   // watchingSession takes priority: a broadcaster can watch another stream.
-  const activeScreenShare = screenShare.watchingSession !== null
-    ? { session: screenShare.watchingSession, isOwn: false, stream: null }
-    : screenShare.isBroadcasting
-      ? { session: ownSession!, isOwn: true, stream: screenShare.localStream }
-      : null;
+  // If the watched stream is currently displayed in a detached popout window,
+  // suppress the in-chat panel so we do not run two viewer peer connections
+  // for the same broadcaster.  When the popout closes, the popped-out set
+  // clears and the in-chat viewer (or banner) reappears automatically.
+  const poppedOutStreamSessions = useAppStore((s) => s.poppedOutStreamSessions);
+  let activeScreenShare: { session: number; isOwn: boolean; stream: MediaStream | null } | null = null;
+  if (screenShare.watchingSession !== null
+      && !poppedOutStreamSessions.has(screenShare.watchingSession)) {
+    activeScreenShare = { session: screenShare.watchingSession, isOwn: false, stream: null };
+  } else if (screenShare.isBroadcasting) {
+    activeScreenShare = { session: ownSession!, isOwn: true, stream: screenShare.localStream };
+  }
 
   // Other users broadcasting in the current channel (for the notification banner).
+  // Sessions whose stream is already open in a detached popout window are
+  // excluded so the user does not see a redundant "watch" prompt.
   const channelBroadcasters = useMemo(() => {
     if (screenShare.broadcastingSessions.size === 0) return [];
     return users
       .filter((u) => u.channel_id === selectedChannel
         && screenShare.broadcastingSessions.has(u.session)
-        && u.session !== ownSession)
+        && u.session !== ownSession
+        && !poppedOutStreamSessions.has(u.session))
       .map((u) => ({ session: u.session, name: u.name }));
-  }, [users, selectedChannel, screenShare.broadcastingSessions, ownSession]);
+  }, [users, selectedChannel, screenShare.broadcastingSessions, ownSession, poppedOutStreamSessions]);
 
   // Show StreamFocusView when watching someone, or broadcasting with others.
   // Using a single instance keeps layout state stable across swap transitions.

@@ -363,6 +363,11 @@ interface AppState {
   drawingActiveChannels: Set<number>;
   /** Session IDs of other users currently broadcasting. */
   broadcastingSessions: Set<number>;
+  /** Session IDs whose live screen-share is currently displayed in a
+   *  detached popout window.  The main window suppresses the
+   *  "is sharing" banner for these sessions so the user does not see
+   *  a redundant prompt to watch a stream they are already viewing. */
+  poppedOutStreamSessions: Set<number>;
   /** Session ID we are currently watching (null if not watching). */
   watchingSession: number | null;
   /** The Mumble session ID of the tab whose viewer is currently watching
@@ -649,6 +654,7 @@ const INITIAL: Pick<
   | "desktopDrawingOverlayOpen"
   | "drawingActiveChannels"
   | "broadcastingSessions"
+  | "poppedOutStreamSessions"
   | "watchingSession"
   | "watchingOwnSession"
   | "channelPersistence"
@@ -719,6 +725,7 @@ const INITIAL: Pick<
   desktopDrawingOverlayOpen: false,
   drawingActiveChannels: new Set(),
   broadcastingSessions: new Set(),
+  poppedOutStreamSessions: new Set(),
   watchingSession: null,
   watchingOwnSession: null,
   channelPersistence: {},
@@ -2383,6 +2390,17 @@ export async function initEventListeners(
     // Audio transport mode changed (UDP vs TCP tunnel).
     await listen<boolean>("audio-transport-changed", (event) => {
       useAppStore.setState({ udpActive: event.payload });
+    }),
+
+    // Stream popout windows broadcast their open/close state so the main
+    // window can hide its "is sharing" banner for sessions whose stream
+    // is already being viewed in a detached window.
+    await listen<{ session: number; opened: boolean }>("stream-popout-state", (event) => {
+      const { session, opened } = event.payload;
+      const prev = useAppStore.getState().poppedOutStreamSessions;
+      const next = new Set(prev);
+      if (opened) next.add(session); else next.delete(session);
+      useAppStore.setState({ poppedOutStreamSessions: next });
     }),
 
     // User talking state changed (audio transmission start/stop).

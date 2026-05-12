@@ -85,6 +85,28 @@ pub fn run() {
             {
                 updater::show_main_window(&window.app_handle().clone());
             }
+            // Stream popout cleanup: when one of our `popout-stream-*`
+            // windows is destroyed (any cause), tell the main window so
+            // it can restore the in-chat viewer / watch banner.
+            #[cfg(not(target_os = "android"))]
+            if matches!(event, tauri::WindowEvent::Destroyed)
+                && window.label().starts_with("popout-stream-")
+            {
+                use tauri::{Emitter, Manager};
+                if let Some(state) = window.try_state::<AppState>() {
+                    let session = state
+                        .popout_stream_sessions
+                        .lock()
+                        .ok()
+                        .and_then(|mut m| m.remove(window.label()));
+                    if let Some(session) = session {
+                        let _ = window.app_handle().emit(
+                            "stream-popout-state",
+                            serde_json::json!({ "session": session, "opened": false }),
+                        );
+                    }
+                }
+            }
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -419,6 +441,8 @@ macro_rules! all_command_handlers {
             commands::image::process_background,
             commands::popout::open_image_popout,
             commands::popout::take_popout_image,
+            commands::popout::open_stream_popout,
+            commands::popout::take_popout_stream,
             commands::draw_overlay::open_drawing_overlay,
             commands::draw_overlay::close_drawing_overlay,
             commands::draw_overlay::take_drawing_overlay_context,
