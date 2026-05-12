@@ -20,6 +20,7 @@ import { isUpdaterWindow } from "./updater";
 import UpdaterWindow from "./updater/UpdaterWindow";
 import PopoutPage from "./pages/PopoutPage";
 import DrawOverlayPage from "./pages/DrawOverlayPage";
+import OnboardingModal from "./components/onboarding/OnboardingModal";
 
 const ChatPage = lazy(() => import("./pages/ChatPage"));
 const SettingsPage = lazy(() => import("./pages/settings"));
@@ -212,6 +213,7 @@ function MainApp() {
           )}
         </Routes>
       </Suspense>
+      <OnboardingModal />
     </div>
   );
 }

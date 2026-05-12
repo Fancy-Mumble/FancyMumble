@@ -238,6 +238,11 @@ pub fn decode_udp_message(data: &[u8]) -> Result<UdpMessage> {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "panic-on-failure is acceptable in test code"
+)]
 mod tests {
     use super::*;
 

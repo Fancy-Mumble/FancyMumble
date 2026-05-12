@@ -115,7 +115,7 @@ pub fn run() {
 /// flags here.  Experimenting with `--in-process-gpu` saved ~40 MB of
 /// private memory but cost ~7% sustained idle CPU (battery drain),
 /// because the in-process compositor never goes fully idle.  Keeping
-/// the WebView2 defaults turns out to be the better trade-off.
+/// the `WebView2` defaults turns out to be the better trade-off.
 fn configure_runtime_env() {
     set_env_if_unset("TOKIO_WORKER_THREADS", "4");
 }
@@ -403,6 +403,11 @@ macro_rules! all_command_handlers {
             commands::admin::update_ban_list,
             commands::admin::request_acl,
             commands::admin::update_acl,
+            commands::onboarding::get_onboarding_config,
+            commands::onboarding::get_onboarding_response,
+            commands::onboarding::save_onboarding_config,
+            commands::onboarding::submit_onboarding_response,
+            commands::onboarding::request_onboarding_response,
             commands::keyshare::confirm_custodians,
             commands::keyshare::accept_custodian_changes,
             commands::keyshare::approve_key_share,

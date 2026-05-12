@@ -28,6 +28,7 @@ mod handler;
 pub(crate) mod hash_names;
 pub(crate) mod local_cache;
 mod messaging;
+mod onboarding;
 pub mod offload;
 mod offload_ops;
 pub(crate) mod pchat;
@@ -194,6 +195,11 @@ pub(super) struct SharedState {
     /// Certificate label used for this connection (if any), kept so
     /// `list_servers` can surface it without re-querying the connect args.
     pub cert_label: Option<String>,
+    /// Latest onboarding config broadcast by the server (`None` until a
+    /// `FancyOnboardingConfig` arrives, e.g. on legacy servers).
+    pub onboarding: Option<OnboardingConfig>,
+    /// Local user's onboarding response, fetched on demand.
+    pub onboarding_response: Option<OnboardingResponse>,
 }
 
 // --- Tauri-managed application state ------------------------------

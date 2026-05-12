@@ -48,6 +48,8 @@ import type { WatchSession, WatchSyncPayload } from "./components/chat/watch/wat
 import { applyWatchSyncEvent } from "./components/chat/watch/watchStore";
 import { applyReaction, resetReactions, setServerCustomReactions, type ServerCustomReaction } from "./components/chat/reactionStore";
 import { applyReadStates, clearReadReceipts } from "./components/chat/readReceiptStore";
+import { useOnboardingStore } from "./components/onboarding/onboardingStore";
+import type { OnboardingConfigEvent, OnboardingResponseEvent } from "./types";
 import { offloadManager } from "./messageOffload";
 import { getSilencedChannels, setSilencedChannel, getUserVolumes, saveUserVolume, getMutedPushChannels, setMutedPushChannel, getPreferences, updatePreferences } from "./preferencesStorage";
 import { loadProfileData } from "./pages/settings/profileData";
@@ -904,6 +906,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         offloadManager.dispose().catch(() => {});
         volumeAppliedSessions.clear();
         clearReadReceipts();
+        useOnboardingStore.getState().clear();
         set({ ...INITIAL });
         invoke("update_badge_count", { count: null }).catch(() => {});
         navigateRef?.("/");
@@ -971,6 +974,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     resetReactions();
     clearReadReceipts();
+    useOnboardingStore.getState().clear();
     set({ ...INITIAL });
     invoke("update_badge_count", { count: null }).catch(() => {});
     useAppStore.getState().refreshSessions().catch(() => {});
@@ -2002,6 +2006,17 @@ export async function initEventListeners(
           // Apply persisted per-user volumes to backend for all current users.
           applyStoredVolumesToNewUsers();
 
+          // Hydrate onboarding state for this server (no-op on legacy
+          // Mumble - the store gates on serverFancyVersion >= 0.3.1).
+          try {
+            const { activeServerId, serverFancyVersion } = useAppStore.getState();
+            await useOnboardingStore
+              .getState()
+              .hydrate(activeServerId ?? null, serverFancyVersion);
+          } catch {
+            // best-effort; hydrate already swallows decode failures.
+          }
+
           // Visible bootstrap is done - drop the loading bar and reveal the chat view.
           useAppStore.setState({ bootstrapStage: null });
           navigate("/chat");
@@ -2115,6 +2130,7 @@ export async function initEventListeners(
         offloadManager.dispose().catch(() => {});
         volumeAppliedSessions.clear();
         clearReadReceipts();
+        useOnboardingStore.getState().clear();
         const { error: currentError, passwordRequired: pwRequired, pendingConnect: pending } = useAppStore.getState();
         // If a password prompt is already pending, keep the rejection error
         // instead of overwriting it with a generic disconnect message.
@@ -2564,6 +2580,38 @@ export async function initEventListeners(
         }));
       },
     ),
+  );
+
+  // -- Onboarding workflow events ---------------------------------
+
+  unlisteners.push(
+    await listen<OnboardingConfigEvent>("onboarding-config", (event) => {
+      const { config } = event.payload;
+      const onboarding = useOnboardingStore.getState();
+      onboarding.setConfig(config);
+
+      // If a fresh config arrived and the user has not answered the
+      // current revision yet, surface the modal automatically.
+      const { response } = useOnboardingStore.getState();
+      if (
+        config?.enabled &&
+        (!response || response.config_revision < config.revision)
+      ) {
+        const serverId = useAppStore.getState().activeServerId ?? null;
+        const dismissed = serverId
+          ? sessionStorage.getItem(`onboarding-dismissed:${serverId}`) === "1"
+          : false;
+        if (!dismissed) {
+          onboarding.setModalOpen(true);
+        }
+      }
+    }),
+  );
+
+  unlisteners.push(
+    await listen<OnboardingResponseEvent>("onboarding-response", (event) => {
+      useOnboardingStore.getState().setResponse(event.payload.response ?? null);
+    }),
   );
 
   // -- Typing indicator events ------------------------------------

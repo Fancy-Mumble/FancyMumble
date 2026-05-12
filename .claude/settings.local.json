@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"Write\\\\|isAdmin\\\\|hasPermission\\\\|ChanACL::\" \"F:/Dokumente/projekte/mumble_server/mumble-server/src/murmur/Messages.cpp\" 2>&1 | grep -iE \"write|admin\" | head -10)",
+      "Read(//f/Dokumente/projekte/mumble_server/mumble-server/src/murmur/**)"
+    ]
+  }
+}
