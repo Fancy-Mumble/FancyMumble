@@ -15,7 +15,10 @@ message Version {
 	// New version number format.
 	// Necessary since patch level may exceed 255. (See https://github.com/mumble-voip/mumble/issues/5827)
 	optional uint64 version_v2 = 5;
-    // Fancy Mumble version string.
+	// Fancy Mumble version identifier using v2 encoding:
+    // (major << 48) | (minor << 32) | (patch << 16).
+    // When present, both sides understand Fancy Mumble extensions
+    // (message_id, timestamp, plugin data, etc.).
     optional uint64 fancy_version = 6;
 
 	// Client release name.

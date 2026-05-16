@@ -8,7 +8,10 @@ pub struct Version {
     /// Necessary since patch level may exceed 255. (See <https://github.com/mumble-voip/mumble/issues/5827>)
     #[prost(uint64, optional, tag = "5")]
     pub version_v2: ::core::option::Option<u64>,
-    /// Fancy Mumble version string.
+    /// Fancy Mumble version identifier using v2 encoding:
+    /// (major << 48) | (minor << 32) | (patch << 16).
+    /// When present, both sides understand Fancy Mumble extensions
+    /// (message_id, timestamp, plugin data, etc.).
     #[prost(uint64, optional, tag = "6")]
     pub fancy_version: ::core::option::Option<u64>,
     /// Client release name.
