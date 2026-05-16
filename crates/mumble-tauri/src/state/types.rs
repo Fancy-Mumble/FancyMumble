@@ -81,6 +81,9 @@ pub struct ChannelEntry {
     /// Key custodian cert hashes (Section 5.7).
     #[serde(skip)]
     pub pchat_key_custodians: Vec<String>,
+    /// Whether the channel requires a password (token) to enter.
+    #[serde(default)]
+    pub is_enter_restricted: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

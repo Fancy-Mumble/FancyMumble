@@ -189,6 +189,33 @@ pub(crate) async fn toggle_deafen(state: tauri::State<'_, AppState>) -> Result<(
     state.toggle_deafen().await
 }
 
+/// Activate mic for push-to-talk (key pressed).
+#[tauri::command]
+pub(crate) async fn push_to_talk_start(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.push_to_talk_start().await
+}
+
+/// Deactivate mic for push-to-talk (key released).
+#[tauri::command]
+pub(crate) async fn push_to_talk_end(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.push_to_talk_end().await
+}
+
+/// Activate mic for voice priority override (key pressed).
+///
+/// Behaves identically to push-to-talk for now; voice-target routing
+/// will be added in a future iteration.
+#[tauri::command]
+pub(crate) async fn voice_priority_start(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.push_to_talk_start().await
+}
+
+/// Deactivate mic for voice priority override (key released).
+#[tauri::command]
+pub(crate) async fn voice_priority_end(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.push_to_talk_end().await
+}
+
 /// Set the local playback volume for a specific remote user.
 ///
 /// `volume` is a multiplier (0.0 = muted, 1.0 = normal, 2.0 = 200%).

@@ -147,9 +147,10 @@ function mapMediaItems(items: KlipyMediaItem[]): KlipyGif[] {
       }
       if (!item.file) return null;
 
-      // Pick the best quality for full-size, small for preview
-      const full = item.file.hd?.gif ?? item.file.md?.gif ?? item.file.sm?.gif;
-      const thumb = item.file.sm?.gif ?? item.file.xs?.gif ?? full;
+      // Pick the best quality for full-size, small for preview.
+      // Prefer webp over gif: same visual quality, ~40% smaller file size.
+      const full = item.file.hd?.webp ?? item.file.md?.webp ?? item.file.sm?.webp;
+      const thumb = item.file.sm?.webp ?? item.file.xs?.webp ?? full;
       if (!full) return null;
 
       return {

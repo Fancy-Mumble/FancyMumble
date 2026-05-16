@@ -889,6 +889,20 @@
 
 /* --- Sidebar tabs (Channels | Members) ---------------------------- */
 
+/**
+ * Pane container used to keep both tab subtrees mounted while only the
+ * active one is visible.  Inactive panes are hidden (and removed from
+ * the layout / a11y tree) but the React components stay alive so we
+ * pay the mount cost once instead of on every tab switch.
+ */
+.tabPane {
+  display: contents;
+}
+
+.tabPaneHidden {
+  display: none;
+}
+
 .tabBar {
   display: flex;
   gap: 4px;

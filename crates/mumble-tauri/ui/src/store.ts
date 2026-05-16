@@ -437,6 +437,7 @@ interface AppState {
   disconnect: () => Promise<void>;
   selectChannel: (id: number) => Promise<void>;
   joinChannel: (id: number) => Promise<void>;
+  joinChannelWithPassword: (id: number, password: string) => Promise<void>;
   sendMessage: (channelId: number, body: string) => Promise<void>;
   /**
    * Insert a synthetic pending-message placeholder.  Used by the chat
@@ -464,6 +465,7 @@ interface AppState {
     pchatProtocol?: PchatProtocol;
     pchatMaxHistory?: number;
     pchatRetentionDays?: number;
+    password?: string;
   }) => Promise<void>;
   updateChannel: (channelId: number, opts: {
     name?: string;
@@ -474,8 +476,10 @@ interface AppState {
     pchatProtocol?: PchatProtocol;
     pchatMaxHistory?: number;
     pchatRetentionDays?: number;
+    password?: string;
   }) => Promise<void>;
   deleteChannel: (channelId: number) => Promise<void>;
+  moveChannelUsers: (fromChannelId: number, toChannelId: number) => Promise<void>;
 
   // -- Multi-server (Phase C) ------------------------------------
   /** Snapshot of every backend session currently registered.  Survives
@@ -1014,6 +1018,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  joinChannelWithPassword: async (id, password) => {
+    try {
+      await invoke("join_channel", { channelId: id, password });
+    } catch (e) {
+      console.error("join_channel error:", e);
+      throw e;
+    }
+  },
+
   createChannel: async (parentId, name, opts = {}) => {
     try {
       await invoke("create_channel", {
@@ -1026,6 +1039,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         pchatProtocol: opts.pchatProtocol ?? null,
         pchatMaxHistory: opts.pchatMaxHistory ?? null,
         pchatRetentionDays: opts.pchatRetentionDays ?? null,
+        password: opts.password ?? null,
       });
     } catch (e) {
       console.error("create_channel error:", e);
@@ -1045,6 +1059,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         pchatProtocol: opts.pchatProtocol ?? null,
         pchatMaxHistory: opts.pchatMaxHistory ?? null,
         pchatRetentionDays: opts.pchatRetentionDays ?? null,
+        password: opts.password ?? null,
       });
     } catch (e) {
       console.error("update_channel error:", e);
@@ -1057,6 +1072,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       await invoke("delete_channel", { channelId });
     } catch (e) {
       console.error("delete_channel error:", e);
+      throw e;
+    }
+  },
+
+  moveChannelUsers: async (fromChannelId, toChannelId) => {
+    try {
+      await invoke("move_channel_users", { fromChannelId, toChannelId });
+    } catch (e) {
+      console.error("move_channel_users error:", e);
       throw e;
     }
   },
@@ -2754,9 +2778,19 @@ export async function initEventListeners(
     ),
 
     // Pchat fetch complete -- update pagination metadata.
+    //
+    // Also refresh the displayed `messages` array if the fetched
+    // channel happens to be the one the user is currently viewing.
+    // The "new-message" listener also tries to do this, but during the
+    // initial connect bootstrap the fetch response can arrive *before*
+    // selectChannel(defaultCh) has run -- in that case the new-message
+    // handler bails (selectedChannel still null) and the restored
+    // backlog stays invisible until the user types a message (which
+    // forces a get_messages via sendMessage). Refreshing here closes
+    // that race for the bootstrap case.
     await listen<{ channel_id: number; has_more: boolean; total_stored: number }>(
       "pchat-fetch-complete",
-      (event) => {
+      async (event) => {
         const { channel_id, has_more, total_stored } = event.payload;
         useAppStore.setState((prev) => ({
           channelPersistence: {
@@ -2769,6 +2803,10 @@ export async function initEventListeners(
             },
           },
         }));
+        const { selectedChannel } = useAppStore.getState();
+        if (selectedChannel === channel_id) {
+          await useAppStore.getState().refreshMessages(channel_id);
+        }
       },
     ),
 

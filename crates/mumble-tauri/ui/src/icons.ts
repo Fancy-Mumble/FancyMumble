@@ -12,6 +12,7 @@
 // more inline SVGs or per-icon asset files.
 
 export {
+  GripVertical as GripVerticalIcon,
   Paperclip as AttachIcon,
   ArrowUpRight as ArrowUpRightIcon,
   Bell as BellIcon,

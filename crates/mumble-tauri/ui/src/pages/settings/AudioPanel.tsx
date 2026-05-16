@@ -10,7 +10,7 @@ import type {
 } from "../../types";
 import { NOISE_SUPPRESSION_LABELS } from "../../types";
 import { isDesktopPlatform } from "../../utils/platform";
-import { Toggle, SliderField, ShortcutRecorder } from "./SharedControls";
+import { Toggle, SliderField } from "./SharedControls";
 import { DenoiserAdvancedControls } from "./DenoiserAdvancedControls";
 import styles from "./SettingsPage.module.css";
 
@@ -447,15 +447,10 @@ export function AudioPanel({
       {/* -- Push-to-Talk Key ---------------------------------------- */}
       {settings.push_to_talk && (
         <section className={styles.section}>
-          <div className={styles.pttKeyRow}>
-            <ShortcutRecorder
-              label="PTT Key"
-              value={settings.push_to_talk_key ?? ""}
-              onChange={(key) =>
-                onChange({ push_to_talk_key: key || null })
-              }
-            />
-          </div>
+          <p className={styles.fieldHint}>
+            The push-to-talk key is configured in the{" "}
+            <strong>Shortcuts</strong> tab.
+          </p>
         </section>
       )}
 

@@ -59,6 +59,8 @@ const SCREEN_SHARE_MIN_VERSION = 2 * 2 ** 32 + 12 * 2 ** 16;
 interface ChatViewProps {
   readonly onChannelInfoToggle?: () => void;
   readonly onChannelSearch?: () => void;
+  readonly scrollToMessageId?: string | null;
+  readonly onScrollConsumed?: () => void;
 }
 
 /** Compute chat header label and member count based on the active mode. */
@@ -86,7 +88,7 @@ function findPopOutImageSrc(body: string): string | null {
   return null;
 }
 
-export default function ChatView({ onChannelInfoToggle, onChannelSearch }: ChatViewProps) {
+export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollToMessageId, onScrollConsumed }: ChatViewProps) {
   const channels = useAppStore((s) => s.channels);
   const users = useAppStore((s) => s.users);
   const selectedChannel = useAppStore((s) => s.selectedChannel);
@@ -346,6 +348,31 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch }: ChatV
     selectedChannel, selectedDmUser,
     channel, messagesContainerRef, setPendingQuotes,
   });
+
+  // Scroll to and highlight a message when navigating from search results.
+  useEffect(() => {
+    if (!scrollToMessageId || messages.length === 0) return;
+    let attempts = 0;
+    const tryScroll = () => {
+      const container = messagesContainerRef.current;
+      if (!container) return;
+      const el = container.querySelector<HTMLElement>(
+        `[data-msg-id="${CSS.escape(scrollToMessageId)}"]`,
+      );
+      if (el) {
+        handleScrollToMessage(scrollToMessageId);
+        onScrollConsumed?.();
+        return;
+      }
+      if (attempts < 8) {
+        attempts++;
+        setTimeout(tryScroll, 150);
+      } else {
+        onScrollConsumed?.();
+      }
+    };
+    requestAnimationFrame(tryScroll);
+  }, [scrollToMessageId, messages, handleScrollToMessage, messagesContainerRef, onScrollConsumed]);
 
   const { sending, handleSend, sendMediaFile, handlePaste, handleGifSelect } = useChatSend({
     pendingQuotes,
@@ -698,6 +725,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch }: ChatV
         <BroadcastBanner
           broadcasters={channelBroadcasters}
           onWatch={screenShare.watchBroadcast}
+          sfuAvailable={sfuAvailable}
         />
       )}
 

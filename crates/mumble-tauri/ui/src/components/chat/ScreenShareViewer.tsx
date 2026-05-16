@@ -460,13 +460,17 @@ interface BroadcastBannerProps {
   readonly broadcasters: { session: number; name: string }[];
   /** Called when user clicks "Watch". */
   readonly onWatch: (session: number) => void;
+  /** When false, all broadcasts are peer-to-peer (no server SFU available). */
+  readonly sfuAvailable?: boolean;
 }
 
 /**
  * Notification bar shown above the chat when another user is sharing their
  * screen. Provides a "Watch" button to join the broadcast.
+ * When the server has no SFU the banner is shown in amber to indicate
+ * that the share is peer-to-peer rather than server-relayed.
  */
-export function BroadcastBanner({ broadcasters, onWatch }: BroadcastBannerProps) {
+export function BroadcastBanner({ broadcasters, onWatch, sfuAvailable = true }: BroadcastBannerProps) {
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
 
   // Reset dismissed state when broadcasters change (new broadcaster should show).
@@ -492,11 +496,20 @@ export function BroadcastBanner({ broadcasters, onWatch }: BroadcastBannerProps)
   return (
     <>
       {visible.map((b) => (
-        <div key={b.session} className={styles.broadcastBanner} role="status">
-          <span className={styles.broadcastBannerDot} />
+        <div
+          key={b.session}
+          className={`${styles.broadcastBanner} ${!sfuAvailable ? styles.broadcastBannerP2P : ""}`}
+          role="status"
+        >
+          <span className={`${styles.broadcastBannerDot} ${!sfuAvailable ? styles.broadcastBannerDotP2P : ""}`} />
           <span className={styles.broadcastBannerText}>
             <span className={styles.broadcastBannerName}>{b.name}</span> is sharing their screen
           </span>
+          {!sfuAvailable && (
+            <span className={styles.broadcastBannerP2PLabel} title="No SFU on this server - the stream connects directly between peers">
+              P2P
+            </span>
+          )}
           <button
             type="button"
             className={styles.broadcastBannerWatchBtn}

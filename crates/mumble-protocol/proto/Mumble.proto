@@ -179,6 +179,12 @@ message ChannelState {
 	// Key custodians can countersign epoch transitions and are trusted
 	// authorities for key distribution. Set by channel operators.
 	repeated string pchat_key_custodians = 103;
+	// Channel access password.  Empty string means "remove the password".
+	// When set, the server creates (or updates) an ACL group named
+	// `~pwd_<channel_id>` that grants Enter permission, and denies Enter
+	// to @all.  Clients joining a password-protected channel must include
+	// the password in UserState.temporary_access_tokens.
+	optional string channel_info_password = 104;
 }
 
 // Used to communicate user leaving or being kicked. May be sent by the client

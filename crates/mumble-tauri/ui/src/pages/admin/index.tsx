@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
 import { useAppStore } from "../../store";
 import { RegisteredUsersTab } from "./RegisteredUsersTab";
@@ -23,7 +23,15 @@ const BASE_TABS: TabDef<Tab>[] = [
 
 export default function AdminPanel() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>("users");
+  const [searchParams] = useSearchParams();
+  const initialTab = (() => {
+    const t = searchParams.get("tab");
+    if (t === "users" || t === "roles" || t === "bans" || t === "acl" || t === "emotes" || t === "onboarding") {
+      return t;
+    }
+    return "users";
+  })();
+  const [tab, setTab] = useState<Tab>(initialTab);
   const customEmotesSupported = useAppStore((s) => s.fileServerCapabilities?.features.custom_emotes ?? false);
   const rootChannelPerms = useAppStore((s) => s.channels.find((c) => c.id === 0)?.permissions ?? 0);
   const canManageEmotes = customEmotesSupported && (rootChannelPerms & PERM_MANAGE_EMOTES) !== 0;

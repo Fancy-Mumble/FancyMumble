@@ -26,6 +26,8 @@ export interface ChannelEntry {
   pchat_max_history?: number;
   /** Auto-delete after N days (0 = forever). */
   pchat_retention_days?: number;
+  /** Whether the channel requires a password (token) to enter. */
+  is_enter_restricted?: boolean;
 }
 
 export interface UserEntry {

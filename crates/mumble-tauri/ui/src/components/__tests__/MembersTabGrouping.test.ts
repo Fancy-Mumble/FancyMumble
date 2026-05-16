@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildMemberGroups } from "../sidebar/MembersTab";
+import { buildMemberGroups, regsToOfflineEntries } from "../sidebar/MembersTab";
 import type { AclGroup, RegisteredUser, UserEntry } from "../../types";
 
 function user(session: number, name: string, userId: number | null = null): UserEntry {
@@ -57,7 +57,7 @@ describe("buildMemberGroups", () => {
   it("merges offline registered users into the same role groups, online first", () => {
     const groups = buildMemberGroups(
       [user(1, "OnlineAdmin", 10)],
-      [reg(11, "OfflineAdmin"), reg(20, "OfflineMod")],
+      regsToOfflineEntries([reg(11, "OfflineAdmin"), reg(20, "OfflineMod")]),
       null,
       [aclGroup("admin", [10, 11]), aclGroup("mods", [20])],
     );
@@ -106,7 +106,7 @@ describe("buildMemberGroups", () => {
   it("does not duplicate users present both online and in registered list", () => {
     const groups = buildMemberGroups(
       [user(1, "Alice", 10)],
-      [reg(10, "Alice")],
+      regsToOfflineEntries([reg(10, "Alice")]),
       null,
       [aclGroup("staff", [10])],
     );
@@ -128,7 +128,7 @@ describe("buildMemberGroups", () => {
   it("uses texture from the server UserList response for offline users", () => {
     const textureBytes = [1, 2, 3, 4];
     const reg = { user_id: 10, name: "Bob", texture: textureBytes };
-    const groups = buildMemberGroups([], [reg], null, []);
+    const groups = buildMemberGroups([], regsToOfflineEntries([reg]), null, []);
     expect(groups).toHaveLength(1);
     const row = groups[0].rows[0];
     expect(row.offline).toBe(true);
@@ -137,33 +137,33 @@ describe("buildMemberGroups", () => {
 
   it("leaves texture null when the server UserList response has no texture", () => {
     const reg = { user_id: 99, name: "Carol" };
-    const groups = buildMemberGroups([], [reg], null, []);
+    const groups = buildMemberGroups([], regsToOfflineEntries([reg]), null, []);
     expect(groups[0].rows[0].entry.texture_size).toBeNull();
   });
 
   it("uses inline comment from RegisteredUser when no fetchedComments entry exists", () => {
     const reg = { user_id: 10, name: "Alice", comment: "Hello world" };
-    const groups = buildMemberGroups([], [reg], null, []);
+    const groups = buildMemberGroups([], regsToOfflineEntries([reg]), null, []);
     expect(groups[0].rows[0].entry.comment).toBe("Hello world");
   });
 
   it("leaves comment null when RegisteredUser has no comment", () => {
     const reg = { user_id: 10, name: "Alice" };
-    const groups = buildMemberGroups([], [reg], null, []);
+    const groups = buildMemberGroups([], regsToOfflineEntries([reg]), null, []);
     expect(groups[0].rows[0].entry.comment).toBeNull();
   });
 
   it("prefers fetchedComments over the inline reg.comment", () => {
     const reg = { user_id: 10, name: "Alice", comment: "short inline" };
     const fetched = new Map([[10, "full fetched comment"]]);
-    const groups = buildMemberGroups([], [reg], null, [], fetched);
+    const groups = buildMemberGroups([], regsToOfflineEntries([reg], fetched), null, []);
     expect(groups[0].rows[0].entry.comment).toBe("full fetched comment");
   });
 
   it("uses fetchedComments when reg.comment is null (lazy blob fetch scenario)", () => {
     const reg = { user_id: 10, name: "Alice", comment: null };
     const fetched = new Map([[10, "fetched after hover"]]);
-    const groups = buildMemberGroups([], [reg], null, [], fetched);
+    const groups = buildMemberGroups([], regsToOfflineEntries([reg], fetched), null, []);
     expect(groups[0].rows[0].entry.comment).toBe("fetched after hover");
   });
 });

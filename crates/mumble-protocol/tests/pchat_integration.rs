@@ -1577,7 +1577,7 @@ async fn join_channel(
     state: &ServerState,
     channel_id: u32,
 ) {
-    let cmd = JoinChannel { channel_id };
+    let cmd = JoinChannel { channel_id, password: None };
     let output = cmd.execute(state);
     for msg in &output.tcp_messages {
         transport.send(msg).await.unwrap();

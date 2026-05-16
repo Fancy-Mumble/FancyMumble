@@ -9,13 +9,17 @@ import { ChevronRightIcon, ListenBadgeIcon, LockIcon } from "../../../icons";
  * - Current channel sticky at the top.
  */
 
-import { useState, useMemo, useCallback } from "react";
+import { memo, useState, useMemo, useCallback } from "react";
 import type { ChannelEntry, UserEntry } from "../../../types";
 import { colorFor } from "../UserListItem";
 import { useUserAvatar } from "../../../lazyBlobs";
 import { PchatBadge } from "../PchatBadge";
 import { useChannelDropTarget } from "../../../utils/userMoveDnd";
 import { PERM_ENTER } from "../../../utils/permissions";
+import {
+  ChannelReorderWrapper,
+  useChannelReorderHandler,
+} from "../channelReorder";
 import styles from "./ClassicChannelList.module.css";
 
 const MAX_STACKED = 3;
@@ -31,6 +35,8 @@ export interface ClassicChannelListProps {
   readonly onJoinChannel: (id: number) => void;
   readonly onContextMenu: (e: React.MouseEvent, channelId: number) => void;
   readonly shakingChannelId?: number;
+  readonly highlightChannelId?: number;
+  readonly highlightUserSession?: number;
 }
 
 // --- Stacked avatars ---------------------------------------------
@@ -123,7 +129,7 @@ function ChannelDropWrapper({
   );
 }
 
-export default function ClassicChannelList({
+function ClassicChannelListImpl({
   channels,
   users,
   selectedChannel,
@@ -131,11 +137,13 @@ export default function ClassicChannelList({
   listenedChannels,
   unreadCounts,
   shakingChannelId,
+  highlightChannelId,
   onSelectChannel,
   onJoinChannel,
   onContextMenu,
 }: ClassicChannelListProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const handleChannelReorder = useChannelReorderHandler(channels);
 
   const toggleExpand = useCallback((id: number) => {
     setExpanded((prev) => {
@@ -205,13 +213,20 @@ export default function ClassicChannelList({
     const isCurrent = channel.id === currentChannel;
     const indentPx = depth * 16;
     const isShaking = shakingChannelId === channel.id;
+    const isHighlighted = highlightChannelId === channel.id;
     const isLocked = !isCurrent && channel.permissions !== null && (channel.permissions & PERM_ENTER) === 0;
 
     if (hasChildren) {
       const totalUsers = subtreeUserCount(channel.id);
       const allUsers = subtreeUsers(channel.id);
       return (
-        <ChannelDropWrapper key={channel.id} channelId={channel.id}>
+        <ChannelReorderWrapper
+          key={channel.id}
+          channel={channel}
+          onReorder={handleChannelReorder}
+          showHandle={false}
+        >
+        <ChannelDropWrapper channelId={channel.id}>
         <div className={styles.folderGroup}>
           <div
             className={[
@@ -219,6 +234,7 @@ export default function ClassicChannelList({
               isSelected ? styles.active : "",
               isCurrent ? styles.currentChannel : "",
               isShaking ? styles.shaking : "",
+              isHighlighted ? styles.highlighted : "",
               isLocked ? styles.locked : "",
             ].filter(Boolean).join(" ")}
             style={{ paddingLeft: `${4 + indentPx}px` }}
@@ -271,17 +287,25 @@ export default function ClassicChannelList({
           )}
         </div>
         </ChannelDropWrapper>
+        </ChannelReorderWrapper>
       );
     }
 
     return (
-      <ChannelDropWrapper key={channel.id} channelId={channel.id}>
+      <ChannelReorderWrapper
+        key={channel.id}
+        channel={channel}
+        onReorder={handleChannelReorder}
+        showHandle={false}
+      >
+      <ChannelDropWrapper channelId={channel.id}>
       <button
         className={[
           styles.channelItem,
           isSelected ? styles.active : "",
           isCurrent ? styles.currentChannel : "",
           isShaking ? styles.shaking : "",
+          isHighlighted ? styles.highlighted : "",
           isLocked ? styles.locked : "",
         ].filter(Boolean).join(" ")}
         style={{ paddingLeft: `${12 + indentPx}px` }}
@@ -311,6 +335,7 @@ export default function ClassicChannelList({
         <StackedAvatars users={chUsers} />
       </button>
       </ChannelDropWrapper>
+      </ChannelReorderWrapper>
     );
   }
 
@@ -357,3 +382,7 @@ export default function ClassicChannelList({
     </>
   );
 }
+
+const ClassicChannelList = memo(ClassicChannelListImpl);
+export default ClassicChannelList;
+

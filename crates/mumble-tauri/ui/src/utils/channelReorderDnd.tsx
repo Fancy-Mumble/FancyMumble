@@ -1,105 +1,128 @@
 /**
- * Drag-and-drop helpers for moving a user into another channel.
+ * Drag-and-drop helpers for reordering channels within the same parent.
  *
- * Uses pointer events + a portal-mounted floating clone (similar to
- * the `ServerTabsBar` tab reorder), because HTML5 drag-and-drop is
- * unreliable inside Tauri's webview (drag ghost suppressed, the
- * `data-tauri-drag-region` attribute can swallow events).  Only the Y
- * axis follows the cursor; X is locked to the source row's left edge
- * because users are arranged vertically in the sidebar.
+ * Uses pointer events + a portal-mounted floating clone, matching the
+ * pattern established in userMoveDnd.tsx.  HTML5 drag-and-drop is
+ * avoided because it is unreliable inside Tauri's webview.
  *
- * Drop targets register themselves through `useChannelDropTarget`.
- * On `pointerup` we hit-test the cursor against every registered
- * target's bounding rect and invoke `move_user_to_channel` if the
- * drop landed on one.
+ * Channels can only be reordered among their siblings (same parent_id).
+ * The floating clone follows the cursor on the Y axis while X is locked
+ * to the source card's left edge (sidebar layout is vertical).
+ *
+ * Drop targets register via `useChannelReorderTarget`.  On pointerup the
+ * cursor is hit-tested against every registered sibling; the top or
+ * bottom half of the target rect determines whether to insert before or
+ * after.  The caller receives a `ChannelDropEvent` and is responsible
+ * for computing updated positions and invoking `update_channel`.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { invoke } from "@tauri-apps/api/core";
-import { useAppStore } from "../store";
+import { GripVerticalIcon } from "../icons";
 
-const DRAG_THRESHOLD_PX = 4;
+const DRAG_THRESHOLD_PX = 8;
 
-// -- Global drop-target registry ----------------------------------
+// -- Global drag state -------------------------------------------
 
-interface DropRegistration {
+interface ActiveDrag {
   channelId: number;
+  parentId: number | null;
+}
+
+let activeDrag: ActiveDrag | null = null;
+
+// -- Drop-target registry ----------------------------------------
+
+interface DropTargetReg {
   el: HTMLElement;
-  setActive: (active: boolean) => void;
+  channelId: number;
+  parentId: number | null;
+  setDropPos: (pos: "before" | "after" | null) => void;
 }
 
-const registry = new Set<DropRegistration>();
+const dropTargets = new Set<DropTargetReg>();
 
-function registerDropTarget(reg: DropRegistration): () => void {
-  registry.add(reg);
-  return () => {
-    registry.delete(reg);
-  };
+function registerDropTarget(reg: DropTargetReg): () => void {
+  dropTargets.add(reg);
+  return () => dropTargets.delete(reg);
 }
 
-function hitTest(clientX: number, clientY: number): DropRegistration | null {
-  for (const reg of registry) {
-    const rect = reg.el.getBoundingClientRect();
+function clearAllDropPos(): void {
+  for (const t of dropTargets) t.setDropPos(null);
+}
+
+function findDropTarget(
+  clientX: number,
+  clientY: number,
+): { target: DropTargetReg; pos: "before" | "after" } | null {
+  if (!activeDrag) return null;
+  const { channelId: dragId, parentId: dragParent } = activeDrag;
+  for (const t of dropTargets) {
+    if (t.channelId === dragId) continue;
+    if (t.parentId !== dragParent) continue;
+    const rect = t.el.getBoundingClientRect();
     if (
       clientX >= rect.left &&
       clientX <= rect.right &&
       clientY >= rect.top &&
       clientY <= rect.bottom
     ) {
-      return reg;
+      const pos = clientY < rect.top + rect.height / 2 ? "before" : "after";
+      return { target: t, pos };
     }
   }
   return null;
 }
 
-function clearAllActive(): void {
-  for (const reg of registry) {
-    reg.setActive(false);
-  }
-}
-
-function setActiveOnly(target: DropRegistration | null): void {
-  for (const reg of registry) {
-    reg.setActive(reg === target);
-  }
-}
-
-// -- Drop-target hook (channel rows) ------------------------------
+// -- useChannelReorderTarget hook --------------------------------
 
 /**
- * Register a channel as a drop target for user-move drags.
- * Returns a `ref` to attach to the wrapper element and an `active`
- * flag that flips to `true` while a user drag is hovering it.
+ * Register a channel card as a drop zone for sibling reorder drags.
+ * Returns `ref` (attach to the outermost wrapper element) and `dropPos`
+ * (`"before"` / `"after"` / `null`) to render the insertion indicator.
  */
-export function useChannelDropTarget(channelId: number) {
-  const [active, setActive] = useState(false);
-  const unregisterRef = useRef<(() => void) | null>(null);
+export function useChannelReorderTarget(
+  channelId: number,
+  parentId: number | null,
+) {
+  const [dropPos, setDropPos] = useState<"before" | "after" | null>(null);
+  const unregRef = useRef<(() => void) | null>(null);
 
   const ref = useCallback(
-    (el: HTMLDivElement | null) => {
-      // Tear down any previous registration first.
-      unregisterRef.current?.();
-      unregisterRef.current = null;
+    (el: HTMLElement | null) => {
+      unregRef.current?.();
+      unregRef.current = null;
       if (el) {
-        unregisterRef.current = registerDropTarget({ channelId, el, setActive });
+        unregRef.current = registerDropTarget({
+          el,
+          channelId,
+          parentId,
+          setDropPos,
+        });
       }
     },
-    [channelId],
+    [channelId, parentId],
   );
 
   useEffect(
     () => () => {
-      unregisterRef.current?.();
-      unregisterRef.current = null;
+      unregRef.current?.();
+      unregRef.current = null;
     },
     [],
   );
 
-  return { ref, active };
+  return { ref, dropPos };
 }
 
-// -- Drag-source hook (user rows) ---------------------------------
+// -- useChannelDrag hook -----------------------------------------
+
+/** Payload emitted when a channel is dropped onto a sibling. */
+export interface ChannelDropEvent {
+  draggedId: number;
+  targetId: number;
+  insertBefore: boolean;
+}
 
 interface DragState {
   pointerId: number;
@@ -122,37 +145,46 @@ interface FloatingState {
   initialLeft: number;
   initialTop: number;
   label: string;
-  avatarUrl: string | null;
 }
 
-/** Result of `useUserDrag`. */
-export interface UserDragResult {
-  /** Spread on the draggable user row. */
-  handlers: {
+/** Result returned by `useChannelDrag`. */
+export interface ChannelDragResult {
+  /** Spread on the drag-handle element. */
+  handleProps: {
     onPointerDown: (e: React.PointerEvent<HTMLElement>) => void;
     onPointerMove: (e: React.PointerEvent<HTMLElement>) => void;
     onPointerUp: (e: React.PointerEvent<HTMLElement>) => void;
     onPointerCancel: (e: React.PointerEvent<HTMLElement>) => void;
     onClickCapture: (e: React.MouseEvent) => void;
-    style: React.CSSProperties;
   };
-  /** Portal-rendered floating clone (or `null` when idle). */
+  /** Apply to the card so it hides while the floating clone is visible. */
+  cardStyle: React.CSSProperties;
+  /** Portal-rendered floating clone; render this unconditionally. */
   overlay: React.ReactNode;
-  /** True while the user is being dragged (after threshold). */
+  /** True while dragging (after threshold). */
   isDragging: boolean;
 }
 
 /**
- * Make a user row draggable.  When `disabled` is true the hook returns
- * inert handlers and never starts a drag (used for self / offline /
- * mobile rows).
+ * Make a channel card reorderable via a drag handle.
+ *
+ * @param channelId  ID of the channel being dragged.
+ * @param parentId   Parent channel ID (normalised: `null` for root-level).
+ * @param name       Channel name shown in the floating clone.
+ * @param disabled   When `true` the hook is inert (no drag started).
+ * @param onDrop        Called with the drop event when the drag succeeds.
+ * @param containerRef  When provided, the floating clone uses this element's
+ *                      bounding rect instead of the handle's (gives full-row
+ *                      width to the ghost card).
  */
-export function useUserDrag(
-  session: number,
+export function useChannelDrag(
+  channelId: number,
+  parentId: number | null,
   name: string,
-  avatarUrl: string | null,
   disabled: boolean,
-): UserDragResult {
+  onDrop: (event: ChannelDropEvent) => void,
+  containerRef?: { readonly current: HTMLElement | null },
+): ChannelDragResult {
   const stateRef = useRef<DragState | null>(null);
   const floatingElRef = useRef<HTMLDivElement | null>(null);
   const justDraggedRef = useRef(false);
@@ -164,31 +196,34 @@ export function useUserDrag(
     st.rafId = null;
     const el = floatingElRef.current;
     if (el) {
-      // Lock X to the source row's initial left; only Y follows the
-      // cursor (users are stacked vertically).
       const y = st.pendingY - st.grabOffsetY;
       el.style.transform = `translate(${st.initialLeft}px, ${y}px)`;
     }
-    setActiveOnly(hitTest(st.pendingX, st.pendingY));
+    clearAllDropPos();
+    const hit = findDropTarget(st.pendingX, st.pendingY);
+    if (hit) hit.target.setDropPos(hit.pos);
   }, []);
 
   const cleanup = useCallback(() => {
     const st = stateRef.current;
     if (st?.rafId != null) cancelAnimationFrame(st.rafId);
     stateRef.current = null;
-    clearAllActive();
+    activeDrag = null;
+    clearAllDropPos();
     setFloating(null);
   }, []);
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
       if (disabled || e.button !== 0) return;
-      // Allow nested interactive controls (volume sliders, etc.) to
-      // claim their own pointer events.
       const targetEl = e.target as HTMLElement;
-      if (targetEl.closest("input, [data-no-drag='true']")) return;
-
-      const rect = e.currentTarget.getBoundingClientRect();
+      // Skip when the pointer lands on an input, a generic no-drag widget,
+      // or a member-list row that has its own user-drag handler.  The channel
+      // reorder must not capture the pointer away from those targets.
+      if (targetEl.closest("input, [data-no-drag='true'], [data-no-channel-drag='true']")) return;
+      // Use the full container (channel row) rect for clone dimensions so
+      // the ghost card is full-width, not just the 18px handle width.
+      const rect = (containerRef?.current ?? e.currentTarget).getBoundingClientRect();
       stateRef.current = {
         pointerId: e.pointerId,
         startX: e.clientX,
@@ -203,13 +238,8 @@ export function useUserDrag(
         pendingX: e.clientX,
         pendingY: e.clientY,
       };
-      try {
-        e.currentTarget.setPointerCapture(e.pointerId);
-      } catch {
-        // Some webviews reject capture on disabled elements; ignore.
-      }
     },
-    [disabled],
+    [disabled, containerRef],
   );
 
   const onPointerMove = useCallback(
@@ -223,39 +253,25 @@ export function useUserDrag(
         const dy = e.clientY - st.startY;
         if (Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
         st.started = true;
+        activeDrag = { channelId, parentId };
+        try {
+          e.currentTarget.setPointerCapture(st.pointerId);
+        } catch {
+          // Some webviews reject capture; ignore.
+        }
         setFloating({
           width: st.width,
           height: st.height,
           initialLeft: st.initialLeft,
           initialTop: e.clientY - st.grabOffsetY,
           label: name,
-          avatarUrl,
         });
       }
       if (st.rafId == null) {
         st.rafId = requestAnimationFrame(flush);
       }
     },
-    [flush, name, avatarUrl],
-  );
-
-  const commitDrop = useCallback(
-    (clientX: number, clientY: number) => {
-      const target = hitTest(clientX, clientY);
-      if (!target) return;
-      // For self-moves use join_channel (which sends a UserState without
-      // an explicit session) so the server treats it as a self-join and
-      // does not check PERM_MOVE on the source/target channels.  Other
-      // users go through move_user_to_channel which requires PERM_MOVE.
-      const ownSession = useAppStore.getState().ownSession;
-      const cmd = ownSession === session
-        ? invoke("join_channel", { channelId: target.channelId })
-        : invoke("move_user_to_channel", { session, channelId: target.channelId });
-      cmd.catch((err: unknown) =>
-        console.error("channel move failed:", err),
-      );
-    },
-    [session],
+    [flush, name, channelId, parentId],
   );
 
   const onPointerUp = useCallback(
@@ -271,17 +287,22 @@ export function useUserDrag(
           e.currentTarget.releasePointerCapture(st.pointerId);
         }
       } catch {
-        // Capture may have already been released.
+        // Pointer capture may already be released.
       }
       if (wasDragging) {
-        commitDrop(e.clientX, e.clientY);
-        // Suppress the synthetic click that normally follows
-        // pointerup, otherwise selecting / opening DM would fire.
+        const hit = findDropTarget(e.clientX, e.clientY);
+        if (hit) {
+          onDrop({
+            draggedId: channelId,
+            targetId: hit.target.channelId,
+            insertBefore: hit.pos === "before",
+          });
+        }
         justDraggedRef.current = true;
       }
       cleanup();
     },
-    [cleanup, commitDrop],
+    [cleanup, onDrop, channelId],
   );
 
   const onPointerCancel = useCallback(
@@ -293,7 +314,7 @@ export function useUserDrag(
             e.currentTarget.releasePointerCapture(st.pointerId);
           }
         } catch {
-          // Capture may have already been released.
+          // Already released.
         }
       }
       cleanup();
@@ -309,33 +330,30 @@ export function useUserDrag(
     }
   }, []);
 
-  // Render the floating clone via portal so it can travel outside the
-  // sidebar's overflow clip box.
   const overlay =
     floating != null
       ? createPortal(
-          <FloatingUserClone
+          <FloatingChannelClone
             elRef={floatingElRef}
             width={floating.width}
             height={floating.height}
             initialLeft={floating.initialLeft}
             initialTop={floating.initialTop}
             label={floating.label}
-            avatarUrl={floating.avatarUrl}
           />,
           document.body,
         )
       : null;
 
   return {
-    handlers: {
+    handleProps: {
       onPointerDown,
       onPointerMove,
       onPointerUp,
       onPointerCancel,
       onClickCapture,
-      style: floating ? { visibility: "hidden" } : {},
     },
+    cardStyle: floating ? { opacity: 0.35 } : {},
     overlay,
     isDragging: floating != null,
   };
@@ -343,25 +361,23 @@ export function useUserDrag(
 
 // -- Floating clone (portal child) --------------------------------
 
-interface FloatingUserCloneProps {
+interface FloatingChannelCloneProps {
   elRef: React.MutableRefObject<HTMLDivElement | null>;
   width: number;
   height: number;
   initialLeft: number;
   initialTop: number;
   label: string;
-  avatarUrl: string | null;
 }
 
-function FloatingUserClone({
+function FloatingChannelClone({
   elRef,
   width,
   height,
   initialLeft,
   initialTop,
   label,
-  avatarUrl,
-}: FloatingUserCloneProps) {
+}: FloatingChannelCloneProps) {
   return (
     <div
       ref={elRef}
@@ -374,12 +390,13 @@ function FloatingUserClone({
         transform: `translate(${initialLeft}px, ${initialTop}px)`,
         pointerEvents: "none",
         zIndex: 9999,
+        opacity: 0.5,
         display: "flex",
         alignItems: "center",
         gap: 8,
         padding: "0 10px",
-        borderRadius: 10,
-        background: "rgba(30, 33, 40, 0.85)",
+        borderRadius: 8,
+        background: "rgba(30, 33, 40, 0.90)",
         border: "1px solid rgba(255, 255, 255, 0.18)",
         boxShadow:
           "0 8px 24px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.06) inset",
@@ -387,33 +404,20 @@ function FloatingUserClone({
         WebkitBackdropFilter: "blur(10px) saturate(160%)",
         color: "#f5f6f8",
         font: "inherit",
-        opacity: 0.95,
       }}
     >
-      <div
-        style={{
-          width: 24,
-          height: 24,
-          borderRadius: "50%",
-          background: avatarUrl ? "transparent" : "#5865f2",
-          backgroundImage: avatarUrl ? `url(${avatarUrl})` : undefined,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 12,
-          fontWeight: 600,
-          flexShrink: 0,
-        }}
-      >
-        {!avatarUrl && label.charAt(0).toUpperCase()}
-      </div>
+      <GripVerticalIcon
+        width={14}
+        height={14}
+        style={{ flexShrink: 0, opacity: 0.6 }}
+      />
       <span
         style={{
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
+          fontSize: 14,
+          fontWeight: 500,
         }}
       >
         {label}

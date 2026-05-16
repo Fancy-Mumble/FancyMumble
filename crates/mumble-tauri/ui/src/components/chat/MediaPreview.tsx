@@ -180,7 +180,9 @@ export function extractMedia(html: string): { cleaned: string; media: MediaItem[
     const src = img.getAttribute("src") ?? "";
     if (!src) return;
     const isGif =
-      src.startsWith("data:image/gif") || src.toLowerCase().endsWith(".gif");
+      src.startsWith("data:image/gif") ||
+      src.toLowerCase().endsWith(".gif") ||
+      (src.toLowerCase().endsWith(".webp") && src.includes("klipy.com"));
     media.push({ kind: isGif ? "gif" : "image", src, alt: img.alt || "" });
     img.remove();
   });
@@ -208,12 +210,10 @@ export function extractMedia(html: string): { cleaned: string; media: MediaItem[
 function GifThumb({
   item,
   id,
-  onOpen,
   timeLabel,
 }: Readonly<{
   item: MediaItem;
   id: string;
-  onOpen: () => void;
   timeLabel?: string | null;
 }>) {
   const imgRef = useRef<HTMLImageElement>(null);
@@ -232,13 +232,17 @@ function GifThumb({
     }
     const img = imgRef.current;
     if (img && img.naturalWidth > 0) {
-      const c = document.createElement("canvas");
-      c.width = img.naturalWidth;
-      c.height = img.naturalHeight;
-      c.getContext("2d")?.drawImage(img, 0, 0);
-      const url = c.toDataURL();
-      frozenFrames.set(id, url);
-      setPosterSrc(url);
+      try {
+        const c = document.createElement("canvas");
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        c.getContext("2d")?.drawImage(img, 0, 0);
+        const url = c.toDataURL();
+        frozenFrames.set(id, url);
+        setPosterSrc(url);
+      } catch {
+        // Cross-origin image without CORS headers - freeze without a poster frame.
+      }
     }
     setFrozen(true);
   }, [id]);
@@ -261,14 +265,19 @@ function GifThumb({
   useEffect(() => {
     if (!frozen || posterSrc) return;
     const img = new Image();
+    img.crossOrigin = "anonymous";
     img.onload = () => {
-      const c = document.createElement("canvas");
-      c.width = img.naturalWidth;
-      c.height = img.naturalHeight;
-      c.getContext("2d")?.drawImage(img, 0, 0);
-      const url = c.toDataURL();
-      frozenFrames.set(id, url);
-      setPosterSrc(url);
+      try {
+        const c = document.createElement("canvas");
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        c.getContext("2d")?.drawImage(img, 0, 0);
+        const url = c.toDataURL();
+        frozenFrames.set(id, url);
+        setPosterSrc(url);
+      } catch {
+        // Cross-origin image without CORS headers - no poster frame.
+      }
     };
     img.src = item.src;
   }, [frozen, posterSrc, id, item.src]);
@@ -296,28 +305,21 @@ function GifThumb({
     [],
   );
 
-  const handleReplay = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleToggle = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     setFrozen(false);
     startTimer();
-  };
+  }, [startTimer]);
 
   if (frozen) {
     return (
-      <button type="button" className={styles.thumbWrap} onClick={onOpen}>
+      <button type="button" className={styles.thumbWrap} onClick={handleToggle}>
         {posterSrc ? (
           <img className={styles.thumb} src={posterSrc} alt={item.alt} />
         ) : (
           <div className={styles.thumbPlaceholder} />
         )}
-        <div
-          role="button"
-          tabIndex={0}
-          className={styles.replayOverlay}
-          onClick={handleReplay}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleReplay(e as unknown as React.MouseEvent); }}
-        >
+        <div className={styles.replayOverlay}>
           <span className={styles.replayIcon}>&#x25B6;</span>
         </div>
         <span className={styles.gifBadge}>GIF</span>
@@ -327,12 +329,13 @@ function GifThumb({
   }
 
   return (
-    <button type="button" className={styles.thumbWrap} onClick={onOpen}>
+    <button type="button" className={styles.thumbWrap} onClick={captureAndFreeze}>
       <img
         ref={imgRef}
         className={styles.thumb}
         src={item.src}
         alt={item.alt}
+        crossOrigin="anonymous"
         onLoad={handleImgLoad}
       />
       <span className={styles.gifBadge}>GIF</span>
@@ -492,7 +495,6 @@ export default function MediaPreview({ html, messageId, compact = false, timesta
                     key={key}
                     item={item}
                     id={key}
-                    onOpen={() => openLightbox(i)}
                     timeLabel={timeLabel}
                   />
                 );

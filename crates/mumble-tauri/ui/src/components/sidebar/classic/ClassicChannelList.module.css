@@ -41,6 +41,17 @@
   animation: shake 0.5s ease;
 }
 
+/* --- Highlight animation (search result selected) --------------- */
+
+@keyframes highlight-flash {
+  0%   { box-shadow: 0 0 0 2px var(--color-accent, #2aabee); }
+  100% { box-shadow: none; }
+}
+
+.highlighted {
+  animation: highlight-flash 1.5s ease-out;
+}
+
 /* --- Locked channel (no PERM_ENTER) ----------------------------- */
 
 .locked {

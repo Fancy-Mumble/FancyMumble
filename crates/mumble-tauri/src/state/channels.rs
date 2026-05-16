@@ -28,7 +28,7 @@ impl AppState {
         Ok(())
     }
 
-    pub async fn join_channel(&self, channel_id: u32) -> Result<(), String> {
+    pub async fn join_channel(&self, channel_id: u32, password: Option<String>) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
             let state = __session.lock().map_err(|e| e.to_string())?;
@@ -37,7 +37,7 @@ impl AppState {
 
         if let Some(handle) = handle {
             let _ = handle
-                .send(command::JoinChannel { channel_id })
+                .send(command::JoinChannel { channel_id, password })
                 .await;
         }
 
@@ -134,6 +134,7 @@ impl AppState {
         pchat_protocol: Option<String>,
         pchat_max_history: Option<u32>,
         pchat_retention_days: Option<u32>,
+        password: Option<String>,
     ) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
@@ -164,6 +165,7 @@ impl AppState {
                     pchat_protocol: parsed_protocol,
                     pchat_max_history,
                     pchat_retention_days,
+                    channel_info_password: password,
                 })
                 .await
                 .map_err(|e| e.to_string())
@@ -199,6 +201,7 @@ impl AppState {
         pchat_protocol: Option<String>,
         pchat_max_history: Option<u32>,
         pchat_retention_days: Option<u32>,
+        password: Option<String>,
     ) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
@@ -218,6 +221,7 @@ impl AppState {
                     pchat_protocol: pchat_protocol.map(|s| parse_pchat_protocol_str(&s)),
                     pchat_max_history,
                     pchat_retention_days,
+                    channel_info_password: password,
                 })
                 .await
                 .map_err(|e| e.to_string())

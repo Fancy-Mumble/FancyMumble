@@ -267,6 +267,13 @@ pub struct ChannelState {
     /// authorities for key distribution. Set by channel operators.
     #[prost(string, repeated, tag = "103")]
     pub pchat_key_custodians: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// Channel access password.  Empty string means "remove the password".
+    /// When set, the server creates (or updates) an ACL group named
+    /// `~pwd_<channel_id>` that grants Enter permission, and denies Enter
+    /// to @all.  Clients joining a password-protected channel must include
+    /// the password in UserState.temporary_access_tokens.
+    #[prost(string, optional, tag = "104")]
+    pub channel_info_password: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Used to communicate user leaving or being kicked. May be sent by the client
 /// when it attempts to kick a user. Sent by the server when it informs the

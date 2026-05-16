@@ -213,7 +213,7 @@ mod tests {
 
     #[test]
     fn join_channel_uses_session_id() {
-        let cmd = JoinChannel { channel_id: 3 };
+        let cmd = JoinChannel { channel_id: 3, password: None };
         let state = state_with_session(42);
         let output = cmd.execute(&state);
 

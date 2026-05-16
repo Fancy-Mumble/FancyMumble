@@ -11,10 +11,10 @@ import { setKlipyApiKey as setKlipyApiKeyBanner } from "./KlipyGifBrowser";
 import { useAppStore } from "../../store";
 import {
   type ShortcutBindings,
+  DEFAULT_SHORTCUTS,
   loadShortcuts,
   saveShortcuts,
-  applyGlobalShortcut,
-  clearGlobalShortcut,
+  applyChangedShortcut,
 } from "./shortcutHelpers";
 import { loadProfileData, saveProfileData, migrateProfilesToIdentities } from "./profileData";
 import { ProfilePanel } from "./ProfilePanel";
@@ -131,10 +131,7 @@ export default function SettingsPage() {
   const [convertToLocalTime, setConvertToLocalTime] = useState(true);
 
   // Shortcuts
-  const [shortcuts, setShortcuts] = useState<ShortcutBindings>({
-    toggleMute: "",
-    toggleDeafen: "",
-  });
+  const [shortcuts, setShortcuts] = useState<ShortcutBindings>(DEFAULT_SHORTCUTS);
 
   // Profile (per-identity)
   const [profile, setProfile] = useState<FancyProfile>({});
@@ -396,13 +393,12 @@ export default function SettingsPage() {
     async (key: keyof ShortcutBindings, value: string) => {
       setShortcuts((prev) => {
         const updated = { ...prev, [key]: value };
-        // Persist + register in background.
         (async () => {
-          await clearGlobalShortcut(prev[key]);
+          await applyChangedShortcut(key, prev[key], value);
           await saveShortcuts(updated);
-          const command =
-            key === "toggleMute" ? "toggle_mute" : "toggle_deafen";
-          await applyGlobalShortcut(value, command);
+          globalThis.dispatchEvent(
+            new CustomEvent("shortcuts-changed", { detail: updated }),
+          );
         })();
         return updated;
       });
@@ -656,6 +652,7 @@ export default function SettingsPage() {
             <ShortcutsPanel
               shortcuts={shortcuts}
               onChangeShortcut={handleChangeShortcut}
+              isExpert={userMode !== "normal"}
             />
           )}
 

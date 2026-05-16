@@ -575,7 +575,77 @@ mod voice_pipeline {
             Ok(())
         }
 
-        /// Start the mic test: opens a capture stream and emits
+        /// Activate the mic for push-to-talk (key pressed).
+        ///
+        /// Transitions Muted/Inactive -> Active and sends unmute to the server.
+        /// If already Active, this is a no-op so rapid key repeats are harmless.
+        pub async fn push_to_talk_start(&self) -> Result<(), String> {
+            let (voice_state, handle, audio_settings) = {
+                let __session = self.inner.snapshot();
+                let state = __session.lock().map_err(|e| e.to_string())?;
+                (
+                    state.audio.voice_state,
+                    state.conn.client_handle.clone(),
+                    state.audio.settings.clone(),
+                )
+            };
+
+            if voice_state == VoiceState::Active {
+                return Ok(());
+            }
+
+            if voice_state == VoiceState::Inactive {
+                self.enable_voice_muted().await?;
+            }
+
+            self.start_outbound_pipeline(&audio_settings, &handle)?;
+            {
+                let __session = self.inner.snapshot();
+                let mut state = __session.lock().map_err(|e| e.to_string())?;
+                state.audio.voice_state = VoiceState::Active;
+            }
+            if let Some(handle) = handle {
+                handle
+                    .send(command::SetSelfMute { muted: false })
+                    .await
+                    .map_err(|e| format!("Failed to unmute for PTT: {e}"))?;
+            }
+            self.emit_voice_state();
+            Ok(())
+        }
+
+        /// Deactivate the mic for push-to-talk (key released).
+        ///
+        /// Transitions Active -> Muted and sends mute to the server.
+        /// If not Active, this is a no-op.
+        pub async fn push_to_talk_end(&self) -> Result<(), String> {
+            let (voice_state, handle) = {
+                let __session = self.inner.snapshot();
+                let state = __session.lock().map_err(|e| e.to_string())?;
+                (state.audio.voice_state, state.conn.client_handle.clone())
+            };
+
+            if voice_state != VoiceState::Active {
+                return Ok(());
+            }
+
+            self.stop_outbound();
+            {
+                let __session = self.inner.snapshot();
+                let mut state = __session.lock().map_err(|e| e.to_string())?;
+                state.audio.voice_state = VoiceState::Muted;
+            }
+            if let Some(handle) = handle {
+                handle
+                    .send(command::SetSelfMute { muted: true })
+                    .await
+                    .map_err(|e| format!("Failed to mute after PTT: {e}"))?;
+            }
+            self.emit_voice_state();
+            Ok(())
+        }
+
+
         /// `mic-amplitude` events to the frontend at ~30 Hz.
         ///
         /// When `auto_input_sensitivity` is enabled, the measured

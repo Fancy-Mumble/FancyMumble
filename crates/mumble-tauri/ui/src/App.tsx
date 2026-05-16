@@ -5,7 +5,7 @@ import { initEventListeners, useAppStore } from "./store";
 import { getPreferences, getSavedAudioSettings, isFirstRun, getNotificationSounds } from "./preferencesStorage";
 import { setKlipyApiKey } from "./components/chat/GifPicker";
 import { setKlipyApiKey as setKlipyApiKeyBanner } from "./pages/settings/KlipyGifBrowser";
-import { loadShortcuts, applyGlobalShortcut } from "./pages/settings/shortcutHelpers";
+import { loadShortcuts, applyAllGlobalShortcuts } from "./pages/settings/shortcutHelpers";
 import { useVisualViewport } from "./hooks/useVisualViewport";
 import { useNotificationSounds } from "./hooks/useNotificationSounds";
 import { useSpoilerReveal } from "./hooks/useSpoilerReveal";
@@ -163,12 +163,7 @@ function MainApp() {
       }
     });
     loadShortcuts().then((sc) => {
-      if (sc.toggleMute) {
-        applyGlobalShortcut(sc.toggleMute, "toggle_mute").catch(console.error);
-      }
-      if (sc.toggleDeafen) {
-        applyGlobalShortcut(sc.toggleDeafen, "toggle_deafen").catch(console.error);
-      }
+      applyAllGlobalShortcuts(sc).catch(console.error);
     });
   }, []);
 

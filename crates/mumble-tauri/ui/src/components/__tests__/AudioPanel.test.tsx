@@ -171,14 +171,16 @@ describe("Activation Mode selector", () => {
     expect(screen.queryByText("Calibrate")).toBeNull();
   });
 
-  it("shows PTT key binding only in PTT mode", () => {
+  it("shows PTT shortcut hint only in PTT mode", () => {
+    // The PTT key binding itself lives in the Shortcuts tab; AudioPanel
+    // just shows a pointer to it when push-to-talk is enabled.
     renderPanel({ push_to_talk: true });
-    expect(screen.getByText("PTT Key")).toBeTruthy();
+    expect(screen.getByText(/Shortcuts/)).toBeTruthy();
   });
 
-  it("hides PTT key binding in Voice Activation mode", () => {
+  it("hides PTT shortcut hint in Voice Activation mode", () => {
     renderPanel({ noise_suppression: true, push_to_talk: false });
-    expect(screen.queryByText("PTT Key")).toBeNull();
+    expect(screen.queryByText(/configured in the/)).toBeNull();
   });
 });
 
