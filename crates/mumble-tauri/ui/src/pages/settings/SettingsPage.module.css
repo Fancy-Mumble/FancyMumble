@@ -467,6 +467,18 @@
   background: var(--color-warning, #f59e0b);
 }
 
+.vuRangeOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  z-index: 3;
+  cursor: ew-resize;
+  pointer-events: none;
+}
+
 .vuDragLayer {
   position: absolute;
   top: -22px;

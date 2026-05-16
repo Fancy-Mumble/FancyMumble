@@ -147,6 +147,19 @@ export function VuMeter({
             style={{ left: `${linearToVuPercent(m.value)}%` }}
           />
         ))}
+        {draggableMarkers.map((m, i) => (
+          <input
+            key={`range-${m.variant}-${i}`}
+            type="range"
+            className={styles.vuRangeOverlay}
+            min="0"
+            max="100"
+            step="0.1"
+            value={linearToVuPercent(m.value)}
+            aria-label={m.ariaLabel}
+            onChange={(e) => m.onChange?.(vuPercentToLinear(parseFloat(e.target.value)))}
+          />
+        ))}
         {hasDraggable && (
           <div
             className={`${styles.vuDragLayer} ${activeDrag >= 0 ? styles.vuDragActive : ""}`}
