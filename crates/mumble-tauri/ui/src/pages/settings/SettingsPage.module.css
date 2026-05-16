@@ -51,6 +51,13 @@
   color: var(--color-text-primary);
 }
 
+.groupTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin: 20px 0 8px;
+}
+
 /* --- Device columns (side-by-side input/output) ----------------- */
 
 .deviceColumns {
@@ -377,6 +384,9 @@
 .vuMeter {
   flex: 1;
   min-width: 0;
+  /* Reserve headroom for the draggable triangle handles that sit above
+     the track.  Harmless when no draggable markers are present. */
+  padding-top: 22px;
 }
 
 .vuTrack {
@@ -384,7 +394,13 @@
   height: 10px;
   border-radius: 5px;
   background: var(--color-glass-hover);
-  overflow: hidden;
+  overflow: visible;
+  box-shadow: 0 0 0 0 transparent;
+  transition: box-shadow 0.12s ease;
+}
+
+.vuTrackActive {
+  box-shadow: 0 0 0 2px var(--color-online);
 }
 
 .vuFill {
@@ -392,6 +408,8 @@
   border-radius: 5px;
   transition: width 0.06s linear;
   background: linear-gradient(90deg, var(--color-online) 0%, var(--color-online) 50%, var(--color-warning) 75%, var(--color-danger) 100%);
+  position: relative;
+  z-index: 0;
 }
 
 .vuPeak {
@@ -402,19 +420,65 @@
   background: rgba(255, 255, 255, 0.7);
   transition: left 0.06s linear;
   transform: translateX(-1px);
+  z-index: 1;
 }
 
 .vuThreshold {
   position: absolute;
-  top: -2px;
+  top: -4px;
   width: 2px;
-  height: calc(100% + 4px);
-  background: var(--color-accent, #6366f1);
-  transition: left 0.1s linear;
+  height: calc(100% + 8px);
   transform: translateX(-1px);
   border-radius: 1px;
-  opacity: 0.9;
-  z-index: 1;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.vuThresholdOpen {
+  background: var(--color-accent, #6366f1);
+  opacity: 0.95;
+}
+
+.vuThresholdClose {
+  background: var(--color-warning, #f59e0b);
+  opacity: 0.85;
+}
+
+/* Draggable triangle handles that sit above the meter track.
+   Each handle is a div centered on its threshold value via translateX(-50%).
+   A single invisible drag layer on top handles all pointer events and picks
+   the closest handle on pointerdown, avoiding the "stacked inputs" problem. */
+.vuHandle {
+  position: absolute;
+  top: -22px;
+  width: 18px;
+  height: 22px;
+  transform: translateX(-50%);
+  clip-path: polygon(5% 0%, 95% 0%, 56% 68%, 56% 100%, 44% 100%, 44% 68%);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.vuHandleOpen {
+  background: var(--color-accent, #6366f1);
+}
+
+.vuHandleClose {
+  background: var(--color-warning, #f59e0b);
+}
+
+.vuDragLayer {
+  position: absolute;
+  top: -22px;
+  left: 0;
+  right: 0;
+  height: calc(100% + 22px);
+  cursor: ew-resize;
+  z-index: 4;
+}
+
+.vuDragActive {
+  cursor: grabbing;
 }
 
 .vuLabels {
@@ -426,19 +490,229 @@
   padding: 0 2px;
 }
 
-/* --- Shortcut recorder ----------------------------------------- */
+/* --- Calibration panel ----------------------------------------- */
 
-.recorderRow {
+.calibrationContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.calibrationView {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.calibrateActionRow {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+}
+
+.calibrationReadouts {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  background: var(--color-glass-hover);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+}
+
+.calibrationReadouts strong {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.calibrateBtn {
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.calibrateBtnPrimary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(var(--color-accent-rgb, 99, 102, 241), 0.25);
+}
+
+.calibrateBtnPrimary:hover {
+  background: color-mix(in srgb, var(--color-accent) 85%, #fff 15%);
+  box-shadow: 0 0 0 4px rgba(var(--color-accent-rgb, 99, 102, 241), 0.35);
+}
+
+@keyframes calibratePulse {
+  0%, 100% {
+    background: var(--color-accent, #6366f1);
+    box-shadow: 0 0 0 0 rgba(var(--color-accent-rgb, 99, 102, 241), 0.7);
+  }
+  50% {
+    background: color-mix(in srgb, var(--color-accent, #6366f1) 60%, #fff 40%);
+    box-shadow: 0 0 0 10px rgba(var(--color-accent-rgb, 99, 102, 241), 0);
+  }
+}
+
+.calibrateBtnPulse {
+  animation: calibratePulse 1.5s ease-in-out infinite;
+}
+
+.warningBanner,
+.warningBannerDanger,
+.warningBannerMuted {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.warningBanner {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.warningBannerDanger {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.warningBannerMuted {
+  background: rgba(100, 116, 139, 0.07);
+  border: 1px solid rgba(100, 116, 139, 0.2);
+}
+
+.warningBanner span,
+.warningBannerDanger span,
+.warningBannerMuted span {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.warningBanner span { color: var(--color-warning, #f59e0b); }
+.warningBannerDanger span { color: var(--color-danger, #ef4444); }
+.warningBannerMuted span { color: var(--color-text-secondary); }
+
+.warningBanner p,
+.warningBannerDanger p,
+.warningBannerMuted p {
+  margin: 0;
+}
+
+.speechProgressBar {
+  position: relative;
+  height: 26px;
+  background: var(--color-glass-hover);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+
+.speechProgressFill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--color-accent, #6366f1);
+  opacity: 0.35;
+  transition: width 0.1s linear;
+}
+
+.speechProgressStatus {
+  position: relative;
+  z-index: 1;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.legendOpen {
+  color: var(--color-accent, #6366f1);
+  font-weight: 600;
+}
+
+.legendClose {
+  color: var(--color-warning, #f59e0b);
+  font-weight: 600;
+}
+
+.replaySection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--color-glass-hover);
+}
+
+.replayHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.replayBtn {
+  position: relative;
+  overflow: hidden;
+  min-width: 220px;
+}
+
+.replayBtnFill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  transition: width 0.15s linear;
+  pointer-events: none;
+}
+
+.replayBtnFillRecording {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.replayBtnFillPlaying {
+  background: rgba(var(--color-accent-rgb, 99, 102, 241), 0.35);
+}
+
+.replayBtnLabel {
+  position: relative;
+  z-index: 1;
+}
+
+/* --- Shortcut recorder ----------------------------------------- */
+
+.shortcutList {
+  display: grid;
+  grid-template-columns: max-content 1fr auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 8px;
+}
+
+.recorderRow {
+  display: contents;
 }
 
 .recorderLabel {
   font-size: 14px;
   font-weight: 500;
   color: var(--color-text-secondary);
-  min-width: 110px;
+  white-space: nowrap;
 }
 
 .recorderBtn {
@@ -749,8 +1023,11 @@
 }
 
 .optionPreview {
-  font-size: 22px;
-  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  color: var(--color-text-secondary);
 }
 
 .optionLabel {

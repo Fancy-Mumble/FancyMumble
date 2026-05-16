@@ -555,6 +555,36 @@ pub(crate) struct MicAmplitudePayload {
     pub peak: f32,
 }
 
+/// Auto-calibration result emitted when voice-activation auto-tunes
+/// the noise-gate parameters.  Carries all four calibration knobs so
+/// the frontend can refresh its UI atomically.
+#[derive(Clone, Serialize)]
+pub(crate) struct VoiceActivationCalibrationPayload {
+    /// Auto-tuned open threshold (post-AGC RMS, 0.0 - 1.0).
+    pub vad_threshold: f32,
+    /// Close-threshold ratio relative to `vad_threshold`.
+    pub noise_gate_close_ratio: f32,
+    /// Frames to keep the gate open after audio drops below the close threshold.
+    pub hold_frames: u32,
+    /// Auto-tuned AGC max gain in dB.
+    pub max_gain_db: f32,
+}
+
+/// Voice replay lifecycle, emitted on `voice-replay-state` so the
+/// frontend can label its single Record / Stop / Playing button
+/// without polling.
+#[derive(Clone, Copy, Serialize)]
+#[serde(tag = "phase", rename_all = "snake_case")]
+pub(crate) enum VoiceReplayState {
+    /// Capturing through the same filter chain the live voice pipeline
+    /// uses (AGC + denoiser + noise gate).
+    Recording { elapsed_ms: u32, capacity_ms: u32 },
+    /// Replaying the captured buffer through the output device.
+    Playing { elapsed_ms: u32, total_ms: u32 },
+    /// Replay finished or was cancelled.
+    Idle,
+}
+
 /// Latency measurement payload emitted during latency test.
 #[derive(Clone, Serialize)]
 pub(crate) struct LatencyPayload {
@@ -1146,7 +1176,7 @@ mod tests {
             pchat_protocol: Some(PchatProtocol::SignalV1),
             pchat_max_history: Some(1000),
             pchat_retention_days: Some(7),
-            pchat_key_custodians: Vec::new(),
+            pchat_key_custodians: Vec::new(), is_enter_restricted: false,
         };
         let json = serde_json::to_string(&entry).expect("serialize");
         assert!(

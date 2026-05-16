@@ -17,6 +17,8 @@
 mod admin;
 mod audio;
 mod audio_tasks;
+mod calibration;
+mod voice_replay;
 mod channels;
 mod connection;
 mod emotes;
@@ -91,6 +93,8 @@ pub(super) struct AudioPipelineState {
     pub speaker_volumes: SpeakerVolumes,
     pub mic_test_handle: Option<tauri::async_runtime::JoinHandle<()>>,
     pub latency_test_handle: Option<tauri::async_runtime::JoinHandle<()>>,
+    pub voice_replay_handle: Option<tauri::async_runtime::JoinHandle<()>>,
+    pub voice_replay_stop: Option<tokio::sync::watch::Sender<bool>>,
     pub recording_handle: Option<recording::RecordingHandle>,
     pub talking_sessions: HashSet<u32>,
 }

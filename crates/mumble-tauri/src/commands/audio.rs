@@ -243,6 +243,23 @@ pub(crate) async fn calibrate_voice_threshold(state: tauri::State<'_, AppState>)
     state.calibrate_voice_threshold().await
 }
 
+/// Begin a voice replay session: record up to ~20 s of microphone
+/// audio through the live outbound filter chain, then play it back
+/// through the output device.
+///
+/// Lifecycle events are emitted on `voice-replay-state`.
+#[tauri::command]
+pub(crate) fn start_voice_replay(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.start_voice_replay()
+}
+
+/// Advance the voice replay state machine - stops recording (which
+/// auto-transitions into playback), or stops playback entirely.
+#[tauri::command]
+pub(crate) fn stop_voice_replay(state: tauri::State<'_, AppState>) {
+    state.stop_voice_replay();
+}
+
 /// Start periodic TCP pings for live latency measurement.
 #[tauri::command]
 pub(crate) fn start_latency_test(state: tauri::State<'_, AppState>) -> Result<(), String> {

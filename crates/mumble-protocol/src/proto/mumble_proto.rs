@@ -1483,14 +1483,18 @@ pub struct PchatKeyChallengeResult {
     pub passed: ::core::option::Option<bool>,
 }
 /// Client requests deletion of persistent messages in a channel.
+///
 /// Exactly one deletion mode should be used per request:
+///
 ///    - message_ids: bulk delete specific messages by ID
 ///    - time_range: delete messages within a timestamp range
 ///    - sender_hash: delete all messages from a specific user
+///
 /// Server acknowledges to the requester via PchatAck with
 /// status = PCHAT_ACK_DELETED, message_ids listing deleted IDs.
 /// Server then broadcasts this same PchatDeleteMessages to other
 /// verified sessions so they can evict matching messages locally.
+///
 /// Wire type ID = 115.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PchatDeleteMessages {

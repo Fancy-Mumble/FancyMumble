@@ -362,38 +362,7 @@ mod voice_pipeline {
             let encoder = OpusEncoder::new(encoder_config, AudioFormat::MONO_48KHZ_F32)
                 .map_err(|e| format!("Encoder init: {e}"))?;
 
-            let mut outbound_filters = FilterChain::new();
-            // AGC before noise gate (see enable_voice for rationale).
-            if audio_settings.auto_gain {
-                let max_gain_linear = 10.0_f32.powf(audio_settings.max_gain_db / 20.0);
-                #[cfg(target_os = "android")]
-                let agc_config = AgcConfig {
-                    max_gain: max_gain_linear.min(2.0),
-                    ..AgcConfig::default()
-                };
-                #[cfg(not(target_os = "android"))]
-                let agc_config = AgcConfig {
-                    max_gain: max_gain_linear,
-                    ..AgcConfig::default()
-                };
-                outbound_filters.push(Box::new(AutomaticGainControl::new(agc_config)));
-            }
-            if audio_settings.noise_suppression {
-                // RNN-based denoiser runs first so the gate sees clean
-                // audio and does not chatter on transient noise.
-                let denoiser_config = DenoiserConfig {
-                    algorithm: audio_settings.denoiser_algorithm,
-                    params: audio_settings.denoiser_params.clone(),
-                    ..DenoiserConfig::default()
-                };
-                outbound_filters.push(Box::new(SpectralDenoiser::new(denoiser_config)));
-                outbound_filters.push(Box::new(NoiseGate::new(NoiseGateConfig {
-                    open_threshold: audio_settings.vad_threshold,
-                    close_threshold: audio_settings.vad_threshold * audio_settings.noise_gate_close_ratio,
-                    hold_frames: audio_settings.hold_frames,
-                    ..NoiseGateConfig::default()
-                })));
-            }
+            let outbound_filters = build_outbound_filters(audio_settings);
 
             info!(
                 "start_outbound_pipeline: filters={}, noise_suppression={}, threshold={:.5}",
@@ -670,24 +639,9 @@ mod voice_pipeline {
 
             capture.start().map_err(|e| format!("Mic test capture start: {e}"))?;
 
-            // Build AGC filter matching the voice pipeline so auto-calibration
-            // measures post-gain levels (same as the noise gate will see).
-            let agc_filter = if audio_settings.auto_gain {
-                let max_gain_linear = 10.0_f32.powf(audio_settings.max_gain_db / 20.0);
-                #[cfg(target_os = "android")]
-                let agc_config = AgcConfig {
-                    max_gain: max_gain_linear.min(2.0),
-                    ..AgcConfig::default()
-                };
-                #[cfg(not(target_os = "android"))]
-                let agc_config = AgcConfig {
-                    max_gain: max_gain_linear,
-                    ..AgcConfig::default()
-                };
-                Some(AutomaticGainControl::new(agc_config))
-            } else {
-                None
-            };
+            // Same AGC config as the voice pipeline so the calibrator
+            // measures the post-gain signal the noise gate will see.
+            let agc_filter = build_agc_filter(&audio_settings);
 
             let app = self.app_handle().ok_or("No app handle")?;
             let auto_sensitivity = audio_settings.auto_input_sensitivity;
@@ -710,6 +664,81 @@ mod voice_pipeline {
                 if let Some(handle) = state.audio.mic_test_handle.take() {
                     handle.abort();
                 }
+            }
+        }
+
+        /// Start a voice replay session.
+        ///
+        /// Records the local microphone through the *exact* filter chain
+        /// used for live transmission (AGC + denoiser + noise gate), then
+        /// plays the captured buffer back through the output device.
+        ///
+        /// Either press stop again (which advances or ends the cycle) or
+        /// let the loop auto-stop when the ~20 s buffer fills.
+        pub fn start_voice_replay(&self) -> Result<(), String> {
+            self.stop_voice_replay();
+
+            let (audio_settings, speaker_volumes) = {
+                let __session = self.inner.snapshot();
+                let state = __session.lock().map_err(|e| e.to_string())?;
+                (
+                    state.audio.settings.clone(),
+                    state.audio.speaker_volumes.clone(),
+                )
+            };
+
+            let input_vol = Arc::new(AtomicU32::new(audio_settings.input_volume.to_bits()));
+            let output_vol = Arc::new(AtomicU32::new(audio_settings.output_volume.to_bits()));
+
+            let capture = PlatformAudioFactory::create_capture(
+                audio_settings.selected_device.as_deref(),
+                960,
+                input_vol,
+            )?;
+            let filters = build_outbound_filters(&audio_settings);
+            let (playback, speaker_buffers) = super::super::voice_replay::make_voice_replay_playback(
+                &audio_settings,
+                output_vol,
+                speaker_volumes,
+            )?;
+
+            let app = self.app_handle().ok_or("No app handle")?;
+            let (stop_tx, stop_rx) = tokio::sync::watch::channel(true);
+
+            let context = super::super::voice_replay::VoiceReplayContext {
+                capture,
+                filters,
+                playback,
+                speaker_buffers,
+            };
+
+            let handle = tauri::async_runtime::spawn(async move {
+                super::super::voice_replay::voice_replay_loop(context, app, stop_rx).await;
+            });
+
+            let __session = self.inner.snapshot();
+            let mut state = __session.lock().map_err(|e| e.to_string())?;
+            state.audio.voice_replay_handle = Some(handle);
+            state.audio.voice_replay_stop = Some(stop_tx);
+            Ok(())
+        }
+
+        /// Signal the replay loop to advance: from Recording it stops
+        /// capture and starts playback; from Playing it stops playback;
+        /// from Idle it is a no-op.  The task itself emits the matching
+        /// `voice-replay-state` event so the UI stays in sync.
+        pub fn stop_voice_replay(&self) {
+            let session = self.inner.snapshot();
+            let Ok(state) = session.lock() else {
+                return;
+            };
+            if let Some(tx) = &state.audio.voice_replay_stop {
+                // Flip the watch value to `false` so the loop's
+                // `has_changed()` polling sees the request.  The sender
+                // is intentionally left in state so a second stop call
+                // (e.g. stopping playback after stopping recording) still
+                // has a live sender to signal through.
+                let _ = tx.send(false);
             }
         }
 
@@ -749,13 +778,20 @@ mod voice_pipeline {
             }
         }
 
-        /// Calibrate the voice activation threshold.
+        /// One-shot voice activation calibration.
         ///
         /// Opens the microphone, applies the same AGC filter chain as
-        /// the voice pipeline, measures the post-gain noise floor over
-        /// ~2 seconds, and sets `vad_threshold` to 3x the measured
-        /// noise floor.  Returns the new threshold.
+        /// the voice pipeline, feeds ~3 seconds of audio into the
+        /// shared [`Calibrator`], and writes the resulting open
+        /// threshold, close ratio, and hold time back into
+        /// [`AudioSettings`].  Returns the new open threshold.
+        ///
+        /// The estimator rejects digital silence (see
+        /// [`super::super::calibration`]) so a user who pauses during
+        /// calibration no longer collapses the noise floor.
         pub async fn calibrate_voice_threshold(&self) -> Result<f32, String> {
+            use super::super::calibration::{frame_rms, Calibrator, AUTO_CALIBRATION_WINDOW};
+
             let audio_settings = {
                 let __session = self.inner.snapshot();
                 let state = __session.lock().map_err(|e| e.to_string())?;
@@ -771,33 +807,15 @@ mod voice_pipeline {
             )?;
             capture.start().map_err(|e| format!("Calibration capture start: {e}"))?;
 
-            // Build the same AGC filter as the voice pipeline.
-            let mut agc_filter = if audio_settings.auto_gain {
-                let max_gain_linear = 10.0_f32.powf(audio_settings.max_gain_db / 20.0);
-                #[cfg(target_os = "android")]
-                let agc_config = AgcConfig {
-                    max_gain: max_gain_linear.min(2.0),
-                    ..AgcConfig::default()
-                };
-                #[cfg(not(target_os = "android"))]
-                let agc_config = AgcConfig {
-                    max_gain: max_gain_linear,
-                    ..AgcConfig::default()
-                };
-                Some(AutomaticGainControl::new(agc_config))
-            } else {
-                None
-            };
+            let mut agc_filter = build_agc_filter(&audio_settings);
 
-            // Measure noise floor for ~2 seconds (~60 frames at 30 Hz).
-            let mut noise_floor_ema: f32 = 0.0;
-            let ema_alpha: f32 = 0.1;
-            let mut frame_count: u32 = 0;
-
+            let mut calibrator = Calibrator::new(AUTO_CALIBRATION_WINDOW);
             let mut interval = tokio::time::interval(Duration::from_millis(33));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-            for _ in 0..60 {
+            // Sample for ~3 s (90 frames at 30 Hz) so the percentile
+            // estimator has enough non-silent frames to be meaningful.
+            for _ in 0..90 {
                 let _ = interval.tick().await;
 
                 let mut latest = None;
@@ -808,68 +826,99 @@ mod voice_pipeline {
                     continue;
                 };
 
-                // Apply AGC to get post-gain levels.
                 if let Some(ref mut agc) = agc_filter {
                     use mumble_protocol::audio::filter::AudioFilter as _;
+                    let pre_agc_rms = frame_rms(&frame);
                     let _ = agc.process(&mut frame);
-                }
-
-                let samples: Vec<f32> = frame
-                    .data
-                    .chunks_exact(4)
-                    .map(|b| f32::from_ne_bytes([b[0], b[1], b[2], b[3]]))
-                    .collect();
-
-                if samples.is_empty() {
-                    continue;
-                }
-
-                let sum_sq: f32 = samples.iter().map(|s| s * s).sum();
-                let rms = (sum_sq / samples.len() as f32).sqrt().min(1.0);
-
-                frame_count += 1;
-                if noise_floor_ema < 0.0001 {
-                    noise_floor_ema = rms;
+                    calibrator.push(frame_rms(&frame), pre_agc_rms);
                 } else {
-                    // Only update from frames close to the noise floor.
-                    // Use a tight 3x multiplier so speech does not
-                    // inflate the noise floor estimate.
-                    let is_quiet = frame_count < 15
-                        || rms < noise_floor_ema * 3.0
-                        || noise_floor_ema < 0.0001;
-                    noise_floor_ema = apply_ema_if_quiet(noise_floor_ema, rms, ema_alpha, is_quiet);
+                    let rms = frame_rms(&frame);
+                    calibrator.push(rms, rms);
                 }
             }
 
             let _ = capture.stop();
 
-            // Set threshold at 15x noise floor for clear separation.
-            let threshold = (noise_floor_ema * 15.0).clamp(0.03, 0.5);
+            let Some(calibration) = calibrator.compute() else {
+                return Err(
+                    "Calibration failed: not enough audio captured.  Speak normally for a few seconds and try again.".into(),
+                );
+            };
+
             info!(
-                "calibrate_voice_threshold: noise_floor={:.5}, threshold={:.5}",
-                noise_floor_ema, threshold
+                "calibrate_voice_threshold: open={:.5}, close_ratio={:.3}, hold_frames={}, max_gain_db={:.1}",
+                calibration.vad_threshold, calibration.noise_gate_close_ratio, calibration.hold_frames, calibration.max_gain_db,
             );
 
-            if let Ok(mut state) = self.inner.snapshot().lock() {
-                state.audio.settings.vad_threshold = threshold;
-            }
+            let payload = if let Ok(mut state) = self.inner.snapshot().lock() {
+                state.audio.settings.vad_threshold = calibration.vad_threshold;
+                state.audio.settings.noise_gate_close_ratio = calibration.noise_gate_close_ratio;
+                state.audio.settings.hold_frames = calibration.hold_frames;
+                state.audio.settings.max_gain_db = calibration.max_gain_db;
+                Some(super::super::types::VoiceActivationCalibrationPayload {
+                    vad_threshold: calibration.vad_threshold,
+                    noise_gate_close_ratio: calibration.noise_gate_close_ratio,
+                    hold_frames: calibration.hold_frames,
+                    max_gain_db: calibration.max_gain_db,
+                })
+            } else {
+                None
+            };
 
-            // Emit event so the frontend can update the displayed threshold.
-            if let Some(app) = self.app_handle() {
+            if let (Some(app), Some(payload)) = (self.app_handle(), payload) {
                 use tauri::Emitter as _;
-                let _ = app.emit("vad-threshold-updated", threshold);
+                let _ = app.emit("voice-activation-calibrated", payload);
             }
 
-            Ok(threshold)
+            Ok(calibration.vad_threshold)
         }
     }
 
-    fn apply_ema_if_quiet(current_ema: f32, rms: f32, alpha: f32, is_quiet: bool) -> f32 {
-        if is_quiet {
-            alpha * rms + (1.0 - alpha) * current_ema
-        } else {
-            current_ema
+    /// Build the full outbound filter chain used by the live voice
+    /// pipeline.  Shared by `start_outbound_pipeline` and the voice
+    /// replay task so users hear *exactly* what is sent over the wire,
+    /// gating, denoising, AGC and all.
+    pub(super) fn build_outbound_filters(settings: &AudioSettings) -> FilterChain {
+        let mut filters = FilterChain::new();
+        if let Some(agc) = build_agc_filter(settings) {
+            filters.push(Box::new(agc));
         }
+        if settings.noise_suppression {
+            let denoiser_config = DenoiserConfig {
+                algorithm: settings.denoiser_algorithm,
+                params: settings.denoiser_params.clone(),
+                ..DenoiserConfig::default()
+            };
+            filters.push(Box::new(SpectralDenoiser::new(denoiser_config)));
+            filters.push(Box::new(NoiseGate::new(NoiseGateConfig {
+                open_threshold: settings.vad_threshold,
+                close_threshold: settings.vad_threshold * settings.noise_gate_close_ratio,
+                hold_frames: settings.hold_frames,
+                ..NoiseGateConfig::default()
+            })));
+        }
+        filters
+    }
+
+    /// Build the AGC filter used by the calibration paths.  Mirrors
+    /// the configuration applied by `start_outbound_pipeline` so the
+    /// calibrator sees the same post-gain signal the noise gate will.
+    fn build_agc_filter(settings: &AudioSettings) -> Option<AutomaticGainControl> {
+        if !settings.auto_gain {
+            return None;
+        }
+        let max_gain_linear = 10.0_f32.powf(settings.max_gain_db / 20.0);
+        #[cfg(target_os = "android")]
+        let agc_config = AgcConfig {
+            max_gain: max_gain_linear.min(2.0),
+            ..AgcConfig::default()
+        };
+        #[cfg(not(target_os = "android"))]
+        let agc_config = AgcConfig {
+            max_gain: max_gain_linear,
+            ..AgcConfig::default()
+        };
+        Some(AutomaticGainControl::new(agc_config))
     }
 
     // Background task functions are in the `audio_tasks` sibling module

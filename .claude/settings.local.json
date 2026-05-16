@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(grep -n \"Write\\\\|isAdmin\\\\|hasPermission\\\\|ChanACL::\" \"F:/Dokumente/projekte/mumble_server/mumble-server/src/murmur/Messages.cpp\" 2>&1 | grep -iE \"write|admin\" | head -10)",
-      "Read(//f/Dokumente/projekte/mumble_server/mumble-server/src/murmur/**)"
+      "Read(//f/Dokumente/projekte/mumble_server/mumble-server/src/murmur/**)",
+      "Bash(find crates/mumble-tauri/ui/src/icons*)",
+      "Bash(cargo check *)",
+      "Bash(cargo clippy *)",
+      "Bash(npx tsc *)",
+      "Bash(npm test *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(cargo test *)"
     ]
   }
 }

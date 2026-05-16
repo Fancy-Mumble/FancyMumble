@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type {
@@ -8,10 +8,19 @@ import type {
   NoiseSuppressionAlgorithm,
   PacketStats,
 } from "../../types";
-import { NOISE_SUPPRESSION_LABELS } from "../../types";
+import {
+  ActivityIcon,
+  AudioWaveformIcon,
+  MicOffIcon,
+  SlidersIcon,
+  SparklesIcon,
+} from "../../icons";
 import { isDesktopPlatform } from "../../utils/platform";
 import { Toggle, SliderField } from "./SharedControls";
 import { DenoiserAdvancedControls } from "./DenoiserAdvancedControls";
+import { ActivationModeSelector } from "./ActivationModeSelector";
+import { CalibrationPanel } from "./CalibrationPanel";
+import { RadioCardGroup, type RadioCardOption } from "../../components/elements/RadioCardGroup";
 import styles from "./SettingsPage.module.css";
 
 const FRAME_SIZE_OPTIONS = [
@@ -21,8 +30,38 @@ const FRAME_SIZE_OPTIONS = [
   { value: 60, label: "60 ms" },
 ];
 
-/** Peak-hold decay: percentage-points per second. */
-const PEAK_DECAY_PER_SEC = 80;
+const DENOISER_OPTIONS: readonly RadioCardOption<NoiseSuppressionAlgorithm>[] = [
+  {
+    value: "none",
+    label: "Off",
+    description: "No noise processing. Raw microphone audio is transmitted as-is.",
+    Icon: MicOffIcon,
+  },
+  {
+    value: "rnnoise",
+    label: "RNNoise",
+    description: "Neural network trained on real speech. Works well in most environments.",
+    Icon: ActivityIcon,
+  },
+  {
+    value: "deepfilternet",
+    label: "DeepFilterNet",
+    description: "State-of-the-art deep learning. Best quality; higher CPU cost.",
+    Icon: SparklesIcon,
+  },
+  {
+    value: "omlsa_imcra",
+    label: "OMLSA + IMCRA",
+    description: "Modern classical estimator. Very smooth suppression output.",
+    Icon: SlidersIcon,
+  },
+  {
+    value: "spectral_subtraction",
+    label: "Spectral Subtraction",
+    description: "Lightest option. Ideal for steady background noise.",
+    Icon: AudioWaveformIcon,
+  },
+];
 
 function StatsRow({ label, stats }: Readonly<{ label: string; stats: PacketStats }>) {
   const total = stats.good + stats.late + stats.lost;
@@ -70,59 +109,6 @@ function AudioStatsSection() {
   );
 }
 
-function VuMeter({ rms, peak, threshold }: Readonly<{ rms: number; peak: number; threshold: number }>) {
-  const fillRef = useRef<HTMLDivElement>(null);
-  const peakRef = useRef<HTMLDivElement>(null);
-  const threshRef = useRef<HTMLDivElement>(null);
-  const heldPeak = useRef(0);
-  const lastTime = useRef(performance.now());
-  const rafId = useRef(0);
-
-  useEffect(() => {
-    const now = performance.now();
-    const dt = (now - lastTime.current) / 1000; // seconds since last update
-    lastTime.current = now;
-
-    const scaledPeak = Math.min(peak * 500, 100);
-
-    // Decay held peak by time elapsed, then snap up if new peak is higher.
-    heldPeak.current = Math.max(0, heldPeak.current - PEAK_DECAY_PER_SEC * dt);
-    if (scaledPeak > heldPeak.current) {
-      heldPeak.current = scaledPeak;
-    }
-
-    // Write directly to the DOM to avoid extra React re-renders.
-    cancelAnimationFrame(rafId.current);
-    rafId.current = requestAnimationFrame(() => {
-      const rmsPercent = Math.min(rms * 500, 100);
-      if (fillRef.current) fillRef.current.style.width = `${rmsPercent}%`;
-      if (peakRef.current) peakRef.current.style.left = `${heldPeak.current}%`;
-      if (threshRef.current) {
-        const threshPercent = Math.min(threshold * 500, 100);
-        threshRef.current.style.left = `${threshPercent}%`;
-      }
-    });
-
-    return () => cancelAnimationFrame(rafId.current);
-  }, [rms, peak, threshold]);
-
-  return (
-    <div className={styles.vuMeter}>
-      <div className={styles.vuTrack}>
-        <div className={styles.vuFill} ref={fillRef} />
-        <div className={styles.vuPeak} ref={peakRef} />
-        <div className={styles.vuThreshold} ref={threshRef} title={`Threshold: ${(threshold * 100).toFixed(1)}%`} />
-      </div>
-      <div className={styles.vuLabels}>
-        <span>-60</span>
-        <span>-40</span>
-        <span>-20</span>
-        <span>0 dB</span>
-      </div>
-    </div>
-  );
-}
-
 export function AudioPanel({
   devices,
   outputDevices,
@@ -140,14 +126,6 @@ export function AudioPanel({
   useRodioBackend: boolean;
   onToggleAudioBackend: () => void;
 }>) {
-  const [micTesting, setMicTesting] = useState(false);
-  const micTestingRef = useRef(false);
-  // Store latest amplitude in a ref to avoid re-rendering on every event.
-  const amplitudeRef = useRef({ rms: 0, peak: 0 });
-  // A state counter bumped at display-rate to trigger VuMeter updates.
-  const [ampTick, setAmpTick] = useState(0);
-  const rafHandle = useRef(0);
-
   const [availableAlgorithms, setAvailableAlgorithms] = useState<
     NoiseSuppressionAlgorithm[]
   >(["none", "omlsa_imcra", "spectral_subtraction"]);
@@ -159,66 +137,7 @@ export function AudioPanel({
       .catch(() => { /* keep the conservative default */ });
   }, []);
 
-  const toggleMicTest = useCallback(async () => {
-    if (micTestingRef.current) {
-      await invoke("stop_mic_test").catch(() => {});
-      setMicTesting(false);
-      micTestingRef.current = false;
-      amplitudeRef.current = { rms: 0, peak: 0 };
-      setAmpTick((t) => t + 1);
-    } else {
-      try {
-        await invoke("start_mic_test");
-        setMicTesting(true);
-        micTestingRef.current = true;
-      } catch (e) {
-        console.error("Mic test failed:", e);
-      }
-    }
-  }, []);
-
-  // Listen for amplitude events while mic test is active.
-  // Buffer into a ref and flush to React at display rate.
-  useEffect(() => {
-    if (!micTesting) return;
-    const unlisten = listen<{ rms: number; peak: number }>(
-      "mic-amplitude",
-      (event) => {
-        amplitudeRef.current = event.payload;
-        cancelAnimationFrame(rafHandle.current);
-        rafHandle.current = requestAnimationFrame(() =>
-          setAmpTick((t) => t + 1),
-        );
-      },
-    );
-    return () => {
-      cancelAnimationFrame(rafHandle.current);
-      unlisten.then((f) => f());
-    };
-  }, [micTesting]);
-
-  // Stop mic test on unmount.
-  useEffect(() => {
-    return () => {
-      if (micTestingRef.current) {
-        invoke("stop_mic_test").catch(() => {});
-      }
-    };
-  }, []);
-
-  // Listen for backend-driven threshold updates (auto-calibration).
-  useEffect(() => {
-    const unlisten = listen<number>("vad-threshold-updated", (event) => {
-      onChange({ vad_threshold: event.payload });
-    });
-    return () => {
-      unlisten.then((f) => f());
-    };
-  }, [onChange]);
-
-  // Read amplitude from ref (the ampTick dependency triggers re-reads).
-  void ampTick; // used only to trigger re-render
-  const amplitude = amplitudeRef.current;
+  const isVoiceGate = !settings.push_to_talk && settings.noise_suppression;
 
   return (
     <>
@@ -227,7 +146,6 @@ export function AudioPanel({
       {/* -- Input & Output Devices (side by side) ---------- */}
       <section className={styles.section}>
         <div className={styles.deviceColumns}>
-          {/* Left: Microphone */}
           <div className={styles.deviceColumn}>
             <h3 className={styles.sectionTitle}>Input Device</h3>
             <select
@@ -258,7 +176,6 @@ export function AudioPanel({
             />
           </div>
 
-          {/* Right: Speaker */}
           <div className={styles.deviceColumn}>
             <h3 className={styles.sectionTitle}>Output Device</h3>
             <select
@@ -292,167 +209,47 @@ export function AudioPanel({
         </div>
       </section>
 
-      {/* -- Activation Mode ---------------------------------------- */}
+      {/* -- Activation Mode + Voice Gate ---------------------------- */}
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>Activation Mode</h3>
         <p className={styles.fieldHint}>
           Choose how your microphone is activated.
         </p>
-        <div className={styles.radioGroup}>
-          <label className={styles.radioLabel}>
-            <input
-              type="radio"
-              name="activation_mode"
-              checked={!settings.push_to_talk && settings.noise_suppression}
-              onChange={() =>
-                onChange({ push_to_talk: false, noise_suppression: true })
-              }
-            />
-            Voice Activation
-          </label>
-          <label className={styles.radioLabel}>
-            <input
-              type="radio"
-              name="activation_mode"
-              checked={!settings.push_to_talk && !settings.noise_suppression}
-              onChange={() =>
-                onChange({
-                  push_to_talk: false,
-                  noise_suppression: false,
-                  auto_input_sensitivity: false,
-                })
-              }
-            />
-            Continuous
-          </label>
-          <label className={styles.radioLabel}>
-            <input
-              type="radio"
-              name="activation_mode"
-              checked={settings.push_to_talk}
-              onChange={() =>
-                onChange({
-                  push_to_talk: true,
-                  noise_suppression: false,
-                  auto_input_sensitivity: false,
-                })
-              }
-            />
-            Push to Talk
-          </label>
-        </div>
-      </section>
-
-      {/* -- Voice Activation Settings ------------------------------- */}
-      {!settings.push_to_talk && settings.noise_suppression && (
-        <section className={styles.section}>
-          <h3 className={styles.sectionTitle}>Voice Activation</h3>
-
-          <div className={styles.field}>
-            <label className={styles.fieldLabel} htmlFor="denoiser-algorithm">
-              Noise suppression algorithm
-            </label>
-            <select
-              id="denoiser-algorithm"
-              className={styles.select}
-              value={settings.denoiser_algorithm}
-              onChange={(e) =>
-                onChange({
-                  denoiser_algorithm: e.target.value as NoiseSuppressionAlgorithm,
-                })
-              }
-            >
-              {(Object.keys(NOISE_SUPPRESSION_LABELS) as NoiseSuppressionAlgorithm[])
-                .filter((algo) => availableAlgorithms.includes(algo))
-                .map((algo) => (
-                  <option key={algo} value={algo}>
-                    {NOISE_SUPPRESSION_LABELS[algo]}
-                  </option>
-                ),
-              )}
-            </select>
-            <p className={styles.fieldHint}>
-              RNNoise (default) is a recurrent neural network trained on hours
-              of noisy speech and works well across most environments.  OMLSA
-              + IMCRA (Cohen 2001/2003) is a modern classical estimator with
-              very smooth output.  Spectral subtraction is the lightest
-              option, ideal for steady backgrounds.  Switch live to compare.
-            </p>
-          </div>
-
-          {isExpert && (
-            <DenoiserAdvancedControls
-              algorithm={settings.denoiser_algorithm}
-              settings={settings}
-              onChange={onChange}
-            />
-          )}
-
-          <div className={styles.toggleRow}>
-            <div className={styles.toggleInfo}>
-              <span className={styles.fieldLabel}>Auto Sensitivity</span>
-              <p className={styles.fieldHint}>
-                Automatically adjusts the activation threshold based on your
-                ambient noise level.
-              </p>
-            </div>
-            <Toggle
-              checked={settings.auto_input_sensitivity}
-              onChange={() =>
-                onChange({
-                  auto_input_sensitivity: !settings.auto_input_sensitivity,
-                })
-              }
-            />
-          </div>
-
-          {!settings.auto_input_sensitivity && (
-            <SliderField
-              label="Threshold"
-              hint="Audio below this level is treated as silence; above it is treated as speech."
-              min={0}
-              max={1}
-              step={0.005}
-              value={settings.vad_threshold}
-              onChange={(v) => onChange({ vad_threshold: v })}
-              format={(v) => `${(v * 100).toFixed(1)}%`}
-            />
-          )}
-
-          {settings.auto_input_sensitivity && (
-            <div className={styles.field}>
-              <div className={styles.fieldRow}>
-                <span className={styles.fieldLabel}>Current Threshold</span>
-                <span className={styles.sliderValue}>
-                  {(settings.vad_threshold * 100).toFixed(1)}%
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Calibrate: starts mic test with live VU meter */}
-          <div className={styles.micTestRow}>
-            <button
-              type="button"
-              className={`${styles.micTestBtn} ${micTesting ? styles.micTestActive : ""}`}
-              onClick={toggleMicTest}
-            >
-              {micTesting ? "Stop" : "Calibrate"}
-            </button>
-            {micTesting && <VuMeter rms={amplitude.rms} peak={amplitude.peak} threshold={settings.vad_threshold} />}
-          </div>
-        </section>
-      )}
-
-      {/* -- Push-to-Talk Key ---------------------------------------- */}
-      {settings.push_to_talk && (
-        <section className={styles.section}>
+        <ActivationModeSelector settings={settings} onChange={onChange} />
+        {settings.push_to_talk && (
           <p className={styles.fieldHint}>
-            The push-to-talk key is configured in the{" "}
+            Configure the Push to Talk key under the{" "}
             <strong>Shortcuts</strong> tab.
           </p>
-        </section>
-      )}
+        )}
+        {isVoiceGate && (
+          <>
+            <h4 className={styles.groupTitle}>Voice Gate</h4>
+            <CalibrationPanel settings={settings} onChange={onChange} />
+          </>
+        )}
+      </section>
+
+      {/* -- Noise Suppression --------------------------------------- */}
+      <section className={styles.section}>
+        <h3 className={styles.sectionTitle}>Noise Suppression</h3>
+        <p className={styles.fieldHint}>
+          Reduces background noise before your voice reaches listeners.
+        </p>
+        <RadioCardGroup
+          name="denoiser_algorithm"
+          options={DENOISER_OPTIONS.filter((o) => availableAlgorithms.includes(o.value))}
+          value={settings.denoiser_algorithm}
+          onChange={(denoiser_algorithm) => onChange({ denoiser_algorithm })}
+        />
+        {isExpert && (
+          <DenoiserAdvancedControls
+            algorithm={settings.denoiser_algorithm}
+            settings={settings}
+            onChange={onChange}
+          />
+        )}
+      </section>
 
       {/* -- Audio Processing ------------------------------- */}
       <section className={styles.section}>
@@ -471,16 +268,16 @@ export function AudioPanel({
           />
         </div>
 
-        {settings.auto_gain && (
+        {settings.auto_gain && !settings.auto_input_sensitivity && (
           <SliderField
             label="Max Amplification"
-            hint="Maximum boost the auto-gain controller can apply."
+            hint="Maximum boost the auto-gain controller can apply. Auto-calibration accounts for this when picking the threshold."
             min={1}
             max={40}
             step={1}
             value={settings.max_gain_db}
             onChange={(v) => onChange({ max_gain_db: v })}
-            format={(v) => `${v} dB`}
+            format={(v) => `${Math.round(v)} dB`}
           />
         )}
       </section>
@@ -547,46 +344,23 @@ export function AudioPanel({
       </section>
 
       {/* -- Expert settings -------------------------------- */}
-      {isExpert && (
+      {isExpert && isDesktopPlatform() && (
         <section className={styles.section}>
           <h3 className={styles.sectionTitle}>Expert</h3>
-          <SliderField
-            label="Gate Close Ratio"
-            hint="Close-threshold as a fraction of the open-threshold (hysteresis)."
-            min={0.1}
-            max={1}
-            step={0.05}
-            value={settings.noise_gate_close_ratio}
-            onChange={(v) => onChange({ noise_gate_close_ratio: v })}
-            format={(v) => `${(v * 100).toFixed(0)}%`}
-          />
-          <SliderField
-            label="Hold Frames"
-            hint="How many frames to keep the gate open after audio drops below threshold."
-            min={1}
-            max={50}
-            step={1}
-            value={settings.hold_frames}
-            onChange={(v) => onChange({ hold_frames: v })}
-            format={(v) => `${v}`}
-          />
-
-          {isDesktopPlatform() && (
-            <div className={styles.toggleRow}>
-              <div className={styles.toggleInfo}>
-                <span className={styles.fieldLabel}>Legacy Audio Backend</span>
-                <p className={styles.fieldHint}>
-                  Switch to the legacy cpal audio backend. Use this if you
-                  experience issues with the default rodio backend. Takes effect
-                  on the next voice toggle.
-                </p>
-              </div>
-              <Toggle
-                checked={!useRodioBackend}
-                onChange={onToggleAudioBackend}
-              />
+          <div className={styles.toggleRow}>
+            <div className={styles.toggleInfo}>
+              <span className={styles.fieldLabel}>Legacy Audio Backend</span>
+              <p className={styles.fieldHint}>
+                Switch to the legacy cpal audio backend. Use this if you
+                experience issues with the default rodio backend. Takes effect
+                on the next voice toggle.
+              </p>
             </div>
-          )}
+            <Toggle
+              checked={!useRodioBackend}
+              onChange={onToggleAudioBackend}
+            />
+          </div>
         </section>
       )}
 

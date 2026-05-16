@@ -367,6 +367,8 @@ macro_rules! all_command_handlers {
             commands::audio::start_mic_test,
             commands::audio::stop_mic_test,
             commands::audio::calibrate_voice_threshold,
+            commands::audio::start_voice_replay,
+            commands::audio::stop_voice_replay,
             commands::audio::start_latency_test,
             commands::audio::stop_latency_test,
             commands::audio::start_recording,

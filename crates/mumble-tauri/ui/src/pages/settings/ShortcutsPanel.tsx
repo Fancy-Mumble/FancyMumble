@@ -18,7 +18,7 @@ function ShortcutGroup({
   return (
     <section className={styles.section}>
       <h3 className={styles.sectionTitle}>{title}</h3>
-      {children}
+      <div className={styles.shortcutList}>{children}</div>
     </section>
   );
 }

@@ -296,6 +296,7 @@ async fn set_pchat_protocol(
         position: None,
         temporary: None,
         max_users: None,
+        channel_info_password: None,
         pchat_protocol: Some(mode),
         pchat_max_history: None,
         pchat_retention_days: None,
