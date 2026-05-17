@@ -30,6 +30,7 @@ impl HandleMessage for mumble_tcp::ChannelState {
                     pchat_max_history: None,
                     pchat_retention_days: None,
                     pchat_key_custodians: Vec::new(),
+                    is_enter_restricted: false,
                 });
                 let mode_changed = apply_channel_state_fields(ch, self);
                 let new_custodians = ch.pchat_key_custodians.clone();
@@ -112,6 +113,9 @@ fn apply_channel_state_fields(ch: &mut ChannelEntry, proto: &mumble_tcp::Channel
     }
     if !proto.pchat_key_custodians.is_empty() || ch.pchat_key_custodians != proto.pchat_key_custodians {
         ch.pchat_key_custodians = proto.pchat_key_custodians.clone();
+    }
+    if let Some(v) = proto.is_enter_restricted {
+        ch.is_enter_restricted = v;
     }
     mode_changed
 }

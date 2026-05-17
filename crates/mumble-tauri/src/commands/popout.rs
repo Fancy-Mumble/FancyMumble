@@ -96,3 +96,88 @@ pub(crate) fn take_popout_image(
         .ok()
         .and_then(|mut m| m.remove(&id))
 }
+
+/// Metadata sent to a screen-share popout window so it can subscribe
+/// to the SFU as an independent viewer.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(crate) struct PopoutStreamPayload {
+    /// Mumble session of the broadcaster being watched.
+    pub broadcaster_session: u32,
+    /// Display name of the broadcaster.
+    #[serde(default)]
+    pub broadcaster_name: Option<String>,
+    /// Avatar (data URL) of the broadcaster, if available.
+    #[serde(default)]
+    pub broadcaster_avatar: Option<String>,
+    /// The local user's session, needed to send WebRTC signals.
+    pub own_session: u32,
+    /// Server connection id that owns the Mumble session.
+    pub server_id: String,
+    /// Mumble channel the broadcast is happening in.
+    pub channel_id: u32,
+}
+
+/// Open a borderless, always-on-top window that subscribes to a remote
+/// screen share as a separate WebRTC viewer.  Mirrors `open_image_popout`
+/// but uses the label prefix `popout-stream-` so the frontend can
+/// dispatch to a different page.
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+pub(crate) async fn open_stream_popout(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    payload: PopoutStreamPayload,
+) -> Result<(), String> {
+    let id = uuid::Uuid::new_v4().simple().to_string();
+    let session = payload.broadcaster_session;
+    if let Ok(mut map) = state.popout_streams.lock() {
+        let _ = map.insert(id.clone(), payload);
+    }
+    let label = format!("popout-stream-{id}");
+    // Remember this window so the app-level `on_window_event` handler
+    // (in `lib.rs`) can emit `stream-popout-state opened:false` when the
+    // OS destroys it - works for every close path (Alt+F4, X button,
+    // taskbar close, programmatic close from our context menu).
+    if let Ok(mut map) = state.popout_stream_sessions.lock() {
+        let _ = map.insert(label.clone(), session);
+    }
+    let _window = tauri::WebviewWindowBuilder::new(
+        &app,
+        &label,
+        tauri::WebviewUrl::App(std::path::PathBuf::from("index.html")),
+    )
+    .title("")
+    .decorations(false)
+    .shadow(false)
+    .transparent(true)
+    .always_on_top(true)
+    .inner_size(960.0, 540.0)
+    .resizable(true)
+    .skip_taskbar(false)
+    .build()
+    .map_err(|e: tauri::Error| e.to_string())?;
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub(crate) async fn open_stream_popout(
+    _app: tauri::AppHandle,
+    _state: tauri::State<'_, AppState>,
+    _payload: PopoutStreamPayload,
+) -> Result<(), String> {
+    Err("Stream popout windows are not supported on Android".to_string())
+}
+
+/// Consume and return the stream payload registered for a popout window id.
+#[tauri::command]
+pub(crate) fn take_popout_stream(
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Option<PopoutStreamPayload> {
+    state
+        .popout_streams
+        .lock()
+        .ok()
+        .and_then(|mut m| m.remove(&id))
+}

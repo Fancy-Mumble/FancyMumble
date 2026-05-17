@@ -181,6 +181,12 @@
   flex-shrink: 0;
 }
 
+/* P2P variant - amber background */
+.broadcastBannerP2P {
+  background: linear-gradient(135deg, rgba(240, 160, 30, 0.12), rgba(240, 160, 30, 0.06));
+  border-bottom-color: rgba(240, 160, 30, 0.25);
+}
+
 .broadcastBannerDot {
   width: 8px;
   height: 8px;
@@ -190,9 +196,35 @@
   animation: bannerDotPulse 1.5s ease-in-out infinite;
 }
 
+/* P2P dot - amber */
+.broadcastBannerDotP2P {
+  background: #f0a01e;
+  animation: bannerDotPulseP2P 1.5s ease-in-out infinite;
+}
+
 @keyframes bannerDotPulse {
   0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--color-danger-alt-glow); }
   50% { opacity: 0.6; box-shadow: 0 0 6px 2px rgba(237, 66, 69, 0.3); }
+}
+
+@keyframes bannerDotPulseP2P {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(240, 160, 30, 0.4); }
+  50% { opacity: 0.6; box-shadow: 0 0 6px 2px rgba(240, 160, 30, 0.3); }
+}
+
+/* P2P label pill shown in banner */
+.broadcastBannerP2PLabel {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(240, 160, 30, 0.18);
+  color: #f0a01e;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
 }
 
 .broadcastBannerText {

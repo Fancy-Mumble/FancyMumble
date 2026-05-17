@@ -17,6 +17,13 @@
   font: inherit;
   color: inherit;
   outline: none;
+  /*
+   * Limit style/layout/paint invalidations to this row.  Hovering
+   * across hundreds of rows in a populated sidebar would otherwise
+   * ripple through global style recalculation; with `contain` the
+   * browser can short-circuit invalidation at the row boundary.
+   */
+  contain: layout style paint;
 }
 
 .userItem:focus-visible {
@@ -180,7 +187,19 @@
   animation: livePulse 2s ease-in-out infinite;
 }
 
+/* P2P variant - amber to distinguish from server-relayed red */
+.liveBadgeP2P {
+  background: rgba(240, 160, 30, 0.15);
+  color: #f0a01e;
+  animation: livePulseP2P 2s ease-in-out infinite;
+}
+
 @keyframes livePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes livePulseP2P {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
 }

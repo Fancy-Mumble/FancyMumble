@@ -1,18 +1,19 @@
-import { ChevronRightIcon, HeadphonesOffIcon, ListenBadgeIcon, MicOffSmallIcon, ScreenShareIcon } from "../../../icons";
+import { ChevronRightIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MicOffSmallIcon, ScreenShareIcon } from "../../../icons";
 /**
  * ModernChannelList - a flat, always-visible channel viewer.
  *
  * - No hierarchy: all channels rendered at the same level.
- * - Channels with members are sorted to the top.
+ * - Channels are ordered by server position (then name as tiebreaker).
  * - Each channel shows its members directly below the name.
  * - Channels can be collapsed (shows stacked avatar bubbles instead).
  * - Default state: expanded (members visible as a name list).
- * - Current channel is sticky at the top when scrolling.
+ * - Current channel shows a sticky clone at the top or bottom edge
+ *   of the scroll container when it has scrolled out of view.
  * - Hovering a member shows their profile card.
  * - Right-clicking a member opens the user context menu.
  */
 
-import { useState, useMemo, useCallback, useContext } from "react";
+import { useState, useMemo, useCallback, useContext, useRef, useLayoutEffect, memo } from "react";
 import type { ChannelEntry, UserEntry } from "../../../types";
 import { colorFor, useHoverCardPosition, UserHoverCardPortal, RoleColorsContext } from "../UserListItem";
 import { useUserAvatar } from "../../../lazyBlobs";
@@ -21,10 +22,14 @@ import { useUserStats } from "../../../hooks/useUserStats";
 import { useStreamThumbnail } from "../../chat/useStreamPreview";
 import SwipeableCard from "../../elements/SwipeableCard";
 import { isMobile } from "../../../utils/platform";
-import { PERM_MOVE } from "../../../utils/permissions";
+import { PERM_MOVE, PERM_ENTER } from "../../../utils/permissions";
 import { useUserDrag, useChannelDropTarget } from "../../../utils/userMoveDnd";
 import { useAppStore } from "../../../store";
 import { PchatBadge } from "../PchatBadge";
+import {
+  ChannelReorderWrapper,
+  useChannelReorderHandler,
+} from "../channelReorder";
 import styles from "./ModernChannelList.module.css";
 
 const MAX_STACKED = 3;
@@ -43,6 +48,9 @@ interface ModernChannelListProps {
   readonly onContextMenu: (e: React.MouseEvent, channelId: number) => void;
   readonly onUserContextMenu?: (e: React.MouseEvent, user: UserEntry) => void;
   readonly onUserClick?: (session: number) => void;
+  readonly shakingChannelId?: number;
+  readonly highlightChannelId?: number;
+  readonly highlightUserSession?: number;
 }
 
 // -- Channel drop-target wrapper (drag-to-move users) -------------
@@ -70,7 +78,7 @@ interface MemberItemProps {
   readonly onClick?: (session: number) => void;
 }
 
-function MemberItem({ user, isTalking, isBroadcasting, isActive, onContextMenu, onClick }: MemberItemProps) {
+function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMenu, onClick }: MemberItemProps) {
   const ownSession = useAppStore((s) => s.ownSession);
   const selectedDmUser = useAppStore((s) => s.selectedDmUser);
   const dmUnread = useAppStore((s) => s.dmUnreadCounts[user.session] ?? 0);
@@ -83,11 +91,14 @@ function MemberItem({ user, isTalking, isBroadcasting, isActive, onContextMenu, 
   const roleColors = useContext(RoleColorsContext);
   const roleColor = user.user_id != null ? (roleColors.get(user.user_id) ?? null) : null;
   const url = useUserAvatar(user.session, user.texture_size);
-  const parsed = useMemo(
-    () => (user.comment ? parseComment(user.comment) : null),
-    [user.comment],
-  );
   const { showCard, cardPos, itemRef, handleEnter, handleLeave } = useHoverCardPosition(isBroadcasting);
+  // Defer FancyProfile parsing until the hover card is actually shown.
+  // The result is consumed only inside the portal below, and parsing
+  // adds measurable mount cost when many members are visible.
+  const parsed = useMemo(
+    () => (showCard && user.comment ? parseComment(user.comment) : null),
+    [showCard, user.comment],
+  );
   const stats = useUserStats(user.session, showCard);
   const streamThumbnail = useStreamThumbnail(user.session, showCard && isBroadcasting);
 
@@ -104,7 +115,9 @@ function MemberItem({ user, isTalking, isBroadcasting, isActive, onContextMenu, 
     user.session,
     user.name,
     url,
-    isMobile || isSelf || !canMoveUser,
+    // Moving yourself to another channel is always allowed (no PERM_MOVE
+    // needed on self). Moving others requires PERM_MOVE on their channel.
+    isMobile || (ownSession != null && !isSelf && !canMoveUser),
   );
 
   return (
@@ -175,6 +188,8 @@ function MemberItem({ user, isTalking, isBroadcasting, isActive, onContextMenu, 
   );
 }
 
+const MemberItem = memo(MemberItemImpl);
+
 /** A single collapsed-avatar bubble (separate component so we can use the avatar hook). */
 function CollapsedAvatar({ user }: Readonly<{ user: UserEntry }>) {
   const url = useUserAvatar(user.session, user.texture_size);
@@ -211,7 +226,7 @@ function CollapsedAvatars({ users }: Readonly<{ users: UserEntry[] }>) {
   );
 }
 
-export default function ModernChannelList({
+function ModernChannelListImpl({
   channels,
   users,
   selectedChannel,
@@ -220,6 +235,9 @@ export default function ModernChannelList({
   unreadCounts,
   talkingSessions,
   broadcastingSessions,
+  shakingChannelId,
+  highlightChannelId,
+  highlightUserSession,
   onSelectChannel,
   onJoinChannel,
   onContextMenu,
@@ -228,6 +246,8 @@ export default function ModernChannelList({
 }: ModernChannelListProps) {
   // Collapsed channels (expanded by default = not in the set).
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+
+  const handleChannelReorder = useChannelReorderHandler(channels);
 
   const toggleCollapsed = useCallback((id: number) => {
     setCollapsed((prev) => {
@@ -249,41 +269,87 @@ export default function ModernChannelList({
     return map;
   }, [users]);
 
-  // Flat list of all channels, excluding the root itself.
-  // Sorted: channels with members first, then alphabetical.
+  // Depth-first flattening of the channel tree, so each parent is
+  // immediately followed by its (recursively expanded) children, in
+  // server `position` order at every level.  An empty root channel is
+  // omitted (it would otherwise show up as an unhelpful "Root" header).
   const flatChannels = useMemo(() => {
-    const root = channels.find(
-      (c) => c.parent_id === null || c.parent_id === c.id,
-    );
-    const rootId = root?.id ?? 0;
-
-    // Include all channels (root + descendants).
-    const all = channels.filter((c) => c.id !== rootId);
-    // Also include root if it has users.
-    if (root && (usersByChannel.get(root.id)?.length ?? 0) > 0) {
-      all.unshift(root);
+    const childrenOf = new Map<number, typeof channels>();
+    const isRoot = (ch: ChannelEntry) =>
+      ch.parent_id === null || ch.parent_id === ch.id;
+    for (const ch of channels) {
+      const parent = ch.parent_id === ch.id ? -1 : ch.parent_id ?? -1;
+      const list = childrenOf.get(parent) ?? [];
+      list.push(ch);
+      childrenOf.set(parent, list);
     }
+    const sortLevel = (list: typeof channels) =>
+      [...list].sort((a, b) =>
+        a.position !== b.position ? a.position - b.position : a.name.localeCompare(b.name),
+      );
 
-    return all.sort((a, b) => {
-      const aUsers = usersByChannel.get(a.id)?.length ?? 0;
-      const bUsers = usersByChannel.get(b.id)?.length ?? 0;
-      if (aUsers > 0 && bUsers === 0) return -1;
-      if (aUsers === 0 && bUsers > 0) return 1;
-      return a.name.localeCompare(b.name);
-    });
+    const result: typeof channels = [];
+    const visit = (parentId: number) => {
+      for (const ch of sortLevel(childrenOf.get(parentId) ?? [])) {
+        const skip = isRoot(ch) && (usersByChannel.get(ch.id)?.length ?? 0) === 0;
+        if (!skip) result.push(ch);
+        visit(ch.id);
+      }
+    };
+    // Start from synthetic "no parent" bucket; the real root and any
+    // top-level channels live there, and the recursion handles descendants.
+    visit(-1);
+
+    return result;
   }, [channels, usersByChannel]);
 
-  // Find the current channel entry for the sticky header.
+  // Find the current channel entry for the sticky clone.
   const currentChannelEntry = useMemo(
     () => (currentChannel == null ? undefined : flatChannels.find((c) => c.id === currentChannel)),
     [flatChannels, currentChannel],
   );
 
-  // Channels excluding the current one (rendered below the sticky header).
-  const otherChannels = useMemo(
-    () => (currentChannel == null ? flatChannels : flatChannels.filter((c) => c.id !== currentChannel)),
-    [flatChannels, currentChannel],
-  );
+  // -- Sticky current-channel detection --------------------------------
+  // Shows a clone at the top when the real card has scrolled above the
+  // viewport, or at the bottom when it is below.
+
+  const listRef = useRef<HTMLDivElement>(null);
+  const currentCardRef = useRef<HTMLDivElement>(null);
+  const selectedCardRef = useRef<HTMLDivElement>(null);
+  const [stickyState, setStickyState] = useState<"none" | "top" | "bottom">("none");
+
+  useLayoutEffect(() => {
+    const card = currentCardRef.current;
+    const scrollEl = listRef.current?.parentElement;
+    if (!card || !scrollEl || currentChannel == null) {
+      setStickyState("none");
+      return;
+    }
+    const update = () => {
+      const cardRect = card.getBoundingClientRect();
+      const containerRect = scrollEl.getBoundingClientRect();
+      if (cardRect.top < containerRect.top) {
+        setStickyState("top");
+      } else if (cardRect.bottom > containerRect.bottom) {
+        setStickyState("bottom");
+      } else {
+        setStickyState("none");
+      }
+    };
+    update();
+    scrollEl.addEventListener("scroll", update, { passive: true });
+    return () => scrollEl.removeEventListener("scroll", update);
+  }, [currentChannel, flatChannels]);
+
+  // Scroll the real channel card into view when the user clicks the sticky clone.
+  const scrollCurrentIntoView = useCallback(() => {
+    currentCardRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, []);
+
+  // Scroll the selected channel into view whenever keyboard navigation changes it.
+  useLayoutEffect(() => {
+    selectedCardRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedChannel, highlightChannelId]);
 
   /** Render a single channel card (shared between sticky and list). */
   const renderChannel = useCallback((channel: ChannelEntry) => {
@@ -294,11 +360,14 @@ export default function ModernChannelList({
     const isCurrent = currentChannel === channel.id;
     const isCollapsed = collapsed.has(channel.id);
     const hasUsers = chUsers.length > 0;
+    const isShaking = shakingChannelId === channel.id;
+    const isHighlighted = highlightChannelId === channel.id;
+    const isLocked = !isCurrent && channel.permissions !== null && (channel.permissions & PERM_ENTER) === 0;
 
     return (
       <ChannelDropWrapper channelId={channel.id}>
       <div
-        className={`${styles.channelCard} ${isSelected ? styles.selected : ""} ${isCurrent ? styles.current : ""}`}
+        className={`${styles.channelCard} ${isSelected ? styles.selected : ""} ${isCurrent ? styles.current : ""} ${isShaking ? styles.shaking : ""} ${isHighlighted ? styles.highlighted : ""} ${isLocked ? styles.locked : ""}`}
       >
         {/* Channel header row */}
         <div className={styles.headerRow}>
@@ -326,6 +395,11 @@ export default function ModernChannelList({
           >
             <span className={styles.channelName}>
               {channel.name || "Root"}
+              {isLocked && (
+                <span className={styles.lockBadge} title="No permission to join">
+                  <LockIcon width={11} height={11} />
+                </span>
+              )}
               {isListened && (
                 <span className={styles.listenBadge} title="Listening">
                   <ListenBadgeIcon width={12} height={12} />
@@ -354,16 +428,17 @@ export default function ModernChannelList({
 
         {/* Expanded: show member names */}
         {!isCollapsed && hasUsers && (
-          <div className={styles.memberList}>
+          <div className={styles.memberList} data-no-channel-drag="true">
             {chUsers.map((u) => (
-              <MemberItem
-                key={u.session}
-                user={u}
-                isTalking={talkingSessions.has(u.session)}
-                isBroadcasting={broadcastingSessions.has(u.session)}
-                onContextMenu={onUserContextMenu}
-                onClick={onUserClick}
-              />
+              <div key={u.session} className={u.session === highlightUserSession ? styles.highlighted : undefined}>
+                <MemberItem
+                  user={u}
+                  isTalking={talkingSessions.has(u.session)}
+                  isBroadcasting={broadcastingSessions.has(u.session)}
+                  onContextMenu={onUserContextMenu}
+                  onClick={onUserClick}
+                />
+              </div>
             ))}
           </div>
         )}
@@ -373,39 +448,67 @@ export default function ModernChannelList({
   }, [
     usersByChannel, unreadCounts, listenedChannels, selectedChannel,
     currentChannel, collapsed, talkingSessions, broadcastingSessions,
-    toggleCollapsed, onSelectChannel, onJoinChannel, onContextMenu, onUserContextMenu, onUserClick,
+    shakingChannelId, highlightChannelId, highlightUserSession, toggleCollapsed, onSelectChannel, onJoinChannel, onContextMenu, onUserContextMenu, onUserClick,
   ]);
 
   return (
-    <div className={styles.list}>
-      {/* Sticky current channel */}
-      {currentChannelEntry && (
-        <div className={styles.stickyChannel}>
+    <div ref={listRef} className={styles.list}>
+      {/* Sticky clone at top: shown when the current channel has scrolled above the viewport */}
+      {currentChannelEntry && stickyState === "top" && (
+        <button type="button" className={styles.stickyTop} onClick={scrollCurrentIntoView}>
           {renderChannel(currentChannelEntry)}
-        </div>
+        </button>
       )}
 
-      {/* Other channels */}
-      {otherChannels.map((channel) => {
+      {/* All channels in server order */}
+      {flatChannels.map((channel) => {
+        const isCurrent = channel.id === currentChannel;
+        const isSelected = channel.id === selectedChannel;
         const card = renderChannel(channel);
+        const setRef = (el: HTMLDivElement | null) => {
+          if (isCurrent) currentCardRef.current = el;
+          if (isSelected) selectedCardRef.current = el;
+        };
 
         if (isMobile) {
           return (
-            <SwipeableCard
-              key={channel.id}
-              rightSwipeAction={{
-                label: "Join",
-                color: "var(--color-accent, #2aabee)",
-                onTrigger: () => onJoinChannel(channel.id),
-              }}
-            >
-              {card}
-            </SwipeableCard>
+            <div key={channel.id} ref={setRef}>
+              <SwipeableCard
+                rightSwipeAction={{
+                  label: "Join",
+                  color: "var(--color-accent, #2aabee)",
+                  onTrigger: () => onJoinChannel(channel.id),
+                }}
+              >
+                {card}
+              </SwipeableCard>
+            </div>
           );
         }
 
-        return <div key={channel.id}>{card}</div>;
+        return (
+          <ChannelReorderWrapper
+            key={channel.id}
+            channel={channel}
+            onReorder={handleChannelReorder}
+            innerRef={setRef}
+          >
+            {card}
+          </ChannelReorderWrapper>
+        );
       })}
+
+      {/* Sticky clone at bottom: shown when the current channel is below the viewport */}
+      {currentChannelEntry && stickyState === "bottom" && (
+        <button type="button" className={styles.stickyBottom} onClick={scrollCurrentIntoView}>
+          {renderChannel(currentChannelEntry)}
+        </button>
+      )}
     </div>
   );
 }
+
+// Memoized so parent re-renders (e.g., sidebar tab switches) don't
+// re-execute the heavy render body when props are unchanged.
+const ModernChannelList = memo(ModernChannelListImpl);
+export default ModernChannelList;

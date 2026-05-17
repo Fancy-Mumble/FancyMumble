@@ -1,4 +1,4 @@
-import { CloseIcon, EditIcon, ErrorCircleIcon, FullscreenExitIcon, FullscreenIcon, PauseIcon, PlayIcon, ScreenShareIcon, VolumeIcon, VolumeOffIcon } from "../../icons";
+import { CloseIcon, EditIcon, ErrorCircleIcon, FullscreenExitIcon, FullscreenIcon, PauseIcon, PlayIcon, PopoutIcon, ScreenShareIcon, VolumeIcon, VolumeOffIcon } from "../../icons";
 /**
  * Screen share viewer components.
  *
@@ -33,14 +33,55 @@ interface StreamControlsProps {
    *  so the parent can manage the click-through overlay window lifecycle. */
   readonly desktopOverlayOn?: boolean;
   readonly onToggleDesktopOverlay?: () => void;
+  /** When provided, renders a popout button that detaches the stream
+   *  into a separate always-on-top window. */
+  readonly onPopout?: () => void;
 }
 
-function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, desktopOverlayOn, onToggleDesktopOverlay }: StreamControlsProps) {
+function VolumeControl({ muted, volume, onToggleMute, onChange }: {
+  readonly muted: boolean;
+  readonly volume: number;
+  readonly onToggleMute: () => void;
+  readonly onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div
+      className={styles.volumeGroup}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      <button
+        type="button"
+        className={styles.controlBtn}
+        onClick={onToggleMute}
+        title={muted ? "Unmute" : "Mute"}
+        aria-label={muted ? "Unmute" : "Mute"}
+      >
+        {muted || volume === 0
+          ? <VolumeOffIcon width={16} height={16} />
+          : <VolumeIcon width={16} height={16} />}
+      </button>
+      {show && (
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={muted ? 0 : volume}
+          onChange={onChange}
+          className={styles.volumeSlider}
+          aria-label="Volume"
+        />
+      )}
+    </div>
+  );
+}
+
+function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, desktopOverlayOn, onToggleDesktopOverlay, onPopout }: StreamControlsProps) {
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(100);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showVolSlider, setShowVolSlider] = useState(false);
 
   // Sync fullscreen state.
   useEffect(() => {
@@ -128,34 +169,12 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
 
       {/* Volume (only for remote streams) */}
       {!isOwnPreview && (
-        <div
-          className={styles.volumeGroup}
-          onMouseEnter={() => setShowVolSlider(true)}
-          onMouseLeave={() => setShowVolSlider(false)}
-        >
-          <button
-            type="button"
-            className={styles.controlBtn}
-            onClick={toggleMute}
-            title={muted ? "Unmute" : "Mute"}
-            aria-label={muted ? "Unmute" : "Mute"}
-          >
-            {muted || volume === 0
-              ? <VolumeOffIcon width={16} height={16} />
-              : <VolumeIcon width={16} height={16} />}
-          </button>
-          {showVolSlider && (
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={muted ? 0 : volume}
-              onChange={handleVolumeChange}
-              className={styles.volumeSlider}
-              aria-label="Volume"
-            />
-          )}
-        </div>
+        <VolumeControl
+          muted={muted}
+          volume={volume}
+          onToggleMute={toggleMute}
+          onChange={handleVolumeChange}
+        />
       )}
 
       {/* Draw on screen toggle */}
@@ -188,6 +207,19 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
 
       {/* Spacer */}
       <div className={styles.controlsSpacer} />
+
+      {/* Pop out into a separate always-on-top window (remote streams only) */}
+      {onPopout && (
+        <button
+          type="button"
+          className={styles.controlBtn}
+          onClick={onPopout}
+          title="Open in separate window"
+          aria-label="Open in separate window"
+        >
+          <PopoutIcon width={16} height={16} />
+        </button>
+      )}
 
       {/* Fullscreen (remote streams only) */}
       {!isOwnPreview && (
@@ -307,6 +339,22 @@ function RemoteViewer({ session, channelId, ownSession }: { readonly session: nu
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const remoteStream = useRemoteStream(session);
+  const broadcaster = useAppStore((s) => s.users.find((u) => u.session === session));
+  const activeServerId = useAppStore((s) => s.activeServerId);
+
+  const handlePopout = useCallback(() => {
+    if (!ownSession || !activeServerId) return;
+    invoke("open_stream_popout", {
+      payload: {
+        broadcaster_session: session,
+        broadcaster_name: broadcaster?.name ?? null,
+        broadcaster_avatar: null,
+        own_session: ownSession,
+        server_id: activeServerId,
+        channel_id: channelId,
+      },
+    }).catch((err) => console.error("open_stream_popout failed:", err));
+  }, [session, broadcaster?.name, ownSession, activeServerId, channelId]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -342,6 +390,7 @@ function RemoteViewer({ session, channelId, ownSession }: { readonly session: nu
           videoRef={videoRef}
           containerRef={containerRef}
           drawChannelId={channelId}
+          onPopout={handlePopout}
         />
       )}
       <DrawingOverlay channelId={channelId} ownSession={ownSession} videoRef={videoRef} />
@@ -411,13 +460,17 @@ interface BroadcastBannerProps {
   readonly broadcasters: { session: number; name: string }[];
   /** Called when user clicks "Watch". */
   readonly onWatch: (session: number) => void;
+  /** When false, all broadcasts are peer-to-peer (no server SFU available). */
+  readonly sfuAvailable?: boolean;
 }
 
 /**
  * Notification bar shown above the chat when another user is sharing their
  * screen. Provides a "Watch" button to join the broadcast.
+ * When the server has no SFU the banner is shown in amber to indicate
+ * that the share is peer-to-peer rather than server-relayed.
  */
-export function BroadcastBanner({ broadcasters, onWatch }: BroadcastBannerProps) {
+export function BroadcastBanner({ broadcasters, onWatch, sfuAvailable = true }: BroadcastBannerProps) {
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
 
   // Reset dismissed state when broadcasters change (new broadcaster should show).
@@ -443,11 +496,20 @@ export function BroadcastBanner({ broadcasters, onWatch }: BroadcastBannerProps)
   return (
     <>
       {visible.map((b) => (
-        <div key={b.session} className={styles.broadcastBanner} role="status">
-          <span className={styles.broadcastBannerDot} />
+        <div
+          key={b.session}
+          className={`${styles.broadcastBanner} ${!sfuAvailable ? styles.broadcastBannerP2P : ""}`}
+          role="status"
+        >
+          <span className={`${styles.broadcastBannerDot} ${!sfuAvailable ? styles.broadcastBannerDotP2P : ""}`} />
           <span className={styles.broadcastBannerText}>
             <span className={styles.broadcastBannerName}>{b.name}</span> is sharing their screen
           </span>
+          {!sfuAvailable && (
+            <span className={styles.broadcastBannerP2PLabel} title="No SFU on this server - the stream connects directly between peers">
+              P2P
+            </span>
+          )}
           <button
             type="button"
             className={styles.broadcastBannerWatchBtn}

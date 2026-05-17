@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AclGroup, ChannelEntry, RegisteredUser, UserCommentPayload, UserEntry } from "../../types";
@@ -11,6 +11,39 @@ import {
 import { UserListItem } from "./UserListItem";
 import { setUserAvatarBytes } from "../../lazyBlobs";
 import styles from "./ChannelSidebar.module.css";
+
+/**
+ * Process-wide cache of the registered-user list per server.  Persists
+ * across MembersTab mount/unmount cycles (sidebar tab switches) so we
+ * don't refetch and flash a skeleton every time.  The fingerprint is a
+ * cheap content hash used to skip state updates when the server returns
+ * an identical payload.
+ */
+interface RegisteredCacheEntry {
+  readonly users: readonly RegisteredUser[];
+  readonly fingerprint: string;
+}
+const registeredMemCache = new Map<string, RegisteredCacheEntry>();
+
+function fingerprintRegistered(users: readonly RegisteredUser[]): string {
+  let hash = 5381 ^ users.length;
+  for (const u of users) {
+    hash = ((hash * 33) ^ u.user_id) | 0;
+    const name = u.name;
+    for (let i = 0; i < name.length; i += 7) {
+      hash = ((hash * 33) ^ name.charCodeAt(i)) | 0;
+    }
+    hash = ((hash * 33) ^ (u.last_channel ?? 0)) | 0;
+    hash = ((hash * 33) ^ (u.texture?.length ?? 0)) | 0;
+    const ch = u.comment_hash;
+    if (ch && ch.length > 0) {
+      hash = ((hash * 33) ^ ch.length) | 0;
+      hash = ((hash * 33) ^ ch[0]) | 0;
+      hash = ((hash * 33) ^ ch[ch.length - 1]!) | 0;
+    }
+  }
+  return hash.toString(36) + ":" + users.length;
+}
 
 interface MembersTabProps {
   readonly users: readonly UserEntry[];
@@ -44,18 +77,16 @@ const KEY_GUESTS = "__guests__";
  *
  * The session id is set to a negative number derived from the user_id
  * to keep it unique and to ensure no DM/talking lookups ever match.
- * Avatar bytes come from the server's `UserList` response when available.
+ * Avatar bytes are NOT installed here so callers can do that once per
+ * `registered` payload instead of on every render.
  */
-function synthesiseOfflineEntry(
+export function synthesiseOfflineEntry(
   reg: RegisteredUser,
-  fetchedComments: ReadonlyMap<number, string>,
+  fetchedComments: ReadonlyMap<number, string> = new Map(),
 ): UserEntry {
   const comment = fetchedComments.get(reg.user_id) ?? reg.comment ?? null;
   const session = -(reg.user_id + 1);
   const textureBytes = reg.texture && reg.texture.length > 0 ? reg.texture : null;
-  if (textureBytes) {
-    setUserAvatarBytes(session, textureBytes);
-  }
   return {
     session,
     name: reg.name,
@@ -71,6 +102,16 @@ function synthesiseOfflineEntry(
     priority_speaker: false,
     hash: undefined,
   };
+}
+
+/** Convert a list of registered users to offline `UserEntry` objects.
+ *  Convenience helper for tests and callers that don't need the
+ *  per-user_id stable cache used inside the component. */
+export function regsToOfflineEntries(
+  registered: readonly RegisteredUser[],
+  fetchedComments: ReadonlyMap<number, string> = new Map(),
+): readonly UserEntry[] {
+  return registered.map((r) => synthesiseOfflineEntry(r, fetchedComments));
 }
 
 /**
@@ -143,13 +184,16 @@ function bucketRows(
 /**
  * Combine online + offline registered users, group them by ACL role
  * and produce the final ordered list of `MemberGroup` sections.
+ *
+ * `offlineEntries` are precomputed (and cached for stable references)
+ * by the caller so we don't allocate fresh `UserEntry` objects on every
+ * call - that would defeat the `memo` wrapping `UserListItem`.
  */
 export function buildMemberGroups(
   users: readonly UserEntry[],
-  registered: readonly RegisteredUser[],
+  offlineEntries: readonly UserEntry[],
   ownSession: number | null,
   aclGroups: readonly AclGroup[],
-  fetchedComments: ReadonlyMap<number, string> = new Map(),
 ): readonly MemberGroup[] {
   const onlineUserIds = new Set<number>();
   const onlineRows: MemberRow[] = [];
@@ -158,9 +202,11 @@ export function buildMemberGroups(
     if (u.user_id != null && u.user_id > 0) onlineUserIds.add(u.user_id);
     onlineRows.push({ entry: u, offline: false });
   }
-  const offlineRows: MemberRow[] = registered
-    .filter((r) => !onlineUserIds.has(r.user_id))
-    .map((r) => ({ entry: synthesiseOfflineEntry(r, fetchedComments), offline: true }));
+  const offlineRows: MemberRow[] = [];
+  for (const entry of offlineEntries) {
+    if (entry.user_id != null && onlineUserIds.has(entry.user_id)) continue;
+    offlineRows.push({ entry, offline: true });
+  }
 
   const { userIdToGroup, groupOrder, groupColors } = buildUserGroupMap(aclGroups);
   const buckets = bucketRows([...onlineRows, ...offlineRows], userIdToGroup);
@@ -224,11 +270,58 @@ function MembersSkeleton() {
 }
 
 /**
+ * Memoized row wrapper.  Owns stable click/context-menu callbacks so
+ * the inner `UserListItem` (also memoized) can short-circuit re-renders
+ * when the row's user data and flags are unchanged.  Without this, the
+ * arrow functions created in the parent map would change identity on
+ * every MembersTab render and defeat the inner memoization, causing the
+ * entire member list to re-render whenever any store slice updated.
+ */
+interface MemberRowItemProps {
+  readonly user: UserEntry;
+  readonly offline: boolean;
+  readonly channelName: string | undefined;
+  readonly active: boolean;
+  readonly isTalking: boolean;
+  readonly onSelectDm: (session: number) => void;
+  readonly onUserContextMenu: (e: React.MouseEvent, user: UserEntry) => void;
+  readonly onRequestComment: (userId: number) => void;
+}
+const MemberRowItem = memo(function MemberRowItem({
+  user,
+  offline,
+  channelName,
+  active,
+  isTalking,
+  onSelectDm,
+  onUserContextMenu,
+  onRequestComment,
+}: MemberRowItemProps) {
+  const handleClick = useCallback(() => onSelectDm(user.session), [onSelectDm, user.session]);
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => onUserContextMenu(e, user),
+    [onUserContextMenu, user],
+  );
+  return (
+    <UserListItem
+      user={user}
+      channelName={offline ? undefined : channelName}
+      active={!offline && active}
+      isTalking={!offline && isTalking}
+      offline={offline}
+      onClick={offline ? undefined : handleClick}
+      onContextMenu={offline ? undefined : handleContextMenu}
+      onRequestComment={offline ? onRequestComment : undefined}
+    />
+  );
+});
+
+/**
  * Members tab for the sidebar.  Lists every user (online + offline
  * registered) grouped by their primary ACL role.  The whole tab scrolls
  * as a single non-nested list so groups flow consecutively.
  */
-export function MembersTab({
+function MembersTabImpl({
   users,
   channels,
   ownSession,
@@ -237,34 +330,58 @@ export function MembersTab({
   onSelectDm,
   onUserContextMenu,
 }: MembersTabProps) {
-  const [registered, setRegistered] = useState<readonly RegisteredUser[]>([]);
+  const pendingConnect = useAppStore((s) => s.pendingConnect);
+  const serverKey = pendingConnect ? `${pendingConnect.host}:${pendingConnect.port}` : null;
+  const initialCache = serverKey ? registeredMemCache.get(serverKey) : undefined;
+  const [registered, setRegistered] = useState<readonly RegisteredUser[]>(
+    () => initialCache?.users ?? [],
+  );
   const [fetchedComments, setFetchedComments] = useState<ReadonlyMap<number, string>>(new Map());
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(() => !initialCache);
   /** Tracks user_ids for which a blob request has already been sent
    * to avoid redundant requests if the hover card is opened repeatedly. */
   const requestedRef = useRef<Set<number>>(new Set());
   const aclGroups = useAclGroups();
-  const pendingConnect = useAppStore((s) => s.pendingConnect);
-  const serverKey = pendingConnect ? `${pendingConnect.host}:${pendingConnect.port}` : null;
 
   useEffect(() => {
     /** Minimum visible time for the spinner so it doesn't flash on
-     *  fast LAN responses. */
+     *  fast LAN responses.  Skipped entirely when we already have
+     *  cached data to display. */
     const MIN_SPINNER_MS = 450;
     const startedAt = Date.now();
+    const memEntry = serverKey ? registeredMemCache.get(serverKey) : undefined;
     let cancelled = false;
     let pendingPayload: readonly RegisteredUser[] | null = null;
-    let cacheEntryUsers: readonly RegisteredUser[] | null = null;
+    let cacheEntryUsers: readonly RegisteredUser[] | null = memEntry?.users ?? null;
     let minTimer: number | null = null;
-    let minElapsed = false;
+    let minElapsed = !!memEntry;
 
-    setRegistered([]);
-    setLoading(true);
+    if (memEntry) {
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
+    const applyPayload = (payload: readonly RegisteredUser[]) => {
+      if (!serverKey) {
+        setRegistered(payload);
+        return;
+      }
+      const fp = fingerprintRegistered(payload);
+      const cached = registeredMemCache.get(serverKey);
+      if (cached && cached.fingerprint === fp) {
+        // Identical payload: skip the state update so memoized children
+        // (offlineEntries, groups, UserListItem) do not re-render.
+        return;
+      }
+      registeredMemCache.set(serverKey, { users: payload, fingerprint: fp });
+      setRegistered(payload);
+    };
 
     const flush = () => {
       if (cancelled) return;
       const next = pendingPayload ?? cacheEntryUsers;
-      if (next) setRegistered(next);
+      if (next) applyPayload(next);
       setLoading(false);
     };
 
@@ -281,7 +398,10 @@ export function MembersTab({
       }
     };
 
-    if (serverKey) {
+    // Persistent (disk) cache fallback: only consult when no in-memory
+    // entry is available, since the in-memory copy is always at least as
+    // fresh as what's on disk.
+    if (serverKey && !memEntry) {
       getCachedRegisteredUsers(serverKey)
         .then((entry) => {
           if (cancelled || !entry) return;
@@ -305,6 +425,7 @@ export function MembersTab({
     const unlistenComment = listen<UserCommentPayload>("user-comment", (event) => {
       const { user_id, comment } = event.payload;
       setFetchedComments((prev) => {
+        if (prev.get(user_id) === comment) return prev;
         const next = new Map(prev);
         next.set(user_id, comment);
         return next;
@@ -328,20 +449,68 @@ export function MembersTab({
     };
   }, [serverKey]);
 
-  const handleRequestComment = (userId: number) => {
+  const handleRequestComment = useCallback((userId: number) => {
     if (requestedRef.current.has(userId)) return;
     requestedRef.current.add(userId);
     invoke("request_user_comment", { userId }).catch(() => {});
-  };
+  }, []);
 
-  const channelName = (channelId: number): string => {
-    const ch = channels.find((c) => c.id === channelId);
-    return ch?.name || "Root";
-  };
+  // O(1) channel-id -> name lookup, built once per `channels` change.
+  const channelNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const ch of channels) map.set(ch.id, ch.name || "Root");
+    return map;
+  }, [channels]);
+  const channelName = useCallback(
+    (channelId: number): string => channelNameById.get(channelId) ?? "Root",
+    [channelNameById],
+  );
+
+  // Install registered-user avatar bytes into the LRU cache once per
+  // payload.  setUserAvatarBytes is a no-op when the cache already holds
+  // an entry of the same size, so this is cheap on repeat renders.
+  useEffect(() => {
+    for (const reg of registered) {
+      if (reg.texture && reg.texture.length > 0) {
+        setUserAvatarBytes(-(reg.user_id + 1), reg.texture);
+      }
+    }
+  }, [registered]);
+
+  // Build offline `UserEntry` objects with stable per-user_id references
+  // so the `memo`-wrapped `UserListItem` skips re-renders when nothing
+  // about a particular user actually changed.
+  const offlineEntryCacheRef = useRef<Map<number, UserEntry>>(new Map());
+  const offlineEntries = useMemo<readonly UserEntry[]>(() => {
+    const cache = offlineEntryCacheRef.current;
+    const next: UserEntry[] = [];
+    const seen = new Set<number>();
+    for (const reg of registered) {
+      seen.add(reg.user_id);
+      const fresh = synthesiseOfflineEntry(reg, fetchedComments);
+      const existing = cache.get(reg.user_id);
+      if (
+        existing
+        && existing.name === fresh.name
+        && existing.channel_id === fresh.channel_id
+        && existing.comment === fresh.comment
+        && existing.texture_size === fresh.texture_size
+      ) {
+        next.push(existing);
+        continue;
+      }
+      cache.set(reg.user_id, fresh);
+      next.push(fresh);
+    }
+    for (const key of cache.keys()) {
+      if (!seen.has(key)) cache.delete(key);
+    }
+    return next;
+  }, [registered, fetchedComments]);
 
   const groups = useMemo(
-    () => buildMemberGroups(users, registered, ownSession, aclGroups, fetchedComments),
-    [users, registered, ownSession, aclGroups, fetchedComments],
+    () => buildMemberGroups(users, offlineEntries, ownSession, aclGroups),
+    [users, offlineEntries, ownSession, aclGroups],
   );
 
   const totalMembers = useMemo(
@@ -383,16 +552,16 @@ export function MembersTab({
           </div>
           <div className={styles.memberGroupBody}>
             {group.rows.map((row) => (
-              <UserListItem
+              <MemberRowItem
                 key={row.entry.session}
                 user={row.entry}
-                channelName={row.offline ? undefined : channelName(row.entry.channel_id)}
-                active={!row.offline && selectedDmUser === row.entry.session}
-                isTalking={!row.offline && talkingSessions.has(row.entry.session)}
                 offline={row.offline}
-                onClick={row.offline ? undefined : () => onSelectDm(row.entry.session)}
-                onContextMenu={row.offline ? undefined : (e) => onUserContextMenu(e, row.entry)}
-                onRequestComment={row.offline ? handleRequestComment : undefined}
+                channelName={row.offline ? undefined : channelName(row.entry.channel_id)}
+                active={selectedDmUser === row.entry.session}
+                isTalking={talkingSessions.has(row.entry.session)}
+                onSelectDm={onSelectDm}
+                onUserContextMenu={onUserContextMenu}
+                onRequestComment={handleRequestComment}
               />
             ))}
           </div>
@@ -426,3 +595,11 @@ export function MembersTab({
     </div>
   );
 }
+
+/**
+ * Memoized so a parent re-render (e.g., sidebar tab switch where this
+ * pane is kept mounted via CSS) skips the heavy render body when the
+ * props are unchanged by reference.
+ */
+export const MembersTab = memo(MembersTabImpl);
+

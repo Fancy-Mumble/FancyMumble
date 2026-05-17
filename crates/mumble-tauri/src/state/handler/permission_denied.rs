@@ -2,7 +2,7 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::info;
 
 use super::{HandleMessage, HandlerContext};
-use crate::state::types::{ListenDeniedPayload, PermissionDeniedPayload};
+use crate::state::types::{ChannelDeniedPayload, ListenDeniedPayload, PermissionDeniedPayload};
 
 impl HandleMessage for mumble_tcp::PermissionDenied {
     fn handle(&self, ctx: &HandlerContext) {
@@ -22,6 +22,10 @@ impl HandleMessage for mumble_tcp::PermissionDenied {
             ctx.emit(
                 "listen-denied",
                 ListenDeniedPayload { channel_id: ch_id },
+            );
+            ctx.emit(
+                "channel-denied",
+                ChannelDeniedPayload { channel_id: ch_id },
             );
         }
 

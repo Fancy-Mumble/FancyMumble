@@ -12,6 +12,11 @@
 // more inline SVGs or per-icon asset files.
 
 export {
+  Activity as ActivityIcon,
+  AudioWaveform as AudioWaveformIcon,
+  SlidersHorizontal as SlidersIcon,
+  Sparkles as SparklesIcon,
+  GripVertical as GripVerticalIcon,
   Paperclip as AttachIcon,
   ArrowUpRight as ArrowUpRightIcon,
   Bell as BellIcon,
@@ -43,7 +48,9 @@ export {
   Info as InfoIcon,
   EllipsisVertical as KebabMenuIcon,
   Key as KeyIcon,
+  Keyboard as KeyboardIcon,
   Ear as ListenBadgeIcon,
+  Lock as LockIcon,
   Lock as LockSvg,
   LogOut as LogoutIcon,
   Maximize2 as MaximizeIcon,
@@ -56,6 +63,7 @@ export {
   Minus as MinimizeIcon,
   Moon as MoonIcon,
   Pause as PauseIcon,
+  PictureInPicture2 as PopoutIcon,
   Phone as PhoneIcon,
   PhoneOff as PhoneOffIcon,
   Play as PlayIcon,
@@ -87,4 +95,8 @@ export {
   TriangleAlert as WarningIcon,
   TriangleAlert as WarningSvg,
   X as WindowCloseIcon,
+  MessageCircle as MessageCircleIcon,
+  AlignLeft as AlignLeftIcon,
+  AlignJustify as AlignJustifyIcon,
+  List as ListIcon,
 } from "lucide-react";

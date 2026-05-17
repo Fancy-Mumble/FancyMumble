@@ -90,6 +90,16 @@ pub(crate) async fn move_user_to_channel(
     state.move_user(session, channel_id).await
 }
 
+/// Move every user currently in `from_channel_id` to `to_channel_id`.
+#[tauri::command]
+pub(crate) async fn move_channel_users(
+    state: tauri::State<'_, AppState>,
+    from_channel_id: u32,
+    to_channel_id: u32,
+) -> Result<(), String> {
+    state.move_channel_users(from_channel_id, to_channel_id).await
+}
+
 /// Request ping/connection statistics for a specific user.
 ///
 /// The server responds asynchronously with a `UserStats` message,

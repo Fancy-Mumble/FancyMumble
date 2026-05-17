@@ -11,10 +11,10 @@ import { setKlipyApiKey as setKlipyApiKeyBanner } from "./KlipyGifBrowser";
 import { useAppStore } from "../../store";
 import {
   type ShortcutBindings,
+  DEFAULT_SHORTCUTS,
   loadShortcuts,
   saveShortcuts,
-  applyGlobalShortcut,
-  clearGlobalShortcut,
+  applyChangedShortcut,
 } from "./shortcutHelpers";
 import { loadProfileData, saveProfileData, migrateProfilesToIdentities } from "./profileData";
 import { ProfilePanel } from "./ProfilePanel";
@@ -29,11 +29,13 @@ import { getNotificationSounds, saveNotificationSounds } from "../../preferences
 import { ProfilePreviewCard } from "./ProfilePreviewCard";
 import { loadPersonalization, savePersonalization, type PersonalizationData } from "../../personalizationStorage";
 import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
+import ChannelsAndRolesPanel from "../../components/onboarding/ChannelsAndRolesPanel";
+import { isOnboardingSupported } from "../../components/onboarding/onboardingStore";
 import styles from "./SettingsPage.module.css";
 
 // -- Types & constants ----------------------------------------------
 
-type Tab = "profile" | "voice" | "shortcuts" | "identities" | "advanced" | "personalize" | "notifications" | "privacy";
+type Tab = "profile" | "voice" | "shortcuts" | "identities" | "advanced" | "personalize" | "notifications" | "privacy" | "channels-roles";
 
 const DEFAULT_AUDIO: AudioSettings = {
   selected_device: null,
@@ -72,7 +74,7 @@ const PERSONALIZATION_DEFAULTS: PersonalizationData = {
   theme: "dark",
 };
 
-const TABS: TabDef<Tab>[] = [
+const BASE_TABS: TabDef<Tab>[] = [
   { id: "profile", label: "Profile", icon: "👤" },
   { id: "voice", label: "Voice", icon: "🎙️" },
   { id: "shortcuts", label: "Shortcuts", icon: "⌨️" },
@@ -90,6 +92,17 @@ export default function SettingsPage() {
   const [tab, setTab] = useState<Tab>("profile");
   const isConnected = useAppStore((s) => s.status) === "connected";
   const connectedCertLabel = useAppStore((s) => s.connectedCertLabel);
+  const serverFancyVersion = useAppStore((s) => s.serverFancyVersion);
+  const onboardingSupported = isOnboardingSupported(serverFancyVersion);
+  // Insert "Channels & Roles" before "Advanced" only when the server
+  // supports the onboarding workflow (Fancy 0.3.1+).
+  const TABS: TabDef<Tab>[] = onboardingSupported
+    ? [
+        ...BASE_TABS.slice(0, BASE_TABS.length - 1),
+        { id: "channels-roles", label: "Channels & Roles", icon: "👋" },
+        BASE_TABS[BASE_TABS.length - 1],
+      ]
+    : BASE_TABS;
 
   // Audio
   const [devices, setDevices] = useState<AudioDevice[]>([]);
@@ -118,10 +131,7 @@ export default function SettingsPage() {
   const [convertToLocalTime, setConvertToLocalTime] = useState(true);
 
   // Shortcuts
-  const [shortcuts, setShortcuts] = useState<ShortcutBindings>({
-    toggleMute: "",
-    toggleDeafen: "",
-  });
+  const [shortcuts, setShortcuts] = useState<ShortcutBindings>(DEFAULT_SHORTCUTS);
 
   // Profile (per-identity)
   const [profile, setProfile] = useState<FancyProfile>({});
@@ -383,13 +393,12 @@ export default function SettingsPage() {
     async (key: keyof ShortcutBindings, value: string) => {
       setShortcuts((prev) => {
         const updated = { ...prev, [key]: value };
-        // Persist + register in background.
         (async () => {
-          await clearGlobalShortcut(prev[key]);
+          await applyChangedShortcut(key, prev[key], value);
           await saveShortcuts(updated);
-          const command =
-            key === "toggleMute" ? "toggle_mute" : "toggle_deafen";
-          await applyGlobalShortcut(value, command);
+          globalThis.dispatchEvent(
+            new CustomEvent("shortcuts-changed", { detail: updated }),
+          );
         })();
         return updated;
       });
@@ -643,6 +652,7 @@ export default function SettingsPage() {
             <ShortcutsPanel
               shortcuts={shortcuts}
               onChangeShortcut={handleChangeShortcut}
+              isExpert={userMode !== "normal"}
             />
           )}
 
@@ -692,6 +702,8 @@ export default function SettingsPage() {
               onToggleStreamerMode={handleToggleStreamerMode}
             />
           )}
+
+          {tab === "channels-roles" && <ChannelsAndRolesPanel />}
 
           {tab === "advanced" && (
             <AdvancedPanel

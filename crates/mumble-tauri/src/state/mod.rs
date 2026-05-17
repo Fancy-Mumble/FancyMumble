@@ -17,6 +17,8 @@
 mod admin;
 mod audio;
 mod audio_tasks;
+mod calibration;
+mod voice_replay;
 mod channels;
 mod connection;
 mod emotes;
@@ -28,6 +30,7 @@ mod handler;
 pub(crate) mod hash_names;
 pub(crate) mod local_cache;
 mod messaging;
+mod onboarding;
 pub mod offload;
 mod offload_ops;
 pub(crate) mod pchat;
@@ -90,6 +93,8 @@ pub(super) struct AudioPipelineState {
     pub speaker_volumes: SpeakerVolumes,
     pub mic_test_handle: Option<tauri::async_runtime::JoinHandle<()>>,
     pub latency_test_handle: Option<tauri::async_runtime::JoinHandle<()>>,
+    pub voice_replay_handle: Option<tauri::async_runtime::JoinHandle<()>>,
+    pub voice_replay_stop: Option<tokio::sync::watch::Sender<bool>>,
     pub recording_handle: Option<recording::RecordingHandle>,
     pub talking_sessions: HashSet<u32>,
 }
@@ -194,6 +199,11 @@ pub(super) struct SharedState {
     /// Certificate label used for this connection (if any), kept so
     /// `list_servers` can surface it without re-querying the connect args.
     pub cert_label: Option<String>,
+    /// Latest onboarding config broadcast by the server (`None` until a
+    /// `FancyOnboardingConfig` arrives, e.g. on legacy servers).
+    pub onboarding: Option<OnboardingConfig>,
+    /// Local user's onboarding response, fetched on demand.
+    pub onboarding_response: Option<OnboardingResponse>,
 }
 
 // --- Tauri-managed application state ------------------------------
@@ -221,6 +231,14 @@ pub struct AppState {
     /// Image sources pending pickup by freshly-opened image popout windows.
     /// Keyed by random id; each entry is consumed once by `take_popout_image`.
     pub(crate) popout_images: Mutex<HashMap<String, crate::commands::popout::PopoutImagePayload>>,
+    /// Stream-share contexts pending pickup by freshly-opened stream popout windows.
+    /// Keyed by random id; each entry is consumed once by `take_popout_stream`.
+    pub(crate) popout_streams: Mutex<HashMap<String, crate::commands::popout::PopoutStreamPayload>>,
+    /// Live stream-popout windows, keyed by window label
+    /// (`popout-stream-<id>`).  Value is the broadcaster session, used to
+    /// emit `stream-popout-state opened:false` when the OS destroys the
+    /// window (any close path - Alt+F4, X button, context menu, app exit).
+    pub(crate) popout_stream_sessions: Mutex<HashMap<String, u32>>,
     /// Channel/session context for the (single) drawing-overlay window.
     /// Read by the overlay via `take_drawing_overlay_context` once it
     /// has spawned. `None` while no overlay is open.
@@ -251,6 +269,8 @@ impl AppState {
             http_client: file_server::new_http_client(),
             upload_cancels: Mutex::new(HashMap::new()),
             popout_images: Mutex::new(HashMap::new()),
+            popout_streams: Mutex::new(HashMap::new()),
+            popout_stream_sessions: Mutex::new(HashMap::new()),
             draw_overlay_context: Mutex::new(None),
             draw_overlay_tracker: Mutex::new(None),
         }

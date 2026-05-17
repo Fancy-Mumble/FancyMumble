@@ -16,6 +16,7 @@ pub(crate) mod image;
 pub(crate) mod keyshare;
 pub(crate) mod messaging;
 pub(crate) mod offload;
+pub(crate) mod onboarding;
 pub(crate) mod popout;
 pub(crate) mod profile;
 pub(crate) mod public_servers;
