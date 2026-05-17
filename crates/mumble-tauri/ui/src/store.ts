@@ -48,6 +48,8 @@ import type { WatchSession, WatchSyncPayload } from "./components/chat/watch/wat
 import { applyWatchSyncEvent } from "./components/chat/watch/watchStore";
 import { applyReaction, resetReactions, setServerCustomReactions, type ServerCustomReaction } from "./components/chat/reactionStore";
 import { applyReadStates, clearReadReceipts } from "./components/chat/readReceiptStore";
+import { useOnboardingStore } from "./components/onboarding/onboardingStore";
+import type { OnboardingConfigEvent, OnboardingResponseEvent } from "./types";
 import { offloadManager } from "./messageOffload";
 import { getSilencedChannels, setSilencedChannel, getUserVolumes, saveUserVolume, getMutedPushChannels, setMutedPushChannel, getPreferences, updatePreferences } from "./preferencesStorage";
 import { loadProfileData } from "./pages/settings/profileData";
@@ -361,6 +363,11 @@ interface AppState {
   drawingActiveChannels: Set<number>;
   /** Session IDs of other users currently broadcasting. */
   broadcastingSessions: Set<number>;
+  /** Session IDs whose live screen-share is currently displayed in a
+   *  detached popout window.  The main window suppresses the
+   *  "is sharing" banner for these sessions so the user does not see
+   *  a redundant prompt to watch a stream they are already viewing. */
+  poppedOutStreamSessions: Set<number>;
   /** Session ID we are currently watching (null if not watching). */
   watchingSession: number | null;
   /** The Mumble session ID of the tab whose viewer is currently watching
@@ -430,6 +437,7 @@ interface AppState {
   disconnect: () => Promise<void>;
   selectChannel: (id: number) => Promise<void>;
   joinChannel: (id: number) => Promise<void>;
+  joinChannelWithPassword: (id: number, password: string) => Promise<void>;
   sendMessage: (channelId: number, body: string) => Promise<void>;
   /**
    * Insert a synthetic pending-message placeholder.  Used by the chat
@@ -457,6 +465,7 @@ interface AppState {
     pchatProtocol?: PchatProtocol;
     pchatMaxHistory?: number;
     pchatRetentionDays?: number;
+    password?: string;
   }) => Promise<void>;
   updateChannel: (channelId: number, opts: {
     name?: string;
@@ -467,8 +476,10 @@ interface AppState {
     pchatProtocol?: PchatProtocol;
     pchatMaxHistory?: number;
     pchatRetentionDays?: number;
+    password?: string;
   }) => Promise<void>;
   deleteChannel: (channelId: number) => Promise<void>;
+  moveChannelUsers: (fromChannelId: number, toChannelId: number) => Promise<void>;
 
   // -- Multi-server (Phase C) ------------------------------------
   /** Snapshot of every backend session currently registered.  Survives
@@ -647,6 +658,7 @@ const INITIAL: Pick<
   | "desktopDrawingOverlayOpen"
   | "drawingActiveChannels"
   | "broadcastingSessions"
+  | "poppedOutStreamSessions"
   | "watchingSession"
   | "watchingOwnSession"
   | "channelPersistence"
@@ -717,6 +729,7 @@ const INITIAL: Pick<
   desktopDrawingOverlayOpen: false,
   drawingActiveChannels: new Set(),
   broadcastingSessions: new Set(),
+  poppedOutStreamSessions: new Set(),
   watchingSession: null,
   watchingOwnSession: null,
   channelPersistence: {},
@@ -904,6 +917,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         offloadManager.dispose().catch(() => {});
         volumeAppliedSessions.clear();
         clearReadReceipts();
+        useOnboardingStore.getState().clear();
         set({ ...INITIAL });
         invoke("update_badge_count", { count: null }).catch(() => {});
         navigateRef?.("/");
@@ -971,6 +985,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     resetReactions();
     clearReadReceipts();
+    useOnboardingStore.getState().clear();
     set({ ...INITIAL });
     invoke("update_badge_count", { count: null }).catch(() => {});
     useAppStore.getState().refreshSessions().catch(() => {});
@@ -1003,6 +1018,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  joinChannelWithPassword: async (id, password) => {
+    try {
+      await invoke("join_channel", { channelId: id, password });
+    } catch (e) {
+      console.error("join_channel error:", e);
+      throw e;
+    }
+  },
+
   createChannel: async (parentId, name, opts = {}) => {
     try {
       await invoke("create_channel", {
@@ -1015,6 +1039,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         pchatProtocol: opts.pchatProtocol ?? null,
         pchatMaxHistory: opts.pchatMaxHistory ?? null,
         pchatRetentionDays: opts.pchatRetentionDays ?? null,
+        password: opts.password ?? null,
       });
     } catch (e) {
       console.error("create_channel error:", e);
@@ -1034,6 +1059,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         pchatProtocol: opts.pchatProtocol ?? null,
         pchatMaxHistory: opts.pchatMaxHistory ?? null,
         pchatRetentionDays: opts.pchatRetentionDays ?? null,
+        password: opts.password ?? null,
       });
     } catch (e) {
       console.error("update_channel error:", e);
@@ -1046,6 +1072,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       await invoke("delete_channel", { channelId });
     } catch (e) {
       console.error("delete_channel error:", e);
+      throw e;
+    }
+  },
+
+  moveChannelUsers: async (fromChannelId, toChannelId) => {
+    try {
+      await invoke("move_channel_users", { fromChannelId, toChannelId });
+    } catch (e) {
+      console.error("move_channel_users error:", e);
       throw e;
     }
   },
@@ -2002,6 +2037,17 @@ export async function initEventListeners(
           // Apply persisted per-user volumes to backend for all current users.
           applyStoredVolumesToNewUsers();
 
+          // Hydrate onboarding state for this server (no-op on legacy
+          // Mumble - the store gates on serverFancyVersion >= 0.3.1).
+          try {
+            const { activeServerId, serverFancyVersion } = useAppStore.getState();
+            await useOnboardingStore
+              .getState()
+              .hydrate(activeServerId ?? null, serverFancyVersion);
+          } catch {
+            // best-effort; hydrate already swallows decode failures.
+          }
+
           // Visible bootstrap is done - drop the loading bar and reveal the chat view.
           useAppStore.setState({ bootstrapStage: null });
           navigate("/chat");
@@ -2115,6 +2161,7 @@ export async function initEventListeners(
         offloadManager.dispose().catch(() => {});
         volumeAppliedSessions.clear();
         clearReadReceipts();
+        useOnboardingStore.getState().clear();
         const { error: currentError, passwordRequired: pwRequired, pendingConnect: pending } = useAppStore.getState();
         // If a password prompt is already pending, keep the rejection error
         // instead of overwriting it with a generic disconnect message.
@@ -2369,6 +2416,17 @@ export async function initEventListeners(
       useAppStore.setState({ udpActive: event.payload });
     }),
 
+    // Stream popout windows broadcast their open/close state so the main
+    // window can hide its "is sharing" banner for sessions whose stream
+    // is already being viewed in a detached window.
+    await listen<{ session: number; opened: boolean }>("stream-popout-state", (event) => {
+      const { session, opened } = event.payload;
+      const prev = useAppStore.getState().poppedOutStreamSessions;
+      const next = new Set(prev);
+      if (opened) next.add(session); else next.delete(session);
+      useAppStore.setState({ poppedOutStreamSessions: next });
+    }),
+
     // User talking state changed (audio transmission start/stop).
     await listen<[number, boolean]>("user-talking", (event) => {
       const [session, talking] = event.payload;
@@ -2566,6 +2624,38 @@ export async function initEventListeners(
     ),
   );
 
+  // -- Onboarding workflow events ---------------------------------
+
+  unlisteners.push(
+    await listen<OnboardingConfigEvent>("onboarding-config", (event) => {
+      const { config } = event.payload;
+      const onboarding = useOnboardingStore.getState();
+      onboarding.setConfig(config);
+
+      // If a fresh config arrived and the user has not answered the
+      // current revision yet, surface the modal automatically.
+      const { response } = useOnboardingStore.getState();
+      if (
+        config?.enabled &&
+        (!response || response.config_revision < config.revision)
+      ) {
+        const serverId = useAppStore.getState().activeServerId ?? null;
+        const dismissed = serverId
+          ? sessionStorage.getItem(`onboarding-dismissed:${serverId}`) === "1"
+          : false;
+        if (!dismissed) {
+          onboarding.setModalOpen(true);
+        }
+      }
+    }),
+  );
+
+  unlisteners.push(
+    await listen<OnboardingResponseEvent>("onboarding-response", (event) => {
+      useOnboardingStore.getState().setResponse(event.payload.response ?? null);
+    }),
+  );
+
   // -- Typing indicator events ------------------------------------
 
   unlisteners.push(
@@ -2688,9 +2778,19 @@ export async function initEventListeners(
     ),
 
     // Pchat fetch complete -- update pagination metadata.
+    //
+    // Also refresh the displayed `messages` array if the fetched
+    // channel happens to be the one the user is currently viewing.
+    // The "new-message" listener also tries to do this, but during the
+    // initial connect bootstrap the fetch response can arrive *before*
+    // selectChannel(defaultCh) has run -- in that case the new-message
+    // handler bails (selectedChannel still null) and the restored
+    // backlog stays invisible until the user types a message (which
+    // forces a get_messages via sendMessage). Refreshing here closes
+    // that race for the bootstrap case.
     await listen<{ channel_id: number; has_more: boolean; total_stored: number }>(
       "pchat-fetch-complete",
-      (event) => {
+      async (event) => {
         const { channel_id, has_more, total_stored } = event.payload;
         useAppStore.setState((prev) => ({
           channelPersistence: {
@@ -2703,6 +2803,10 @@ export async function initEventListeners(
             },
           },
         }));
+        const { selectedChannel } = useAppStore.getState();
+        if (selectedChannel === channel_id) {
+          await useAppStore.getState().refreshMessages(channel_id);
+        }
       },
     ),
 

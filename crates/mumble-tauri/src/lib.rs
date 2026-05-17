@@ -85,6 +85,28 @@ pub fn run() {
             {
                 updater::show_main_window(&window.app_handle().clone());
             }
+            // Stream popout cleanup: when one of our `popout-stream-*`
+            // windows is destroyed (any cause), tell the main window so
+            // it can restore the in-chat viewer / watch banner.
+            #[cfg(not(target_os = "android"))]
+            if matches!(event, tauri::WindowEvent::Destroyed)
+                && window.label().starts_with("popout-stream-")
+            {
+                use tauri::{Emitter, Manager};
+                if let Some(state) = window.try_state::<AppState>() {
+                    let session = state
+                        .popout_stream_sessions
+                        .lock()
+                        .ok()
+                        .and_then(|mut m| m.remove(window.label()));
+                    if let Some(session) = session {
+                        let _ = window.app_handle().emit(
+                            "stream-popout-state",
+                            serde_json::json!({ "session": session, "opened": false }),
+                        );
+                    }
+                }
+            }
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -115,7 +137,7 @@ pub fn run() {
 /// flags here.  Experimenting with `--in-process-gpu` saved ~40 MB of
 /// private memory but cost ~7% sustained idle CPU (battery drain),
 /// because the in-process compositor never goes fully idle.  Keeping
-/// the WebView2 defaults turns out to be the better trade-off.
+/// the `WebView2` defaults turns out to be the better trade-off.
 fn configure_runtime_env() {
     set_env_if_unset("TOKIO_WORKER_THREADS", "4");
 }
@@ -337,10 +359,16 @@ macro_rules! all_command_handlers {
             commands::audio::disable_voice,
             commands::audio::toggle_mute,
             commands::audio::toggle_deafen,
+            commands::audio::push_to_talk_start,
+            commands::audio::push_to_talk_end,
+            commands::audio::voice_priority_start,
+            commands::audio::voice_priority_end,
             commands::audio::set_user_volume,
             commands::audio::start_mic_test,
             commands::audio::stop_mic_test,
             commands::audio::calibrate_voice_threshold,
+            commands::audio::start_voice_replay,
+            commands::audio::stop_voice_replay,
             commands::audio::start_latency_test,
             commands::audio::stop_latency_test,
             commands::audio::start_recording,
@@ -395,6 +423,7 @@ macro_rules! all_command_handlers {
             commands::admin::reset_user_comment,
             commands::admin::remove_user_avatar,
             commands::admin::move_user_to_channel,
+            commands::admin::move_channel_users,
             commands::admin::request_user_stats,
             commands::admin::request_user_list,
             commands::admin::update_user_list,
@@ -403,6 +432,11 @@ macro_rules! all_command_handlers {
             commands::admin::update_ban_list,
             commands::admin::request_acl,
             commands::admin::update_acl,
+            commands::onboarding::get_onboarding_config,
+            commands::onboarding::get_onboarding_response,
+            commands::onboarding::save_onboarding_config,
+            commands::onboarding::submit_onboarding_response,
+            commands::onboarding::request_onboarding_response,
             commands::keyshare::confirm_custodians,
             commands::keyshare::accept_custodian_changes,
             commands::keyshare::approve_key_share,
@@ -414,6 +448,8 @@ macro_rules! all_command_handlers {
             commands::image::process_background,
             commands::popout::open_image_popout,
             commands::popout::take_popout_image,
+            commands::popout::open_stream_popout,
+            commands::popout::take_popout_stream,
             commands::draw_overlay::open_drawing_overlay,
             commands::draw_overlay::close_drawing_overlay,
             commands::draw_overlay::take_drawing_overlay_context,

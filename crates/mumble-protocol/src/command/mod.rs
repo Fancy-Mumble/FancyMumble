@@ -49,6 +49,9 @@ mod send_read_receipt;
 mod send_typing_indicator;
 mod send_draw_stroke;
 mod send_watch_sync;
+mod send_fancy_onboarding_config_update;
+mod send_fancy_onboarding_response;
+mod request_fancy_onboarding_response;
 mod request_link_preview;
 mod set_channel_state;
 mod set_comment;
@@ -109,6 +112,9 @@ pub use send_read_receipt::SendReadReceipt;
 pub use send_typing_indicator::SendTypingIndicator;
 pub use send_draw_stroke::SendDrawStroke;
 pub use send_watch_sync::SendWatchSync;
+pub use send_fancy_onboarding_config_update::SendFancyOnboardingConfigUpdate;
+pub use send_fancy_onboarding_response::SendFancyOnboardingResponse;
+pub use request_fancy_onboarding_response::RequestFancyOnboardingResponse;
 pub use request_link_preview::RequestLinkPreview;
 pub use set_channel_state::SetChannelState;
 pub use set_comment::SetComment;
@@ -207,7 +213,7 @@ mod tests {
 
     #[test]
     fn join_channel_uses_session_id() {
-        let cmd = JoinChannel { channel_id: 3 };
+        let cmd = JoinChannel { channel_id: 3, password: None };
         let state = state_with_session(42);
         let output = cmd.execute(&state);
 
@@ -567,5 +573,66 @@ mod tests {
             }
             other => panic!("expected FancyTypingIndicator, got {other:?}"),
         }
+    }
+
+    // -- Onboarding command tests ----------------------------------
+
+    #[test]
+    fn send_onboarding_config_update_wraps_config() {
+        let cfg = mumble_tcp::FancyOnboardingConfig {
+            version: Some(1),
+            enabled: Some(true),
+            default_channel_ids: vec![0],
+            questions: vec![],
+            revision: None,
+            updated_by: None,
+            updated_at: None,
+        };
+        let cmd = SendFancyOnboardingConfigUpdate { config: cfg };
+        let output = cmd.execute(&ServerState::new());
+        assert_eq!(output.tcp_messages.len(), 1);
+        match &output.tcp_messages[0] {
+            ControlMessage::FancyOnboardingConfigUpdate(u) => {
+                let inner = u.config.as_ref().unwrap();
+                assert!(inner.enabled.unwrap());
+                assert_eq!(inner.default_channel_ids, vec![0]);
+            }
+            other => panic!("expected FancyOnboardingConfigUpdate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn send_onboarding_response_leaves_user_hash_to_server() {
+        let cmd = SendFancyOnboardingResponse {
+            selections: vec![
+                mumble_tcp::fancy_onboarding_response::Selection {
+                    question_id: Some("q1".into()),
+                    answer_ids: vec!["a1".into()],
+                },
+            ],
+            config_revision: Some(7),
+        };
+        let output = cmd.execute(&ServerState::new());
+        match &output.tcp_messages[0] {
+            ControlMessage::FancyOnboardingResponse(r) => {
+                // Client never stamps user_hash/submitted_at; only the server.
+                assert!(r.user_hash.is_none());
+                assert!(r.submitted_at.is_none());
+                assert_eq!(r.config_revision, Some(7));
+                assert_eq!(r.selections.len(), 1);
+                assert_eq!(r.selections[0].answer_ids, vec!["a1"]);
+            }
+            other => panic!("expected FancyOnboardingResponse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn request_onboarding_response_emits_empty_query() {
+        let output = RequestFancyOnboardingResponse.execute(&ServerState::new());
+        assert_eq!(output.tcp_messages.len(), 1);
+        assert!(matches!(
+            output.tcp_messages[0],
+            ControlMessage::FancyOnboardingResponseQuery(_)
+        ));
     }
 }

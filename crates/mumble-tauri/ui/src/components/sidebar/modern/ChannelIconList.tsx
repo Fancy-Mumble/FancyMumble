@@ -2,15 +2,16 @@ import { HashIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MicOffSmallIcon
 /**
  * ChannelIconList - a "Modern" channel viewer.
  *
- * - Flat, no hierarchy.
+ * - Depth-first traversal: each parent is immediately followed by its
+ *   recursively expanded children, in server `position` order at every level.
  * - Round channel icon on the left: first <img> from description, or initials fallback.
  * - Channel name and member count on the right.
  * - Inline member avatars below on expand.
- * - Populated channels sorted to the top.
- * - Current channel sticky at the top with accent left border.
+ * - Current channel shows a sticky clone at the top or bottom edge
+ *   of the scroll container when it has scrolled out of view.
  */
 
-import { useState, useMemo, useCallback, useContext } from "react";
+import { useState, useMemo, useCallback, useContext, useRef, useLayoutEffect, memo } from "react";
 import type { ChannelEntry, UserEntry } from "../../../types";
 import { colorFor, useHoverCardPosition, UserHoverCardPortal, RoleColorsContext } from "../UserListItem";
 import { useUserAvatar, useChannelDescription } from "../../../lazyBlobs";
@@ -23,6 +24,10 @@ import { useUserDrag, useChannelDropTarget } from "../../../utils/userMoveDnd";
 import { PERM_MOVE, PERM_ENTER } from "../../../utils/permissions";
 import { useAppStore } from "../../../store";
 import { PchatBadge } from "../PchatBadge";
+import {
+  ChannelReorderWrapper,
+  useChannelReorderHandler,
+} from "../channelReorder";
 import styles from "./ChannelIconList.module.css";
 
 /** Extract the src of the first <img> tag in an HTML string. */
@@ -46,6 +51,8 @@ export interface ChannelIconListProps {
   readonly onUserContextMenu?: (e: React.MouseEvent, user: UserEntry) => void;
   readonly onUserClick?: (session: number) => void;
   readonly shakingChannelId?: number;
+  readonly highlightChannelId?: number;
+  readonly highlightUserSession?: number;
 }
 
 // -- Channel icon (description image or initials fallback) ---------
@@ -98,7 +105,7 @@ interface MemberRowProps {
   readonly onClick?: (session: number) => void;
 }
 
-function MemberRow({ user, isTalking, isBroadcasting, isActive, onContextMenu, onClick }: MemberRowProps) {
+function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMenu, onClick }: MemberRowProps) {
   const ownSession = useAppStore((s) => s.ownSession);
   const selectedDmUser = useAppStore((s) => s.selectedDmUser);
   const dmUnread = useAppStore((s) => s.dmUnreadCounts[user.session] ?? 0);
@@ -111,11 +118,12 @@ function MemberRow({ user, isTalking, isBroadcasting, isActive, onContextMenu, o
   const roleColors = useContext(RoleColorsContext);
   const roleColor = user.user_id != null ? (roleColors.get(user.user_id) ?? null) : null;
   const url = useUserAvatar(user.session, user.texture_size);
-  const parsed = useMemo(
-    () => (user.comment ? parseComment(user.comment) : null),
-    [user.comment],
-  );
   const { showCard, cardPos, itemRef, handleEnter, handleLeave } = useHoverCardPosition(isBroadcasting);
+  // Defer FancyProfile parsing until the hover card is actually shown.
+  const parsed = useMemo(
+    () => (showCard && user.comment ? parseComment(user.comment) : null),
+    [showCard, user.comment],
+  );
   const stats = useUserStats(user.session, showCard);
   const streamThumbnail = useStreamThumbnail(user.session, showCard && isBroadcasting);
 
@@ -132,7 +140,8 @@ function MemberRow({ user, isTalking, isBroadcasting, isActive, onContextMenu, o
     user.session,
     user.name,
     url,
-    isMobile || isSelf || !canMoveUser,
+    // Self can always drag to join another channel; others require PERM_MOVE.
+    isMobile || (!isSelf && !canMoveUser),
   );
 
   return (
@@ -203,6 +212,8 @@ function MemberRow({ user, isTalking, isBroadcasting, isActive, onContextMenu, o
   );
 }
 
+const MemberRow = memo(MemberRowImpl);
+
 // -- Main component ------------------------------------------------
 
 function ChannelDropWrapper({
@@ -217,7 +228,7 @@ function ChannelDropWrapper({
   );
 }
 
-export default function ChannelIconList({
+function ChannelIconListImpl({
   channels,
   users,
   selectedChannel,
@@ -227,6 +238,8 @@ export default function ChannelIconList({
   talkingSessions,
   broadcastingSessions,
   shakingChannelId,
+  highlightChannelId,
+  highlightUserSession,
   onSelectChannel,
   onJoinChannel,
   onContextMenu,
@@ -234,6 +247,7 @@ export default function ChannelIconList({
   onUserClick,
 }: ChannelIconListProps) {
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const handleChannelReorder = useChannelReorderHandler(channels);
 
   const toggleCollapsed = useCallback((id: number) => {
     setCollapsed((prev) => {
@@ -254,20 +268,37 @@ export default function ChannelIconList({
     return map;
   }, [users]);
 
+  // Depth-first flattening of the channel tree, preserving server
+  // `position` order at every level so each parent is immediately
+  // followed by its (recursively expanded) children.  An empty root
+  // channel is omitted (it would otherwise show up as an unhelpful
+  // "Root" header).
   const flatChannels = useMemo(() => {
-    const root = channels.find((c) => c.parent_id === null || c.parent_id === c.id);
-    const rootId = root?.id ?? 0;
-    const all = channels.filter((c) => c.id !== rootId);
-    if (root && (usersByChannel.get(root.id)?.length ?? 0) > 0) {
-      all.unshift(root);
+    const childrenOf = new Map<number, typeof channels>();
+    const isRoot = (ch: ChannelEntry) =>
+      ch.parent_id === null || ch.parent_id === ch.id;
+    for (const ch of channels) {
+      const parent = ch.parent_id === ch.id ? -1 : ch.parent_id ?? -1;
+      const list = childrenOf.get(parent) ?? [];
+      list.push(ch);
+      childrenOf.set(parent, list);
     }
-    return all.sort((a, b) => {
-      const aUsers = usersByChannel.get(a.id)?.length ?? 0;
-      const bUsers = usersByChannel.get(b.id)?.length ?? 0;
-      if (aUsers > 0 && bUsers === 0) return -1;
-      if (aUsers === 0 && bUsers > 0) return 1;
-      return a.name.localeCompare(b.name);
-    });
+    const sortLevel = (list: typeof channels) =>
+      [...list].sort((a, b) =>
+        a.position !== b.position ? a.position - b.position : a.name.localeCompare(b.name),
+      );
+
+    const result: typeof channels = [];
+    const visit = (parentId: number) => {
+      for (const ch of sortLevel(childrenOf.get(parentId) ?? [])) {
+        const skip = isRoot(ch) && (usersByChannel.get(ch.id)?.length ?? 0) === 0;
+        if (!skip) result.push(ch);
+        visit(ch.id);
+      }
+    };
+    visit(-1);
+
+    return result;
   }, [channels, usersByChannel]);
 
   const currentEntry = useMemo(
@@ -275,10 +306,43 @@ export default function ChannelIconList({
     [flatChannels, currentChannel],
   );
 
-  const otherChannels = useMemo(
-    () => (currentChannel == null ? flatChannels : flatChannels.filter((c) => c.id !== currentChannel)),
-    [flatChannels, currentChannel],
-  );
+  // -- Smart sticky current-channel detection --------------------------
+
+  const listRef = useRef<HTMLDivElement>(null);
+  const currentCardRef = useRef<HTMLDivElement>(null);
+  const selectedCardRef = useRef<HTMLDivElement>(null);
+  const [stickyState, setStickyState] = useState<"none" | "top" | "bottom">("none");
+
+  useLayoutEffect(() => {
+    const card = currentCardRef.current;
+    const scrollEl = listRef.current?.parentElement;
+    if (!card || !scrollEl || currentChannel == null) {
+      setStickyState("none");
+      return;
+    }
+    const update = () => {
+      const cardRect = card.getBoundingClientRect();
+      const containerRect = scrollEl.getBoundingClientRect();
+      if (cardRect.top < containerRect.top) {
+        setStickyState("top");
+      } else if (cardRect.bottom > containerRect.bottom) {
+        setStickyState("bottom");
+      } else {
+        setStickyState("none");
+      }
+    };
+    update();
+    scrollEl.addEventListener("scroll", update, { passive: true });
+    return () => scrollEl.removeEventListener("scroll", update);
+  }, [currentChannel, flatChannels]);
+
+  const scrollCurrentIntoView = useCallback(() => {
+    currentCardRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, []);
+
+  useLayoutEffect(() => {
+    selectedCardRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedChannel, highlightChannelId]);
 
   const renderChannel = useCallback((channel: ChannelEntry) => {
     const chUsers = usersByChannel.get(channel.id) ?? [];
@@ -289,6 +353,7 @@ export default function ChannelIconList({
     const isCollapsed = collapsed.has(channel.id);
     const hasUsers = chUsers.length > 0;
     const isShaking = shakingChannelId === channel.id;
+    const isHighlighted = highlightChannelId === channel.id;
     const isLocked = !isCurrent && channel.permissions !== null && (channel.permissions & PERM_ENTER) === 0;
 
     return (
@@ -299,6 +364,7 @@ export default function ChannelIconList({
           isSelected ? styles.selected : "",
           isCurrent ? styles.current : "",
           isShaking ? styles.shaking : "",
+          isHighlighted ? styles.highlighted : "",
           isLocked ? styles.locked : "",
         ].filter(Boolean).join(" ")}
       >
@@ -348,16 +414,17 @@ export default function ChannelIconList({
         </div>
 
         {!isCollapsed && hasUsers && (
-          <div className={styles.memberList}>
+          <div className={styles.memberList} data-no-channel-drag="true">
             {chUsers.map((u) => (
-              <MemberRow
-                key={u.session}
-                user={u}
-                isTalking={talkingSessions.has(u.session)}
-                isBroadcasting={broadcastingSessions.has(u.session)}
-                onContextMenu={onUserContextMenu}
-                onClick={onUserClick}
-              />
+              <div key={u.session} className={u.session === highlightUserSession ? styles.highlighted : undefined}>
+                <MemberRow
+                  user={u}
+                  isTalking={talkingSessions.has(u.session)}
+                  isBroadcasting={broadcastingSessions.has(u.session)}
+                  onContextMenu={onUserContextMenu}
+                  onClick={onUserClick}
+                />
+              </div>
             ))}
           </div>
         )}
@@ -367,37 +434,63 @@ export default function ChannelIconList({
   }, [
     usersByChannel, unreadCounts, listenedChannels, selectedChannel,
     currentChannel, collapsed, talkingSessions, broadcastingSessions,
-    shakingChannelId, toggleCollapsed, onSelectChannel, onJoinChannel, onContextMenu, onUserContextMenu, onUserClick,
+    shakingChannelId, highlightChannelId, highlightUserSession, toggleCollapsed, onSelectChannel, onJoinChannel, onContextMenu, onUserContextMenu, onUserClick,
   ]);
 
   return (
-    <div className={styles.list}>
-      {currentEntry && (
-        <div className={styles.stickyChannel}>
+    <div ref={listRef} className={styles.list}>
+      {currentEntry && stickyState === "top" && (
+        <button type="button" className={styles.stickyTop} onClick={scrollCurrentIntoView}>
           {renderChannel(currentEntry)}
-        </div>
+        </button>
       )}
 
-      {otherChannels.map((channel) => {
+      {flatChannels.map((channel) => {
+        const isCurrent = channel.id === currentChannel;
+        const isSelected = channel.id === selectedChannel;
         const card = renderChannel(channel);
+        const setRef = (el: HTMLDivElement | null) => {
+          if (isCurrent) currentCardRef.current = el;
+          if (isSelected) selectedCardRef.current = el;
+        };
 
         if (isMobile) {
           return (
-            <SwipeableCard
-              key={channel.id}
-              rightSwipeAction={{
-                label: "Join",
-                color: "var(--color-accent, #2aabee)",
-                onTrigger: () => onJoinChannel(channel.id),
-              }}
-            >
-              {card}
-            </SwipeableCard>
+            <div key={channel.id} ref={setRef}>
+              <SwipeableCard
+                rightSwipeAction={{
+                  label: "Join",
+                  color: "var(--color-accent, #2aabee)",
+                  onTrigger: () => onJoinChannel(channel.id),
+                }}
+              >
+                {card}
+              </SwipeableCard>
+            </div>
           );
         }
 
-        return <div key={channel.id}>{card}</div>;
+        return (
+          <ChannelReorderWrapper
+            key={channel.id}
+            channel={channel}
+            onReorder={handleChannelReorder}
+            innerRef={setRef}
+          >
+            {card}
+          </ChannelReorderWrapper>
+        );
       })}
+
+      {currentEntry && stickyState === "bottom" && (
+        <button type="button" className={styles.stickyBottom} onClick={scrollCurrentIntoView}>
+          {renderChannel(currentEntry)}
+        </button>
+      )}
     </div>
   );
 }
+
+const ChannelIconList = memo(ChannelIconListImpl);
+export default ChannelIconList;
+

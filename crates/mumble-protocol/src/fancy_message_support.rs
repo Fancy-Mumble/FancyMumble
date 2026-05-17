@@ -115,6 +115,13 @@ fancy_message_support! {
 
     // -- Screen-share drawing (server-relayed) -- 0.3.0 --------------
     (0, 3, 0) FancyDrawStroke             => ServerOnly,
+
+    // -- Onboarding workflow (server-processed) -- 0.3.1 -------------
+    (0, 3, 1) FancyOnboardingConfig          => ServerOnly,
+    (0, 3, 1) FancyOnboardingConfigUpdate    => ServerOnly,
+    (0, 3, 1) FancyOnboardingResponse        => ServerOnly,
+    (0, 3, 1) FancyOnboardingResponseQuery   => ServerOnly,
+    (0, 3, 1) FancyOnboardingResponseDeliver => ServerOnly,
 }
 
 #[cfg(test)]
@@ -175,5 +182,32 @@ mod tests {
             support.min_version,
             fancy_utils::version::fancy_version_encode(0, 3, 0),
         );
+    }
+
+    #[test]
+    fn onboarding_messages_require_0_3_1_server() {
+        let v_0_3_1 = fancy_utils::version::fancy_version_encode(0, 3, 1);
+        let cases: [ControlMessage; 5] = [
+            ControlMessage::FancyOnboardingConfig(
+                mumble_tcp::FancyOnboardingConfig::default(),
+            ),
+            ControlMessage::FancyOnboardingConfigUpdate(
+                mumble_tcp::FancyOnboardingConfigUpdate::default(),
+            ),
+            ControlMessage::FancyOnboardingResponse(
+                mumble_tcp::FancyOnboardingResponse::default(),
+            ),
+            ControlMessage::FancyOnboardingResponseQuery(
+                mumble_tcp::FancyOnboardingResponseQuery::default(),
+            ),
+            ControlMessage::FancyOnboardingResponseDeliver(
+                mumble_tcp::FancyOnboardingResponseDeliver::default(),
+            ),
+        ];
+        for msg in &cases {
+            let support = message_support(msg).unwrap();
+            assert_eq!(support.fallback, FallbackPolicy::ServerOnly);
+            assert_eq!(support.min_version, v_0_3_1);
+        }
     }
 }

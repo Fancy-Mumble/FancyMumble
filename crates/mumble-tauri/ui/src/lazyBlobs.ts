@@ -51,6 +51,7 @@ export function getCachedChannelDescription(channelId: number, descriptionSize: 
 }
 
 async function fetchUserAvatar(session: number, expectedSize: number): Promise<string | null> {
+  if (session <= 0) return null;
   const existing = avatarPending.get(session);
   if (existing) return existing;
   const promise = (async () => {
@@ -99,7 +100,7 @@ export function useUserAvatar(session: number | null | undefined, textureSize: n
   const [url, setUrl] = useState<string | null>(initial);
 
   useEffect(() => {
-    if (session == null || textureSize == null || textureSize === 0) {
+    if (session == null || session <= 0 || textureSize == null || textureSize === 0) {
       setUrl(null);
       return;
     }
@@ -156,7 +157,7 @@ export function useChannelDescription(
 
 /** Imperatively prefetch an avatar (for use outside React, e.g. from a store action). */
 export function prefetchUserAvatar(session: number, textureSize: number | null): void {
-  if (textureSize == null || textureSize === 0) return;
+  if (session <= 0 || textureSize == null || textureSize === 0) return;
   if (getCachedUserAvatar(session, textureSize)) return;
   void fetchUserAvatar(session, textureSize);
 }
@@ -165,9 +166,15 @@ export function prefetchUserAvatar(session: number, textureSize: number | null):
  * Synchronously install raw avatar bytes (e.g. from `UserList` admin
  * response, where the bytes are sent inline) into the cache so that
  * `useUserAvatar(session, bytes.length)` resolves without an IPC call.
+ *
+ * If the cache already holds an entry of the same size for this session
+ * the call is a no-op so we don't redo the (relatively expensive)
+ * base64 encoding on every re-render.
  */
 export function setUserAvatarBytes(session: number, bytes: number[] | null): void {
   if (!bytes || bytes.length === 0) return;
+  const cached = avatarCache.get(session);
+  if (cached && cached.size === bytes.length) return;
   const url = textureToDataUrl(bytes);
   lruTouch(avatarCache, session, { size: bytes.length, value: url });
 }

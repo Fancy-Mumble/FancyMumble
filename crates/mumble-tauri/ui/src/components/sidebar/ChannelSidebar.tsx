@@ -1,4 +1,4 @@
-import { BellIcon, BellOffIcon, ChevronRightIcon, CloseIcon, EditIcon, HeadphonesIcon, HeadphonesOffIcon, InfoIcon, ListenBadgeIcon, LogoutIcon, MenuIcon, MicIcon, MicOffIcon, MicOffSmallIcon, PhoneIcon, PhoneOffIcon, PlusIcon, RecordIcon, SearchIcon, SettingsIcon, ShieldIcon, TrashIcon } from "../../icons";
+import { BellIcon, BellOffIcon, ChevronRightIcon, CloseIcon, DatabaseIcon, EditIcon, HeadphonesIcon, HeadphonesOffIcon, InfoIcon, ListenBadgeIcon, LogoutIcon, MenuIcon, MicIcon, MicOffIcon, MicOffSmallIcon, PhoneIcon, PhoneOffIcon, PlusIcon, RecordIcon, SearchIcon, SettingsIcon, ShieldIcon, TrashIcon, UsersGroupIcon } from "../../icons";
 import { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -11,7 +11,10 @@ import { UserListItem, RoleColorsContext, RoleGroupsContext, buildRoleColorMap, 
 import { useAclGroups } from "../../hooks/useAclGroups";
 import { UserContextMenu } from "./UserContextMenu";
 import type { UserContextMenuState } from "./UserContextMenu";
-import ChannelEditorDialog, { canEditChannel, canCreateChannel, canOnlyCreateTemp, canDeleteChannel } from "./ChannelEditorDialog";
+import ChannelEditorDialog, { canEditChannel, canCreateChannel, canOnlyCreateTemp, canDeleteChannel, canDeleteMessages } from "./ChannelEditorDialog";
+import ConfirmDialog from "../elements/ConfirmDialog";
+import { MoveUsersDialog } from "./MoveUsersDialog";
+import { ChannelPasswordDialog } from "./ChannelPasswordDialog";
 import styles from "./ChannelSidebar.module.css";
 import { loadPersonalization } from "../../personalizationStorage";
 import type { ChannelViewerStyle } from "../../personalizationStorage";
@@ -20,6 +23,7 @@ const ChannelIconList = lazy(() => import("./modern/ChannelIconList"));
 const ClassicChannelList = lazy(() => import("./classic/ClassicChannelList"));
 const MembersTab = lazy(() => import("./MembersTab").then((m) => ({ default: m.MembersTab })));
 const RecordingModal = lazy(() => import("./RecordingModal"));
+import { SidebarTabs } from "./SidebarTabs";
 import { PERM_LISTEN, PERM_WRITE } from "../../utils/permissions";
 
 /** Check whether a channel's cached permissions include the Listen bit. */
@@ -110,16 +114,21 @@ interface ChannelSidebarProps {
   searchChannelId?: number | null;
   /** Called to clear the channel search scope. */
   onSearchChannelClear?: () => void;
+  /** Called when a message search result is selected; receives channel+message IDs. */
+  onSelectMessage?: (channelId: number, messageId: string) => void;
 }
 
-export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, onCollapse, searchChannelId, onSearchChannelClear }: Readonly<ChannelSidebarProps>) {
+export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, onCollapse, searchChannelId, onSearchChannelClear, onSelectMessage }: Readonly<ChannelSidebarProps>) {
   const channels = useAppStore((s) => s.channels);
   const users = useAppStore((s) => s.users);
   const selectedChannel = useAppStore((s) => s.selectedChannel);
   const currentChannel = useAppStore((s) => s.currentChannel);
   const selectChannel = useAppStore((s) => s.selectChannel);
   const joinChannel = useAppStore((s) => s.joinChannel);
+  const joinChannelWithPassword = useAppStore((s) => s.joinChannelWithPassword);
   const deleteChannel = useAppStore((s) => s.deleteChannel);
+  const moveChannelUsers = useAppStore((s) => s.moveChannelUsers);
+  const deletePchatMessages = useAppStore((s) => s.deletePchatMessages);
   const disconnect = useAppStore((s) => s.disconnect);
   const toggleListen = useAppStore((s) => s.toggleListen);
   const listenedChannels = useAppStore((s) => s.listenedChannels);
@@ -152,6 +161,8 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [shakingChannelId, setShakingChannelId] = useState<number | undefined>();
+  const [highlightChannelId, setHighlightChannelId] = useState<number | undefined>();
+  const [highlightUserSession, setHighlightUserSession] = useState<number | undefined>();
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -188,6 +199,18 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
     channelId: number;
     channelName: string;
   } | null>(null);
+
+  // -- Purge persistent chat confirm state -------------------------
+  const [purgeConfirm, setPurgeConfirm] = useState<{
+    channelId: number;
+    channelName: string;
+  } | null>(null);
+
+  // -- Move all users dialog state ---------------------------------
+  const [moveUsersSource, setMoveUsersSource] = useState<ChannelEntry | null>(null);
+
+  // -- Channel password dialog state -------------------------------
+  const [passwordChannel, setPasswordChannel] = useState<ChannelEntry | null>(null);
 
   // True when the user has Write permission on the root channel (id 0).
   // This is the traditional Mumble indicator for server admin rights.
@@ -237,18 +260,19 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
   // Section collapse state (all expanded by default, restored from prefs).
   const [channelsOpen, setChannelsOpen] = useState(true);
 
-  // Sidebar tab — restored from persisted preferences on mount.
-  const [activeTab, setActiveTab] = useState<"channels" | "members">("channels");
+  // Members pane is mounted lazily on first activation by SidebarTabs.
+  // Once shown it stays mounted (hidden via CSS) so subsequent tab
+  // switches are pure CSS toggles.
+  const [membersMounted, setMembersMounted] = useState(false);
+  const handleMembersFirstShown = useCallback(() => setMembersMounted(true), []);
 
-  // Load persisted section and tab states on mount.
+  // Load persisted section states on mount.  (Active tab is handled
+  // inside SidebarTabs to keep its state local.)
   useEffect(() => {
     getPreferences().then((prefs) => {
       const s = prefs.sidebarSections;
       if (s) {
         setChannelsOpen(s.channels);
-      }
-      if (prefs.sidebarActiveTab) {
-        setActiveTab(prefs.sidebarActiveTab);
       }
     });
   }, []);
@@ -265,11 +289,6 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
     },
     [],
   );
-
-  const handleTabChange = useCallback((tab: "channels" | "members") => {
-    setActiveTab(tab);
-    updatePreferences({ sidebarActiveTab: tab }).catch(() => {});
-  }, []);
 
   // -- Context menu state ------------------------------------------
   const [ctxMenu, setCtxMenu] = useState<{
@@ -318,6 +337,28 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
     },
     [],
   );
+
+  // Stable callbacks for the list components below: avoid passing fresh
+  // arrow functions on every render so React.memo on MemberItem/MemberRow
+  // can short-circuit when nothing about a row actually changed.
+  const handleSelectChannel = useCallback((id: number) => {
+    selectChannel(id);
+    onChannelSelect?.();
+  }, [selectChannel, onChannelSelect]);
+  const handleJoinChannel = useCallback((id: number) => {
+    const ch = channels.find((c) => c.id === id);
+    if (ch?.is_enter_restricted) {
+      setPasswordChannel(ch);
+      return;
+    }
+    joinChannel(id);
+    selectChannel(id);
+    onChannelSelect?.();
+  }, [channels, joinChannel, selectChannel, onChannelSelect]);
+  const handleUserClick = useCallback((session: number) => {
+    selectDmUser(session);
+    onChannelSelect?.();
+  }, [selectDmUser, onChannelSelect]);
 
   /** Get the channel name for a user's current channel. */
   const channelName = (channelId: number) => {
@@ -380,35 +421,51 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             query={searchQuery}
             channelId={searchChannelId}
             channelName={searchChannelName}
-            onSelectChannel={(id) => { selectChannel(id); onChannelSelect?.(); }}
-            onSelectUser={(session) => { selectDmUser(session); onChannelSelect?.(); }}
+            onSelectChannel={(id) => {
+              selectChannel(id);
+              setHighlightChannelId(id);
+              setTimeout(() => setHighlightChannelId(undefined), 1500);
+              onChannelSelect?.();
+            }}
+            onSelectUser={(session) => {
+              const user = users.find((u) => u.session === session);
+              const channelId = user?.channel_id;
+              if (channelId != null) {
+                selectChannel(channelId);
+                setHighlightChannelId(channelId);
+                setTimeout(() => setHighlightChannelId(undefined), 1500);
+              }
+              setHighlightUserSession(session);
+              setTimeout(() => setHighlightUserSession(undefined), 1500);
+              onChannelSelect?.();
+            }}
+            onSelectMessage={(channelId, messageId) => {
+              selectChannel(channelId);
+              setHighlightChannelId(channelId);
+              setTimeout(() => setHighlightChannelId(undefined), 1500);
+              onSelectMessage?.(channelId, messageId);
+              onChannelSelect?.();
+            }}
           />
         </Suspense>
       ) : (<>
 
-      {/* Tab bar (Channels | Members) */}
-      <div className={styles.tabBar} role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === "channels"}
-          className={`${styles.tab} ${activeTab === "channels" ? styles.tabActive : ""}`}
-          onClick={() => handleTabChange("channels")}
-        >
-          Channels
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === "members"}
-          className={`${styles.tab} ${activeTab === "members" ? styles.tabActive : ""}`}
-          onClick={() => handleTabChange("members")}
-        >
-          Members
-        </button>
-      </div>
-
-      {activeTab === "channels" && <>
+      <SidebarTabs
+        onMembersFirstShown={handleMembersFirstShown}
+        membersPane={membersMounted ? (
+          <Suspense fallback={null}>
+            <MembersTab
+              users={users}
+              channels={channels}
+              ownSession={ownSession}
+              selectedDmUser={selectedDmUser}
+              talkingSessions={talkingSessions}
+              onSelectDm={handleUserClick}
+              onUserContextMenu={openUserCtxMenu}
+            />
+          </Suspense>
+        ) : null}
+        channelsPane={(<>
       {/* Channel list header (always visible) */}
       <div className={styles.sectionHeaderBar}>
         <button
@@ -440,11 +497,13 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             talkingSessions={talkingSessions}
             broadcastingSessions={broadcastingSessions}
             shakingChannelId={shakingChannelId}
-            onSelectChannel={(id) => { selectChannel(id); onChannelSelect?.(); }}
-            onJoinChannel={(id) => { joinChannel(id); selectChannel(id); onChannelSelect?.(); }}
+            highlightChannelId={highlightChannelId}
+            highlightUserSession={highlightUserSession}
+            onSelectChannel={handleSelectChannel}
+            onJoinChannel={handleJoinChannel}
             onContextMenu={openCtxMenu}
             onUserContextMenu={openUserCtxMenu}
-            onUserClick={(session) => { selectDmUser(session); onChannelSelect?.(); }}
+            onUserClick={handleUserClick}
           />
         )}
 
@@ -459,11 +518,13 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             talkingSessions={talkingSessions}
             broadcastingSessions={broadcastingSessions}
             shakingChannelId={shakingChannelId}
-            onSelectChannel={(id) => { selectChannel(id); onChannelSelect?.(); }}
-            onJoinChannel={(id) => { joinChannel(id); selectChannel(id); onChannelSelect?.(); }}
+            highlightChannelId={highlightChannelId}
+            highlightUserSession={highlightUserSession}
+            onSelectChannel={handleSelectChannel}
+            onJoinChannel={handleJoinChannel}
             onContextMenu={openCtxMenu}
             onUserContextMenu={openUserCtxMenu}
-            onUserClick={(session) => { selectDmUser(session); onChannelSelect?.(); }}
+            onUserClick={handleUserClick}
           />
         )}
 
@@ -476,28 +537,17 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             listenedChannels={listenedChannels}
             unreadCounts={unreadCounts}
             shakingChannelId={shakingChannelId}
-            onSelectChannel={(id) => { selectChannel(id); onChannelSelect?.(); }}
-            onJoinChannel={(id) => { joinChannel(id); selectChannel(id); onChannelSelect?.(); }}
+            highlightChannelId={highlightChannelId}
+            highlightUserSession={highlightUserSession}
+            onSelectChannel={handleSelectChannel}
+            onJoinChannel={handleJoinChannel}
             onContextMenu={openCtxMenu}
           />
         )}
         </Suspense>
       </div>
-      </>}
-
-      {activeTab === "members" && (
-        <Suspense fallback={null}>
-          <MembersTab
-            users={users}
-            channels={channels}
-            ownSession={ownSession}
-            selectedDmUser={selectedDmUser}
-            talkingSessions={talkingSessions}
-            onSelectDm={(session) => { selectDmUser(session); onChannelSelect?.(); }}
-            onUserContextMenu={openUserCtxMenu}
-          />
-        </Suspense>
-      )}
+        </>)}
+      />
 
       </>)}{/* end search-mode ternary */}
 
@@ -591,6 +641,8 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
         const showEdit = canEditChannel(ctxChannel);
         const showCreate = canCreateChannel(ctxChannel);
         const showDelete = canDeleteChannel(ctxChannel);
+        const showPurge = canDeleteMessages(ctxChannel) && !!ctxChannel?.pchat_protocol;
+        const channelUserCount = users.filter((u) => u.channel_id === ctxMenu.channelId).length;
 
         return createPortal(
           <div
@@ -655,6 +707,20 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
               </button>
             )}
 
+            {showEdit && (
+              <button
+                className={styles.contextMenuItem}
+                onClick={() => {
+                  const channelId = ctxMenu.channelId;
+                  setCtxMenu(null);
+                  navigate(`/admin?tab=acl&channel=${channelId}`);
+                }}
+              >
+                <ShieldIcon width={14} height={14} />
+                Edit Permissions
+              </button>
+            )}
+
             {showCreate && (
               <button
                 className={styles.contextMenuItem}
@@ -669,6 +735,35 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
               >
                 <PlusIcon width={14} height={14} />
                 Create Sub-channel
+              </button>
+            )}
+
+            {showEdit && channelUserCount > 0 && (
+              <button
+                className={styles.contextMenuItem}
+                onClick={() => {
+                  if (ctxChannel) setMoveUsersSource(ctxChannel);
+                  setCtxMenu(null);
+                }}
+              >
+                <UsersGroupIcon width={14} height={14} />
+                Move all users to&hellip;
+              </button>
+            )}
+
+            {showPurge && (
+              <button
+                className={`${styles.contextMenuItem} ${styles.contextMenuItemDanger}`}
+                onClick={() => {
+                  setPurgeConfirm({
+                    channelId: ctxMenu.channelId,
+                    channelName: ctxChannel?.name ?? "this channel",
+                  });
+                  setCtxMenu(null);
+                }}
+              >
+                <DatabaseIcon width={14} height={14} />
+                Purge chat history
               </button>
             )}
 
@@ -752,6 +847,51 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
         <Suspense fallback={null}>
           <RecordingModal onClose={() => setShowRecordingModal(false)} />
         </Suspense>
+      )}
+
+      {/* Purge persistent chat confirmation */}
+      {purgeConfirm && (
+        <ConfirmDialog
+          title="Purge chat history"
+          body={`This will permanently delete all persistent chat messages in "${purgeConfirm.channelName}". This cannot be undone.`}
+          confirmLabel="Purge"
+          danger
+          onConfirm={async () => {
+            const id = purgeConfirm.channelId;
+            setPurgeConfirm(null);
+            await deletePchatMessages(id, { timeTo: Date.now() });
+          }}
+          onCancel={() => setPurgeConfirm(null)}
+        />
+      )}
+
+      {/* Move all users to channel picker */}
+      {moveUsersSource && (
+        <MoveUsersDialog
+          sourceChannel={moveUsersSource}
+          channels={channels}
+          onConfirm={async (targetId) => {
+            const srcId = moveUsersSource.id;
+            setMoveUsersSource(null);
+            await moveChannelUsers(srcId, targetId);
+          }}
+          onCancel={() => setMoveUsersSource(null)}
+        />
+      )}
+
+      {/* Channel password dialog */}
+      {passwordChannel && (
+        <ChannelPasswordDialog
+          channel={passwordChannel}
+          onConfirm={async (password) => {
+            const ch = passwordChannel;
+            setPasswordChannel(null);
+            await joinChannelWithPassword(ch.id, password);
+            selectChannel(ch.id);
+            onChannelSelect?.();
+          }}
+          onCancel={() => setPasswordChannel(null)}
+        />
       )}
     </aside>
     </RoleGroupsContext.Provider>
