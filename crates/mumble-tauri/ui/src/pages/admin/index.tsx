@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
 import { useAppStore } from "../../store";
 import { RegisteredUsersTab } from "./RegisteredUsersTab";
@@ -7,10 +7,12 @@ import { BanListTab } from "./BanListTab";
 import { ChannelAclTab } from "./ChannelAclTab";
 import { RolesListPanel } from "./RolesListPanel";
 import { CustomEmotesTab } from "./CustomEmotesTab";
+import OnboardingAdminPanel from "../../components/onboarding/OnboardingAdminPanel";
+import { isOnboardingSupported } from "../../components/onboarding/onboardingStore";
 import { PERM_MANAGE_EMOTES } from "../../utils/permissions";
 import styles from "./AdminPanel.module.css";
 
-type Tab = "users" | "roles" | "bans" | "acl" | "emotes";
+type Tab = "users" | "roles" | "bans" | "acl" | "emotes" | "onboarding";
 
 const BASE_TABS: TabDef<Tab>[] = [
   { id: "users", label: "Users", icon: "\uD83D\uDC65" },
@@ -21,13 +23,29 @@ const BASE_TABS: TabDef<Tab>[] = [
 
 export default function AdminPanel() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>("users");
+  const [searchParams] = useSearchParams();
+  const initialTab = (() => {
+    const t = searchParams.get("tab");
+    if (t === "users" || t === "roles" || t === "bans" || t === "acl" || t === "emotes" || t === "onboarding") {
+      return t;
+    }
+    return "users";
+  })();
+  const [tab, setTab] = useState<Tab>(initialTab);
   const customEmotesSupported = useAppStore((s) => s.fileServerCapabilities?.features.custom_emotes ?? false);
   const rootChannelPerms = useAppStore((s) => s.channels.find((c) => c.id === 0)?.permissions ?? 0);
   const canManageEmotes = customEmotesSupported && (rootChannelPerms & PERM_MANAGE_EMOTES) !== 0;
-  const tabs: TabDef<Tab>[] = canManageEmotes
-    ? [...BASE_TABS, { id: "emotes", label: "Emotes", icon: "\uD83C\uDFA8" }]
-    : BASE_TABS;
+  const serverFancyVersion = useAppStore((s) => s.serverFancyVersion);
+  const onboardingSupported = isOnboardingSupported(serverFancyVersion);
+  const tabs: TabDef<Tab>[] = [
+    ...BASE_TABS,
+    ...(canManageEmotes
+      ? [{ id: "emotes" as const, label: "Emotes", icon: "\uD83C\uDFA8" }]
+      : []),
+    ...(onboardingSupported
+      ? [{ id: "onboarding" as const, label: "Onboarding", icon: "\uD83D\uDC4B" }]
+      : []),
+  ];
 
   return (
     <TabbedPage
@@ -43,6 +61,7 @@ export default function AdminPanel() {
         {tab === "bans" && <BanListTab />}
         {tab === "acl" && <ChannelAclTab />}
         {tab === "emotes" && <CustomEmotesTab />}
+        {tab === "onboarding" && <OnboardingAdminPanel />}
       </div>
     </TabbedPage>
   );

@@ -120,29 +120,48 @@ export function useHoverCardPosition(isBroadcasting: boolean): HoverCardPosition
   const [showCard, setShowCard] = useState(false);
   const [cardPos, setCardPos] = useState<{ top: number; left: number } | null>(null);
   const itemRef = useRef<HTMLButtonElement>(null);
+  // Hover-open timer.  Keeping this out of state means a casual mouse
+  // pass over the user list (the dominant tab-switch / pointermove
+  // cost) does not trigger any React re-renders - only a sustained
+  // hover does.
+  const openTimerRef = useRef<number | null>(null);
+
+  const cancelTimer = useCallback(() => {
+    if (openTimerRef.current !== null) {
+      window.clearTimeout(openTimerRef.current);
+      openTimerRef.current = null;
+    }
+  }, []);
 
   const handleEnter = useCallback(() => {
     if (isMobile) return;
-    if (itemRef.current) {
-      const rect = itemRef.current.getBoundingClientRect();
-      const rawTop = rect.top + rect.height / 2;
-      const effectiveH = isBroadcasting ? HOVER_CARD_H + 160 : HOVER_CARD_H;
-      const top = Math.max(
-        effectiveH / 2 + HOVER_CARD_MARGIN,
-        Math.min(rawTop, window.innerHeight - effectiveH / 2 - HOVER_CARD_MARGIN),
-      );
-      const fitsRight = rect.right + HOVER_CARD_GAP + HOVER_CARD_W + HOVER_CARD_MARGIN <= window.innerWidth;
-      const left = fitsRight
-        ? rect.right + HOVER_CARD_GAP
-        : rect.left - HOVER_CARD_GAP - HOVER_CARD_W;
-      setCardPos({ top, left });
-    }
-    setShowCard(true);
-  }, [isBroadcasting]);
+    cancelTimer();
+    openTimerRef.current = window.setTimeout(() => {
+      openTimerRef.current = null;
+      if (itemRef.current) {
+        const rect = itemRef.current.getBoundingClientRect();
+        const rawTop = rect.top + rect.height / 2;
+        const effectiveH = isBroadcasting ? HOVER_CARD_H + 160 : HOVER_CARD_H;
+        const top = Math.max(
+          effectiveH / 2 + HOVER_CARD_MARGIN,
+          Math.min(rawTop, window.innerHeight - effectiveH / 2 - HOVER_CARD_MARGIN),
+        );
+        const fitsRight = rect.right + HOVER_CARD_GAP + HOVER_CARD_W + HOVER_CARD_MARGIN <= window.innerWidth;
+        const left = fitsRight
+          ? rect.right + HOVER_CARD_GAP
+          : rect.left - HOVER_CARD_GAP - HOVER_CARD_W;
+        setCardPos({ top, left });
+      }
+      setShowCard(true);
+    }, 250);
+  }, [isBroadcasting, cancelTimer]);
 
   const handleLeave = useCallback(() => {
+    cancelTimer();
     setShowCard(false);
-  }, []);
+  }, [cancelTimer]);
+
+  useEffect(() => cancelTimer, [cancelTimer]);
 
   return { showCard, cardPos, itemRef, handleEnter, handleLeave };
 }
@@ -270,6 +289,7 @@ export const UserListItem = memo(function UserListItem({
   const dmUnread = useAppStore((s) => s.dmUnreadCounts[user.session] ?? 0);
   const volumePct = useAppStore((s) => user.hash ? (s.userVolumes[user.hash] ?? 100) : 100);
   const isBroadcasting = useAppStore((s) => s.broadcastingSessions.has(user.session));
+  const sfuAvailable = useAppStore((s) => s.serverConfig.webrtc_sfu_available);
   const canMoveUser = useAppStore((s) => {
     const ch = s.channels.find((c) => c.id === user.channel_id);
     return ch?.permissions != null && (ch.permissions & PERM_MOVE_BIT) !== 0;
@@ -279,9 +299,10 @@ export const UserListItem = memo(function UserListItem({
   const streamThumbnail = useStreamThumbnail(user.session, showCard && isBroadcasting);
 
   const url = useUserAvatar(user.session, user.texture_size);
+  // Defer FancyProfile parsing until the hover card is actually shown.
   const parsed = useMemo(
-    () => (user.comment ? parseComment(user.comment) : null),
-    [user.comment],
+    () => (showCard && user.comment ? parseComment(user.comment) : null),
+    [showCard, user.comment],
   );
 
   const isMuted = user.mute || user.self_mute;
@@ -295,7 +316,9 @@ export const UserListItem = memo(function UserListItem({
     }
   }, [showCard, offline, user.comment, user.user_id, onRequestComment]);
 
-  const dragDisabled = isMobile || isSelf || !!offline || !canMoveUser;
+  // Self-drag is allowed (sent as join_channel by the drop handler);
+  // moving other users requires PERM_MOVE.  Offline users cannot be moved.
+  const dragDisabled = isMobile || !!offline || (!isSelf && !canMoveUser);
   const { handlers: dragHandlers, overlay: dragOverlay } = useUserDrag(
     user.session,
     user.name,
@@ -370,9 +393,12 @@ export const UserListItem = memo(function UserListItem({
         </span>
       )}
       {isBroadcasting && (
-        <span className={styles.liveBadge} title="Sharing screen">
+        <span
+          className={`${styles.liveBadge} ${!sfuAvailable ? styles.liveBadgeP2P : ""}`}
+          title={sfuAvailable ? "Sharing screen (server-relayed)" : "Sharing screen (peer-to-peer)"}
+        >
           <ScreenShareIcon width={10} height={10} />
-          Live
+          {sfuAvailable ? "Live" : "P2P"}
         </span>
       )}
       {dmUnread > 0 && (

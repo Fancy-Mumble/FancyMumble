@@ -81,6 +81,9 @@ pub struct ChannelEntry {
     /// Key custodian cert hashes (Section 5.7).
     #[serde(skip)]
     pub pchat_key_custodians: Vec<String>,
+    /// Whether the channel requires a password (token) to enter.
+    #[serde(default)]
+    pub is_enter_restricted: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -380,6 +383,11 @@ pub(crate) struct ListenDeniedPayload {
 }
 
 #[derive(Clone, Serialize)]
+pub(crate) struct ChannelDeniedPayload {
+    pub channel_id: u32,
+}
+
+#[derive(Clone, Serialize)]
 pub(crate) struct PermissionDeniedPayload {
     pub deny_type: Option<i32>,
     pub reason: Option<String>,
@@ -545,6 +553,36 @@ pub(crate) struct MicAmplitudePayload {
     pub rms: f32,
     /// Peak amplitude (0.0 - 1.0).
     pub peak: f32,
+}
+
+/// Auto-calibration result emitted when voice-activation auto-tunes
+/// the noise-gate parameters.  Carries all four calibration knobs so
+/// the frontend can refresh its UI atomically.
+#[derive(Clone, Serialize)]
+pub(crate) struct VoiceActivationCalibrationPayload {
+    /// Auto-tuned open threshold (post-AGC RMS, 0.0 - 1.0).
+    pub vad_threshold: f32,
+    /// Close-threshold ratio relative to `vad_threshold`.
+    pub noise_gate_close_ratio: f32,
+    /// Frames to keep the gate open after audio drops below the close threshold.
+    pub hold_frames: u32,
+    /// Auto-tuned AGC max gain in dB.
+    pub max_gain_db: f32,
+}
+
+/// Voice replay lifecycle, emitted on `voice-replay-state` so the
+/// frontend can label its single Record / Stop / Playing button
+/// without polling.
+#[derive(Clone, Copy, Serialize)]
+#[serde(tag = "phase", rename_all = "snake_case")]
+pub(crate) enum VoiceReplayState {
+    /// Capturing through the same filter chain the live voice pipeline
+    /// uses (AGC + denoiser + noise gate).
+    Recording { elapsed_ms: u32, capacity_ms: u32 },
+    /// Replaying the captured buffer through the output device.
+    Playing { elapsed_ms: u32, total_ms: u32 },
+    /// Replay finished or was cancelled.
+    Idle,
 }
 
 /// Latency measurement payload emitted during latency test.
@@ -1025,6 +1063,77 @@ pub enum VoiceState {
     Muted,
 }
 
+// --- Onboarding workflow types ------------------------------------
+
+/// Single answer chip on a multiple-choice onboarding question.
+#[derive(Debug, Clone, Default, Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct OnboardingAnswer {
+    pub id: String,
+    pub label: String,
+    /// Channels added to the user's visible-channel set on selection.
+    #[serde(default)]
+    pub channel_ids: Vec<u32>,
+    /// Mumble ACL group names the user is added to on selection.
+    #[serde(default)]
+    pub group_names: Vec<String>,
+    /// Optional emoji glyph for the chip.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub emoji: Option<String>,
+    /// Optional description rendered beneath the label.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// Single multiple-choice question of the onboarding flow.
+#[derive(Debug, Clone, Default, Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct OnboardingQuestion {
+    pub id: String,
+    pub text: String,
+    #[serde(default)]
+    pub multi_select: bool,
+    #[serde(default)]
+    pub required: bool,
+    /// True when the question must be answered before fully entering the server.
+    #[serde(default)]
+    pub ask_before_join: bool,
+    pub answers: Vec<OnboardingAnswer>,
+}
+
+/// Server-managed onboarding configuration.
+#[derive(Debug, Clone, Default, Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct OnboardingConfig {
+    pub version: u32,
+    pub enabled: bool,
+    #[serde(default)]
+    pub default_channel_ids: Vec<u32>,
+    pub questions: Vec<OnboardingQuestion>,
+    pub revision: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<u64>,
+}
+
+/// Selected answer ids for one question.
+#[derive(Debug, Clone, Default, Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct OnboardingSelection {
+    pub question_id: String,
+    pub answer_ids: Vec<String>,
+}
+
+/// User's onboarding response.  Sent to the server for ACL group
+/// application and stored locally for the "Channels & Roles" editor.
+#[derive(Debug, Clone, Default, Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct OnboardingResponse {
+    /// Cert hash of the responder (server-stamped, optional from client).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub submitted_at: Option<u64>,
+    pub config_revision: u64,
+    pub selections: Vec<OnboardingSelection>,
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used, reason = "test code: panicking on failure is the intended behaviour")]
 mod tests {
@@ -1067,7 +1176,7 @@ mod tests {
             pchat_protocol: Some(PchatProtocol::SignalV1),
             pchat_max_history: Some(1000),
             pchat_retention_days: Some(7),
-            pchat_key_custodians: Vec::new(),
+            pchat_key_custodians: Vec::new(), is_enter_restricted: false,
         };
         let json = serde_json::to_string(&entry).expect("serialize");
         assert!(

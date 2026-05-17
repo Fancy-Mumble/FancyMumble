@@ -115,6 +115,9 @@ export default function ChannelEditorDialog({
     channel?.pchat_retention_days ?? 0,
   );
 
+  // Access password (set = change/add, empty when editing = remove)
+  const [password, setPassword] = useState("");
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -156,6 +159,7 @@ export default function ChannelEditorDialog({
           position: position || undefined,
           temporary: temporary || undefined,
           maxUsers: maxUsers || undefined,
+          password: password || undefined,
           ...pchatOpts,
         });
       } else {
@@ -166,6 +170,7 @@ export default function ChannelEditorDialog({
           position: position !== channel.position ? position : undefined,
           temporary: temporary !== channel.temporary ? temporary : undefined,
           maxUsers: maxUsers !== channel.max_users ? maxUsers : undefined,
+          password: password !== "" ? password : (channel.is_enter_restricted ? "" : undefined),
           ...pchatOpts,
         });
       }
@@ -181,6 +186,7 @@ export default function ChannelEditorDialog({
     position,
     temporary,
     maxUsers,
+    password,
     pchatProtocol,
     pchatMaxHistory,
     pchatRetentionDays,
@@ -271,6 +277,26 @@ export default function ChannelEditorDialog({
           <label className={styles.checkboxLabel} htmlFor="ch-ed-temp">
             Temporary channel
           </label>
+        </div>
+
+        {/* Access password */}
+        <div className={styles.field}>
+          <label className={styles.label} htmlFor="ch-ed-password">Password</label>
+          <input
+            id="ch-ed-password"
+            className={styles.input}
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={
+              isCreate
+                ? "Optional — leave empty for open access"
+                : channel?.is_enter_restricted
+                  ? "Currently password-protected. Enter new password to change, or clear to remove"
+                  : "Optional — leave empty for open access"
+            }
+            autoComplete="new-password"
+          />
         </div>
 
         {/* Persistence settings */}

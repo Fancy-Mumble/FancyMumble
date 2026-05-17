@@ -38,11 +38,31 @@ export function serializeProfile(
  *
  *  Returns `null` profile when the comment was not written by
  *  FancyMumble (i.e. it's a regular comment from a legacy client).
+ *
+ *  Result is memoized in a small LRU cache because the same comment
+ *  string is often parsed by many components per render pass.
  */
-export function parseComment(comment: string): {
-  profile: FancyProfile | null;
-  bio: string;
-} {
+type ParsedComment = { profile: FancyProfile | null; bio: string };
+const PARSE_CACHE_MAX = 256;
+const parseCommentCache = new Map<string, ParsedComment>();
+
+export function parseComment(comment: string): ParsedComment {
+  const cached = parseCommentCache.get(comment);
+  if (cached) {
+    parseCommentCache.delete(comment);
+    parseCommentCache.set(comment, cached);
+    return cached;
+  }
+  const result = parseCommentImpl(comment);
+  parseCommentCache.set(comment, result);
+  if (parseCommentCache.size > PARSE_CACHE_MAX) {
+    const oldest = parseCommentCache.keys().next().value;
+    if (oldest !== undefined) parseCommentCache.delete(oldest);
+  }
+  return result;
+}
+
+function parseCommentImpl(comment: string): ParsedComment {
   if (!comment.startsWith(FANCY_PREFIX)) {
     return { profile: null, bio: comment };
   }

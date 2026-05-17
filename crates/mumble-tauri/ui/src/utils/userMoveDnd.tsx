@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { useAppStore } from "../store";
 
 const DRAG_THRESHOLD_PX = 4;
 
@@ -242,11 +243,16 @@ export function useUserDrag(
     (clientX: number, clientY: number) => {
       const target = hitTest(clientX, clientY);
       if (!target) return;
-      invoke("move_user_to_channel", {
-        session,
-        channelId: target.channelId,
-      }).catch((err: unknown) =>
-        console.error("move_user_to_channel failed:", err),
+      // For self-moves use join_channel (which sends a UserState without
+      // an explicit session) so the server treats it as a self-join and
+      // does not check PERM_MOVE on the source/target channels.  Other
+      // users go through move_user_to_channel which requires PERM_MOVE.
+      const ownSession = useAppStore.getState().ownSession;
+      const cmd = ownSession === session
+        ? invoke("join_channel", { channelId: target.channelId })
+        : invoke("move_user_to_channel", { session, channelId: target.channelId });
+      cmd.catch((err: unknown) =>
+        console.error("channel move failed:", err),
       );
     },
     [session],

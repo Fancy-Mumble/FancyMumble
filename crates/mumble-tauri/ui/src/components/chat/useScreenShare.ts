@@ -19,6 +19,7 @@
  */
 import { useEffect, useCallback, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { emit as emitTauri } from "@tauri-apps/api/event";
 import { useAppStore, onWebRtcSignal } from "../../store";
 import {
   getPreviewPc,
@@ -29,6 +30,17 @@ import {
   storeLocalThumbnail,
 } from "./useStreamPreview";
 import { clearAllStrokesInChannel, clearStrokesFromSender } from "./DrawingOverlay";
+
+// This module holds singleton WebRTC state (broadcasterPc, viewerPcs, etc.).
+// Vite HMR would otherwise hot-swap the module while leaving stale closures
+// in the store's signal-handler registry, causing SDP answers to be routed
+// to a dead module instance.  Forcing a full reload on any change keeps dev
+// behaviour aligned with production.
+if (import.meta.hot) {
+  import.meta.hot.accept(() => {
+    import.meta.hot!.invalidate();
+  });
+}
 
 // Proto SignalType enum values (must match Mumble.proto).
 const SIGNAL_START = 0;
@@ -83,6 +95,15 @@ let localStream: MediaStream | null = null;
 
 /** Single peer connection from broadcaster to the server SFU. */
 let broadcasterPc: RTCPeerConnection | null = null;
+
+/** Monotonic id of the current broadcaster PC; increments every time a new
+ *  RTCPeerConnection is assigned to {@link broadcasterPc}.  Used to tell
+ *  fresh SDP answers from stale ones when the user re-shares quickly. */
+let broadcasterPcEpoch = 0;
+
+/** Epoch we are currently waiting an SDP answer for; cleared once the
+ *  answer has been applied (or the PC is torn down). */
+let broadcasterAwaitingAnswer: number | null = null;
 
 /** ServerId of the connection that owns the broadcaster PC.
  *  See {@link sendSignal} for why this is required. */
@@ -164,9 +185,12 @@ async function connectBroadcasterToServer(): Promise<void> {
     broadcasterPc = null;
   }
   broadcasterPendingIce = [];
+  broadcasterAwaitingAnswer = null;
 
   const pc = new RTCPeerConnection(RTC_CONFIG);
   broadcasterPc = pc;
+  broadcasterPcEpoch += 1;
+  const pcEpoch = broadcasterPcEpoch;
   useAppStore.setState({ webrtcConnecting: true });
 
   // Add screen tracks (video + optional audio).
@@ -188,23 +212,12 @@ async function connectBroadcasterToServer(): Promise<void> {
   // Send our ICE candidates to the server (target=0).
   pc.onicecandidate = (e) => {
     if (e.candidate) {
-      console.log(`[sfu] broadcaster local ICE candidate: ${e.candidate.candidate}`);
       sendSignal(0, SIGNAL_ICE_CANDIDATE, JSON.stringify(e.candidate.toJSON()), sid);
-    } else {
-      console.log("[sfu] broadcaster local ICE gathering complete");
     }
-  };
-
-  pc.onicegatheringstatechange = () => {
-    console.log(`[sfu] broadcaster iceGatheringState=${pc.iceGatheringState}`);
-  };
-  pc.oniceconnectionstatechange = () => {
-    console.log(`[sfu] broadcaster iceConnectionState=${pc.iceConnectionState}`);
   };
 
   pc.onconnectionstatechange = () => {
     if (pc !== broadcasterPc) return; // stale closure
-    console.log(`[sfu] broadcaster connectionState=${pc.connectionState}`);
     if (pc.connectionState === "connected") {
       clearBroadcasterIceTimeout();
       useAppStore.setState({ webrtcConnecting: false });
@@ -221,8 +234,6 @@ async function connectBroadcasterToServer(): Promise<void> {
       });
       if (ownSession) broadcastSignal(SIGNAL_STOP, "", sid);
       showWebRtcError("Screen sharing failed: unable to reach the WebRTC server. Check that the required ports are not blocked by your firewall.");
-    } else if (pc.connectionState === "disconnected") {
-      console.warn("[sfu] broadcaster connection to server temporarily disconnected");
     }
   };
 
@@ -230,6 +241,8 @@ async function connectBroadcasterToServer(): Promise<void> {
   if (broadcasterPc !== pc) return; // replaced while awaiting
   await pc.setLocalDescription(offer);
   if (broadcasterPc !== pc) return; // replaced while awaiting
+
+  broadcasterAwaitingAnswer = pcEpoch;
 
   // Send offer to the server SFU (target=0 tells server this is our broadcast offer).
   sendSignal(0, SIGNAL_SDP_OFFER, offer.sdp!, sid);
@@ -291,6 +304,7 @@ function stopBroadcasting(): void {
     broadcasterPc = null;
   }
   broadcasterPendingIce = [];
+  broadcasterAwaitingAnswer = null;
   broadcasterServerId = null;
   // Wipe every annotation that was drawn on this broadcast (including
   // viewers' annotations on the local cache) so the next share starts
@@ -336,19 +350,19 @@ function flushViewerIce(session: number): void {
 }
 
 function closeViewer(session?: number): void {
-  if (session !== undefined) {
-    const state = viewerPcs.get(session);
-    if (state) {
-      state.pc.close();
-      viewerPcs.delete(session);
-      notifyStreamListeners(session, null);
-    }
-  } else {
+  if (session === undefined) {
     for (const [sess, state] of viewerPcs) {
       state.pc.close();
       notifyStreamListeners(sess, null);
     }
     viewerPcs.clear();
+    return;
+  }
+  const state = viewerPcs.get(session);
+  if (state) {
+    state.pc.close();
+    viewerPcs.delete(session);
+    notifyStreamListeners(session, null);
   }
 }
 
@@ -438,7 +452,7 @@ function routeSdpAnswer(senderSession: number, payload: string): void {
   // is not for a known viewer must be for our broadcaster - the SFU
   // never sends unsolicited answers.
   if (broadcasterPc?.signalingState === "have-local-offer") {
-    console.log(`[sfu] broadcaster received SDP answer (length=${payload.length}, senderSession=${senderSession})`);
+    broadcasterAwaitingAnswer = null;
     handleServerAnswer(broadcasterPc, payload)
       .then(flushBroadcasterIce)
       .catch((e) => console.error("[sfu] broadcaster setRemoteDescription error:", e));
@@ -450,9 +464,20 @@ function routeSdpAnswer(senderSession: number, payload: string): void {
     return;
   }
 
+  const answerUfrag = /a=ice-ufrag:([^\r\n]+)/.exec(payload)?.[1] ?? "?";
   console.warn(
     "[sfu] SDP answer received but no peer is expecting one",
-    { senderSession, viewerSessions: [...viewerPcs.keys()] },
+    {
+      senderSession,
+      viewerSessions: [...viewerPcs.keys()],
+      broadcasterPcExists: !!broadcasterPc,
+      broadcasterSignalingState: broadcasterPc?.signalingState ?? null,
+      broadcasterConnectionState: broadcasterPc?.connectionState ?? null,
+      broadcasterEpoch: broadcasterPcEpoch,
+      awaitingAnswerForEpoch: broadcasterAwaitingAnswer,
+      answerUfrag,
+      payloadLength: payload.length,
+    },
   );
 }
 
@@ -530,6 +555,10 @@ function handleSignal(senderSession: number, _targetSession: number | null, sign
       // stream was visible - drop them now that the stream is gone
       // so a future share doesn't start with leftover scribbles.
       clearStrokesFromSender(senderSession);
+      // Notify popout windows so they can self-close when their
+      // broadcaster stops sharing.
+      emitTauri("screen-share-stopped", { session: senderSession })
+        .catch((e) => console.warn("[screenshare] emit stopped failed", e));
       break;
 
     case SIGNAL_SDP_ANSWER:

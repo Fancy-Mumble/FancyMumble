@@ -351,6 +351,13 @@ interface DrawingOverlayProps {
    */
   readonly hideToolbar?: boolean;
   /**
+   * When `true`, the canvas only renders incoming strokes - it never
+   * captures pointer events and never sends strokes.  Used by the
+   * stream popout window, which mirrors annotations from the broadcaster
+   * without granting the viewer drawing rights.
+   */
+  readonly viewOnly?: boolean;
+  /**
    * Reference to the `<video>` element underneath the canvas. Used to
    * compute the content rect (the actual shared-content area within
    * the canvas, accounting for `object-fit: contain` letterboxing).
@@ -361,7 +368,7 @@ interface DrawingOverlayProps {
   readonly videoRef?: React.RefObject<HTMLVideoElement | null>;
 }
 
-export default function DrawingOverlay({ channelId, ownSession, hideToolbar, videoRef }: DrawingOverlayProps) {
+export default function DrawingOverlay({ channelId, ownSession, hideToolbar, viewOnly, videoRef }: DrawingOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   /** Cached content rect in canvas CSS pixels - kept in sync with resize + video metadata. */
   const contentRectRef = useRef<ContentRect>({ x: 0, y: 0, w: 0, h: 0 });
@@ -369,8 +376,10 @@ export default function DrawingOverlay({ channelId, ownSession, hideToolbar, vid
   // The dedicated desktop-overlay window (`hideToolbar = true`) only exists
   // while the broadcaster has drawing enabled, so treat it as permanently
   // active.  In-page overlays consult the global drawing-active set.
+  // `viewOnly` overrides everything - the canvas stays passive (renders
+  // remote strokes but never captures input).
   const drawingActiveStore = useAppStore((s) => s.drawingActiveChannels.has(channelId));
-  const drawingActive = hideToolbar || drawingActiveStore;
+  const drawingActive = !viewOnly && (hideToolbar || drawingActiveStore);
   const [selectedColor, setSelectedColor] = useState(DEFAULT_COLOR);
   const [strokeWidth, setStrokeWidth] = useState(DEFAULT_WIDTH);
   /**

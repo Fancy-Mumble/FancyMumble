@@ -137,6 +137,16 @@ pub enum TcpMessageType {
     FancyWatchSync = 134,
     /// Fancy Mumble: drawing stroke overlay for screen-share collaboration.
     FancyDrawStroke = 135,
+    /// Fancy Mumble: server broadcasts the active onboarding config.
+    FancyOnboardingConfig = 136,
+    /// Fancy Mumble: admin submits a new onboarding config.
+    FancyOnboardingConfigUpdate = 137,
+    /// Fancy Mumble: user submits answers to the onboarding questionnaire.
+    FancyOnboardingResponse = 138,
+    /// Fancy Mumble: user queries their previously-stored onboarding response.
+    FancyOnboardingResponseQuery = 139,
+    /// Fancy Mumble: server delivers a previously-stored onboarding response.
+    FancyOnboardingResponseDeliver = 140,
 }
 
 /// Generates both `TryFrom<u16> for TcpMessageType` and
@@ -300,6 +310,16 @@ pub enum ControlMessage {
     FancyWatchSync(mumble_tcp::FancyWatchSync),
     /// Fancy: drawing stroke overlay for screen-share collaboration.
     FancyDrawStroke(mumble_tcp::FancyDrawStroke),
+    /// Fancy: server broadcasts the active onboarding config.
+    FancyOnboardingConfig(mumble_tcp::FancyOnboardingConfig),
+    /// Fancy: admin submits a new onboarding config.
+    FancyOnboardingConfigUpdate(mumble_tcp::FancyOnboardingConfigUpdate),
+    /// Fancy: user submits answers to the onboarding questionnaire.
+    FancyOnboardingResponse(mumble_tcp::FancyOnboardingResponse),
+    /// Fancy: user queries their previously-stored onboarding response.
+    FancyOnboardingResponseQuery(mumble_tcp::FancyOnboardingResponseQuery),
+    /// Fancy: server delivers a previously-stored onboarding response.
+    FancyOnboardingResponseDeliver(mumble_tcp::FancyOnboardingResponseDeliver),
     /// UDP audio tunneled through TCP (fallback path).
     UdpTunnel(Vec<u8>),
 }
@@ -328,6 +348,9 @@ message_type_mapping! {
     FancyTypingIndicator,
     FancyLinkPreviewRequest, FancyLinkPreviewResponse,
     FancyWatchSync, FancyDrawStroke,
+    FancyOnboardingConfig, FancyOnboardingConfigUpdate,
+    FancyOnboardingResponse, FancyOnboardingResponseQuery,
+    FancyOnboardingResponseDeliver,
 }
 
 /// A decoded UDP message - either audio or a UDP ping.
@@ -474,13 +497,18 @@ mod tests {
             let msg_type = TcpMessageType::try_from(id).unwrap();
             assert_eq!(msg_type as u16, id);
         }
+        // FancyOnboardingConfig (136) .. FancyOnboardingResponseDeliver (140)
+        for id in 136..=140u16 {
+            let msg_type = TcpMessageType::try_from(id).unwrap();
+            assert_eq!(msg_type as u16, id);
+        }
     }
 
     #[test]
     fn tcp_message_type_invalid_returns_error() {
         assert!(TcpMessageType::try_from(27u16).is_err());
         assert!(TcpMessageType::try_from(99u16).is_err());
-        assert!(TcpMessageType::try_from(136u16).is_err());
+        assert!(TcpMessageType::try_from(141u16).is_err());
         assert!(TcpMessageType::try_from(199u16).is_err());
         assert!(TcpMessageType::try_from(203u16).is_err());
         assert!(TcpMessageType::try_from(u16::MAX).is_err());

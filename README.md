@@ -43,19 +43,16 @@ Fancy Mumble is a next-generation desktop client for Mumble that combines the re
 ## Screenshots
 
 ### Main Interface
-![Main Chat Interface](https://via.placeholder.com/800x500/1a1a2e/eaeaea?text=Main+Chat+Interface+-+Replace+with+actual+screenshot)
+![Main Chat Interface](images/chat.png)
 *The main view - channels on the left, chat in the middle, user info on the right*
 
 ### Profile Customization
-![Profile Editor](https://via.placeholder.com/800x500/16213e/eaeaea?text=Profile+Editor+-+Replace+with+actual+screenshot)
+![Profile Editor](images/profileeditor.png)
 *Customize your profile with frames, banners, and a bio editor*
 
-### Rich Chat Features
-![Rich Chat](https://via.placeholder.com/800x500/0f3460/eaeaea?text=Rich+Chat+Features+-+Replace+with+actual+screenshot)
-*Send formatted messages, images, GIFs, and even create polls*
 
 ### Audio Settings
-![Audio Pipeline](https://via.placeholder.com/800x500/533483/eaeaea?text=Audio+Settings+-+Replace+with+actual+screenshot)
+![Audio Pipeline](images/audiosettings.png)
 *Configure your mic settings and enable AI noise suppression*
 
 ---

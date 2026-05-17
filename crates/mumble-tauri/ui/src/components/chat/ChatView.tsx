@@ -59,6 +59,8 @@ const SCREEN_SHARE_MIN_VERSION = 2 * 2 ** 32 + 12 * 2 ** 16;
 interface ChatViewProps {
   readonly onChannelInfoToggle?: () => void;
   readonly onChannelSearch?: () => void;
+  readonly scrollToMessageId?: string | null;
+  readonly onScrollConsumed?: () => void;
 }
 
 /** Compute chat header label and member count based on the active mode. */
@@ -86,7 +88,7 @@ function findPopOutImageSrc(body: string): string | null {
   return null;
 }
 
-export default function ChatView({ onChannelInfoToggle, onChannelSearch }: ChatViewProps) {
+export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollToMessageId, onScrollConsumed }: ChatViewProps) {
   const channels = useAppStore((s) => s.channels);
   const users = useAppStore((s) => s.users);
   const selectedChannel = useAppStore((s) => s.selectedChannel);
@@ -347,6 +349,31 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch }: ChatV
     channel, messagesContainerRef, setPendingQuotes,
   });
 
+  // Scroll to and highlight a message when navigating from search results.
+  useEffect(() => {
+    if (!scrollToMessageId || messages.length === 0) return;
+    let attempts = 0;
+    const tryScroll = () => {
+      const container = messagesContainerRef.current;
+      if (!container) return;
+      const el = container.querySelector<HTMLElement>(
+        `[data-msg-id="${CSS.escape(scrollToMessageId)}"]`,
+      );
+      if (el) {
+        handleScrollToMessage(scrollToMessageId);
+        onScrollConsumed?.();
+        return;
+      }
+      if (attempts < 8) {
+        attempts++;
+        setTimeout(tryScroll, 150);
+      } else {
+        onScrollConsumed?.();
+      }
+    };
+    requestAnimationFrame(tryScroll);
+  }, [scrollToMessageId, messages, handleScrollToMessage, messagesContainerRef, onScrollConsumed]);
+
   const { sending, handleSend, sendMediaFile, handlePaste, handleGifSelect } = useChatSend({
     pendingQuotes,
     clearQuotes: () => setPendingQuotes([]),
@@ -503,21 +530,31 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch }: ChatV
 
   // Determine which screen share panel to show (own broadcast or watching someone).
   // watchingSession takes priority: a broadcaster can watch another stream.
-  const activeScreenShare = screenShare.watchingSession !== null
-    ? { session: screenShare.watchingSession, isOwn: false, stream: null }
-    : screenShare.isBroadcasting
-      ? { session: ownSession!, isOwn: true, stream: screenShare.localStream }
-      : null;
+  // If the watched stream is currently displayed in a detached popout window,
+  // suppress the in-chat panel so we do not run two viewer peer connections
+  // for the same broadcaster.  When the popout closes, the popped-out set
+  // clears and the in-chat viewer (or banner) reappears automatically.
+  const poppedOutStreamSessions = useAppStore((s) => s.poppedOutStreamSessions);
+  let activeScreenShare: { session: number; isOwn: boolean; stream: MediaStream | null } | null = null;
+  if (screenShare.watchingSession !== null
+      && !poppedOutStreamSessions.has(screenShare.watchingSession)) {
+    activeScreenShare = { session: screenShare.watchingSession, isOwn: false, stream: null };
+  } else if (screenShare.isBroadcasting) {
+    activeScreenShare = { session: ownSession!, isOwn: true, stream: screenShare.localStream };
+  }
 
   // Other users broadcasting in the current channel (for the notification banner).
+  // Sessions whose stream is already open in a detached popout window are
+  // excluded so the user does not see a redundant "watch" prompt.
   const channelBroadcasters = useMemo(() => {
     if (screenShare.broadcastingSessions.size === 0) return [];
     return users
       .filter((u) => u.channel_id === selectedChannel
         && screenShare.broadcastingSessions.has(u.session)
-        && u.session !== ownSession)
+        && u.session !== ownSession
+        && !poppedOutStreamSessions.has(u.session))
       .map((u) => ({ session: u.session, name: u.name }));
-  }, [users, selectedChannel, screenShare.broadcastingSessions, ownSession]);
+  }, [users, selectedChannel, screenShare.broadcastingSessions, ownSession, poppedOutStreamSessions]);
 
   // Show StreamFocusView when watching someone, or broadcasting with others.
   // Using a single instance keeps layout state stable across swap transitions.
@@ -688,6 +725,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch }: ChatV
         <BroadcastBanner
           broadcasters={channelBroadcasters}
           onWatch={screenShare.watchBroadcast}
+          sfuAvailable={sfuAvailable}
         />
       )}
 

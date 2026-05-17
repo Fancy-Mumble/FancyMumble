@@ -189,6 +189,33 @@ pub(crate) async fn toggle_deafen(state: tauri::State<'_, AppState>) -> Result<(
     state.toggle_deafen().await
 }
 
+/// Activate mic for push-to-talk (key pressed).
+#[tauri::command]
+pub(crate) async fn push_to_talk_start(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.push_to_talk_start().await
+}
+
+/// Deactivate mic for push-to-talk (key released).
+#[tauri::command]
+pub(crate) async fn push_to_talk_end(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.push_to_talk_end().await
+}
+
+/// Activate mic for voice priority override (key pressed).
+///
+/// Behaves identically to push-to-talk for now; voice-target routing
+/// will be added in a future iteration.
+#[tauri::command]
+pub(crate) async fn voice_priority_start(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.push_to_talk_start().await
+}
+
+/// Deactivate mic for voice priority override (key released).
+#[tauri::command]
+pub(crate) async fn voice_priority_end(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.push_to_talk_end().await
+}
+
 /// Set the local playback volume for a specific remote user.
 ///
 /// `volume` is a multiplier (0.0 = muted, 1.0 = normal, 2.0 = 200%).
@@ -214,6 +241,23 @@ pub(crate) fn stop_mic_test(state: tauri::State<'_, AppState>) {
 #[tauri::command]
 pub(crate) async fn calibrate_voice_threshold(state: tauri::State<'_, AppState>) -> Result<f32, String> {
     state.calibrate_voice_threshold().await
+}
+
+/// Begin a voice replay session: record up to ~20 s of microphone
+/// audio through the live outbound filter chain, then play it back
+/// through the output device.
+///
+/// Lifecycle events are emitted on `voice-replay-state`.
+#[tauri::command]
+pub(crate) fn start_voice_replay(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.start_voice_replay()
+}
+
+/// Advance the voice replay state machine - stops recording (which
+/// auto-transitions into playback), or stops playback entirely.
+#[tauri::command]
+pub(crate) fn stop_voice_replay(state: tauri::State<'_, AppState>) {
+    state.stop_voice_replay();
 }
 
 /// Start periodic TCP pings for live latency measurement.

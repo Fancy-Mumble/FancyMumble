@@ -270,7 +270,7 @@ async fn server_sync_stores_root_channel_permissions() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                pchat_key_custodians: Vec::new(),
+                pchat_key_custodians: Vec::new(), is_enter_restricted: false,
             },
         );
     }
@@ -725,7 +725,7 @@ async fn channel_state_updates_existing_channel() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(),            },
+                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
         );
     }
 
@@ -808,7 +808,7 @@ fn channel_remove_clears_channel_and_messages() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(),            },
+                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
         );
         let _ = state.msgs.by_channel.insert(5, vec![]);
     }
@@ -1382,7 +1382,7 @@ fn permission_query_stores_permissions() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(),            },
+                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
         );
     }
 
@@ -1421,7 +1421,7 @@ fn permission_query_flush_clears_all() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(),            },
+                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
         );
         let _ = state.channels.insert(
             2,
@@ -1439,7 +1439,7 @@ fn permission_query_flush_clears_all() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(),            },
+                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
         );
     }
 
@@ -1487,7 +1487,7 @@ fn permission_query_tracks_subscribe_push_channels() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                pchat_key_custodians: Vec::new(),
+                pchat_key_custodians: Vec::new(), is_enter_restricted: false,
             },
         );
         let _ = state.channels.insert(
@@ -1506,7 +1506,7 @@ fn permission_query_tracks_subscribe_push_channels() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                pchat_key_custodians: Vec::new(),
+                pchat_key_custodians: Vec::new(), is_enter_restricted: false,
             },
         );
     }
@@ -1559,7 +1559,7 @@ fn permission_query_removes_subscribe_push_on_revoke() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                pchat_key_custodians: Vec::new(),
+                pchat_key_custodians: Vec::new(), is_enter_restricted: false,
             },
         );
     }
@@ -1609,7 +1609,7 @@ fn permission_query_flush_clears_push_subscribed() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                pchat_key_custodians: Vec::new(),
+                pchat_key_custodians: Vec::new(), is_enter_restricted: false,
             },
         );
     }
@@ -1719,7 +1719,7 @@ fn text_message_skipped_for_pchat_enabled_channel() {
                 pchat_protocol: Some(PchatProtocol::FancyV1FullArchive),
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(),            },
+                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
         );
     }
 
@@ -1771,7 +1771,7 @@ fn text_message_stored_for_non_pchat_channel() {
                 pchat_protocol: Some(PchatProtocol::None),
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(),            },
+                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
         );
     }
 
@@ -1813,7 +1813,7 @@ fn text_message_stored_when_pchat_protocol_absent() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(),            },
+                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
         );
     }
 
@@ -1855,7 +1855,7 @@ fn text_message_skipped_for_full_archive_channel() {
                 pchat_protocol: Some(PchatProtocol::FancyV1FullArchive),
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(),            },
+                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
         );
     }
 
@@ -1898,7 +1898,7 @@ fn text_message_mixed_pchat_and_regular_channels() {
                 pchat_protocol: Some(PchatProtocol::FancyV1FullArchive),
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(),            },
+                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
         );
         // Channel 4: no pchat
         let _ = state.channels.insert(
@@ -1917,7 +1917,7 @@ fn text_message_mixed_pchat_and_regular_channels() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(),            },
+                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
         );
     }
 
@@ -2222,7 +2222,7 @@ fn server_log_channel_move() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                pchat_key_custodians: Vec::new(),
+                pchat_key_custodians: Vec::new(), is_enter_restricted: false,
             },
         );
     }

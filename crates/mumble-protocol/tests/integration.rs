@@ -1061,7 +1061,7 @@ async fn test_poll_cross_channel_is_delivered() {
     let sb = s_b.own_session().unwrap();
 
     // Move B to the new channel.
-    let join = JoinChannel { channel_id: new_ch };
+    let join = JoinChannel { channel_id: new_ch, password: None };
     for msg in &join.execute(&s_b).tcp_messages {
         t_b.send(msg).await.unwrap();
     }
@@ -1151,7 +1151,7 @@ async fn test_poll_mixed_channels_only_same_channel_receives() {
     let sc = s_c.own_session().unwrap();
 
     // Move C to the new channel.
-    let join = JoinChannel { channel_id: new_ch };
+    let join = JoinChannel { channel_id: new_ch, password: None };
     for msg in &join.execute(&s_c).tcp_messages {
         t_c.send(msg).await.unwrap();
     }

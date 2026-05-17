@@ -1,7 +1,8 @@
 import { ChevronRightIcon } from "../../icons";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { useSearchParams } from "react-router-dom";
 import { useAppStore } from "../../store";
 import type { AclData, AclEntry, AclGroup, ChannelEntry, RegisteredUser } from "../../types";
 import { AclRulesPanel } from "./AclRulesPanel";
@@ -65,6 +66,7 @@ function filterTree(nodes: TreeNode[], query: string): Set<number> {
 export function ChannelAclTab() {
   const channels = useAppStore((s) => s.channels);
   const users = useAppStore((s) => s.users);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedChannel, setSelectedChannel] = useState<number | null>(null);
   const [aclData, setAclData] = useState<AclData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -116,6 +118,56 @@ export function ChannelAclTab() {
     setAclData(null);
     invoke("request_acl", { channelId }).catch(() => setLoading(false));
   }, []);
+
+  // Deep-link support: ?channel=<id> selects the channel and expands
+  // every ancestor in the tree so it is visible.  Consumed once and
+  // then stripped from the URL so back/refresh does not re-trigger.
+  const channelParam = searchParams.get("channel");
+  const consumedChannelParamRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!channelParam) return;
+    if (consumedChannelParamRef.current === channelParam) return;
+    if (channels.length === 0) return;
+    const targetId = Number.parseInt(channelParam, 10);
+    if (!Number.isFinite(targetId)) {
+      consumedChannelParamRef.current = channelParam;
+      return;
+    }
+    const target = channels.find((c) => c.id === targetId);
+    if (!target) return;
+    consumedChannelParamRef.current = channelParam;
+
+    // Walk parent chain to collect ancestors that need expanding.
+    const ancestors = new Set<number>();
+    const byId = new Map(channels.map((c) => [c.id, c]));
+    let cur: ChannelEntry | undefined = target;
+    let guard = 0;
+    while (cur && guard++ < 256) {
+      ancestors.add(cur.id);
+      const pid = cur.parent_id;
+      if (pid == null || pid === cur.id) break;
+      cur = byId.get(pid);
+    }
+    setExpanded((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of ancestors) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    handleChannelSelect(targetId);
+
+    // Strip the consumed param so it does not re-fire on rerenders.
+    setSearchParams((sp) => {
+      const next = new URLSearchParams(sp);
+      next.delete("channel");
+      return next;
+    }, { replace: true });
+  }, [channelParam, channels, handleChannelSelect, setSearchParams]);
 
   const toggleExpand = useCallback((id: number) => {
     setExpanded((prev) => {

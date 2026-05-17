@@ -239,6 +239,26 @@ crates/
     has its own status bar), and `UserProfileView` is hidden.  Platform
     detection uses `isMobilePlatform()` from `utils/platform.ts`.
 
+11. **Onboarding workflow** - native Mumble.proto extension (wire IDs
+    136-140) for a Discord-style join-time questionnaire.  Requires a
+    Fancy Mumble server running **0.3.1 or newer**: the protocol crate
+    declares `(0, 3, 1) FancyOnboarding* => ServerOnly` in
+    `fancy_message_support!`, and the UI gates everything on
+    `isOnboardingSupported(serverFancyVersion)` from
+    `components/onboarding/onboardingStore.ts`.  On legacy / pre-0.3.1
+    servers the modal never opens, the Settings "Channels &amp; Roles"
+    tab and the Admin "Onboarding" tab are hidden, and `hydrate()` is a
+    no-op.  Server broadcasts `FancyOnboardingConfig` after
+    `ServerSync` (or on admin edit); clients show `OnboardingModal` if
+    the user has not answered the current revision.  Admin edits go
+    through `FancyOnboardingConfigUpdate` which the server stamps with
+    revision/updated_by/updated_at and re-broadcasts.  Users submit via
+    `FancyOnboardingResponse`; the server stores per-cert-hash and
+    applies the answer-mapped Mumble ACL group memberships.
+    Frontend lives under `ui/src/components/onboarding/`; backend
+    handler in `state/handler/onboarding.rs`, state methods in
+    `state/onboarding.rs`, commands in `commands/onboarding.rs`.
+
 ## Boy Scout Rule
 
 > **"Always leave the campground cleaner than you found it."**
@@ -558,6 +578,11 @@ npm run test:watch # watch mode
 | `set_user_texture` | texture (`Vec<u8>`) | `()` | Set avatar |
 | `send_plugin_data` | receiver_sessions, data (`Vec<u8>`), data_id | `()` | Send plugin data (polls, etc.) - receiver_sessions must list each target explicitly |
 | `get_own_session` | - | `u32 \| null` | Our own session ID (after connect) |
+| `get_onboarding_config` | - | `OnboardingConfig \| null` | Latest onboarding config from server |
+| `get_onboarding_response` | - | `OnboardingResponse \| null` | Local user's stored answers |
+| `save_onboarding_config` | config | `()` | Admin: persist new onboarding config (server stamps revision) |
+| `submit_onboarding_response` | response | `()` | User: submit answers; server applies ACL groups |
+| `request_onboarding_response` | - | `()` | User: ask server to deliver stored answers |
 | `reset_app_data` | - | `()` | Factory reset |
 
 ## Key types (TypeScript)
@@ -573,6 +598,10 @@ AudioSettings   { selected_device, auto_gain, vad_threshold, max_gain_db, noise_
 FancyProfile    { v, decoration, nameplate, effect, banner: {color,image}, nameStyle: {font,color,gradient,glow,bold,italic}, cardBackground, cardBackgroundCustom, avatarBorder, avatarBorderCustom, status }
 VoiceState      = "inactive" | "active" | "muted"
 ConnectionStatus = "disconnected" | "connecting" | "connected"
+OnboardingConfig    { version, enabled, default_channel_ids: number[], questions: OnboardingQuestion[], revision, updated_by?, updated_at? }
+OnboardingQuestion  { id, text, multi_select, required, ask_before_join, answers: OnboardingAnswer[] }
+OnboardingAnswer    { id, label, channel_ids: number[], group_names: string[], emoji?, description? }
+OnboardingResponse  { user_hash?, submitted_at?, config_revision, selections: { question_id, answer_ids: string[] }[] }
 ```
 
 ## Key types (Rust - mumble-protocol)

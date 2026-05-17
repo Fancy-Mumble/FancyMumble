@@ -35,6 +35,9 @@ pub struct SetChannelState {
     pub pchat_max_history: Option<u32>,
     /// Auto-delete after N days (0 = forever).
     pub pchat_retention_days: Option<u32>,
+    /// Channel access password.  `Some("")` removes the password;
+    /// `None` leaves the existing password unchanged.
+    pub channel_info_password: Option<String>,
 }
 
 impl CommandAction for SetChannelState {
@@ -50,6 +53,7 @@ impl CommandAction for SetChannelState {
             pchat_protocol: self.pchat_protocol.map(PchatProtocol::to_proto),
             pchat_max_history: self.pchat_max_history,
             pchat_retention_days: self.pchat_retention_days,
+            channel_info_password: self.channel_info_password.clone(),
             ..Default::default()
         };
         tracing::debug!(

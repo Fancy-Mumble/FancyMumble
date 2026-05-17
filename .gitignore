@@ -43,6 +43,7 @@ crates/mumble-gui/dist/
 .vscode/
 .idea/
 *.code-workspace
+.claude/
 
 # ---- OS noise ----
 .DS_Store

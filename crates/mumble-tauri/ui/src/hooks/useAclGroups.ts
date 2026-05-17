@@ -13,19 +13,30 @@ import { rootChannelId } from "../pages/admin/rootChannel";
  * can call this hook concurrently; each instance keeps its own
  * snapshot but shares the underlying backend request.
  */
+/**
+ * Process-wide cache of the most recent ACL groups per root channel.
+ * Persists across component mount/unmount cycles (e.g. sidebar tab
+ * switches) so we don't refetch and flash an empty list each time.
+ */
+const aclCache = new Map<number, readonly AclGroup[]>();
+
 export function useAclGroups(): readonly AclGroup[] {
   const channels = useAppStore((s) => s.channels);
   const rootId = useMemo(() => rootChannelId(channels), [channels]);
-  const [groups, setGroups] = useState<readonly AclGroup[]>([]);
+  const [groups, setGroups] = useState<readonly AclGroup[]>(() => aclCache.get(rootId) ?? []);
 
   useEffect(() => {
     let cancelled = false;
+    const cached = aclCache.get(rootId);
+    if (cached) setGroups(cached);
     const unlisten = listen<AclData>("acl", (event) => {
-      if (!cancelled && event.payload.channel_id === rootId) {
-        setGroups(event.payload.groups);
-      }
+      if (cancelled || event.payload.channel_id !== rootId) return;
+      aclCache.set(rootId, event.payload.groups);
+      setGroups(event.payload.groups);
     });
-    invoke("request_acl", { channelId: rootId }).catch(() => {});
+    if (!cached) {
+      invoke("request_acl", { channelId: rootId }).catch(() => {});
+    }
     return () => {
       cancelled = true;
       unlisten.then((f) => f());

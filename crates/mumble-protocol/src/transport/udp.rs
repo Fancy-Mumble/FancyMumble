@@ -17,6 +17,7 @@ use tracing::{debug, trace, warn};
 use crate::error::{Error, Result};
 use crate::message::UdpMessage;
 use crate::proto::mumble_udp;
+use crate::transport::audio_codec::{AudioPacketCodec, LegacyAudioCodec};
 
 /// Maximum UDP datagram size (Mumble practical limit).
 const MAX_UDP_SIZE: usize = 1024;
@@ -224,6 +225,12 @@ pub fn decode_udp_message(data: &[u8]) -> Result<UdpMessage> {
             let ping = mumble_udp::Ping::decode(&data[1..])?;
             Ok(UdpMessage::Ping(ping))
         }
+        // Legacy format: header byte = (type << 5) | target.
+        // Type 4 = Opus, so bytes 0x80..=0x9F are legacy Opus audio.
+        b if b >> 5 == 4 => {
+            let audio = LegacyAudioCodec::decode(data)?;
+            Ok(UdpMessage::Audio(audio))
+        }
         other => Err(Error::InvalidState(format!(
             "unsupported UDP message type: 0x{other:02x}"
         ))),
@@ -231,6 +238,11 @@ pub fn decode_udp_message(data: &[u8]) -> Result<UdpMessage> {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "panic-on-failure is acceptable in test code"
+)]
 mod tests {
     use super::*;
 
@@ -327,6 +339,31 @@ mod tests {
         // 0x02 is not a valid protobuf UDP message type
         let result = decode_udp_message(&[0x02]);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn decode_legacy_opus_audio_0x80() {
+        use crate::transport::audio_codec::MumbleVarint;
+
+        // Build a minimal legacy Opus packet: header=0x80 (type=Opus, target=0),
+        // then session varint, sequence varint, length varint, opus bytes.
+        let mut buf = Vec::new();
+        buf.push(0x80u8); // (4 << 5) | 0
+        MumbleVarint::write(&mut buf, 42); // sender_session
+        MumbleVarint::write(&mut buf, 7);  // frame_number
+        let opus = vec![0xAB, 0xCD];
+        MumbleVarint::write(&mut buf, opus.len() as u64);
+        buf.extend_from_slice(&opus);
+
+        let msg = decode_udp_message(&buf).expect("should decode legacy Opus 0x80");
+        match msg {
+            UdpMessage::Audio(a) => {
+                assert_eq!(a.sender_session, 42);
+                assert_eq!(a.frame_number, 7);
+                assert_eq!(a.opus_data, opus);
+            }
+            other => panic!("expected Audio, got {other:?}"),
+        }
     }
 
     #[test]

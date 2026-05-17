@@ -46,8 +46,9 @@ pub(crate) async fn select_channel(
 pub(crate) async fn join_channel(
     state: tauri::State<'_, AppState>,
     channel_id: u32,
+    password: Option<String>,
 ) -> Result<(), String> {
-    state.join_channel(channel_id).await
+    state.join_channel(channel_id, password).await
 }
 
 #[tauri::command]
@@ -97,6 +98,7 @@ pub(crate) async fn update_channel(
     pchat_protocol: Option<String>,
     pchat_max_history: Option<u32>,
     pchat_retention_days: Option<u32>,
+    password: Option<String>,
 ) -> Result<(), String> {
     state
         .update_channel(
@@ -109,6 +111,7 @@ pub(crate) async fn update_channel(
             pchat_protocol,
             pchat_max_history,
             pchat_retention_days,
+            password,
         )
         .await
 }
@@ -136,6 +139,7 @@ pub(crate) async fn create_channel(
     pchat_protocol: Option<String>,
     pchat_max_history: Option<u32>,
     pchat_retention_days: Option<u32>,
+    password: Option<String>,
 ) -> Result<(), String> {
     state
         .create_channel(
@@ -148,6 +152,7 @@ pub(crate) async fn create_channel(
             pchat_protocol,
             pchat_max_history,
             pchat_retention_days,
+            password,
         )
         .await
 }

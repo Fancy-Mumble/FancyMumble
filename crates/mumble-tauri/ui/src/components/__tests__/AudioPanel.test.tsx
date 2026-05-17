@@ -155,104 +155,136 @@ describe("Activation Mode selector", () => {
 
   it("shows Voice Activation settings only in VA mode", () => {
     renderPanel({ noise_suppression: true, push_to_talk: false });
-    expect(screen.getByText("Voice Activation", { selector: "h3" })).toBeTruthy();
-    expect(screen.getByText("Auto Sensitivity")).toBeTruthy();
+    expect(screen.getByText("Activation Mode", { selector: "h3" })).toBeTruthy();
+    expect(screen.getByLabelText("Auto Calibrate")).toBeTruthy();
+    expect(screen.getByLabelText("Manual Calibrate")).toBeTruthy();
   });
 
   it("hides Voice Activation settings in Continuous mode", () => {
     renderPanel({ noise_suppression: false, push_to_talk: false });
-    expect(screen.queryByText("Auto Sensitivity")).toBeNull();
-    expect(screen.queryByText("Calibrate")).toBeNull();
+    expect(screen.queryByLabelText("Auto Calibrate")).toBeNull();
   });
 
   it("hides Voice Activation settings in PTT mode", () => {
     renderPanel({ push_to_talk: true });
-    expect(screen.queryByText("Auto Sensitivity")).toBeNull();
-    expect(screen.queryByText("Calibrate")).toBeNull();
+    expect(screen.queryByLabelText("Auto Calibrate")).toBeNull();
   });
 
-  it("shows PTT key binding only in PTT mode", () => {
+  it("shows PTT shortcut hint only in PTT mode", () => {
+    // The PTT key binding itself lives in the Shortcuts tab; AudioPanel
+    // just shows a pointer to it when push-to-talk is enabled.
     renderPanel({ push_to_talk: true });
-    expect(screen.getByText("PTT Key")).toBeTruthy();
+    expect(screen.getByText(/Shortcuts/, { selector: "strong" })).toBeTruthy();
   });
 
-  it("hides PTT key binding in Voice Activation mode", () => {
+  it("hides PTT shortcut hint in Voice Activation mode", () => {
     renderPanel({ noise_suppression: true, push_to_talk: false });
-    expect(screen.queryByText("PTT Key")).toBeNull();
+    expect(screen.queryByText(/configured in the/)).toBeNull();
   });
 });
 
-// -- Auto Input Sensitivity ----------------------------------------
+// -- Calibration mode selector -------------------------------------
 
-describe("Auto Input Sensitivity toggle", () => {
-  it("shows manual threshold slider when auto sensitivity is off", () => {
-    renderPanel({ auto_input_sensitivity: false, noise_suppression: true });
-    expect(screen.getByText("Threshold")).toBeTruthy();
-  });
-
-  it("hides manual threshold slider when auto sensitivity is on", () => {
+describe("Calibration mode selector", () => {
+  it("shows the auto-mode Calibrate button when auto sensitivity is on", () => {
     renderPanel({ auto_input_sensitivity: true, noise_suppression: true });
-    expect(screen.queryByText("Threshold")).toBeNull();
+    expect(screen.getByRole("button", { name: "Calibrate" })).toBeTruthy();
+    // Manual sliders should not be shown.
+    expect(screen.queryByText("Open")).toBeNull();
   });
 
-  it("calls onChange with toggled auto_input_sensitivity", () => {
+  it("shows the manual Open and Close draggable triangles when auto sensitivity is off", () => {
+    renderPanel({ auto_input_sensitivity: false, noise_suppression: true });
+    // The triangles sitting on the meter are role=slider with aria-labels.
+    expect(screen.getByLabelText("Open threshold")).toBeTruthy();
+    expect(screen.getByLabelText("Close threshold")).toBeTruthy();
+    // Manual mode shows the "Test Mic" button (not "Calibrate").
+    expect(screen.getByText("Test Mic")).toBeTruthy();
+    expect(screen.queryByText("Calibrate")).toBeNull();
+  });
+
+  it("dragging the Open triangle updates vad_threshold", () => {
+    const { onChange } = renderPanel({
+      auto_input_sensitivity: false,
+      noise_suppression: true,
+      vad_threshold: 0.05,
+    });
+    const slider = screen.getByLabelText("Open threshold") as HTMLInputElement;
+    fireEvent.change(slider, { target: { value: "50" } });
+    // 50% on the dB axis -> 10^(-30/20) ~= 0.0316
+    expect(onChange).toHaveBeenCalled();
+    const last = onChange.mock.calls[onChange.mock.calls.length - 1][0];
+    expect(last.vad_threshold).toBeCloseTo(0.0316, 3);
+  });
+
+  it("switches into Auto mode by clicking the Auto Calibrate card", () => {
     const { onChange } = renderPanel({ auto_input_sensitivity: false, noise_suppression: true });
-    const toggles = screen.getAllByRole("switch");
-    const autoSensToggle = toggles.find(
-      (btn) => btn.getAttribute("aria-checked") === "false"
-        && btn.closest("section")?.textContent?.includes("Auto Sensitivity"),
-    );
-    expect(autoSensToggle).toBeTruthy();
-    fireEvent.click(autoSensToggle!);
+    fireEvent.click(screen.getByLabelText("Auto Calibrate"));
     expect(onChange).toHaveBeenCalledWith({ auto_input_sensitivity: true });
   });
 
-  it("calls onChange to disable auto_input_sensitivity", () => {
+  it("switches into Manual mode by clicking the Manual Calibrate card", () => {
     const { onChange } = renderPanel({ auto_input_sensitivity: true, noise_suppression: true });
-    const toggles = screen.getAllByRole("switch");
-    const autoSensToggle = toggles.find(
-      (btn) => btn.getAttribute("aria-checked") === "true"
-        && btn.closest("section")?.textContent?.includes("Auto Sensitivity"),
-    );
-    expect(autoSensToggle).toBeTruthy();
-    fireEvent.click(autoSensToggle!);
+    fireEvent.click(screen.getByLabelText("Manual Calibrate"));
     expect(onChange).toHaveBeenCalledWith({ auto_input_sensitivity: false });
+  });
+});
+
+// -- Voice replay --------------------------------------------------
+
+describe("Voice replay", () => {
+  it("renders a Record Sample button in voice activation mode", () => {
+    renderPanel({ noise_suppression: true, push_to_talk: false });
+    expect(screen.getByText("Record Sample")).toBeTruthy();
+  });
+
+  it("invokes start_voice_replay when Record Sample is clicked", async () => {
+    renderPanel({ noise_suppression: true, push_to_talk: false });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Record Sample"));
+    });
+    expect(invokeMock).toHaveBeenCalledWith("start_voice_replay", undefined);
+  });
+
+  it("does not render replay control outside voice activation mode", () => {
+    renderPanel({ push_to_talk: true });
+    expect(screen.queryByText("Record Sample")).toBeNull();
   });
 });
 
 // -- Calibrate (mic test) ------------------------------------------
 
 describe("Calibrate", () => {
-  it("renders the Calibrate button", () => {
-    renderPanel();
-    expect(screen.getByText("Calibrate")).toBeTruthy();
+  it("renders the Calibrate button in Auto mode", () => {
+    renderPanel({ auto_input_sensitivity: true });
+    expect(screen.getByRole("button", { name: "Calibrate" })).toBeTruthy();
   });
 
   it("does not show VU meter when not active", () => {
-    const { container } = renderPanel();
+    const { container } = renderPanel({ auto_input_sensitivity: true });
     expect(container.querySelector("[class*='vuMeter']")).toBeNull();
   });
 
-  it("invokes start_mic_test when button is clicked", async () => {
-    renderPanel();
+  it("invokes start_mic_test when Calibrate is clicked", async () => {
+    renderPanel({ auto_input_sensitivity: true });
     await act(async () => {
-      fireEvent.click(screen.getByText("Calibrate"));
+      fireEvent.click(screen.getByRole("button", { name: "Calibrate" }));
     });
     expect(invokeMock).toHaveBeenCalledWith("start_mic_test", undefined);
   });
 
   it("shows Stop button after starting", async () => {
-    renderPanel();
+    renderPanel({ auto_input_sensitivity: true });
     await act(async () => {
-      fireEvent.click(screen.getByText("Calibrate"));
+      fireEvent.click(screen.getByRole("button", { name: "Calibrate" }));
     });
     expect(screen.getByText("Stop")).toBeTruthy();
   });
 
   it("shows VU meter after starting", async () => {
-    renderPanel();
+    renderPanel({ auto_input_sensitivity: true });
     await act(async () => {
-      fireEvent.click(screen.getByText("Calibrate"));
+      fireEvent.click(screen.getByRole("button", { name: "Calibrate" }));
     });
     // VU meter should contain dB labels
     expect(screen.getByText("-60")).toBeTruthy();
@@ -260,18 +292,18 @@ describe("Calibrate", () => {
   });
 
   it("subscribes to mic-amplitude events when active", async () => {
-    renderPanel();
+    renderPanel({ auto_input_sensitivity: true });
     await act(async () => {
-      fireEvent.click(screen.getByText("Calibrate"));
+      fireEvent.click(screen.getByRole("button", { name: "Calibrate" }));
     });
     expect(listenMock).toHaveBeenCalledWith("mic-amplitude", expect.any(Function));
   });
 
   it("invokes stop_mic_test when Stop is clicked", async () => {
-    renderPanel();
+    renderPanel({ auto_input_sensitivity: true });
     // Start
     await act(async () => {
-      fireEvent.click(screen.getByText("Calibrate"));
+      fireEvent.click(screen.getByRole("button", { name: "Calibrate" }));
     });
     invokeMock.mockClear();
     // Stop
@@ -282,17 +314,17 @@ describe("Calibrate", () => {
   });
 
   it("hides VU meter after stopping", async () => {
-    const { container } = renderPanel();
+    const { container } = renderPanel({ auto_input_sensitivity: true });
     // Start
     await act(async () => {
-      fireEvent.click(screen.getByText("Calibrate"));
+      fireEvent.click(screen.getByRole("button", { name: "Calibrate" }));
     });
     // Stop
     await act(async () => {
       fireEvent.click(screen.getByText("Stop"));
     });
     expect(container.querySelector("[class*='vuMeter']")).toBeNull();
-    expect(screen.getByText("Calibrate")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Calibrate" })).toBeTruthy();
   });
 
   it("does not start if invoke throws", async () => {
@@ -301,18 +333,18 @@ describe("Calibrate", () => {
         ? Promise.reject(new Error("no mic"))
         : Promise.resolve(undefined),
     );
-    renderPanel();
+    renderPanel({ auto_input_sensitivity: true });
     await act(async () => {
-      fireEvent.click(screen.getByText("Calibrate"));
+      fireEvent.click(screen.getByRole("button", { name: "Calibrate" }));
     });
     // Should still show "Calibrate" (not "Stop")
-    expect(screen.getByText("Calibrate")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Calibrate" })).toBeTruthy();
   });
 
   it("calls stop_mic_test on unmount while active", async () => {
-    const { unmount } = renderPanel();
+    const { unmount } = renderPanel({ auto_input_sensitivity: true });
     await act(async () => {
-      fireEvent.click(screen.getByText("Calibrate"));
+      fireEvent.click(screen.getByRole("button", { name: "Calibrate" }));
     });
     invokeMock.mockClear();
     unmount();

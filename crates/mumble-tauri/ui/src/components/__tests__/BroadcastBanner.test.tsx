@@ -71,4 +71,36 @@ describe("BroadcastBanner", () => {
     expect(screen.queryByText("Alice")).toBeNull();
     expect(screen.getByText("Bob")).toBeTruthy();
   });
+
+  it("shows P2P label when sfuAvailable is false", () => {
+    render(
+      <BroadcastBanner
+        broadcasters={[{ session: 1, name: "Alice" }]}
+        onWatch={vi.fn()}
+        sfuAvailable={false}
+      />,
+    );
+    expect(screen.getByText("P2P")).toBeTruthy();
+  });
+
+  it("does not show P2P label when sfuAvailable is true", () => {
+    render(
+      <BroadcastBanner
+        broadcasters={[{ session: 1, name: "Alice" }]}
+        onWatch={vi.fn()}
+        sfuAvailable={true}
+      />,
+    );
+    expect(screen.queryByText("P2P")).toBeNull();
+  });
+
+  it("does not show P2P label when sfuAvailable is omitted (default)", () => {
+    render(
+      <BroadcastBanner
+        broadcasters={[{ session: 1, name: "Alice" }]}
+        onWatch={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("P2P")).toBeNull();
+  });
 });

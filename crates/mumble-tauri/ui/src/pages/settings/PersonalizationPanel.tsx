@@ -1,6 +1,17 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { PersonalizationData, BubbleStyle, FontSize, BgFit, ChannelViewerStyle } from "../../personalizationStorage";
+import {
+  MessageCircleIcon,
+  AlignLeftIcon,
+  AlignJustifyIcon,
+  FolderIcon,
+  ListIcon,
+  SparklesIcon,
+  FullscreenIcon,
+  Grid2x2Icon,
+} from "../../icons";
 import { THEMES, applyTheme } from "../../themes";
 import type { ThemeId } from "../../themes";
 import { ImageEditor } from "./ImageEditor";
@@ -19,21 +30,21 @@ interface PersonalizationPanelProps {
 const MAX_BG_WIDTH = 1920;
 const MAX_BG_HEIGHT = 1080;
 
-const BUBBLE_STYLES: { id: BubbleStyle; label: string; icon: string }[] = [
-  { id: "bubbles", label: "Bubbles", icon: "💬" },
-  { id: "flat", label: "Flat", icon: "📋" },
-  { id: "compact", label: "Compact", icon: "📟" },
+const BUBBLE_STYLES: { id: BubbleStyle; label: string; icon: ReactNode }[] = [
+  { id: "bubbles", label: "Bubbles", icon: <MessageCircleIcon size={20} /> },
+  { id: "flat", label: "Flat", icon: <AlignLeftIcon size={20} /> },
+  { id: "compact", label: "Compact", icon: <AlignJustifyIcon size={20} /> },
 ];
 
-const BG_FIT_OPTIONS: { id: BgFit; label: string; icon: string }[] = [
-  { id: "cover", label: "Cover", icon: "🖼️" },
-  { id: "tile", label: "Tile", icon: "🧩" },
+const BG_FIT_OPTIONS: { id: BgFit; label: string; icon: ReactNode }[] = [
+  { id: "cover", label: "Cover", icon: <FullscreenIcon size={20} /> },
+  { id: "tile", label: "Tile", icon: <Grid2x2Icon size={20} /> },
 ];
 
-const CHANNEL_VIEWER_STYLES: { id: ChannelViewerStyle; label: string; icon: string }[] = [
-  { id: "classic", label: "Classic", icon: "🏛️" },
-  { id: "flat", label: "Flat", icon: "📋" },
-  { id: "modern", label: "Modern", icon: "✨" },
+const CHANNEL_VIEWER_STYLES: { id: ChannelViewerStyle; label: string; icon: ReactNode }[] = [
+  { id: "classic", label: "Classic", icon: <FolderIcon size={20} /> },
+  { id: "flat", label: "Flat", icon: <ListIcon size={20} /> },
+  { id: "modern", label: "Modern", icon: <SparklesIcon size={20} /> },
 ];
 
 const FONT_SIZES: { id: FontSize; label: string }[] = [

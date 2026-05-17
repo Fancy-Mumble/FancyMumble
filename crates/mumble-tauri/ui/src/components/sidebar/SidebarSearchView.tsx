@@ -38,6 +38,7 @@ interface SidebarSearchViewProps {
   readonly channelName?: string;
   readonly onSelectChannel: (id: number) => void;
   readonly onSelectUser: (session: number) => void;
+  readonly onSelectMessage?: (channelId: number, messageId: string) => void;
 }
 
 export function SidebarSearchView({
@@ -46,6 +47,7 @@ export function SidebarSearchView({
   channelName,
   onSelectChannel,
   onSelectUser,
+  onSelectMessage,
 }: SidebarSearchViewProps) {
   const [filter, setFilter] = useState<SearchFilter>("all");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -199,11 +201,15 @@ export function SidebarSearchView({
           if (r.id != null) onSelectUser(r.id);
           break;
         case "message":
-          if (r.id != null) onSelectChannel(r.id);
+          if (r.id != null && r.string_id != null) {
+            onSelectMessage?.(r.id, r.string_id);
+          } else if (r.id != null) {
+            onSelectChannel(r.id);
+          }
           break;
       }
     },
-    [onSelectChannel, onSelectUser],
+    [onSelectChannel, onSelectUser, onSelectMessage],
   );
 
   return (

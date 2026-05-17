@@ -124,6 +124,11 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
         FancyLinkPreviewResponse(m) => m.encode_to_vec(),
         FancyWatchSync(m) => m.encode_to_vec(),
         FancyDrawStroke(m) => m.encode_to_vec(),
+        FancyOnboardingConfig(m) => m.encode_to_vec(),
+        FancyOnboardingConfigUpdate(m) => m.encode_to_vec(),
+        FancyOnboardingResponse(m) => m.encode_to_vec(),
+        FancyOnboardingResponseQuery(m) => m.encode_to_vec(),
+        FancyOnboardingResponseDeliver(m) => m.encode_to_vec(),
         UdpTunnel(data) => data.clone(),
     };
 
@@ -198,6 +203,11 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
         FancyLinkPreviewResponse => ControlMessage::FancyLinkPreviewResponse(mumble_tcp::FancyLinkPreviewResponse::decode(payload)?),
         FancyWatchSync => ControlMessage::FancyWatchSync(mumble_tcp::FancyWatchSync::decode(payload)?),
         FancyDrawStroke => ControlMessage::FancyDrawStroke(mumble_tcp::FancyDrawStroke::decode(payload)?),
+        FancyOnboardingConfig => ControlMessage::FancyOnboardingConfig(mumble_tcp::FancyOnboardingConfig::decode(payload)?),
+        FancyOnboardingConfigUpdate => ControlMessage::FancyOnboardingConfigUpdate(mumble_tcp::FancyOnboardingConfigUpdate::decode(payload)?),
+        FancyOnboardingResponse => ControlMessage::FancyOnboardingResponse(mumble_tcp::FancyOnboardingResponse::decode(payload)?),
+        FancyOnboardingResponseQuery => ControlMessage::FancyOnboardingResponseQuery(mumble_tcp::FancyOnboardingResponseQuery::decode(payload)?),
+        FancyOnboardingResponseDeliver => ControlMessage::FancyOnboardingResponseDeliver(mumble_tcp::FancyOnboardingResponseDeliver::decode(payload)?),
     };
     Ok(msg)
 }
@@ -880,6 +890,142 @@ mod tests {
                 assert_eq!(d.distribution.as_deref(), Some(b"skdm-bytes-here".as_ref()));
             }
             other => panic!("expected PchatSenderKeyDistribution, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn roundtrip_fancy_onboarding_config() -> Result<()> {
+        use mumble_tcp::fancy_onboarding_config::{Answer, Question};
+
+        let cfg = mumble_tcp::FancyOnboardingConfig {
+            version: Some(1),
+            enabled: Some(true),
+            default_channel_ids: vec![0, 1, 2],
+            questions: vec![Question {
+                id: Some("q1".into()),
+                text: Some("What brings you here?".into()),
+                multi_select: Some(false),
+                answers: vec![
+                    Answer {
+                        id: Some("a1".into()),
+                        label: Some("Gaming".into()),
+                        channel_ids: vec![5, 6],
+                        group_names: vec!["gamers".into()],
+                        emoji: Some("🎮".into()),
+                        description: None,
+                    },
+                    Answer {
+                        id: Some("a2".into()),
+                        label: Some("Music".into()),
+                        channel_ids: vec![7],
+                        group_names: vec!["music".into()],
+                        emoji: None,
+                        description: Some("Producers, listeners, jam sessions".into()),
+                    },
+                ],
+                ask_before_join: Some(true),
+                required: Some(true),
+            }],
+            revision: Some(42),
+            updated_by: Some("admin-cert".into()),
+            updated_at: Some(1_700_000_000),
+        };
+        let msg = ControlMessage::FancyOnboardingConfig(cfg);
+        let encoded = encode(&msg)?;
+        let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
+        assert_eq!(type_id, 136, "FancyOnboardingConfig must be wire type 136");
+
+        let mut buf = BytesMut::from(&encoded[..]);
+        let decoded = decode(&mut buf)?.unwrap();
+        match decoded {
+            ControlMessage::FancyOnboardingConfig(c) => {
+                assert_eq!(c.version, Some(1));
+                assert!(c.enabled.unwrap());
+                assert_eq!(c.default_channel_ids, vec![0, 1, 2]);
+                assert_eq!(c.questions.len(), 1);
+                assert_eq!(c.questions[0].answers.len(), 2);
+                assert_eq!(c.questions[0].answers[0].label.as_deref(), Some("Gaming"));
+                assert_eq!(c.questions[0].answers[0].channel_ids, vec![5, 6]);
+                assert_eq!(c.questions[0].answers[0].group_names, vec!["gamers".to_string()]);
+                assert_eq!(c.revision, Some(42));
+            }
+            other => panic!("expected FancyOnboardingConfig, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn roundtrip_fancy_onboarding_response() -> Result<()> {
+        use mumble_tcp::fancy_onboarding_response::Selection;
+
+        let resp = mumble_tcp::FancyOnboardingResponse {
+            user_hash: Some("hash_alice".into()),
+            submitted_at: Some(1_700_000_001),
+            selections: vec![
+                Selection {
+                    question_id: Some("q1".into()),
+                    answer_ids: vec!["a1".into(), "a2".into()],
+                },
+                Selection {
+                    question_id: Some("q2".into()),
+                    answer_ids: vec!["b1".into()],
+                },
+            ],
+            config_revision: Some(42),
+        };
+        let msg = ControlMessage::FancyOnboardingResponse(resp);
+        let encoded = encode(&msg)?;
+        let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
+        assert_eq!(type_id, 138, "FancyOnboardingResponse must be wire type 138");
+
+        let mut buf = BytesMut::from(&encoded[..]);
+        let decoded = decode(&mut buf)?.unwrap();
+        match decoded {
+            ControlMessage::FancyOnboardingResponse(r) => {
+                assert_eq!(r.user_hash.as_deref(), Some("hash_alice"));
+                assert_eq!(r.config_revision, Some(42));
+                assert_eq!(r.selections.len(), 2);
+                assert_eq!(r.selections[0].answer_ids, vec!["a1", "a2"]);
+                assert_eq!(r.selections[1].question_id.as_deref(), Some("q2"));
+            }
+            other => panic!("expected FancyOnboardingResponse, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn roundtrip_fancy_onboarding_response_query_and_deliver() -> Result<()> {
+        // Query
+        let q = ControlMessage::FancyOnboardingResponseQuery(
+            mumble_tcp::FancyOnboardingResponseQuery {},
+        );
+        let encoded_q = encode(&q)?;
+        let type_id_q = u16::from_be_bytes([encoded_q[0], encoded_q[1]]);
+        assert_eq!(type_id_q, 139);
+
+        let mut buf = BytesMut::from(&encoded_q[..]);
+        let decoded_q = decode(&mut buf)?.unwrap();
+        assert!(matches!(
+            decoded_q,
+            ControlMessage::FancyOnboardingResponseQuery(_)
+        ));
+
+        // Deliver (with no stored response)
+        let d_empty = ControlMessage::FancyOnboardingResponseDeliver(
+            mumble_tcp::FancyOnboardingResponseDeliver { response: None },
+        );
+        let encoded_d = encode(&d_empty)?;
+        let type_id_d = u16::from_be_bytes([encoded_d[0], encoded_d[1]]);
+        assert_eq!(type_id_d, 140);
+
+        let mut buf = BytesMut::from(&encoded_d[..]);
+        let decoded_d = decode(&mut buf)?.unwrap();
+        match decoded_d {
+            ControlMessage::FancyOnboardingResponseDeliver(d) => {
+                assert!(d.response.is_none());
+            }
+            other => panic!("expected FancyOnboardingResponseDeliver, got {other:?}"),
         }
         Ok(())
     }

@@ -149,6 +149,35 @@ impl AppState {
         }
     }
 
+    pub async fn move_channel_users(
+        &self,
+        from_channel_id: u32,
+        to_channel_id: u32,
+    ) -> Result<(), String> {
+        let (handle, sessions) = {
+            let __session = self.inner.snapshot();
+            let state = __session.lock().map_err(|e| e.to_string())?;
+            let handle = state.conn.client_handle.clone();
+            let sessions: Vec<u32> = state
+                .users
+                .values()
+                .filter(|u| u.channel_id == from_channel_id)
+                .map(|u| u.session)
+                .collect();
+            (handle, sessions)
+        };
+        let h = handle.ok_or_else(|| "Not connected".to_string())?;
+        for session in sessions {
+            h.send(command::MoveUser {
+                session,
+                channel_id: to_channel_id,
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
     pub async fn request_user_stats(&self, session: u32) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();

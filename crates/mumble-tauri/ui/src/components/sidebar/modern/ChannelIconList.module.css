@@ -9,6 +9,47 @@
   padding: 4px 8px 8px;
 }
 
+/* --- Shake animation (permission denied) ------------------------ */
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  15%       { transform: translateX(-6px); }
+  30%       { transform: translateX(5px); }
+  45%       { transform: translateX(-4px); }
+  60%       { transform: translateX(4px); }
+  75%       { transform: translateX(-2px); }
+  90%       { transform: translateX(2px); }
+}
+
+.shaking {
+  animation: shake 0.5s ease;
+}
+
+/* --- Highlight animation (search result selected) --------------- */
+
+@keyframes highlight-flash {
+  0%   { box-shadow: 0 0 0 2px var(--color-accent, #2aabee); }
+  100% { box-shadow: none; }
+}
+
+.highlighted {
+  animation: highlight-flash 1.5s ease-out;
+}
+
+/* --- Locked channel (no PERM_ENTER) ----------------------------- */
+
+.locked {
+  opacity: 0.45;
+}
+
+.lockBadge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
 /* --- Channel row ------------------------------------------------ */
 
 .channelRow {
@@ -289,14 +330,31 @@
   50% { opacity: 0.65; }
 }
 
-/* --- Sticky current channel ------------------------------------ */
+/* --- Sticky current-channel clones ----------------------------- */
 
-.stickyChannel {
+.stickyTop,
+.stickyBottom {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+
   position: sticky;
-  top: 0;
   z-index: 10;
   background: var(--color-bg-secondary);
-  margin-bottom: 6px;
   border-radius: 10px;
   overflow: hidden;
+}
+
+.stickyTop {
+  top: 0;
+  margin-bottom: 6px;
+}
+
+.stickyBottom {
+  bottom: 0;
+  margin-top: 6px;
 }

@@ -141,16 +141,16 @@ export function ShortcutRecorder({
           {value || "Not set"}
         </button>
       )}
-      {value && (
-        <button
-          type="button"
-          className={styles.clearBtn}
-          onClick={() => onChange("")}
-          title="Clear shortcut"
-        >
-          ✕
-        </button>
-      )}
+      <button
+        type="button"
+        className={styles.clearBtn}
+        style={{ visibility: value ? "visible" : "hidden" }}
+        onClick={() => onChange("")}
+        title="Clear shortcut"
+        disabled={!value}
+      >
+        ✕
+      </button>
     </div>
   );
 }

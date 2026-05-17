@@ -12,6 +12,7 @@ mod codec_version;
 mod custom_reactions_config;
 mod draw_stroke;
 mod link_preview;
+mod onboarding;
 mod pchat;
 mod permission_denied;
 mod permission_query;
@@ -165,6 +166,8 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::FancyLinkPreviewResponse(m) => m.handle(ctx),
         ControlMessage::FancyWatchSync(m) => m.handle(ctx),
         ControlMessage::FancyDrawStroke(m) => m.handle(ctx),
+        ControlMessage::FancyOnboardingConfig(m) => m.handle(ctx),
+        ControlMessage::FancyOnboardingResponseDeliver(m) => m.handle(ctx),
         ControlMessage::BanList(m) => m.handle(ctx),
         ControlMessage::UserList(m) => m.handle(ctx),
         ControlMessage::Acl(m) => m.handle(ctx),

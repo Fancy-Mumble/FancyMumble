@@ -5,7 +5,7 @@ import { initEventListeners, useAppStore } from "./store";
 import { getPreferences, getSavedAudioSettings, isFirstRun, getNotificationSounds } from "./preferencesStorage";
 import { setKlipyApiKey } from "./components/chat/GifPicker";
 import { setKlipyApiKey as setKlipyApiKeyBanner } from "./pages/settings/KlipyGifBrowser";
-import { loadShortcuts, applyGlobalShortcut } from "./pages/settings/shortcutHelpers";
+import { loadShortcuts, applyAllGlobalShortcuts } from "./pages/settings/shortcutHelpers";
 import { useVisualViewport } from "./hooks/useVisualViewport";
 import { useNotificationSounds } from "./hooks/useNotificationSounds";
 import { useSpoilerReveal } from "./hooks/useSpoilerReveal";
@@ -19,7 +19,9 @@ import LoadingSplash from "./components/elements/LoadingSplash";
 import { isUpdaterWindow } from "./updater";
 import UpdaterWindow from "./updater/UpdaterWindow";
 import PopoutPage from "./pages/PopoutPage";
+import StreamPopoutPage from "./pages/StreamPopoutPage";
 import DrawOverlayPage from "./pages/DrawOverlayPage";
+import OnboardingModal from "./components/onboarding/OnboardingModal";
 
 const ChatPage = lazy(() => import("./pages/ChatPage"));
 const SettingsPage = lazy(() => import("./pages/settings"));
@@ -41,7 +43,15 @@ function isPopoutWindow(): boolean {
   // We run this synchronously by reading the document title fallback.
   const tauriInternals = (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__;
   const label = tauriInternals?.metadata?.currentWindow?.label;
-  return !!label && label.startsWith("popout-");
+  return !!label && label.startsWith("popout-") && !label.startsWith("popout-stream-");
+}
+
+/** True when this webview is a stream-share popout (`popout-stream-<id>`). */
+function isStreamPopoutWindow(): boolean {
+  if (new URLSearchParams(globalThis.location.search).has("stream-popout")) return true;
+  const tauriInternals = (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__;
+  const label = tauriInternals?.metadata?.currentWindow?.label;
+  return !!label && label.startsWith("popout-stream-");
 }
 
 /**
@@ -58,21 +68,23 @@ function isDrawOverlayWindow(): boolean {
   return label === "draw-overlay";
 }
 
-const enum WindowKind { Main, Popout, Updater, DrawOverlay }
+const enum WindowKind { Main, Popout, StreamPopout, Updater, DrawOverlay }
 
 function getWindowKind(): WindowKind {
   if (isUpdaterWindow()) return WindowKind.Updater;
   if (isDrawOverlayWindow()) return WindowKind.DrawOverlay;
+  if (isStreamPopoutWindow()) return WindowKind.StreamPopout;
   if (isPopoutWindow()) return WindowKind.Popout;
   return WindowKind.Main;
 }
 
 export default function App() {
   switch (getWindowKind()) {
-    case WindowKind.Updater:     return <UpdaterWindow />;
-    case WindowKind.DrawOverlay: return <DrawOverlayPage />;
-    case WindowKind.Popout:      return <PopoutPage />;
-    default:                     return <MainApp />;
+    case WindowKind.Updater:      return <UpdaterWindow />;
+    case WindowKind.DrawOverlay:  return <DrawOverlayPage />;
+    case WindowKind.StreamPopout: return <StreamPopoutPage />;
+    case WindowKind.Popout:       return <PopoutPage />;
+    default:                      return <MainApp />;
   }
 }
 
@@ -151,12 +163,7 @@ function MainApp() {
       }
     });
     loadShortcuts().then((sc) => {
-      if (sc.toggleMute) {
-        applyGlobalShortcut(sc.toggleMute, "toggle_mute").catch(console.error);
-      }
-      if (sc.toggleDeafen) {
-        applyGlobalShortcut(sc.toggleDeafen, "toggle_deafen").catch(console.error);
-      }
+      applyAllGlobalShortcuts(sc).catch(console.error);
     });
   }, []);
 
@@ -212,6 +219,7 @@ function MainApp() {
           )}
         </Routes>
       </Suspense>
+      <OnboardingModal />
     </div>
   );
 }

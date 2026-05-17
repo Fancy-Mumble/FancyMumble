@@ -296,6 +296,7 @@ async fn set_pchat_protocol(
         position: None,
         temporary: None,
         max_users: None,
+        channel_info_password: None,
         pchat_protocol: Some(mode),
         pchat_max_history: None,
         pchat_retention_days: None,
@@ -1577,7 +1578,7 @@ async fn join_channel(
     state: &ServerState,
     channel_id: u32,
 ) {
-    let cmd = JoinChannel { channel_id };
+    let cmd = JoinChannel { channel_id, password: None };
     let output = cmd.execute(state);
     for msg in &output.tcp_messages {
         transport.send(msg).await.unwrap();

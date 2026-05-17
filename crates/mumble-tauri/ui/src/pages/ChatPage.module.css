@@ -130,9 +130,30 @@
   display: contents;
 }
 
+/* On wide desktop, Ctrl+B can collapse the sidebar. */
+.sidebarContainer.sidebarCollapsed {
+  display: none;
+}
+
 /* Hamburger button shown when sidebar is collapsed */
 .menuToggle {
-  display: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.menuToggle:hover {
+  color: var(--color-text-primary);
+  background: var(--color-glass);
 }
 
 /* Backdrop behind the drawer */
@@ -174,19 +195,11 @@
   }
 
   .menuToggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
     position: absolute;
     top: 12px;
     left: 8px;
     z-index: 10;
     width: 44px;
     height: 44px;
-    border: none;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--color-text-primary);
-    cursor: pointer;
   }
 }
