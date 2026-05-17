@@ -17,38 +17,29 @@ env:
 
 jobs:
   # ----------------------------------------------------------------
-  # 0. Preflight checks (runs first)
+  # 0. Version consistency guard
   # ----------------------------------------------------------------
 
-  preflight:
-    name: Preflight (Android signing)
+  version-check:
+    name: Version consistency
     runs-on: ubuntu-latest
-    env:
-      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-
     steps:
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
+      - uses: actions/checkout@v6
 
-      - name: Validate Android signing keystore secrets
-        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_KEYSTORE_PASSWORD != '' && env.ANDROID_KEY_ALIAS != '' }}
+      - name: Verify version sources agree
         shell: bash
         run: |
-          KEYSTORE_PATH="$RUNNER_TEMP/android-release.keystore"
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
-          keytool -list \
-            -keystore "$KEYSTORE_PATH" \
-            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
-            -alias "$ANDROID_KEY_ALIAS" > /dev/null
-
-      - name: Skip signing preflight (missing secrets)
-        if: ${{ env.ANDROID_KEYSTORE_BASE64 == '' || env.ANDROID_KEYSTORE_PASSWORD == '' || env.ANDROID_KEY_ALIAS == '' }}
-        run: echo "Android signing secrets are missing. Continuing without signing preflight."
+          set -euo pipefail
+          TAURI=$(jq -r '.version' crates/mumble-tauri/tauri.conf.json)
+          UI=$(jq -r '.version' crates/mumble-tauri/ui/package.json)
+          PROTOCOL=$(grep -m1 -E '^version[[:space:]]*=' crates/mumble-protocol/Cargo.toml | sed -E 's/.*"(.+)".*/\1/')
+          echo "tauri.conf.json:           $TAURI"
+          echo "ui/package.json:           $UI"
+          echo "mumble-protocol Cargo.toml: $PROTOCOL"
+          if [ "$TAURI" != "$UI" ] || [ "$TAURI" != "$PROTOCOL" ]; then
+            echo "::error::Version mismatch — tauri.conf.json/ui/package.json/mumble-protocol Cargo.toml must all agree."
+            exit 1
+          fi
 
   # ----------------------------------------------------------------
   # 1. Lint & test (runs on every push / PR)
@@ -56,7 +47,6 @@ jobs:
 
   test:
     name: Test (${{ matrix.os }})
-    needs: preflight
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -81,22 +71,16 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: crates/mumble-tauri/ui/package-lock.json
 
       # -- Linux system deps (Tauri + ALSA for cpal) --------------
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libasound2-dev \
-            libgtk-3-dev \
-            libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev \
-            protobuf-compiler
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev protobuf-compiler
+          version: 1.0
 
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
@@ -144,12 +128,11 @@ jobs:
         run: docker compose -f docker-compose.test.yml down
 
   # ----------------------------------------------------------------
-  # 2. Build Tauri app (runs on every push / PR)
+  # 2. Build Tauri app (runs on every push / PR, parallel with test)
   # ----------------------------------------------------------------
 
   build:
     name: Build (${{ matrix.target.name }})
-    needs: [test]
     runs-on: ${{ matrix.target.os }}
     strategy:
       fail-fast: false
@@ -180,21 +163,15 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: crates/mumble-tauri/ui/package-lock.json
 
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libasound2-dev \
-            libgtk-3-dev \
-            libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev \
-            protobuf-compiler
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev protobuf-compiler
+          version: 1.0
 
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
@@ -205,7 +182,9 @@ jobs:
         run: npm ci
 
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: tauri-cli
 
       - name: Build Tauri app
         working-directory: crates/mumble-tauri
@@ -235,12 +214,11 @@ jobs:
           if-no-files-found: warn
 
   # ----------------------------------------------------------------
-  # 2b. Build Android APK (runs on every push / PR)
+  # 2b. Build Android APK (runs on every push / PR, parallel with test)
   # ----------------------------------------------------------------
 
   build-android:
     name: Build (Android)
-    needs: test
     runs-on: ubuntu-latest
     env:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -281,18 +259,23 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: crates/mumble-tauri/ui/package-lock.json
 
       - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: protobuf-compiler
+          version: 1.0
 
       - name: Install npm dependencies
         working-directory: crates/mumble-tauri/ui
         run: npm ci
 
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: tauri-cli
 
       - name: Decode google-services.json
         if: ${{ env.GOOGLE_SERVICES_JSON != '' }}
@@ -375,7 +358,7 @@ jobs:
 
   release:
     name: Release
-    needs: [build, build-android]
+    needs: [version-check, build, build-android]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
