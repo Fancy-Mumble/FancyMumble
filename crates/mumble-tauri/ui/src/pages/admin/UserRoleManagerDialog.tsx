@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import type { AclData, AclGroup, RegisteredUser } from "../../types";
 import { RoleChip } from "../../components/elements/RoleChip";
@@ -44,6 +45,7 @@ function buildRoleRows(groups: readonly AclGroup[], userId: number): RoleRow[] {
  */
 export function UserRoleManagerDialog({ user, acl, onClose, onSaved }: UserRoleManagerDialogProps) {
   const groups = acl?.groups ?? [];
+  const { t } = useTranslation("settings");
   const initialMembership = useMemo(() => {
     const set = new Set<string>();
     for (const g of groups) {
@@ -124,21 +126,21 @@ export function UserRoleManagerDialog({ user, acl, onClose, onSaved }: UserRoleM
     <dialog
       ref={dialogRef}
       className={styles.dialogCard}
-      aria-label={`Manage roles for ${user.name}`}
+      aria-label={t("roleManagerDialog.ariaLabel", { name: user.name })}
     >
       <div>
         <div className={styles.dialogHeader}>
-          <h3 className={styles.dialogTitle}>Manage roles for {user.name}</h3>
-          <button type="button" className={styles.dialogClose} onClick={onClose} aria-label="Close">
+          <h3 className={styles.dialogTitle}>{t("roleManagerDialog.title", { name: user.name })}</h3>
+          <button type="button" className={styles.dialogClose} onClick={onClose} aria-label={t("roleManagerDialog.closeButton")}>
             &times;
           </button>
         </div>
 
         <div className={styles.dialogBody}>
           {acl === null ? (
-            <p className={styles.dimText}>Loading roles...</p>
+            <p className={styles.dimText}>{t("roleManagerDialog.loading")}</p>
           ) : rows.length === 0 ? (
-            <p className={styles.dimText}>No roles defined on this server.</p>
+            <p className={styles.dimText}>{t("roleManagerDialog.noRoles")}</p>
           ) : (
             <ul className={styles.roleCheckList}>
               {rows.map((row) => {
@@ -159,7 +161,7 @@ export function UserRoleManagerDialog({ user, acl, onClose, onSaved }: UserRoleM
                         size="small"
                       />
                       {row.isInheritedOnly && (
-                        <span className={styles.dimText}>(inherited)</span>
+                        <span className={styles.dimText}>{t("roleManagerDialog.inherited")}</span>
                       )}
                     </label>
                   </li>
@@ -172,7 +174,7 @@ export function UserRoleManagerDialog({ user, acl, onClose, onSaved }: UserRoleM
 
         <div className={styles.dialogActions}>
           <button type="button" className={styles.refreshBtn} onClick={onClose} disabled={saving}>
-            Cancel
+            {t("roleManagerDialog.cancel")}
           </button>
           <button
             type="button"
@@ -180,7 +182,7 @@ export function UserRoleManagerDialog({ user, acl, onClose, onSaved }: UserRoleM
             onClick={handleSave}
             disabled={!dirty || saving}
           >
-            {saving ? "Saving..." : "Save"}
+            {saving ? t("roleManagerDialog.saving") : t("roleManagerDialog.save")}
           </button>
         </div>
       </div>

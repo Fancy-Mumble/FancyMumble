@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useRef, useState, type ChangeEvent } from "react";
+﻿import { useCallback, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { ImageEditor } from "../../pages/settings/ImageEditor";
 import { useAppStore } from "../../store";
 import { dataUrlToBytes, textureToDataUrl } from "../../profileFormat";
@@ -39,6 +40,7 @@ function clampBudget(maxBytes: number | undefined, serverMax: number): number {
  * `AclGroup.icon` and forwarded to the server unchanged.
  */
 export function RoleIconPicker({ value, onChange, maxBytes, disabled }: RoleIconPickerProps) {
+  const { t } = useTranslation("settings");
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [editorSrc, setEditorSrc] = useState<string | null>(null);
@@ -62,7 +64,7 @@ export function RoleIconPicker({ value, onChange, maxBytes, disabled }: RoleIcon
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => setEditorSrc(reader.result as string);
-    reader.onerror = () => setError("Could not read selected file.");
+    reader.onerror = () => setError(t("roleDisplay.iconPickerErrorRead"));
     reader.readAsDataURL(file);
   };
 
@@ -73,7 +75,7 @@ export function RoleIconPicker({ value, onChange, maxBytes, disabled }: RoleIcon
         setError(null);
       } catch (err) {
         console.error("Failed to encode role icon", err);
-        setError("Could not process the cropped image.");
+        setError(t("roleDisplay.iconPickerErrorProcess"));
       }
       setEditorSrc(null);
     },
@@ -84,7 +86,7 @@ export function RoleIconPicker({ value, onChange, maxBytes, disabled }: RoleIcon
     <div className={styles.wrapper}>
       <div className={styles.preview}>
         {previewSrc ? (
-          <img src={previewSrc} alt="Role icon preview" />
+          <img src={previewSrc} alt={t("roleDisplay.iconPickerAlt")} />
         ) : (
           <span className={styles.placeholder} aria-hidden="true">
             +
@@ -94,7 +96,7 @@ export function RoleIconPicker({ value, onChange, maxBytes, disabled }: RoleIcon
       <div className={styles.controls}>
         <div className={styles.row}>
           <button type="button" className={styles.btn} onClick={handlePick} disabled={disabled}>
-            {previewSrc ? "Replace" : "Choose icon"}
+            {previewSrc ? t("roleDisplay.iconPickerReplace") : t("roleDisplay.iconPickerChoose")}
           </button>
           {previewSrc && !disabled && (
             <button
@@ -105,12 +107,12 @@ export function RoleIconPicker({ value, onChange, maxBytes, disabled }: RoleIcon
                 onChange(null);
               }}
             >
-              Remove
+              {t("roleDisplay.iconPickerRemove")}
             </button>
           )}
         </div>
         <span className={styles.hint}>
-          Square crop, max {formatBytes(budget)} (server limit).
+          {t("roleDisplay.iconPickerHint", { size: formatBytes(budget) })}
         </span>
         {error && <span className={styles.error}>{error}</span>}
       </div>

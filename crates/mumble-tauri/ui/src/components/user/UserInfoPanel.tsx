@@ -6,6 +6,7 @@
  */
 
 import { lazy, Suspense, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { UserStats, PacketStats } from "../../types";
 import type { GeoLocation } from "../../utils/geolocation";
 import { geolocateIp } from "../../utils/geolocation";
@@ -66,6 +67,7 @@ function ConnectionInfo({ stats }: Readonly<Props>) {
   const hasVersion = stats.version || stats.os;
   const [geo, setGeo] = useState<GeoLocation | null>(null);
   const streamerMode = useAppStore((s) => s.streamerMode);
+  const { t } = useTranslation("sidebar");
 
   useEffect(() => {
     if (!stats.address) {
@@ -97,23 +99,23 @@ function ConnectionInfo({ stats }: Readonly<Props>) {
 
   return (
     <section className={styles.section}>
-      <h3 className={styles.sectionTitle}>Connection Information</h3>
+      <h3 className={styles.sectionTitle}>{t("userInfo.connectionInfo")}</h3>
       <div className={styles.infoGrid}>
         {stats.version && (
           <>
-            <span className={styles.infoLabel}>Version</span>
+            <span className={styles.infoLabel}>{t("userInfo.labelVersion")}</span>
             <span className={styles.infoValue}>{stats.version}</span>
           </>
         )}
         {osDisplay && (
           <>
-            <span className={styles.infoLabel}>OS</span>
+            <span className={styles.infoLabel}>{t("userInfo.labelOs")}</span>
             <span className={styles.infoValue}>{osDisplay}</span>
           </>
         )}
         {stats.address && (
           <>
-            <span className={styles.infoLabel}>Address</span>
+            <span className={styles.infoLabel}>{t("userInfo.labelAddress")}</span>
             <span className={styles.infoValue}>
               {streamerMode ? maskSensitive(stats.address) : stats.address}
             </span>
@@ -121,20 +123,20 @@ function ConnectionInfo({ stats }: Readonly<Props>) {
         )}
         {geo && !streamerMode && (
           <>
-            <span className={styles.infoLabel}>Location</span>
+            <span className={styles.infoLabel}>{t("userInfo.labelLocation")}</span>
             <span className={styles.infoValue}>{popupLabel}</span>
           </>
         )}
         <>
-          <span className={styles.infoLabel}>Certificate</span>
+          <span className={styles.infoLabel}>{t("userInfo.labelCertificate")}</span>
           <span className={styles.infoValue}>
-            {stats.strong_certificate ? "Strong" : "Weak / None"}
+            {stats.strong_certificate ? t("userInfo.certStrong") : t("userInfo.certWeak")}
           </span>
         </>
         <>
-          <span className={styles.infoLabel}>Opus</span>
+          <span className={styles.infoLabel}>{t("userInfo.labelOpus")}</span>
           <span className={styles.infoValue}>
-            {stats.opus ? "Yes" : "No"}
+            {stats.opus ? t("userProfile.yes") : t("userProfile.no")}
           </span>
         </>
       </div>
@@ -150,28 +152,29 @@ function ConnectionInfo({ stats }: Readonly<Props>) {
 }
 
 function PingStats({ stats }: Readonly<Props>) {
+  const { t } = useTranslation("sidebar");
   return (
     <section className={styles.section}>
-      <h3 className={styles.sectionTitle}>Ping Statistics</h3>
+      <h3 className={styles.sectionTitle}>{t("userInfo.pingStats")}</h3>
       <table className={styles.statsTable}>
         <thead>
           <tr>
             <th />
-            <th>Packets</th>
-            <th>Avg Ping</th>
-            <th>Deviation</th>
+            <th>{t("userInfo.colPackets")}</th>
+            <th>{t("userInfo.colAvgPing")}</th>
+            <th>{t("userInfo.colDeviation")}</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td className={styles.rowLabel}>TCP (Control)</td>
+            <td className={styles.rowLabel}>{t("userInfo.rowTcp")}</td>
             <td>{stats.tcp_packets}</td>
             <td>{stats.tcp_ping_avg.toFixed(1)} ms</td>
             <td>{stats.tcp_ping_var.toFixed(1)} ms</td>
           </tr>
           {stats.udp_packets > 0 && (
             <tr>
-              <td className={styles.rowLabel}>UDP (Voice)</td>
+              <td className={styles.rowLabel}>{t("userInfo.rowUdp")}</td>
               <td>{stats.udp_packets}</td>
               <td>{stats.udp_ping_avg.toFixed(1)} ms</td>
               <td>{stats.udp_ping_var.toFixed(1)} ms</td>
@@ -184,39 +187,40 @@ function PingStats({ stats }: Readonly<Props>) {
 }
 
 function UdpNetworkStats({ stats }: Readonly<Props>) {
+  const { t } = useTranslation("sidebar");
   return (
     <section className={styles.section}>
-      <h3 className={styles.sectionTitle}>UDP Network Statistics</h3>
+      <h3 className={styles.sectionTitle}>{t("userInfo.udpStats")}</h3>
       <table className={styles.statsTable}>
         <thead>
           <tr>
             <th />
-            <th>Good</th>
-            <th>Late</th>
-            <th>Lost</th>
-            <th>Resync</th>
+            <th>{t("userInfo.colGood")}</th>
+            <th>{t("userInfo.colLate")}</th>
+            <th>{t("userInfo.colLost")}</th>
+            <th>{t("userInfo.colResync")}</th>
           </tr>
         </thead>
         <tbody>
           {stats.from_client && (
-            <PacketStatsRow label="From Client" data={stats.from_client} />
+            <PacketStatsRow label={t("userInfo.rowFromClient")} data={stats.from_client} />
           )}
           {stats.from_server && (
-            <PacketStatsRow label="To Client" data={stats.from_server} />
+            <PacketStatsRow label={t("userInfo.rowToClient")} data={stats.from_server} />
           )}
           {stats.rolling_stats && (
             <>
               <tr className={styles.subHeader}>
                 <td colSpan={5}>
-                  Rolling ({stats.rolling_stats.time_window}s window)
+                  {t("userInfo.rollingWindow", { seconds: stats.rolling_stats.time_window })}
                 </td>
               </tr>
               <PacketStatsRow
-                label="From Client"
+                label={t("userInfo.rowFromClient")}
                 data={stats.rolling_stats.from_client}
               />
               <PacketStatsRow
-                label="To Client"
+                label={t("userInfo.rowToClient")}
                 data={stats.rolling_stats.from_server}
               />
             </>
@@ -254,6 +258,7 @@ function PacketStatsRow({
 }
 
 function BandwidthInfo({ stats }: Readonly<Props>) {
+  const { t } = useTranslation("sidebar");
   const hasBandwidth = stats.bandwidth != null;
   const hasTime = stats.onlinesecs != null;
 
@@ -261,11 +266,11 @@ function BandwidthInfo({ stats }: Readonly<Props>) {
 
   return (
     <section className={styles.section}>
-      <h3 className={styles.sectionTitle}>Bandwidth</h3>
+      <h3 className={styles.sectionTitle}>{t("userInfo.bandwidth")}</h3>
       <div className={styles.infoGrid}>
         {hasBandwidth && (
           <>
-            <span className={styles.infoLabel}>Current</span>
+            <span className={styles.infoLabel}>{t("userInfo.labelCurrent")}</span>
             <span className={styles.infoValue}>
               {formatBandwidth(stats.bandwidth! * 8)}
             </span>
@@ -273,11 +278,11 @@ function BandwidthInfo({ stats }: Readonly<Props>) {
         )}
         {hasTime && (
           <>
-            <span className={styles.infoLabel}>Online</span>
+            <span className={styles.infoLabel}>{t("userInfo.labelOnline")}</span>
             <span className={styles.infoValue}>
               {formatDuration(stats.onlinesecs!)}
               {stats.idlesecs != null && stats.idlesecs > 0 && (
-                <> (idle: {formatDuration(stats.idlesecs)})</>
+                <> {t("userInfo.idle", { duration: formatDuration(stats.idlesecs) })}</>
               )}
             </span>
           </>

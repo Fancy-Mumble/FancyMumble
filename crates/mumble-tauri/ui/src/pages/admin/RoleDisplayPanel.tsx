@@ -1,16 +1,10 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { AclGroup } from "../../types";
 import { RoleColorPicker } from "../../components/elements/RoleColorPicker";
 import { RoleIconPicker } from "../../components/elements/RoleIconPicker";
 import { RolePreviewCard } from "../../components/elements/RolePreviewCard";
 import styles from "./AdminPanel.module.css";
-
-const STYLE_PRESETS = [
-  { id: "", label: "Default" },
-  { id: "neon", label: "Neon outline" },
-  { id: "gradient", label: "Gradient banner" },
-  { id: "minimal", label: "Minimal" },
-];
 
 export interface RoleDisplayPanelProps {
   readonly role: AclGroup;
@@ -20,6 +14,13 @@ export interface RoleDisplayPanelProps {
 
 /** Display sub-tab of the role editor: name, color, icon, style preset, metadata. */
 export function RoleDisplayPanel({ role, onPatch, disabled }: RoleDisplayPanelProps) {
+  const { t } = useTranslation("settings");
+  const stylePresets = useMemo(() => [
+    { id: "", label: t("roleDisplay.presetDefault") },
+    { id: "neon", label: t("roleDisplay.presetNeon") },
+    { id: "gradient", label: t("roleDisplay.presetGradient") },
+    { id: "minimal", label: t("roleDisplay.presetMinimal") },
+  ], [t]);
   const metadataEntries = useMemo(
     () => Object.entries(role.metadata ?? {}),
     [role.metadata],
@@ -41,7 +42,7 @@ export function RoleDisplayPanel({ role, onPatch, disabled }: RoleDisplayPanelPr
     <div className={styles.editorGrid}>
       <div className={styles.editorMain}>
         <label className={styles.fieldLabel}>
-          Role name
+          {t("roleDisplay.fieldName")}
           <input
             type="text"
             className={styles.input}
@@ -52,7 +53,7 @@ export function RoleDisplayPanel({ role, onPatch, disabled }: RoleDisplayPanelPr
         </label>
 
         <fieldset className={styles.fieldset}>
-          <legend>Color</legend>
+          <legend>{t("roleDisplay.fieldColor")}</legend>
           <RoleColorPicker
             value={role.color}
             onChange={(color) => onPatch({ color })}
@@ -61,7 +62,7 @@ export function RoleDisplayPanel({ role, onPatch, disabled }: RoleDisplayPanelPr
         </fieldset>
 
         <fieldset className={styles.fieldset}>
-          <legend>Icon</legend>
+          <legend>{t("roleDisplay.fieldIcon")}</legend>
           <RoleIconPicker
             value={role.icon}
             onChange={(icon) => onPatch({ icon })}
@@ -70,14 +71,14 @@ export function RoleDisplayPanel({ role, onPatch, disabled }: RoleDisplayPanelPr
         </fieldset>
 
         <label className={styles.fieldLabel}>
-          Style preset
+          {t("roleDisplay.fieldStylePreset")}
           <select
             className={styles.select}
             value={role.style_preset ?? ""}
             onChange={(e) => onPatch({ style_preset: e.target.value || null })}
             disabled={disabled || role.inherited}
           >
-            {STYLE_PRESETS.map((p) => (
+            {stylePresets.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label}
               </option>
@@ -86,9 +87,9 @@ export function RoleDisplayPanel({ role, onPatch, disabled }: RoleDisplayPanelPr
         </label>
 
         <fieldset className={styles.fieldset}>
-          <legend>Metadata</legend>
+          <legend>{t("roleDisplay.fieldMetadata")}</legend>
           {metadataEntries.length === 0 && (
-            <span className={styles.dimText}>No metadata entries.</span>
+            <span className={styles.dimText}>{t("roleDisplay.noMetadata")}</span>
           )}
           <ul className={styles.metadataList}>
             {metadataEntries.map(([k, v]) => (
@@ -106,7 +107,7 @@ export function RoleDisplayPanel({ role, onPatch, disabled }: RoleDisplayPanelPr
                     type="button"
                     className={styles.removeSmallBtn}
                     onClick={() => setMetadata(k, null)}
-                    aria-label={`Remove ${k}`}
+                    aria-label={t("roleDisplay.removeKey", { key: k })}
                   >
                     &times;
                   </button>
@@ -119,14 +120,14 @@ export function RoleDisplayPanel({ role, onPatch, disabled }: RoleDisplayPanelPr
               <input
                 type="text"
                 className={styles.input}
-                placeholder="key"
+                placeholder={t("roleDisplay.keyPlaceholder")}
                 value={newKey}
                 onChange={(e) => setNewKey(e.target.value)}
               />
               <input
                 type="text"
                 className={styles.input}
-                placeholder="value"
+                placeholder={t("roleDisplay.valuePlaceholder")}
                 value={newValue}
                 onChange={(e) => setNewValue(e.target.value)}
               />
@@ -141,7 +142,7 @@ export function RoleDisplayPanel({ role, onPatch, disabled }: RoleDisplayPanelPr
                   setNewValue("");
                 }}
               >
-                Add
+                {t("roleDisplay.addButton")}
               </button>
             </div>
           )}

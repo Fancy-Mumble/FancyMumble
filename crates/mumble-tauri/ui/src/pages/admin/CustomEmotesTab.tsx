@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react";
+﻿import { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../store";
 import { PERM_MANAGE_EMOTES } from "../../utils/permissions";
 import styles from "./AdminPanel.module.css";
@@ -9,6 +10,7 @@ const ALLOWED_MIME = ["image/png", "image/jpeg", "image/gif", "image/webp", "ima
 
 export function CustomEmotesTab() {
   const emotes = useAppStore((s) => s.customServerEmotes);
+  const { t } = useTranslation("settings");
   const customEmotesSupported = useAppStore((s) => s.fileServerCapabilities?.features.custom_emotes ?? false);
   const rootChannelPerms = useAppStore((s) => s.channels.find((c) => c.id === 0)?.permissions ?? 0);
   const canManage = customEmotesSupported && (rootChannelPerms & PERM_MANAGE_EMOTES) !== 0;
@@ -38,23 +40,23 @@ export function CustomEmotesTab() {
       }
     } catch (e) {
       console.error("emote file picker failed:", e);
-      setStatusMsg({ kind: "err", text: "Could not open file picker." });
+      setStatusMsg({ kind: "err", text: t("emotes.errorPickerFailed") });
     }
   }, []);
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!filePath) {
-      setStatusMsg({ kind: "err", text: "Please select an emote image." });
+      setStatusMsg({ kind: "err", text: t("emotes.errorNeedsFile") });
       return;
     }
     const mime = inferMimeType(filePath);
     if (!mime || !ALLOWED_MIME.includes(mime)) {
-      setStatusMsg({ kind: "err", text: "Unsupported image type." });
+      setStatusMsg({ kind: "err", text: t("emotes.errorBadType") });
       return;
     }
     if (!shortcode.trim() || !aliasEmoji.trim()) {
-      setStatusMsg({ kind: "err", text: "Shortcode and alias emoji are required." });
+      setStatusMsg({ kind: "err", text: t("emotes.errorRequiredFields") });
       return;
     }
     setSubmitting(true);
@@ -71,10 +73,10 @@ export function CustomEmotesTab() {
       setAliasEmoji("");
       setDescription("");
       setFilePath(null);
-      setStatusMsg({ kind: "ok", text: "Emote added." });
+      setStatusMsg({ kind: "ok", text: t("emotes.successAdded") });
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      setStatusMsg({ kind: "err", text: `Add emote failed: ${detail}` });
+      setStatusMsg({ kind: "err", text: t("emotes.errorAddFailed", { detail }) });
     } finally {
       setSubmitting(false);
     }
@@ -84,27 +86,27 @@ export function CustomEmotesTab() {
     if (!confirm(`Delete emote :${sc}: ?`)) return;
     try {
       await removeCustomEmote(sc);
-      setStatusMsg({ kind: "ok", text: `Removed :${sc}:` });
+      setStatusMsg({ kind: "ok", text: t("emotes.successRemoved", { shortcode: sc }) });
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      setStatusMsg({ kind: "err", text: `Remove failed: ${detail}` });
+      setStatusMsg({ kind: "err", text: t("emotes.errorRemoveFailed", { detail }) });
     }
-  }, [removeCustomEmote]);
+  }, [removeCustomEmote, t]);
 
   if (!canManage) {
     return (
       <div className={styles.content}>
-        <p>You do not have permission to manage custom server emotes.</p>
+        <p>{t("emotes.noPermission")}</p>
       </div>
     );
   }
 
   return (
     <div className={styles.content}>
-      <h3 className={styles.aclSectionTitle}>Add custom emote</h3>
+      <h3 className={styles.aclSectionTitle}>{t("emotes.addTitle")}</h3>
       <form onSubmit={handleSubmit} className={styles.emoteForm}>
         <label className={styles.fieldLabel}>
-          Shortcode
+          {t("emotes.fieldShortcode")}
           <input
             type="text"
             className={styles.input}
@@ -117,7 +119,7 @@ export function CustomEmotesTab() {
           />
         </label>
         <label className={styles.fieldLabel}>
-          Alias emoji
+          {t("emotes.fieldAliasEmoji")}
           <input
             type="text"
             className={styles.input}
@@ -129,7 +131,7 @@ export function CustomEmotesTab() {
           />
         </label>
         <label className={styles.fieldLabel}>
-          Description
+          {t("emotes.fieldDescription")}
           <input
             type="text"
             className={styles.input}
@@ -140,17 +142,17 @@ export function CustomEmotesTab() {
           />
         </label>
         <div className={styles.fieldLabel}>
-          Image
+          {t("emotes.fieldImage")}
           <div className={styles.emoteFileRow}>
             <button type="button" className={styles.addBtn} onClick={handlePickFile}>
-              {filePath ? "Change file" : "Choose file"}
+              {filePath ? t("emotes.changeFile") : t("emotes.chooseFile")}
             </button>
             {filePath && <span className={styles.emoteFilePath}>{filePath}</span>}
           </div>
         </div>
         <div>
           <button type="submit" className={styles.saveBtn} disabled={submitting}>
-            {submitting ? "Uploading..." : "Add emote"}
+            {submitting ? t("emotes.uploading") : t("emotes.addEmote")}
           </button>
         </div>
         {statusMsg && (
@@ -160,9 +162,9 @@ export function CustomEmotesTab() {
         )}
       </form>
 
-      <h3 className={styles.aclSectionTitle}>Existing emotes ({emotes.length})</h3>
+      <h3 className={styles.aclSectionTitle}>{t("emotes.existingTitle", { count: emotes.length })}</h3>
       {emotes.length === 0 ? (
-        <p>No custom emotes yet.</p>
+        <p>{t("emotes.noEmotes")}</p>
       ) : (
         <ul className={styles.emoteList}>
           {emotes.map((e) => (
@@ -182,7 +184,7 @@ export function CustomEmotesTab() {
                 onClick={() => handleDelete(e.shortcode)}
                 className={`${styles.removeBtn} ${styles.emoteDelete}`}
               >
-                Delete
+              {t("emotes.deleteButton")}
               </button>
             </li>
           ))}

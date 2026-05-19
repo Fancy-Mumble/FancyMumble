@@ -21,7 +21,7 @@ pub(crate) async fn set_active_server(
 }
 
 /// Disconnect a specific session by id.  Operates only on that
-/// session's connection / state — does not touch the active session's
+/// session's connection / state - does not touch the active session's
 /// `inner` pointer or its audio pipeline (unless `server_id` itself
 /// is the active session).
 #[tauri::command]

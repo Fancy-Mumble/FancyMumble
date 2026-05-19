@@ -7,6 +7,7 @@ import { ImageIcon } from "../../icons";
  */
 
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useEditor, EditorContent } from "@tiptap/react";
 import type { EditorView } from "@tiptap/pm/view";
 import type { Slice } from "@tiptap/pm/model";
@@ -48,8 +49,10 @@ export function BioEditor({
   value,
   onChange,
   maxLength = 2000,
-  placeholder = "Tell others about yourself...",
+  placeholder,
 }: BioEditorProps) {
+  const { t } = useTranslation("settings");
+  const resolvedPlaceholder = placeholder ?? t("bioEditor.placeholder");
   const [showColourPicker, setShowColourPicker] = useState(false);
   const colourPickerRef = useRef<HTMLDivElement>(null);
   const colourBtnRef = useRef<HTMLButtonElement>(null);
@@ -172,7 +175,7 @@ export function BioEditor({
       }),
       TextStyle,
       Color,
-      Placeholder.configure({ placeholder }),
+      Placeholder.configure({ placeholder: resolvedPlaceholder }),
       TiptapImage.configure({ inline: true, allowBase64: true }),
     ],
     content: value,

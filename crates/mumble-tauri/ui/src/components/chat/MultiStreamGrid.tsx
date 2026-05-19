@@ -5,6 +5,7 @@ import { ChevronDownIcon, PlayIcon, ScreenShareIcon } from "../../icons";
  * Clicking a card starts watching that stream.
  */
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useStreamThumbnail } from "./useStreamPreview";
 import styles from "./MultiStreamGrid.module.css";
 
@@ -21,9 +22,10 @@ interface StreamCardProps {
 function StreamCard({ session, name, onWatch }: StreamCardProps) {
   const thumbnail = useStreamThumbnail(session, true);
   const handleClick = useCallback(() => onWatch(session), [session, onWatch]);
+  const { t } = useTranslation("chat");
 
   return (
-    <button type="button" className={styles.card} onClick={handleClick} aria-label={`Watch ${name}'s stream`}>
+    <button type="button" className={styles.card} onClick={handleClick} aria-label={t("multiStream.watchStream", { name })}>
       <div className={styles.cardThumb}>
         {thumbnail
           ? <img src={thumbnail} alt="" className={styles.cardImg} />
@@ -39,7 +41,7 @@ function StreamCard({ session, name, onWatch }: StreamCardProps) {
           </span>
         </div>
 
-        <span className={styles.liveBadge}>LIVE</span>
+        <span className={styles.liveBadge}>{t("multiStream.liveBadge")}</span>
       </div>
 
       <div className={styles.cardFooter}>
@@ -61,6 +63,7 @@ interface MultiStreamGridProps {
 
 export default function MultiStreamGrid({ broadcasters, onWatch }: MultiStreamGridProps) {
   const [expanded, setExpanded] = useState(false);
+  const { t } = useTranslation("chat");
 
   return (
     <div className={`${styles.container} ${expanded ? styles.containerExpanded : ""}`}>
@@ -72,7 +75,7 @@ export default function MultiStreamGrid({ broadcasters, onWatch }: MultiStreamGr
       >
         <ScreenShareIcon width={14} height={14} />
         <span>
-          {broadcasters.length} active stream{broadcasters.length === 1 ? "" : "s"}
+          {t("multiStream.activeStreams", { count: broadcasters.length })}
         </span>
         <ChevronDownIcon
           width={13}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { getPreferences, updatePreferences } from "../../preferencesStorage";
 import styles from "./ChannelSidebar.module.css";
 
@@ -33,6 +34,7 @@ export function SidebarTabs({ channelsPane, membersPane, onMembersFirstShown }: 
   const [activeTab, setActiveTab] = useState<SidebarTabKey>("channels");
   const persistTimer = useRef<number | null>(null);
   const membersOpenedRef = useRef(false);
+  const { t } = useTranslation("sidebar");
 
   // Restore the persisted active tab on mount.
   useEffect(() => {
@@ -84,7 +86,7 @@ export function SidebarTabs({ channelsPane, membersPane, onMembersFirstShown }: 
           className={`${styles.tab} ${channelsActive ? styles.tabActive : ""}`}
           onClick={() => handleClick("channels")}
         >
-          Channels
+          {t("sidebarTabs.channels")}
         </button>
         <button
           type="button"
@@ -93,7 +95,7 @@ export function SidebarTabs({ channelsPane, membersPane, onMembersFirstShown }: 
           className={`${styles.tab} ${membersActive ? styles.tabActive : ""}`}
           onClick={() => handleClick("members")}
         >
-          Members
+          {t("sidebarTabs.members")}
         </button>
       </div>
 

@@ -9,7 +9,7 @@ import type {
  * `<video>` element.
  *
  * Forwards user-initiated `play`, `pause` and `seeked` events to the
- * controller via `onLocalEvent` (only when the host is driving — the
+ * controller via `onLocalEvent` (only when the host is driving - the
  * controller is responsible for ignoring inbound events from
  * non-hosts).
  *

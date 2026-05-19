@@ -5,6 +5,7 @@
  */
 
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../store";
 import { parseComment } from "../../profileFormat";
 import { useUserAvatar } from "../../lazyBlobs";
@@ -17,6 +18,7 @@ export default function MobileProfileSheet() {
   const selectedUser = useAppStore((s) => s.selectedUser);
   const users = useAppStore((s) => s.users);
   const selectUser = useAppStore((s) => s.selectUser);
+  const { t } = useTranslation("sidebar");
 
   const user = useMemo(
     () => users.find((u) => u.session === selectedUser) ?? null,
@@ -37,7 +39,7 @@ export default function MobileProfileSheet() {
     <MobileBottomSheet
       open={isOpen}
       onClose={() => selectUser(null)}
-      ariaLabel="Close profile"
+      ariaLabel={t("userProfile.closeProfile")}
     >
       <div className={styles.cardWrap}>
         <ProfilePreviewCard

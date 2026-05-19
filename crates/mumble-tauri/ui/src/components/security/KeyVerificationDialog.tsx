@@ -1,6 +1,7 @@
-import { CloseIcon } from "../../icons";
+﻿import { CloseIcon } from "../../icons";
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
 import type { KeyTrustLevel, KeyFingerprints, PersistenceMode } from "../../types";
 import styles from "./KeyVerificationDialog.module.css";
 
@@ -30,12 +31,12 @@ function trustStatusClass(level: KeyTrustLevel): string {
   }
 }
 
-function trustStatusText(level: KeyTrustLevel): string {
+function trustStatusText(level: KeyTrustLevel, t: (key: string) => string): string {
   switch (level) {
-    case "ManuallyVerified": return "Manually Verified";
-    case "Verified": return "Verified (consensus)";
-    case "Unverified": return "Unverified (TOFU)";
-    case "Disputed": return "Disputed - conflicting keys";
+    case "ManuallyVerified": return t("keyVerification.trustManuallyVerified");
+    case "Verified": return t("keyVerification.trustVerified");
+    case "Unverified": return t("keyVerification.trustUnverified");
+    case "Disputed": return t("keyVerification.trustDisputed");
   }
 }
 
@@ -52,10 +53,11 @@ function FingerprintDisplay({
   showFull: boolean;
   onShowFull: () => void;
 }>) {
+  const { t } = useTranslation("sidebar");
   if (!fingerprints) {
     return (
       <div className={styles.fingerprint}>
-        <span>Loading...</span>
+        <span>{t("keyVerification.loadingFingerprint")}</span>
       </div>
     );
   }
@@ -79,7 +81,7 @@ function FingerprintDisplay({
       )}
       {!showFull && tab !== "hex" && (
         <button className={styles.showFullBtn} onClick={onShowFull}>
-          Show full fingerprint
+          {t("keyVerification.showFullFingerprint")}
         </button>
       )}
     </div>
@@ -97,6 +99,8 @@ export default function KeyVerificationDialog({
   distributorName,
   distributorHash,
 }: KeyVerificationDialogProps) {
+  const { t } = useTranslation("sidebar");
+  const tStr = t as (key: string) => string;
   const [tab, setTab] = useState<FingerprintTab>("emoji");
   const [showFull, setShowFull] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -150,26 +154,26 @@ export default function KeyVerificationDialog({
   const needsVerification = trustLevel === "Unverified" || trustLevel === "Disputed";
 
   return (
-    <dialog className={styles.overlay} open aria-label="Channel Encryption Verification">
+    <dialog className={styles.overlay} open aria-label={t("keyVerification.ariaLabel")}>
       <div className={styles.dialog}>
         <div className={styles.header}>
-          <h3 className={styles.title}>Channel Encryption Verification</h3>
-          <button className={styles.closeBtn} onClick={onClose} aria-label="Close">
+          <h3 className={styles.title}>{t("keyVerification.title")}</h3>
+          <button className={styles.closeBtn} onClick={onClose} aria-label={t("keyVerification.closeAriaLabel")}>
             <CloseIcon width={16} height={16} />
           </button>
         </div>
 
         <div className={styles.body}>
           <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Channel:</span>
+            <span className={styles.infoLabel}>{t("keyVerification.channelLabel")}</span>
             <span>#{channelName}</span>
           </div>
           <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Mode:</span>
+            <span className={styles.infoLabel}>{t("keyVerification.modeLabel")}</span>
             <span>{mode}</span>
           </div>
           <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Key distributed by:</span>
+            <span className={styles.infoLabel}>{t("keyVerification.distributorLabel")}</span>
             <span>{distributorName} ({distributorHash.slice(0, 8)}...)</span>
           </div>
 
@@ -178,15 +182,15 @@ export default function KeyVerificationDialog({
             <button
               className={`${styles.tab} ${tab === "emoji" ? styles.tabActive : ""}`}
               onClick={() => setTab("emoji")}
-            >Emoji</button>
+            >{t("keyVerification.tabEmoji")}</button>
             <button
               className={`${styles.tab} ${tab === "words" ? styles.tabActive : ""}`}
               onClick={() => setTab("words")}
-            >Words</button>
+            >{t("keyVerification.tabWords")}</button>
             <button
               className={`${styles.tab} ${tab === "hex" ? styles.tabActive : ""}`}
               onClick={() => setTab("hex")}
-            >Hex</button>
+            >{t("keyVerification.tabHex")}</button>
           </div>
 
           <FingerprintDisplay
@@ -197,13 +201,12 @@ export default function KeyVerificationDialog({
           />
 
           <p className={styles.instructions}>
-            Compare this fingerprint with a trusted channel member using voice
-            chat, in person, or another secure channel.
+            {t("keyVerification.instructions")}
           </p>
 
           {/* Current trust status */}
           <div className={`${styles.trustStatus} ${trustStatusClass(trustLevel)}`}>
-            Current trust: {trustStatusText(trustLevel)}
+            {t("keyVerification.currentTrust", { status: trustStatusText(trustLevel, tStr) })}
           </div>
         </div>
 
@@ -217,14 +220,14 @@ export default function KeyVerificationDialog({
             onChange={(e) => setConfirmed(e.target.checked)}
           />
           <label htmlFor="verify-confirm" className={styles.checkboxLabel}>
-            I have verified this fingerprint matches
+            {t("keyVerification.confirmLabel")}
           </label>
           <button
             className={styles.verifyBtn}
             disabled={!confirmed || verifying || !needsVerification}
             onClick={handleVerify}
           >
-            {verifying ? "Verifying..." : "Mark as Verified"}
+            {verifying ? t("keyVerification.verifyingButton") : t("keyVerification.verifyButton")}
           </button>
         </div>
       </div>

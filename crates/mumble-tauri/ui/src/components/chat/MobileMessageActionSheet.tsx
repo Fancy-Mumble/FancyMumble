@@ -1,5 +1,6 @@
 import { ArrowUpRightIcon, CheckboxIcon, CopyIcon, EditIcon, EmojiPlusIcon, PlayIcon, QuoteIcon, TrashIcon } from "../../icons";
 import { useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { ChatMessage } from "../../types";
 import type { ReactionSummary } from "./reactionStore";
 import { getReadersForMessage } from "./readReceiptStore";
@@ -73,6 +74,7 @@ export default function MobileMessageActionSheet({
   channelId,
   avatarByHash,
 }: MobileMessageActionSheetProps) {
+  const { t } = useTranslation("chat");
   const previewText = useMemo(() => {
     const text = stripHtml(message.body);
     if (text.length <= MAX_PREVIEW_LEN) return text;
@@ -158,7 +160,7 @@ export default function MobileMessageActionSheet({
             <button
               type="button"
               className={styles.reactionBtn}
-              aria-label="More reactions"
+              aria-label={t("contextMenu.moreReactions")}
               onClick={act((m) => onMoreReactions(m))}
             >
               <EmojiPlusIcon width={18} height={18} />
@@ -186,7 +188,7 @@ export default function MobileMessageActionSheet({
       {/* Read by list */}
       {isOwnWithId && (
         <div className={styles.reactorList}>
-          <div className={styles.readByLabel}>Read by</div>
+          <div className={styles.readByLabel}>{t("contextMenu.readBy")}</div>
           {readerEntries.length > 0 ? (
             readerEntries.map((entry) => (
               <div key={entry.certHash} className={`${styles.readByRow} ${entry.isOnline ? "" : styles.offlineReader}`}>
@@ -201,7 +203,7 @@ export default function MobileMessageActionSheet({
               </div>
             ))
           ) : (
-            <div className={styles.readByEmpty}>No one yet</div>
+            <div className={styles.readByEmpty}>{t("contextMenu.noReaders")}</div>
           )}
         </div>
       )}
@@ -213,7 +215,7 @@ export default function MobileMessageActionSheet({
             <span className={styles.actionIcon}>
               <QuoteIcon width={16} height={16} />
             </span>
-            Quote
+            {t("contextMenu.quote")}
           </button>
         )}
         {canWatchTogether && (
@@ -226,7 +228,7 @@ export default function MobileMessageActionSheet({
             <span className={styles.actionIcon}>
               <PlayIcon width={16} height={16} />
             </span>
-            {watchBusy ? "Starting\u2026" : "Watch together"}
+            {watchBusy ? t("contextMenu.watchTogetherBusy") : t("contextMenu.watchTogether")}
           </button>
         )}
         {onCopyText && (
@@ -234,7 +236,7 @@ export default function MobileMessageActionSheet({
             <span className={styles.actionIcon}>
               <CopyIcon width={16} height={16} />
             </span>
-            Copy text
+            {t("contextMenu.copyText")}
           </button>
         )}
         {onEdit && message.is_own && message.message_id && (
@@ -242,13 +244,13 @@ export default function MobileMessageActionSheet({
             <span className={styles.actionIcon}>
               <EditIcon width={16} height={16} />
             </span>
-            Edit message
+            {t("contextMenu.edit")}
           </button>
         )}
         {onPin && message.message_id && (
           <button type="button" className={styles.actionItem} onClick={act((m) => onPin(m))}>
             <span className={styles.actionIcon}>📌</span>
-            {message.pinned ? "Unpin message" : "Pin message"}
+            {message.pinned ? t("contextMenu.unpin") : t("contextMenu.pin")}
           </button>
         )}
         {onPopOutImage && popOutImageSrc && (
@@ -256,7 +258,7 @@ export default function MobileMessageActionSheet({
             <span className={styles.actionIcon}>
               <ArrowUpRightIcon width={16} height={16} />
             </span>
-            Pop out image
+            {t("contextMenu.popOutImage")}
           </button>
         )}
         {canDelete && (
@@ -269,13 +271,13 @@ export default function MobileMessageActionSheet({
               <span className={styles.actionIcon}>
                 <TrashIcon width={16} height={16} />
               </span>
-              Delete message
+              {t("contextMenu.deleteMessage")}
             </button>
             <button type="button" className={styles.actionItem} onClick={act(onSelectMode)}>
               <span className={styles.actionIcon}>
                 <CheckboxIcon width={16} height={16} />
               </span>
-              Select messages
+              {t("contextMenu.selectMessages")}
             </button>
           </>
         )}

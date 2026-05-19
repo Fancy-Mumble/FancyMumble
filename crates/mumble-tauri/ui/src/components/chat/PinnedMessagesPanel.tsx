@@ -1,5 +1,6 @@
 import { CloseIcon } from "../../icons";
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { ChatMessage } from "../../types";
 import styles from "./PinnedMessagesPanel.module.css";
 
@@ -42,6 +43,7 @@ export default function PinnedMessagesPanel({
   onNavigate,
   onUnpin,
 }: PinnedMessagesPanelProps) {
+  const { t } = useTranslation("chat");
   const pinnedMessages = useMemo(
     () => messages.filter((m) => m.pinned),
     [messages],
@@ -51,7 +53,7 @@ export default function PinnedMessagesPanel({
     <div className={styles.panel}>
       <div className={styles.header}>
         <span className={styles.title}>
-          📌 Pinned Messages
+          📌 {t("pinned.title")}
           {pinnedMessages.length > 0 && (
             <span className={styles.count}>{pinnedMessages.length}</span>
           )}
@@ -60,14 +62,14 @@ export default function PinnedMessagesPanel({
           type="button"
           className={styles.closeBtn}
           onClick={onClose}
-          aria-label="Close pinned messages"
+          aria-label={t("pinned.closeAriaLabel")}
         >
           <CloseIcon width={16} height={16} />
         </button>
       </div>
 
       {pinnedMessages.length === 0 ? (
-        <div className={styles.empty}>No pinned messages in this channel.</div>
+        <div className={styles.empty}>{t("pinned.empty")}</div>
       ) : (
         <div className={styles.list}>
           {pinnedMessages.map((msg) => {
@@ -91,7 +93,7 @@ export default function PinnedMessagesPanel({
                   {isUnseen && <span className={styles.unseenDot} />}
                   {msg.pinned_by && (
                     <span className={styles.pinnedBy}>
-                      pinned by {msg.pinned_by}
+                      {t("pinned.pinnedBy", { name: msg.pinned_by })}
                     </span>
                   )}
                 </div>
@@ -99,7 +101,7 @@ export default function PinnedMessagesPanel({
                   {imageSrc && (
                     <img src={imageSrc} alt="" className={styles.thumbnail} />
                   )}
-                  <div className={styles.preview}>{preview || (imageSrc ? "Image" : "(media)")}</div>
+                  <div className={styles.preview}>{preview || (imageSrc ? t("pinned.imageLabel") : t("pinned.mediaLabel"))}</div>
                 </div>
                 {onUnpin && (
                   <button
@@ -109,9 +111,9 @@ export default function PinnedMessagesPanel({
                       e.stopPropagation();
                       onUnpin(msg);
                     }}
-                    aria-label="Unpin message"
+                    aria-label={t("pinned.unpinAriaLabel")}
                   >
-                    Unpin
+                    {t("pinned.unpin")}
                   </button>
                 )}
               </button>

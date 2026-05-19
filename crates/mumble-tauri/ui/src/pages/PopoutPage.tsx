@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import styles from "./PopoutPage.module.css";
@@ -38,6 +39,7 @@ export default function PopoutPage() {
   const [payload, setPayload] = useState<PopoutImagePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const { t } = useTranslation("common");
   // React 19 StrictMode double-invokes effects in dev; the registry
   // entry is single-use, so guard against the second invocation.
   const fetchedRef = useRef(false);
@@ -49,13 +51,13 @@ export default function PopoutPage() {
 
     const id = popoutIdFromLabel();
     if (!id) {
-      setError("Missing popout id");
+      setError(t("pages.popout.missingId"));
       return;
     }
     invoke<PopoutImagePayload | null>("take_popout_image", { id })
       .then((result) => {
         if (result) setPayload(result);
-        else setError("Image source unavailable");
+        else setError(t("pages.popout.imageUnavailable"));
       })
       .catch((e) => setError(String(e)));
   }, []);
@@ -64,7 +66,7 @@ export default function PopoutPage() {
     <PopoutShell
       mediaRef={imageRef}
       mediaReady={imageLoaded}
-      mediaLabel="Image"
+      mediaLabel={t("pages.popout.mediaLabel")}
       error={error}
       infoBar={payload ? {
         name: payload.sender_name,

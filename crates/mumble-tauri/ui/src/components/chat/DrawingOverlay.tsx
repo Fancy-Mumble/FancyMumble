@@ -17,6 +17,7 @@
  * any redraw (resize, incoming remote stroke) replays them as well.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "../../store";
@@ -370,6 +371,7 @@ interface DrawingOverlayProps {
 
 export default function DrawingOverlay({ channelId, ownSession, hideToolbar, viewOnly, videoRef }: DrawingOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { t } = useTranslation("chat");
   /** Cached content rect in canvas CSS pixels - kept in sync with resize + video metadata. */
   const contentRectRef = useRef<ContentRect>({ x: 0, y: 0, w: 0, h: 0 });
 
@@ -753,8 +755,8 @@ export default function DrawingOverlay({ channelId, ownSession, hideToolbar, vie
             className={`${styles.colorSwatch} ${c === selectedColor ? styles.colorSwatchSelected : ""}`}
             style={{ background: argbToCssColor(c) }}
             onClick={() => setSelectedColor(c)}
-            title={`Color ${c.toString(16)}`}
-            aria-label={`Select color ${c.toString(16)}`}
+            title={t("drawing.selectColor", { color: c.toString(16) })}
+            aria-label={t("drawing.selectColor", { color: c.toString(16) })}
             aria-pressed={c === selectedColor}
           />
         ))}
@@ -766,16 +768,16 @@ export default function DrawingOverlay({ channelId, ownSession, hideToolbar, vie
           value={strokeWidth}
           onChange={(e) => setStrokeWidth(Number(e.target.value))}
           className={styles.widthSlider}
-          aria-label="Stroke width"
-          title={`Width: ${strokeWidth}px`}
+          aria-label={t("drawing.strokeWidth")}
+          title={t("drawing.widthTooltip", { strokeWidth })}
         />
 
         <button
           type="button"
           className={styles.toolBtn}
           onClick={handleClear}
-          title={isOwnBroadcaster ? "Clear everyone's drawings" : "Clear my drawings"}
-          aria-label={isOwnBroadcaster ? "Clear everyone's drawings" : "Clear my drawings"}
+          title={isOwnBroadcaster ? t("drawing.clearAll") : t("drawing.clearMine")}
+          aria-label={isOwnBroadcaster ? t("drawing.clearAll") : t("drawing.clearMine")}
         >
           <TrashIcon width={16} height={16} />
         </button>

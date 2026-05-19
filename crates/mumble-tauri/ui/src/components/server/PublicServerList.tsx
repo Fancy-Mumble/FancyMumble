@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
 import type { PublicServer, ServerPingResult } from "../../types";
 import styles from "./PublicServerList.module.css";
 
@@ -45,6 +46,7 @@ export default function PublicServerList({
   onBack,
   disabled,
 }: Readonly<Props>) {
+  const { t } = useTranslation("server");
   const [consented, setConsented] = useState(false);
   const [servers, setServers] = useState<PublicServer[]>([]);
   const [loading, setLoading] = useState(false);
@@ -165,37 +167,30 @@ export default function PublicServerList({
     return (
       <div className={styles.container}>
         <div className={styles.header}>
-          <span className={styles.heading}>Public Servers</span>
+          <span className={styles.heading}>{t("public.title")}</span>
           <button
             className={styles.backLink}
             onClick={onBack}
             type="button"
           >
-            Saved servers
+            {t("public.savedServers")}
           </button>
         </div>
 
         <div className={styles.consent}>
           <p className={styles.consentText}>
-            The public server list is fetched from the official Mumble
-            directory. When you connect to a public server, your IP address
-            will be visible to that server&apos;s operator.
+            {t("public.consentText")}
           </p>
           <div className={styles.consentWarning}>
             <span className={styles.consentWarningIcon}>&#x26A0;&#xFE0F;</span>
-            <span>
-              Loading this list makes a request to{" "}
-              <strong>publist.mumble.info</strong> and pinging servers reveals
-              your IP address to each server. Only continue if you understand
-              and accept this.
-            </span>
+            <span>{t("public.consentWarning")}</span>
           </div>
           <button
             className={styles.consentButton}
             onClick={() => setConsented(true)}
             type="button"
           >
-            I understand, show servers
+            {t("public.consentButton")}
           </button>
         </div>
       </div>
@@ -206,13 +201,13 @@ export default function PublicServerList({
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <span className={styles.heading}>Public Servers</span>
+        <span className={styles.heading}>{t("public.title")}</span>
         <button
           className={styles.backLink}
           onClick={onBack}
           type="button"
         >
-          Saved servers
+          {t("public.savedServers")}
         </button>
       </div>
 
@@ -222,7 +217,7 @@ export default function PublicServerList({
         <input
           className={styles.searchInput}
           type="text"
-          placeholder="Search servers..."
+          placeholder={t("public.searchPlaceholder")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -232,13 +227,13 @@ export default function PublicServerList({
       {loading && (
         <div className={styles.statusRow}>
           <span className={styles.spinner} />{" "}
-          Loading public servers...
+          {t("public.loading")}
         </div>
       )}
 
       {error && (
         <div className={styles.statusRow}>
-          Failed to load: {error}
+          {t("public.loadingError", { error })}
         </div>
       )}
 
@@ -248,19 +243,19 @@ export default function PublicServerList({
             <thead>
               <tr>
                 <th onClick={() => handleSort("country")}>
-                  Country{sortIndicator("country")}
+                  {t("public.colCountry")}{sortIndicator("country")}
                 </th>
                 <th onClick={() => handleSort("name")}>
-                  Server{sortIndicator("name")}
+                  {t("public.colServer")}{sortIndicator("name")}
                 </th>
                 <th onClick={() => handleSort("users")}>
-                  Users{sortIndicator("users")}
+                  {t("public.colUsers")}{sortIndicator("users")}
                 </th>
                 <th onClick={() => handleSort("ping")}>
-                  Ping{sortIndicator("ping")}
+                  {t("public.colPing")}{sortIndicator("ping")}
                 </th>
                 <th onClick={() => handleSort("version")}>
-                  Version{sortIndicator("version")}
+                  {t("public.colVersion")}{sortIndicator("version")}
                 </th>
               </tr>
             </thead>
@@ -297,7 +292,7 @@ export default function PublicServerList({
               {displayed.length === 0 && (
                 <tr>
                   <td colSpan={5} className={styles.statusRow}>
-                    No servers match your search.
+                    {t("public.noMatch")}
                   </td>
                 </tr>
               )}
@@ -308,7 +303,7 @@ export default function PublicServerList({
 
       {!loading && !error && servers.length === 0 && (
         <div className={styles.statusRow}>
-          No public servers found.
+          {t("public.noResults")}
         </div>
       )}
     </div>

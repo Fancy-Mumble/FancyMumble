@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./Autocomplete.module.css";
 
 export interface AutocompleteOption<T> {
@@ -52,12 +53,15 @@ export function Autocomplete<T>({
   value,
   options,
   onChange,
-  placeholder = "Search...",
+  placeholder,
   disabled = false,
-  noOptionsText = "No options",
+  noOptionsText,
   label,
   inputRef: externalRef,
 }: Readonly<AutocompleteProps<T>>) {
+  const { t } = useTranslation("common");
+  const displayPlaceholder = placeholder ?? t("autocomplete.placeholder");
+  const displayNoOptions = noOptionsText ?? t("autocomplete.noOptions");
   const instanceId = useId();
   const listboxId = `autocomplete-listbox-${instanceId}`;
   const internalRef = useRef<HTMLInputElement>(null);
@@ -76,7 +80,14 @@ export function Autocomplete<T>({
 
   const filtered = useMemo(() => {
     const q = inputValue.trim().toLowerCase();
-    if (!q) return options.slice(0, MAX_VISIBLE) as AutocompleteOption<T>[];
+    // When the input still shows the current selection's label verbatim
+    // (i.e. the user just opened the dropdown without typing), show all
+    // options instead of filtering down to the single selected item.
+    const showingSelectedLabel =
+      value !== null && q === value.label.toLowerCase();
+    if (!q || showingSelectedLabel) {
+      return options.slice(0, MAX_VISIBLE) as AutocompleteOption<T>[];
+    }
     const results: AutocompleteOption<T>[] = [];
     for (const opt of options) {
       if (opt.label.toLowerCase().includes(q)) {
@@ -85,7 +96,7 @@ export function Autocomplete<T>({
       }
     }
     return results;
-  }, [inputValue, options]);
+  }, [inputValue, options, value]);
 
   const scrollOptionIntoView = useCallback((index: number) => {
     const listbox = listboxRef.current;
@@ -111,8 +122,11 @@ export function Autocomplete<T>({
     if (value !== null) onChange(null);
   };
 
-  const handleFocus = () => {
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
     setOpen(true);
+    // Select the existing text so the user can immediately type to
+    // replace it (standard combobox UX).
+    e.target.select();
   };
 
   const handleBlur = () => {
@@ -167,16 +181,19 @@ export function Autocomplete<T>({
   return (
     <div className={styles.root} role="combobox" aria-expanded={open} aria-haspopup="listbox" aria-owns={listboxId}>
       <div className={styles.inputWrapper}>
+        {value?.startAdornment && (
+          <span className={styles.startAdornment} aria-hidden="true">{value.startAdornment}</span>
+        )}
         <input
           ref={inputEl}
           type="text"
-          className={styles.input}
+          className={value?.startAdornment ? `${styles.input} ${styles.inputWithAdornment}` : styles.input}
           role="combobox"
           aria-autocomplete="list"
           aria-controls={listboxId}
           aria-activedescendant={open && filtered[highlightedIndex] ? `${listboxId}-opt-${highlightedIndex}` : undefined}
           aria-label={label}
-          placeholder={placeholder}
+          placeholder={displayPlaceholder}
           value={inputValue}
           disabled={disabled}
           onChange={handleInputChange}
@@ -206,11 +223,11 @@ export function Autocomplete<T>({
           ref={listboxRef}
           className={styles.listbox}
           role="listbox"
-          aria-label={label ?? placeholder}
+          aria-label={label ?? displayPlaceholder}
           onMouseDown={() => { ignoreBlur.current = true; }}
         >
           {filtered.length === 0 ? (
-            <li className={styles.noOptions} role="option" aria-selected={false}>{noOptionsText}</li>
+            <li className={styles.noOptions} role="option" aria-selected={false}>{displayNoOptions}</li>
           ) : (
             filtered.map((opt, i) => (
               <li

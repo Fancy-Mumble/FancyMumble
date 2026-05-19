@@ -1,6 +1,7 @@
 import { HeadphonesOffIcon, MicOffIcon, ScreenShareIcon, ShieldCheckIcon, StarIcon, VolumeIcon } from "../../icons";
 import { memo, useState, useMemo, useCallback, useEffect, useRef, createContext, useContext } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../store";
 import type { UserEntry, FancyProfile, AclGroup } from "../../types";
 import { parseComment } from "../../profileFormat";
@@ -282,6 +283,7 @@ export const UserListItem = memo(function UserListItem({
   onContextMenu,
   onRequestComment,
 }: UserListItemProps) {
+  const { t } = useTranslation("sidebar");
   const roleColors = useContext(RoleColorsContext);
   const roleColor = user.user_id != null ? (roleColors.get(user.user_id) ?? null) : null;
   const roleGroups = useContext(RoleGroupsContext);
@@ -371,22 +373,22 @@ export const UserListItem = memo(function UserListItem({
       {(isRegistered || (!isSelf && (isMuted || isDeafened || isPriority))) && (
         <span className={styles.statusIcons}>
           {isRegistered && (
-            <span className={`${styles.statusIcon} ${styles.registered}`} title="Registered">
+            <span className={`${styles.statusIcon} ${styles.registered}`} title={t("userListItem.registeredTitle")}>
               <RegisteredIcon />
             </span>
           )}
           {!isSelf && isMuted && !isDeafened && (
-            <span className={`${styles.statusIcon} ${styles.muted}`} title={user.mute ? "Server muted" : "Self muted"}>
+            <span className={`${styles.statusIcon} ${styles.muted}`} title={user.mute ? t("userListItem.serverMutedTitle") : t("userListItem.selfMutedTitle")}>
               <MutedIcon />
             </span>
           )}
           {!isSelf && isDeafened && (
-            <span className={`${styles.statusIcon} ${styles.deafened}`} title={user.deaf ? "Server deafened" : "Self deafened"}>
+            <span className={`${styles.statusIcon} ${styles.deafened}`} title={user.deaf ? t("userListItem.serverDeafenedTitle") : t("userListItem.selfDeafenedTitle")}>
               <DeafenedIcon />
             </span>
           )}
           {!isSelf && isPriority && (
-            <span className={`${styles.statusIcon} ${styles.prioritySpeaker}`} title="Priority speaker">
+            <span className={`${styles.statusIcon} ${styles.prioritySpeaker}`} title={t("userListItem.prioritySpeakerTitle")}>
               <PriorityIcon />
             </span>
           )}
@@ -395,10 +397,10 @@ export const UserListItem = memo(function UserListItem({
       {isBroadcasting && (
         <span
           className={`${styles.liveBadge} ${!sfuAvailable ? styles.liveBadgeP2P : ""}`}
-          title={sfuAvailable ? "Sharing screen (server-relayed)" : "Sharing screen (peer-to-peer)"}
+          title={sfuAvailable ? t("userListItem.sharingScreenSfuTitle") : t("userListItem.sharingScreenP2PTitle")}
         >
           <ScreenShareIcon width={10} height={10} />
-          {sfuAvailable ? "Live" : "P2P"}
+          {sfuAvailable ? t("userListItem.liveBadge") : t("userListItem.liveBadgeP2P")}
         </span>
       )}
       {dmUnread > 0 && (

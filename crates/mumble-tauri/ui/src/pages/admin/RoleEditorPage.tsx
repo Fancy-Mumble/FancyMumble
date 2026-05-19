@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useNavigate, useParams } from "react-router-dom";
@@ -14,15 +15,10 @@ import styles from "./AdminPanel.module.css";
 
 type SubTab = "display" | "permissions" | "members";
 
-const SUB_TABS: TabDef<SubTab>[] = [
-  { id: "display", label: "Display", icon: "\uD83C\uDFA8" },
-  { id: "permissions", label: "Permissions", icon: "\uD83D\uDD12" },
-  { id: "members", label: "Members", icon: "\uD83D\uDC65" },
-];
-
 export default function RoleEditorPage() {
   const { groupName: encodedName = "" } = useParams<{ groupName: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation("settings");
   const channels = useAppStore((s) => s.channels);
   const rootId = useMemo(() => rootChannelId(channels), [channels]);
   const { acl, loading, dirty, saving, setAcl, save } = useChannelAcl(rootId);
@@ -41,6 +37,12 @@ export default function RoleEditorPage() {
   const roleIdx = useMemo(() => acl?.groups.findIndex((g) => g.name === roleName) ?? -1, [acl, roleName]);
   const role: AclGroup | null = roleIdx === -1 ? null : (acl?.groups[roleIdx] ?? null);
 
+  const subTabs: TabDef<SubTab>[] = [
+    { id: "display", label: t("roleEditor.tabDisplay"), icon: "\uD83C\uDFA8" },
+    { id: "permissions", label: t("roleEditor.tabPermissions"), icon: "\uD83D\uDD12" },
+    { id: "members", label: t("roleEditor.tabMembers"), icon: "\uD83D\uDC65" },
+  ];
+
   const patchRole = (patch: Partial<AclGroup>) => {
     if (!acl || roleIdx === -1) return;
     const groups = acl.groups.map((g, i) => (i === roleIdx ? { ...g, ...patch } : g));
@@ -57,11 +59,11 @@ export default function RoleEditorPage() {
 
   let body: React.ReactNode;
   if (loading && !acl) {
-    body = <div className={styles.dimText}>Loading role...</div>;
+    body = <div className={styles.dimText}>{t("roleEditor.loadingRole")}</div>;
   } else if (!role) {
     body = (
       <div className={styles.dimText}>
-        Role <code>{roleName}</code> not found.
+        {t("roleEditor.notFound", { name: roleName })}
       </div>
     );
   } else if (tab === "display") {
@@ -86,8 +88,8 @@ export default function RoleEditorPage() {
 
   return (
     <TabbedPage
-      heading={`Role: ${roleName}`}
-      tabs={SUB_TABS}
+      heading={t("roleEditor.headingPrefix", { name: roleName })}
+      tabs={subTabs}
       activeTab={tab}
       onTabChange={setTab}
       onBack={() => navigate("/admin")}
@@ -101,7 +103,7 @@ export default function RoleEditorPage() {
               onClick={() => save()}
               disabled={saving}
             >
-              {saving ? "Saving..." : "Save changes"}
+              {saving ? t("roleEditor.saving") : t("roleEditor.saveChanges")}
             </button>
           )}
         </div>
@@ -114,7 +116,7 @@ export default function RoleEditorPage() {
               onClick={handleDelete}
               disabled={saving}
             >
-              Delete role
+              {t("roleEditor.deleteRole")}
             </button>
           </div>
         )}

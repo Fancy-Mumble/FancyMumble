@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import styles from "./UploadProgressItem.module.css";
 
 export interface UploadPlaceholder {
@@ -16,6 +17,7 @@ interface UploadProgressItemProps {
 }
 
 export default function UploadProgressItem({ placeholder, onDismiss, onCancel }: UploadProgressItemProps) {
+  const { t } = useTranslation("chat");
   const isError = placeholder.state === "error";
   const { progress } = placeholder;
   // True once all bytes are queued for the server (stream consumed) but we
@@ -43,7 +45,7 @@ export default function UploadProgressItem({ placeholder, onDismiss, onCancel }:
                 aria-valuenow={progress ?? 0}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-label="Upload progress"
+                aria-label={t("upload.progressLabel")}
               >
                 {progress !== undefined ? (
                   <div
@@ -57,7 +59,7 @@ export default function UploadProgressItem({ placeholder, onDismiss, onCancel }:
             )}
             {isError && (
               <span className={styles.errorText}>
-                {placeholder.errorMessage ?? "Upload failed"}
+                {placeholder.errorMessage ?? t("upload.failed")}
               </span>
             )}
           </div>
@@ -65,14 +67,14 @@ export default function UploadProgressItem({ placeholder, onDismiss, onCancel }:
           {!isError && (
             <>
               <span className={styles.uploadingLabel}>
-                {progress !== undefined ? `${progress}%` : "Uploading\u2026"}
+                {progress !== undefined ? `${progress}%` : t("upload.uploading")}
               </span>
               <button
                 type="button"
                 className={styles.dismissBtn}
                 onClick={() => onCancel(placeholder.id)}
-                title="Cancel upload"
-                aria-label="Cancel upload"
+                title={t("upload.cancel")}
+                aria-label={t("upload.cancel")}
               >
                 &#x2715;
               </button>
@@ -83,8 +85,8 @@ export default function UploadProgressItem({ placeholder, onDismiss, onCancel }:
               type="button"
               className={styles.dismissBtn}
               onClick={() => onDismiss(placeholder.id)}
-              title="Dismiss"
-              aria-label="Dismiss failed upload"
+              title={t("upload.dismiss")}
+              aria-label={t("upload.dismissFailed")}
             >
               &#x2715;
             </button>

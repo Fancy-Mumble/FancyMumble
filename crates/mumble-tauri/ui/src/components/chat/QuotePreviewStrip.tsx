@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { ChatMessage } from "../../types";
 import { colorFor } from "../../utils/format";
 import styles from "./ChatView.module.css";
@@ -18,6 +19,7 @@ function stripHtml(body: string): string {
 }
 
 export default function QuotePreviewStrip({ quotes, onRemove }: QuotePreviewStripProps) {
+  const { t } = useTranslation("chat");
   if (quotes.length === 0) return null;
 
   return (
@@ -39,14 +41,14 @@ export default function QuotePreviewStrip({ quotes, onRemove }: QuotePreviewStri
                 {q.sender_name}
               </span>
               <span className={styles.quotePreviewText}>
-                {preview || "Media"}
+                {preview || t("quotePreview.mediaFallback")}
               </span>
             </div>
             <button
               type="button"
               className={styles.quotePreviewRemove}
               onClick={() => onRemove(q.message_id!)}
-              aria-label="Remove quote"
+              aria-label={t("quotePreview.remove")}
             >
               &times;
             </button>

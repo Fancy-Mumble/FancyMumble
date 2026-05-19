@@ -2156,7 +2156,7 @@ export async function initEventListeners(
           return;
         }
 
-        // Active session was the one that disconnected — proceed with
+        // Active session was the one that disconnected - proceed with
         // the full local cleanup.
         offloadManager.dispose().catch(() => {});
         volumeAppliedSessions.clear();
@@ -2891,7 +2891,7 @@ export async function initEventListeners(
           // Clear any messages that were decrypted before the challenge
           // result arrived (prevents flash of unauthorized content).
           const clearMessages = prev.selectedChannel === channel_id;
-          // Stop the loading spinner — no fetch response will arrive.
+          // Stop the loading spinner - no fetch response will arrive.
           const nextLoading = new Set(prev.pchatHistoryLoading);
           nextLoading.delete(channel_id);
           const { [channel_id]: prevPersist, ...restPersist } = prev.channelPersistence;

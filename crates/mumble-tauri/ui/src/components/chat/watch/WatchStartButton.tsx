@@ -9,6 +9,7 @@
 
 import { memo } from "react";
 
+import { useTranslation } from "react-i18next";
 import { useWatchStart } from "./useWatchStart";
 import styles from "./WatchTogetherCard.module.css";
 
@@ -18,6 +19,7 @@ interface Props {
 }
 
 function WatchStartButtonImpl({ body, channelId }: Props) {
+  const { t } = useTranslation("chat");
   const { canStart, busy, start } = useWatchStart(body, channelId);
 
   if (!canStart) return null;
@@ -28,9 +30,9 @@ function WatchStartButtonImpl({ body, channelId }: Props) {
       className={styles.startBtn}
       onClick={() => void start()}
       disabled={busy}
-      title="Start a synchronised watch session for this video"
+      title={t("watch.startTooltip")}
     >
-      {busy ? "Starting\u2026" : "Watch together"}
+      {busy ? t("watch.starting") : t("watch.watchTogether")}
     </button>
   );
 }

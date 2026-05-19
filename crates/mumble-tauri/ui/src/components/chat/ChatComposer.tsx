@@ -1,5 +1,6 @@
 import { AttachIcon, CloseIcon, EditIcon, FileIcon, GifIcon, ImageIcon, SendIcon } from "../../icons";
 import { useState, useRef, useCallback, useMemo, useEffect, type ClipboardEvent } from "react";
+import { useTranslation } from "react-i18next";
 import MarkdownInput, { type MarkdownInputApi } from "./MarkdownInput";
 import GifPicker from "./GifPicker";
 import MentionAutocomplete, { type MentionCandidate, handleMentionKey } from "./MentionAutocomplete";
@@ -56,6 +57,7 @@ export default function ChatComposer({
 }: ChatComposerProps) {
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const { t } = useTranslation("chat");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const inputApi = useRef<MarkdownInputApi | null>(null);
@@ -231,7 +233,7 @@ export default function ChatComposer({
       {isEditing && (
         <div className={styles.editBanner}>
           <EditIcon width={14} height={14} />
-          <span>Editing message</span>
+          <span>{t("composer.editingMessage")}</span>
           <button type="button" className={styles.editBannerClose} onClick={onCancelEdit}>
             <CloseIcon width={14} height={14} />
           </button>
@@ -258,7 +260,7 @@ export default function ChatComposer({
             className={`${styles.attachBtn} ${showAttachMenu ? styles.attachBtnActive : ""}`}
             onClick={handleAttachBtnClick}
             disabled={disabled}
-            title={onAttachFile ? "Attach image or file" : "Attach image, GIF, or video"}
+            title={onAttachFile ? t("composer.attachTooltipImageFile") : t("composer.attachTooltipImageOnly")}
           >
             <AttachIcon width={20} height={20} />
           </button>
@@ -266,11 +268,11 @@ export default function ChatComposer({
             <div className={styles.attachMenu} role="menu">
               <button type="button" className={styles.attachMenuItem} role="menuitem" onClick={handlePickImage}>
                 <ImageIcon width={15} height={15} />
-                Image / Video
+                {t("composer.attachMenuImage")}
               </button>
               <button type="button" className={styles.attachMenuItem} role="menuitem" onClick={handlePickFile}>
                 <FileIcon width={15} height={15} />
-                File
+                {t("composer.attachMenuFile")}
               </button>
             </div>
           )}
@@ -281,7 +283,7 @@ export default function ChatComposer({
           className={`${styles.attachBtn} ${showGifPicker ? styles.attachBtnActive : ""}`}
           onClick={() => setShowGifPicker((s) => !s)}
           disabled={disabled}
-          title="GIF picker"
+          title={t("composer.gifPickerTooltip")}
         >
           <GifIcon width={20} height={20} />
         </button>
@@ -301,7 +303,7 @@ export default function ChatComposer({
             onChange={onChange}
             onSubmit={onSend}
             onPaste={onPaste}
-            placeholder={isMobile ? "Write a message..." : "Write a message... (Ctrl+B/I/U for formatting)"}
+            placeholder={isMobile ? t("composer.placeholderMobile") : t("composer.placeholderDesktop")}
             disabled={disabled}
             apiRef={inputApi}
             onSelectionChange={handleSelectionChange}

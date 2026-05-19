@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import styles from "./RecordingModal.module.css";
@@ -26,10 +27,6 @@ interface RecordingState {
 interface RecordingModalProps {
   readonly onClose: () => void;
 }
-
-const WILDCARD_HELP =
-  "{date} = YYYY-MM-DD, {time} = HH-MM-SS, {datetime} = date + time, " +
-  "{host} = server, {user} = username, {channel} = channel name";
 
 function formatElapsed(secs: number): string {
   const h = Math.floor(secs / 3600);
@@ -53,6 +50,7 @@ export default function RecordingModal({
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { t } = useTranslation("sidebar");
 
   // Poll recording state on mount to resume UI if already recording.
   useEffect(() => {
@@ -136,7 +134,7 @@ export default function RecordingModal({
         aria-modal="true"
       >
         <div className={styles.header}>
-          <h3 className={styles.title}>Record Audio</h3>
+          <h3 className={styles.title}>{t("recordingModal.title")}</h3>
           <button className={styles.closeBtn} onClick={onClose}>
             &#x2715;
           </button>
@@ -148,7 +146,7 @@ export default function RecordingModal({
             <div className={styles.statusBar}>
               <span className={styles.recordingDot} />
               <span className={styles.statusText}>
-                Recording to {filePath}
+                {t("recordingModal.recordingTo", { path: filePath })}
               </span>
               <span className={styles.elapsed}>
                 {formatElapsed(elapsed)}
@@ -158,26 +156,26 @@ export default function RecordingModal({
 
           {/* Output format */}
           <div className={styles.field}>
-            <label className={styles.label}>Format</label>
+            <label className={styles.label}>{t("recordingModal.labelFormat")}</label>
             <select
               className={styles.select}
               value={format}
               onChange={(e) => setFormat(e.target.value as RecordingFormat)}
               disabled={recording}
             >
-              <option value="wav">WAV (lossless, 48 kHz 16-bit PCM)</option>
+              <option value="wav">{t("recordingModal.formatWav")}</option>
             </select>
           </div>
 
           {/* Target directory */}
           <div className={styles.field}>
-            <label className={styles.label}>Directory</label>
+            <label className={styles.label}>{t("recordingModal.labelDirectory")}</label>
             <div className={styles.directoryRow}>
               <input
                 className={styles.input}
                 value={directory}
                 onChange={(e) => setDirectory(e.target.value)}
-                placeholder="Select output directory..."
+                placeholder={t("recordingModal.directoryPlaceholder")}
                 disabled={recording}
               />
               <button
@@ -185,14 +183,14 @@ export default function RecordingModal({
                 onClick={handleBrowse}
                 disabled={recording}
               >
-                Browse
+                {t("recordingModal.browse")}
               </button>
             </div>
           </div>
 
           {/* Filename template */}
           <div className={styles.field}>
-            <label className={styles.label}>Filename</label>
+            <label className={styles.label}>{t("recordingModal.labelFilename")}</label>
             <input
               className={styles.input}
               value={filename}
@@ -200,7 +198,7 @@ export default function RecordingModal({
               placeholder="recording_{datetime}"
               disabled={recording}
             />
-            <span className={styles.fieldHint}>{WILDCARD_HELP}</span>
+            <span className={styles.fieldHint}>{t("recordingModal.wildcardHelp")}</span>
           </div>
 
           {/* Error display */}
@@ -213,11 +211,11 @@ export default function RecordingModal({
 
         <div className={styles.footer}>
           <button className={styles.cancelBtn} onClick={onClose}>
-            Close
+            {t("recordingModal.close")}
           </button>
           {recording ? (
             <button className={styles.stopBtn} onClick={handleStop}>
-              Stop Recording
+              {t("recordingModal.stopRecording")}
             </button>
           ) : (
             <button
@@ -225,7 +223,7 @@ export default function RecordingModal({
               onClick={handleStart}
               disabled={!canStart}
             >
-              Start Recording
+              {t("recordingModal.startRecording")}
             </button>
           )}
         </div>

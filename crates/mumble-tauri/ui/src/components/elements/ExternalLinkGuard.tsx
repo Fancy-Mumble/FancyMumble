@@ -14,6 +14,7 @@ import { WarningIcon } from "../../icons";
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import styles from "./ExternalLinkGuard.module.css";
 
@@ -26,6 +27,7 @@ interface DialogProps {
 }
 
 function ExternalLinkDialog({ url, onConfirm, onCancel }: Readonly<DialogProps>) {
+  const { t } = useTranslation("common");
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   // Open as a modal and attach backdrop-click + Escape handling via native
@@ -88,12 +90,11 @@ function ExternalLinkDialog({ url, onConfirm, onCancel }: Readonly<DialogProps>)
       </div>
 
       <h2 id="ext-link-title" className={styles.title}>
-        External Link
+        {t("externalLinkGuard.title")}
       </h2>
 
       <p className={styles.body}>
-        You are about to leave <strong>Fancy Mumble</strong> and visit an
-        external website:
+        {t("externalLinkGuard.body")}
       </p>
 
       <div className={styles.urlBox} title={url}>
@@ -101,17 +102,15 @@ function ExternalLinkDialog({ url, onConfirm, onCancel }: Readonly<DialogProps>)
       </div>
 
       <p className={styles.disclaimer}>
-        This website is not affiliated with or endorsed by Fancy Mumble.
-        External links may lead to sites that contain harmful, misleading, or
-        unwanted content. Proceed only if you trust the source.
+        {t("externalLinkGuard.disclaimer")}
       </p>
 
       <div className={styles.actions}>
         <button className={styles.cancelBtn} onClick={onCancel}>
-          Cancel
+          {t("externalLinkGuard.cancelBtn")}
         </button>
         <button className={styles.openBtn} onClick={onConfirm}>
-          Open Link
+          {t("externalLinkGuard.openBtn")}
         </button>
       </div>
     </dialog>

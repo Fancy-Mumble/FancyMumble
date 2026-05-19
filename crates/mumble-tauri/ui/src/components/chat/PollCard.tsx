@@ -1,4 +1,5 @@
 import { PollIcon } from "../../icons";
+import { useTranslation } from "react-i18next";
 /**
  * PollCard - renders a poll inside the chat message view.
  *
@@ -74,6 +75,7 @@ interface PollCardProps {
 }
 
 export default function PollCard({ poll, ownSession, isOwn, onVote }: Readonly<PollCardProps>) {
+  const { t } = useTranslation("chat");
   const [_rev, forceUpdate] = useState(0);
 
   const votes = getVotes(poll.id);
@@ -133,8 +135,8 @@ export default function PollCard({ poll, ownSession, isOwn, onVote }: Readonly<P
     <div className={`${styles.card} ${isOwn ? styles.cardOwn : ""}`}>
       <div className={styles.header}>
         <PollIcon className={styles.pollIcon} width={16} height={16} />
-        <span className={styles.pollLabel}>Poll</span>
-        <span className={styles.creatorInfo}>by {poll.creatorName}</span>
+        <span className={styles.pollLabel}>{t("poll.header")}</span>
+        <span className={styles.creatorInfo}>{t("poll.by", { name: poll.creatorName })}</span>
       </div>
 
       <h4 className={styles.question}>{poll.question}</h4>
@@ -192,13 +194,13 @@ export default function PollCard({ poll, ownSession, isOwn, onVote }: Readonly<P
 
       {poll.multiple && !hasVoted && pendingSelection.length > 0 && (
         <button className={styles.voteBtn} onClick={handleSubmitMultiple}>
-          Vote ({pendingSelection.length} selected)
+          {t("poll.voteButton", { count: pendingSelection.length })}
         </button>
       )}
 
       <div className={styles.footer}>
-        <span>{totalVoters} vote{totalVoters !== 1 ? "s" : ""}</span>
-        {poll.multiple && <span> · Multiple choice</span>}
+        <span>{t("poll.totalVotes", { count: totalVoters })}</span>
+        {poll.multiple && <span> · {t("poll.multipleChoice")}</span>}
       </div>
     </div>
   );

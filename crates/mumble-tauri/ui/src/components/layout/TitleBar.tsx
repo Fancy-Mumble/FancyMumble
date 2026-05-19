@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { InfoFilledIcon, MaximizeIcon, MinimizeIcon, WindowCloseIcon } from "../../icons";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isDesktopPlatform } from "../../utils/platform";
@@ -5,6 +6,8 @@ import ServerTabsBar from "./ServerTabsBar";
 import styles from "./TitleBar.module.css";
 
 export default function TitleBar() {
+  const { t } = useTranslation("common");
+
   // On mobile (Android/iOS) there is no custom title bar - the OS
   // provides its own status bar and navigation.
   if (!isDesktopPlatform()) {
@@ -31,7 +34,7 @@ export default function TitleBar() {
         <div className={styles.logo}>
           <InfoFilledIcon width={20} height={20} />
         </div>
-        <span className={styles.title}>Fancy Mumble</span>
+        <span className={styles.title}>{t("brand")}</span>
       </div>
 
       <div className={styles.tabsSection} data-tauri-drag-region>
@@ -42,21 +45,21 @@ export default function TitleBar() {
         <button
           className={styles.controlBtn}
           onClick={handleMinimize}
-          aria-label="Minimize"
+          aria-label={t("actions.minimize")}
         >
           <MinimizeIcon width={12} height={12} />
         </button>
         <button
           className={styles.controlBtn}
           onClick={handleMaximize}
-          aria-label="Maximize"
+          aria-label={t("actions.maximize")}
         >
           <MaximizeIcon width={12} height={12} />
         </button>
         <button
           className={`${styles.controlBtn} ${styles.closeBtn}`}
           onClick={handleClose}
-          aria-label="Close"
+          aria-label={t("actions.close")}
         >
           <WindowCloseIcon width={12} height={12} />
         </button>

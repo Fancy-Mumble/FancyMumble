@@ -1,0 +1,161 @@
+﻿{
+  "brand": "Fancy Mumble",
+  "actions": {
+    "minimize": "Réduire",
+    "maximize": "Agrandir",
+    "close": "Fermer",
+    "cancel": "Annuler",
+    "dismiss": "Ignorer",
+    "retry": "Réessayer",
+    "hide": "Masquer",
+    "open": "Ouvrir",
+    "collapse": "Réduire",
+    "optional": "(facultatif)"
+  },
+  "confirmDialog": {
+    "confirmLabel": "Confirmer",
+    "cancelLabel": "Annuler"
+  },
+  "externalLinkGuard": {
+    "title": "Lien externe",
+    "body": "Vous êtes sur le point de quitter Fancy Mumble et de visiter un site web externe :",
+    "disclaimer": "Ce site n'est pas affilié à Fancy Mumble ni approuvé par Fancy Mumble. Les liens externes peuvent mener vers des sites contenant des contenus nuisibles, trompeurs ou indésirables. Ne continuez que si vous faites confiance à la source.",
+    "cancelBtn": "Annuler",
+    "openBtn": "Ouvrir le lien"
+  },
+  "fileDropZone": {
+    "defaultLabel": "Déposer un fichier ici ou cliquer pour parcourir",
+    "draggingOverlay": "Déposer le fichier ici",
+    "removeBtn": "Supprimer"
+  },
+  "kebabMenu": {
+    "ariaLabel": "Plus d'options",
+    "closeMenu": "Fermer le menu"
+  },
+  "lightbox": {
+    "ariaLabel": "Visionneuse de médias",
+    "prevAriaLabel": "Image précédente",
+    "nextAriaLabel": "Image suivante",
+    "counter": "Photo {{n}} / {{total}}",
+    "loading": "Chargement de l'image..."
+  },
+  "loadingSplash": {
+    "messages": [
+      "Réticulage des splines...",
+      "Préchauffage des microphones...",
+      "Réglage du squelch...",
+      "Persuasion des paquets d'arriver dans l'ordre...",
+      "Demande très polie à Opus...",
+      "Négociation avec les poignées de main TLS...",
+      "Polissage de votre avatar...",
+      "Recherche du bouton muet...",
+      "Comptage des bits, puis recomptage...",
+      "Préparation d'une cafetière d'UDP frais...",
+      "Traduction du serveur vers l'humain...",
+      "Démêlage des câbles audio...",
+      "Recherche d'utilisateurs perdus sous le tapis...",
+      "Caresse au débruiteur...",
+      "Rappel au GPU qu'il n'est pas invité...",
+      "Chargement suspicieusement rapide...",
+      "Presque là. Probablement."
+    ]
+  },
+  "memberPicker": {
+    "placeholder": "Ajouter un utilisateur par nom ou ID",
+    "emptyLabel": "Aucun membre",
+    "removeChipAriaLabel": "Supprimer {{name}}",
+    "userFallbackName": "Utilisateur #{{userId}}"
+  },
+  "messageActionBar": {
+    "moreReactions": "Plus de réactions",
+    "quote": "Citer",
+    "quoteAriaLabel": "Citer le message",
+    "copy": "Copier le texte",
+    "copyAriaLabel": "Copier le texte du message",
+    "moreOptions": "Plus d'options",
+    "watchTogether": "Regarder ensemble",
+    "watchTogetherStarting": "Démarrage…",
+    "delete": "Supprimer"
+  },
+  "mobileBottomSheet": {
+    "closeAriaLabel": "Fermer"
+  },
+  "quoteBlock": {
+    "unavailable": "Message non disponible",
+    "scrollTitle": "Cliquer pour accéder au message",
+    "photoFallback": "Photo",
+    "emptyFallback": "Message vide"
+  },
+  "toast": {
+    "dismissAriaLabel": "Ignorer"
+  },
+  "autocomplete": {
+    "placeholder": "Rechercher...",
+    "noOptions": "Aucune option"
+  },
+  "emojiPicker": {
+    "searchPlaceholder": "Rechercher un emoji...",
+    "empty": "Aucun emoji trouvé",
+    "catPeople": "Sourires & personnes",
+    "catNature": "Animaux & nature",
+    "catFood": "Nourriture & boissons",
+    "catActivity": "Activités",
+    "catObjects": "Objets",
+    "catSymbols": "Symboles",
+    "catFlags": "Drapeaux",
+    "catCustom": "Personnalisé"
+  },
+  "tabbedPage": {
+    "backAriaLabel": "Retour",
+    "back": "Retour"
+  },
+  "infoBanner": {
+    "dismissAriaLabel": "Ignorer la bannière"
+  },
+  "pages": {
+    "drawOverlay": {
+      "contextUnavailable": "Contexte de l'overlay de dessin non disponible"
+    },
+    "popout": {
+      "imageUnavailable": "Source d'image non disponible",
+      "missingId": "ID de popout manquant",
+      "mediaLabel": "Image"
+    },
+    "streamPopout": {
+      "connectionLost": "Connexion au stream perdue",
+      "contextUnavailable": "Contexte du stream non disponible",
+      "missingId": "ID de popout manquant",
+      "connecting": "Connexion au stream...",
+      "screenshare": "Partage d'écran",
+      "caption": "Partage d'écran en direct",
+      "mediaLabel": "Stream"
+    }
+  },
+  "updater": {
+    "heading": {
+      "available": "Mise à jour disponible",
+      "downloading": "Téléchargement de la mise à jour",
+      "installing": "Installation de la mise à jour",
+      "restarting": "Redémarrage...",
+      "failed": "Échec de la mise à jour"
+    },
+    "subtitle": {
+      "restarting": "Fancy Mumble redémarrera automatiquement lorsque c'est terminé.",
+      "checking": "Recherche de mises à jour...",
+      "autoInstall": "Préparation de l'installation de la dernière version de Fancy Mumble...",
+      "ready": "Une nouvelle version de Fancy Mumble est prête à être installée."
+    },
+    "progress": {
+      "installing": "Vérification & installation...",
+      "starting": "Démarrage du téléchargement..."
+    },
+    "closeAriaLabel": "Fermer",
+    "busyTitle": "Mise à jour en cours...",
+    "skipActive": "✓ Ignorer v{{version}} — cliquer pour annuler",
+    "skipInactive": "Ignorer v{{version}}",
+    "closeBtn": "Fermer",
+    "laterBtn": "Plus tard",
+    "retryBtn": "Réessayer",
+    "updateNowBtn": "Mettre à jour maintenant"
+  }
+}

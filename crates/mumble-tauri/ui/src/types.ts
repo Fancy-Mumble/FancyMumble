@@ -8,7 +8,7 @@ export interface ChannelEntry {
   parent_id: number | null;
   name: string;
   /** Byte length of the channel description, or null if empty.
-   *  The actual HTML must be fetched lazily via `get_channel_description` —
+   *  The actual HTML must be fetched lazily via `get_channel_description` -
    *  use `useChannelDescription(channelId, description_size)` from the store. */
   description_size: number | null;
   user_count: number;
@@ -37,7 +37,7 @@ export interface UserEntry {
   /** Registered user ID, or null/undefined if not registered. */
   user_id?: number | null;
   /** Byte length of the avatar image, or null if no avatar.
-   *  The actual bytes must be fetched lazily via `get_user_texture` —
+   *  The actual bytes must be fetched lazily via `get_user_texture` -
    *  use `useUserAvatar(session, texture_size)` from the store. */
   texture_size: number | null;
   /** Mumble comment - may contain FancyMumble profile JSON marker. */
@@ -376,6 +376,17 @@ export type UserMode = "normal" | "expert" | "developer";
 /** Preferred time display format. */
 export type TimeFormat = "12h" | "24h" | "auto";
 
+/** Preferred date display format.
+ *  - `auto`: follow the active UI language.
+ *  - `dmy`: Day/Month/Year (e.g. 17/05/2026) - most of the world.
+ *  - `mdy`: Month/Day/Year (e.g. 05/17/2026) - US, parts of Canada.
+ *  - `ymd`: Year-Month-Day / ISO 8601 (e.g. 2026-05-17). */
+export type DateFormat = "auto" | "dmy" | "mdy" | "ymd";
+
+/** Preferred number formatting. Named by the actual separators used so
+ *  no convention is privileged as "plain" or "default". */
+export type NumberFormat = "auto" | "comma-period" | "period-comma" | "space-comma";
+
 /** App-wide user preferences stored persistently. */
 export interface UserPreferences {
   /** Simplified or full-featured UI mode. */
@@ -390,6 +401,10 @@ export interface UserPreferences {
   timeFormat: TimeFormat;
   /** Convert UTC timestamps to the local timezone before displaying. */
   convertToLocalTime: boolean;
+  /** Preferred date format for message timestamps and other date displays. */
+  dateFormat?: DateFormat;
+  /** Preferred number formatting (thousands separator + decimal mark). */
+  numberFormat?: NumberFormat;
   /** Whether native OS notifications are enabled. */
   enableNotifications?: boolean;
   /** When true, encrypted channels send a placeholder instead of the real
@@ -428,7 +443,7 @@ export interface UserPreferences {
   /** Version string the user chose to skip in the updater bootstrapper.
    *  Updates matching this version are silently ignored on startup. */
   skippedUpdateVersion?: string | null;
-  /** Last active sidebar tab — restored after reconnect. */
+  /** Last active sidebar tab - restored after reconnect. */
   sidebarActiveTab?: "channels" | "members";
   /** Whether voice (mic on/can-hear) was enabled when last disconnected.
    *  On reconnect the call is re-enabled automatically when true. */

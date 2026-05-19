@@ -1,6 +1,6 @@
+﻿import { useTranslation } from "react-i18next";
 import type { AclData, AclEntry } from "../../types";
 import { PERMISSIONS } from "../../utils/permissions";
-import { PERMISSION_META } from "../../utils/permissionMeta";
 import styles from "./AdminPanel.module.css";
 
 export interface RolePermissionsPanelProps {
@@ -34,6 +34,9 @@ function ensureRoleAcl(acl: AclData, roleName: string): { acl: AclData; idx: num
 
 /** Permissions sub-tab: edit grant/deny bits for the ACL rule that targets this role. */
 export function RolePermissionsPanel({ acl, roleName, onAclChange, disabled }: RolePermissionsPanelProps) {
+  const { t } = useTranslation("settings");
+  type TFn = (key: string, opts?: Record<string, unknown>) => string;
+  const tAny = t as unknown as TFn;
   const idx = findRoleAclIndex(acl, roleName);
   const entry: AclEntry | null = idx === -1 ? null : acl.acls[idx];
 
@@ -54,20 +57,18 @@ export function RolePermissionsPanel({ acl, roleName, onAclChange, disabled }: R
   return (
     <div className={styles.editorMain}>
       <p className={styles.dimText}>
-        Permissions are stored as ACL rules on the channel. Toggling a permission
-        creates or updates an "apply here" rule that targets the <code>{roleName}</code>{" "}
-        role.
+        {t("rolePermissions.description", { role: roleName })}
       </p>
 
       {entry === null && (
-        <div className={styles.dimText}>No explicit permissions set yet.</div>
+        <div className={styles.dimText}>{t("rolePermissions.noExplicitPerms")}</div>
       )}
 
       <ul className={styles.permList}>
-        {PERMISSIONS.map(({ bit, label }) => {
-          const meta = PERMISSION_META[bit];
-          const title = meta?.title ?? label;
-          const description = meta?.description ?? `Grants the ${label} permission.`;
+        {PERMISSIONS.map(({ bit, label, ident }) => {
+          const title = tAny(`permissionMeta.${ident}.title`) || label;
+          const description = tAny(`permissionMeta.${ident}.description`)
+            || t("rolePermissions.defaultDescription", { label });
           const checked = entry !== null && (entry.grant & bit) !== 0;
           const switchId = `perm-toggle-${bit}`;
           return (
@@ -95,7 +96,7 @@ export function RolePermissionsPanel({ acl, roleName, onAclChange, disabled }: R
 
       {inheritedEntries.length > 0 && (
         <div className={styles.fieldset}>
-          <strong>Inherited rules ({inheritedEntries.length})</strong>
+          <strong>{t("rolePermissions.inheritedRules", { count: inheritedEntries.length })}</strong>
           <ul className={styles.inheritedList}>
             {inheritedEntries.map((a, i) => (
               <li key={`${a.grant}-${a.deny}-${i}`} className={styles.dimText}>

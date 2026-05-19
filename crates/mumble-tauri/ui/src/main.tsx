@@ -7,6 +7,7 @@ import { detectBackdropFilterSupport } from "./utils/platform";
 import { loadPersonalization } from "./personalizationStorage";
 import { applyTheme, DEFAULT_THEME } from "./themes";
 import { applyFont } from "./utils/fonts";
+import "./i18n";
 import "./global.css";
 
 if (isMobile) {

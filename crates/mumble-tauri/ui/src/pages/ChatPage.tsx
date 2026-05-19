@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { lazy, Suspense, useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAppStore } from "../store";
 import { isMobile } from "../utils/platform";
@@ -27,6 +28,7 @@ const MobileProfileSheet = lazy(() => import("../components/user/MobileProfileSh
 const MobileBottomSheet = lazy(() => import("../components/elements/MobileBottomSheet"));
 
 export default function ChatPage() {
+  const { t } = useTranslation("chat");
   const status = useAppStore((s) => s.status);
   const selectedChannel = useAppStore((s) => s.selectedChannel);
   const channels = useAppStore((s) => s.channels);
@@ -255,7 +257,7 @@ export default function ChatPage() {
   if (status === "disconnected" && sessions.length > 0) {
     const meta = sessions.find((s) => s.id === activeServerId);
     const serverLabel = meta?.label || meta?.host || "Server";
-    const title = error ? "Disconnected" : "Connection lost";
+    const title = error ? t("page.reconnect.titleDisconnected") : t("page.reconnect.titleLost");
     return (
       <div className={styles.reconnectPage}>
         <div className={styles.reconnectCard}>
@@ -264,7 +266,7 @@ export default function ChatPage() {
           <p className={styles.reconnectServer}>{serverLabel}</p>
           {error && (
             <div className={styles.reconnectReasonBox}>
-              <span className={styles.reconnectReasonLabel}>Reason</span>
+              <span className={styles.reconnectReasonLabel}>{t("page.reconnect.reasonLabel")}</span>
               <p className={styles.reconnectError}>{error}</p>
             </div>
           )}
@@ -274,7 +276,7 @@ export default function ChatPage() {
             onClick={() => void handleReconnect()}
             disabled={isReconnecting}
           >
-            {isReconnecting ? "Reconnecting..." : "Reconnect"}
+            {isReconnecting ? t("page.reconnect.reconnectingBtn") : t("page.reconnect.reconnectBtn")}
           </button>
         </div>
         <PasswordDialog
@@ -298,7 +300,7 @@ export default function ChatPage() {
         <button
           className={styles.menuToggle}
           onClick={toggleSidebar}
-          aria-label="Open channels"
+          aria-label={t("page.openChannelsAriaLabel")}
         >
           <MenuIcon width={24} height={24} />
         </button>
@@ -310,7 +312,7 @@ export default function ChatPage() {
           className={styles.backdrop}
           onClick={closeSidebar}
           onKeyDown={(e) => e.key === "Escape" && closeSidebar()}
-          aria-label="Close channels"
+          aria-label={t("page.closeChannelsAriaLabel")}
           type="button"
         />
       )}

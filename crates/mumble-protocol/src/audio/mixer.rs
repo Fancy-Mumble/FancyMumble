@@ -923,7 +923,7 @@ mod tests {
         mixer.feed(42, &pkt1).unwrap();
         let after_first = bufs.lock().unwrap()[&42].len();
 
-        // Feed packet at seq=0 — large backward jump triggers reset.
+        // Feed packet at seq=0 - large backward jump triggers reset.
         let pkt2 = EncodedPacket {
             data: encoded.data.clone(),
             sequence: 0,

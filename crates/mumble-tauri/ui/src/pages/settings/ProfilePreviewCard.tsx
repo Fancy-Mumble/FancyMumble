@@ -1,5 +1,6 @@
 import { MoonIcon, ShieldCheckIcon } from "../../icons";
 import type { FancyProfile } from "../../types";
+import { useTranslation } from "react-i18next";
 import { SafeHtml } from "../../components/elements/SafeHtml";
 import { formatDuration } from "../../utils/format";
 import { resolveThemePalette } from "../../utils/colorUtils";
@@ -95,6 +96,7 @@ export function ProfilePreviewCard({
   isRegistered,
   groups,
 }: Readonly<ProfilePreviewCardProps>) {
+  const { t } = useTranslation("settings");
   const nameStyle = profile.nameStyle ?? {};
   const decoration = DECORATIONS.find((d) => d.id === (profile.decoration ?? "none"));
   const nameplate = NAMEPLATES.find((n) => n.id === (profile.nameplate ?? "none"));
@@ -145,7 +147,7 @@ export function ProfilePreviewCard({
           {avatar ? (
             <img
               src={avatar}
-              alt="Avatar"
+              alt={t("profilePreview.avatarAlt")}
               className={styles.previewAvatarImg}
             />
           ) : (
@@ -191,7 +193,7 @@ export function ProfilePreviewCard({
               {displayName || "Your Name"}
             </span>
             {isRegistered && (
-              <span className={styles.previewRegisteredBadge} title="Registered">
+              <span className={styles.previewRegisteredBadge} title={t("profilePreview.registeredTitle")}>
                 <ShieldCheckIcon width={12} height={12} strokeWidth={2.5} />
               </span>
             )}

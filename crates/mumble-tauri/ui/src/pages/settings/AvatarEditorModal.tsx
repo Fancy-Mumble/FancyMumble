@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { KlipyGifBrowser } from "./KlipyGifBrowser";
 import { ImageEditor } from "./ImageEditor";
 import { FileDropZone } from "../../components/elements/FileDropZone";
@@ -96,6 +97,8 @@ export function AvatarEditorModal({
     onConfirm(activeImage ?? null);
   };
 
+  const { t } = useTranslation("settings");
+
   const handleRemoveImage = () => {
     setLocalImage(undefined);
   };
@@ -106,14 +109,14 @@ export function AvatarEditorModal({
         className={styles.modal}
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className={styles.title}>Edit Avatar</h3>
+        <h3 className={styles.title}>{t("avatarEditor.title")}</h3>
 
         {/* Preview */}
         <div className={styles.avatarPreview}>
           {activeImage ? (
-            <img src={activeImage} alt="Avatar preview" />
+            <img src={activeImage} alt={t("avatarEditor.previewAlt")} />
           ) : (
-            <span className={styles.avatarPlaceholder}>No image</span>
+            <span className={styles.avatarPlaceholder}>{t("avatarEditor.noImage")}</span>
           )}
         </div>
 
@@ -124,14 +127,14 @@ export function AvatarEditorModal({
             className={`${styles.tab} ${tab === "image" ? styles.tabActive : ""}`}
             onClick={() => setTab("image")}
           >
-            Image / GIF
+            {t("avatarEditor.tabImage")}
           </button>
           <button
             type="button"
             className={`${styles.tab} ${tab === "gif" ? styles.tabActive : ""}`}
             onClick={() => setTab("gif")}
           >
-            Klipy GIF
+            {t("avatarEditor.tabKlipy")}
           </button>
         </div>
 
@@ -141,11 +144,11 @@ export function AvatarEditorModal({
             <FileDropZone
               accept="image/png,image/jpeg,image/webp,image/gif"
               onFile={handleFileSelect}
-              label="Drop an image or GIF here, or click to browse"
+              label={t("avatarEditor.dropLabel")}
               shape="circle"
               preview={
                 localImage ? (
-                  <img src={localImage} alt="Avatar" />
+                  <img src={localImage} alt={t("avatarEditor.imgAlt")} />
                 ) : undefined
               }
               onRemove={localImage ? handleRemoveImage : undefined}
@@ -164,12 +167,12 @@ export function AvatarEditorModal({
             className={settingsStyles.ghostBtn}
             onClick={onCancel}
           >
-            Discard
+            {t("avatarEditor.discardBtn")}
           </button>
           <div className={styles.applyWrapper}>
             {showUnsavedHint && (
               <div className={styles.unsavedBubble}>
-                You have unsaved changes. Apply or discard them.
+                {t("avatarEditor.unsavedHint")}
               </div>
             )}
             <button
@@ -177,7 +180,7 @@ export function AvatarEditorModal({
               className={`${settingsStyles.applyBtn} ${showUnsavedHint ? styles.applyFlash : ""}`}
               onClick={handleApply}
             >
-              Apply
+              {t("avatarEditor.applyBtn")}
             </button>
           </div>
         </div>

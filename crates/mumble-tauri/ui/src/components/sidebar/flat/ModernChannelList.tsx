@@ -14,6 +14,7 @@ import { ChevronRightIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MicOffS
  */
 
 import { useState, useMemo, useCallback, useContext, useRef, useLayoutEffect, memo } from "react";
+import { useTranslation } from "react-i18next";
 import type { ChannelEntry, UserEntry } from "../../../types";
 import { colorFor, useHoverCardPosition, UserHoverCardPortal, RoleColorsContext } from "../UserListItem";
 import { useUserAvatar } from "../../../lazyBlobs";
@@ -79,6 +80,7 @@ interface MemberItemProps {
 }
 
 function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMenu, onClick }: MemberItemProps) {
+  const { t } = useTranslation("sidebar");
   const ownSession = useAppStore((s) => s.ownSession);
   const selectedDmUser = useAppStore((s) => s.selectedDmUser);
   const dmUnread = useAppStore((s) => s.dmUnreadCounts[user.session] ?? 0);
@@ -159,13 +161,13 @@ function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMe
           <HeadphonesOffIcon className={styles.statusIcon} width={12} height={12} />
         )}
         {isBroadcasting && (
-          <span className={styles.liveBadge} title="Sharing screen">
+          <span className={styles.liveBadge} title={t("channelList.sharingScreen")}>
             <ScreenShareIcon width={10} height={10} />
-            Live
+            {t("channelList.liveBadge")}
           </span>
         )}
         {dmUnread > 0 && (
-          <span className={styles.dmUnreadBadge} title={`${dmUnread} unread direct message${dmUnread === 1 ? "" : "s"}`}>
+          <span className={styles.dmUnreadBadge} title={t("channelList.dmUnread", { count: dmUnread })}>
             {dmUnread > 99 ? "99+" : dmUnread}
           </span>
         )}
@@ -257,6 +259,8 @@ function ModernChannelListImpl({
       return next;
     });
   }, []);
+
+  const { t } = useTranslation("sidebar");
 
   // Build a map of users per channel.
   const usersByChannel = useMemo(() => {
@@ -376,7 +380,7 @@ function ModernChannelListImpl({
               type="button"
               className={styles.expandBtn}
               onClick={() => toggleCollapsed(channel.id)}
-              aria-label={isCollapsed ? "Expand" : "Collapse"}
+              aria-label={isCollapsed ? t("channelList.expand") : t("channelList.collapse")}
             >
               <ChevronRightIcon
                 className={`${styles.chevron} ${isCollapsed ? "" : styles.chevronOpen}`}
@@ -394,14 +398,14 @@ function ModernChannelListImpl({
             onContextMenu={(e) => onContextMenu(e, channel.id)}
           >
             <span className={styles.channelName}>
-              {channel.name || "Root"}
+              {channel.name || t("channelList.root")}
               {isLocked && (
-                <span className={styles.lockBadge} title="No permission to join">
+                <span className={styles.lockBadge} title={t("channelList.noPermissionToJoin")}>
                   <LockIcon width={11} height={11} />
                 </span>
               )}
               {isListened && (
-                <span className={styles.listenBadge} title="Listening">
+                <span className={styles.listenBadge} title={t("channelList.listening")}>
                   <ListenBadgeIcon width={12} height={12} />
                 </span>
               )}

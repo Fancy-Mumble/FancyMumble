@@ -9,6 +9,14 @@
   align-items: center;
 }
 
+.startAdornment {
+  position: absolute;
+  left: 0.5rem;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
 .input {
   width: 100%;
   padding: 0.4rem 2rem 0.4rem 0.55rem;
@@ -20,6 +28,10 @@
   box-sizing: border-box;
   outline: none;
   transition: border-color 0.12s;
+}
+
+.inputWithAdornment {
+  padding-left: 2.2rem;
 }
 
 .input:focus {

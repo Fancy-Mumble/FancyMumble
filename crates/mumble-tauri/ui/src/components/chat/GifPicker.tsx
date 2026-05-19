@@ -1,4 +1,5 @@
 import { SearchIcon } from "../../icons";
+import { useTranslation } from "react-i18next";
 /**
  * GifPicker - popup GIF / Sticker search & browse powered by Klipy.
  *
@@ -208,6 +209,7 @@ interface GifPickerProps {
 }
 
 export default function GifPicker({ onSelect, onClose }: Readonly<GifPickerProps>) {
+  const { t } = useTranslation("chat");
   const [tab, setTab] = useState<TabId>("gifs");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<KlipyGif[]>([]);
@@ -365,13 +367,13 @@ export default function GifPicker({ onSelect, onClose }: Readonly<GifPickerProps
             className={`${styles.tab} ${tab === "gifs" ? styles.active : ""}`}
             onClick={() => { setTab("gifs"); setQuery(""); }}
           >
-            GIFs
+            {t("gifPicker.tabGifs")}
           </button>
           <button
             className={`${styles.tab} ${tab === "stickers" ? styles.active : ""}`}
             onClick={() => { setTab("stickers"); setQuery(""); }}
           >
-            Stickers
+            {t("gifPicker.tabStickers")}
           </button>
         </div>
         <button className={styles.closeBtn} onClick={onClose}>
@@ -384,7 +386,7 @@ export default function GifPicker({ onSelect, onClose }: Readonly<GifPickerProps
         <SearchIcon className={styles.searchIcon} width={16} height={16} />
         <input
           className={styles.searchInput}
-          placeholder={`Search ${tab}...`}
+          placeholder={t("gifPicker.searchPlaceholder", { tab: tab === "gifs" ? t("gifPicker.tabGifs") : t("gifPicker.tabStickers") })}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           autoFocus
@@ -394,7 +396,7 @@ export default function GifPicker({ onSelect, onClose }: Readonly<GifPickerProps
       {/* Content */}
       <div className={styles.content}>
         {loading && results.length === 0 && (
-          <div className={styles.loadingMsg}>Loading...</div>
+          <div className={styles.loadingMsg}>{t("gifPicker.loading")}</div>
         )}
 
         {/* Category grid */}
@@ -438,12 +440,12 @@ export default function GifPicker({ onSelect, onClose }: Readonly<GifPickerProps
 
         {/* Spinner shown while loading subsequent pages */}
         {loadingMore && (
-          <div className={styles.loadingMore}>Loading...</div>
+          <div className={styles.loadingMore}>{t("gifPicker.loading")}</div>
         )}
 
         {!loading && results.length === 0 && query && (
           <div className={styles.emptyMsg}>
-            No {tab} found for "{query}"
+            {t("gifPicker.noResults", { tab: tab === "gifs" ? t("gifPicker.tabGifs") : t("gifPicker.tabStickers"), query })}
           </div>
         )}
       </div>

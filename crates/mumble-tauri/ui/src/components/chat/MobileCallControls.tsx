@@ -1,4 +1,5 @@
 import { HeadphonesIcon, HeadphonesOffIcon, MicIcon, MicOffIcon } from "../../icons";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../store";
 import styles from "./MobileCallControls.module.css";
 
@@ -10,6 +11,7 @@ import styles from "./MobileCallControls.module.css";
  * sidebar hang-up button, even if voice is deafened.
  */
 export default function MobileCallControls() {
+  const { t } = useTranslation("chat");
   const voiceState = useAppStore((s) => s.voiceState);
   const inCall = useAppStore((s) => s.inCall);
   const toggleMute = useAppStore((s) => s.toggleMute);
@@ -19,7 +21,7 @@ export default function MobileCallControls() {
 
   const isActive = voiceState === "active";
   const isInactive = voiceState === "inactive";
-  const muteTitle = isActive ? "Mute" : "Unmute";
+  const muteTitle = isActive ? t("callControls.mute") : t("callControls.unmute");
 
   return (
     <div className={styles.bar}>
@@ -38,14 +40,14 @@ export default function MobileCallControls() {
       <button
         className={`${styles.btn} ${isInactive ? "" : styles.btnActive}`}
         onClick={toggleDeafen}
-        title={isInactive ? "Undeafen" : "Deafen"}
+        title={isInactive ? t("callControls.undeafen") : t("callControls.deafen")}
       >
         {isInactive ? (
           <HeadphonesOffIcon width={18} height={18} />
         ) : (
           <HeadphonesIcon width={18} height={18} />
         )}
-        <span className={styles.label}>{isInactive ? "Undeafen" : "Deafen"}</span>
+        <span className={styles.label}>{isInactive ? t("callControls.undeafen") : t("callControls.deafen")}</span>
       </button>
     </div>
   );

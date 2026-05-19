@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { useAppStore } from "../../store";
@@ -29,17 +30,20 @@ function pingClass(ping?: ServerPingResult): string {
   return styles.dotPoor;
 }
 
-function pingTitle(ping?: ServerPingResult): string {
-  if (!ping) return "Checking...";
-  if (!ping.online) return "Offline";
-  const ms = ping.latency_ms ?? 0;
-  return `${ms} ms`;
-}
+
 
 export default function AddServerPopover({ anchor, onClose }: Readonly<Props>) {
   const navigate = useNavigate();
   const connect = useAppStore((s) => s.connect);
   const sessions = useAppStore((s) => s.sessions);
+
+  const { t } = useTranslation("server");
+
+  const pingTitle = (ping?: ServerPingResult): string => {
+    if (!ping) return t("list.checking");
+    if (!ping.online) return t("list.offline");
+    return `${ping.latency_ms ?? 0} ms`;
+  };
 
   const [servers, setServers] = useState<SavedServer[] | null>(null);
   const [pings, setPings] = useState<Record<string, ServerPingResult>>({});
@@ -173,27 +177,27 @@ export default function AddServerPopover({ anchor, onClose }: Readonly<Props>) {
       className={styles.popover}
       style={{ top: pos.top, right: pos.right }}
       role="dialog"
-      aria-label="Connect to a server"
+      aria-label={t("addPopover.title")}
     >
       <div className={styles.header}>
-        <span className={styles.title}>Connect to a server</span>
+        <span className={styles.title}>{t("addPopover.title")}</span>
         <button
           type="button"
           className={styles.headerBtn}
           onClick={handleAddNew}
-          title="Add a new server"
+          title={t("addPopover.newButtonTitle")}
         >
-          + New
+          {t("addPopover.newButton")}
         </button>
       </div>
 
-      {servers === null && <div className={styles.empty}>Loading...</div>}
+      {servers === null && <div className={styles.empty}>{t("addPopover.loading")}</div>}
 
       {servers !== null && servers.length === 0 && (
         <div className={styles.empty}>
-          <p>No saved servers yet.</p>
+          <p>{t("addPopover.emptyState")}</p>
           <button type="button" className={styles.primaryBtn} onClick={handleAddNew}>
-            Add your first server
+            {t("addPopover.addFirstServer")}
           </button>
         </div>
       )}
@@ -205,14 +209,14 @@ export default function AddServerPopover({ anchor, onClose }: Readonly<Props>) {
               ref={searchInputRef}
               type="text"
               className={styles.searchInput}
-              placeholder="Search servers..."
+              placeholder={t("addPopover.searchPlaceholder")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               autoFocus
             />
           </div>
           {filteredServers && filteredServers.length === 0 ? (
-            <div className={styles.empty}>No matches</div>
+            <div className={styles.empty}>{t("addPopover.noMatches")}</div>
           ) : (
             <ul className={styles.list} role="list">
               {filteredServers?.map((s) => {
@@ -226,14 +230,14 @@ export default function AddServerPopover({ anchor, onClose }: Readonly<Props>) {
                   className={styles.item}
                   disabled={alreadyConnected}
                   onClick={() => void handleQuickConnect(s)}
-                  title={alreadyConnected ? "Already connected" : `${s.username}@${s.host}:${s.port}`}
+                  title={alreadyConnected ? t("addPopover.alreadyConnected") : `${s.username}@${s.host}:${s.port}`}
                 >
                   <span className={`${styles.pingDot} ${pingClass(ping)}`} title={pingTitle(ping)} />
                   <span className={styles.itemBody}>
                     <span className={styles.itemLabel}>{s.label || s.host}</span>
                     <span className={styles.itemMeta}>
                       {s.username}
-                      {alreadyConnected && <span className={styles.connectedTag}>Connected</span>}
+                      {alreadyConnected && <span className={styles.connectedTag}>{t("addPopover.connectedTag")}</span>}
                     </span>
                   </span>
                 </button>

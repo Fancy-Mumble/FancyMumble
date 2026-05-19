@@ -23,6 +23,8 @@ const DEFAULTS: UserPreferences = {
   klipyApiKey: "",
   timeFormat: "auto",
   convertToLocalTime: true,
+  dateFormat: "auto",
+  numberFormat: "auto",
   enableNotifications: true,
   enableDualPath: false,
   debugLogging: false,

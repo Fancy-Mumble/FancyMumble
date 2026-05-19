@@ -1,4 +1,5 @@
-import { useId, useRef, type ChangeEvent } from "react";
+﻿import { useId, useRef, type ChangeEvent } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./RoleColorPicker.module.css";
 
 export interface RoleColorPickerProps {
@@ -29,6 +30,7 @@ function isValidColor(input: string): boolean {
  * input with a hex text field and a row of preset swatches.
  */
 export function RoleColorPicker({ value, onChange, presets = DEFAULT_PRESETS, disabled }: RoleColorPickerProps) {
+  const { t } = useTranslation("settings");
   const inputId = useId();
   const colorInputRef = useRef<HTMLInputElement>(null);
   const current = value ?? "";
@@ -59,7 +61,7 @@ export function RoleColorPicker({ value, onChange, presets = DEFAULT_PRESETS, di
           className={`${styles.swatch} ${!current ? styles.empty : ""}`}
           style={current ? ({ "--swatch-color": current } as React.CSSProperties) : undefined}
           onClick={handleSwatchClick}
-          aria-label="Open color picker"
+          aria-label={t("roleDisplay.colorPickerOpen")}
           disabled={disabled}
         />
         <input
@@ -80,7 +82,7 @@ export function RoleColorPicker({ value, onChange, presets = DEFAULT_PRESETS, di
         />
         {current && !disabled && (
           <button type="button" className={styles.clearBtn} onClick={() => onChange(null)}>
-            Clear
+            {t("roleDisplay.colorPickerClear")}
           </button>
         )}
       </div>
@@ -92,7 +94,7 @@ export function RoleColorPicker({ value, onChange, presets = DEFAULT_PRESETS, di
             className={`${styles.presetSwatch} ${current.toLowerCase() === p.toLowerCase() ? styles.active : ""}`}
             style={{ background: p }}
             onClick={() => onChange(p)}
-            aria-label={`Use color ${p}`}
+            aria-label={t("roleDisplay.colorPickerUseColor", { color: p })}
             disabled={disabled}
           />
         ))}

@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { loadImage, cropToCanvas, resizeImage } from "./imageUtils";
 import styles from "./SettingsPage.module.css";
 
@@ -32,6 +33,7 @@ export function ImageEditor({
   onConfirm,
   onCancel,
 }: ImageEditorProps) {
+  const { t } = useTranslation("settings");
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -135,7 +137,7 @@ export function ImageEditor({
     <div className={styles.editorOverlay} onClick={onCancel}>
       <div className={styles.editorModal} onClick={(e) => e.stopPropagation()}>
         <h3 className={styles.editorTitle}>
-          {cropShape === "circle" ? "Crop Avatar" : "Crop Banner"}
+          {cropShape === "circle" ? t("imageEditor.titleAvatar") : t("imageEditor.titleBanner")}
         </h3>
 
         {/* Viewport */}
@@ -236,7 +238,7 @@ export function ImageEditor({
             className={styles.ghostBtn}
             onClick={onCancel}
           >
-            Cancel
+            {t("imageEditor.cancelBtn")}
           </button>
           <button
             type="button"
@@ -244,7 +246,7 @@ export function ImageEditor({
             onClick={handleConfirm}
             style={{ padding: "8px 24px", width: "auto" }}
           >
-            Apply
+            {t("imageEditor.applyBtn")}
           </button>
         </div>
       </div>

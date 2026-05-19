@@ -1,5 +1,6 @@
 import { ChevronRightIcon } from "../../icons";
 import { useState, useCallback, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { eventToShortcut } from "./shortcutHelpers";
 import styles from "./SettingsPage.module.css";
 
@@ -106,6 +107,7 @@ export function ShortcutRecorder({
   onChange: (shortcut: string) => void;
 }) {
   const [recording, setRecording] = useState(false);
+  const { t } = useTranslation("settings");
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -128,7 +130,7 @@ export function ShortcutRecorder({
           className={`${styles.recorderInput} ${styles.recorderActive}`}
           autoFocus
           readOnly
-          placeholder="Press a key combo..."
+          placeholder={t("shared.shortcutPlaceholder")}
           onKeyDown={handleKeyDown}
           onBlur={() => setRecording(false)}
         />
@@ -138,7 +140,7 @@ export function ShortcutRecorder({
           className={styles.recorderBtn}
           onClick={() => setRecording(true)}
         >
-          {value || "Not set"}
+          {value || t("shared.shortcutNotSet")}
         </button>
       )}
       <button
@@ -146,7 +148,7 @@ export function ShortcutRecorder({
         className={styles.clearBtn}
         style={{ visibility: value ? "visible" : "hidden" }}
         onClick={() => onChange("")}
-        title="Clear shortcut"
+        title={t("shared.clearShortcutTitle")}
         disabled={!value}
       >
         ✕

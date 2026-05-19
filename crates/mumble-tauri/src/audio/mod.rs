@@ -101,7 +101,7 @@ pub trait AudioDeviceFactory {
 /// A playback device that mixes multiple speakers in its audio callback.
 ///
 /// Unlike [`AudioPlayback`], this device does not receive frames via
-/// `write_frame` — decoded samples are written into [`SpeakerBuffers`]
+/// `write_frame` - decoded samples are written into [`SpeakerBuffers`]
 /// by the [`AudioMixer`](mumble_protocol::audio::mixer::AudioMixer),
 /// and the callback reads + sums them directly.
 pub trait MixingPlayback: Send + 'static {

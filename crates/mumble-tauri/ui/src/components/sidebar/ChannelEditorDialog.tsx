@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import type { ChannelEntry, PchatProtocol } from "../../types";
 import { useAppStore } from "../../store";
 import { useChannelDescription } from "../../lazyBlobs";
@@ -79,6 +80,7 @@ export default function ChannelEditorDialog({
   onClose,
 }: ChannelEditorProps) {
   const isCreate = channel === null;
+  const { t } = useTranslation("sidebar");
   const createChannel = useAppStore((s) => s.createChannel);
   const updateChannel = useAppStore((s) => s.updateChannel);
 
@@ -208,31 +210,31 @@ export default function ChannelEditorDialog({
         if (e.key === "Escape") onClose();
       }}
     >
-      <div className={styles.dialog} role="dialog" aria-modal="true" aria-label={isCreate ? "Create Channel" : "Edit Channel"}>
-        <h3 className={styles.title}>{isCreate ? "Create Channel" : "Edit Channel"}</h3>
+      <div className={styles.dialog} role="dialog" aria-modal="true" aria-label={isCreate ? t("channelEditor.ariaCreate") : t("channelEditor.ariaEdit")}>
+        <h3 className={styles.title}>{isCreate ? t("channelEditor.titleCreate") : t("channelEditor.titleEdit")}</h3>
 
         {/* Name */}
         <div className={styles.field}>
-          <label className={styles.label} htmlFor="ch-ed-name">Name</label>
+          <label className={styles.label} htmlFor="ch-ed-name">{t("channelEditor.nameLabel")}</label>
           <input
             id="ch-ed-name"
             className={styles.input}
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Channel name"
+            placeholder={t("channelEditor.namePlaceholder")}
             autoFocus
           />
         </div>
 
         {/* Description */}
         <div className={styles.field}>
-          <span className={styles.label}>Description</span>
-          <Suspense fallback={<div className={styles.label}>Loading editor...</div>}>
+          <span className={styles.label}>{t("channelEditor.descriptionLabel")}</span>
+          <Suspense fallback={<div className={styles.label}>{t("channelEditor.loadingEditor")}</div>}>
             <BioEditor
               value={description}
               onChange={setDescription}
-              placeholder="Optional description"
+              placeholder={t("channelEditor.descriptionPlaceholder")}
             />
           </Suspense>
         </div>
@@ -240,7 +242,7 @@ export default function ChannelEditorDialog({
         {/* Position & Max Users */}
         <div className={styles.row}>
           <div className={styles.field}>
-            <label className={styles.label} htmlFor="ch-ed-pos">Position</label>
+            <label className={styles.label} htmlFor="ch-ed-pos">{t("channelEditor.positionLabel")}</label>
             <input
               id="ch-ed-pos"
               className={styles.input}
@@ -251,7 +253,7 @@ export default function ChannelEditorDialog({
             />
           </div>
           <div className={styles.field}>
-            <label className={styles.label} htmlFor="ch-ed-max">Max Users</label>
+            <label className={styles.label} htmlFor="ch-ed-max">{t("channelEditor.maxUsersLabel")}</label>
             <input
               id="ch-ed-max"
               className={styles.input}
@@ -260,7 +262,7 @@ export default function ChannelEditorDialog({
               onChange={(e) => setMaxUsers(Number(e.target.value))}
               min={0}
             />
-            <span className={styles.hint}>0 = unlimited</span>
+            <span className={styles.hint}>{t("channelEditor.unlimited")}</span>
           </div>
         </div>
 
@@ -275,13 +277,13 @@ export default function ChannelEditorDialog({
             disabled={tempOnly}
           />
           <label className={styles.checkboxLabel} htmlFor="ch-ed-temp">
-            Temporary channel
+            {t("channelEditor.temporaryLabel")}
           </label>
         </div>
 
         {/* Access password */}
         <div className={styles.field}>
-          <label className={styles.label} htmlFor="ch-ed-password">Password</label>
+          <label className={styles.label} htmlFor="ch-ed-password">{t("channelEditor.passwordLabel")}</label>
           <input
             id="ch-ed-password"
             className={styles.input}
@@ -290,10 +292,10 @@ export default function ChannelEditorDialog({
             onChange={(e) => setPassword(e.target.value)}
             placeholder={
               isCreate
-                ? "Optional — leave empty for open access"
+                ? t("channelEditor.passwordPlaceholderNew")
                 : channel?.is_enter_restricted
-                  ? "Currently password-protected. Enter new password to change, or clear to remove"
-                  : "Optional — leave empty for open access"
+                  ? t("channelEditor.passwordPlaceholderChange")
+                  : t("channelEditor.passwordPlaceholderNew")
             }
             autoComplete="new-password"
           />
@@ -301,19 +303,19 @@ export default function ChannelEditorDialog({
 
         {/* Persistence settings */}
         <div className={styles.section}>
-          <h4 className={styles.sectionTitle}>Persistence</h4>
+          <h4 className={styles.sectionTitle}>{t("channelEditor.persistenceTitle")}</h4>
 
           <div className={styles.field}>
-            <label className={styles.label} htmlFor="ch-ed-pchat">Protocol</label>
+            <label className={styles.label} htmlFor="ch-ed-pchat">{t("channelEditor.protocolLabel")}</label>
             <select
               id="ch-ed-pchat"
               className={styles.select}
               value={pchatProtocol}
               onChange={(e) => setPchatProtocol(e.target.value as PchatProtocol)}
             >
-              <option value="none">None (standard volatile chat)</option>
-              <option value="fancy_v1_full_archive">Full Archive (all messages)</option>
-              <option value="signal_v1">Signal V1 (E2EE via Signal Protocol)</option>
+              <option value="none">{t("channelEditor.protocolNone")}</option>
+              <option value="fancy_v1_full_archive">{t("channelEditor.protocolFullArchive")}</option>
+              <option value="signal_v1">{t("channelEditor.protocolSignalV1")}</option>
             </select>
           </div>
 
@@ -321,7 +323,7 @@ export default function ChannelEditorDialog({
             <div className={styles.row}>
               <div className={styles.field}>
                 <label className={styles.label} htmlFor="ch-ed-maxhist">
-                  Max History
+                  {t("channelEditor.maxHistoryLabel")}
                 </label>
                 <input
                   id="ch-ed-maxhist"
@@ -331,11 +333,11 @@ export default function ChannelEditorDialog({
                   onChange={(e) => setPchatMaxHistory(Number(e.target.value))}
                   min={0}
                 />
-                <span className={styles.hint}>0 = unlimited</span>
+                <span className={styles.hint}>{t("channelEditor.unlimited")}</span>
               </div>
               <div className={styles.field}>
                 <label className={styles.label} htmlFor="ch-ed-ret">
-                  Retention (days)
+                  {t("channelEditor.retentionLabel")}
                 </label>
                 <input
                   id="ch-ed-ret"
@@ -345,7 +347,7 @@ export default function ChannelEditorDialog({
                   onChange={(e) => setPchatRetentionDays(Number(e.target.value))}
                   min={0}
                 />
-                <span className={styles.hint}>0 = forever</span>
+                <span className={styles.hint}>{t("channelEditor.forever")}</span>
               </div>
             </div>
           )}
@@ -355,7 +357,7 @@ export default function ChannelEditorDialog({
 
         <div className={styles.actions}>
           <button className={styles.cancelBtn} onClick={onClose} type="button">
-            Cancel
+            {t("channelEditor.cancel")}
           </button>
           <button
             className={styles.submitBtn}
@@ -364,10 +366,10 @@ export default function ChannelEditorDialog({
             type="button"
           >
             {submitting
-              ? "Saving..."
+              ? t("channelEditor.saving")
               : isCreate
-                ? "Create"
-                : "Save"}
+                ? t("channelEditor.create")
+                : t("channelEditor.save")}
           </button>
         </div>
       </div>

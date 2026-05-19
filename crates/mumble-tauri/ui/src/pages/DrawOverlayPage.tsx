@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import DrawingOverlay from "../components/chat/DrawingOverlay";
 import styles from "./DrawOverlayPage.module.css";
@@ -30,6 +31,7 @@ interface DrawOverlayContext {
 export default function DrawOverlayPage() {
   const [ctx, setCtx] = useState<DrawOverlayContext | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useTranslation("common");
 
   useEffect(() => {
     const html = document.documentElement;
@@ -48,7 +50,7 @@ export default function DrawOverlayPage() {
     invoke<DrawOverlayContext | null>("take_drawing_overlay_context")
       .then((result) => {
         if (result) setCtx(result);
-        else setError("Drawing overlay context unavailable");
+        else setError(t("pages.drawOverlay.contextUnavailable"));
       })
       .catch((e) => setError(String(e)));
   }, []);
