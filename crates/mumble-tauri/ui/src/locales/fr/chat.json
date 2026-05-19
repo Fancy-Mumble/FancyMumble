@@ -27,8 +27,8 @@
     "pinnedMessages": "Messages épinglés",
     "downloads": "Téléchargements",
     "createPoll": "Créer un sondage",
-    "muteChannel": "Rendre le canal muet",
-    "unmuteChannel": "Réactiver le son du canal",
+    "muteChannel": "Mettre le canal en sourdine",
+    "unmuteChannel": "Sortir le canal de la sourdine",
     "channelOptions": "Options du canal",
     "join": "Rejoindre",
     "joinChannel": "Rejoindre le canal"
@@ -42,11 +42,11 @@
     "copyText": "Copier le texte",
     "pin": "Épingler",
     "unpin": "Désépingler",
-    "popOutImage": "Ouvrir l'image",
+    "popOutImage": "Ouvrir dans une fenêtre séparée",
     "deleteMessage": "Supprimer le message",
     "selectMessages": "Sélectionner des messages",
     "readBy": "Lu par",
-    "noReaders": "Personne encore"
+    "noReaders": "Personne pour l'instant"
   },
   "poll": {
     "header": "Sondage",
@@ -111,7 +111,8 @@
   "toasts": {
     "fileSharingDisabled": "Le partage de fichiers n'est pas activé sur ce serveur.",
     "fileSharingNoPermission": "Vous n'avez pas la permission de partager des fichiers dans ce canal.",
-    "filePickerFailed": "Échec du sélecteur de fichier : {{detail}}"  },
+    "filePickerFailed": "Échec du sélecteur de fichier : {{detail}}"
+  },
   "downloads": {
     "title": "Téléchargements",
     "clear": "Effacer",
@@ -227,7 +228,7 @@
     "readByEveryone": "Lu par tout le monde"
   },
   "screenShare": {
-    "alreadySharingOtherServer": "Vous partagez déjà votre écran depuis un autre serveur. Arrêtez ce partage d'abord.",
+    "alreadySharingOtherServer": "Vous partagez déjà votre écran sur un autre serveur. Arrêtez d'abord ce partage.",
     "mute": "Couper le son",
     "unmute": "Réactiver le son",
     "volume": "Volume",
@@ -235,9 +236,9 @@
     "pause": "Pause",
     "drawOn": "Dessiner à l'écran",
     "drawOff": "Arrêter de dessiner",
-    "showOverlayTooltip": "Afficher l'overlay bureau (clic passant, masqué de la capture)",
-    "showOverlay": "Afficher l'overlay bureau",
-    "hideOverlay": "Masquer l'overlay bureau",
+    "showOverlayTooltip": "Afficher la surcouche sur le bureau (clics traversants, exclue de la capture)",
+    "showOverlay": "Afficher la surcouche sur le bureau",
+    "hideOverlay": "Masquer la surcouche",
     "popout": "Ouvrir dans une fenêtre séparée",
     "fullscreen": "Plein écran",
     "exitFullscreen": "Quitter le plein écran",
@@ -247,7 +248,7 @@
     "share": "Partager l'écran",
     "stopSharing": "Arrêter le partage",
     "p2pLabel": "P2P",
-    "p2pTooltip": "Pas de SFU sur ce serveur - le stream se connecte directement entre pairs",
+    "p2pTooltip": "Pas de SFU sur ce serveur – le flux passe directement entre les participants",
     "dismiss": "Ignorer",
     "banner": {
       "isSharingScreen": "{{name}} partage son écran",
@@ -264,16 +265,16 @@
       "main2": "Principal + 2",
       "main3": "Principal + 3"
     },
-    "primaryStream": "Stream principal",
-    "dropToFocus": "Déposer pour mettre en focus",
+    "primaryStream": "Flux principal",
+    "dropToFocus": "Déposer ici pour mettre au premier plan",
     "changeLayout": "Changer la disposition",
     "snapLayout": "Disposition rapide",
-    "showOtherStreams": "Afficher les autres streams",
-    "hideOtherStreams": "Masquer les autres streams",
-    "otherStreams_one": "{{count}} autre stream",
-    "otherStreams_other": "{{count}} autres streams",
-    "dragOrClickToSwitch": "Glisser ou cliquer pour changer",
-    "switchToStream": "Passer au stream de {{name}}",
+    "showOtherStreams": "Afficher les autres flux",
+    "hideOtherStreams": "Masquer les autres flux",
+    "otherStreams_one": "{{count}} autre flux",
+    "otherStreams_other": "{{count}} autres flux",
+    "dragOrClickToSwitch": "Glissez ou cliquez pour changer",
+    "switchToStream": "Passer au flux de {{name}}",
     "watchDrawerThumb": "Regarder {{name}}",
     "liveBadge": "EN DIRECT"
   },
@@ -295,13 +296,13 @@
     "collapse": "Réduire",
     "card": {
       "watchingWithHost": "{{count}} spectateur(s) · hôte : {{hostName}}",
-      "openElsewhere": "La session de visionnage est ouverte ailleurs sur cette page.",
+      "openElsewhere": "La session est déjà ouverte ailleurs sur cette page.",
       "hostBadge": "HÔTE",
-      "outOfSync": "Pas en sync avec l'hôte.",
+      "outOfSync": "Désynchronisé par rapport à l'hôte.",
       "resync": "Resynchroniser",
       "requestState": "Demander l'état",
       "leave": "Quitter",
-      "endForEveryone": "Terminer pour tous",
+      "endForEveryone": "Terminer pour tout le monde",
       "rejoin": "Rejoindre"
     }
   },
@@ -315,5 +316,6 @@
       "reconnectBtn": "Reconnecter"
     },
     "openChannelsAriaLabel": "Ouvrir les canaux",
-    "closeChannelsAriaLabel": "Fermer les canaux"  }
+    "closeChannelsAriaLabel": "Fermer les canaux"
+  }
 }

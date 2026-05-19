@@ -3,18 +3,18 @@
     "title": "Mot de passe requis",
     "closeAriaLabel": "Fermer",
     "differentUser": {
-      "message": "Se connecter en tant qu'autre utilisateur sur <strong>{{host}}</strong>.",
+      "message": "Se connecter à <strong>{{host}}</strong> sous un autre nom.",
       "usernameLabel": "Nouveau nom d'utilisateur",
       "back": "Retour",
       "reconnect": "Reconnecter"
     },
-    "retryMessage": "Réessayer pour <strong>{{target}}</strong>.",
-    "enterMessage": "Le serveur requiert un mot de passe pour <strong>{{target}}</strong>. Entrez le mot de passe pour continuer la connexion.",
+    "retryMessage": "Réessayer la connexion à <strong>{{target}}</strong>.",
+    "enterMessage": "Le serveur <strong>{{target}}</strong> demande un mot de passe. Saisissez-le pour finaliser la connexion.",
     "passwordLabel": "Mot de passe",
-    "changeUsername": "Utiliser un autre nom d'utilisateur",
+    "changeUsername": "Utiliser un autre nom",
     "savePassword": "Enregistrer le mot de passe",
     "cancel": "Annuler",
-    "connect": "Connecter"
+    "connect": "Se connecter"
   },
   "edit": {
     "title": "Modifier le serveur",
@@ -30,9 +30,9 @@
     "identityNamePlaceholder": "Nom d'identité",
     "createIdentity": "Créer",
     "cancelIdentity": "Annuler",
-    "storedPassword": "Mot de passe enregistré",
+    "storedPassword": "Mot de passe déjà enregistré",
     "removePassword": "Supprimer",
-    "passwordPlaceholderClear": "Entrez un nouveau mot de passe ou laissez vide",
+    "passwordPlaceholderClear": "Saisissez un nouveau mot de passe ou laissez vide",
     "passwordPlaceholderEmpty": "Laisser vide si non requis",
     "cancel": "Annuler",
     "save": "Enregistrer"
@@ -56,8 +56,8 @@
     "addServer": "+ Ajouter un serveur",
     "searchPlaceholder": "Rechercher des serveurs...",
     "searchAriaLabel": "Rechercher des serveurs enregistrés",
-    "emptyState": "Aucun serveur enregistré. Ajoutez-en un pour commencer !",
-    "noMatch": "Aucun serveur ne correspond à \"{{query}}\""
+    "emptyState": "Aucun serveur enregistré pour l'instant. Ajoutez-en un pour commencer !",
+    "noMatch": "Aucun serveur ne correspond à « {{query}} »"
   },
   "public": {
     "title": "Serveurs publics",
@@ -74,9 +74,9 @@
     "colPing": "Ping",
     "colVersion": "Version",
     "players": "{{count}} joueurs",
-    "connect": "Connecter",
-    "consentText": "La liste de serveurs publics est récupérée depuis l'annuaire officiel Mumble. Lorsque vous vous connectez à un serveur public, votre adresse IP sera visible pour l'opérateur de ce serveur.",
-    "consentWarning": "Le chargement de cette liste envoie une requête à publist.mumble.info et le ping des serveurs révèle votre adresse IP à chaque serveur. Ne continuez que si vous comprenez et acceptez cela."
+    "connect": "Se connecter",
+    "consentText": "La liste de serveurs publics provient de l'annuaire officiel Mumble. Lorsque vous vous connectez à un serveur public, votre adresse IP est visible par son opérateur.",
+    "consentWarning": "Charger cette liste envoie une requête à publist.mumble.info, et tester le ping révèle votre adresse IP à chacun des serveurs. Ne continuez que si vous comprenez et acceptez ces conditions."
   },
   "addPopover": {
     "title": "Se connecter à un serveur",
@@ -84,7 +84,7 @@
     "newButtonTitle": "Ajouter un nouveau serveur",
     "loading": "Chargement...",
     "emptyState": "Aucun serveur enregistré.",
-    "addFirstServer": "Ajouter votre premier serveur",
+    "addFirstServer": "Ajouter un premier serveur",
     "searchPlaceholder": "Rechercher des serveurs...",
     "noMatches": "Aucun résultat",
     "alreadyConnected": "Déjà connecté",
@@ -97,12 +97,13 @@
     "disconnectFrom": "Se déconnecter de {{label}}",
     "disconnectTitle": "Se déconnecter",
     "newConnection": "Nouvelle connexion",
-    "dismissNewTab": "Fermer le nouvel onglet",
+    "dismissNewTab": "Fermer ce nouvel onglet",
     "dismissTitle": "Fermer",
     "disconnectDialogTitle": "Se déconnecter du serveur",
     "disconnectDialogBody": "Se déconnecter de {{label}} ?",
     "disconnectConfirm": "Se déconnecter",
-    "disconnectCancel": "Annuler"  },
+    "disconnectCancel": "Annuler"
+  },
   "activityLog": {
     "empty": "Aucune activité pour l'instant"
   },
@@ -172,8 +173,9 @@
       "deleteOnDownload": "Supprimer au téléchargement",
       "deleteOnDisconnect": "Supprimer à la déconnexion",
       "customEmotes": "Émotes personnalisées"
-    }  },
-  "chooseServer": "Choisissez un serveur auquel vous connecter",
+    }
+  },
+  "chooseServer": "Choisissez le serveur auquel vous connecter",
   "publicServersLink": "Parcourir les serveurs publics",
   "backToSavedServers": "Serveurs enregistrés",
   "back": "Retour",
@@ -200,37 +202,37 @@
     "connectAndSave": "Connecter & Enregistrer",
     "connecting": "Connexion...",
     "continue": "Continuer",
-    "useDifferentName": "Utiliser un autre nom pour ce serveur",
-    "useDefaultName": "← Utiliser mon nom par défaut ({{name}})"
+    "useDifferentName": "Utiliser un autre nom sur ce serveur",
+    "useDefaultName": "← Reprendre mon nom par défaut ({{name}})"
   },
   "wizard": {
     "expert": {
       "step0": {
         "title": "Adresse du serveur",
         "subtitle": "Où se trouve votre serveur Mumble ?",
-        "hint": "Entrez le nom d'hôte ou l'adresse IP fournie par l'administrateur du serveur. Le port par défaut est 64738. Sélectionnez un certificat client pour l'authentification TLS, ou laissez « Aucun » pour les connexions anonymes."
+        "hint": "Saisissez le nom d'hôte ou l'adresse IP fournie par votre administrateur. Le port par défaut est 64738. Choisissez un certificat client pour l'authentification TLS, ou laissez « Aucun » pour une connexion anonyme."
       },
       "step1": {
         "title": "Votre identité",
         "subtitle": "Comment souhaitez-vous être vu ?",
-        "hint": "Choisissez un nom d'utilisateur qui sera affiché aux autres utilisateurs du serveur. Vous pouvez le changer plus tard sur la plupart des serveurs."
+        "hint": "Choisissez le nom qui sera visible des autres sur le serveur. Sur la plupart des serveurs, vous pourrez en changer plus tard."
       },
       "step2": {
-        "title": "Nommez-le",
+        "title": "Donnez-lui un nom",
         "subtitle": "Presque fini !",
-        "hint": "Choisissez un nom convivial pour reconnaître ce serveur plus tard. Laissez vide pour utiliser l'adresse du serveur."
+        "hint": "Choisissez un nom convivial pour retrouver facilement ce serveur plus tard. Laissez vide pour afficher l'adresse du serveur à la place."
       }
     },
     "normal": {
       "step0": {
         "title": "Adresse du serveur",
         "subtitle": "Où se trouve votre serveur Mumble ?",
-        "hint": "Entrez l'adresse du serveur fournie par votre admin - nous nous occupons du reste."
+        "hint": "Saisissez l'adresse du serveur fournie par votre administrateur – on s'occupe du reste."
       },
       "step1": {
         "title": "Votre identité",
         "subtitle": "Comment souhaitez-vous être vu ?",
-        "hint": "Choisissez un nom d'utilisateur qui sera affiché aux autres utilisateurs du serveur."
+        "hint": "Choisissez le nom qui sera visible des autres sur le serveur."
       }
     }
   },
@@ -240,10 +242,10 @@
   "interface": "Interface",
   "mode": {
     "simple": "Simple",
-    "simpleHint": "Connectez-vous et parlez",
+    "simpleHint": "Se connecter et discuter, c'est tout",
     "advanced": "Avancé",
-    "advancedHint": "Contrôle total"
+    "advancedHint": "Contrôle total sur les réglages"
   },
-  "submit": "Commencer",
-  "submitting": "Démarrage..."
+  "submit": "C'est parti",
+  "submitting": "Démarrage en cours..."
 }

@@ -19,7 +19,7 @@
   "externalLinkGuard": {
     "title": "Lien externe",
     "body": "Vous êtes sur le point de quitter Fancy Mumble et de visiter un site web externe :",
-    "disclaimer": "Ce site n'est pas affilié à Fancy Mumble ni approuvé par Fancy Mumble. Les liens externes peuvent mener vers des sites contenant des contenus nuisibles, trompeurs ou indésirables. Ne continuez que si vous faites confiance à la source.",
+    "disclaimer": "Ce site n'est ni affilié à Fancy Mumble ni recommandé par Fancy Mumble. Les liens externes peuvent rediriger vers des sites au contenu nuisible, trompeur ou indésirable. Ne continuez que si vous faites confiance à la source.",
     "cancelBtn": "Annuler",
     "openBtn": "Ouvrir le lien"
   },
@@ -43,21 +43,21 @@
     "messages": [
       "Réticulage des splines...",
       "Préchauffage des microphones...",
-      "Réglage du squelch...",
-      "Persuasion des paquets d'arriver dans l'ordre...",
-      "Demande très polie à Opus...",
-      "Négociation avec les poignées de main TLS...",
-      "Polissage de votre avatar...",
-      "Recherche du bouton muet...",
-      "Comptage des bits, puis recomptage...",
-      "Préparation d'une cafetière d'UDP frais...",
-      "Traduction du serveur vers l'humain...",
-      "Démêlage des câbles audio...",
-      "Recherche d'utilisateurs perdus sous le tapis...",
-      "Caresse au débruiteur...",
-      "Rappel au GPU qu'il n'est pas invité...",
+      "Réglage du bouton de squelch...",
+      "On convainc les paquets d'arriver dans l'ordre...",
+      "On demande gentiment à Opus...",
+      "Négociation des poignées de main TLS...",
+      "On lustre votre avatar...",
+      "On cherche le bouton « Muet »...",
+      "On compte les bits, puis on recompte...",
+      "On infuse une fraîche cafetière d'UDP...",
+      "Traduction du serveur en langage humain...",
+      "On démêle les câbles audio...",
+      "On cherche les utilisateurs perdus sous le tapis...",
+      "On caresse le débruiteur...",
+      "On rappelle au GPU qu'il n'est pas invité...",
       "Chargement suspicieusement rapide...",
-      "Presque là. Probablement."
+      "Bientôt fini. Sans doute."
     ]
   },
   "memberPicker": {

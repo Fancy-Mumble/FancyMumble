@@ -7,7 +7,7 @@
     "attachMenuFile": "Datei",
     "gifPickerTooltip": "GIF-Auswahl",
     "placeholderMobile": "Nachricht schreiben...",
-    "placeholderDesktop": "Nachricht schreiben... (Strg+B/I/U für Formatierung)"
+    "placeholderDesktop": "Nachricht schreiben... (Strg+B/I/U zum Formatieren)"
   },
   "header": {
     "directMessage": "Direktnachricht",
@@ -21,14 +21,14 @@
     "channelInfo": "Kanalinfo",
     "stopSharing": "Freigabe beenden",
     "shareScreen": "Bildschirm teilen",
-    "shareScreenRelayed": "Bildschirm teilen (server-vermittelt)",
-    "shareScreenP2P": "Bildschirm teilen (kein SFU - Peer-to-Peer)",
+    "shareScreenRelayed": "Bildschirm teilen (über Server)",
+    "shareScreenP2P": "Bildschirm teilen (kein SFU – Peer-to-Peer)",
     "closeStream": "Stream schließen",
     "pinnedMessages": "Angeheftete Nachrichten",
     "downloads": "Downloads",
     "createPoll": "Umfrage erstellen",
     "muteChannel": "Kanal stummschalten",
-    "unmuteChannel": "Kanal Stummschaltung aufheben",
+    "unmuteChannel": "Stummschaltung des Kanals aufheben",
     "channelOptions": "Kanaloptionen",
     "join": "Beitreten",
     "joinChannel": "Kanal beitreten"
@@ -41,8 +41,8 @@
     "edit": "Bearbeiten",
     "copyText": "Text kopieren",
     "pin": "Anheften",
-    "unpin": "Loslösen",
-    "popOutImage": "Bild ausklappen",
+    "unpin": "Anheften aufheben",
+    "popOutImage": "Bild in neuem Fenster öffnen",
     "deleteMessage": "Nachricht löschen",
     "selectMessages": "Nachrichten auswählen",
     "readBy": "Gelesen von",
@@ -93,8 +93,8 @@
     "pinnedBy": "angeheftet von {{name}}",
     "imageLabel": "Bild",
     "mediaLabel": "(Medien)",
-    "unpin": "Loslösen",
-    "unpinAriaLabel": "Nachricht loslösen"
+    "unpin": "Lösen",
+    "unpinAriaLabel": "Anheften aufheben"
   },
   "typing": {
     "one": "{{name}} tippt",
@@ -149,7 +149,7 @@
     "downloadTooltip": "Auf Festplatte speichern",
     "open": "Öffnen",
     "openTooltip": "Im Browser öffnen",
-    "viewInLightbox": "{{filename}} im Lightbox anzeigen"
+    "viewInLightbox": "{{filename}} in der Lightbox anzeigen"
   },
   "fileShare": {
     "title": "Datei teilen",
@@ -168,7 +168,7 @@
     "upload": "Hochladen"
   },
   "linkPreview": {
-    "privacyGateText": "Dieses Einbett lädt externe Inhalte von {{site}}.",
+    "privacyGateText": "Diese Einbettung lädt externe Inhalte von {{site}}.",
     "loadContent": "Inhalt laden",
     "playVideo": "Video abspielen",
     "embeddedVideo": "Eingebettetes Video"
@@ -210,7 +210,7 @@
     "retry": "Erneut versuchen",
     "retrySending": "Erneut senden",
     "dismissFailed": "Fehlgeschlagene Nachricht verwerfen",
-    "hidePending": "Ausstehenden Indikator ausblenden",
+    "hidePending": "Sendeanzeige ausblenden",
     "dismiss": "Verwerfen",
     "hide": "Ausblenden"
   },
@@ -228,7 +228,7 @@
     "readByEveryone": "Von allen gelesen"
   },
   "screenShare": {
-    "alreadySharingOtherServer": "Du teilst deinen Bildschirm bereits von einem anderen Server. Beende diese Freigabe zuerst.",
+    "alreadySharingOtherServer": "Du teilst deinen Bildschirm bereits auf einem anderen Server. Beende diese Freigabe zuerst.",
     "mute": "Stummschalten",
     "unmute": "Stummschaltung aufheben",
     "volume": "Lautstärke",
@@ -248,7 +248,7 @@
     "share": "Bildschirm teilen",
     "stopSharing": "Freigabe beenden",
     "p2pLabel": "P2P",
-    "p2pTooltip": "Kein SFU auf diesem Server - der Stream verbindet direkt zwischen Teilnehmern",
+    "p2pTooltip": "Kein SFU auf diesem Server – der Stream läuft direkt zwischen den Teilnehmern",
     "dismiss": "Verwerfen",
     "banner": {
       "isSharingScreen": "{{name}} teilt den Bildschirm",
@@ -265,8 +265,8 @@
       "main2": "Haupt + 2",
       "main3": "Haupt + 3"
     },
-    "primaryStream": "Primärer Stream",
-    "dropToFocus": "Ablegen zum Fokussieren",
+    "primaryStream": "Hauptstream",
+    "dropToFocus": "Hier ablegen, um zu fokussieren",
     "changeLayout": "Layout ändern",
     "snapLayout": "Layout einrasten",
     "showOtherStreams": "Andere Streams anzeigen",
@@ -288,15 +288,15 @@
     "dismiss": "Verwerfen"
   },
   "watch": {
-    "watching": "{{count}} schaut zu",
-    "startTooltip": "Synchronisierte Watch-Session für dieses Video starten",
+    "watching": "{{count}} sehen zu",
+    "startTooltip": "Eine synchronisierte Watch-Session für dieses Video starten",
     "watchTogether": "Gemeinsam ansehen",
     "starting": "Wird gestartet…",
     "open": "Öffnen",
     "collapse": "Einklappen",
     "card": {
-      "watchingWithHost": "{{count}} schaut zu · Host: {{hostName}}",
-      "openElsewhere": "Watch-Session ist anderswo auf dieser Seite offen.",
+      "watchingWithHost": "{{count}} sehen zu · Host: {{hostName}}",
+      "openElsewhere": "Die Watch-Session ist an anderer Stelle auf dieser Seite geöffnet.",
       "hostBadge": "HOST",
       "outOfSync": "Nicht synchron mit dem Host.",
       "resync": "Synchronisieren",
@@ -307,7 +307,7 @@
     }
   },
   "page": {
-    "selectChannel": "Wähle einen Kanal, um zu chatten",
+    "selectChannel": "Wähle einen Kanal, um mit dem Chatten zu beginnen",
     "reconnect": {
       "titleDisconnected": "Getrennt",
       "titleLost": "Verbindung verloren",

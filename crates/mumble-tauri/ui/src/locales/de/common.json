@@ -19,7 +19,7 @@
   "externalLinkGuard": {
     "title": "Externer Link",
     "body": "Du verlässt Fancy Mumble und besuchst eine externe Website:",
-    "disclaimer": "Diese Website ist nicht mit Fancy Mumble verbunden oder von Fancy Mumble empfohlen. Externe Links können zu Seiten führen, die schädliche, irreführende oder unerwünschte Inhalte enthalten. Fahre nur fort, wenn du der Quelle vertraust.",
+    "disclaimer": "Diese Website steht in keiner Verbindung zu Fancy Mumble und wird auch nicht von Fancy Mumble empfohlen. Externe Links können zu Seiten mit schädlichen, irreführenden oder unerwünschten Inhalten führen. Fahre nur fort, wenn du der Quelle vertraust.",
     "cancelBtn": "Abbrechen",
     "openBtn": "Link öffnen"
   },
@@ -50,10 +50,10 @@
       "Dein Avatar wird poliert...",
       "Der Stummschaltknopf wird gesucht...",
       "Bits werden gezählt, und nochmal gezählt...",
-      "Frisches UDP wird gebraut...",
+      "Eine frische Kanne UDP wird aufgebrüht...",
       "Vom Server in menschliche Sprache wird übersetzt...",
       "Audiokabel werden entwirrt...",
-      "Nach verlorenen Benutzern wird gesucht...",
+      "Unter dem Teppich nach verlorenen Nutzern gesucht...",
       "Der Denoiser wird gestreichelt...",
       "Die GPU wird daran erinnert, dass sie nicht eingeladen ist...",
       "Lädt verdächtig schnell...",
