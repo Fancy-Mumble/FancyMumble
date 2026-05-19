@@ -1,0 +1,321 @@
+﻿{
+  "composer": {
+    "editingMessage": "Modifier le message",
+    "attachTooltipImageFile": "Joindre une image ou un fichier",
+    "attachTooltipImageOnly": "Joindre une image, un GIF ou une vidéo",
+    "attachMenuImage": "Image / Vidéo",
+    "attachMenuFile": "Fichier",
+    "gifPickerTooltip": "Sélecteur de GIF",
+    "placeholderMobile": "Écrire un message...",
+    "placeholderDesktop": "Écrire un message... (Ctrl+B/I/U pour la mise en forme)"
+  },
+  "header": {
+    "directMessage": "Message direct",
+    "unknown": "Inconnu",
+    "members": "{{count}} membres",
+    "you": "Vous",
+    "screenSharing": "Partage d'écran",
+    "persistedChat": "Chat persistant",
+    "persistedChatTooltip": "Les messages de ce canal sont stockés sur le serveur",
+    "searchInChannel": "Rechercher dans le canal",
+    "channelInfo": "Infos sur le canal",
+    "stopSharing": "Arrêter le partage",
+    "shareScreen": "Partager l'écran",
+    "shareScreenRelayed": "Partager l'écran (via serveur)",
+    "shareScreenP2P": "Partager l'écran (sans SFU - pair à pair)",
+    "closeStream": "Fermer le flux",
+    "pinnedMessages": "Messages épinglés",
+    "downloads": "Téléchargements",
+    "createPoll": "Créer un sondage",
+    "muteChannel": "Mettre le canal en sourdine",
+    "unmuteChannel": "Sortir le canal de la sourdine",
+    "channelOptions": "Options du canal",
+    "join": "Rejoindre",
+    "joinChannel": "Rejoindre le canal"
+  },
+  "contextMenu": {
+    "moreReactions": "Plus de réactions",
+    "quote": "Citer",
+    "watchTogether": "Regarder ensemble",
+    "watchTogetherBusy": "Démarrage…",
+    "edit": "Modifier",
+    "copyText": "Copier le texte",
+    "pin": "Épingler",
+    "unpin": "Désépingler",
+    "popOutImage": "Ouvrir dans une fenêtre séparée",
+    "deleteMessage": "Supprimer le message",
+    "selectMessages": "Sélectionner des messages",
+    "readBy": "Lu par",
+    "noReaders": "Personne pour l'instant"
+  },
+  "poll": {
+    "header": "Sondage",
+    "by": "par {{name}}",
+    "voteButton": "Voter ({{count}} sélectionné(s))",
+    "totalVotes_one": "{{count}} vote",
+    "totalVotes_other": "{{count}} votes",
+    "multipleChoice": "Choix multiple",
+    "creator": {
+      "title": "Créer un sondage",
+      "questionLabel": "Question",
+      "questionPlaceholder": "Que voulez-vous demander ?",
+      "optionsLabel": "Options",
+      "optionPlaceholder": "Option {{n}}",
+      "removeOption": "Supprimer l'option",
+      "addOption": "+ Ajouter une option",
+      "allowMultiple": "Autoriser plusieurs sélections",
+      "cancel": "Annuler",
+      "submit": "Créer le sondage"
+    }
+  },
+  "selection": {
+    "count": "{{count}} sélectionné(s)",
+    "deleteButton": "Supprimer ({{count}})",
+    "cancel": "Annuler"
+  },
+  "callControls": {
+    "mute": "Couper le micro",
+    "unmute": "Réactiver le micro",
+    "deafen": "Couper le son",
+    "undeafen": "Réactiver le son"
+  },
+  "gifPicker": {
+    "tabGifs": "GIFs",
+    "tabStickers": "Stickers",
+    "searchPlaceholder": "Rechercher {{tab}}...",
+    "loading": "Chargement...",
+    "noResults": "Aucun {{tab}} trouvé pour \"{{query}}\""
+  },
+  "pinned": {
+    "title": "Messages épinglés",
+    "closeAriaLabel": "Fermer les messages épinglés",
+    "empty": "Aucun message épinglé dans ce canal.",
+    "pinnedBy": "épinglé par {{name}}",
+    "imageLabel": "Image",
+    "mediaLabel": "(média)",
+    "unpin": "Désépingler",
+    "unpinAriaLabel": "Désépingler le message"
+  },
+  "typing": {
+    "one": "{{name}} est en train d'écrire",
+    "two": "{{name1}} et {{name2}} écrivent",
+    "many": "{{name}} et {{count}} autres écrivent"
+  },
+  "dates": {
+    "today": "Aujourd'hui",
+    "yesterday": "Hier",
+    "newMessages": "Nouveaux messages",
+    "decrypting": "Déchiffrement…",
+    "contentOffloaded": "Contenu déchargé"
+  },
+  "toasts": {
+    "fileSharingDisabled": "Le partage de fichiers n'est pas activé sur ce serveur.",
+    "fileSharingNoPermission": "Vous n'avez pas la permission de partager des fichiers dans ce canal.",
+    "filePickerFailed": "Échec du sélecteur de fichier : {{detail}}"
+  },
+  "downloads": {
+    "title": "Téléchargements",
+    "clear": "Effacer",
+    "clearTooltip": "Effacer la liste (ne supprime pas les fichiers)",
+    "close": "Fermer les téléchargements",
+    "empty": "Aucun fichier téléchargé pour l'instant.",
+    "relTime": {
+      "justNow": "à l'instant",
+      "minutesAgo": "il y a {{min}} min",
+      "hoursAgo": "il y a {{hr}} h"
+    },
+    "open": "Ouvrir",
+    "showInFolder": "Afficher dans le dossier",
+    "remove": "Supprimer",
+    "removeTooltip": "Supprimer de la liste (ne supprime pas le fichier)"
+  },
+  "drawing": {
+    "strokeWidth": "Largeur du trait",
+    "widthTooltip": "Largeur : {{strokeWidth}}px",
+    "clearAll": "Effacer les dessins de tout le monde",
+    "clearMine": "Effacer mes dessins",
+    "selectColor": "Sélectionner la couleur {{color}}"
+  },
+  "fileAttachment": {
+    "passwordPrompt": "Ce fichier nécessite un mot de passe :",
+    "previewError": "Impossible de charger l'aperçu.",
+    "expired": "Ce lien de téléchargement a expiré et n'est plus disponible.",
+    "expiredPrefix": "expiré le",
+    "expiresPrefix": "expire le",
+    "saving": "Enregistrement…",
+    "saved": "Enregistré",
+    "save": "Enregistrer",
+    "savedTooltip": "Enregistré – télécharger à nouveau",
+    "downloadTooltip": "Télécharger sur le disque",
+    "open": "Ouvrir",
+    "openTooltip": "Ouvrir dans le navigateur",
+    "viewInLightbox": "Voir {{filename}} en lightbox"
+  },
+  "fileShare": {
+    "title": "Partager le fichier",
+    "prompt": "Comment partager {{filename}} ?",
+    "accessMode": "Mode d'accès",
+    "mode": {
+      "publicDesc": "Toute personne disposant du lien peut télécharger. À utiliser pour les fichiers que vous acceptez de publier publiquement.",
+      "passwordDesc": "Les destinataires doivent saisir le mot de passe défini ci-dessous. Partagez le mot de passe par un autre canal.",
+      "sessionDesc": "Seuls les utilisateurs actuellement connectés à ce serveur peuvent télécharger. Le lien cesse de fonctionner lorsqu'ils se déconnectent."
+    },
+    "restrictedHint": "Désactivé par la politique du serveur : vous n'avez pas la permission de partager des fichiers via des liens accessibles publiquement.",
+    "passwordLabel": "Mot de passe",
+    "messageLabel": "Message",
+    "messagePlaceholder": "Ajouter un message avec le fichier...",
+    "cancel": "Annuler",
+    "upload": "Envoyer"
+  },
+  "linkPreview": {
+    "privacyGateText": "Cet aperçu charge du contenu externe de {{site}}.",
+    "loadContent": "Charger le contenu",
+    "playVideo": "Lire la vidéo",
+    "embeddedVideo": "Vidéo intégrée"
+  },
+  "mediaPreview": {
+    "closeLightbox": "Fermer la lightbox"
+  },
+  "mention": {
+    "hintUser": "Utilisateur",
+    "hintRole": "Rôle",
+    "hintEveryone": "Notifier tout le canal",
+    "hintHere": "Notifier les utilisateurs en ligne dans ce canal",
+    "noMatches": "Aucun résultat",
+    "suggestions": "Suggestions de mention"
+  },
+  "mentionPopover": {
+    "noMembers": "Aucun membre",
+    "overflow": "+{{count}} de plus",
+    "userOffline": "L'utilisateur est hors ligne",
+    "onlineMembers": "Membres en ligne",
+    "membersInChannel": "Membres dans ce canal"
+  },
+  "message": {
+    "legacyBadge": "classique",
+    "editedBadge": "(modifié)",
+    "pinnedBadge": "📌 épinglé",
+    "viewProfile": "Voir le profil de {{name}}"
+  },
+  "multiStream": {
+    "watchStream": "Regarder le stream de {{name}}",
+    "liveBadge": "EN DIRECT",
+    "activeStreams_one": "{{count}} stream actif",
+    "activeStreams_other": "{{count}} streams actifs"
+  },
+  "pendingMessage": {
+    "sendingLabel": "Envoi du message",
+    "sending": "Envoi en cours…",
+    "failed": "Échec de l'envoi",
+    "retry": "Réessayer",
+    "retrySending": "Réessayer l'envoi",
+    "dismissFailed": "Ignorer le message échoué",
+    "hidePending": "Masquer l'indicateur d'attente",
+    "dismiss": "Ignorer",
+    "hide": "Masquer"
+  },
+  "quotePreview": {
+    "mediaFallback": "Média",
+    "remove": "Supprimer la citation"
+  },
+  "reactions": {
+    "add": "Ajouter une réaction"
+  },
+  "readReceipt": {
+    "sent": "Envoyé",
+    "read": "Lu",
+    "readByCount": "Lu par {{count}}",
+    "readByEveryone": "Lu par tout le monde"
+  },
+  "screenShare": {
+    "alreadySharingOtherServer": "Vous partagez déjà votre écran sur un autre serveur. Arrêtez d'abord ce partage.",
+    "mute": "Couper le son",
+    "unmute": "Réactiver le son",
+    "volume": "Volume",
+    "play": "Lire",
+    "pause": "Pause",
+    "drawOn": "Dessiner à l'écran",
+    "drawOff": "Arrêter de dessiner",
+    "showOverlayTooltip": "Afficher la surcouche sur le bureau (clics traversants, exclue de la capture)",
+    "showOverlay": "Afficher la surcouche sur le bureau",
+    "hideOverlay": "Masquer la surcouche",
+    "popout": "Ouvrir dans une fenêtre séparée",
+    "fullscreen": "Plein écran",
+    "exitFullscreen": "Quitter le plein écran",
+    "settingUp": "Préparation du stream...",
+    "connecting": "Connexion en cours...",
+    "waitingForStream": "En attente du stream",
+    "share": "Partager l'écran",
+    "stopSharing": "Arrêter le partage",
+    "p2pLabel": "P2P",
+    "p2pTooltip": "Pas de SFU sur ce serveur – le flux passe directement entre les participants",
+    "dismiss": "Ignorer",
+    "banner": {
+      "isSharingScreen": "{{name}} partage son écran",
+      "watch": "Regarder",
+      "dismiss": "Ignorer la notification"
+    }
+  },
+  "streamFocus": {
+    "layout": {
+      "solo": "Solo",
+      "sideBySide": "Côte à côte",
+      "pip": "Incrustation",
+      "grid2x2": "Grille 2x2",
+      "main2": "Principal + 2",
+      "main3": "Principal + 3"
+    },
+    "primaryStream": "Flux principal",
+    "dropToFocus": "Déposer ici pour mettre au premier plan",
+    "changeLayout": "Changer la disposition",
+    "snapLayout": "Disposition rapide",
+    "showOtherStreams": "Afficher les autres flux",
+    "hideOtherStreams": "Masquer les autres flux",
+    "otherStreams_one": "{{count}} autre flux",
+    "otherStreams_other": "{{count}} autres flux",
+    "dragOrClickToSwitch": "Glissez ou cliquez pour changer",
+    "switchToStream": "Passer au flux de {{name}}",
+    "watchDrawerThumb": "Regarder {{name}}",
+    "liveBadge": "EN DIRECT"
+  },
+  "upload": {
+    "progressLabel": "Progression de l'envoi",
+    "failed": "Échec de l'envoi",
+    "uploading": "Envoi en cours…",
+    "percent": "{{progress}} %",
+    "cancel": "Annuler l'envoi",
+    "dismissFailed": "Ignorer l'envoi échoué",
+    "dismiss": "Ignorer"
+  },
+  "watch": {
+    "watching": "{{count}} spectateur(s)",
+    "startTooltip": "Démarrer une session de visionnage synchronisée pour cette vidéo",
+    "watchTogether": "Regarder ensemble",
+    "starting": "Démarrage…",
+    "open": "Ouvrir",
+    "collapse": "Réduire",
+    "card": {
+      "watchingWithHost": "{{count}} spectateur(s) · hôte : {{hostName}}",
+      "openElsewhere": "La session est déjà ouverte ailleurs sur cette page.",
+      "hostBadge": "HÔTE",
+      "outOfSync": "Désynchronisé par rapport à l'hôte.",
+      "resync": "Resynchroniser",
+      "requestState": "Demander l'état",
+      "leave": "Quitter",
+      "endForEveryone": "Terminer pour tout le monde",
+      "rejoin": "Rejoindre"
+    }
+  },
+  "page": {
+    "selectChannel": "Sélectionnez un canal pour commencer à discuter",
+    "reconnect": {
+      "titleDisconnected": "Déconnecté",
+      "titleLost": "Connexion perdue",
+      "reasonLabel": "Raison",
+      "reconnectingBtn": "Reconnexion en cours...",
+      "reconnectBtn": "Reconnecter"
+    },
+    "openChannelsAriaLabel": "Ouvrir les canaux",
+    "closeChannelsAriaLabel": "Fermer les canaux"
+  }
+}

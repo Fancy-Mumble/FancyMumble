@@ -2,6 +2,7 @@ import { BlockIcon, HashIcon, HeadphonesIcon, HeadphonesOffIcon, ImageIcon, Mess
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
 import type { UserEntry } from "../../types";
 import { useAppStore } from "../../store";
 import { canDeleteMessages } from "./ChannelEditorDialog";
@@ -67,6 +68,7 @@ interface UserContextMenuProps {
 
 export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
   const { user } = menu;
+  const { t } = useTranslation("sidebar");
   const ownSession = useAppStore((s) => s.ownSession);
   const channels = useAppStore((s) => s.channels);
   const selectedChannel = useAppStore((s) => s.selectedChannel);
@@ -90,20 +92,20 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
   const isUnregistered = user.user_id == null || user.user_id === 0;
   const canRegister = !isSelf && hasRegisterPerm && isUnregistered;
 
-  // Mute / Deafen / Priority Speaker — MUTE_DEAFEN on the user's channel.
+  // Mute / Deafen / Priority Speaker - MUTE_DEAFEN on the user's channel.
   const userChannelPerms = channels.find((c) => c.id === user.channel_id)?.permissions ?? 0;
   const canMuteDeafen = !isSelf && (userChannelPerms & PERM_MUTE_DEAFEN) !== 0;
 
-  // Move — MOVE must be held on the user's current channel (source).
+  // Move - MOVE must be held on the user's current channel (source).
   // Checking any channel is too broad: the actor might own a temp channel
   // but lack Move on the channel where the target user actually sits.
   const canMoveUser = !isSelf && (userChannelPerms & PERM_MOVE) !== 0;
 
-  // Kick / Ban — checked at root channel.
+  // Kick / Ban - checked at root channel.
   const canKick = !isSelf && (rootPerms & PERM_KICK) !== 0;
   const canBan  = !isSelf && (rootPerms & PERM_BAN) !== 0;
 
-  // Reset comment / Remove avatar — RESET_USER_CONTENT at root channel.
+  // Reset comment / Remove avatar - RESET_USER_CONTENT at root channel.
   const canResetContent = !isSelf && (rootPerms & PERM_RESET_USER_CONTENT) !== 0;
 
   const hasAnyAdminAction =
@@ -181,10 +183,10 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
           case "register":
             try {
               await invoke("register_user", { session: user.session });
-              setToast({ message: `Registered ${user.name}`, variant: "success" });
+              setToast({ message: t("userMenu.toastRegistered", { name: user.name }), variant: "success" });
             } catch (regErr) {
               console.error("register_user failed:", regErr);
-              setToast({ message: "Failed to register user", variant: "error" });
+              setToast({ message: t("userMenu.toastRegisterFailed"), variant: "error" });
             }
             break;
         }
@@ -208,7 +210,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
         {/* -- Local settings -- */}
         {!isSelf && (
           <>
-            <div className={styles.sectionLabel}>Local</div>
+            <div className={styles.sectionLabel}>{ t("userMenu.sectionLocal") }</div>
             <div className={styles.volumeRow}>
               <span className={styles.menuIcon}>
                 <VolumeIcon width={14} height={14} />
@@ -220,7 +222,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
                 max={200}
                 value={volume}
                 onChange={handleVolumeChange}
-                title={`Volume: ${volume}%`}
+                title={t("userMenu.volume", { volume })}
               />
               <span className={styles.volumeValue}>{volume}%</span>
             </div>
@@ -236,7 +238,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
                 <span className={styles.menuIcon}>
                   <HashIcon width={14} height={14} />
                 </span>
-                Join {userChannel?.name ?? "channel"}
+                {t("userMenu.joinChannel", { channel: userChannel?.name ?? "channel" })}
               </button>
             )}
           </>
@@ -246,7 +248,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
         {!isSelf && hasAnyAdminAction && (
           <>
             <div className={styles.divider} />
-            <div className={styles.sectionLabel}>Admin</div>
+            <div className={styles.sectionLabel}>{ t("userMenu.sectionAdmin") }</div>
             {canMuteDeafen && (
               <button type="button" className={styles.menuItem} onClick={() => handleAction("mute")}>
                 <span className={styles.menuIcon}>
@@ -256,7 +258,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
                     <MicOffIcon width={14} height={14} />
                   )}
                 </span>
-                {user.mute ? "Unmute" : "Mute"}
+                {user.mute ? t("userMenu.unmute") : t("userMenu.mute")}
               </button>
             )}
             {canMuteDeafen && (
@@ -268,7 +270,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
                     <HeadphonesOffIcon width={14} height={14} />
                   )}
                 </span>
-                {user.deaf ? "Undeafen" : "Deafen"}
+                {user.deaf ? t("userMenu.undeafen") : t("userMenu.deafen")}
               </button>
             )}
             {canMuteDeafen && (
@@ -280,7 +282,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
                 <span className={styles.menuIcon}>
                   <StarIcon width={14} height={14} />
                 </span>
-                {user.priority_speaker ? "Remove priority" : "Priority speaker"}
+                {user.priority_speaker ? t("userMenu.removePriority") : t("userMenu.prioritySpeaker")}
               </button>
             )}
             {canMoveUser && (
@@ -292,7 +294,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
                 <span className={styles.menuIcon}>
                   <HashIcon width={14} height={14} />
                 </span>
-                Move to channel...
+                {t("userMenu.moveToChannel")}
               </button>
             )}
             {canRegister && (
@@ -300,7 +302,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
                 <span className={styles.menuIcon}>
                   <UserPlusIcon width={14} height={14} />
                 </span>
-                Register
+                {t("userMenu.register")}
               </button>
             )}
             {canResetContent && (
@@ -310,13 +312,13 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
                   <span className={styles.menuIcon}>
                     <MessageMinusIcon width={14} height={14} />
                   </span>
-                  Reset comment
+                  {t("userMenu.resetComment")}
                 </button>
                 <button type="button" className={styles.menuItem} onClick={() => handleAction("remove_avatar")}>
                   <span className={styles.menuIcon}>
                     <ImageIcon width={14} height={14} />
                   </span>
-                  Remove avatar
+                  {t("userMenu.removeAvatar")}
                 </button>
               </>
             )}
@@ -326,7 +328,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
                 <span className={styles.menuIcon}>
                   <TrashIcon width={14} height={14} />
                 </span>
-                Delete messages
+                {t("userMenu.deleteMessages")}
               </button>
             )}
             {canKick && (
@@ -334,7 +336,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
                 <span className={styles.menuIcon}>
                   <UserXIcon width={14} height={14} />
                 </span>
-                Kick
+                {t("userMenu.kick")}
               </button>
             )}
             {canBan && (
@@ -342,7 +344,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
                 <span className={styles.menuIcon}>
                   <BlockIcon width={14} height={14} />
                 </span>
-                Ban
+                {t("userMenu.ban")}
               </button>
             )}
           </>
@@ -351,13 +353,13 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
         {/* Self user - minimal menu */}
         {isSelf && (
           <div className={styles.sectionLabel} style={{ padding: "8px 12px" }}>
-            No actions available for yourself
+            {t("userMenu.noActionsForSelf")}
           </div>
         )}
         {/* Non-self user with no permissions */}
         {!isSelf && !canJoinChannel && !showDeleteMessages && !hasAnyAdminAction && (
           <div className={styles.sectionLabel} style={{ padding: "8px 12px" }}>
-            No actions available
+            {t("userMenu.noActions")}
           </div>
         )}
       </div>
@@ -365,18 +367,18 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
       {/* Delete-by-user confirmation dialog */}
       {deleteUserConfirm && (
         <ConfirmDialog
-          title="Delete messages"
-          body={`Are you sure you want to delete all messages from ${user.name} in this channel? This action cannot be undone.`}
-          confirmLabel="Delete"
+          title={t("userMenu.deleteMessagesTitle")}
+          body={t("userMenu.deleteMessagesBody", { name: user.name })}
+          confirmLabel={t("userMenu.deleteConfirm")}
           danger
           onConfirm={async () => {
             if (selectedChannel !== null && user.hash) {
               try {
                 await deletePchatMessages(selectedChannel, { senderHash: user.hash });
-                setToast({ message: `Deleted messages from ${user.name}`, variant: "success" });
+                setToast({ message: t("userMenu.toastMessagesDeleted", { name: user.name }), variant: "success" });
               } catch (err) {
                 console.error("delete user messages error:", err);
-                setToast({ message: "Failed to delete messages", variant: "error" });
+                setToast({ message: t("userMenu.toastDeleteFailed"), variant: "error" });
               }
             }
             setDeleteUserConfirm(false);
@@ -393,12 +395,12 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
           onClose={() => setShowMoveSheet(false)}
           onMoved={(name) => {
             setShowMoveSheet(false);
-            setToast({ message: `Moved ${user.name} to ${name}`, variant: "success" });
+            setToast({ message: t("userMenu.toastUserMoved", { name: user.name, channel: name }), variant: "success" });
             onClose();
           }}
           onError={() => {
             setShowMoveSheet(false);
-            setToast({ message: `Failed to move ${user.name}`, variant: "error" });
+            setToast({ message: t("userMenu.toastMoveFailed", { name: user.name }), variant: "error" });
           }}
         />
       )}
@@ -426,6 +428,7 @@ function MoveUserChannelPicker({
   onMoved,
   onError,
 }: MoveUserChannelPickerProps) {
+  const { t } = useTranslation("sidebar");
   const [filter, setFilter] = useState("");
   const users = useAppStore((s) => s.users);
 
@@ -452,7 +455,7 @@ function MoveUserChannelPicker({
     async (channelId: number, channelName: string) => {
       try {
         await invoke("move_user_to_channel", { session: user.session, channelId });
-        onMoved(channelName || "channel");
+        onMoved(channelName || t("movePicker.root"));
       } catch (err) {
         console.error("move_user_to_channel failed:", err);
         onError();
@@ -476,12 +479,12 @@ function MoveUserChannelPicker({
       <div
         className={pickerStyles.dialog}
         role="dialog"
-        aria-label={`Move ${user.name} to channel`}
+        aria-label={t("movePicker.ariaLabel", { name: user.name })}
       >
         <div className={pickerStyles.header}>
-          <span className={pickerStyles.title}>Move user</span>
+          <span className={pickerStyles.title}>{t("movePicker.title")}</span>
           <span className={pickerStyles.subtitle}>
-            Pick a channel to move <strong>{user.name}</strong> to.
+            {t("movePicker.subtitle", { name: user.name })}
           </span>
         </div>
         <div className={pickerStyles.searchWrap}>
@@ -491,12 +494,12 @@ function MoveUserChannelPicker({
             autoFocus
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter channels..."
+            placeholder={t("movePicker.filterPlaceholder")}
           />
         </div>
         <div className={pickerStyles.list}>
           {filtered.length === 0 ? (
-            <div className={pickerStyles.empty}>No matching channels.</div>
+            <div className={pickerStyles.empty}>{t("movePicker.noChannels")}</div>
           ) : (
             filtered.map((c) => {
               const count = usersByChannel.get(c.id) ?? 0;
@@ -510,10 +513,10 @@ function MoveUserChannelPicker({
                   <span className={pickerStyles.itemIcon}>
                     <HashIcon width={14} height={14} />
                   </span>
-                  <span className={pickerStyles.itemName}>{c.name || "Root"}</span>
+                  <span className={pickerStyles.itemName}>{c.name || t("movePicker.root")}</span>
                   {count > 0 && (
                     <span className={pickerStyles.itemMeta}>
-                      {count} {count === 1 ? "member" : "members"}
+                      {t("movePicker.member", { count })}
                     </span>
                   )}
                 </button>
@@ -527,7 +530,7 @@ function MoveUserChannelPicker({
             className={pickerStyles.cancelBtn}
             onClick={onClose}
           >
-            Cancel
+            {t("movePicker.cancel")}
           </button>
         </div>
       </div>

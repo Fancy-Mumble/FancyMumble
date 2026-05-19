@@ -1,4 +1,5 @@
-import { useState } from "react";
+﻿import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
 import { useAppStore } from "../../store";
@@ -14,15 +15,9 @@ import styles from "./AdminPanel.module.css";
 
 type Tab = "users" | "roles" | "bans" | "acl" | "emotes" | "onboarding";
 
-const BASE_TABS: TabDef<Tab>[] = [
-  { id: "users", label: "Users", icon: "\uD83D\uDC65" },
-  { id: "roles", label: "Roles", icon: "\uD83C\uDFAD" },
-  { id: "bans", label: "Ban List", icon: "\uD83D\uDEAB" },
-  { id: "acl", label: "Channel ACL", icon: "\uD83D\uDD12" },
-];
-
 export default function AdminPanel() {
   const navigate = useNavigate();
+  const { t } = useTranslation("settings");
   const [searchParams] = useSearchParams();
   const initialTab = (() => {
     const t = searchParams.get("tab");
@@ -38,18 +33,21 @@ export default function AdminPanel() {
   const serverFancyVersion = useAppStore((s) => s.serverFancyVersion);
   const onboardingSupported = isOnboardingSupported(serverFancyVersion);
   const tabs: TabDef<Tab>[] = [
-    ...BASE_TABS,
+    { id: "users", label: t("adminTabs.users"), icon: "\uD83D\uDC65" },
+    { id: "roles", label: t("adminTabs.roles"), icon: "\uD83C\uDFAD" },
+    { id: "bans", label: t("adminTabs.bans"), icon: "\uD83D\uDEAB" },
+    { id: "acl", label: t("adminTabs.acl"), icon: "\uD83D\uDD12" },
     ...(canManageEmotes
-      ? [{ id: "emotes" as const, label: "Emotes", icon: "\uD83C\uDFA8" }]
+      ? [{ id: "emotes" as const, label: t("adminTabs.emotes"), icon: "\uD83C\uDFA8" }]
       : []),
     ...(onboardingSupported
-      ? [{ id: "onboarding" as const, label: "Onboarding", icon: "\uD83D\uDC4B" }]
+      ? [{ id: "onboarding" as const, label: t("adminTabs.onboarding"), icon: "\uD83D\uDC4B" }]
       : []),
   ];
 
   return (
     <TabbedPage
-      heading="Admin"
+      heading={t("heading")}
       tabs={tabs}
       activeTab={tab}
       onTabChange={setTab}

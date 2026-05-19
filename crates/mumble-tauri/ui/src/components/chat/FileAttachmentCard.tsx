@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { rebaseFileServerUrl, useAppStore } from "../../store";
@@ -96,6 +97,7 @@ export function previewKindForFilename(filename: string): PreviewKind {
 }
 
 export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
+  const { t } = useTranslation("chat");
   const downloadFile = useAppStore((s) => s.downloadFile);
   const addDownload = useAppStore((s) => s.addDownload);
   const [busy, setBusy] = useState(false);
@@ -188,7 +190,7 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
       }
       let password: string | undefined;
       if (info.mode === "password") {
-        const entered = window.prompt("This file requires a password:");
+        const entered = window.prompt(t("fileAttachment.passwordPrompt"));
         if (entered === null) {
           setBusy(false);
           return;
@@ -225,7 +227,7 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
           type="button"
           className={styles.previewImageBtn}
           onClick={handleImageClick}
-          aria-label={`View ${info.filename} in lightbox`}
+          aria-label={t("fileAttachment.viewInLightbox", { filename: info.filename })}
         >
           <img
             src={previewSrc}
@@ -282,14 +284,14 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
           <div className={styles.body}>
             <div className={styles.filename}>{info.filename}</div>
             <div className={styles.expiredMessage}>
-              This download link has expired and is no longer available.
+              {t("fileAttachment.expired")}
             </div>
             <div className={styles.meta}>
               {formatBytes(info.sizeBytes)}
               {info.mode !== "public" && <span className={styles.badge}>{info.mode}</span>}
               {info.expiresAt != null && info.expiresAt > 0 && (
                 <span className={styles.expiry}>
-                  expired {new Date(info.expiresAt * 1000).toLocaleString()}
+                  {t("fileAttachment.expiredPrefix")} {new Date(info.expiresAt * 1000).toLocaleString()}
                 </span>
               )}
             </div>
@@ -317,7 +319,7 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
             {info.mode !== "public" && <span className={styles.badge}>{info.mode}</span>}
             {info.expiresAt && (
               <span className={styles.expiry}>
-                expires {new Date(info.expiresAt * 1000).toLocaleString()}
+                {t("fileAttachment.expiresPrefix")} {new Date(info.expiresAt * 1000).toLocaleString()}
               </span>
             )}
           </div>
@@ -328,18 +330,18 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
           className={styles.saveBtn}
           onClick={onSave}
           disabled={busy}
-          title={saved ? "Saved - download again" : "Download to disk"}
+          title={saved ? t("fileAttachment.savedTooltip") : t("fileAttachment.downloadTooltip")}
         >
-          {busy ? "Saving\u2026" : saved ? "Saved" : "Save"}
+          {busy ? t("fileAttachment.saving") : saved ? t("fileAttachment.saved") : t("fileAttachment.save")}
         </button>
         {canOpenInBrowser && (
           <button
             type="button"
             className={styles.openBtn}
             onClick={handleOpenInBrowser}
-            title="Open in browser"
+            title={t("fileAttachment.openTooltip")}
           >
-            Open
+            {t("fileAttachment.open")}
           </button>
         )}
       </div>

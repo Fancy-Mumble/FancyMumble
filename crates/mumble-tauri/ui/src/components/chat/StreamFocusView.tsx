@@ -11,6 +11,7 @@ import { ChevronDownIcon, Grid2x2Icon, ScreenShareIcon } from "../../icons";
  *   Dropping onto the primary pane switches the focused stream.
  */
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
+import { useTranslation } from "react-i18next";
 import ScreenShareViewer from "./ScreenShareViewer";
 import { useRemoteStream } from "./useScreenShare";
 import { useStreamThumbnail } from "./useStreamPreview";
@@ -32,6 +33,15 @@ const LAYOUT_CSS: Record<GridLayout, string> = {
   "2x2":        styles.layout2x2,
   "main+2":     styles.layoutMain2,
   "main+3":     styles.layoutMain3,
+};
+
+const LAYOUT_KEYS: Record<GridLayout, string> = {
+  "solo":         "streamFocus.layout.solo",
+  "side-by-side": "streamFocus.layout.sideBySide",
+  "pip":          "streamFocus.layout.pip",
+  "2x2":          "streamFocus.layout.grid2x2",
+  "main+2":       "streamFocus.layout.main2",
+  "main+3":       "streamFocus.layout.main3",
 };
 
 const LAYOUT_OPTIONS: { id: GridLayout; label: string }[] = [
@@ -115,6 +125,7 @@ const SecondaryPanel = memo(function SecondaryPanel({ session, name, className, 
   const remoteStream = useRemoteStream(session);
   const videoRef = useRef<HTMLVideoElement>(null);
   const stream = ownBroadcastStream ?? remoteStream;
+  const { t } = useTranslation("chat");
 
   useEffect(() => {
     const video = videoRef.current;
@@ -134,7 +145,7 @@ const SecondaryPanel = memo(function SecondaryPanel({ session, name, className, 
       onClick={() => onItemClick(session)}
       onPointerDown={(e) => onItemPointerDown(e, session)}
       style={{ touchAction: "none" }}
-      aria-label={`Switch to ${name}'s stream`}
+      aria-label={t("streamFocus.switchToStream", { name })}
     >
       {stream
         ? (
@@ -154,7 +165,7 @@ const SecondaryPanel = memo(function SecondaryPanel({ session, name, className, 
 
       <div className={styles.secondaryOverlay}>
         <span className={styles.secondaryName}>{name}</span>
-        <span className={styles.secondaryHint}>Drag or click to switch</span>
+        <span className={styles.secondaryHint}>{t("streamFocus.dragOrClickToSwitch")}</span>
       </div>
     </button>
   );
@@ -171,6 +182,7 @@ interface DrawerThumbProps extends PointerDragItemProps {
 
 const DrawerThumb = memo(function DrawerThumb({ session, name, isDragOver, onItemPointerDown, onItemClick }: DrawerThumbProps) {
   const thumbnail = useStreamThumbnail(session, true);
+  const { t } = useTranslation("chat");
 
   return (
     <button
@@ -180,7 +192,7 @@ const DrawerThumb = memo(function DrawerThumb({ session, name, isDragOver, onIte
       onClick={() => onItemClick(session)}
       onPointerDown={(e) => onItemPointerDown(e, session)}
       style={{ touchAction: "none" }}
-      aria-label={`Watch ${name}`}
+      aria-label={t("streamFocus.watchDrawerThumb", { name })}
     >
       <div className={styles.drawerThumbImg}>
         {thumbnail
@@ -190,7 +202,7 @@ const DrawerThumb = memo(function DrawerThumb({ session, name, isDragOver, onIte
               <ScreenShareIcon width={20} height={20} />
             </div>
           )}
-        <span className={styles.drawerLiveBadge}>LIVE</span>
+        <span className={styles.drawerLiveBadge}>{t("streamFocus.liveBadge")}</span>
       </div>
       <span className={styles.drawerThumbName}>{name}</span>
     </button>
@@ -212,10 +224,11 @@ interface PrimaryPaneProps {
 }
 
 function PrimaryPane({ isOwnBroadcast, localStream, session, hasOthers, isPrimaryDragOver, channelId, ownSession }: PrimaryPaneProps) {
+  const { t } = useTranslation("chat");
   return (
     <section
       className={styles.primaryPane}
-      aria-label="Primary stream"
+      aria-label={t("streamFocus.primaryStream")}
       data-drop-zone={hasOthers ? "primary" : undefined}
     >
       <ScreenShareViewer isOwnBroadcast={isOwnBroadcast} localStream={localStream} session={session} channelId={channelId} ownSession={ownSession} />
@@ -225,7 +238,7 @@ function PrimaryPane({ isOwnBroadcast, localStream, session, hasOthers, isPrimar
           aria-hidden="true"
         >
           {isPrimaryDragOver && (
-            <span className={styles.primaryDropLabel}>Drop to focus</span>
+            <span className={styles.primaryDropLabel}>{t("streamFocus.dropToFocus")}</span>
           )}
         </div>
       )}
@@ -245,6 +258,8 @@ interface LayoutPickerBarProps {
 
 function LayoutPickerBar({ layout, onSelectLayout, pickerRef }: LayoutPickerBarProps) {
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation("chat");
+  const tStr = t as (k: string) => string;
 
   useEffect(() => {
     if (!open) return;
@@ -266,15 +281,15 @@ function LayoutPickerBar({ layout, onSelectLayout, pickerRef }: LayoutPickerBarP
         type="button"
         className={`${styles.layoutBtn} ${open ? styles.layoutBtnActive : ""}`}
         onClick={() => setOpen((p) => !p)}
-        title="Change layout"
-        aria-label="Change layout"
+        title={t("streamFocus.changeLayout")}
+        aria-label={t("streamFocus.changeLayout")}
         aria-expanded={open}
       >
         <Grid2x2Icon width={16} height={16} aria-hidden="true" />
       </button>
       {open && (
         <div className={styles.layoutPicker} role="menu">
-          <div className={styles.layoutPickerTitle}>Snap layout</div>
+          <div className={styles.layoutPickerTitle}>{t("streamFocus.snapLayout")}</div>
           <div className={styles.layoutPickerGrid}>
             {LAYOUT_OPTIONS.map((opt) => (
               <button
@@ -283,12 +298,12 @@ function LayoutPickerBar({ layout, onSelectLayout, pickerRef }: LayoutPickerBarP
                 role="menuitem"
                 className={`${styles.layoutOption} ${layout === opt.id ? styles.layoutOptionActive : ""}`}
                 onClick={() => handleSelect(opt.id)}
-                title={opt.label}
-                aria-label={opt.label}
+                title={tStr(LAYOUT_KEYS[opt.id])}
+                aria-label={tStr(LAYOUT_KEYS[opt.id])}
                 aria-current={layout === opt.id ? "true" : undefined}
               >
                 <LayoutVisual id={opt.id} />
-                <span className={styles.layoutOptionLabel}>{opt.label}</span>
+                <span className={styles.layoutOptionLabel}>{tStr(LAYOUT_KEYS[opt.id])}</span>
               </button>
             ))}
           </div>
@@ -312,6 +327,7 @@ interface StreamDrawerProps {
 function StreamDrawer({ broadcasters, orderedList, dragOverTarget, dragHandlers }: StreamDrawerProps) {
   const [open, setOpen] = useState(false);
   const toggle = useCallback(() => setOpen((p) => !p), []);
+  const { t } = useTranslation("chat");
 
   return (
     <div className={`${styles.drawer} ${open ? styles.drawerOpen : ""}`}>
@@ -319,8 +335,8 @@ function StreamDrawer({ broadcasters, orderedList, dragOverTarget, dragHandlers 
         type="button"
         className={styles.drawerToggle}
         onClick={toggle}
-        title={open ? "Hide other streams" : "Show other streams"}
-        aria-label={open ? "Hide other streams" : "Show other streams"}
+        title={open ? t("streamFocus.hideOtherStreams") : t("streamFocus.showOtherStreams")}
+        aria-label={open ? t("streamFocus.hideOtherStreams") : t("streamFocus.showOtherStreams")}
         aria-expanded={open}
       >
         <ChevronDownIcon
@@ -330,7 +346,7 @@ function StreamDrawer({ broadcasters, orderedList, dragOverTarget, dragHandlers 
         />
         {!open && (
           <span className={styles.toggleLabel}>
-            {broadcasters.length} other stream{broadcasters.length === 1 ? "" : "s"}
+            {t("streamFocus.otherStreams", { count: broadcasters.length })}
           </span>
         )}
       </button>

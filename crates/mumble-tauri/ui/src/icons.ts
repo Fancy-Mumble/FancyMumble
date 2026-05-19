@@ -3,12 +3,12 @@
 // All icons are re-exported from `lucide-react` (https://lucide.dev) under
 // the legacy display names previously used by the per-file
 // `assets/icons/*.svg?react` imports. This means consumer components can
-// keep using `<MicIcon />` etc. without any JSX changes — only the import
+// keep using `<MicIcon />` etc. without any JSX changes - only the import
 // line needs to point at this barrel.
 //
 // To add a new icon, look it up at https://lucide.dev/icons and add a
 // re-export here. Lucide ships ~1500 icons (MIT, actively maintained), so
-// it should be the only icon source going forward — please do not add any
+// it should be the only icon source going forward - please do not add any
 // more inline SVGs or per-icon asset files.
 
 export {

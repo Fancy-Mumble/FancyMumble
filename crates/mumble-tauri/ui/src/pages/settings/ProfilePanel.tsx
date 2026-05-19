@@ -1,4 +1,5 @@
 ﻿import { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import type { FancyProfile } from "../../types";
 import { updatePreferences } from "../../preferencesStorage";
 import {
@@ -50,6 +51,7 @@ export function ProfilePanel({
   const [showBannerEditor, setShowBannerEditor] = useState(false);
   const [showAvatarEditor, setShowAvatarEditor] = useState(false);
   const [showCustomCss, setShowCustomCss] = useState(false);
+  const { t } = useTranslation("settings");
 
   const handleSaveUsername = useCallback(async () => {
     if (!defaultUsername.trim()) return;
@@ -62,13 +64,13 @@ export function ProfilePanel({
 
   return (
     <>
-      <h2 className={styles.panelTitle}>Profile</h2>
+      <h2 className={styles.panelTitle}>{t("profile.panelTitle")}</h2>
 
       {/* -- Identity selector (advanced mode only) ------------- */}
       {isExpert && identities.length > 0 && (
         <section className={styles.identityBar}>
           <div className={styles.identityBarRow}>
-            <label className={styles.identityBarLabel}>Identity</label>
+            <label className={styles.identityBarLabel}>{t("profile.identityLabel")}</label>
             <select
               className={styles.select}
               value={activeIdentity ?? ""}
@@ -76,7 +78,7 @@ export function ProfilePanel({
             >
               {identities.map((label) => (
                 <option key={label} value={label}>
-                  {label}{label === connectedCertLabel ? " (connected)" : ""}
+                  {label}{label === connectedCertLabel ? t("profile.connectedSuffix") : ""}
                 </option>
               ))}
             </select>
@@ -85,13 +87,12 @@ export function ProfilePanel({
               className={styles.ghostBtn}
               onClick={onGoToIdentities}
             >
-              Manage identities
+              {t("profile.manageIdentities")}
             </button>
           </div>
           {connectedCertLabel && activeIdentity !== connectedCertLabel && (
             <p className={styles.infoBoxYellow}>
-              Viewing profile for a different identity. Changes are saved locally
-              but will not be applied to the server until you connect with this identity.
+              {t("profile.viewingOtherIdentity")}
             </p>
           )}
         </section>
@@ -99,9 +100,9 @@ export function ProfilePanel({
 
       {/* -- Default Username ----------------------------------- */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Default Username</h3>
+        <h3 className={styles.sectionTitle}>{t("profile.sectionUsername")}</h3>
         <p className={styles.fieldHint}>
-          Pre-filled when you add a new server.
+          {t("profile.usernameHint")}
         </p>
         <input
           className={styles.input}
@@ -113,15 +114,15 @@ export function ProfilePanel({
           onKeyDown={(e) => {
             if (e.key === "Enter") handleSaveUsername();
           }}
-          placeholder="Your username"
+          placeholder={t("profile.usernamePlaceholder")}
         />
       </section>
 
       {/* -- Avatar --------------------------------------------- */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Avatar</h3>
+        <h3 className={styles.sectionTitle}>{t("profile.sectionAvatar")}</h3>
         <p className={styles.fieldHint}>
-          Upload a PNG, JPEG, GIF, or pick from Klipy. Sent as the Mumble user texture.
+          {t("profile.avatarHint")}
         </p>
         <div className={styles.avatarRow}>
           {avatar && (
@@ -136,16 +137,16 @@ export function ProfilePanel({
             className={styles.ghostBtn}
             onClick={() => setShowAvatarEditor(true)}
           >
-            Edit Avatar
+            {t("profile.editAvatar")}
           </button>
         </div>
       </section>
 
       {/* -- Banner --------------------------------------------- */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Banner</h3>
+        <h3 className={styles.sectionTitle}>{t("profile.sectionBanner")}</h3>
         <p className={styles.fieldHint}>
-          Background colour, image, or GIF for your profile card banner.
+          {t("profile.bannerHint")}
         </p>
         {profile.banner?.image && (
           <img
@@ -165,29 +166,29 @@ export function ProfilePanel({
           className={styles.ghostBtn}
           onClick={() => setShowBannerEditor(true)}
         >
-          Edit Banner
+          {t("profile.editBanner")}
         </button>
       </section>
 
       {/* -- Bio ------------------------------------------------ */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Bio</h3>
+        <h3 className={styles.sectionTitle}>{t("profile.sectionBio")}</h3>
         <p className={styles.fieldHint}>
-          Visible to other Mumble clients as your user comment.
+          {t("profile.bioHint")}
         </p>
         <BioEditor
           value={bio}
           onChange={onBioChange}
           maxLength={2000}
-          placeholder="Tell others about yourself..."
+          placeholder={t("profile.bioPlaceholder")}
         />
       </section>
 
       {/* -- Custom Status -------------------------------------- */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Status</h3>
+        <h3 className={styles.sectionTitle}>{t("profile.sectionStatus")}</h3>
         <p className={styles.fieldHint}>
-          A short status message shown below your name.
+          {t("profile.statusHint")}
         </p>
         <input
           className={styles.input}
@@ -200,16 +201,15 @@ export function ProfilePanel({
               status: e.target.value || undefined,
             })
           }
-          placeholder="🎮 Playing a game..."
+          placeholder={t("profile.statusPlaceholder")}
         />
       </section>
 
       {/* -- Card Background ------------------------------------ */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Card Background</h3>
+        <h3 className={styles.sectionTitle}>{t("profile.sectionCardBackground")}</h3>
         <p className={styles.fieldHint}>
-          Pick up to 5 colours. The first 3 form the gradient, the 4th
-          sets the border, and the 5th becomes an accent for status text.
+          {t("profile.cardBgHint")}
         </p>
         <CardColorPicker
           colors={profile.themeColors ?? []}
@@ -224,12 +224,12 @@ export function ProfilePanel({
             style={{ marginTop: 8, fontSize: 12 }}
             onClick={() => setShowCustomCss(true)}
           >
-            Custom CSS override...
+            {t("profile.customCssOverride")}
           </button>
         )}
         {isExpert && showCustomCss && (
           <div className={styles.field} style={{ marginTop: 8 }}>
-            <label className={styles.fieldLabel}>Custom CSS background</label>
+            <label className={styles.fieldLabel}>{t("profile.customCssLabel")}</label>
             <input
               className={styles.input}
               type="text"
@@ -248,9 +248,9 @@ export function ProfilePanel({
 
       {/* -- Avatar Border -------------------------------------- */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Avatar Border</h3>
+        <h3 className={styles.sectionTitle}>{t("profile.sectionAvatarBorder")}</h3>
         <p className={styles.fieldHint}>
-          Border style around your profile picture.
+          {t("profile.avatarBorderHint")}
         </p>
         <div className={styles.optionGrid}>
           {AVATAR_BORDERS
@@ -294,7 +294,7 @@ export function ProfilePanel({
         </div>
         {isExpert && profile.avatarBorder === "custom" && (
           <div className={styles.field} style={{ marginTop: 8 }}>
-            <label className={styles.fieldLabel}>Custom CSS border</label>
+            <label className={styles.fieldLabel}>{t("profile.customCssBorderLabel")}</label>
             <input
               className={styles.input}
               type="text"
@@ -310,9 +310,9 @@ export function ProfilePanel({
 
       {/* -- Profile Decoration --------------------------------- */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Profile Decoration</h3>
+        <h3 className={styles.sectionTitle}>{t("profile.sectionDecoration")}</h3>
         <p className={styles.fieldHint}>
-          An overlay around your avatar frame.
+          {t("profile.decorationHint")}
         </p>
         <div className={styles.optionGrid}>
           {DECORATIONS.map((d) => (
@@ -339,9 +339,9 @@ export function ProfilePanel({
 
       {/* -- Nameplate ------------------------------------------ */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Nameplate</h3>
+        <h3 className={styles.sectionTitle}>{t("profile.sectionNameplate")}</h3>
         <p className={styles.fieldHint}>
-          Background style behind your display name.
+          {t("profile.nameplateHint")}
         </p>
         <div className={styles.optionGrid}>
           {NAMEPLATES.map((n) => (
@@ -368,9 +368,9 @@ export function ProfilePanel({
 
       {/* -- Profile Effect ------------------------------------- */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Profile Effect</h3>
+        <h3 className={styles.sectionTitle}>{t("profile.sectionEffect")}</h3>
         <p className={styles.fieldHint}>
-          Animated effect shown on your profile card.
+          {t("profile.effectHint")}
         </p>
         <div className={styles.optionGrid}>
           {EFFECTS.map((fx) => (

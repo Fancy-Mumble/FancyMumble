@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { useTranslation } from "react-i18next";
 import type { AclGroup, ChannelEntry, RegisteredUser, UserCommentPayload, UserEntry } from "../../types";
 import { useAclGroups } from "../../hooks/useAclGroups";
 import { useAppStore } from "../../store";
@@ -194,6 +195,8 @@ export function buildMemberGroups(
   offlineEntries: readonly UserEntry[],
   ownSession: number | null,
   aclGroups: readonly AclGroup[],
+  membersLabel = "Members",
+  guestsLabel = "Guests",
 ): readonly MemberGroup[] {
   const onlineUserIds = new Set<number>();
   const onlineRows: MemberRow[] = [];
@@ -226,12 +229,12 @@ export function buildMemberGroups(
   const noGroupRows = buckets.get(KEY_NO_GROUP);
   if (noGroupRows && noGroupRows.length > 0) {
     noGroupRows.sort(compareRows);
-    result.push({ key: KEY_NO_GROUP, label: "Members", color: null, rows: noGroupRows });
+    result.push({ key: KEY_NO_GROUP, label: membersLabel, color: null, rows: noGroupRows });
   }
   const guestRows = buckets.get(KEY_GUESTS);
   if (guestRows && guestRows.length > 0) {
     guestRows.sort(compareRows);
-    result.push({ key: KEY_GUESTS, label: "Guests", color: null, rows: guestRows });
+    result.push({ key: KEY_GUESTS, label: guestsLabel, color: null, rows: guestRows });
   }
   return result;
 }
@@ -330,6 +333,7 @@ function MembersTabImpl({
   onSelectDm,
   onUserContextMenu,
 }: MembersTabProps) {
+  const { t } = useTranslation("sidebar");
   const pendingConnect = useAppStore((s) => s.pendingConnect);
   const serverKey = pendingConnect ? `${pendingConnect.host}:${pendingConnect.port}` : null;
   const initialCache = serverKey ? registeredMemCache.get(serverKey) : undefined;
@@ -509,8 +513,8 @@ function MembersTabImpl({
   }, [registered, fetchedComments]);
 
   const groups = useMemo(
-    () => buildMemberGroups(users, offlineEntries, ownSession, aclGroups),
-    [users, offlineEntries, ownSession, aclGroups],
+    () => buildMemberGroups(users, offlineEntries, ownSession, aclGroups, t("membersTab.groupMembers"), t("membersTab.groupGuests")),
+    [users, offlineEntries, ownSession, aclGroups, t],
   );
 
   const totalMembers = useMemo(
@@ -525,7 +529,7 @@ function MembersTabImpl({
         role="status"
         aria-live="polite"
         aria-busy="true"
-        aria-label="Loading members"
+        aria-label={t("membersTab.loading")}
       >
         <MembersSkeleton />
       </div>
@@ -535,7 +539,7 @@ function MembersTabImpl({
   if (totalMembers === 0) {
     return (
       <div className={styles.membersTab}>
-        <div className={styles.membersEmpty}>No other members</div>
+        <div className={styles.membersEmpty}>{t("membersTab.empty")}</div>
       </div>
     );
   }
@@ -573,7 +577,7 @@ function MembersTabImpl({
           role="status"
           aria-live="polite"
           aria-busy="true"
-          aria-label="Loading offline members"
+          aria-label={t("membersTab.loadingOffline")}
         >
           <div className={styles.membersGroupTitle}>
             <span

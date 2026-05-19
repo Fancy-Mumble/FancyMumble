@@ -1,4 +1,5 @@
 import { memo, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import type { EmbedMedia, LinkEmbed } from "../../types";
 import styles from "./LinkPreviewCard.module.css";
 
@@ -162,6 +163,7 @@ function VideoEmbed({
   consented: boolean;
   onConsent: () => void;
 }>) {
+  const { t } = useTranslation("chat");
   if (!embed.video?.url) return null;
 
   const containerStyle = videoContainerStyle(embed);
@@ -171,10 +173,10 @@ function VideoEmbed({
     return (
       <div className={styles.privacyGate}>
         <span className={styles.privacyText}>
-          This embed loads external content from <strong>{embed.site_name ?? new URL(embed.video.url).hostname}</strong>.
+          {t("linkPreview.privacyGateText", { site: embed.site_name ?? new URL(embed.video.url).hostname })}
         </span>
         <button type="button" className={styles.privacyButton} onClick={onConsent}>
-          Load content
+          {t("linkPreview.loadContent")}
         </button>
       </div>
     );
@@ -191,7 +193,7 @@ function VideoEmbed({
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
         )}
-        <button type="button" className={styles.videoOverlay} onClick={onConsent} aria-label="Play video">
+        <button type="button" className={styles.videoOverlay} onClick={onConsent} aria-label={t("linkPreview.playVideo")}>
           <span className={styles.playButton}>
             <span className={styles.playTriangle} />
           </span>

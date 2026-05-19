@@ -1,5 +1,6 @@
 import { memo, useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import type { ChatMessage, UserEntry, TimeFormat } from "../../types";
 import type { PollPayload } from "./PollCreator";
 import { useAppStore, requestLinkPreview } from "../../store";
@@ -207,6 +208,7 @@ export default memo(function MessageItem({
   children,
   readReceiptIndicator,
 }: MessageItemProps) {
+  const { t } = useTranslation("chat");
   const offloadInfo = extractOffloadInfo(msg.body);
   const offloaded = offloadInfo !== null;
   const pureMedia = !offloaded && isPureMedia(msg.body);
@@ -275,7 +277,7 @@ export default memo(function MessageItem({
         <div>
           <div className={styles.skeleton} style={{ minHeight: estimatedHeight }} />
           <span className={styles.skeletonLabel}>
-            {isRestoring ? "Decrypting\u2026" : "Content offloaded"}
+            {isRestoring ? t("dates.decrypting") : t("dates.contentOffloaded")}
           </span>
         </div>
       );
@@ -375,12 +377,12 @@ export default memo(function MessageItem({
             style={{ color: msg.is_own ? "rgba(255,255,255,0.85)" : colorFor(msg.sender_name) }}
           >
             {msg.sender_name}
-            {msg.is_legacy && <span className={styles.legacyBadge}>legacy</span>}
+            {msg.is_legacy && <span className={styles.legacyBadge}>{t("message.legacyBadge")}</span>}
             <time className={styles.messageTime} dateTime={new Date(displayTimestamp).toISOString()}>
               {formatTimestamp(displayTimestamp, timeFormat, convertToLocalTime, systemUses24h)}
             </time>
-            {msg.edited_at != null && <span className={styles.editedBadge}>(edited)</span>}
-            {msg.pinned && <span className={styles.pinnedBadge}>📌 pinned</span>}
+            {msg.edited_at != null && <span className={styles.editedBadge}>{t("message.editedBadge")}</span>}
+            {msg.pinned && <span className={styles.pinnedBadge}>{t("message.pinnedBadge")}</span>}
             {msg.is_own && readReceiptIndicator}
           </span>
         )}
@@ -389,8 +391,8 @@ export default memo(function MessageItem({
             <time dateTime={new Date(displayTimestamp).toISOString()}>
               {formatTimestamp(displayTimestamp, timeFormat, convertToLocalTime, systemUses24h)}
             </time>
-            {msg.edited_at != null && <span className={styles.editedBadge}>(edited)</span>}
-            {msg.pinned && <span className={styles.pinnedBadge}>📌 pinned</span>}
+            {msg.edited_at != null && <span className={styles.editedBadge}>{t("message.editedBadge")}</span>}
+            {msg.pinned && <span className={styles.pinnedBadge}>{t("message.pinnedBadge")}</span>}
             {msg.is_own && readReceiptIndicator}
           </span>
         )}

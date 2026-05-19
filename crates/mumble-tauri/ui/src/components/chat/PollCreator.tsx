@@ -10,6 +10,7 @@
  */
 
 import { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./PollCreator.module.css";
 
 // --- Poll data format ---------------------------------------------
@@ -55,6 +56,7 @@ interface PollCreatorProps {
 }
 
 export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorProps>) {
+  const { t } = useTranslation("chat");
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState(["", ""]);
   const [multiple, setMultiple] = useState(false);
@@ -101,7 +103,7 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
         aria-modal="true"
       >
         <div className={styles.header}>
-          <h3 className={styles.title}>Create a Poll</h3>
+          <h3 className={styles.title}>{t("poll.creator.title")}</h3>
           <button className={styles.closeBtn} onClick={onClose}>
             ✕
           </button>
@@ -109,10 +111,10 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
 
         <div className={styles.body}>
           {/* Question */}
-          <label className={styles.label}>Question</label>
+          <label className={styles.label}>{t("poll.creator.questionLabel")}</label>
           <input
             className={styles.input}
-            placeholder="What do you want to ask?"
+            placeholder={t("poll.creator.questionPlaceholder")}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             autoFocus
@@ -120,7 +122,7 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
           />
 
           {/* Options */}
-          <label className={styles.label}>Options</label>
+          <label className={styles.label}>{t("poll.creator.optionsLabel")}</label>
           {options.map((opt, i) => (
             <div key={i} className={styles.optionRow}>
               <span className={styles.optionBullet}>
@@ -128,7 +130,7 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
               </span>
               <input
                 className={styles.input}
-                placeholder={`Option ${i + 1}`}
+                placeholder={t("poll.creator.optionPlaceholder", { n: i + 1 })}
                 value={opt}
                 onChange={(e) => updateOption(i, e.target.value)}
                 maxLength={200}
@@ -137,7 +139,7 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
                 <button
                   className={styles.removeBtn}
                   onClick={() => removeOption(i)}
-                  title="Remove option"
+                  title={t("poll.creator.removeOption")}
                 >
                   ✕
                 </button>
@@ -146,7 +148,7 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
           ))}
           {options.length < 10 && (
             <button className={styles.addBtn} onClick={addOption}>
-              + Add option
+              {t("poll.creator.addOption")}
             </button>
           )}
 
@@ -157,20 +159,20 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
               checked={multiple}
               onChange={(e) => setMultiple(e.target.checked)}
             />
-            Allow multiple selections
+            {t("poll.creator.allowMultiple")}
           </label>
         </div>
 
         <div className={styles.footer}>
           <button className={styles.cancelBtn} onClick={onClose}>
-            Cancel
+            {t("poll.creator.cancel")}
           </button>
           <button
             className={styles.submitBtn}
             onClick={handleSubmit}
             disabled={!canSubmit}
           >
-            Create Poll
+            {t("poll.creator.submit")}
           </button>
         </div>
       </div>

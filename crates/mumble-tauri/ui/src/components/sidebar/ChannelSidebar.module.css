@@ -943,7 +943,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  /* No horizontal padding here — sticky headers need to reach full width. */
+  /* No horizontal padding here - sticky headers need to reach full width. */
   padding: 0 0 12px;
   display: flex;
   flex-direction: column;

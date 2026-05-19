@@ -79,7 +79,7 @@ impl Registry {
     /// Remove every disconnected session whose `(host, port, username)`
     /// matches the supplied target.  Used by `connect()` to eliminate
     /// stale tabs left behind by an automatic reconnect attempt against
-    /// the same target — without this pruning each retry would leave
+    /// the same target - without this pruning each retry would leave
     /// the previous failed session in the registry, spamming the tab
     /// strip with one entry per attempt.
     ///
@@ -204,9 +204,9 @@ mod tests {
         // Two stale disconnected sessions targeting the same server.
         let stale_a = ServerId::new();
         let stale_b = ServerId::new();
-        // A live connecting session to the same target — must NOT be pruned.
+        // A live connecting session to the same target - must NOT be pruned.
         let live = ServerId::new();
-        // A disconnected session targeting a *different* server — must NOT be pruned.
+        // A disconnected session targeting a *different* server - must NOT be pruned.
         let other = ServerId::new();
 
         let stale_a_shared = make_shared("h", 1, "u");

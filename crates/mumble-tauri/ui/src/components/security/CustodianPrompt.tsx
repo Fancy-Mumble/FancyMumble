@@ -1,5 +1,6 @@
-import { CloseIcon, ShieldIcon, WarningIcon } from "../../icons";
+﻿import { CloseIcon, ShieldIcon, WarningIcon } from "../../icons";
 import { useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./CustodianPrompt.module.css";
 
 interface Custodian {
@@ -26,6 +27,8 @@ export default function CustodianPrompt({
   removedCustodians,
   addedCustodians,
 }: CustodianPromptProps) {
+  const { t } = useTranslation("sidebar");
+
   // Close on Escape.
   useEffect(() => {
     if (!open) return;
@@ -44,17 +47,17 @@ export default function CustodianPrompt({
   if (!open) return null;
 
   const isChange = !isFirstJoin;
-  const title = isChange ? "Channel Authority Changed" : "Key Custodians";
+  const title = isChange ? t("custodian.titleChange") : t("custodian.titleFirstJoin");
   const description = isChange
-    ? "The channel's key custodians have changed. New custodians will not be trusted until you accept this change."
-    : `This channel is managed by ${custodians.length} key custodian(s). Review and confirm to enable accelerated key verification.`;
+    ? t("custodian.descriptionChange")
+    : t("custodian.descriptionFirstJoin", { count: custodians.length });
 
   return (
     <dialog className={styles.overlay} open aria-label={title}>
       <div className={styles.dialog}>
         <div className={styles.header}>
           <h3 className={styles.title}>{title}</h3>
-          <button className={styles.closeBtn} onClick={onClose} aria-label="Close">
+          <button className={styles.closeBtn} onClick={onClose} aria-label={t("custodian.closeAriaLabel")}>
             <CloseIcon width={16} height={16} />
           </button>
         </div>
@@ -66,8 +69,7 @@ export default function CustodianPrompt({
             <div className={styles.warning}>
               <WarningIcon className={styles.warningIcon} aria-hidden="true" />
               <span>
-                Until you accept, only previously pinned custodians are trusted
-                for key verification. New custodians cannot bypass consensus.
+                {t("custodian.warningChange")}
               </span>
             </div>
           )}
@@ -78,9 +80,9 @@ export default function CustodianPrompt({
               {addedCustodians.map((c) => (
                 <li key={c.hash} className={`${styles.custodianItem} ${styles.changeAdded}`}>
                   <ShieldIcon className={styles.custodianIcon} aria-hidden="true" />
-                  <span className={styles.custodianName}>{c.name ?? "Unknown"}</span>
+                  <span className={styles.custodianName}>{c.name ?? t("custodian.unknownCustodian")}</span>
                   <span className={styles.custodianHash}>{c.hash.slice(0, 12)}...</span>
-                  <span className={`${styles.changeBadge} ${styles.badgeAdded}`}>Added</span>
+                  <span className={`${styles.changeBadge} ${styles.badgeAdded}`}>{t("custodian.badgeAdded")}</span>
                 </li>
               ))}
             </ul>
@@ -91,9 +93,9 @@ export default function CustodianPrompt({
               {removedCustodians.map((c) => (
                 <li key={c.hash} className={`${styles.custodianItem} ${styles.changeRemoved}`}>
                   <ShieldIcon className={styles.custodianIcon} aria-hidden="true" />
-                  <span className={styles.custodianName}>{c.name ?? "Unknown"}</span>
+                  <span className={styles.custodianName}>{c.name ?? t("custodian.unknownCustodian")}</span>
                   <span className={styles.custodianHash}>{c.hash.slice(0, 12)}...</span>
-                  <span className={`${styles.changeBadge} ${styles.badgeRemoved}`}>Removed</span>
+                  <span className={`${styles.changeBadge} ${styles.badgeRemoved}`}>{t("custodian.badgeRemoved")}</span>
                 </li>
               ))}
             </ul>
@@ -105,7 +107,7 @@ export default function CustodianPrompt({
               {custodians.map((c) => (
                 <li key={c.hash} className={styles.custodianItem}>
                   <ShieldIcon className={styles.custodianIcon} aria-hidden="true" />
-                  <span className={styles.custodianName}>{c.name ?? "Unknown"}</span>
+                  <span className={styles.custodianName}>{c.name ?? t("custodian.unknownCustodian")}</span>
                   <span className={styles.custodianHash}>{c.hash.slice(0, 12)}...</span>
                 </li>
               ))}
@@ -115,10 +117,10 @@ export default function CustodianPrompt({
 
         <div className={styles.footer}>
           <button className={styles.btnSecondary} onClick={onClose}>
-            {isChange ? "Dismiss" : "Later"}
+            {isChange ? t("custodian.dismiss") : t("custodian.later")}
           </button>
           <button className={styles.btnPrimary} onClick={handleConfirm}>
-            {isChange ? "Accept" : "Confirm"}
+            {isChange ? t("custodian.accept") : t("custodian.confirm")}
           </button>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { ChevronLeftIcon } from "../../icons";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./TabbedPage.module.css";
 
 export interface TabDef<T extends string> {
@@ -30,6 +31,7 @@ export function TabbedPage<T extends string>({
   mainAreaClassName,
   children,
 }: Readonly<TabbedPageProps<T>>) {
+  const { t } = useTranslation("common");
   const mainCls = mainAreaClassName
     ? `${styles.mainArea} ${mainAreaClassName}`
     : styles.mainArea;
@@ -40,10 +42,10 @@ export function TabbedPage<T extends string>({
         <button
           className={styles.backBtn}
           onClick={onBack}
-          aria-label="Go back"
+          aria-label={t("tabbedPage.backAriaLabel")}
         >
           {BackIcon}
-          <span>Back</span>
+          <span>{t("tabbedPage.back")}</span>
         </button>
 
         <h2 className={styles.sidebarHeading}>{heading}</h2>

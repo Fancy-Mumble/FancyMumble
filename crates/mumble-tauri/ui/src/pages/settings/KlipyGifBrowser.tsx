@@ -1,5 +1,6 @@
 import { SearchIcon } from "../../icons";
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./KlipyGifBrowser.module.css";
 
 const KLIPY_BASE = "https://api.klipy.com/api/v1";
@@ -153,6 +154,7 @@ async function fetchCategoryPreview(name: string): Promise<string | null> {
 }
 
 export function KlipyGifBrowser({ onSelect }: Readonly<KlipyGifBrowserProps>) {
+  const { t } = useTranslation("settings");
   const [view, setView] = useState<View>({ kind: "categories" });
   const [categories, setCategories] = useState<string[]>([]);
   const [categoryPreviews, setCategoryPreviews] = useState<Record<string, string>>({});
@@ -323,8 +325,8 @@ export function KlipyGifBrowser({ onSelect }: Readonly<KlipyGifBrowserProps>) {
 
   const searchPlaceholder =
     view.kind === "category"
-      ? `Search in ${view.name}...`
-      : "Search GIFs...";
+      ? t("klipyBrowser.searchInCategory", { categoryName: view.name })
+      : t("klipyBrowser.searchPlaceholder");
 
   return (
     <div className={styles.browser}>
@@ -346,7 +348,7 @@ export function KlipyGifBrowser({ onSelect }: Readonly<KlipyGifBrowserProps>) {
 
       <div className={styles.content}>
         {loading && results.length === 0 && (
-          <div className={styles.statusMsg}>Loading...</div>
+          <div className={styles.statusMsg}>{t("klipyBrowser.loading")}</div>
         )}
 
         {showCategoryGrid && (
@@ -395,12 +397,12 @@ export function KlipyGifBrowser({ onSelect }: Readonly<KlipyGifBrowserProps>) {
         )}
 
         {loadingMore && (
-          <div className={styles.statusMsg}>Loading...</div>
+          <div className={styles.statusMsg}>{t("klipyBrowser.loading")}</div>
         )}
 
         {!loading && results.length === 0 && searchQuery.trim() && (
           <div className={styles.statusMsg}>
-            No GIFs found for &ldquo;{searchQuery}&rdquo;
+            {t("klipyBrowser.noResults", { query: searchQuery })}
           </div>
         )}
 

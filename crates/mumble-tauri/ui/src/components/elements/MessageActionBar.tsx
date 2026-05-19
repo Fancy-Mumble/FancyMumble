@@ -1,5 +1,6 @@
 import { CopyIcon, EmojiPlusIcon, KebabMenuIcon, PlayIcon, QuoteIcon, TrashIcon } from "../../icons";
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import type { ChatMessage } from "../../types";
 import { useWatchStart } from "../chat/watch/useWatchStart";
@@ -55,6 +56,7 @@ export default function MessageActionBar({
   onDelete,
   canDelete = false,
 }: MessageActionBarProps) {
+  const { t } = useTranslation("common");
   const { canStart: canWatchTogether, busy: watchBusy, start: startWatch } = useWatchStart(
     message.body,
     message.channel_id,
@@ -93,7 +95,7 @@ export default function MessageActionBar({
   if (canWatchTogether) {
     kebabItems.push({
       id: "watch-together",
-      label: watchBusy ? "Starting\u2026" : "Watch together",
+      label: watchBusy ? t("messageActionBar.watchTogetherStarting") : t("messageActionBar.watchTogether"),
       icon: <PlayIcon width={14} height={14} />,
       onClick: () => { void startWatch(); },
     });
@@ -101,7 +103,7 @@ export default function MessageActionBar({
   if (canDelete && onDelete) {
     kebabItems.push({
       id: "delete",
-      label: "Delete",
+      label: t("messageActionBar.delete"),
       icon: <TrashIcon width={14} height={14} />,
       danger: true,
       onClick: () => onDelete(message),
@@ -130,8 +132,8 @@ export default function MessageActionBar({
       <button
         type="button"
         className={styles.actionBtn}
-        title="More reactions"
-        aria-label="More reactions"
+        title={t("messageActionBar.moreReactions")}
+        aria-label={t("messageActionBar.moreReactions")}
         onClick={(e) => onMoreReactions(message, e)}
       >
         <EmojiPlusIcon width={16} height={16} />
@@ -144,8 +146,8 @@ export default function MessageActionBar({
       <button
         type="button"
         className={styles.actionBtn}
-        title="Quote"
-        aria-label="Quote message"
+        title={t("messageActionBar.quote")}
+        aria-label={t("messageActionBar.quoteAriaLabel")}
         onClick={() => onCite(message)}
       >
         <QuoteIcon width={16} height={16} />
@@ -156,8 +158,8 @@ export default function MessageActionBar({
         <button
           type="button"
           className={styles.actionBtn}
-          title="Copy text"
-          aria-label="Copy message text"
+          title={t("messageActionBar.copy")}
+          aria-label={t("messageActionBar.copyAriaLabel")}
           onClick={() => onCopyText(message)}
         >
           <CopyIcon width={16} height={16} />
@@ -171,8 +173,8 @@ export default function MessageActionBar({
             ref={kebabBtnRef}
             type="button"
             className={styles.actionBtn}
-            title="More options"
-            aria-label="More options"
+            title={t("messageActionBar.moreOptions")}
+            aria-label={t("messageActionBar.moreOptions")}
             onClick={toggleKebab}
           >
             <KebabMenuIcon width={16} height={16} />

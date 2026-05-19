@@ -8,6 +8,7 @@ import { CloseIcon, MoonIcon, ShieldCheckIcon } from "../../icons";
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../store";
 import { SafeHtml } from "../elements/SafeHtml";
 import type { UserEntry, FancyProfile, UserMode } from "../../types";
@@ -126,6 +127,7 @@ function UserProfilePanel({
   onClose?: () => void;
 }>) {
   const [userMode, setUserMode] = useState<UserMode>("normal");
+  const { t } = useTranslation("sidebar");
 
   const isExpert = userMode !== "normal";
 
@@ -189,7 +191,7 @@ function UserProfilePanel({
         <button
           className={styles.closeBtn}
           onClick={onClose}
-          aria-label="Close profile"
+          aria-label={t("userProfile.closeProfile")}
         >
           <CloseIcon width={18} height={18} />
         </button>
@@ -305,7 +307,7 @@ function UserProfilePanel({
 
       {bio && (
         <section className={styles.section}>
-          <h3 className={styles.sectionTitle}>About Me</h3>
+          <h3 className={styles.sectionTitle}>{t("userProfile.aboutMe")}</h3>
           <SafeHtml
             html={bio}
             className={styles.bioContent}
@@ -315,15 +317,15 @@ function UserProfilePanel({
       )}
 
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Info</h3>
+        <h3 className={styles.sectionTitle}>{t("userProfile.info")}</h3>
         <div className={styles.infoGrid}>
-          <span className={styles.infoLabel}>Session</span>
+          <span className={styles.infoLabel}>{t("userProfile.labelSession")}</span>
           <span className={styles.infoValue}>{user.session}</span>
-          <span className={styles.infoLabel}>Channel</span>
+          <span className={styles.infoLabel}>{t("userProfile.labelChannel")}</span>
           <span className={styles.infoValue}>{user.channel_id}</span>
-          <span className={styles.infoLabel}>Registered</span>
+          <span className={styles.infoLabel}>{t("userProfile.labelRegistered")}</span>
           <span className={styles.infoValue}>
-            {user.user_id != null && user.user_id > 0 ? "Yes" : "No"}
+            {user.user_id != null && user.user_id > 0 ? t("userProfile.yes") : t("userProfile.no")}
           </span>
         </div>
       </section>

@@ -1,5 +1,6 @@
 import { CheckIcon } from "../../icons";
 import React, { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { ChatMessage, TimeFormat, UserEntry } from "../../types";
 import MessageItem, { MessageAvatar } from "./MessageItem";
 import MessageActionBar from "../elements/MessageActionBar";
@@ -90,6 +91,7 @@ export default function ChatMessageList({
   onToggleReaction,
   onAddReaction,
 }: ChatMessageListProps) {
+  const { t } = useTranslation("chat");
   // Resolve own cert hash for hash-based reaction tracking.
   const ownHash = ownSession !== null ? userBySession.get(ownSession)?.hash : undefined;
 
@@ -248,8 +250,8 @@ export default function ChatMessageList({
         const dividerMidGroup = dividerInGroup && !dividerAtStart;
 
         const unreadDivider = (
-          <div key={`unread-${lastReadIdx}`} className={styles.unreadDivider} aria-label="New messages">
-            <span className={styles.unreadDividerLabel}>New messages</span>
+          <div key={`unread-${lastReadIdx}`} className={styles.unreadDivider} aria-label={t("dates.newMessages")}>
+            <span className={styles.unreadDividerLabel}>{t("dates.newMessages")}</span>
           </div>
         );
 

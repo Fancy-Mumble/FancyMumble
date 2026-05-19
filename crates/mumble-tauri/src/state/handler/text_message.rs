@@ -310,7 +310,7 @@ fn handle_channel_message(
 
     for &ch_id in &target_channels {
         // For pchat-enabled channels, check whether the sender supports E2EE.
-        // If they do, skip — the authoritative PchatMessageDeliver will arrive
+        // If they do, skip - the authoritative PchatMessageDeliver will arrive
         // separately.  If they don't (legacy client), accept the TextMessage
         // and mark it as legacy so the UI can style it differently.
         let has_pchat = state
@@ -325,7 +325,7 @@ fn handle_channel_message(
             .is_some_and(UserEntry::has_pchat_e2ee);
 
         if has_pchat && sender_has_e2ee {
-            // Fancy sender — PchatMessageDeliver is the authoritative source.
+            // Fancy sender - PchatMessageDeliver is the authoritative source.
             continue;
         }
 

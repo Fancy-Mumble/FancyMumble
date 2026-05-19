@@ -8,6 +8,7 @@
  * or that are large enough to be perceptibly slow on weak connections.
  */
 
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../store";
 import { SafeHtml } from "../elements/SafeHtml";
 import type { PendingMessage } from "../../types";
@@ -18,6 +19,7 @@ interface PendingMessageItemProps {
 }
 
 export default function PendingMessageItem({ pending }: PendingMessageItemProps) {
+  const { t } = useTranslation("chat");
   const dismiss = useAppStore((s) => s.dismissPendingMessage);
   const retry = useAppStore((s) => s.retryPendingMessage);
   const isFailed = pending.state === "failed";
@@ -33,7 +35,7 @@ export default function PendingMessageItem({ pending }: PendingMessageItemProps)
           <div
             className={styles.progressTrack}
             role="progressbar"
-            aria-label="Sending message"
+            aria-label={t("pendingMessage.sendingLabel")}
             aria-valuemin={0}
             aria-valuemax={100}
           >
@@ -45,7 +47,7 @@ export default function PendingMessageItem({ pending }: PendingMessageItemProps)
           <span
             className={`${styles.statusLabel} ${isFailed ? styles.statusLabelError : ""}`}
           >
-            {isFailed ? "Failed to send" : "Sending\u2026"}
+            {isFailed ? t("pendingMessage.failed") : t("pendingMessage.sending")}
           </span>
           <span className={styles.actions}>
             {isFailed && (
@@ -53,18 +55,18 @@ export default function PendingMessageItem({ pending }: PendingMessageItemProps)
                 type="button"
                 className={styles.iconBtn}
                 onClick={() => void retry(pending.pendingId)}
-                aria-label="Retry sending"
-                title="Retry"
+                aria-label={t("pendingMessage.retrySending")}
+                title={t("pendingMessage.retry")}
               >
-                Retry
+                {t("pendingMessage.retry")}
               </button>
             )}
             <button
               type="button"
               className={styles.iconBtn}
               onClick={() => dismiss(pending.pendingId)}
-              aria-label={isFailed ? "Dismiss failed message" : "Hide pending indicator"}
-              title={isFailed ? "Dismiss" : "Hide"}
+              aria-label={isFailed ? t("pendingMessage.dismissFailed") : t("pendingMessage.hidePending")}
+              title={isFailed ? t("pendingMessage.dismiss") : t("pendingMessage.hide")}
             >
               &#x2715;
             </button>

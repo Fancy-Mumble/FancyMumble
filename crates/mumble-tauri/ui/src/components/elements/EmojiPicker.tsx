@@ -8,6 +8,7 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { getServerCustomReactions } from "../chat/reactionStore";
 import styles from "./EmojiPicker.module.css";
 
@@ -162,6 +163,19 @@ export default function EmojiPicker({
   const gridRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
 
+  const { t } = useTranslation("common");
+
+  const catLabels = useMemo<Record<string, string>>(() => ({
+    people: t("emojiPicker.catPeople"),
+    nature: t("emojiPicker.catNature"),
+    food: t("emojiPicker.catFood"),
+    activities: t("emojiPicker.catActivity"),
+    objects: t("emojiPicker.catObjects"),
+    symbols: t("emojiPicker.catSymbols"),
+    flags: t("emojiPicker.catFlags"),
+    server: t("emojiPicker.catCustom"),
+  }), [t]);
+
   // Server custom reactions (loaded once per connection).
   const serverReactions = useMemo(() => getServerCustomReactions(), []);
 
@@ -183,7 +197,7 @@ export default function EmojiPicker({
       if (filtered.length > 0) {
         result.push({
           id: "server",
-          label: "Custom",
+          label: catLabels.server,
           emojis: filtered.map((r) => r.display),
         });
       }
@@ -191,17 +205,17 @@ export default function EmojiPicker({
 
     for (const cat of CATEGORIES) {
       if (!term) {
-        result.push({ id: cat.id, label: cat.label, emojis: [...cat.emojis] });
+        result.push({ id: cat.id, label: catLabels[cat.id] ?? cat.label, emojis: [...cat.emojis] });
         continue;
       }
       // Unicode search: match emoji by label or by the emoji character.
       const matched = cat.emojis.filter((e) => e.includes(term));
       if (matched.length > 0) {
-        result.push({ id: cat.id, label: cat.label, emojis: matched });
+        result.push({ id: cat.id, label: catLabels[cat.id] ?? cat.label, emojis: matched });
       }
     }
     return result;
-  }, [search, serverReactions]);
+  }, [search, serverReactions, catLabels]);
 
   // Scroll to category on tab click.
   const handleCategoryClick = useCallback((catId: string) => {
@@ -252,7 +266,7 @@ export default function EmojiPicker({
           <input
             type="text"
             className={styles.searchInput}
-            placeholder="Search emoji..."
+            placeholder={t("emojiPicker.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             autoFocus
@@ -278,7 +292,7 @@ export default function EmojiPicker({
         {/* Emoji grid */}
         <div ref={gridRef} className={styles.emojiGrid}>
           {filteredCategories.length === 0 && (
-            <div className={styles.emptyState}>No emoji found</div>
+            <div className={styles.emptyState}>{t("emojiPicker.empty")}</div>
           )}
           {filteredCategories.map((cat) => (
             <div key={cat.id} data-cat={cat.id}>

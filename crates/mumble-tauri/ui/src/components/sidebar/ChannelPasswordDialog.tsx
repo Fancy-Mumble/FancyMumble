@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import type { ChannelEntry } from "../../types";
 import styles from "./ChannelPasswordDialog.module.css";
 
@@ -10,6 +11,7 @@ interface ChannelPasswordDialogProps {
 }
 
 export function ChannelPasswordDialog({ channel, onConfirm, onCancel }: Readonly<ChannelPasswordDialogProps>) {
+  const { t } = useTranslation("sidebar");
   const [password, setPassword] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -41,23 +43,23 @@ export function ChannelPasswordDialog({ channel, onConfirm, onCancel }: Readonly
   return createPortal(
     <div className={styles.overlay} onMouseDown={handleOverlayClick}>
       <form className={styles.dialog} role="dialog" aria-modal="true" onSubmit={handleSubmit}>
-        <h3 className={styles.title}>Password required</h3>
+        <h3 className={styles.title}>{t("channelPassword.title")}</h3>
         <p className={styles.body}>
-          <strong>{channel.name}</strong> requires a password to enter.
+          <strong>{channel.name}</strong>{t("channelPassword.body")}
         </p>
         <input
           ref={inputRef}
           type="password"
           className={styles.input}
-          placeholder="Channel password"
+          placeholder={t("channelPassword.placeholder")}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="off"
         />
         <div className={styles.actions}>
-          <button type="button" className={styles.cancelBtn} onClick={onCancel}>Cancel</button>
+          <button type="button" className={styles.cancelBtn} onClick={onCancel}>{t("channelPassword.cancelBtn")}</button>
           <button type="submit" className={styles.confirmBtn} disabled={!password.trim()}>
-            Join
+            {t("channelPassword.joinBtn")}
           </button>
         </div>
       </form>

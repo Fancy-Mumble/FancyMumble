@@ -1,4 +1,5 @@
 import { BellIcon, BellOffIcon, CloseIcon, DatabaseIcon, FolderIcon, PollIcon, ScreenShareIcon, SearchIcon, UsersGroupIcon } from "../../icons";
+import { useTranslation } from "react-i18next";
 import { isMobile } from "../../utils/platform";
 import type { KeyTrustLevel } from "../../types";
 import KeyTrustIndicator from "../security/KeyTrustIndicator";
@@ -62,12 +63,13 @@ function buildKebabItems({
   onPinnedMessages,
   hasNewDownloads,
   onDownloads,
-}: Pick<ChatHeaderProps, "onPollCreate" | "isSilenced" | "onToggleSilence" | "hasNewPins" | "onPinnedMessages" | "hasNewDownloads" | "onDownloads">): KebabMenuItem[] {
+  t,
+}: Pick<ChatHeaderProps, "onPollCreate" | "isSilenced" | "onToggleSilence" | "hasNewPins" | "onPinnedMessages" | "hasNewDownloads" | "onDownloads"> & { t: (key: string) => string }): KebabMenuItem[] {
   const items: KebabMenuItem[] = [];
   if (onPinnedMessages) {
     items.push({
       id: "pinned-messages",
-      label: "Pinned messages",
+      label: t("header.pinnedMessages"),
       icon: <span style={{ fontSize: 15, lineHeight: 1 }}>📌</span>,
       badge: hasNewPins,
       onClick: onPinnedMessages,
@@ -76,7 +78,7 @@ function buildKebabItems({
   if (onDownloads) {
     items.push({
       id: "downloads",
-      label: "Downloads",
+      label: t("header.downloads"),
       icon: <FolderIcon width={16} height={16} />,
       badge: hasNewDownloads,
       onClick: onDownloads,
@@ -85,7 +87,7 @@ function buildKebabItems({
   if (onPollCreate) {
     items.push({
       id: "create-poll",
-      label: "Create poll",
+      label: t("header.createPoll"),
       icon: <PollIcon width={16} height={16} />,
       onClick: onPollCreate,
     });
@@ -93,7 +95,7 @@ function buildKebabItems({
   if (onToggleSilence) {
     items.push({
       id: "toggle-silence",
-      label: isSilenced ? "Unmute channel" : "Mute channel",
+      label: isSilenced ? t("header.unmuteChannel") : t("header.muteChannel"),
       icon: isSilenced
         ? <BellIcon width={16} height={16} />
         : <BellOffIcon width={16} height={16} />,
@@ -128,8 +130,10 @@ export default function ChatHeader({
   hasNewDownloads,
   onDownloads,
 }: ChatHeaderProps) {
+  const { t } = useTranslation("chat");
+  const tStr = t as (key: string) => string;
   const prefix = isDm ? "@" : "#";
-  const subtitle = isDm ? "Direct Message" : `${memberCount} members`;
+  const subtitle = isDm ? t("header.directMessage") : t("header.members", { count: memberCount });
 
   const privateBadge = isDm;
   const isStreaming = !!broadcastInfo;
@@ -160,7 +164,7 @@ export default function ChatHeader({
             </div>
             <div className={styles.broadcasterMeta}>
               <span className={styles.broadcasterName}>
-                {broadcastInfo.isOwnBroadcast ? "You" : broadcastInfo.broadcasterName}
+                {broadcastInfo.isOwnBroadcast ? t("header.you") : broadcastInfo.broadcasterName}
                 <span className={styles.broadcasterChannel}> - {broadcastInfo.channelName}</span>
               </span>
               <span className={styles.broadcastLabel}>
@@ -179,9 +183,9 @@ export default function ChatHeader({
                 className={styles.persistedIcon}
                 width={14}
                 height={14}
-                aria-label="Persistent chat"
+                aria-label={t("header.persistedChat")}
               >
-                <title>Messages in this channel are stored on the server</title>
+                <title>{t("header.persistedChatTooltip")}</title>
               </DatabaseIcon>
             )}
           </h2>
@@ -207,8 +211,8 @@ export default function ChatHeader({
           <button
             className={styles.serverInfoBtn}
             onClick={onChannelSearch}
-            aria-label="Search in channel"
-            title="Search in channel"
+            aria-label={t("header.searchInChannel")}
+            title={t("header.searchInChannel")}
           >
             <SearchIcon width={18} height={18} />
           </button>
@@ -217,8 +221,8 @@ export default function ChatHeader({
           <button
             className={styles.serverInfoBtn}
             onClick={onChannelInfoToggle}
-            aria-label="Channel info"
-            title="Channel info"
+            aria-label={t("header.channelInfo")}
+            title={t("header.channelInfo")}
           >
             <FolderIcon width={18} height={18} />
           </button>
@@ -228,14 +232,14 @@ export default function ChatHeader({
             className={`${styles.serverInfoBtn} ${isScreenSharing ? styles.screenShareActive : ""}`}
             onClick={onToggleScreenShare}
             disabled={!!screenShareDisabledReason}
-            aria-label={isScreenSharing ? "Stop sharing" : "Share screen"}
+            aria-label={isScreenSharing ? t("header.stopSharing") : t("header.shareScreen")}
             title={
               screenShareDisabledReason ?? (
                 isScreenSharing
-                  ? "Stop sharing"
+                  ? t("header.stopSharing")
                   : sfuAvailable
-                    ? "Share screen (server-relayed)"
-                    : "Share screen (no SFU - peer-to-peer)"
+                    ? t("header.shareScreenRelayed")
+                    : t("header.shareScreenP2P")
               )
             }
           >
@@ -247,22 +251,22 @@ export default function ChatHeader({
           <button
             className={styles.streamCloseBtn}
             onClick={broadcastInfo.onClose}
-            title={broadcastInfo.isOwnBroadcast ? "Stop sharing" : "Close stream"}
-            aria-label={broadcastInfo.isOwnBroadcast ? "Stop sharing" : "Close stream"}
+            title={broadcastInfo.isOwnBroadcast ? t("header.stopSharing") : t("header.closeStream")}
+            aria-label={broadcastInfo.isOwnBroadcast ? t("header.stopSharing") : t("header.closeStream")}
           >
             <CloseIcon width={16} height={16} />
           </button>
         )}
         {!privateBadge && (
           <KebabMenu
-            items={buildKebabItems({ onPollCreate, isSilenced, onToggleSilence, hasNewPins, onPinnedMessages, hasNewDownloads, onDownloads })}
-            ariaLabel="Channel options"
+            items={buildKebabItems({ onPollCreate, isSilenced, onToggleSilence, hasNewPins, onPinnedMessages, hasNewDownloads, onDownloads, t: tStr })}
+            ariaLabel={t("header.channelOptions")}
             badge={hasNewPins || hasNewDownloads}
           />
         )}
         {!isInChannel && onJoin && (
           <button className={styles.joinBtn} onClick={onJoin}>
-            {isMobile ? "Join" : "Join Channel"}
+            {isMobile ? t("header.join") : t("header.joinChannel")}
           </button>
         )}
       </div>

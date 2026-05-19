@@ -32,7 +32,7 @@ export interface PersonalizationData {
   fontSizeCustomPx: number;
   /** Font family for chat messages. */
   fontFamily: string;
-  /** Compact mode — hide avatars and tighten spacing. */
+  /** Compact mode - hide avatars and tighten spacing. */
   compactMode: boolean;
   /** Channel sidebar viewer style. */
   channelViewerStyle: ChannelViewerStyle;

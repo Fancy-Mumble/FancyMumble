@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAppStore } from "../../store";
 import type { ServerId, SessionMeta } from "../../types";
@@ -70,6 +71,7 @@ export default function ServerTabsBar() {
   const refreshSessions = useAppStore((s) => s.refreshSessions);
   const disconnectSession = useAppStore((s) => s.disconnectSession);
   const sessionUnreadTotals = useAppStore((s) => s.sessionUnreadTotals);
+  const { t } = useTranslation("server");
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -334,10 +336,10 @@ export default function ServerTabsBar() {
       type="button"
       className={styles.addBtn}
       onClick={handleAddClick}
-      aria-label="Connect to a server"
+      aria-label={t("tabsBar.connectButton")}
       aria-expanded={addOpen}
       aria-haspopup="dialog"
-      title="Connect to a server"
+      title={t("tabsBar.connectButton")}
     >
       +
     </button>
@@ -360,7 +362,7 @@ export default function ServerTabsBar() {
 
   return (
     <>
-      <div className={styles.bar} role="tablist" aria-label="Connected servers" data-tauri-drag-region>
+      <div className={styles.bar} role="tablist" aria-label={t("tabsBar.connectedServersAriaLabel")} data-tauri-drag-region>
         {orderedSessions.map((meta) => {
           const isActive = !newTabActive && meta.id === activeServerId;
           const unreadTotal = isActive ? 0 : (sessionUnreadTotals[meta.id] ?? 0);
@@ -411,7 +413,7 @@ export default function ServerTabsBar() {
               <span className={`${styles.statusDot} ${statusClass(meta.status)}`} />
               <span className={styles.label}>{tabLabel(meta)}</span>
               {unreadTotal > 0 && (
-                <span className={styles.unreadBadge} aria-label={`${unreadTotal} unread`}>
+                <span className={styles.unreadBadge} aria-label={t("tabsBar.unreadCount", { count: unreadTotal })}>
                   {unreadTotal > 99 ? "99+" : unreadTotal}
                 </span>
               )}
@@ -419,8 +421,8 @@ export default function ServerTabsBar() {
                 type="button"
                 className={styles.closeBtn}
                 onClick={(e) => handleCloseClick(e, meta)}
-                aria-label={`Disconnect from ${tabLabel(meta)}`}
-                title="Disconnect"
+                aria-label={t("tabsBar.disconnectFrom", { label: tabLabel(meta) })}
+                title={t("tabsBar.disconnectTitle")}
               >
                 x
               </button>
@@ -433,16 +435,16 @@ export default function ServerTabsBar() {
             aria-selected
             tabIndex={0}
             className={`${styles.tab} ${styles.tabActive} ${styles.newTab}`}
-            title="New connection"
+            title={t("tabsBar.newConnection")}
           >
             <span className={`${styles.statusDot} ${styles.statusNew}`} />
-            <span className={styles.label}>New connection</span>
+            <span className={styles.label}>{t("tabsBar.newConnection")}</span>
             <button
               type="button"
               className={styles.closeBtn}
               onClick={handleDismissNewTab}
-              aria-label="Dismiss new connection tab"
-              title="Dismiss"
+              aria-label={t("tabsBar.dismissNewTab")}
+              title={t("tabsBar.dismissTitle")}
             >
               x
             </button>
@@ -476,10 +478,10 @@ export default function ServerTabsBar() {
 
       {pendingDisconnect && (
         <ConfirmDialog
-          title="Disconnect from server"
-          body={`Disconnect from ${tabLabel(pendingDisconnect)}?`}
-          confirmLabel="Disconnect"
-          cancelLabel="Cancel"
+          title={t("tabsBar.disconnectDialogTitle")}
+          body={t("tabsBar.disconnectDialogBody", { label: tabLabel(pendingDisconnect) })}
+          confirmLabel={t("tabsBar.disconnectConfirm")}
+          cancelLabel={t("tabsBar.disconnectCancel")}
           danger
           isConfirming={isDisconnecting}
           onConfirm={() => void handleConfirmDisconnect()}

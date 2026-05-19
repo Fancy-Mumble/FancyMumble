@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 
 import { useAppStore } from "../../store";
@@ -36,6 +37,7 @@ export default function OnboardingModal() {
 
   const [stepIndex, setStepIndex] = useState(0);
   const [selections, setSelections] = useState<Record<string, Set<string>>>({});
+  const { t } = useTranslation("settings");;
 
   // Seed with previous answers when the modal opens.
   useEffect(() => {
@@ -120,14 +122,14 @@ export default function OnboardingModal() {
       >
         <div className={styles.header}>
           <h2 id="onboarding-title" className={styles.title}>
-            {isPreview ? "Welcome!" : question?.text}
+            {isPreview ? t("onboarding.modal.welcomeTitle") : question?.text}
           </h2>
           <p className={styles.subtitle}>
             {isPreview
-              ? "Let's tailor your view of this server."
+              ? t("onboarding.modal.welcomeSubtitle")
               : question?.multi_select
-              ? "Pick all that apply."
-              : "Pick one."}
+              ? t("onboarding.modal.pickMultiple")
+              : t("onboarding.modal.pickOne")}
           </p>
         </div>
 
@@ -151,7 +153,7 @@ export default function OnboardingModal() {
           ) : question ? (
             <>
               {question.required && (
-                <p className={styles.questionMeta}>* required</p>
+                <p className={styles.questionMeta}>{t("onboarding.modal.required")}</p>
               )}
               <div className={styles.answers}>
                 {question.answers.map((a) => {
@@ -195,7 +197,7 @@ export default function OnboardingModal() {
 
         <div className={styles.actions}>
           <button className={styles.btn} onClick={handleSkip} disabled={busy}>
-            Skip for now
+            {t("onboarding.modal.skipBtn")}
           </button>
           <div className={styles.spacer} />
           {stepIndex > 0 ? (
@@ -204,7 +206,7 @@ export default function OnboardingModal() {
               onClick={() => setStepIndex((i) => i - 1)}
               disabled={busy}
             >
-              Back
+              {t("onboarding.modal.backBtn")}
             </button>
           ) : null}
           <button
@@ -212,7 +214,7 @@ export default function OnboardingModal() {
             onClick={handleNext}
             disabled={busy || !isStepValid()}
           >
-            {stepIndex < stepCount - 1 ? "Next" : "Finish"}
+            {stepIndex < stepCount - 1 ? t("onboarding.modal.nextBtn") : t("onboarding.modal.finishBtn")}
           </button>
         </div>
       </div>
@@ -227,18 +229,18 @@ interface PreviewProps {
 }
 
 function DefaultChannelsPreview({ defaultIds, channelLookup }: PreviewProps) {
+  const { t } = useTranslation("settings");
   if (defaultIds.length === 0) {
     return (
       <p className={styles.questionMeta}>
-        You'll start with the full channel list. Answer the next questions to
-        narrow it down.
+        {t("onboarding.modal.defaultChannelsEmpty")}
       </p>
     );
   }
   return (
     <div className={styles.defaultChannels}>
       <p className={styles.defaultChannelsTitle}>
-        You'll start in these channels
+        {t("onboarding.modal.defaultChannelsTitle")}
       </p>
       <div className={styles.defaultChannelsList}>
         {defaultIds.map((id) => (

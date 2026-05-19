@@ -1,5 +1,6 @@
 import { CheckDoubleIcon, CheckSingleIcon } from "../../icons";
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../store";
 import { allActiveUsersRead, getReadersForMessage } from "./readReceiptStore";
 import styles from "./ReadReceiptIndicator.module.css";
@@ -18,6 +19,8 @@ export default function ReadReceiptIndicator({
   const readReceiptVersion = useAppStore((s) => s.readReceiptVersion);
   const users = useAppStore((s) => s.users);
   const ownSession = useAppStore((s) => s.ownSession);
+
+  const { t } = useTranslation("chat");
 
   const ownHash = useMemo(
     () => users.find((u) => u.session === ownSession)?.hash,
@@ -58,23 +61,23 @@ export default function ReadReceiptIndicator({
 
   if (readerCount === 0) {
     return (
-      <span className={styles.indicator} title="Sent">
-        <CheckSingleIcon width={16} height={11} aria-label="Sent" />
+      <span className={styles.indicator} title={t("readReceipt.sent")}>
+        <CheckSingleIcon width={16} height={11} aria-label={t("readReceipt.sent")} />
       </span>
     );
   }
 
   if (!allRead) {
     return (
-      <span className={`${styles.indicator} ${styles.read}`} title={`Read by ${readerCount}`}>
-        <CheckSingleIcon width={16} height={11} aria-label="Read" />
+      <span className={`${styles.indicator} ${styles.read}`} title={t("readReceipt.readByCount", { count: readerCount })}>
+        <CheckSingleIcon width={16} height={11} aria-label={t("readReceipt.read")} />
       </span>
     );
   }
 
   return (
-    <span className={`${styles.indicator} ${styles.read}`} title="Read by everyone">
-      <CheckDoubleIcon width={16} height={11} aria-label="Read by everyone" />
+    <span className={`${styles.indicator} ${styles.read}`} title={t("readReceipt.readByEveryone")}>
+      <CheckDoubleIcon width={16} height={11} aria-label={t("readReceipt.readByEveryone")} />
     </span>
   );
 }

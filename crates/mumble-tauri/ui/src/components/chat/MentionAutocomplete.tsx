@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useRef, type KeyboardEvent } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./MentionAutocomplete.module.css";
 import { colorFor } from "../../utils/format";
 
@@ -41,16 +42,21 @@ export interface MentionAutocompleteProps {
  *
  * Extracted as a tiny helper to keep the row JSX readable.
  */
-function candidateLabel(c: MentionCandidate): { label: string; hint: string } {
+function candidateLabel(c: MentionCandidate): string {
   switch (c.kind) {
-    case "user":
-      return { label: c.name, hint: "User" };
-    case "role":
-      return { label: `@${c.name}`, hint: "Role" };
-    case "everyone":
-      return { label: "@everyone", hint: "Notify the whole channel" };
-    case "here":
-      return { label: "@here", hint: "Notify online users in this channel" };
+    case "user": return c.name;
+    case "role": return `@${c.name}`;
+    case "everyone": return "@everyone";
+    case "here": return "@here";
+  }
+}
+
+function candidateHintKey(c: MentionCandidate): string {
+  switch (c.kind) {
+    case "user": return "mention.hintUser";
+    case "role": return "mention.hintRole";
+    case "everyone": return "mention.hintEveryone";
+    case "here": return "mention.hintHere";
   }
 }
 
@@ -76,6 +82,8 @@ export default function MentionAutocomplete({
   onActiveIndexChange,
 }: MentionAutocompleteProps) {
   const listRef = useRef<HTMLUListElement>(null);
+  const { t } = useTranslation("chat");
+  const tStr = t as (k: string) => string;
 
   // Keep the active item scrolled into view.
   useEffect(() => {
@@ -88,7 +96,7 @@ export default function MentionAutocomplete({
   if (candidates.length === 0) {
     return (
       <div className={styles.popup} role="listbox">
-        <div className={styles.empty}>No matches</div>
+        <div className={styles.empty}>{t("mention.noMatches")}</div>
       </div>
     );
   }
@@ -97,7 +105,8 @@ export default function MentionAutocomplete({
     <div className={styles.popup} role="listbox" aria-label="Mention suggestions">
       <ul ref={listRef} className={styles.list}>
         {candidates.map((c, idx) => {
-          const { label, hint } = candidateLabel(c);
+          const label = candidateLabel(c);
+          const hint = tStr(candidateHintKey(c));
           const active = idx === activeIndex;
           return (
             <li

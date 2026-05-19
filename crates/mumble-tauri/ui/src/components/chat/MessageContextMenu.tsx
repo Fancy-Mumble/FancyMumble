@@ -1,6 +1,7 @@
 import { ArrowUpRightIcon, CheckboxIcon, CopyIcon, EditIcon, EmojiPlusIcon, PlayIcon, QuoteIcon, TrashIcon } from "../../icons";
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import type { ChatMessage } from "../../types";
 import type { ReactionSummary } from "./reactionStore";
 import { getReadersForMessage } from "./readReceiptStore";
@@ -89,6 +90,7 @@ export default function MessageContextMenu({
 }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<MenuPosition | null>(null);
+  const { t } = useTranslation("chat");
   const { canStart: canWatchTogether, busy: watchBusy, start: startWatch } = useWatchStart(
     menu.message.body,
     menu.message.channel_id,
@@ -174,7 +176,7 @@ export default function MessageContextMenu({
               <button
                 type="button"
                 className={styles.reactionBtn}
-                aria-label="More reactions"
+                aria-label={t("contextMenu.moreReactions")}
                 onClick={(e) => { onMoreReactions(menu.message, e); onClose(); }}
               >
                 <EmojiPlusIcon width={16} height={16} />
@@ -188,7 +190,7 @@ export default function MessageContextMenu({
             <span className={styles.menuIcon}>
               <QuoteIcon width={14} height={14} />
             </span>
-            Quote
+            {t("contextMenu.quote")}
           </button>
         )}
         {canWatchTogether && (
@@ -201,7 +203,7 @@ export default function MessageContextMenu({
             <span className={styles.menuIcon}>
               <PlayIcon width={14} height={14} />
             </span>
-            {watchBusy ? "Starting\u2026" : "Watch together"}
+            {watchBusy ? t("contextMenu.watchTogetherBusy") : t("contextMenu.watchTogether")}
           </button>
         )}
         {onCopyText && (
@@ -209,7 +211,7 @@ export default function MessageContextMenu({
             <span className={styles.menuIcon}>
               <CopyIcon width={14} height={14} />
             </span>
-            Copy text
+            {t("contextMenu.copyText")}
           </button>
         )}
         {onEdit && menu.message.is_own && menu.message.message_id && (
@@ -217,13 +219,13 @@ export default function MessageContextMenu({
             <span className={styles.menuIcon}>
               <EditIcon width={14} height={14} />
             </span>
-            Edit message
+            {t("contextMenu.edit")}
           </button>
         )}
         {onPin && menu.message.message_id && (
           <button type="button" className={styles.menuItem} onClick={() => { onPin(menu.message); onClose(); }}>
             <span className={styles.menuIcon}>📌</span>
-            {menu.message.pinned ? "Unpin message" : "Pin message"}
+            {menu.message.pinned ? t("contextMenu.unpin") : t("contextMenu.pin")}
           </button>
         )}
         {onPopOutImage && popOutImageSrc && (
@@ -231,7 +233,7 @@ export default function MessageContextMenu({
             <span className={styles.menuIcon}>
               <ArrowUpRightIcon width={14} height={14} />
             </span>
-            Pop out image
+            {t("contextMenu.popOutImage")}
           </button>
         )}
         {canDelete && (
@@ -239,7 +241,7 @@ export default function MessageContextMenu({
             <span className={styles.menuIcon}>
               <TrashIcon width={14} height={14} />
             </span>
-            Delete message
+            {t("contextMenu.deleteMessage")}
           </button>
         )}
         {canDelete && (
@@ -247,7 +249,7 @@ export default function MessageContextMenu({
             <span className={styles.menuIcon}>
               <CheckboxIcon width={14} height={14} />
             </span>
-            Select messages
+            {t("contextMenu.selectMessages")}
           </button>
         )}
 
@@ -284,7 +286,7 @@ export default function MessageContextMenu({
         {isOwnWithId && (
           <>
             <div className={styles.divider} />
-            <div className={styles.readByLabel}>Read by</div>
+            <div className={styles.readByLabel}>{t("contextMenu.readBy")}</div>
             {readerEntries.length > 0 ? (
               <div className={styles.reactorSection}>
                 {readerEntries.map((entry) => (
@@ -301,7 +303,7 @@ export default function MessageContextMenu({
                 ))}
               </div>
             ) : (
-              <div className={styles.readByEmpty}>No one yet</div>
+              <div className={styles.readByEmpty}>{t("contextMenu.noReaders")}</div>
             )}
           </>
         )}

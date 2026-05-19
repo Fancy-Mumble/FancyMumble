@@ -1,0 +1,321 @@
+﻿{
+  "composer": {
+    "editingMessage": "Editing message",
+    "attachTooltipImageFile": "Attach image or file",
+    "attachTooltipImageOnly": "Attach image, GIF, or video",
+    "attachMenuImage": "Image / Video",
+    "attachMenuFile": "File",
+    "gifPickerTooltip": "GIF picker",
+    "placeholderMobile": "Write a message...",
+    "placeholderDesktop": "Write a message... (Ctrl+B/I/U for formatting)"
+  },
+  "header": {
+    "directMessage": "Direct Message",
+    "unknown": "Unknown",
+    "members": "{{count}} members",
+    "you": "You",
+    "screenSharing": "Screen sharing",
+    "persistedChat": "Persistent chat",
+    "persistedChatTooltip": "Messages in this channel are stored on the server",
+    "searchInChannel": "Search in channel",
+    "channelInfo": "Channel info",
+    "stopSharing": "Stop sharing",
+    "shareScreen": "Share screen",
+    "shareScreenRelayed": "Share screen (server-relayed)",
+    "shareScreenP2P": "Share screen (no SFU - peer-to-peer)",
+    "closeStream": "Close stream",
+    "pinnedMessages": "Pinned messages",
+    "downloads": "Downloads",
+    "createPoll": "Create poll",
+    "muteChannel": "Mute channel",
+    "unmuteChannel": "Unmute channel",
+    "channelOptions": "Channel options",
+    "join": "Join",
+    "joinChannel": "Join Channel"
+  },
+  "contextMenu": {
+    "moreReactions": "More reactions",
+    "quote": "Quote",
+    "watchTogether": "Watch together",
+    "watchTogetherBusy": "Starting…",
+    "edit": "Edit",
+    "copyText": "Copy text",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "popOutImage": "Pop out image",
+    "deleteMessage": "Delete message",
+    "selectMessages": "Select messages",
+    "readBy": "Read by",
+    "noReaders": "No one yet"
+  },
+  "poll": {
+    "header": "Poll",
+    "by": "by {{name}}",
+    "voteButton": "Vote ({{count}} selected)",
+    "totalVotes_one": "{{count}} vote",
+    "totalVotes_other": "{{count}} votes",
+    "multipleChoice": "Multiple choice",
+    "creator": {
+      "title": "Create a Poll",
+      "questionLabel": "Question",
+      "questionPlaceholder": "What do you want to ask?",
+      "optionsLabel": "Options",
+      "optionPlaceholder": "Option {{n}}",
+      "removeOption": "Remove option",
+      "addOption": "+ Add option",
+      "allowMultiple": "Allow multiple selections",
+      "cancel": "Cancel",
+      "submit": "Create Poll"
+    }
+  },
+  "selection": {
+    "count": "{{count}} selected",
+    "deleteButton": "Delete ({{count}})",
+    "cancel": "Cancel"
+  },
+  "callControls": {
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "deafen": "Deafen",
+    "undeafen": "Undeafen"
+  },
+  "gifPicker": {
+    "tabGifs": "GIFs",
+    "tabStickers": "Stickers",
+    "searchPlaceholder": "Search {{tab}}...",
+    "loading": "Loading...",
+    "noResults": "No {{tab}} found for \"{{query}}\""
+  },
+  "pinned": {
+    "title": "Pinned Messages",
+    "closeAriaLabel": "Close pinned messages",
+    "empty": "No pinned messages in this channel.",
+    "pinnedBy": "pinned by {{name}}",
+    "imageLabel": "Image",
+    "mediaLabel": "(media)",
+    "unpin": "Unpin",
+    "unpinAriaLabel": "Unpin message"
+  },
+  "typing": {
+    "one": "{{name}} is typing",
+    "two": "{{name1}} and {{name2}} are typing",
+    "many": "{{name}} and {{count}} others are typing"
+  },
+  "dates": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "newMessages": "New messages",
+    "decrypting": "Decrypting…",
+    "contentOffloaded": "Content offloaded"
+  },
+  "toasts": {
+    "fileSharingDisabled": "File sharing is not enabled on this server.",
+    "fileSharingNoPermission": "You don't have permission to share files in this channel.",
+    "filePickerFailed": "File picker failed: {{detail}}"
+  },
+  "downloads": {
+    "title": "Downloads",
+    "clear": "Clear",
+    "clearTooltip": "Clear list (does not delete files)",
+    "close": "Close downloads",
+    "empty": "No files downloaded yet.",
+    "relTime": {
+      "justNow": "just now",
+      "minutesAgo": "{{min}} min ago",
+      "hoursAgo": "{{hr}} h ago"
+    },
+    "open": "Open",
+    "showInFolder": "Show in folder",
+    "remove": "Remove",
+    "removeTooltip": "Remove from list (does not delete file)"
+  },
+  "drawing": {
+    "strokeWidth": "Stroke width",
+    "widthTooltip": "Width: {{strokeWidth}}px",
+    "clearAll": "Clear everyone's drawings",
+    "clearMine": "Clear my drawings",
+    "selectColor": "Select color {{color}}"
+  },
+  "fileAttachment": {
+    "passwordPrompt": "This file requires a password:",
+    "previewError": "Preview failed to load.",
+    "expired": "This download link has expired and is no longer available.",
+    "expiredPrefix": "expired",
+    "expiresPrefix": "expires",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "save": "Save",
+    "savedTooltip": "Saved - download again",
+    "downloadTooltip": "Download to disk",
+    "open": "Open",
+    "openTooltip": "Open in browser",
+    "viewInLightbox": "View {{filename}} in lightbox"
+  },
+  "fileShare": {
+    "title": "Share file",
+    "prompt": "How should {{filename}} be shared?",
+    "accessMode": "Access mode",
+    "mode": {
+      "publicDesc": "Anyone with the link can download. Use for files you'd be okay posting publicly.",
+      "passwordDesc": "Recipients must enter the password you set below. Share the password out-of-band.",
+      "sessionDesc": "Only currently-connected users on this server can download. Link stops working when they disconnect."
+    },
+    "restrictedHint": "Disabled by server policy: you do not have permission to share files via publicly accessible links.",
+    "passwordLabel": "Password",
+    "messageLabel": "Message",
+    "messagePlaceholder": "Add a message to send with the file...",
+    "cancel": "Cancel",
+    "upload": "Upload"
+  },
+  "linkPreview": {
+    "privacyGateText": "This embed loads external content from {{site}}.",
+    "loadContent": "Load content",
+    "playVideo": "Play video",
+    "embeddedVideo": "Embedded video"
+  },
+  "mediaPreview": {
+    "closeLightbox": "Close lightbox"
+  },
+  "mention": {
+    "hintUser": "User",
+    "hintRole": "Role",
+    "hintEveryone": "Notify the whole channel",
+    "hintHere": "Notify online users in this channel",
+    "noMatches": "No matches",
+    "suggestions": "Mention suggestions"
+  },
+  "mentionPopover": {
+    "noMembers": "No members",
+    "overflow": "+{{count}} more",
+    "userOffline": "User is offline",
+    "onlineMembers": "Online members",
+    "membersInChannel": "Members in this channel"
+  },
+  "message": {
+    "legacyBadge": "legacy",
+    "editedBadge": "(edited)",
+    "pinnedBadge": "📌 pinned",
+    "viewProfile": "View {{name}}'s profile"
+  },
+  "multiStream": {
+    "watchStream": "Watch {{name}}'s stream",
+    "liveBadge": "LIVE",
+    "activeStreams_one": "{{count}} active stream",
+    "activeStreams_other": "{{count}} active streams"
+  },
+  "pendingMessage": {
+    "sendingLabel": "Sending message",
+    "sending": "Sending…",
+    "failed": "Failed to send",
+    "retry": "Retry",
+    "retrySending": "Retry sending",
+    "dismissFailed": "Dismiss failed message",
+    "hidePending": "Hide pending indicator",
+    "dismiss": "Dismiss",
+    "hide": "Hide"
+  },
+  "quotePreview": {
+    "mediaFallback": "Media",
+    "remove": "Remove quote"
+  },
+  "reactions": {
+    "add": "Add reaction"
+  },
+  "readReceipt": {
+    "sent": "Sent",
+    "read": "Read",
+    "readByCount": "Read by {{count}}",
+    "readByEveryone": "Read by everyone"
+  },
+  "screenShare": {
+    "alreadySharingOtherServer": "You are already sharing your screen from another server. Stop that share first.",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "volume": "Volume",
+    "play": "Play",
+    "pause": "Pause",
+    "drawOn": "Draw on screen",
+    "drawOff": "Stop drawing",
+    "showOverlayTooltip": "Show desktop overlay (click-through, hidden from capture)",
+    "showOverlay": "Show desktop overlay",
+    "hideOverlay": "Hide desktop overlay",
+    "popout": "Open in separate window",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen",
+    "settingUp": "Setting up stream...",
+    "connecting": "Connecting...",
+    "waitingForStream": "Waiting for stream",
+    "share": "Share screen",
+    "stopSharing": "Stop sharing",
+    "p2pLabel": "P2P",
+    "p2pTooltip": "No SFU on this server - the stream connects directly between peers",
+    "dismiss": "Dismiss",
+    "banner": {
+      "isSharingScreen": "{{name}} is sharing their screen",
+      "watch": "Watch",
+      "dismiss": "Dismiss notification"
+    }
+  },
+  "streamFocus": {
+    "layout": {
+      "solo": "Solo",
+      "sideBySide": "Side by side",
+      "pip": "Picture-in-picture",
+      "grid2x2": "2x2 Grid",
+      "main2": "Main + 2",
+      "main3": "Main + 3"
+    },
+    "primaryStream": "Primary stream",
+    "dropToFocus": "Drop to focus",
+    "changeLayout": "Change layout",
+    "snapLayout": "Snap layout",
+    "showOtherStreams": "Show other streams",
+    "hideOtherStreams": "Hide other streams",
+    "otherStreams_one": "{{count}} other stream",
+    "otherStreams_other": "{{count}} other streams",
+    "dragOrClickToSwitch": "Drag or click to switch",
+    "switchToStream": "Switch to {{name}}'s stream",
+    "watchDrawerThumb": "Watch {{name}}",
+    "liveBadge": "LIVE"
+  },
+  "upload": {
+    "progressLabel": "Upload progress",
+    "failed": "Upload failed",
+    "uploading": "Uploading…",
+    "percent": "{{progress}}%",
+    "cancel": "Cancel upload",
+    "dismissFailed": "Dismiss failed upload",
+    "dismiss": "Dismiss"
+  },
+  "watch": {
+    "watching": "{{count}} watching",
+    "startTooltip": "Start a synchronised watch session for this video",
+    "watchTogether": "Watch together",
+    "starting": "Starting…",
+    "open": "Open",
+    "collapse": "Collapse",
+    "card": {
+      "watchingWithHost": "{{count}} watching · host: {{hostName}}",
+      "openElsewhere": "Watch session is open elsewhere on this page.",
+      "hostBadge": "HOST",
+      "outOfSync": "Out of sync with host.",
+      "resync": "Resync",
+      "requestState": "Request state",
+      "leave": "Leave",
+      "endForEveryone": "End for everyone",
+      "rejoin": "Rejoin"
+    }
+  },
+  "page": {
+    "selectChannel": "Select a channel to start chatting",
+    "reconnect": {
+      "titleDisconnected": "Disconnected",
+      "titleLost": "Connection lost",
+      "reasonLabel": "Reason",
+      "reconnectingBtn": "Reconnecting...",
+      "reconnectBtn": "Reconnect"
+    },
+    "openChannelsAriaLabel": "Open channels",
+    "closeChannelsAriaLabel": "Close channels"
+  }
+}

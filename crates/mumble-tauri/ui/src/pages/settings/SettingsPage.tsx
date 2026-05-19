@@ -1,9 +1,10 @@
 ﻿import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { load } from "@tauri-apps/plugin-store";
-import type { AudioDevice, AudioSettings, FancyProfile, UserMode, TimeFormat } from "../../types";
+import type { AudioDevice, AudioSettings, FancyProfile, UserMode, TimeFormat, DateFormat, NumberFormat } from "../../types";
 import { getPreferences, updatePreferences, getSavedAudioSettings, saveAudioSettings } from "../../preferencesStorage";
 import { serializeProfile, dataUrlToBytes } from "../../profileFormat";
 import { setKlipyApiKey } from "../../components/chat/GifPicker";
@@ -24,6 +25,7 @@ import { AdvancedPanel } from "./AdvancedPanel";
 import { PrivacyPanel } from "./PrivacyPanel";
 import { IdentitiesPanel } from "./IdentitiesPanel";
 import { PersonalizationPanel } from "./PersonalizationPanel";
+import { LocalizationPanel } from "./LocalizationPanel";
 import { NotificationsPanel, DEFAULT_NOTIFICATION_SOUNDS } from "./NotificationsPanel";
 import { getNotificationSounds, saveNotificationSounds } from "../../preferencesStorage";
 import { ProfilePreviewCard } from "./ProfilePreviewCard";
@@ -35,7 +37,7 @@ import styles from "./SettingsPage.module.css";
 
 // -- Types & constants ----------------------------------------------
 
-type Tab = "profile" | "voice" | "shortcuts" | "identities" | "advanced" | "personalize" | "notifications" | "privacy" | "channels-roles";
+type Tab = "profile" | "voice" | "shortcuts" | "identities" | "advanced" | "personalize" | "localization" | "notifications" | "privacy" | "channels-roles";
 
 const DEFAULT_AUDIO: AudioSettings = {
   selected_device: null,
@@ -74,32 +76,35 @@ const PERSONALIZATION_DEFAULTS: PersonalizationData = {
   theme: "dark",
 };
 
-const BASE_TABS: TabDef<Tab>[] = [
-  { id: "profile", label: "Profile", icon: "👤" },
-  { id: "voice", label: "Voice", icon: "🎙️" },
-  { id: "shortcuts", label: "Shortcuts", icon: "⌨️" },
-  { id: "identities", label: "Identities", icon: "🔑" },
-  { id: "notifications", label: "Notifications", icon: "🔔" },
-  { id: "privacy", label: "Privacy", icon: "🔒" },
-  { id: "personalize", label: "Personalize", icon: "🎨" },
-  { id: "advanced", label: "Advanced", icon: "⚙️" },
-];
+function buildTabs(t: (key: string) => string): TabDef<Tab>[] {
+  return [
+    { id: "profile", label: t("tabs.profile"), icon: "👤" },
+    { id: "voice", label: t("tabs.voice"), icon: "🎙️" },
+    { id: "shortcuts", label: t("tabs.shortcuts"), icon: "⌨️" },
+    { id: "identities", label: t("tabs.identities"), icon: "🔑" },
+    { id: "notifications", label: t("tabs.notifications"), icon: "🔔" },
+    { id: "privacy", label: t("tabs.privacy"), icon: "🔒" },
+    { id: "personalize", label: t("tabs.personalize"), icon: "🎨" },
+    { id: "localization", label: t("tabs.localization"), icon: "🌐" },
+    { id: "advanced", label: t("tabs.advanced"), icon: "⚙️" },
+  ];
+}
 
 // -- Main component -------------------------------------------------
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation("settings");
   const [tab, setTab] = useState<Tab>("profile");
   const isConnected = useAppStore((s) => s.status) === "connected";
   const connectedCertLabel = useAppStore((s) => s.connectedCertLabel);
   const serverFancyVersion = useAppStore((s) => s.serverFancyVersion);
   const onboardingSupported = isOnboardingSupported(serverFancyVersion);
-  // Insert "Channels & Roles" before "Advanced" only when the server
-  // supports the onboarding workflow (Fancy 0.3.1+).
+  const BASE_TABS = buildTabs(t as (key: string) => string);
   const TABS: TabDef<Tab>[] = onboardingSupported
     ? [
         ...BASE_TABS.slice(0, BASE_TABS.length - 1),
-        { id: "channels-roles", label: "Channels & Roles", icon: "👋" },
+        { id: "channels-roles", label: t("tabs.channelsRoles"), icon: "\u{1F44B}" },
         BASE_TABS[BASE_TABS.length - 1],
       ]
     : BASE_TABS;
@@ -129,6 +134,8 @@ export default function SettingsPage() {
   const [useRodioBackend, setUseRodioBackend] = useState(true);
   const [timeFormat, setTimeFormat] = useState<TimeFormat>("auto");
   const [convertToLocalTime, setConvertToLocalTime] = useState(true);
+  const [dateFormat, setDateFormat] = useState<DateFormat>("auto");
+  const [numberFormat, setNumberFormat] = useState<NumberFormat>("auto");
 
   // Shortcuts
   const [shortcuts, setShortcuts] = useState<ShortcutBindings>(DEFAULT_SHORTCUTS);
@@ -197,6 +204,8 @@ export default function SettingsPage() {
         setLogLevel(prefs.logLevel ?? (prefs.debugLogging ? "debug" : "info"));
         setTimeFormat(prefs.timeFormat);
         setConvertToLocalTime(prefs.convertToLocalTime);
+        setDateFormat(prefs.dateFormat ?? "auto");
+        setNumberFormat(prefs.numberFormat ?? "auto");
       } catch {
         /* keep defaults */
       }
@@ -417,6 +426,16 @@ export default function SettingsPage() {
       updatePreferences({ convertToLocalTime: next });
       return next;
     });
+  }, []);
+
+  const handleDateFormatChange = useCallback(async (fmt: DateFormat) => {
+    setDateFormat(fmt);
+    await updatePreferences({ dateFormat: fmt });
+  }, []);
+
+  const handleNumberFormatChange = useCallback(async (fmt: NumberFormat) => {
+    setNumberFormat(fmt);
+    await updatePreferences({ numberFormat: fmt });
   }, []);
 
   const handleToggleNotifications = useCallback(async () => {
@@ -674,6 +693,19 @@ export default function SettingsPage() {
             />
           )}
 
+          {tab === "localization" && (
+            <LocalizationPanel
+              timeFormat={timeFormat}
+              convertToLocalTime={convertToLocalTime}
+              dateFormat={dateFormat}
+              numberFormat={numberFormat}
+              onTimeFormatChange={handleTimeFormatChange}
+              onConvertToLocalTimeChange={handleConvertToLocalTimeChange}
+              onDateFormatChange={handleDateFormatChange}
+              onNumberFormatChange={handleNumberFormatChange}
+            />
+          )}
+
           {tab === "notifications" && (
             <NotificationsPanel
               settings={notificationSounds}
@@ -712,15 +744,11 @@ export default function SettingsPage() {
               logLevel={logLevel}
               autoReconnect={autoReconnect}
               autoUpdateOnStartup={autoUpdateOnStartup}
-              timeFormat={timeFormat}
-              convertToLocalTime={convertToLocalTime}
               onToggleMode={handleToggleMode}
               onKlipyApiKeyChange={handleKlipyApiKeyChange}
               onLogLevelChange={handleLogLevelChange}
               onToggleAutoReconnect={handleToggleAutoReconnect}
               onToggleAutoUpdate={handleToggleAutoUpdate}
-              onTimeFormatChange={handleTimeFormatChange}
-              onConvertToLocalTimeChange={handleConvertToLocalTimeChange}
               onToggleDeveloperMode={handleToggleDeveloperMode}
               onReset={handleReset}
             />

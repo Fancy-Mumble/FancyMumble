@@ -1,5 +1,6 @@
 import { ChevronDownIcon } from "../../icons";
 import React, { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../../store";
 import type { ChatMessage, TimeFormat } from "../../types";
@@ -69,9 +70,11 @@ function computeHeader(
   dmPartner: { name: string } | undefined,
   channel: { name: string } | undefined,
   memberCount: number,
+  fallbackDm: string,
+  fallbackChannel: string,
 ): [string, number] {
-  if (isDmMode) return [dmPartner?.name ?? "Direct Message", 0];
-  return [channel?.name ?? "Unknown", memberCount];
+  if (isDmMode) return [dmPartner?.name ?? fallbackDm, 0];
+  return [channel?.name ?? fallbackChannel, memberCount];
 }
 
 /** Find the first poppable image source in a message body, or null if none. */
@@ -89,6 +92,7 @@ function findPopOutImageSrc(body: string): string | null {
 }
 
 export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollToMessageId, onScrollConsumed }: ChatViewProps) {
+  const { t } = useTranslation("chat");
   const channels = useAppStore((s) => s.channels);
   const users = useAppStore((s) => s.users);
   const selectedChannel = useAppStore((s) => s.selectedChannel);
@@ -208,7 +212,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   // Persistent chat hook (banners, key verification, custodian prompt).
   const persistent = usePersistentChat(
     isDmMode ? null : selectedChannel,
-    channel?.name ?? "Unknown",
+    channel?.name ?? t("header.unknown"),
   );
 
   /** Merge real messages with local-only poll messages for rendering. */
@@ -487,7 +491,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     } catch (e) {
       console.error("file upload failed:", e);
       const detail = e instanceof Error ? e.message : String(e);
-      // A cancelled upload is silently discarded — the placeholder is already
+      // A cancelled upload is silently discarded - the placeholder is already
       // removed by handleCancelUpload, so there is nothing to show.
       if (detail === "upload cancelled") return;
       setUploadPlaceholders((prev) =>
@@ -589,6 +593,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   // Compute header values before any early returns (hooks can't be conditional).
   const [headerName, headerMemberCount] = computeHeader(
     isDmMode, dmPartner, channel, memberCount,
+    t("header.directMessage"), t("header.unknown"),
   );
   const showJoinButton = !isDmMode && !isInChannel;
 
@@ -606,7 +611,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       avatarUrl: avatar,
       viewerCount: viewers,
       isOwnBroadcast: activeScreenShare.isOwn,
-      channelName: channel?.name ?? "Unknown",
+      channelName: channel?.name ?? t("header.unknown"),
       onClose: activeScreenShare.isOwn ? screenShare.stopSharing : screenShare.stopWatching,
     };
   }, [activeScreenShare, users, avatarBySession, screenShare.stopSharing, screenShare.stopWatching]);
@@ -617,7 +622,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       <main className={styles.main}>
         <div className={styles.empty}>
           <div className={styles.emptyIcon}>💬</div>
-          <p>Select a channel to start chatting</p>
+          <p>{t("page.selectChannel")}</p>
         </div>
       </main>
     );
@@ -654,7 +659,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           }
           screenShareDisabledReason={
             screenShare.isBroadcastingFromOtherTab
-              ? "You are already sharing your screen from another server. Stop that share first."
+              ? t("screenShare.alreadySharingOtherServer")
               : undefined
           }
           sfuAvailable={sfuAvailable}

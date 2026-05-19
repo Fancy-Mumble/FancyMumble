@@ -2,6 +2,7 @@ import { BellIcon, BellOffIcon, ChevronRightIcon, CloseIcon, DatabaseIcon, EditI
 import { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../store";
 import { listen } from "@tauri-apps/api/event";
 import type { ChannelEntry, UserEntry, SidebarSections } from "../../types";
@@ -48,9 +49,10 @@ interface SelfVoiceControlsProps {
 }
 
 function SelfVoiceControls({ voiceState, inCall, toggleMute, toggleDeafen, enableVoice, disableVoice, onCollapse }: Readonly<SelfVoiceControlsProps>) {
+  const { t } = useTranslation("sidebar");
   const isActive = voiceState === "active";
   const isInactive = voiceState === "inactive";
-  const muteTitle = isActive ? "Mute" : "Unmute";
+  const muteTitle = isActive ? t("channelSidebar.mute") : t("channelSidebar.unmute");
 
   return (<>
     {/* Desktop: mute + deaf toggles (hidden on mobile via CSS) */}
@@ -69,7 +71,7 @@ function SelfVoiceControls({ voiceState, inCall, toggleMute, toggleDeafen, enabl
       <button
         className={`${styles.voiceToggle} ${isInactive ? styles.voiceMuted : styles.voiceActive}`}
         onClick={toggleDeafen}
-        title={isInactive ? "Enable Voice" : "Disable Voice"}
+        title={isInactive ? t("channelSidebar.enableVoice") : t("channelSidebar.disableVoice")}
       >
         {isInactive ? (
           <HeadphonesOffIcon width={18} height={18} />
@@ -84,7 +86,7 @@ function SelfVoiceControls({ voiceState, inCall, toggleMute, toggleDeafen, enabl
         <button
           className={`${styles.voiceToggle} ${styles.callBtnEnd}`}
           onClick={() => { disableVoice(); onCollapse?.(); }}
-          title="End call"
+          title={t("channelSidebar.endCall")}
         >
           <PhoneOffIcon width={18} height={18} />
         </button>
@@ -92,7 +94,7 @@ function SelfVoiceControls({ voiceState, inCall, toggleMute, toggleDeafen, enabl
         <button
           className={`${styles.voiceToggle} ${styles.callBtnStart}`}
           onClick={() => { enableVoice(); onCollapse?.(); }}
-          title="Start call"
+          title={t("channelSidebar.startCall")}
         >
           <PhoneIcon width={18} height={18} />
         </button>
@@ -119,6 +121,7 @@ interface ChannelSidebarProps {
 }
 
 export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, onCollapse, searchChannelId, onSearchChannelClear, onSelectMessage }: Readonly<ChannelSidebarProps>) {
+  const { t } = useTranslation("sidebar");
   const channels = useAppStore((s) => s.channels);
   const users = useAppStore((s) => s.users);
   const selectedChannel = useAppStore((s) => s.selectedChannel);
@@ -377,8 +380,8 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             type="button"
             className={styles.collapseBtn}
             onClick={onCollapse}
-            aria-label="Collapse sidebar"
-            title="Collapse sidebar"
+            aria-label={t("channelSidebar.collapse")}
+            title={t("channelSidebar.collapse")}
           >
             <MenuIcon width={18} height={18} />
           </button>
@@ -389,7 +392,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             ref={searchInputRef}
             className={styles.searchBarInput}
             type="text"
-            placeholder="Search..."
+            placeholder={t("channelSidebar.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
@@ -403,8 +406,8 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
               type="button"
               className={styles.searchBarClose}
               onClick={closeSearch}
-              aria-label="Close search"
-              title="Close search (Esc)"
+              aria-label={t("channelSidebar.closeSearch")}
+              title={t("channelSidebar.closeSearchTooltip")}
             >
               <CloseIcon width={14} height={14} />
             </button>
@@ -478,7 +481,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             width={12}
             height={12}
           />
-          <span>Channels</span>
+          <span>{t("channelSidebar.channels")}</span>
         </button>
       </div>
 
@@ -588,8 +591,8 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             <button
               className={styles.serverInfoBtn}
               onClick={onServerInfoToggle}
-              title="Server info"
-              aria-label="Server info"
+              title={t("channelSidebar.serverInfo")}
+              aria-label={t("channelSidebar.serverInfo")}
             >
               <InfoIcon width={18} height={18} />
             </button>
@@ -597,7 +600,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
           <button
             className={styles.settingsBtn}
             onClick={() => navigate("/settings")}
-            title="Audio settings"
+            title={t("channelSidebar.audioSettings")}
           >
             <SettingsIcon width={18} height={18} />
           </button>
@@ -605,8 +608,8 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             <button
               className={styles.adminBtn}
               onClick={() => navigate("/admin")}
-              title="Admin panel"
-              aria-label="Admin panel"
+              title={t("channelSidebar.adminPanel")}
+              aria-label={t("channelSidebar.adminPanel")}
             >
               <ShieldIcon width={18} height={18} />
             </button>
@@ -615,8 +618,8 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             <button
               className={`${styles.settingsBtn} ${showRecordingModal ? styles.activeBtn : ""}`}
               onClick={() => setShowRecordingModal(true)}
-              title="Record audio"
-              aria-label="Record audio"
+              title={t("channelSidebar.recordAudio")}
+              aria-label={t("channelSidebar.recordAudio")}
             >
               <RecordIcon width={18} height={18} />
             </button>
@@ -624,10 +627,10 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
           <button
             className={styles.disconnectBtn}
             onClick={disconnect}
-            title="Disconnect"
+            title={t("channelSidebar.disconnect")}
           >
             <LogoutIcon width={16} height={16} />
-            Disconnect
+            {t("channelSidebar.disconnect")}
           </button>
         </div>
       </div>
@@ -653,7 +656,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             <button
               className={styles.contextMenuItem}
               disabled={!isListened && !hasListenPerm}
-              title={!isListened && !hasListenPerm ? "You do not have permission to listen to this channel" : undefined}
+              title={!isListened && !hasListenPerm ? t("channelSidebar.noListenPerm") : undefined}
               onClick={() => {
                 toggleListen(ctxMenu.channelId);
                 setCtxMenu(null);
@@ -662,12 +665,12 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
               {isListened ? (
                 <>
                   <MicOffSmallIcon width={14} height={14} />
-                  Stop listening
+                  {t("channelSidebar.stopListening")}
                 </>
               ) : (
                 <>
                   <ListenBadgeIcon width={14} height={14} opacity={hasListenPerm ? 1 : 0.4} />
-                  Listen to channel
+                  {t("channelSidebar.listenChannel")}
                 </>
               )}
             </button>
@@ -682,12 +685,12 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
               {isPushMuted ? (
                 <>
                   <BellIcon width={14} height={14} />
-                  Enable notifications
+                  {t("channelSidebar.enableNotifications")}
                 </>
               ) : (
                 <>
                   <BellOffIcon width={14} height={14} />
-                  Mute notifications
+                  {t("channelSidebar.muteNotifications")}
                 </>
               )}
             </button>
@@ -703,7 +706,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
                 }}
               >
                 <EditIcon width={14} height={14} />
-                Edit Channel
+                {t("channelSidebar.editChannel")}
               </button>
             )}
 
@@ -717,7 +720,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
                 }}
               >
                 <ShieldIcon width={14} height={14} />
-                Edit Permissions
+                {t("channelSidebar.editPermissions")}
               </button>
             )}
 
@@ -734,7 +737,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
                 }}
               >
                 <PlusIcon width={14} height={14} />
-                Create Sub-channel
+                {t("channelSidebar.createSubchannel")}
               </button>
             )}
 
@@ -747,7 +750,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
                 }}
               >
                 <UsersGroupIcon width={14} height={14} />
-                Move all users to&hellip;
+                {t("channelSidebar.moveAllUsers")}
               </button>
             )}
 
@@ -763,7 +766,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
                 }}
               >
                 <DatabaseIcon width={14} height={14} />
-                Purge chat history
+                {t("channelSidebar.purgeHistory")}
               </button>
             )}
 
@@ -779,7 +782,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
                 }}
               >
                 <TrashIcon width={14} height={14} />
-                Delete Channel
+                {t("channelSidebar.deleteChannel")}
               </button>
             )}
           </div>,
@@ -814,17 +817,16 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
           onKeyDown={(e) => { if (e.key === "Escape") setDeleteConfirm(null); }}
         >
           <div className={styles.deleteConfirmDialog} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.deleteConfirmTitle}>Delete Channel</h3>
+            <h3 className={styles.deleteConfirmTitle}>{t("channelSidebar.deleteChannelTitle")}</h3>
             <p className={styles.deleteConfirmBody}>
-              Are you sure you want to delete <strong>{deleteConfirm.channelName}</strong>?
-              This will permanently remove the channel and all its persistent chat messages from the server.
+              {t("channelSidebar.deleteChannelBody", { channel: deleteConfirm.channelName })}
             </p>
             <div className={styles.deleteConfirmActions}>
               <button
                 className={styles.deleteConfirmCancel}
                 onClick={() => setDeleteConfirm(null)}
               >
-                Cancel
+                {t("channelSidebar.deleteChannelCancel")}
               </button>
               <button
                 className={styles.deleteConfirmOk}
@@ -834,7 +836,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
                   await deleteChannel(id);
                 }}
               >
-                Delete
+                {t("channelSidebar.deleteChannelConfirm")}
               </button>
             </div>
           </div>
@@ -852,9 +854,9 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
       {/* Purge persistent chat confirmation */}
       {purgeConfirm && (
         <ConfirmDialog
-          title="Purge chat history"
-          body={`This will permanently delete all persistent chat messages in "${purgeConfirm.channelName}". This cannot be undone.`}
-          confirmLabel="Purge"
+          title={t("channelSidebar.purgeHistoryTitle")}
+          body={t("channelSidebar.purgeHistoryBody", { channel: purgeConfirm.channelName })}
+          confirmLabel={t("channelSidebar.purgeConfirm")}
           danger
           onConfirm={async () => {
             const id = purgeConfirm.channelId;

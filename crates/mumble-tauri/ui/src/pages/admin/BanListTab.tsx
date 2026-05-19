@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { BanEntry } from "../../types";
@@ -16,6 +17,7 @@ const EMPTY_BAN: BanEntry = {
 
 export function BanListTab() {
   const [bans, setBans] = useState<BanEntry[]>([]);
+  const { t } = useTranslation("settings");
   const [loading, setLoading] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [editing, setEditing] = useState<BanEntry | null>(null);
@@ -98,14 +100,14 @@ export function BanListTab() {
 
   return (
     <>
-      <h2 className={styles.panelTitle}>Ban List</h2>
+      <h2 className={styles.panelTitle}>{t("banList.title")}</h2>
 
       <div className={styles.toolbar}>
         <button type="button" className={styles.refreshBtn} onClick={handleRefresh} disabled={loading}>
-          {loading ? "Loading..." : "Refresh"}
+          {loading ? t("banList.loading") : t("banList.refresh")}
         </button>
         <button type="button" className={styles.addBtn} onClick={handleAdd}>
-          + Add Entry
+          {t("banList.addEntry")}
         </button>
         <button
           type="button"
@@ -113,11 +115,11 @@ export function BanListTab() {
           onClick={handleRemove}
           disabled={selectedIdx == null}
         >
-          Remove
+          {t("banList.remove")}
         </button>
         {dirty && (
           <button type="button" className={styles.saveBtn} onClick={handleSave}>
-            Save Changes
+            {t("banList.saveChanges")}
           </button>
         )}
       </div>
@@ -127,7 +129,7 @@ export function BanListTab() {
         <div className={styles.listPane}>
           {bans.length === 0 ? (
             <div className={styles.emptyRow}>
-              {loading ? "Loading..." : "No bans"}
+              {loading ? t("banList.loading") : t("banList.noBans")}
             </div>
           ) : (
             bans.map((b, i) => (
@@ -137,7 +139,7 @@ export function BanListTab() {
                 className={`${styles.listItem} ${selectedIdx === i ? styles.listItemActive : ""}`}
                 onClick={() => handleSelect(i)}
               >
-                <span className={styles.listItemTitle}>{b.name || b.address || "Unknown"}</span>
+                <span className={styles.listItemTitle}>{b.name || b.address || t("banList.unknown")}</span>
                 <span className={styles.listItemSub}>
                   {b.address}/{b.mask}
                   {b.reason ? ` - ${b.reason}` : ""}
@@ -152,7 +154,7 @@ export function BanListTab() {
           {editing ? (
             <div className={styles.detailForm}>
               <label className={styles.fieldLabel}>
-                Username
+                {t("banList.fieldUsername")}
                 <input
                   className={styles.input}
                   type="text"
@@ -162,7 +164,7 @@ export function BanListTab() {
                 />
               </label>
               <label className={styles.fieldLabel}>
-                Address
+                {t("banList.fieldAddress")}
                 <input
                   className={styles.input}
                   type="text"
@@ -172,7 +174,7 @@ export function BanListTab() {
                 />
               </label>
               <label className={styles.fieldLabel}>
-                Mask
+                {t("banList.fieldMask")}
                 <input
                   className={styles.input}
                   type="number"
@@ -184,7 +186,7 @@ export function BanListTab() {
                 />
               </label>
               <label className={styles.fieldLabel}>
-                Reason
+                {t("banList.fieldReason")}
                 <input
                   className={styles.input}
                   type="text"
@@ -194,7 +196,7 @@ export function BanListTab() {
                 />
               </label>
               <label className={styles.fieldLabel}>
-                Hash
+                {t("banList.fieldHash")}
                 <input
                   className={styles.input}
                   type="text"
@@ -204,18 +206,18 @@ export function BanListTab() {
                 />
               </label>
               <label className={styles.fieldLabel}>
-                Start
+                {t("banList.fieldStart")}
                 <input
                   className={styles.input}
                   type="text"
                   value={editing.start}
-                  placeholder="e.g. 2025-01-01T00:00:00"
+                  placeholder={t("banList.fieldStartPlaceholder")}
                   onChange={(e) => patchEditing({ start: e.target.value })}
                   onBlur={handleApplyEdit}
                 />
               </label>
               <label className={styles.fieldLabel}>
-                Duration (seconds, 0 = permanent)
+                {t("banList.fieldDuration")}
                 <input
                   className={styles.input}
                   type="number"
@@ -227,7 +229,7 @@ export function BanListTab() {
               </label>
             </div>
           ) : (
-            <div className={styles.detailEmpty}>Select a ban entry to edit</div>
+            <div className={styles.detailEmpty}>{t("banList.selectEntry")}</div>
           )}
         </div>
       </div>

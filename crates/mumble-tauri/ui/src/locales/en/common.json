@@ -1,0 +1,161 @@
+﻿{
+  "brand": "Fancy Mumble",
+  "actions": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "close": "Close",
+    "cancel": "Cancel",
+    "dismiss": "Dismiss",
+    "retry": "Retry",
+    "hide": "Hide",
+    "open": "Open",
+    "collapse": "Collapse",
+    "optional": "(optional)"
+  },
+  "confirmDialog": {
+    "confirmLabel": "Confirm",
+    "cancelLabel": "Cancel"
+  },
+  "externalLinkGuard": {
+    "title": "External Link",
+    "body": "You are about to leave Fancy Mumble and visit an external website:",
+    "disclaimer": "This website is not affiliated with or endorsed by Fancy Mumble. External links may lead to sites that contain harmful, misleading, or unwanted content. Proceed only if you trust the source.",
+    "cancelBtn": "Cancel",
+    "openBtn": "Open Link"
+  },
+  "fileDropZone": {
+    "defaultLabel": "Drop a file here or click to browse",
+    "draggingOverlay": "Drop file here",
+    "removeBtn": "Remove"
+  },
+  "kebabMenu": {
+    "ariaLabel": "More options",
+    "closeMenu": "Close menu"
+  },
+  "lightbox": {
+    "ariaLabel": "Media viewer",
+    "prevAriaLabel": "Previous image",
+    "nextAriaLabel": "Next image",
+    "counter": "Photo {{n}} / {{total}}",
+    "loading": "Loading image..."
+  },
+  "loadingSplash": {
+    "messages": [
+      "Reticulating splines...",
+      "Warming up the microphones...",
+      "Tuning the squelch knob...",
+      "Convincing packets to arrive in order...",
+      "Asking Opus very nicely...",
+      "Negotiating with TLS handshakes...",
+      "Polishing your avatar...",
+      "Looking for the mute button...",
+      "Counting bits, then counting them again...",
+      "Brewing a fresh pot of UDP...",
+      "Translating from server to human...",
+      "Untangling the audio cables...",
+      "Checking under the rug for lost users...",
+      "Petting the denoiser...",
+      "Reminding the GPU it's not invited...",
+      "Loading suspiciously fast...",
+      "Almost there. Probably."
+    ]
+  },
+  "memberPicker": {
+    "placeholder": "Add user by name or ID",
+    "emptyLabel": "No members",
+    "removeChipAriaLabel": "Remove {{name}}",
+    "userFallbackName": "User #{{userId}}"
+  },
+  "messageActionBar": {
+    "moreReactions": "More reactions",
+    "quote": "Quote",
+    "quoteAriaLabel": "Quote message",
+    "copy": "Copy text",
+    "copyAriaLabel": "Copy message text",
+    "moreOptions": "More options",
+    "watchTogether": "Watch together",
+    "watchTogetherStarting": "Starting…",
+    "delete": "Delete"
+  },
+  "mobileBottomSheet": {
+    "closeAriaLabel": "Close"
+  },
+  "quoteBlock": {
+    "unavailable": "Message unavailable",
+    "scrollTitle": "Click to scroll to message",
+    "photoFallback": "Photo",
+    "emptyFallback": "Empty message"
+  },
+  "toast": {
+    "dismissAriaLabel": "Dismiss"
+  },
+  "autocomplete": {
+    "placeholder": "Search...",
+    "noOptions": "No options"
+  },
+  "emojiPicker": {
+    "searchPlaceholder": "Search emoji...",
+    "empty": "No emoji found",
+    "catPeople": "Smileys & People",
+    "catNature": "Animals & Nature",
+    "catFood": "Food & Drink",
+    "catActivity": "Activities",
+    "catObjects": "Objects",
+    "catSymbols": "Symbols",
+    "catFlags": "Flags",
+    "catCustom": "Custom"
+  },
+  "infoBanner": {
+    "dismissAriaLabel": "Dismiss banner"
+  },
+  "tabbedPage": {
+    "backAriaLabel": "Go back",
+    "back": "Back"
+  },
+  "pages": {
+    "drawOverlay": {
+      "contextUnavailable": "Drawing overlay context unavailable"
+    },
+    "popout": {
+      "imageUnavailable": "Image source unavailable",
+      "missingId": "Missing popout id",
+      "mediaLabel": "Image"
+    },
+    "streamPopout": {
+      "connectionLost": "Stream connection lost",
+      "contextUnavailable": "Stream context unavailable",
+      "missingId": "Missing popout id",
+      "connecting": "Connecting to stream...",
+      "screenshare": "Screen share",
+      "caption": "Live screen share",
+      "mediaLabel": "Stream"
+    }
+  },
+  "updater": {
+    "heading": {
+      "available": "Update available",
+      "downloading": "Downloading update",
+      "installing": "Installing update",
+      "restarting": "Restarting...",
+      "failed": "Update failed"
+    },
+    "subtitle": {
+      "restarting": "Fancy Mumble will restart automatically when finished.",
+      "checking": "Checking for updates...",
+      "autoInstall": "Preparing to install the latest version of Fancy Mumble...",
+      "ready": "A new version of Fancy Mumble is ready to install."
+    },
+    "progress": {
+      "installing": "Verifying & installing...",
+      "starting": "Starting download..."
+    },
+    "closeAriaLabel": "Close",
+    "busyTitle": "Update in progress...",
+    "skipActive": "✓ Skipping v{{version}} — click to undo",
+    "skipInactive": "Skip v{{version}}",
+    "closeBtn": "Close",
+    "laterBtn": "Later",
+    "retryBtn": "Retry",
+    "updateNowBtn": "Update now"
+  }
+}

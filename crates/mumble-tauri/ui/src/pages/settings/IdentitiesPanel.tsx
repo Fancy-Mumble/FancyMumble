@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { deleteProfileData } from "./profileData";
@@ -20,6 +21,7 @@ export function IdentitiesPanel({
   const [newLabel, setNewLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const { t } = useTranslation("settings");
 
   const handleCreate = useCallback(async () => {
     const label = newLabel.trim();
@@ -80,20 +82,16 @@ export function IdentitiesPanel({
 
   return (
     <>
-      <h2 className={styles.panelTitle}>Identities</h2>
+      <h2 className={styles.panelTitle}>{t("identities.panelTitle")}</h2>
 
       <section className={styles.section}>
-        <p className={styles.fieldHint}>
-          Identities are TLS client certificates used to authenticate with
-          Mumble servers. Each identity is unique to you and persists across
-          sessions.
-        </p>
+        <p className={styles.fieldHint}>{t("identities.description")}</p>
 
         {error && <p className={styles.error}>{error}</p>}
 
         {identities.length === 0 ? (
           <p className={styles.fieldHint} style={{ fontStyle: "italic" }}>
-            No identities yet. Create or import one below.
+            {t("identities.noIdentities")}
           </p>
         ) : (
           <ul className={styles.identityList}>
@@ -105,7 +103,7 @@ export function IdentitiesPanel({
                 <span className={styles.identityLabel}>
                   {label}
                   {label === connectedCertLabel && (
-                    <span className={styles.identityActiveBadge}>connected</span>
+                    <span className={styles.identityActiveBadge}>{t("identities.connectedBadge")}</span>
                   )}
                 </span>
 
@@ -116,7 +114,7 @@ export function IdentitiesPanel({
                       className={styles.identityEditBtn}
                       onClick={() => onEditProfile(label)}
                     >
-                      Edit Profile
+                      {t("identities.editProfile")}
                     </button>
                   )}
                   <button
@@ -124,7 +122,7 @@ export function IdentitiesPanel({
                     className={styles.ghostBtn}
                     onClick={() => handleExport(label)}
                   >
-                    Export
+                    {t("identities.export")}
                   </button>
 
                   {confirmDelete === label ? (
@@ -134,14 +132,14 @@ export function IdentitiesPanel({
                         className={styles.dangerBtn}
                         onClick={() => handleDelete(label)}
                       >
-                        Confirm
+                        {t("identities.confirmDelete")}
                       </button>
                       <button
                         type="button"
                         className={styles.ghostBtn}
                         onClick={() => setConfirmDelete(null)}
                       >
-                        Cancel
+                        {t("identities.cancelDelete")}
                       </button>
                     </div>
                   ) : (
@@ -150,7 +148,7 @@ export function IdentitiesPanel({
                       className={styles.dangerBtn}
                       onClick={() => setConfirmDelete(label)}
                     >
-                      Delete
+                      {t("identities.delete")}
                     </button>
                   )}
                 </div>
@@ -161,14 +159,14 @@ export function IdentitiesPanel({
       </section>
 
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Create new identity</h3>
+        <h3 className={styles.sectionTitle}>{t("identities.createNew")}</h3>
         <div className={styles.identityCreateRow}>
           <input
             type="text"
             className={styles.input}
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="Identity name..."
+            placeholder={t("identities.createPlaceholder")}
             onKeyDown={(e) => {
               if (e.key === "Enter") handleCreate();
             }}
@@ -179,7 +177,7 @@ export function IdentitiesPanel({
             onClick={handleCreate}
             disabled={!newLabel.trim()}
           >
-            Create
+            {t("identities.createBtn")}
           </button>
         </div>
       </section>
@@ -190,7 +188,7 @@ export function IdentitiesPanel({
           className={styles.ghostBtn}
           onClick={handleImport}
         >
-          Import identity...
+          {t("identities.importBtn")}
         </button>
       </section>
     </>

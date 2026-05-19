@@ -25,7 +25,7 @@ const DISMISSED_PREFIX = "onboarding-dismissed:";
  * Mirrors `fancy_message_support!`'s registration of the onboarding
  * message types at `(0, 3, 1)`.  Encoded the same way as the server's
  * `fancy_version_encode`: `(major << 48) | (minor << 32) | (patch << 16)`.
- * For 0.3.1 that's `3 * 2^32 + 1 * 2^16 = 12_884_967_424` — using bit
+ * For 0.3.1 that's `3 * 2^32 + 1 * 2^16 = 12_884_967_424` - using bit
  * math here keeps the constant readable.
  */
 export const ONBOARDING_MIN_FANCY_VERSION =

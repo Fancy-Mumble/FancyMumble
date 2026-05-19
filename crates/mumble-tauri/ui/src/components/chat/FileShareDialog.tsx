@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import type { FileAccessMode } from "../../types";
 import styles from "./FileShareDialog.module.css";
 
@@ -19,17 +20,6 @@ interface FileShareDialogProps {
   readonly onCancel: () => void;
 }
 
-const MODE_DESCRIPTIONS: Record<FileAccessMode, string> = {
-  public:
-    "Anyone with the link can download. Use for files you'd be okay posting publicly.",
-  password:
-    "Recipients must enter the password you set below. Share the password out-of-band.",
-  session:
-    "Only currently-connected users on this server can download. Link stops working when they disconnect.",
-};
-
-const RESTRICTED_MODE_HINT =
-  "Disabled by server policy: you do not have permission to share files via publicly accessible links.";
 
 export default function FileShareDialog({
   open,
@@ -38,6 +28,8 @@ export default function FileShareDialog({
   onSubmit,
   onCancel,
 }: FileShareDialogProps) {
+  const { t } = useTranslation("chat");
+  const { t: tc } = useTranslation("common");
   const [mode, setMode] = useState<FileAccessMode>("session");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -88,15 +80,15 @@ export default function FileShareDialog({
   if (!open) return null;
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="Share file">
+    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={t("fileShare.title")}>
       <div className={styles.dialog}>
         <div className={styles.header}>
-          <h2 className={styles.title}>Share file</h2>
+          <h2 className={styles.title}>{t("fileShare.title")}</h2>
           <button
             type="button"
             className={styles.closeBtn}
             onClick={onCancel}
-            aria-label="Close"
+            aria-label={tc("actions.close")}
           >
             ×
           </button>
@@ -104,7 +96,7 @@ export default function FileShareDialog({
 
         <form className={styles.body} onSubmit={handleSubmit}>
           <p className={styles.message}>
-            How should <strong>{filename}</strong> be shared?
+            {t("fileShare.prompt", { filename })}
           </p>
 
           <div className={styles.modeList} role="radiogroup" aria-label="Access mode">
@@ -116,7 +108,7 @@ export default function FileShareDialog({
                 restricted ? styles.modeOptionDisabled : "",
               ].filter(Boolean).join(" ");
               return (
-                <label key={m} className={optionClasses} title={restricted ? RESTRICTED_MODE_HINT : undefined}>
+                <label key={m} className={optionClasses} title={restricted ? t("fileShare.restrictedHint") : undefined}>
                   <input
                     type="radio"
                     name="file-share-mode"
@@ -129,7 +121,7 @@ export default function FileShareDialog({
                   <div className={styles.modeText}>
                     <div className={styles.modeName}>{m}</div>
                     <div className={styles.modeDesc}>
-                      {restricted ? RESTRICTED_MODE_HINT : MODE_DESCRIPTIONS[m]}
+                      {restricted ? t("fileShare.restrictedHint") : t(`fileShare.mode.${m}Desc`)}
                     </div>
                   </div>
                 </label>
@@ -140,7 +132,7 @@ export default function FileShareDialog({
           {mode === "password" && (
             <div className={styles.field}>
               <label className={styles.label} htmlFor="file-share-password">
-                Password
+                {t("fileShare.passwordLabel")}
               </label>
               <input
                 ref={passwordRef}
@@ -156,7 +148,7 @@ export default function FileShareDialog({
 
           <div className={styles.field}>
             <label className={styles.label} htmlFor="file-share-message">
-              Message <span className={styles.labelOptional}>(optional)</span>
+                {t("fileShare.messageLabel")} <span className={styles.labelOptional}>{tc("actions.optional")}</span>
             </label>
             <textarea
               ref={messageRef}
@@ -164,21 +156,21 @@ export default function FileShareDialog({
               className={styles.textarea}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Add a message to send with the file..."
+              placeholder={t("fileShare.messagePlaceholder")}
               rows={2}
             />
           </div>
 
           <div className={styles.actions}>
             <button type="button" className={styles.cancelBtn} onClick={onCancel}>
-              Cancel
+              {t("fileShare.cancel")}
             </button>
             <button
               type="submit"
               className={styles.uploadBtn}
               disabled={mode === "password" && password.length === 0}
             >
-              Upload
+              {t("fileShare.upload")}
             </button>
           </div>
         </form>

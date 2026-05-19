@@ -10,6 +10,7 @@ import { CloseIcon, EditIcon, ErrorCircleIcon, FullscreenExitIcon, FullscreenIco
  */
 import DrawingOverlay from "./DrawingOverlay";
 import { useRef, useEffect, useMemo, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../../store";
 import { useRemoteStream } from "./useScreenShare";
@@ -45,6 +46,7 @@ function VolumeControl({ muted, volume, onToggleMute, onChange }: {
   readonly onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   const [show, setShow] = useState(false);
+  const { t } = useTranslation("chat");
   return (
     <div
       className={styles.volumeGroup}
@@ -55,8 +57,8 @@ function VolumeControl({ muted, volume, onToggleMute, onChange }: {
         type="button"
         className={styles.controlBtn}
         onClick={onToggleMute}
-        title={muted ? "Unmute" : "Mute"}
-        aria-label={muted ? "Unmute" : "Mute"}
+        title={muted ? t("screenShare.unmute") : t("screenShare.mute")}
+        aria-label={muted ? t("screenShare.unmute") : t("screenShare.mute")}
       >
         {muted || volume === 0
           ? <VolumeOffIcon width={16} height={16} />
@@ -70,7 +72,7 @@ function VolumeControl({ muted, volume, onToggleMute, onChange }: {
           value={muted ? 0 : volume}
           onChange={onChange}
           className={styles.volumeSlider}
-          aria-label="Volume"
+          aria-label={t("screenShare.volume")}
         />
       )}
     </div>
@@ -82,6 +84,7 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(100);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const { t } = useTranslation("chat");
 
   // Sync fullscreen state.
   useEffect(() => {
@@ -158,8 +161,8 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
           type="button"
           className={styles.controlBtn}
           onClick={togglePause}
-          title={paused ? "Play" : "Pause"}
-          aria-label={paused ? "Play" : "Pause"}
+          title={paused ? t("screenShare.play") : t("screenShare.pause")}
+          aria-label={paused ? t("screenShare.play") : t("screenShare.pause")}
         >
           {paused
             ? <PlayIcon width={16} height={16} />
@@ -183,8 +186,8 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
           type="button"
           className={`${styles.controlBtn} ${drawingActive ? styles.controlBtnActive : ""}`}
           onClick={toggleDrawing}
-          title={drawingActive ? "Stop drawing" : "Draw on screen"}
-          aria-label={drawingActive ? "Stop drawing" : "Draw on screen"}
+          title={drawingActive ? t("screenShare.drawOff") : t("screenShare.drawOn")}
+          aria-label={drawingActive ? t("screenShare.drawOff") : t("screenShare.drawOn")}
           aria-pressed={drawingActive}
         >
           <EditIcon width={16} height={16} />
@@ -197,8 +200,8 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
           type="button"
           className={`${styles.controlBtn} ${desktopOverlayOn ? styles.controlBtnActive : ""}`}
           onClick={onToggleDesktopOverlay}
-          title={desktopOverlayOn ? "Hide desktop overlay" : "Show desktop overlay (click-through, hidden from capture)"}
-          aria-label={desktopOverlayOn ? "Hide desktop overlay" : "Show desktop overlay"}
+          title={desktopOverlayOn ? t("screenShare.hideOverlay") : t("screenShare.showOverlayTooltip")}
+          aria-label={desktopOverlayOn ? t("screenShare.hideOverlay") : t("screenShare.showOverlay")}
           aria-pressed={desktopOverlayOn}
         >
           <ScreenShareIcon width={16} height={16} />
@@ -214,8 +217,8 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
           type="button"
           className={styles.controlBtn}
           onClick={onPopout}
-          title="Open in separate window"
-          aria-label="Open in separate window"
+          title={t("screenShare.popout")}
+          aria-label={t("screenShare.popout")}
         >
           <PopoutIcon width={16} height={16} />
         </button>
@@ -227,8 +230,8 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
           type="button"
           className={styles.controlBtn}
           onClick={toggleFullscreen}
-          title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-          aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+          title={isFullscreen ? t("screenShare.exitFullscreen") : t("screenShare.fullscreen")}
+          aria-label={isFullscreen ? t("screenShare.exitFullscreen") : t("screenShare.fullscreen")}
         >
           {isFullscreen
             ? <FullscreenExitIcon width={16} height={16} />
@@ -253,6 +256,7 @@ function OwnBroadcastPreview({ stream, channelId, ownSession }: OwnPreviewProps)
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const webrtcConnecting = useAppStore((s) => s.webrtcConnecting);
+  const { t } = useTranslation("chat");
   // Persisted in the global store so the overlay stays open when the user
   // switches to a different server tab (which unmounts this component).
   // It is closed automatically by `stopBroadcasting()` in `useScreenShare`
@@ -315,7 +319,7 @@ function OwnBroadcastPreview({ stream, channelId, ownSession }: OwnPreviewProps)
             <span className={styles.connectingDot} />
             <span className={styles.connectingDot} />
           </div>
-          <span className={styles.connectingText}>Setting up stream...</span>
+          <span className={styles.connectingText}>{t("screenShare.settingUp")}</span>
         </div>
       )}
       <StreamControls
@@ -341,6 +345,7 @@ function RemoteViewer({ session, channelId, ownSession }: { readonly session: nu
   const remoteStream = useRemoteStream(session);
   const broadcaster = useAppStore((s) => s.users.find((u) => u.session === session));
   const activeServerId = useAppStore((s) => s.activeServerId);
+  const { t } = useTranslation("chat");
 
   const handlePopout = useCallback(() => {
     if (!ownSession || !activeServerId) return;
@@ -372,8 +377,8 @@ function RemoteViewer({ session, channelId, ownSession }: { readonly session: nu
         <div className={styles.streamPlaceholder}>
           <ScreenShareIcon className={styles.streamPlaceholderIcon} />
           <div className={styles.streamPlaceholderText}>
-            <strong>Connecting...</strong>
-            Waiting for stream
+            <strong>{t("screenShare.connecting")}</strong>
+            {t("screenShare.waitingForStream")}
           </div>
         </div>
       )}
@@ -438,13 +443,14 @@ export function ShareScreenButton({
   active,
   onClick,
 }: Readonly<{ active: boolean; onClick: () => void }>) {
+  const { t } = useTranslation("chat");
   return (
     <button
       type="button"
       className={`${styles.shareScreenBtn} ${active ? styles.shareScreenBtnActive : ""}`}
       onClick={onClick}
-      title={active ? "Stop sharing" : "Share screen"}
-      aria-label={active ? "Stop sharing" : "Share screen"}
+      title={active ? t("screenShare.stopSharing") : t("screenShare.share")}
+      aria-label={active ? t("screenShare.stopSharing") : t("screenShare.share")}
     >
       <ScreenShareIcon className={styles.shareScreenBtnIcon} />
     </button>
@@ -472,6 +478,7 @@ interface BroadcastBannerProps {
  */
 export function BroadcastBanner({ broadcasters, onWatch, sfuAvailable = true }: BroadcastBannerProps) {
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
+  const { t } = useTranslation("chat");
 
   // Reset dismissed state when broadcasters change (new broadcaster should show).
   const broadcasterIds = useMemo(
@@ -503,11 +510,11 @@ export function BroadcastBanner({ broadcasters, onWatch, sfuAvailable = true }: 
         >
           <span className={`${styles.broadcastBannerDot} ${!sfuAvailable ? styles.broadcastBannerDotP2P : ""}`} />
           <span className={styles.broadcastBannerText}>
-            <span className={styles.broadcastBannerName}>{b.name}</span> is sharing their screen
+            <span className={styles.broadcastBannerName}>{b.name}</span> {t("screenShare.banner.isSharingScreen")}
           </span>
           {!sfuAvailable && (
-            <span className={styles.broadcastBannerP2PLabel} title="No SFU on this server - the stream connects directly between peers">
-              P2P
+            <span className={styles.broadcastBannerP2PLabel} title={t("screenShare.p2pTooltip")}>
+              {t("screenShare.p2pLabel")}
             </span>
           )}
           <button
@@ -516,14 +523,14 @@ export function BroadcastBanner({ broadcasters, onWatch, sfuAvailable = true }: 
             onClick={() => onWatch(b.session)}
           >
             <ScreenShareIcon width={12} height={12} />
-            Watch
+            {t("screenShare.banner.watch")}
           </button>
           <button
             type="button"
             className={styles.broadcastBannerDismiss}
             onClick={() => handleDismiss(b.session)}
-            title="Dismiss"
-            aria-label="Dismiss notification"
+            title={t("screenShare.dismiss")}
+            aria-label={t("screenShare.banner.dismiss")}
           >
             <CloseIcon width={14} height={14} />
           </button>
@@ -543,6 +550,7 @@ interface WebRtcErrorBannerProps {
 }
 
 export function WebRtcErrorBanner({ message, onDismiss }: WebRtcErrorBannerProps) {
+  const { t } = useTranslation("chat");
   return (
     <div className={styles.broadcastBanner} role="alert">
       <ErrorCircleIcon className={styles.broadcastBannerErrorIcon} width={14} height={14} />
@@ -551,8 +559,8 @@ export function WebRtcErrorBanner({ message, onDismiss }: WebRtcErrorBannerProps
         type="button"
         className={styles.broadcastBannerDismiss}
         onClick={onDismiss}
-        title="Dismiss"
-        aria-label="Dismiss"
+        title={t("screenShare.dismiss")}
+        aria-label={t("screenShare.dismiss")}
       >
         <CloseIcon width={14} height={14} />
       </button>

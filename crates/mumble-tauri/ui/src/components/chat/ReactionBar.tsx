@@ -7,6 +7,7 @@
 
 import { useState, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import type { ReactionSummary } from "./reactionStore";
 import { isMobile } from "../../utils/platform";
 import styles from "./ReactionBar.module.css";
@@ -30,6 +31,7 @@ export default function ReactionBar({
   onToggle,
   onAdd,
 }: ReactionBarProps) {
+  const { t } = useTranslation("chat");
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
 
   const handleMouseEnter = useCallback(
@@ -80,7 +82,7 @@ export default function ReactionBar({
         type="button"
         className={styles.addBtn}
         onClick={(e) => onAdd(e)}
-        aria-label="Add reaction"
+        aria-label={t("reactions.add")}
       >
         +
       </button>

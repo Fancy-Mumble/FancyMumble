@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { useAppStore } from "../../store";
 import type {
@@ -71,6 +72,7 @@ export default function OnboardingAdminPanel() {
   const channels = useAppStore((s) => s.channels);
   const serverFancyVersion = useAppStore((s) => s.serverFancyVersion);
   const supported = isOnboardingSupported(serverFancyVersion);
+  const { t } = useTranslation("settings");
 
   const [draft, setDraft] = useState<OnboardingConfig>(
     () => remote ?? emptyConfig(),
@@ -157,10 +159,9 @@ export default function OnboardingAdminPanel() {
   if (!supported) {
     return (
       <div className={styles.panel}>
-        <h3 className={styles.heading}>Onboarding</h3>
+        <h3 className={styles.heading}>{t("onboarding.admin.heading")}</h3>
         <p className={styles.subtle}>
-          The connected server does not support the onboarding workflow.
-          It requires a Fancy Mumble server running 0.3.1 or newer.
+          {t("onboarding.admin.unsupportedServer")}
         </p>
       </div>
     );
@@ -168,11 +169,9 @@ export default function OnboardingAdminPanel() {
 
   return (
     <div className={styles.panel}>
-      <h3 className={styles.heading}>Onboarding</h3>
+      <h3 className={styles.heading}>{t("onboarding.admin.heading")}</h3>
       <p className={styles.subtle}>
-        Show new members a welcome questionnaire that maps their answers to
-        channels and Mumble ACL groups. Mirrors Discord&apos;s Community
-        Onboarding model. Up to {MAX_QUESTIONS} questions.
+        {t("onboarding.admin.description")} {t("onboarding.admin.maxQuestionsHint", { max: MAX_QUESTIONS })}
       </p>
 
       <div className={styles.checkboxRow}>
@@ -184,17 +183,17 @@ export default function OnboardingAdminPanel() {
               setDraft({ ...draft, enabled: e.target.checked })
             }
           />{" "}
-          Enabled
+          {t("onboarding.admin.enabledLabel")}
         </label>
         <span className={styles.spacer} />
         <span className={styles.tag}>
-          Revision {draft.revision} {channels.length} channels available
+          {t("onboarding.admin.revisionTag", { n: draft.revision, m: channels.length })}
         </span>
       </div>
 
       <div className={styles.field}>
         <label className={styles.fieldLabel}>
-          Default channel IDs (comma-separated)
+          {t("onboarding.admin.defaultChannelIdsLabel")}
         </label>
         <input
           className={styles.input}
@@ -212,23 +211,23 @@ export default function OnboardingAdminPanel() {
       {draft.questions.map((q, qIdx) => (
         <div key={q.id} className={styles.questionCard}>
           <div className={styles.cardHeader}>
-            <p className={styles.cardTitle}>Question {qIdx + 1}</p>
+            <p className={styles.cardTitle}>{t("onboarding.admin.questionTitle", { n: qIdx + 1 })}</p>
             <button
               className={`${styles.btn} ${styles.btnDanger}`}
               onClick={() => removeQuestion(qIdx)}
               disabled={draft.questions.length <= 1}
             >
-              Delete
+              {t("onboarding.admin.deleteBtn")}
             </button>
           </div>
 
           <div className={styles.field}>
-            <label className={styles.fieldLabel}>Prompt</label>
+            <label className={styles.fieldLabel}>{t("onboarding.admin.promptLabel")}</label>
             <input
               className={styles.input}
               value={q.text}
               onChange={(e) => updateQuestion(qIdx, { text: e.target.value })}
-              placeholder="What brings you here?"
+              placeholder={t("onboarding.admin.promptPlaceholder")}
             />
           </div>
 
@@ -241,7 +240,7 @@ export default function OnboardingAdminPanel() {
                   updateQuestion(qIdx, { multi_select: e.target.checked })
                 }
               />{" "}
-              Multi-select
+              {t("onboarding.admin.multiSelectLabel")}
             </label>
             <label>
               <input
@@ -251,7 +250,7 @@ export default function OnboardingAdminPanel() {
                   updateQuestion(qIdx, { required: e.target.checked })
                 }
               />{" "}
-              Required
+              {t("onboarding.admin.requiredLabel")}
             </label>
             <label>
               <input
@@ -261,25 +260,25 @@ export default function OnboardingAdminPanel() {
                   updateQuestion(qIdx, { ask_before_join: e.target.checked })
                 }
               />{" "}
-              Ask before join
+              {t("onboarding.admin.askBeforeJoinLabel")}
             </label>
           </div>
 
           {q.answers.map((a, aIdx) => (
             <div key={a.id} className={styles.answerCard}>
               <div className={styles.cardHeader}>
-                <p className={styles.cardTitle}>Answer {aIdx + 1}</p>
+                <p className={styles.cardTitle}>{t("onboarding.admin.answerTitle", { n: aIdx + 1 })}</p>
                 <button
                   className={`${styles.btn} ${styles.btnDanger}`}
                   onClick={() => removeAnswer(qIdx, aIdx)}
                   disabled={q.answers.length <= 1}
                 >
-                  Delete
+                  {t("onboarding.admin.deleteBtn")}
                 </button>
               </div>
               <div className={styles.row}>
                 <div className={styles.field}>
-                  <label className={styles.fieldLabel}>Label</label>
+                  <label className={styles.fieldLabel}>{t("onboarding.admin.answerLabelField")}</label>
                   <input
                     className={styles.input}
                     value={a.label}
@@ -290,7 +289,7 @@ export default function OnboardingAdminPanel() {
                   />
                 </div>
                 <div className={styles.field}>
-                  <label className={styles.fieldLabel}>Emoji</label>
+                  <label className={styles.fieldLabel}>{t("onboarding.admin.emojiLabel")}</label>
                   <input
                     className={styles.input}
                     value={a.emoji ?? ""}
@@ -305,7 +304,7 @@ export default function OnboardingAdminPanel() {
               </div>
               <div className={styles.field}>
                 <label className={styles.fieldLabel}>
-                  Channel IDs (comma-separated)
+                  {t("onboarding.admin.channelIdsLabel")}
                 </label>
                 <input
                   className={styles.input}
@@ -320,7 +319,7 @@ export default function OnboardingAdminPanel() {
               </div>
               <div className={styles.field}>
                 <label className={styles.fieldLabel}>
-                  ACL group names (comma-separated)
+                  {t("onboarding.admin.aclGroupNamesLabel")}
                 </label>
                 <input
                   className={styles.input}
@@ -334,7 +333,7 @@ export default function OnboardingAdminPanel() {
                 />
               </div>
               <div className={styles.field}>
-                <label className={styles.fieldLabel}>Description</label>
+                  <label className={styles.fieldLabel}>{t("onboarding.admin.descriptionLabel")}</label>
                 <textarea
                   className={styles.textarea}
                   value={a.description ?? ""}
@@ -349,14 +348,14 @@ export default function OnboardingAdminPanel() {
           ))}
 
           <button className={styles.btn} onClick={() => addAnswer(qIdx)}>
-            + Add answer
+            {t("onboarding.admin.addAnswerBtn")}
           </button>
         </div>
       ))}
 
       {draft.questions.length < MAX_QUESTIONS ? (
         <button className={styles.btn} onClick={addQuestion}>
-          + Add question
+          {t("onboarding.admin.addQuestionBtn")}
         </button>
       ) : null}
 
@@ -368,7 +367,7 @@ export default function OnboardingAdminPanel() {
           onClick={handleSave}
           disabled={busy}
         >
-          {busy ? "Saving..." : "Save & broadcast"}
+          {busy ? t("onboarding.admin.savingBtn") : t("onboarding.admin.saveBroadcastBtn")}
         </button>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AudioSettings,
@@ -26,6 +27,7 @@ export function DenoiserAdvancedControls({
   settings: AudioSettings;
   onChange: (patch: Partial<AudioSettings>) => void;
 }>) {
+  const { t } = useTranslation("settings");
   const [specs, setSpecs] = useState<DenoiserParamSpec[]>([]);
 
   useEffect(() => {
@@ -48,10 +50,9 @@ export function DenoiserAdvancedControls({
 
   return (
     <div className={styles.field}>
-      <span className={styles.fieldLabel}>Algorithm parameters</span>
+      <span className={styles.fieldLabel}>{t("denoiserAdvanced.sectionLabel")}</span>
       <p className={styles.fieldHint}>
-        Fine-tune the selected denoiser. Defaults are tuned for everyday voice
-        chat; only adjust these if the result sounds wrong on your hardware.
+        {t("denoiserAdvanced.hint")}
       </p>
       {specs.map((spec) => {
         const value = params[spec.id] ?? spec.default;
