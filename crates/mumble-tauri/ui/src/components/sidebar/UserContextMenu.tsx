@@ -5,6 +5,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import type { UserEntry } from "../../types";
 import { useAppStore } from "../../store";
+import {
+  addFriend,
+  removeFriend,
+  getFriends,
+  FRIENDS_CHANGED_EVENT,
+  type Friend,
+} from "../../friendsStorage";
 import { canDeleteMessages } from "./ChannelEditorDialog";
 import ConfirmDialog from "../elements/ConfirmDialog";
 import Toast, { type ToastData } from "../elements/Toast";
@@ -74,6 +81,8 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
   const selectedChannel = useAppStore((s) => s.selectedChannel);
   const currentChannel = useAppStore((s) => s.currentChannel);
   const joinChannel = useAppStore((s) => s.joinChannel);
+  const activeServerId = useAppStore((s) => s.activeServerId);
+  const sessions = useAppStore((s) => s.sessions);
   const deletePchatMessages = useAppStore((s) => s.deletePchatMessages);
   const setUserVolume = useAppStore((s) => s.setUserVolume);
   const storedVolume = useAppStore((s) => user.hash ? (s.userVolumes[user.hash] ?? 100) : 100);
@@ -117,6 +126,60 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
   const [toast, setToast] = useState<ToastData | null>(null);
   const [deleteUserConfirm, setDeleteUserConfirm] = useState(false);
   const [showMoveSheet, setShowMoveSheet] = useState(false);
+  const [friendEntry, setFriendEntry] = useState<Friend | null>(null);
+
+  // Track whether the target user is already saved as a friend.  We re-run
+  // on every menu open and refresh when the persisted list changes.
+  useEffect(() => {
+    if (isSelf) {
+      setFriendEntry(null);
+      return;
+    }
+    let cancelled = false;
+    const refresh = async () => {
+      const friends = await getFriends();
+      const match =
+        friends.find((f) => user.hash && f.userHash === user.hash) ??
+        friends.find(
+          (f) =>
+            !f.userHash &&
+            !user.hash &&
+            f.userName === user.name &&
+            f.serverId === activeServerId,
+        ) ??
+        null;
+      if (!cancelled) setFriendEntry(match);
+    };
+    refresh().catch((e) => console.error("load friends failed", e));
+    const onChange = () => { refresh().catch(() => {}); };
+    globalThis.addEventListener(FRIENDS_CHANGED_EVENT, onChange);
+    return () => {
+      cancelled = true;
+      globalThis.removeEventListener(FRIENDS_CHANGED_EVENT, onChange);
+    };
+  }, [isSelf, user.hash, user.name, activeServerId]);
+
+  const handleFriendToggle = useCallback(async () => {
+    try {
+      if (friendEntry) {
+        await removeFriend(friendEntry.id);
+        setToast({ variant: "info", message: t("userMenu.toastFriendRemoved", { name: user.name }) });
+      } else {
+        const serverLabel = sessions.find((s) => s.id === activeServerId)?.label;
+        await addFriend({
+          userName: user.name,
+          userHash: user.hash,
+          serverId: activeServerId ?? undefined,
+          serverLabel,
+        });
+        setToast({ variant: "success", message: t("userMenu.toastFriendAdded", { name: user.name }) });
+      }
+      onClose();
+    } catch (e) {
+      console.error("toggle friend failed", e);
+      setToast({ variant: "error", message: t("userMenu.toastFriendFailed") });
+    }
+  }, [friendEntry, user.name, user.hash, activeServerId, sessions, t, onClose]);
 
   // Compute position once the menu is rendered and we know its size.
   useEffect(() => {
@@ -226,6 +289,18 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
               />
               <span className={styles.volumeValue}>{volume}%</span>
             </div>
+            <button
+              type="button"
+              className={styles.menuItem}
+              onClick={() => { void handleFriendToggle(); }}
+            >
+              <span className={styles.menuIcon}>
+                {friendEntry
+                  ? <UserXIcon width={14} height={14} />
+                  : <UserPlusIcon width={14} height={14} />}
+              </span>
+              {friendEntry ? t("userMenu.removeFriend") : t("userMenu.addFriend")}
+            </button>
             {canJoinChannel && (
               <button
                 type="button"
@@ -354,12 +429,6 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
         {isSelf && (
           <div className={styles.sectionLabel} style={{ padding: "8px 12px" }}>
             {t("userMenu.noActionsForSelf")}
-          </div>
-        )}
-        {/* Non-self user with no permissions */}
-        {!isSelf && !canJoinChannel && !showDeleteMessages && !hasAnyAdminAction && (
-          <div className={styles.sectionLabel} style={{ padding: "8px 12px" }}>
-            {t("userMenu.noActions")}
           </div>
         )}
       </div>

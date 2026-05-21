@@ -6,6 +6,12 @@ import { getPreferences, getSavedAudioSettings, isFirstRun, getNotificationSound
 import { setKlipyApiKey } from "./components/chat/GifPicker";
 import { setKlipyApiKey as setKlipyApiKeyBanner } from "./pages/settings/KlipyGifBrowser";
 import { loadShortcuts, applyAllGlobalShortcuts } from "./pages/settings/shortcutHelpers";
+import {
+  loadUserShortcuts,
+  applyAllUserShortcuts,
+  JUMP_TO_USER_EVENT,
+  type JumpToUserDetail,
+} from "./pages/settings/userShortcuts";
 import { useVisualViewport } from "./hooks/useVisualViewport";
 import { useNotificationSounds } from "./hooks/useNotificationSounds";
 import { useSpoilerReveal } from "./hooks/useSpoilerReveal";
@@ -20,6 +26,7 @@ import { isUpdaterWindow } from "./updater";
 import UpdaterWindow from "./updater/UpdaterWindow";
 import PopoutPage from "./pages/PopoutPage";
 import StreamPopoutPage from "./pages/StreamPopoutPage";
+import DmPopoutPage from "./pages/DmPopoutPage";
 import DrawOverlayPage from "./pages/DrawOverlayPage";
 import OnboardingModal from "./components/onboarding/OnboardingModal";
 
@@ -28,6 +35,7 @@ const SettingsPage = lazy(() => import("./pages/settings"));
 const AdminPanel = lazy(() => import("./pages/admin"));
 const RoleEditorPage = lazy(() => import("./pages/admin/RoleEditorPage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
+const FriendsPage = lazy(() => import("./pages/FriendsPage"));
 
 /**
  * Returns true when this webview window is an image popout window.
@@ -43,7 +51,10 @@ function isPopoutWindow(): boolean {
   // We run this synchronously by reading the document title fallback.
   const tauriInternals = (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__;
   const label = tauriInternals?.metadata?.currentWindow?.label;
-  return !!label && label.startsWith("popout-") && !label.startsWith("popout-stream-");
+  return !!label
+    && label.startsWith("popout-")
+    && !label.startsWith("popout-stream-")
+    && !label.startsWith("popout-dm-");
 }
 
 /** True when this webview is a stream-share popout (`popout-stream-<id>`). */
@@ -52,6 +63,14 @@ function isStreamPopoutWindow(): boolean {
   const tauriInternals = (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__;
   const label = tauriInternals?.metadata?.currentWindow?.label;
   return !!label && label.startsWith("popout-stream-");
+}
+
+/** True when this webview is a DM popout (`popout-dm-<id>`). */
+function isDmPopoutWindow(): boolean {
+  if (new URLSearchParams(globalThis.location.search).has("popout-dm")) return true;
+  const tauriInternals = (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__;
+  const label = tauriInternals?.metadata?.currentWindow?.label;
+  return !!label && label.startsWith("popout-dm-");
 }
 
 /**
@@ -68,12 +87,13 @@ function isDrawOverlayWindow(): boolean {
   return label === "draw-overlay";
 }
 
-const enum WindowKind { Main, Popout, StreamPopout, Updater, DrawOverlay }
+const enum WindowKind { Main, Popout, StreamPopout, DmPopout, Updater, DrawOverlay }
 
 function getWindowKind(): WindowKind {
   if (isUpdaterWindow()) return WindowKind.Updater;
   if (isDrawOverlayWindow()) return WindowKind.DrawOverlay;
   if (isStreamPopoutWindow()) return WindowKind.StreamPopout;
+  if (isDmPopoutWindow()) return WindowKind.DmPopout;
   if (isPopoutWindow()) return WindowKind.Popout;
   return WindowKind.Main;
 }
@@ -83,6 +103,7 @@ export default function App() {
     case WindowKind.Updater:      return <UpdaterWindow />;
     case WindowKind.DrawOverlay:  return <DrawOverlayPage />;
     case WindowKind.StreamPopout: return <StreamPopoutPage />;
+    case WindowKind.DmPopout:     return <DmPopoutPage />;
     case WindowKind.Popout:       return <PopoutPage />;
     default:                      return <MainApp />;
   }
@@ -165,6 +186,9 @@ function MainApp() {
     loadShortcuts().then((sc) => {
       applyAllGlobalShortcuts(sc).catch(console.error);
     });
+    loadUserShortcuts().then((us) => {
+      applyAllUserShortcuts(us).catch(console.error);
+    });
   }, []);
 
   // Sync notification sounds when settings page saves changes.
@@ -176,6 +200,44 @@ function MainApp() {
     globalThis.addEventListener("notification-sounds-changed", handler);
     return () => globalThis.removeEventListener("notification-sounds-changed", handler);
   }, []);
+
+  // Global "jump to user" shortcuts: identify the user by cert hash
+  // when available (matches on whichever connected server they happen
+  // to be visible on); fall back to a server-scoped name lookup for
+  // anonymous users with no certificate hash.
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const detail = (e as CustomEvent<JumpToUserDetail>).detail;
+      if (!detail) return;
+      try {
+        type Match = { serverId: string; userSession: number; userName: string };
+        let match: Match | null = null;
+        if (detail.userHash) {
+          match = await invoke<Match | null>("find_user_by_hash", { userHash: detail.userHash });
+        }
+        if (!match && detail.serverId) {
+          match = await invoke<Match | null>("find_user_in_server", {
+            serverId: detail.serverId,
+            userName: detail.userName,
+          });
+        }
+        if (!match) {
+          console.warn("jump-to-user: target user not online", detail);
+          return;
+        }
+        const state = useAppStore.getState();
+        if (state.activeServerId !== match.serverId) {
+          await state.switchServer(match.serverId);
+        }
+        navigate("/chat");
+        await useAppStore.getState().selectDmUser(match.userSession);
+      } catch (err) {
+        console.error("jump-to-user failed:", err);
+      }
+    };
+    globalThis.addEventListener(JUMP_TO_USER_EVENT, handler);
+    return () => globalThis.removeEventListener(JUMP_TO_USER_EVENT, handler);
+  }, [navigate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -212,6 +274,7 @@ function MainApp() {
             <>
               <Route path="/" element={<ConnectPage />} />
               <Route path="/chat" element={<ChatPage />} />
+              <Route path="/friends" element={<FriendsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/admin" element={<AdminPanel />} />
               <Route path="/admin/role/:groupName" element={<RoleEditorPage />} />

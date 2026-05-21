@@ -459,9 +459,9 @@ function ModernChannelListImpl({
     <div ref={listRef} className={styles.list}>
       {/* Sticky clone at top: shown when the current channel has scrolled above the viewport */}
       {currentChannelEntry && stickyState === "top" && (
-        <button type="button" className={styles.stickyTop} onClick={scrollCurrentIntoView}>
+        <div className={styles.stickyTop} onClick={scrollCurrentIntoView}>
           {renderChannel(currentChannelEntry)}
-        </button>
+        </div>
       )}
 
       {/* All channels in server order */}
@@ -504,9 +504,9 @@ function ModernChannelListImpl({
 
       {/* Sticky clone at bottom: shown when the current channel is below the viewport */}
       {currentChannelEntry && stickyState === "bottom" && (
-        <button type="button" className={styles.stickyBottom} onClick={scrollCurrentIntoView}>
+        <div className={styles.stickyBottom} onClick={scrollCurrentIntoView}>
           {renderChannel(currentChannelEntry)}
-        </button>
+        </div>
       )}
     </div>
   );

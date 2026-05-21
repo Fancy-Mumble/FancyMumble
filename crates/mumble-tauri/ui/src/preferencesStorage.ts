@@ -37,6 +37,7 @@ const DEFAULTS: UserPreferences = {
   autoReconnect: false,
   autoUpdateOnStartup: false,
   skippedUpdateVersion: null,
+  persistDms: false,
 };
 
 async function getStore() {

@@ -453,6 +453,16 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
             onChange={() => onChange({ compactMode: !data.compactMode })}
           />
         </div>
+        <div className={styles.fieldRow}>
+          <div>
+            <label className={styles.fieldLabel}>{t("personalize.alwaysShowMessageActions")}</label>
+            <p className={styles.fieldHint}>{t("personalize.alwaysShowMessageActionsHint")}</p>
+          </div>
+          <Toggle
+            checked={data.alwaysShowMessageActions}
+            onChange={() => onChange({ alwaysShowMessageActions: !data.alwaysShowMessageActions })}
+          />
+        </div>
       </section>
 
       {/* -- Channel Viewer ---------------------------------------- */}

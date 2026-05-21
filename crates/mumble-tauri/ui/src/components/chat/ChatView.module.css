@@ -467,11 +467,37 @@
   position: relative;
 }
 
-/* Show the action bar only when hovering the message bubble itself,
-   not the full-width row.  The bar uses `display: none` by default
-   (see MessageActionBar.module.css).  Also keep it visible while
+/* Invisible hover hitbox that extends the wrapper's hover area across
+   the full width of the messages container while keeping the bubble
+   layout untouched.  Anchored vertically to the wrapper so the action
+   bar only stays open while the cursor is within the message's
+   y-band.  `overflow-x: hidden` on `.messages` clips this so it never
+   creates horizontal scroll.  Using -50vw / 100vw width avoids the
+   pseudo-element contributing layout in browsers that don't fully
+   ignore positioned descendants for sizing. */
+.actionBarWrapper::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -50vw;
+  width: 100vw;
+  z-index: 0;
+  /* pointer-events default `auto` so :hover fires */
+}
+
+/* Keep interactive content above the hitbox.  Must NOT target the
+   floating action bar (`[data-action-bar]`), which relies on its own
+   `position: absolute` declared in MessageActionBar.module.css. */
+.actionBarWrapper > :not([data-action-bar]) {
+  position: relative;
+  z-index: 1;
+}
+
+/* Show the action bar when the cursor is anywhere within the wrapper's
+   vertical band (i.e. anywhere in the row), and keep it visible while
    hovering the bar itself so buttons remain clickable. */
-.actionBarWrapper:has(.bubble:hover) > [data-action-bar],
+.actionBarWrapper:hover > [data-action-bar],
 .actionBarWrapper > [data-action-bar]:hover {
   display: flex;
 }
@@ -596,6 +622,38 @@
   opacity: 0.6;
   margin-left: 6px;
   white-space: nowrap;
+}
+
+/* --- Inline action icons (copy / quote) shown when the
+       "always show message actions" personalization option is on. */
+
+.inlineActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.inlineActionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.12s, background 0.12s;
+}
+
+.inlineActionBtn:hover {
+  color: var(--color-text-primary, #fff);
+  background: var(--color-glass-hover, rgba(255, 255, 255, 0.1));
 }
 
 .ownBubble .messageTime {
@@ -1344,3 +1402,147 @@
   font-size: 13px;
   text-align: center;
 }
+
+/* --- Pending attachments preview (above composer) ---------------- */
+
+.pendingAttachStrip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--color-glass, rgba(30, 30, 30, 0.6));
+  border-top: 1px solid var(--color-glass-hover);
+}
+
+.pendingAttachItems {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pendingAttachItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 6px;
+  background: var(--color-glass-border);
+  border-radius: 6px;
+  max-width: 260px;
+}
+
+.pendingAttachThumb {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  background: var(--color-bg-elevated, rgba(0, 0, 0, 0.3));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+}
+
+.pendingAttachImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pendingAttachMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pendingAttachName {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.pendingAttachKind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.pendingAttachRemove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.pendingAttachRemove:hover {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+}
+
+.pendingAttachSend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-accent-glow, rgba(100, 150, 255, 0.4));
+  border-radius: 6px;
+  background: var(--color-accent, rgba(100, 150, 255, 0.2));
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pendingAttachSend:hover:not(:disabled) {
+  background: var(--color-glass-hover);
+}
+
+.pendingAttachSend:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --- Drag-drop chat overlay (when dragging a file over chat) ----- */
+
+.dragOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+.dragOverlayInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 32px;
+  border: 2px dashed var(--color-accent-glow, rgba(100, 150, 255, 0.6));
+  border-radius: 12px;
+  background: var(--color-glass);
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+

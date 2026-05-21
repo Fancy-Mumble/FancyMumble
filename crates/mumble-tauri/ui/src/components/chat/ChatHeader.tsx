@@ -1,4 +1,4 @@
-import { BellIcon, BellOffIcon, CloseIcon, DatabaseIcon, FolderIcon, PollIcon, ScreenShareIcon, SearchIcon, UsersGroupIcon } from "../../icons";
+import { BellIcon, BellOffIcon, CloseIcon, DatabaseIcon, FolderIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, UsersGroupIcon } from "../../icons";
 import { useTranslation } from "react-i18next";
 import { isMobile } from "../../utils/platform";
 import type { KeyTrustLevel } from "../../types";
@@ -53,6 +53,8 @@ interface ChatHeaderProps {
   readonly hasNewDownloads?: boolean;
   /** Called when the user opens the downloads panel. */
   readonly onDownloads?: () => void;
+  /** Called when the user clicks "Pop out DM" (only meaningful when isDm). */
+  readonly onPopOutDm?: () => void;
 }
 
 function buildKebabItems({
@@ -129,6 +131,7 @@ export default function ChatHeader({
   onPinnedMessages,
   hasNewDownloads,
   onDownloads,
+  onPopOutDm,
 }: ChatHeaderProps) {
   const { t } = useTranslation("chat");
   const tStr = t as (key: string) => string;
@@ -206,6 +209,16 @@ export default function ChatHeader({
             trustLevel={keyTrustLevel}
             onVerifyClick={onVerifyClick}
           />
+        )}
+        {privateBadge && onPopOutDm && (
+          <button
+            className={styles.serverInfoBtn}
+            onClick={onPopOutDm}
+            aria-label={t("header.popOutDm")}
+            title={t("header.popOutDm")}
+          >
+            <PopoutIcon width={18} height={18} />
+          </button>
         )}
         {onChannelSearch && !privateBadge && (
           <button

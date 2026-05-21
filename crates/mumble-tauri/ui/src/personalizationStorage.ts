@@ -38,6 +38,9 @@ export interface PersonalizationData {
   channelViewerStyle: ChannelViewerStyle;
   /** Active color theme. */
   theme: ThemeId;
+  /** Always render the copy/reply/reaction action bar at the bottom of every
+   *  text message instead of only showing it on hover. */
+  alwaysShowMessageActions: boolean;
 }
 
 const STORE_FILE = "personalization.json";
@@ -57,6 +60,7 @@ const DEFAULTS: PersonalizationData = {
   compactMode: false,
   channelViewerStyle: "flat",
   theme: "dark",
+  alwaysShowMessageActions: false,
 };
 
 async function getStore() {

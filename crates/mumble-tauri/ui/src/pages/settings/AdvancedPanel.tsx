@@ -10,11 +10,13 @@ export function AdvancedPanel({
   logLevel,
   autoReconnect,
   autoUpdateOnStartup,
+  persistDms,
   onToggleMode,
   onKlipyApiKeyChange,
   onLogLevelChange,
   onToggleAutoReconnect,
   onToggleAutoUpdate,
+  onTogglePersistDms,
   onToggleDeveloperMode,
   onReset,
 }: Readonly<{
@@ -23,11 +25,13 @@ export function AdvancedPanel({
   logLevel: string;
   autoReconnect: boolean;
   autoUpdateOnStartup: boolean;
+  persistDms: boolean;
   onToggleMode: () => void;
   onKlipyApiKeyChange: (key: string) => void;
   onLogLevelChange: (level: string) => void;
   onToggleAutoReconnect: () => void;
   onToggleAutoUpdate: () => void;
+  onTogglePersistDms: () => void;
   onToggleDeveloperMode: () => void;
   onReset: () => void;
 }>) {
@@ -134,6 +138,16 @@ export function AdvancedPanel({
             checked={autoUpdateOnStartup}
             onChange={onToggleAutoUpdate}
           />
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.toggleRow}>
+          <div className={styles.toggleInfo}>
+            <h3 className={styles.sectionTitle}>{t("advanced.persistDms")}</h3>
+            <p className={styles.fieldHint}>{t("advanced.persistDmsHint")}</p>
+          </div>
+          <Toggle checked={persistDms} onChange={onTogglePersistDms} />
         </div>
       </section>
 

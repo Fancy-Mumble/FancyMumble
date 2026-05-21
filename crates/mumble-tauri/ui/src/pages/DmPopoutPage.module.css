@@ -1,0 +1,75 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--color-bg-base, #1a1a1f);
+  color: var(--color-text-primary, #fff);
+  font-family: system-ui, sans-serif;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--color-glass, rgba(40, 40, 48, 0.7));
+  border-bottom: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.08));
+  -webkit-app-region: drag;
+}
+
+.headerTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.serverLabel {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.6));
+}
+
+.closeBtn {
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 4px;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.6));
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+}
+
+.closeBtn:hover {
+  background: var(--color-glass-hover, rgba(255, 255, 255, 0.08));
+  color: var(--color-text-primary, #fff);
+}
+
+/*
+ * Hosts the embedded `<ChatView />`.  Must be a flex column so
+ * ChatView's root `<main flex:1>` expands to fill the popout.
+ */
+.chatHost {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.error,
+.loading {
+  padding: 16px;
+  text-align: center;
+  font-family: system-ui, sans-serif;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.6));
+}
+
+.error {
+  color: var(--color-danger, #f55);
+}

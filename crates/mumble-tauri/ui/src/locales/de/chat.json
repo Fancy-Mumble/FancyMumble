@@ -9,6 +9,29 @@
     "placeholderMobile": "Nachricht schreiben...",
     "placeholderDesktop": "Nachricht schreiben... (Strg+B/I/U zum Formatieren)"
   },
+  "dragDrop": {
+    "overlayHint": "Dateien hier ablegen, um sie anzuhängen"
+  },
+  "inlineActions": {
+    "copy": "Nachricht kopieren",
+    "quote": "Nachricht zitieren"
+  },
+  "dmPopout": {
+    "loading": "Direktnachricht wird geladen...",
+    "unavailable": "Das DM-Popout ist nicht mehr verfügbar.",
+    "missingId": "Popout-ID fehlt.",
+    "empty": "Noch keine Nachrichten.",
+    "placeholder": "Antworten...",
+    "send": "Senden",
+    "close": "Popout schließen"
+  },
+  "pendingAttachments": {
+    "regionAriaLabel": "Ausstehende Anhänge",
+    "kindImage": "Bild",
+    "kindFile": "Datei",
+    "remove": "Anhang entfernen",
+    "send": "Senden"
+  },
   "header": {
     "directMessage": "Direktnachricht",
     "unknown": "Unbekannt",
@@ -31,7 +54,8 @@
     "unmuteChannel": "Stummschaltung des Kanals aufheben",
     "channelOptions": "Kanaloptionen",
     "join": "Beitreten",
-    "joinChannel": "Kanal beitreten"
+    "joinChannel": "Kanal beitreten",
+    "popOutDm": "Direktnachricht ausklinken"
   },
   "contextMenu": {
     "moreReactions": "Weitere Reaktionen",

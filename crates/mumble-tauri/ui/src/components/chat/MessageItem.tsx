@@ -190,6 +190,10 @@ interface MessageItemProps {
   readonly children?: React.ReactNode;
   /** Optional read receipt indicator rendered next to the timestamp on own messages. */
   readonly readReceiptIndicator?: React.ReactNode;
+  /** Optional inline action icons (e.g. copy, quote) rendered next to the
+   *  timestamp on every message, just before the read-receipt indicator.
+   *  Used by the "always show message actions" personalization option. */
+  readonly inlineActions?: React.ReactNode;
 }
 
 export default memo(function MessageItem({
@@ -207,6 +211,7 @@ export default memo(function MessageItem({
   onOpenLightbox,
   children,
   readReceiptIndicator,
+  inlineActions,
 }: MessageItemProps) {
   const { t } = useTranslation("chat");
   const offloadInfo = extractOffloadInfo(msg.body);
@@ -383,6 +388,7 @@ export default memo(function MessageItem({
             </time>
             {msg.edited_at != null && <span className={styles.editedBadge}>{t("message.editedBadge")}</span>}
             {msg.pinned && <span className={styles.pinnedBadge}>{t("message.pinnedBadge")}</span>}
+            {inlineActions}
             {msg.is_own && readReceiptIndicator}
           </span>
         )}
@@ -393,6 +399,7 @@ export default memo(function MessageItem({
             </time>
             {msg.edited_at != null && <span className={styles.editedBadge}>{t("message.editedBadge")}</span>}
             {msg.pinned && <span className={styles.pinnedBadge}>{t("message.pinnedBadge")}</span>}
+            {inlineActions}
             {msg.is_own && readReceiptIndicator}
           </span>
         )}

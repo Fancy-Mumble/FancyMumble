@@ -450,6 +450,10 @@ export interface UserPreferences {
   voiceOnReconnect?: boolean;
   /** Whether the mic was muted (but still in-call) when last disconnected. */
   voiceMutedOnReconnect?: boolean;
+  /** When true, direct messages exchanged with friends are persisted to
+   *  the local device (encrypted with AES-GCM) so the conversation
+   *  history survives reconnects and app restarts.  Off by default. */
+  persistDms?: boolean;
 }
 
 /** Identifiers for events that can trigger a notification sound. */

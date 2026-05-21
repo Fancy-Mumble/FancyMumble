@@ -1,7 +1,7 @@
 import { ChevronDownIcon } from "../../icons";
 import React, { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { useAppStore } from "../../store";
 import type { ChatMessage, TimeFormat } from "../../types";
 import { getPreferences } from "../../preferencesStorage";
@@ -29,6 +29,8 @@ import { BannerStack } from "../security/InfoBanner";
 import { useUserAvatars } from "../../lazyBlobs";
 import ChatMessageList from "./ChatMessageList";
 import QuotePreviewStrip from "./QuotePreviewStrip";
+import PendingAttachmentsStrip from "./PendingAttachmentsStrip";
+import { useDragDropAttachments } from "./useDragDropAttachments";
 import MentionPopover from "./MentionPopover";
 import { useChatSend } from "./useChatSend";
 import { useChatScroll } from "./useChatScroll";
@@ -62,6 +64,14 @@ interface ChatViewProps {
   readonly onChannelSearch?: () => void;
   readonly scrollToMessageId?: string | null;
   readonly onScrollConsumed?: () => void;
+  /**
+   * True when this `ChatView` is hosted inside a DM popout window.
+   * Suppresses features that don't make sense in the popout context:
+   *   - the "Pop out DM" header button (we are already a popout)
+   *   - screen-share controls (popout is DM-only and would create a
+   *     parallel WebRTC peer connection from a second webview)
+   */
+  readonly inPopout?: boolean;
 }
 
 /** Compute chat header label and member count based on the active mode. */
@@ -91,7 +101,7 @@ function findPopOutImageSrc(body: string): string | null {
   return null;
 }
 
-export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollToMessageId, onScrollConsumed }: ChatViewProps) {
+export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollToMessageId, onScrollConsumed, inPopout = false }: ChatViewProps) {
   const { t } = useTranslation("chat");
   const channels = useAppStore((s) => s.channels);
   const users = useAppStore((s) => s.users);
@@ -148,6 +158,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     compactMode: false,
     channelViewerStyle: "modern",
     theme: "dark",
+    alwaysShowMessageActions: false,
   });
 
   useEffect(() => {
@@ -280,6 +291,23 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     pinMessage(channelId, msg.message_id, !!msg.pinned);
   }, [selectedChannel, pinMessage]);
 
+  const activeServerId = useAppStore((s) => s.activeServerId);
+  const sessions = useAppStore((s) => s.sessions);
+  const handlePopOutDm = useCallback(() => {
+    if (!isDmMode || !dmPartner) return;
+    const session = sessions.find((s) => s.id === activeServerId);
+    const payload = {
+      server_id: activeServerId ?? "",
+      server_label: session?.label ?? session?.host ?? null,
+      user_session: dmPartner.session,
+      user_name: dmPartner.name,
+      user_hash: dmPartner.hash ?? null,
+    };
+    invoke("open_dm_popout", { payload }).catch((err) => {
+      console.error("Failed to open DM popout:", err);
+    });
+  }, [isDmMode, dmPartner, sessions, activeServerId]);
+
   const handlePopOutImage = useCallback((msg: ChatMessage, src: string) => {
     const captionRaw = msg.body
       .replaceAll(/<!--[\s\S]*?-->/g, "")
@@ -387,11 +415,6 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     onEditComplete: cancelEdit,
     showToast,
   });
-
-  const handleSendAndResetTyping = useCallback(async () => {
-    await handleSend();
-    resetTyping();
-  }, [handleSend, resetTyping]);
 
   const fileServerConfig = useAppStore((s) => s.fileServerConfig);
   const uploadFile = useAppStore((s) => s.uploadFile);
@@ -513,6 +536,51 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
 
   const handleShareDialogCancel = useCallback(() => setShareDialog(null), []);
 
+  // -- Drag-drop preview ----------------------------------------------
+  const canDropAttachments = isDmMode || selectedChannel !== null;
+  const { attachments: pendingAttachments, setAttachments: setPendingAttachments, dragActive, removeAttachment } =
+    useDragDropAttachments({ enabled: canDropAttachments });
+
+  const sendPendingAttachments = useCallback(async () => {
+    if (pendingAttachments.length === 0) return;
+    const remaining = [...pendingAttachments];
+    setPendingAttachments([]);
+    for (const att of remaining) {
+      if (att.isImage) {
+        try {
+          let file = att.file;
+          if (!file && att.path) {
+            const res = await fetch(convertFileSrc(att.path));
+            const blob = await res.blob();
+            file = new File([blob], att.name, { type: blob.type || "image/png" });
+          }
+          if (file) await sendMediaFile(file);
+        } catch (e) {
+          console.error("send image attachment failed:", e);
+          showToast({
+            message: `Failed to send ${att.name}: ${e instanceof Error ? e.message : String(e)}`,
+            variant: "error",
+          });
+        }
+      } else if (att.path) {
+        setShareDialog({ filePath: att.path, filename: att.name });
+        return;
+      } else {
+        showToast({
+          message: `Cannot share ${att.name}: missing file path.`,
+          variant: "error",
+        });
+      }
+    }
+  }, [pendingAttachments, setPendingAttachments, sendMediaFile, showToast]);
+
+  const handleSendAndResetTyping = useCallback(async () => {
+    // Send any pending drag-dropped attachments first, then the text message.
+    await sendPendingAttachments();
+    await handleSend();
+    resetTyping();
+  }, [handleSend, resetTyping, sendPendingAttachments]);
+
   const handleDismissUpload = useCallback((id: string) => {
     setUploadPlaceholders((prev) => prev.filter((p) => p.id !== id));
   }, []);
@@ -630,16 +698,17 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
 
   return (
     <main className={`${styles.main} ${activeScreenShare ? styles.streamingLayout : ""}`}>
-      {selectionMode ? (
-        <MessageSelectionBar
-          count={selectedMsgIds.size}
-          onDelete={handleBulkDelete}
-          onCancel={exitSelectionMode}
-        />
-      ) : (
-        <ChatHeader
-          channelName={headerName}
-          memberCount={headerMemberCount}
+      {!inPopout && (
+        selectionMode ? (
+          <MessageSelectionBar
+            count={selectedMsgIds.size}
+            onDelete={handleBulkDelete}
+            onCancel={exitSelectionMode}
+          />
+        ) : (
+          <ChatHeader
+            channelName={headerName}
+            memberCount={headerMemberCount}
           isInChannel={isDmMode || isInChannel}
           isDm={isDmMode}
           isPersisted={persistent.isPersisted}
@@ -653,7 +722,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           onToggleSilence={selectedChannel !== null ? () => toggleSilenceChannel(selectedChannel) : undefined}
           isScreenSharing={screenShare.isBroadcasting}
           onToggleScreenShare={
-            !isMobile && serverFancyVersion != null && serverFancyVersion >= SCREEN_SHARE_MIN_VERSION
+            !inPopout && !isMobile && serverFancyVersion != null && serverFancyVersion >= SCREEN_SHARE_MIN_VERSION
               ? (screenShare.isBroadcasting ? screenShare.stopSharing : screenShare.startSharing)
               : undefined
           }
@@ -668,7 +737,9 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           onPinnedMessages={handleOpenPinnedPanel}
           hasNewDownloads={unseenDownloadCount > 0}
           onDownloads={handleOpenDownloadsPanel}
+          onPopOutDm={inPopout ? undefined : handlePopOutDm}
         />
+        )
       )}
 
       {showPinnedPanel && (
@@ -820,6 +891,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
               getMessageReactions={getMessageReactions}
               onToggleReaction={toggleReaction}
               onAddReaction={handleMoreReactions}
+              alwaysShowMessageActions={personalization.alwaysShowMessageActions}
             />
           )}
           {uploadPlaceholders.map((p) => (
@@ -847,6 +919,23 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
 
       {/* Pending quote preview strip */}
       <QuotePreviewStrip quotes={pendingQuotes} onRemove={removePendingQuote} />
+
+      {/* Drag-drop preview strip (above composer) */}
+      <PendingAttachmentsStrip
+        attachments={pendingAttachments}
+        onRemove={removeAttachment}
+        onSend={() => void sendPendingAttachments()}
+        disabled={sending || isUploading}
+      />
+
+      {/* Drag overlay shown while user drags a file over the chat window */}
+      {dragActive && canDropAttachments && (
+        <div className={styles.dragOverlay} aria-hidden="true">
+          <div className={styles.dragOverlayInner}>
+            <span>{t("dragDrop.overlayHint")}</span>
+          </div>
+        </div>
+      )}
 
       <div className={styles.composerWrapper}>
         <TypingIndicator channelId={isDmMode ? null : selectedChannel} />

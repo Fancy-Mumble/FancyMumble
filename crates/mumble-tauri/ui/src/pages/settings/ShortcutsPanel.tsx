@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { ShortcutBindings } from "./shortcutHelpers";
 import { ShortcutRecorder } from "./SharedControls";
+import UserShortcutsSection from "./UserShortcutsSection";
 import styles from "./SettingsPage.module.css";
 
 interface Props {
@@ -123,6 +124,8 @@ export function ShortcutsPanel({ shortcuts, onChangeShortcut, isExpert }: Props)
           />
         )}
       </ShortcutGroup>
+
+      <UserShortcutsSection />
 
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>{t("shortcuts.builtinTitle")}</h3>

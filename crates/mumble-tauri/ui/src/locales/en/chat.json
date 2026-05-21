@@ -9,6 +9,29 @@
     "placeholderMobile": "Write a message...",
     "placeholderDesktop": "Write a message... (Ctrl+B/I/U for formatting)"
   },
+  "dragDrop": {
+    "overlayHint": "Drop files here to attach"
+  },
+  "inlineActions": {
+    "copy": "Copy message",
+    "quote": "Quote message"
+  },
+  "dmPopout": {
+    "loading": "Loading direct message...",
+    "unavailable": "Direct message popout is no longer available.",
+    "missingId": "Missing popout id.",
+    "empty": "No messages yet.",
+    "placeholder": "Reply...",
+    "send": "Send",
+    "close": "Close popout"
+  },
+  "pendingAttachments": {
+    "regionAriaLabel": "Pending attachments",
+    "kindImage": "Image",
+    "kindFile": "File",
+    "remove": "Remove attachment",
+    "send": "Send"
+  },
   "header": {
     "directMessage": "Direct Message",
     "unknown": "Unknown",
@@ -31,7 +54,8 @@
     "unmuteChannel": "Unmute channel",
     "channelOptions": "Channel options",
     "join": "Join",
-    "joinChannel": "Join Channel"
+    "joinChannel": "Join Channel",
+    "popOutDm": "Pop out direct message"
   },
   "contextMenu": {
     "moreReactions": "More reactions",
