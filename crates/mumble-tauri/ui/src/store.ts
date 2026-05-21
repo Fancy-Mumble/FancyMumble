@@ -52,6 +52,13 @@ import { useOnboardingStore } from "./components/onboarding/onboardingStore";
 import type { OnboardingConfigEvent, OnboardingResponseEvent } from "./types";
 import { offloadManager } from "./messageOffload";
 import { getSilencedChannels, setSilencedChannel, getUserVolumes, saveUserVolume, getMutedPushChannels, setMutedPushChannel, getPreferences, updatePreferences } from "./preferencesStorage";
+import {
+  friendKeyFor as dmFriendKeyFor,
+  isDmPersistenceEnabled,
+  loadDmHistory,
+  mergeMessages as mergeDmMessages,
+  saveDmHistory,
+} from "./dmStorage";
 import { loadProfileData } from "./pages/settings/profileData";
 import { serializeProfile, dataUrlToBytes } from "./profileFormat";
 
@@ -798,6 +805,27 @@ function updateBadgeCount(): void {
   });
 }
 
+/**
+ * Merges newly-fetched remote DM messages with the encrypted on-device
+ * history (when the user has enabled DM persistence) and writes the
+ * merged log back.  When persistence is disabled the remote messages
+ * are returned unchanged.
+ */
+async function applyDmPersistence(
+  state: { users: UserEntry[]; activeServerId: string | null },
+  session: number,
+  remote: ChatMessage[],
+): Promise<ChatMessage[]> {
+  if (!(await isDmPersistenceEnabled())) return remote;
+  const user = state.users.find((u) => u.session === session);
+  if (!user) return remote;
+  const key = dmFriendKeyFor({ hash: user.hash, name: user.name }, state.activeServerId);
+  const persisted = await loadDmHistory(key);
+  const merged = mergeDmMessages(persisted, remote);
+  void saveDmHistory(key, merged);
+  return merged;
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   ...INITIAL,
   disableLinkPreviews: false,
@@ -829,7 +857,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         for (const [k, v] of Object.entries(prev.sessionErrors)) {
           if (ids.has(k)) nextErrors[k] = v;
         }
-        return { sessions, activeServerId, sessionUnreadTotals: next, sessionErrors: nextErrors };
+        const activeMeta = activeServerId ? sessions.find((s) => s.id === activeServerId) : undefined;
+        const status = activeMeta?.status ?? prev.status;
+        const error = activeMeta?.status === "connected" ? null : (nextErrors[activeServerId ?? ""] ?? prev.error);
+        return { sessions, activeServerId, sessionUnreadTotals: next, sessionErrors: nextErrors, status, error };
       });
     } catch (e) {
       console.error("refreshSessions error:", e);
@@ -1340,7 +1371,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ selectedDmUser: session, selectedChannel: null, messages: [], selectedUser: session });
     try {
       await invoke("select_dm_user", { session });
-      const dmMessages = await invoke<ChatMessage[]>("get_dm_messages", { session });
+      const remote = await invoke<ChatMessage[]>("get_dm_messages", { session });
+      const dmMessages = await applyDmPersistence(get(), session, remote);
       set({ dmMessages });
     } catch (e) {
       console.error("select_dm_user error:", e);
@@ -1367,7 +1399,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     try {
       await invoke("send_dm", { targetSession, body });
-      const dmMessages = await invoke<ChatMessage[]>("get_dm_messages", { session: targetSession });
+      const remote = await invoke<ChatMessage[]>("get_dm_messages", { session: targetSession });
+      const dmMessages = await applyDmPersistence(get(), targetSession, remote);
       if (showPlaceholder) {
         set((s) => ({
           dmMessages,
@@ -1393,7 +1426,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   refreshDmMessages: async (session) => {
     try {
-      const dmMessages = await invoke<ChatMessage[]>("get_dm_messages", { session });
+      const remote = await invoke<ChatMessage[]>("get_dm_messages", { session });
+      const dmMessages = await applyDmPersistence(get(), session, remote);
       set({ dmMessages });
     } catch (e) {
       console.error("refresh dm messages error:", e);
@@ -1881,8 +1915,35 @@ export async function initEventListeners(
   const unlisteners: UnlistenFn[] = [];
 
   // Bootstrap the multi-server session list once at startup so the
-  // sessions slice reflects whatever the backend already has.
-  useAppStore.getState().refreshSessions().catch(() => {});
+  // sessions slice reflects whatever the backend already has.  When the
+  // backend is already in a connected session (e.g. after a Vite HMR
+  // remount), also pull channels/users/current-channel/messages/ownSession
+  // so the UI restores the chat view instead of showing the empty/
+  // disconnected fallback.
+  useAppStore.getState().refreshSessions()
+    .then(async () => {
+      const { activeServerId, sessions, refreshState } = useAppStore.getState();
+      const active = sessions.find((s) => s.id === activeServerId);
+      if (active?.status !== "connected") return;
+      await refreshState();
+      try {
+        const currentCh = await invoke<number | null>("get_current_channel");
+        useAppStore.setState({ currentChannel: currentCh, selectedChannel: currentCh });
+        if (currentCh !== null) {
+          const messages = await invoke<ChatMessage[]>("get_messages", { channelId: currentCh });
+          useAppStore.setState({ messages });
+        }
+      } catch (e) {
+        console.error("HMR state restore (channel/messages) failed:", e);
+      }
+      try {
+        const ownSession = await invoke<number | null>("get_own_session");
+        useAppStore.setState({ ownSession });
+      } catch {
+        // not connected; leave as-is.
+      }
+    })
+    .catch(() => {});
 
   // Ensure notification permissions and channel are set up (Android 8+ / 13+).
   try {

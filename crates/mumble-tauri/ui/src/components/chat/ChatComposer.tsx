@@ -61,6 +61,23 @@ export default function ChatComposer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const inputApi = useRef<MarkdownInputApi | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Width below which we drop the keyboard-shortcut hint from the
+  // placeholder.  Roughly the point at which "Write a message... (Ctrl+B/I/U
+  // for formatting)" stops fitting in the textarea on a single line.
+  const NARROW_PLACEHOLDER_PX = 480;
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const obs = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0;
+      setIsNarrow(w > 0 && w < NARROW_PLACEHOLDER_PX);
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
 
   const [trigger, setTrigger] = useState<MentionTrigger | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -229,7 +246,7 @@ export default function ChatComposer({
   );
 
   return (
-    <div className={styles.composerWrapper}>
+    <div ref={wrapperRef} className={styles.composerWrapper}>
       {isEditing && (
         <div className={styles.editBanner}>
           <EditIcon width={14} height={14} />
@@ -303,7 +320,7 @@ export default function ChatComposer({
             onChange={onChange}
             onSubmit={onSend}
             onPaste={onPaste}
-            placeholder={isMobile ? t("composer.placeholderMobile") : t("composer.placeholderDesktop")}
+            placeholder={isMobile || isNarrow ? t("composer.placeholderMobile") : t("composer.placeholderDesktop")}
             disabled={disabled}
             apiRef={inputApi}
             onSelectionChange={handleSelectionChange}

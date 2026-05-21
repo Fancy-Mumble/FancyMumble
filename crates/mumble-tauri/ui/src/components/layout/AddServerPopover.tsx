@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { useAppStore } from "../../store";
 import { getSavedServers, getServerPassword } from "../../serverStorage";
 import type { SavedServer, ServerPingResult } from "../../types";
+import { UsersGroupIcon } from "../../icons";
 import styles from "./AddServerPopover.module.css";
 
 interface Props {
@@ -179,6 +180,17 @@ export default function AddServerPopover({ anchor, onClose }: Readonly<Props>) {
       role="dialog"
       aria-label={t("addPopover.title")}
     >
+      <button
+        type="button"
+        className={styles.friendsRow}
+        onClick={() => { onClose(); navigate("/friends"); }}
+        title={t("addPopover.openFriendsTitle")}
+      >
+        <span className={styles.friendsIcon}>
+          <UsersGroupIcon width={16} height={16} />
+        </span>
+        <span className={styles.friendsLabel}>{t("addPopover.openFriends")}</span>
+      </button>
       <div className={styles.header}>
         <span className={styles.title}>{t("addPopover.title")}</span>
         <button

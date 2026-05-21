@@ -27,7 +27,12 @@
     "toastMessagesDeleted": "Deleted messages from {{name}}",
     "toastDeleteFailed": "Failed to delete messages",
     "toastUserMoved": "Moved {{name}} to {{channel}}",
-    "toastMoveFailed": "Failed to move {{name}}"
+    "toastMoveFailed": "Failed to move {{name}}",
+    "addFriend": "Add as friend",
+    "removeFriend": "Remove friend",
+    "toastFriendAdded": "Added {{name}} to your friends",
+    "toastFriendRemoved": "Removed {{name}} from your friends",
+    "toastFriendFailed": "Failed to update friends list"
   },
   "movePicker": {
     "ariaLabel": "Move {{name}} to channel",

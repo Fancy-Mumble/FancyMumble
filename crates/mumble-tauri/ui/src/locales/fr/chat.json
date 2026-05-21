@@ -9,6 +9,29 @@
     "placeholderMobile": "Écrire un message...",
     "placeholderDesktop": "Écrire un message... (Ctrl+B/I/U pour la mise en forme)"
   },
+  "dragDrop": {
+    "overlayHint": "Déposez les fichiers ici pour les joindre"
+  },
+  "inlineActions": {
+    "copy": "Copier le message",
+    "quote": "Citer le message"
+  },
+  "dmPopout": {
+    "loading": "Chargement du message direct...",
+    "unavailable": "La fenêtre détachée n'est plus disponible.",
+    "missingId": "Identifiant de fenêtre manquant.",
+    "empty": "Aucun message pour l'instant.",
+    "placeholder": "Répondre...",
+    "send": "Envoyer",
+    "close": "Fermer la fenêtre"
+  },
+  "pendingAttachments": {
+    "regionAriaLabel": "Pièces jointes en attente",
+    "kindImage": "Image",
+    "kindFile": "Fichier",
+    "remove": "Supprimer la pièce jointe",
+    "send": "Envoyer"
+  },
   "header": {
     "directMessage": "Message direct",
     "unknown": "Inconnu",
@@ -31,7 +54,8 @@
     "unmuteChannel": "Sortir le canal de la sourdine",
     "channelOptions": "Options du canal",
     "join": "Rejoindre",
-    "joinChannel": "Rejoindre le canal"
+    "joinChannel": "Rejoindre le canal",
+    "popOutDm": "Détacher la conversation"
   },
   "contextMenu": {
     "moreReactions": "Plus de réactions",

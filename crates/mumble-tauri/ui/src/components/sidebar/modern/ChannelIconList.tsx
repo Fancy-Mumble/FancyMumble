@@ -440,9 +440,9 @@ function ChannelIconListImpl({
   return (
     <div ref={listRef} className={styles.list}>
       {currentEntry && stickyState === "top" && (
-        <button type="button" className={styles.stickyTop} onClick={scrollCurrentIntoView}>
+        <div className={styles.stickyTop} onClick={scrollCurrentIntoView}>
           {renderChannel(currentEntry)}
-        </button>
+        </div>
       )}
 
       {flatChannels.map((channel) => {
@@ -483,9 +483,9 @@ function ChannelIconListImpl({
       })}
 
       {currentEntry && stickyState === "bottom" && (
-        <button type="button" className={styles.stickyBottom} onClick={scrollCurrentIntoView}>
+        <div className={styles.stickyBottom} onClick={scrollCurrentIntoView}>
           {renderChannel(currentEntry)}
-        </button>
+        </div>
       )}
     </div>
   );

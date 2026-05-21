@@ -88,11 +88,14 @@
     "searchPlaceholder": "Search servers...",
     "noMatches": "No matches",
     "alreadyConnected": "Already connected",
-    "connectedTag": "Connected"
+    "connectedTag": "Connected",
+    "openFriends": "Friends",
+    "openFriendsTitle": "Open your friends list"
   },
   "tabsBar": {
     "connectedServersAriaLabel": "Connected servers",
     "connectButton": "Connect to a server",
+    "friends": "Friends",
     "unreadCount": "{{count}} unread",
     "disconnectFrom": "Disconnect from {{label}}",
     "disconnectTitle": "Disconnect",
@@ -103,6 +106,16 @@
     "disconnectDialogBody": "Disconnect from {{label}}?",
     "disconnectConfirm": "Disconnect",
     "disconnectCancel": "Cancel"
+  },
+  "friendsPage": {
+    "title": "Friends",
+    "empty": "You have no friends yet. Right-click a user in the channel list and choose \"Add as friend\".",
+    "placeholder": "Select a friend on the left to start chatting.",
+    "remove": "Remove from friends",
+    "offline": "Currently offline",
+    "youLabel": "You",
+    "openSettings": "Open settings",
+    "noMatches": "No friends match your search."
   },
   "activityLog": {
     "empty": "No activity yet"

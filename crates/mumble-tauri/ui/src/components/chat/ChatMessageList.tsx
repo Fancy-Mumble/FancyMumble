@@ -1,4 +1,4 @@
-import { CheckIcon } from "../../icons";
+import { CheckIcon, CopyIcon, QuoteIcon } from "../../icons";
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatMessage, TimeFormat, UserEntry } from "../../types";
@@ -46,6 +46,9 @@ interface ChatMessageListProps {
   readonly getMessageReactions: (messageId: string) => ReactionSummary[];
   readonly onToggleReaction: (msg: ChatMessage, emoji: string) => void;
   readonly onAddReaction: (msg: ChatMessage, e?: React.MouseEvent) => void;
+  /** When true, the per-message MessageActionBar is rendered below every
+   *  message instead of being shown only on hover. */
+  readonly alwaysShowMessageActions?: boolean;
 }
 
 interface MsgGroup {
@@ -90,6 +93,7 @@ export default function ChatMessageList({
   getMessageReactions,
   onToggleReaction,
   onAddReaction,
+  alwaysShowMessageActions = false,
 }: ChatMessageListProps) {
   const { t } = useTranslation("chat");
   // Resolve own cert hash for hash-based reaction tracking.
@@ -170,6 +174,32 @@ export default function ChatMessageList({
             readReceiptIndicator={
               msg.is_own && msg.message_id && channelId != null
                 ? <ReadReceiptIndicator messageId={msg.message_id} channelId={channelId} allMessageIds={allMessageIds} />
+                : undefined
+            }
+            inlineActions={
+              alwaysShowMessageActions && hasMsgId && !msg.is_legacy
+                ? (
+                  <span className={styles.inlineActions}>
+                    <button
+                      type="button"
+                      className={styles.inlineActionBtn}
+                      onClick={(e) => { e.stopPropagation(); handleCite(msg); }}
+                      title={t("inlineActions.quote")}
+                      aria-label={t("inlineActions.quote")}
+                    >
+                      <QuoteIcon width={12} height={12} />
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.inlineActionBtn}
+                      onClick={(e) => { e.stopPropagation(); handleCopyText(msg); }}
+                      title={t("inlineActions.copy")}
+                      aria-label={t("inlineActions.copy")}
+                    >
+                      <CopyIcon width={12} height={12} />
+                    </button>
+                  </span>
+                )
                 : undefined
             }
           >

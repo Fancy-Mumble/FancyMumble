@@ -16,8 +16,19 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use serde::Serialize;
+
 use super::sessions::{ServerId, SessionMeta};
 use super::SharedState;
+
+/// Result of a cross-server user lookup by certificate hash.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct UserHashMatch {
+    pub server_id: ServerId,
+    pub user_session: u32,
+    pub user_name: String,
+}
 
 /// Inner mutable state of [`Registry`].
 #[derive(Default)]
@@ -114,6 +125,53 @@ impl Registry {
             }
         }
         stale
+    }
+
+    /// Search every connected session for a user whose certificate hash
+    /// matches `user_hash`.  Returns the first match (server id + mumble
+    /// session + display name).
+    pub(crate) fn find_user_by_hash(&self, user_hash: &str) -> Option<UserHashMatch> {
+        let guard = self.inner.lock().ok()?;
+        for (id, shared) in &guard.sessions {
+            let Ok(s) = shared.lock() else { continue };
+            if s.conn.status != super::types::ConnectionStatus::Connected {
+                continue;
+            }
+            if let Some(found) = s
+                .users
+                .values()
+                .find(|u| u.hash.as_deref() == Some(user_hash))
+            {
+                return Some(UserHashMatch {
+                    server_id: *id,
+                    user_session: found.session,
+                    user_name: found.name.clone(),
+                });
+            }
+        }
+        None
+    }
+
+    /// Look up a user on a specific connected session by display name.
+    /// Fallback for anonymous users that have no certificate hash and
+    /// therefore can only be addressed within a single server.
+    pub(crate) fn find_user_in_server(
+        &self,
+        server_id: ServerId,
+        user_name: &str,
+    ) -> Option<UserHashMatch> {
+        let guard = self.inner.lock().ok()?;
+        let shared = guard.sessions.get(&server_id)?;
+        let s = shared.lock().ok()?;
+        if s.conn.status != super::types::ConnectionStatus::Connected {
+            return None;
+        }
+        let found = s.users.values().find(|u| u.name == user_name)?;
+        Some(UserHashMatch {
+            server_id,
+            user_session: found.session,
+            user_name: found.name.clone(),
+        })
     }
 
     /// Snapshot the metadata of every known session, suitable for the

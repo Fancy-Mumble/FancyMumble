@@ -46,6 +46,7 @@ mod shared_handle;
 pub mod types;
 
 // Re-export everything that lib.rs needs.
+pub(crate) use registry::UserHashMatch;
 pub use sessions::{ServerId, SessionMeta};
 pub use types::{
     AudioDevice, AudioSettings, ChannelEntry, ChatMessage, ConnectionStatus, DebugStats,
@@ -234,6 +235,9 @@ pub struct AppState {
     /// Stream-share contexts pending pickup by freshly-opened stream popout windows.
     /// Keyed by random id; each entry is consumed once by `take_popout_stream`.
     pub(crate) popout_streams: Mutex<HashMap<String, crate::commands::popout::PopoutStreamPayload>>,
+    /// DM popout payloads pending pickup by freshly-opened DM popout windows.
+    /// Keyed by random id; each entry is consumed once by `take_popout_dm`.
+    pub(crate) popout_dms: Mutex<HashMap<String, crate::commands::popout::PopoutDmPayload>>,
     /// Live stream-popout windows, keyed by window label
     /// (`popout-stream-<id>`).  Value is the broadcaster session, used to
     /// emit `stream-popout-state opened:false` when the OS destroys the
@@ -270,6 +274,7 @@ impl AppState {
             upload_cancels: Mutex::new(HashMap::new()),
             popout_images: Mutex::new(HashMap::new()),
             popout_streams: Mutex::new(HashMap::new()),
+            popout_dms: Mutex::new(HashMap::new()),
             popout_stream_sessions: Mutex::new(HashMap::new()),
             draw_overlay_context: Mutex::new(None),
             draw_overlay_tracker: Mutex::new(None),
