@@ -12,7 +12,7 @@ import { ChevronRightIcon, ListenBadgeIcon, LockIcon } from "../../../icons";
 import { memo, useState, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChannelEntry, UserEntry } from "../../../types";
-import { colorFor } from "../UserListItem";
+import { colorFor } from "../user/UserListItem";
 import { useUserAvatar } from "../../../lazyBlobs";
 import { PchatBadge } from "../PchatBadge";
 import { useChannelDropTarget } from "../../../utils/userMoveDnd";
@@ -20,7 +20,7 @@ import { PERM_ENTER } from "../../../utils/permissions";
 import {
   ChannelReorderWrapper,
   useChannelReorderHandler,
-} from "../channelReorder";
+} from "../channel/channelReorder";
 import styles from "./ClassicChannelList.module.css";
 
 const MAX_STACKED = 3;

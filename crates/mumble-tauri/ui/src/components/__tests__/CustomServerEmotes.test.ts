@@ -15,7 +15,7 @@ import {
   getServerCustomReactions,
   resetReactions,
   type ServerCustomReaction,
-} from "../chat/reactionStore";
+} from "../chat/reaction/reactionStore";
 
 interface EmoteDtoLike {
   shortcode: string;

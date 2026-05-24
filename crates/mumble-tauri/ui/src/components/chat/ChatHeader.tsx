@@ -5,7 +5,7 @@ import type { KeyTrustLevel } from "../../types";
 import KeyTrustIndicator from "../security/KeyTrustIndicator";
 import KebabMenu, { type KebabMenuItem } from "../elements/KebabMenu";
 import styles from "./ChatView.module.css";
-import { colorFor } from "../sidebar/UserListItem";
+import { colorFor } from "../sidebar/user/UserListItem";
 
 /** Info about the active broadcast, passed in when streaming is active. */
 export interface BroadcastInfo {

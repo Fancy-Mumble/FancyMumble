@@ -1,8 +1,8 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import type { AclData, AclGroup, RegisteredUser } from "../../types";
-import { RoleChip } from "../../components/elements/RoleChip";
+import { RoleChip } from "../../components/elements/role/RoleChip";
 import styles from "./AdminPanel.module.css";
 
 export interface UserRoleManagerDialogProps {

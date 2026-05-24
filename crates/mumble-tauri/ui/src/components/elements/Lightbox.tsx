@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { ChatMessage, TimeFormat } from "../../types";
 import { extractOffloadInfo, offloadManager, type MessageScope } from "../../messageOffload";
-import { extractMedia } from "../chat/MediaPreview";
+import { extractMedia } from "../chat/media/MediaPreview";
 import { formatTimestamp } from "../../utils/format";
 import styles from "./Lightbox.module.css";
 

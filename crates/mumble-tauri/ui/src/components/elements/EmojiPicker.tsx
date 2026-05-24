@@ -9,7 +9,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { getServerCustomReactions } from "../chat/reactionStore";
+import { getServerCustomReactions } from "../chat/reaction/reactionStore";
 import styles from "./EmojiPicker.module.css";
 
 // -- Emoji data ---------------------------------------------------

@@ -129,6 +129,11 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
         FancyOnboardingResponse(m) => m.encode_to_vec(),
         FancyOnboardingResponseQuery(m) => m.encode_to_vec(),
         FancyOnboardingResponseDeliver(m) => m.encode_to_vec(),
+        FancyLiveDocOpen(m) => m.encode_to_vec(),
+        FancyLiveDocInvite(m) => m.encode_to_vec(),
+        FancyLiveDocAnnounce(m) => m.encode_to_vec(),
+        FancyPoll(m) => m.encode_to_vec(),
+        FancyPollVote(m) => m.encode_to_vec(),
         UdpTunnel(data) => data.clone(),
     };
 
@@ -208,6 +213,11 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
         FancyOnboardingResponse => ControlMessage::FancyOnboardingResponse(mumble_tcp::FancyOnboardingResponse::decode(payload)?),
         FancyOnboardingResponseQuery => ControlMessage::FancyOnboardingResponseQuery(mumble_tcp::FancyOnboardingResponseQuery::decode(payload)?),
         FancyOnboardingResponseDeliver => ControlMessage::FancyOnboardingResponseDeliver(mumble_tcp::FancyOnboardingResponseDeliver::decode(payload)?),
+        FancyLiveDocOpen => ControlMessage::FancyLiveDocOpen(mumble_tcp::FancyLiveDocOpen::decode(payload)?),
+        FancyLiveDocInvite => ControlMessage::FancyLiveDocInvite(mumble_tcp::FancyLiveDocInvite::decode(payload)?),
+        FancyLiveDocAnnounce => ControlMessage::FancyLiveDocAnnounce(mumble_tcp::FancyLiveDocAnnounce::decode(payload)?),
+        FancyPoll => ControlMessage::FancyPoll(mumble_tcp::FancyPoll::decode(payload)?),
+        FancyPollVote => ControlMessage::FancyPollVote(mumble_tcp::FancyPollVote::decode(payload)?),
     };
     Ok(msg)
 }

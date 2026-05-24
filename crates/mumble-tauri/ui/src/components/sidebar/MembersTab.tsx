@@ -9,9 +9,9 @@ import {
   getCachedRegisteredUsers,
   saveCachedRegisteredUsers,
 } from "../../preferencesStorage";
-import { UserListItem } from "./UserListItem";
+import { UserListItem } from "./user/UserListItem";
 import { setUserAvatarBytes } from "../../lazyBlobs";
-import styles from "./ChannelSidebar.module.css";
+import styles from "./channel/ChannelSidebar.module.css";
 
 /**
  * Process-wide cache of the registered-user list per server.  Persists

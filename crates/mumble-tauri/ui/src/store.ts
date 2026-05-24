@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Global Zustand store for the Mumble Tauri client.
  *
  * All complex logic lives in the Rust backend - the frontend only
@@ -42,12 +42,12 @@ import type {
   CustomServerEmote,
   PendingMessage,
 } from "./types";
-import type { PollPayload, PollVotePayload } from "./components/chat/PollCreator";
-import { registerPoll, registerVote } from "./components/chat/PollCard";
+import type { PollPayload, PollVotePayload } from "./components/chat/poll/PollCreator";
+import { registerPoll, registerVote } from "./components/chat/poll/PollCard";
 import type { WatchSession, WatchSyncPayload } from "./components/chat/watch/watchTypes";
 import { applyWatchSyncEvent } from "./components/chat/watch/watchStore";
-import { applyReaction, resetReactions, setServerCustomReactions, type ServerCustomReaction } from "./components/chat/reactionStore";
-import { applyReadStates, clearReadReceipts } from "./components/chat/readReceiptStore";
+import { applyReaction, resetReactions, setServerCustomReactions, type ServerCustomReaction } from "./components/chat/reaction/reactionStore";
+import { applyReadStates, clearReadReceipts } from "./components/chat/readreceipt/readReceiptStore";
 import { useOnboardingStore } from "./components/onboarding/onboardingStore";
 import type { OnboardingConfigEvent, OnboardingResponseEvent } from "./types";
 import { offloadManager } from "./messageOffload";
@@ -250,6 +250,45 @@ function applyStoredVolumesToNewUsers(): void {
   }
 }
 
+// --- Live Doc types -----------------------------------------------
+// Defined inline (rather than imported from `components/chat/useLiveDoc.ts`)
+// to keep the store dependency-free of UI components.  The shape is
+// re-exported from this module so consumers can reference one type.
+
+/** All the data needed to connect to and render a Live Doc session. */
+export interface LiveDocSessionInfo {
+  readonly serverId: number;
+  /** App-side server tab id this session belongs to.  Used to scope
+   *  the live-doc maps so two server tabs do not collide on the same
+   *  numeric channel id (channel 0 = root on every Mumble server). */
+  readonly appServerId: import("./types").ServerId | null;
+  readonly channelId: number;
+  readonly slug: string;
+  readonly title: string;
+  readonly wsUrl: string;
+  readonly token: string;
+  readonly ownSession: number;
+  readonly ownName: string;
+  readonly ownColor: string;
+}
+
+/** Pending announce shown as a chat banner. */
+export interface LiveDocAnnounceInfo {
+  readonly openerName: string;
+  readonly title: string;
+  readonly appServerId: import("./types").ServerId | null;
+  readonly channelId: number;
+  readonly slug: string;
+}
+
+/** Composite map key for live-doc state, scoped to a server tab. */
+export function liveDocKey(
+  appServerId: import("./types").ServerId | null,
+  channelId: number,
+): string {
+  return `${appServerId ?? ""}|${channelId}`;
+}
+
 // --- Store shape --------------------------------------------------
 
 interface AppState {
@@ -362,6 +401,19 @@ interface AppState {
    *  - which unmounts the preview component - does not implicitly close
    *  the overlay.  Cleared automatically when broadcasting stops. */
   desktopDrawingOverlayOpen: boolean;
+  /** Active Live Doc sessions, keyed by channel id.  Set when the
+   *  local user opens or accepts a Live Doc invite; cleared on close.
+   *  Defined inline (rather than a separate import) to avoid a circular
+   *  dependency between the store and the chat components that consume
+   *  the session object. */
+  activeLiveDocs: Map<string, LiveDocSessionInfo>;
+  /** Pending Live Doc announces shown as banners in chat.  Keyed by
+   *  `liveDocKey(activeServerId, channelId)`; the most recent announce wins. */
+  pendingLiveDocAnnounces: Map<string, LiveDocAnnounceInfo>;
+  /** Pending markdown seed content the editor should insert into a
+   *  freshly-opened doc.  Consumed once on first WS-connected mount
+   *  by `LiveDocPanel`.  Keyed by `liveDocKey(activeServerId, channelId)`. */
+  pendingLiveDocSeeds: Map<string, string>;
   /** Channel IDs where the screen-share drawing tools (color picker,
    *  width slider, clear button) are currently active.  Stored in the
    *  global store so the toggle button in `StreamControls` and the
@@ -583,6 +635,49 @@ interface AppState {
   /** Set a per-user volume override by cert hash (0-200). Persists to disk. */
   setUserVolume: (hash: string, volume: number) => void;
 
+  // Live Doc
+  /** Open (or re-attach to) a Live Doc session and surface its panel. */
+  openLiveDoc: (session: LiveDocSessionInfo) => void;
+  /** Close the active Live Doc panel for a channel.  Idempotent.
+   *  Pass `appServerId` to target a specific server tab instead of the
+   *  currently active one (essential when the panel session belongs to
+   *  a tab that may not be the foreground tab at click time). */
+  closeActiveLiveDoc: (
+    channelId: number,
+    appServerId?: import("./types").ServerId | null,
+  ) => void;
+  /** Record a pending Live Doc announce so the chat banner can render. */
+  setLiveDocAnnounce: (announce: LiveDocAnnounceInfo) => void;
+  /** Dismiss a pending Live Doc announce for a channel.  Pass
+   *  `appServerId` to target a specific server tab. */
+  clearLiveDocAnnounce: (
+    channelId: number,
+    appServerId?: import("./types").ServerId | null,
+  ) => void;
+  /** Ask the server to open a Live Doc by slug.  Server validates and
+   *  replies with a `fancy-live-doc/invite` PluginDataTransmission that
+   *  the plugin-data dispatcher turns into an `openLiveDoc` call. */
+  /** Open or join a Live Doc.  Pass `silent: true` when joining via an
+   *  existing invite card so the client does NOT post a second invite
+   *  card to the channel (the original one is still valid). */
+  requestOpenLiveDoc: (
+    channelId: number,
+    slug: string,
+    title: string,
+    options?: { silent?: boolean },
+  ) => Promise<void>;
+  /** Stash markdown text for the editor to consume on next mount. */
+  setPendingLiveDocSeed: (
+    channelId: number,
+    markdown: string,
+    appServerId?: import("./types").ServerId | null,
+  ) => void;
+  /** Atomic take-and-clear of the pending seed for a channel. */
+  consumePendingLiveDocSeed: (
+    channelId: number,
+    appServerId?: import("./types").ServerId | null,
+  ) => string | undefined;
+
   // Silenced channels
   /** Toggle silence for a channel (local-only, persisted per server). */
   toggleSilenceChannel: (channelId: number) => Promise<boolean>;
@@ -663,6 +758,9 @@ const INITIAL: Pick<
   | "webrtcConnecting"
   | "webrtcError"
   | "desktopDrawingOverlayOpen"
+  | "activeLiveDocs"
+  | "pendingLiveDocAnnounces"
+  | "pendingLiveDocSeeds"
   | "drawingActiveChannels"
   | "broadcastingSessions"
   | "poppedOutStreamSessions"
@@ -734,6 +832,9 @@ const INITIAL: Pick<
   webrtcConnecting: false,
   webrtcError: null,
   desktopDrawingOverlayOpen: false,
+  activeLiveDocs: new Map(),
+  pendingLiveDocAnnounces: new Map(),
+  pendingLiveDocSeeds: new Map(),
   drawingActiveChannels: new Set(),
   broadcastingSessions: new Set(),
   poppedOutStreamSessions: new Set(),
@@ -932,6 +1033,27 @@ export const useAppStore = create<AppState>((set, get) => ({
       const next = { ...prev.sessionErrors };
       delete next[id];
       return { sessionErrors: next };
+    });
+    // Drop live-doc state scoped to the closed server tab so it cannot
+    // bleed into another tab on the same channel id.
+    set((prev) => {
+      const prefix = `${id}|`;
+      const filter = <V,>(m: Map<string, V>): Map<string, V> => {
+        let changed = false;
+        const next = new Map(m);
+        for (const k of m.keys()) {
+          if (k.startsWith(prefix)) {
+            next.delete(k);
+            changed = true;
+          }
+        }
+        return changed ? next : m;
+      };
+      return {
+        activeLiveDocs: filter(prev.activeLiveDocs),
+        pendingLiveDocAnnounces: filter(prev.pendingLiveDocAnnounces),
+        pendingLiveDocSeeds: filter(prev.pendingLiveDocSeeds),
+      };
     });
     // Refresh the sessions list and learn which session (if any) the
     // backend made active in place of the one we just closed.
@@ -1268,7 +1390,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           // store and the chat-only DrawingOverlay module.
           const dropped = [...broadcastingSessions].filter((s) => !currentSessions.has(s));
           if (dropped.length > 0) {
-            void import("./components/chat/DrawingOverlay").then((m) => {
+            void import("./components/chat/drawing/DrawingOverlay").then((m) => {
               for (const s of dropped) m.clearStrokesFromSender(s);
             }).catch(() => {});
           }
@@ -1333,7 +1455,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   toggleMute: async () => {
     // Capture state BEFORE the await so pref write is deterministic and
     // ordered relative to the user action, not the async Rust IPC delivery.
-    // "active" → will be muted; "muted" or "inactive" → will be active.
+    // "active" ? will be muted; "muted" or "inactive" ? will be active.
     const willBeMuted = useAppStore.getState().voiceState === "active";
     try {
       await invoke("toggle_mute");
@@ -1434,16 +1556,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  sendPluginData: async (receiverSessions, data, dataId) => {
-    try {
-      await invoke("send_plugin_data", {
-        receiverSessions,
-        data: Array.from(data),
-        dataId,
-      });
-    } catch (e) {
-      console.error("send_plugin_data error:", e);
-    }
+  sendPluginData: async (_receiverSessions, _data, dataId) => {
+    // PluginDataTransmission is permanently forbidden in Fancy Mumble.
+    // The legacy generic carriage hid "silent drop" bugs whenever a
+    // server-side plugin handler was missing; use a typed protobuf
+    // message instead (see Mumble.proto IDs 141+ and the corresponding
+    // `send_fancy_*` Tauri commands).
+    const err = new Error(
+      `PluginDataTransmission is forbidden in Fancy Mumble (dataId=${dataId}). ` +
+      `Use a typed protobuf message instead: see proto/Mumble.proto IDs 141-145 ` +
+      `and the send_fancy_* Tauri commands.  Add a new message (>= 146) if you ` +
+      `need a new payload.`,
+    );
+    console.error("sendPluginData is BRICKED:", err);
+    throw err;
   },
 
   uploadFile: async ({ filePath, channelId, mode, password, filename, mimeType, uploadId }) => {
@@ -1611,6 +1737,118 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   dismissPasswordPrompt: () => {
     set({ passwordRequired: false, passwordAttempted: false, pendingConnect: null, connectedCertLabel: null });
+  },
+
+  // -- Live Doc ---------------------------------------------------
+
+  openLiveDoc: (session) => {
+    set((state) => {
+      const k = liveDocKey(session.appServerId, session.channelId);
+      const next = new Map(state.activeLiveDocs);
+      next.set(k, session);
+      const announces = new Map(state.pendingLiveDocAnnounces);
+      announces.delete(k);
+      return { activeLiveDocs: next, pendingLiveDocAnnounces: announces };
+    });
+  },
+
+  closeActiveLiveDoc: (channelId, appServerId) => {
+    set((state) => {
+      const targetServer = appServerId !== undefined ? appServerId : state.activeServerId;
+      const k = liveDocKey(targetServer, channelId);
+      if (!state.activeLiveDocs.has(k)) return state;
+      const next = new Map(state.activeLiveDocs);
+      next.delete(k);
+      return { activeLiveDocs: next };
+    });
+  },
+
+  setLiveDocAnnounce: (announce) => {
+    set((state) => {
+      const next = new Map(state.pendingLiveDocAnnounces);
+      next.set(liveDocKey(announce.appServerId, announce.channelId), announce);
+      return { pendingLiveDocAnnounces: next };
+    });
+  },
+
+  clearLiveDocAnnounce: (channelId, appServerId) => {
+    set((state) => {
+      const targetServer = appServerId !== undefined ? appServerId : state.activeServerId;
+      const k = liveDocKey(targetServer, channelId);
+      if (!state.pendingLiveDocAnnounces.has(k)) return state;
+      const next = new Map(state.pendingLiveDocAnnounces);
+      next.delete(k);
+      return { pendingLiveDocAnnounces: next };
+    });
+  },
+
+  setPendingLiveDocSeed: (channelId, markdown, appServerId) => {
+    set((state) => {
+      const targetServer = appServerId !== undefined ? appServerId : state.activeServerId;
+      const next = new Map(state.pendingLiveDocSeeds);
+      next.set(liveDocKey(targetServer, channelId), markdown);
+      return { pendingLiveDocSeeds: next };
+    });
+  },
+
+  consumePendingLiveDocSeed: (channelId, appServerId) => {
+    const state = get();
+    const targetServer = appServerId !== undefined ? appServerId : state.activeServerId;
+    const k = liveDocKey(targetServer, channelId);
+    const current = state.pendingLiveDocSeeds.get(k);
+    if (current === undefined) return undefined;
+    set((s) => {
+      const next = new Map(s.pendingLiveDocSeeds);
+      next.delete(k);
+      return { pendingLiveDocSeeds: next };
+    });
+    return current;
+  },
+
+  requestOpenLiveDoc: async (channelId, slug, title, options) => {
+    const silent = options?.silent === true;
+    const sanitised = slug
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9_-]+/g, "-")
+      .replaceAll(/^-+|-+$/g, "")
+      .slice(0, 64);
+    console.log("[store] requestOpenLiveDoc:", { channelId, slug, sanitised, title });
+    if (!sanitised) {
+      console.warn("[store] requestOpenLiveDoc aborted: slug sanitised to empty string", { slug });
+      throw new Error("Document name produces empty slug; pick a different title.");
+    }
+    const trimmedTitle = title.trim().slice(0, 200);
+    const key = `${channelId}|${sanitised}`;
+    const activeServerId = get().activeServerId;
+    if (get().activeLiveDocs.has(liveDocKey(activeServerId, channelId))) {
+      console.log("[store] requestOpenLiveDoc: channel already has active doc; skipping wait");
+      await invoke("request_open_live_doc", { channelId, slug: sanitised, title: trimmedTitle });
+      return;
+    }
+    const waitForInvite = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pendingLiveDocOpens.delete(key);
+        console.warn("[store] requestOpenLiveDoc: timed out waiting for invite", { key });
+        reject(new Error(
+          "Server did not reply with a document invite within 8s. " +
+          "The live-doc plugin may be disabled on this server " +
+          "(set plugin.live-doc.enabled=true and plugin.live-doc.state_path in mumble-server.ini), " +
+          "or you may lack permission in this channel.",
+        ));
+      }, 8000);
+      pendingLiveDocOpens.set(key, {
+        silent,
+        resolve: () => {
+          clearTimeout(timer);
+          pendingLiveDocOpens.delete(key);
+          resolve();
+        },
+      });
+    });
+    await invoke("request_open_live_doc", { channelId, slug: sanitised, title: trimmedTitle });
+    console.log("[store] requestOpenLiveDoc: open dispatched, awaiting invite");
+    await waitForInvite;
+    console.log("[store] requestOpenLiveDoc: invite received");
   },
 
   // -- Silenced channels ------------------------------------------
@@ -1861,6 +2099,127 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 // --- Tauri event bridge -------------------------------------------
 
+// --- Live Doc native-event dispatcher -----------------------------
+
+/** Native `fancy-live-doc-invite` event payload (server -> client). */
+interface LiveDocInviteEvent {
+  channelId: number;
+  slug: string;
+  title: string;
+  wsUrl: string;
+  token: string | null;
+  serverId: string | null;
+}
+
+/** Native `fancy-live-doc-announce` event payload (peer -> peer via server relay). */
+interface LiveDocAnnounceEvent {
+  channelId: number;
+  slug: string;
+  title: string;
+  openerSession: number;
+  openerName: string;
+}
+
+function dispatchLiveDocInvite(p: LiveDocInviteEvent): void {
+  const state = useAppStore.getState();
+  const ownSession = state.ownSession;
+  if (ownSession === null) return;
+  const pendingKey = `${p.channelId}|${p.slug}`;
+  const pending = pendingLiveDocOpens.get(pendingKey);
+  // Only post a fresh chat invite when WE initiated a *new* open and
+  // did not flag the call as silent (silent = joining an existing
+  // invite card; the original chat message is still in the channel).
+  const shouldPostInvite = pending !== undefined && !pending.silent;
+  if (pending) pending.resolve();
+  const ownUser = state.users.find((u) => u.session === ownSession);
+  // Convert serverId string -> numeric session-id-like value (legacy field).
+  // The new proto carries the string verbatim; downstream `openLiveDoc`
+  // accepts the numeric server id used previously.  When the new field is
+  // numeric-looking, parse it; otherwise fall back to 0 to keep the call
+  // shape stable.
+  const serverIdNum = p.serverId !== null ? Number.parseInt(p.serverId, 10) || 0 : 0;
+  state.openLiveDoc({
+    serverId: serverIdNum,
+    appServerId: state.activeServerId,
+    channelId: p.channelId,
+    slug: p.slug,
+    title: p.title,
+    wsUrl: p.wsUrl,
+    token: p.token ?? "",
+    ownSession,
+    ownName: ownUser?.name ?? "You",
+    ownColor: pickLiveDocCursorColor(ownSession),
+  });
+  // Tell everyone else in the channel that a doc was opened.
+  void invoke("announce_live_doc", {
+    channelId: p.channelId,
+    slug: p.slug,
+    title: p.title,
+  }).catch((e) => console.warn("announce_live_doc failed:", e));
+  // If we initiated the open, post a persistent chat invite so users
+  // who were not in the channel when the announce flew can still join.
+  if (shouldPostInvite) {
+    const payload = encodeLiveDocInviteMarker(p.slug, p.title);
+    void state.sendMessage(p.channelId, payload).catch((e) =>
+      console.warn("live-doc auto-invite message failed:", e),
+    );
+  }
+}
+
+function dispatchLiveDocAnnounce(p: LiveDocAnnounceEvent): void {
+  const state = useAppStore.getState();
+  state.setLiveDocAnnounce({
+    openerName: p.openerName || "Someone",
+    title: p.title,
+    appServerId: state.activeServerId,
+    channelId: p.channelId,
+    slug: p.slug,
+  });
+}
+
+/** Deterministic palette mirror of `pickCursorColor` in ChatView.tsx. */
+const LIVE_DOC_COLORS = [
+  "#2aabee", "#ff6f61", "#7cd66c", "#ffb74d",
+  "#b388ff", "#ff66cc", "#00bfa5", "#ffd54f",
+  "#90caf9", "#f48fb1", "#80deea", "#ce93d8",
+] as const;
+function pickLiveDocCursorColor(session: number): string {
+  return LIVE_DOC_COLORS[Math.abs(session) % LIVE_DOC_COLORS.length];}
+
+/** Encode a live-doc invite marker for use in a chat message body.
+ *  Recognised by `MessageItem` and rendered as a `LiveDocInviteCard`
+ *  with a Join button.  The format is opaque to legacy clients (HTML
+ *  comment); they will simply see an empty message body. */
+export function encodeLiveDocInviteMarker(slug: string, title: string): string {
+  const t = title.replaceAll("\n", " ").slice(0, 200);
+  // Encode via URI percent-encoding to keep `btoa` ASCII-safe for
+  // non-ASCII characters in slug/title.
+  const payload = btoa(encodeURIComponent(JSON.stringify({ slug, title: t })));
+  return `<!-- FANCY_LIVEDOC:${payload} -->`;
+}
+
+/** Decoded payload for the `FANCY_LIVEDOC` marker. */
+export interface LiveDocInviteMarker {
+  readonly slug: string;
+  readonly title: string;
+}
+
+/** Decode the payload from a `FANCY_LIVEDOC:<base64>` marker.  Returns
+ *  null when the payload is malformed. */
+export function decodeLiveDocInviteMarker(payload: string): LiveDocInviteMarker | null {
+  try {
+    const json = decodeURIComponent(atob(payload));
+    const raw = JSON.parse(json) as Partial<LiveDocInviteMarker>;
+    if (typeof raw.slug !== "string" || typeof raw.title !== "string") return null;
+    return { slug: raw.slug, title: raw.title };
+  } catch {
+    return null;
+  }
+}
+
+/** Regex used by `MessageItem` to extract the invite payload. */
+export const FANCY_LIVEDOC_MARKER_RE = /<!-- FANCY_LIVEDOC:([A-Za-z0-9+/=]+) -->/;
+
 // --- Plugin data handler registry ---------------------------------
 
 type PluginDataHandler = (dataId: string, data: Uint8Array, senderSession: number | null) => void;
@@ -1891,6 +2250,11 @@ export function onWebRtcSignal(handler: WebRtcSignalHandler): () => void {
 
 /** Set of request_ids already sent to avoid duplicate requests. */
 const pendingPreviewRequests = new Set<string>();
+
+/** In-flight `requestOpenLiveDoc` invocations keyed by `${channelId}|${slug}`.
+ *  Resolved when the matching `fancy-live-doc/invite` PluginDataTransmission
+ *  arrives; rejected by the request's own timeout if the server never replies. */
+const pendingLiveDocOpens = new Map<string, { resolve: () => void; silent: boolean }>();
 
 /** Request link previews from the server for the given URLs. */
 export async function requestLinkPreview(urls: string[], requestId: string): Promise<void> {
@@ -2530,6 +2894,9 @@ export async function initEventListeners(
       (event) => {
         const { data_id, data, sender_session } = event.payload;
         const bytes = new Uint8Array(data);
+        if (data_id.startsWith("fancy-live-doc/")) {
+          console.log("[plugin-data] received:", { data_id, sender_session, bytes: bytes.length });
+        }
 
         if (data_id === "fancy-file-server-config") {
           try {
@@ -2590,31 +2957,16 @@ export async function initEventListeners(
         }
 
         if (data_id === "fancy-poll" || data_id === "fancy-poll-vote") {
-          try {
-            const json = new TextDecoder().decode(bytes);
-            const payload = JSON.parse(json);
+          // Legacy: ignored.  Polls now travel through native protobuf
+          // messages (FancyPoll, FancyPollVote) and are routed via the
+          // "fancy-poll" / "fancy-poll-vote" Tauri events below.
+        }
 
-            if (data_id === "fancy-poll" && payload.type === "poll") {
-              const poll = payload as PollPayload;
-              poll.creator = sender_session ?? poll.creator;
-              // Resolve creator name from current users.
-              const users = useAppStore.getState().users;
-              const user = users.find((u) => u.session === poll.creator);
-              if (user) poll.creatorName = user.name;
-              useAppStore.getState().addPoll(poll, false);
-            } else if (data_id === "fancy-poll-vote" && payload.type === "poll_vote") {
-              const vote = payload as PollVotePayload;
-              vote.voter = sender_session ?? vote.voter;
-              const users = useAppStore.getState().users;
-              const user = users.find((u) => u.session === vote.voter);
-              if (user) vote.voterName = user.name;
-              registerVote(vote);
-              // Trigger re-render for any component reading polls.
-              useAppStore.setState({});
-            }
-          } catch (e) {
-            console.error("plugin-data poll processing error:", e);
-          }
+        if (data_id === "fancy-live-doc/invite" || data_id === "fancy-live-doc/announce") {
+          // Legacy: ignored.  Live-doc invites/announces are now native
+          // protobuf messages (FancyLiveDocInvite, FancyLiveDocAnnounce)
+          // delivered as the "fancy-live-doc-invite" /
+          // "fancy-live-doc-announce" Tauri events below.
         }
 
         // Also dispatch to legacy registered handlers for extensibility.
@@ -2623,6 +2975,76 @@ export async function initEventListeners(
         }
       },
     ),
+  );
+
+  // -- Native live-doc events --------------------------------------
+
+  unlisteners.push(
+    await listen<LiveDocInviteEvent>("fancy-live-doc-invite", (event) => {
+      dispatchLiveDocInvite(event.payload);
+    }),
+  );
+  unlisteners.push(
+    await listen<LiveDocAnnounceEvent>("fancy-live-doc-announce", (event) => {
+      dispatchLiveDocAnnounce(event.payload);
+    }),
+  );
+
+  // -- Native poll events ------------------------------------------
+
+  unlisteners.push(
+    await listen<{
+      channelId: number;
+      pollId: string;
+      question: string;
+      options: string[];
+      multiple: boolean;
+      creatorSession: number;
+      creatorName: string;
+      createdAt: string;
+    }>("fancy-poll", (event) => {
+      const e = event.payload;
+      const users = useAppStore.getState().users;
+      const resolvedName = e.creatorName
+        || users.find((u) => u.session === e.creatorSession)?.name
+        || "";
+      const poll: PollPayload = {
+        type: "poll",
+        id: e.pollId,
+        question: e.question,
+        options: e.options,
+        multiple: e.multiple,
+        creator: e.creatorSession,
+        creatorName: resolvedName,
+        createdAt: e.createdAt,
+        channelId: e.channelId,
+      };
+      useAppStore.getState().addPoll(poll, false);
+    }),
+  );
+  unlisteners.push(
+    await listen<{
+      channelId: number;
+      pollId: string;
+      selected: number[];
+      voterSession: number;
+      voterName: string;
+    }>("fancy-poll-vote", (event) => {
+      const e = event.payload;
+      const users = useAppStore.getState().users;
+      const resolvedName = e.voterName
+        || users.find((u) => u.session === e.voterSession)?.name
+        || "";
+      const vote: PollVotePayload = {
+        type: "poll_vote",
+        pollId: e.pollId,
+        selected: e.selected,
+        voter: e.voterSession,
+        voterName: resolvedName,
+      };
+      registerVote(vote);
+      useAppStore.setState({});
+    }),
   );
 
   // -- WebRTC signal events ----------------------------------------

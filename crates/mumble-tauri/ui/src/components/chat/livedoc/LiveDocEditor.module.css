@@ -1,0 +1,529 @@
+/* LiveDocEditor: word-processor look + collaborative-cursor styling. */
+
+.editorRoot {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--color-bg, #14161b);
+  /* Top corners stay square so the editor sits flush against the
+     LiveDocPanel header bar above it; only the bottom is rounded
+     to match the panel's outer radius. */
+  border-radius: 0 0 var(--radius-md, 8px) var(--radius-md, 8px);
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 6px 12px;
+  width: 100%;
+  background: var(--color-surface-elevated, #262a32);
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.06));
+  scrollbar-width: thin;
+}
+
+.toolbarGroup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.toolbarDivider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--color-border, rgba(255, 255, 255, 0.12));
+  margin: 4px 2px;
+  flex-shrink: 0;
+}
+
+.toolBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.toolBtn:hover:not(:disabled) {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
+}
+
+.toolBtnActive {
+  background: var(--color-accent-subtle, rgba(42, 171, 238, 0.15));
+  border-color: var(--color-accent, #2aabee);
+  color: var(--color-accent, #2aabee);
+}
+
+.toolBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Themed dropdown (replaces native <select> so the menu honours the
+   app theme on every OS).  Triggered from a toolbar button; pops a
+   floating menu of clickable items beneath it. */
+.dropdownWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.dropdownTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+}
+
+.dropdownTriggerText {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  min-width: 140px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--color-surface, #1e2128);
+  color: var(--color-text-primary, #f5f6f8);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.dropdownItem {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--color-text-primary, #f5f6f8);
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dropdownItem:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.dropdownItemActive {
+  background: var(--color-accent-subtle, rgba(42, 171, 238, 0.18));
+  color: var(--color-accent, #2aabee);
+}
+
+/* Font-size widget: [-] [number input] [+] [▾] */
+.fontSizeWidget {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 1px;
+  height: 32px;
+}
+
+.fontSizeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  cursor: pointer;
+}
+
+.fontSizeBtn:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
+}
+
+.fontSizeInput {
+  width: 42px;
+  height: 32px;
+  padding: 0 4px;
+  background: var(--color-surface, #1e2128);
+  color: var(--color-text-primary, #f5f6f8);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.10));
+  border-radius: var(--radius-sm, 4px);
+  text-align: center;
+  font-size: 13px;
+  -moz-appearance: textfield;
+}
+
+/* Hide native number spinners; we provide our own ± buttons. */
+.fontSizeInput::-webkit-inner-spin-button,
+.fontSizeInput::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.fontSizeInput:focus-visible {
+  outline: 2px solid var(--color-accent, #2aabee);
+  outline-offset: 1px;
+}
+
+.colorTrigger {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+}
+
+.colorIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-bottom: 3px solid currentColor;
+  padding-bottom: 1px;
+}
+
+.colorInputHidden {
+  position: absolute;
+  width: 0;
+  height: 0;
+  padding: 0;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.colorClearBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 32px;
+  margin-left: -2px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted, #aab0b8);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.colorClearBtn:hover {
+  color: var(--color-text-primary, #f5f6f8);
+}
+
+/* Table grid picker popup */
+.tablePickerPopup {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  background: var(--color-surface, #1e2128);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  user-select: none;
+}
+
+.tablePickerLabel {
+  font-size: 11px;
+  color: var(--color-text-muted, #aab0b8);
+  text-align: center;
+  min-width: 60px;
+}
+
+.tablePickerGrid {
+  display: grid;
+  grid-template-columns: repeat(8, 18px);
+  gap: 2px;
+}
+
+.tablePickerCell {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.18));
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.08s, border-color 0.08s;
+}
+
+.tablePickerCell:hover,
+.tablePickerCellActive {
+  background: rgba(42, 171, 238, 0.25);
+  border-color: var(--color-accent, #2aabee);
+}
+
+.editorScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 32px 24px 64px;
+  background: var(--color-bg, #14161b);
+  cursor: text;
+}
+
+/* Google-Docs-style centered "page" surface.  Clicking anywhere on
+   the page (or the gray scroll area, via .editorScroll) focuses the
+   editor - the JSX wires onClick on the scroll wrapper.
+   Height is keyed to A4 aspect (210:297) so the page looks like
+   portrait paper even before the user has typed anything. */
+.editorPage {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  max-width: 850px;
+  min-height: 1100px;
+  margin: 0 auto;
+  background: var(--color-surface, #1e2128);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.30), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  padding: 72px 84px;
+  cursor: text;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+/* White-paper preview mode: override the dark surface so the document
+   looks like real paper.  The toolbar above keeps its theme colours
+   (only the page swaps). */
+.editorPagePaper {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  color: #1c1c1f;
+}
+
+.editorPagePaper .editorContent,
+.editorPagePaper .editorContent * {
+  color: #1c1c1f;
+}
+
+.editorPagePaper .editorContent blockquote {
+  border-left-color: #888;
+  color: #555;
+}
+
+.editorPagePaper .editorContent pre,
+.editorPagePaper .editorContent code {
+  background: #f1f1f3;
+  color: #1c1c1f;
+}
+
+.editorPagePaper .editorContent a {
+  color: #1a4dbe;
+}
+
+.editorContent {
+  outline: none;
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.editorContent h1 {
+  font-size: 1.8em;
+  margin: 0.6em 0 0.3em;
+}
+
+.editorContent h2 {
+  font-size: 1.4em;
+  margin: 0.6em 0 0.3em;
+}
+
+.editorContent h3 {
+  font-size: 1.2em;
+  margin: 0.6em 0 0.3em;
+}
+
+.editorContent blockquote {
+  border-left: 3px solid var(--color-accent, #2aabee);
+  padding-left: 12px;
+  color: var(--color-text-muted, #aab0b8);
+  margin: 0.6em 0;
+}
+
+.editorContent pre {
+  background: var(--color-surface-elevated, #262a32);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm, 4px);
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+
+.editorContent code {
+  background: var(--color-surface-elevated, #262a32);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+
+.editorContent ul,
+.editorContent ol {
+  padding-left: 24px;
+}
+
+.editorContent a {
+  color: var(--color-accent, #2aabee);
+  text-decoration: underline;
+}
+
+/* Table styling */
+.editorContent :global(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+  table-layout: fixed;
+}
+
+.editorContent :global(th),
+.editorContent :global(td) {
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.18));
+  padding: 6px 10px;
+  vertical-align: top;
+  min-width: 60px;
+  position: relative;
+}
+
+.editorContent :global(th) {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
+  font-weight: 600;
+}
+
+.editorContent :global(.selectedCell)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(42, 171, 238, 0.15);
+  pointer-events: none;
+}
+
+/* Floating add-row/add-col controls pinned just above the table the
+   caret currently sits in.  Positioned absolutely relative to the
+   editorPage container (which is `position: relative`). */
+.tableControls {
+  position: absolute;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--color-surface-elevated, #262a32);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+}
+
+.tableControlBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 26px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.tableControlBtn:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+  border-color: var(--color-border, rgba(255, 255, 255, 0.18));
+}
+
+/* Remote-cursor styling from @tiptap/extension-collaboration-cursor.
+   The extension injects span.collaboration-cursor__caret + label. */
+.editorContent :global(.collaboration-cursor__caret) {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 1px solid currentColor;
+  border-right: 1px solid currentColor;
+  word-break: normal;
+  pointer-events: none;
+}
+
+.editorContent :global(.collaboration-cursor__label) {
+  position: absolute;
+  top: -1.4em;
+  left: -1px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 1px 5px;
+  border-radius: 3px 3px 3px 0;
+  white-space: nowrap;
+  user-select: none;
+  /* background-color is set inline by buildCollabCursor */
+}
+
+.editorContent :global(.collaboration-cursor__label)::before {
+  content: attr(data-name);
+  color: rgba(0, 0, 0, 0.85);
+}
+
+.loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-text-muted, #aab0b8);
+}
+
+/* Mobile-friendly toolbar: collapse to a single horizontal scroll row
+   on narrow viewports so the user can swipe to find any button. */
+@media (max-width: 640px) {
+  .toolbar {
+    padding: 4px 6px;
+    gap: 2px 6px;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .toolBtn {
+    min-width: 36px;
+    height: 36px;
+  }
+  .editorScroll {
+    padding: 12px 8px 32px;
+  }
+  .editorPage {
+    padding: 24px 18px;
+    border-radius: var(--radius-sm, 4px);
+    min-height: calc(100% - 8px);
+    max-width: none;
+  }
+}

@@ -9,11 +9,20 @@
   position: relative;
 }
 
-/* When a stream is active, shrink the messages area */
-.main.streamingLayout .messagesWrapper {
+/* When a stream is active or the user toggles compact chat (e.g. from
+   a LiveDoc), shrink the messages area to ~25 % of the viewport so the
+   panel above gets the lion's share of the height. */
+.main.compactChat .messagesWrapper {
   flex: 0 0 200px;
   min-height: 200px;
   max-height: 260px;
+}
+
+/* LiveDoc open with chat hidden: remove the messages + composer from
+   the layout entirely so the document fills the full height. */
+.main.hiddenChat .messagesWrapper,
+.main.hiddenChat .composerWrapper {
+  display: none;
 }
 
 /* --- Header ----------------------------------------------------- */

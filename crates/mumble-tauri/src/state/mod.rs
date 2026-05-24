@@ -25,7 +25,7 @@ mod emotes;
 pub use emotes::{AddEmoteRequest, AddEmoteResponse, RemoveEmoteRequest};
 mod event_handler;
 mod file_server;
-pub use file_server::{DownloadRequest, UploadRequest, UploadResponse};
+pub use file_server::{DownloadRequest, UploadBytesRequest, UploadRequest, UploadResponse};
 mod handler;
 pub(crate) mod hash_names;
 pub(crate) mod local_cache;

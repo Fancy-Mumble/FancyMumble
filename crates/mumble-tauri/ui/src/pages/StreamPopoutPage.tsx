@@ -24,7 +24,7 @@ import { listen, emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import styles from "./PopoutPage.module.css";
 import PopoutShell from "./PopoutShell";
-import DrawingOverlay from "../components/chat/DrawingOverlay";
+import DrawingOverlay from "../components/chat/drawing/DrawingOverlay";
 
 // SignalType enum values from Mumble.proto WebRtcSignal.
 const SIGNAL_SDP_OFFER = 2;

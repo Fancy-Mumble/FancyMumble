@@ -1,0 +1,238 @@
+/* Wrapper around the rendered <img>.  Hosts the resize/rotate
+   handles and the wrap-mode toolbar as absolutely-positioned
+   children. */
+.wrapper {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  margin: 8px 0;
+  vertical-align: top;
+  /* Allow the dotted selection ring to "bleed" beyond the image
+     border without forcing a scrollbar on the parent. */
+}
+
+.img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+  transition: filter 0.12s ease;
+}
+
+.wrapper.selected .img {
+  outline: 2px solid var(--color-accent, #2aabee);
+  outline-offset: 1px;
+}
+
+/* ---------- Wrap modes ---------- */
+
+.wrap_inline {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* In-flow float so surrounding text wraps around the image.  Not
+   draggable — the position is determined by where the image sits in
+   the document. */
+.wrap_wrap {
+  float: left;
+  margin: 4px 16px 8px 0;
+  shape-outside: margin-box;
+  shape-margin: 4px;
+}
+.wrap_wrapRight {
+  float: right;
+  margin: 4px 0 8px 16px;
+  shape-outside: margin-box;
+  shape-margin: 4px;
+}
+/* In-flow block that forces text to break above and below.  Not
+   draggable for the same reason. */
+.wrap_break {
+  display: block;
+  clear: both;
+  margin: 12px auto;
+}
+
+/* Behind text: absolutely positioned at (x, y) on the page, beneath
+   the text layer.  z-index: -1 puts it under static (in-flow) text.
+   The page must establish a stacking context (z-index: 0) for the
+   negative z-index to clip correctly. */
+.wrap_behind {
+  position: absolute;
+  z-index: -1;
+  opacity: 0.55;
+}
+
+/* In front of text: absolutely positioned at (x, y), above text. */
+.wrap_front {
+  position: absolute;
+  z-index: 5;
+}
+
+.draggable {
+  cursor: grab;
+  touch-action: none;
+}
+.draggable:active {
+  cursor: grabbing;
+}
+
+/* ---------- Drag preview (ghost + drop indicator) ---------- */
+
+/* Cursor-following copy of the image rendered while dragging in
+   `wrap` / `break` mode.  Lives in a body-level portal so it isn't
+   clipped by the editor's overflow:hidden chrome. */
+.dragGhost {
+  position: fixed;
+  z-index: 9999;
+  opacity: 0.55;
+  pointer-events: none;
+  object-fit: cover;
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  outline: 2px solid var(--color-accent, #2aabee);
+  outline-offset: 0;
+}
+
+/* Horizontal line marking the exact point the image will be
+   inserted on release.  Two-pixel accent bar with a triangle on the
+   left so it reads as a "drop here" hint. */
+.dropIndicator {
+  position: fixed;
+  z-index: 10101;
+  height: 2px;
+  background: var(--color-accent, #2aabee);
+  border-radius: 2px;
+  pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.dropIndicator::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: -4px;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 5px 0 5px 8px;
+  border-color: transparent transparent transparent var(--color-accent, #2aabee);
+}
+
+/* ---------- Resize handles ---------- */
+
+.handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--color-accent, #2aabee);
+  border: 2px solid var(--color-bg, #14161b);
+  border-radius: 50%;
+  box-sizing: border-box;
+  z-index: 5;
+  touch-action: none;
+}
+
+.handleNW { top: -6px; left: -6px; cursor: nwse-resize; }
+.handleN  { top: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+.handleNE { top: -6px; right: -6px; cursor: nesw-resize; }
+.handleE  { top: 50%; right: -6px; transform: translateY(-50%); cursor: ew-resize; }
+.handleSE { bottom: -6px; right: -6px; cursor: nwse-resize; }
+.handleS  { bottom: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+.handleSW { bottom: -6px; left: -6px; cursor: nesw-resize; }
+.handleW  { top: 50%; left: -6px; transform: translateY(-50%); cursor: ew-resize; }
+
+/* ---------- Rotate handle ---------- */
+
+.rotateHandle {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22px;
+  height: 22px;
+  background: var(--color-accent, #2aabee);
+  color: #fff;
+  border: 2px solid var(--color-bg, #14161b);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  cursor: grab;
+  z-index: 5;
+  touch-action: none;
+  user-select: none;
+}
+
+.rotateHandle:active { cursor: grabbing; }
+
+/* ---------- Wrap-mode floating toolbar ---------- */
+
+.wrapToolbar {
+  position: fixed;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--color-surface, #1e2128);
+  color: var(--color-text-primary, #f5f6f8);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 10100;
+  white-space: nowrap;
+}
+
+.wrapBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.wrapBtn:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.wrapBtnActive {
+  background: var(--color-accent-subtle, rgba(42, 171, 238, 0.18));
+  border-color: var(--color-accent, #2aabee);
+  color: var(--color-accent, #2aabee);
+}
+
+.wrapBtnLabel {
+  white-space: nowrap;
+}
+
+/* Compact the labels on narrow screens (mobile) so the toolbar fits. */
+@media (max-width: 640px) {
+  .wrapBtnLabel {
+    display: none;
+  }
+  .wrapBtn {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
+/* Side-zone drop target highlighted during drag. */
+.sideZoneIndicator {
+  position: fixed;
+  z-index: 10099;
+  pointer-events: none;
+  background: rgba(42, 171, 238, 0.12);
+  border: 2px solid rgba(42, 171, 238, 0.5);
+}

@@ -12,12 +12,14 @@ mod codec_version;
 mod custom_reactions_config;
 mod draw_stroke;
 mod link_preview;
+mod live_doc;
 mod onboarding;
 mod pchat;
 mod permission_denied;
 mod permission_query;
 mod ping;
 mod plugin_data;
+mod poll;
 mod read_receipt;
 mod reject;
 mod server_config;
@@ -168,6 +170,10 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::FancyDrawStroke(m) => m.handle(ctx),
         ControlMessage::FancyOnboardingConfig(m) => m.handle(ctx),
         ControlMessage::FancyOnboardingResponseDeliver(m) => m.handle(ctx),
+        ControlMessage::FancyLiveDocInvite(m) => m.handle(ctx),
+        ControlMessage::FancyLiveDocAnnounce(m) => m.handle(ctx),
+        ControlMessage::FancyPoll(m) => m.handle(ctx),
+        ControlMessage::FancyPollVote(m) => m.handle(ctx),
         ControlMessage::BanList(m) => m.handle(ctx),
         ControlMessage::UserList(m) => m.handle(ctx),
         ControlMessage::Acl(m) => m.handle(ctx),

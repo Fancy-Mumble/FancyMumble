@@ -27,6 +27,10 @@ mod send_audio;
 mod send_ban_list;
 mod send_ping;
 mod send_plugin_data;
+mod send_fancy_live_doc_open;
+mod send_fancy_live_doc_announce;
+mod send_fancy_poll;
+mod send_fancy_poll_vote;
 mod send_text_message;
 mod send_webrtc_signal;
 mod send_pchat_ack;
@@ -89,7 +93,12 @@ pub use send_acl::SendAcl;
 pub use send_audio::SendAudio;
 pub use send_ban_list::SendBanList;
 pub use send_ping::SendPing;
+#[allow(deprecated, reason = "re-exporting the bricked type so callers get the deprecation error")]
 pub use send_plugin_data::SendPluginData;
+pub use send_fancy_live_doc_open::SendFancyLiveDocOpen;
+pub use send_fancy_live_doc_announce::SendFancyLiveDocAnnounce;
+pub use send_fancy_poll::SendFancyPoll;
+pub use send_fancy_poll_vote::SendFancyPollVote;
 pub use send_text_message::SendTextMessage;
 pub use send_webrtc_signal::SendWebRtcSignal;
 pub use send_pchat_ack::SendPchatAck;
@@ -473,92 +482,11 @@ mod tests {
         }
     }
 
-    // -- SendPluginData tests --------------------------------------
-
-    #[test]
-    fn send_plugin_data_produces_correct_message() {
-        let cmd = SendPluginData {
-            receiver_sessions: vec![10, 20, 30],
-            data: b"test payload".to_vec(),
-            data_id: "fancy-poll".into(),
-        };
-        let output = cmd.execute(&ServerState::new());
-
-        assert_eq!(output.tcp_messages.len(), 1);
-        assert!(!output.disconnect);
-        assert!(output.udp_messages.is_empty());
-
-        match &output.tcp_messages[0] {
-            ControlMessage::PluginDataTransmission(pd) => {
-                // Sender is None - the server fills it in.
-                assert!(pd.sender_session.is_none());
-                assert_eq!(pd.receiver_sessions, vec![10, 20, 30]);
-                assert_eq!(pd.data.as_deref(), Some(b"test payload".as_slice()));
-                assert_eq!(pd.data_id.as_deref(), Some("fancy-poll"));
-            }
-            other => panic!("expected PluginDataTransmission, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn send_plugin_data_empty_receivers_sends_to_nobody() {
-        let cmd = SendPluginData {
-            receiver_sessions: vec![],
-            data: b"{}".to_vec(),
-            data_id: "fancy-poll".into(),
-        };
-        let output = cmd.execute(&ServerState::new());
-
-        match &output.tcp_messages[0] {
-            ControlMessage::PluginDataTransmission(pd) => {
-                assert!(
-                    pd.receiver_sessions.is_empty(),
-                    "empty receivers means nobody receives the message on the server"
-                );
-            }
-            other => panic!("expected PluginDataTransmission, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn send_plugin_data_preserves_json_payload() {
-        let json = r#"{"type":"poll","id":"abc-123","question":"Favourite?","options":["A","B"]}"#;
-        let cmd = SendPluginData {
-            receiver_sessions: vec![5],
-            data: json.as_bytes().to_vec(),
-            data_id: "fancy-poll".into(),
-        };
-        let output = cmd.execute(&ServerState::new());
-
-        match &output.tcp_messages[0] {
-            ControlMessage::PluginDataTransmission(pd) => {
-                let payload = std::str::from_utf8(pd.data.as_deref().unwrap()).unwrap();
-                assert_eq!(payload, json);
-            }
-            other => panic!("expected PluginDataTransmission, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn send_plugin_data_vote_message() {
-        let json = r#"{"type":"poll_vote","pollId":"abc-123","selected":[0,2],"voter":42,"voterName":"Bob"}"#;
-        let cmd = SendPluginData {
-            receiver_sessions: vec![10],
-            data: json.as_bytes().to_vec(),
-            data_id: "fancy-poll-vote".into(),
-        };
-        let output = cmd.execute(&ServerState::new());
-
-        match &output.tcp_messages[0] {
-            ControlMessage::PluginDataTransmission(pd) => {
-                assert_eq!(pd.data_id.as_deref(), Some("fancy-poll-vote"));
-                let payload = std::str::from_utf8(pd.data.as_deref().unwrap()).unwrap();
-                assert!(payload.contains("poll_vote"));
-                assert!(payload.contains("abc-123"));
-            }
-            other => panic!("expected PluginDataTransmission, got {other:?}"),
-        }
-    }
+    // -- SendPluginData removed --
+    // PluginDataTransmission is permanently bricked in Fancy Mumble.
+    // The replacement messages (FancyPoll, FancyPollVote, FancyLiveDoc*)
+    // each have their own typed `Send*` command and tests live next to
+    // the message in transport/codec.rs.
 
     #[test]
     fn send_typing_indicator_produces_correct_message() {
