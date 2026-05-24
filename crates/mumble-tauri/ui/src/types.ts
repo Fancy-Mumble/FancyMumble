@@ -305,6 +305,45 @@ export interface FileServerCapabilities {
   limits: FileServerLimits;
 }
 
+/** Configuration advertised by the live-doc plugin to clients on connect
+ *  via a `fancy-live-doc-config` plugin-data message. */
+export interface LiveDocPluginConfig {
+  /** SemVer version string of the live-doc plugin (from its Cargo.toml). */
+  version: string;
+  /** Base WebSocket URL clients use for Yjs sync connections. */
+  wsBaseUrl: string;
+}
+
+/** A single key/value debug row advertised by a plugin's
+ *  `MumblePlugin::info_json` payload. Rendered verbatim in the
+ *  Server Info panel under the plugin's card. */
+export interface PluginInfoDebugRow {
+  label: string;
+  value: string | number | boolean;
+}
+
+/** Per-plugin metadata broadcast by the server via the
+ *  `fancy-plugin-info` envelope shortly after a client connects.
+ *  All fields except `name`/`version` are optional and rendered
+ *  generically. */
+export interface PluginInfoPayload {
+  description?: string;
+  author?: string;
+  homepage?: string;
+  capabilities?: string[];
+  debug_rows?: PluginInfoDebugRow[];
+  /** Allow plugins to carry forward-compatible extra fields. */
+  [extra: string]: unknown;
+}
+
+/** Decoded `fancy-plugin-info` envelope. Stored in the Zustand
+ *  `pluginInfos` map keyed by plugin name. */
+export interface PluginInfoRecord {
+  name: string;
+  version: string;
+  info: PluginInfoPayload;
+}
+
 /** A custom emote pushed by the server via the `fancy-server-emotes`
  *  plugin-data channel. The image is delivered inline as a base64 `data:`
  *  URL so it can be rendered without a follow-up HTTP request. */

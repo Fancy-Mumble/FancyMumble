@@ -10,11 +10,12 @@ import { ChevronRightIcon, CloseIcon, RefreshCwIcon, ServerIcon } from "../../ic
  * from the backend.
  */
 
-import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
+import { Fragment, useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { ServerInfo, DebugStats, AudioSettings } from "../../types";
+import type { ServerInfo, DebugStats, AudioSettings, PluginInfoRecord } from "../../types";
 import { getPreferences, getSavedAudioSettings } from "../../preferencesStorage";
+import type { LiveDocSessionInfo } from "../../store";
 import { formatBandwidth, formatDuration } from "../../utils/format";
 import { useAppStore } from "../../store";
 import { maskSensitive } from "../../utils/maskSensitive";
@@ -58,6 +59,32 @@ function DebugRow({ label, value }: Readonly<{ label: string; value: string | nu
   );
 }
 
+function PluginInfoCard({ plugin }: Readonly<{ plugin: PluginInfoRecord }>) {
+  const { t } = useTranslation("server");
+  const info = plugin.info;
+  const rows = Array.isArray(info.debug_rows) ? info.debug_rows : [];
+  const caps = Array.isArray(info.capabilities) ? info.capabilities : [];
+  return (
+    <div className={styles.debugGrid}>
+      {typeof info.description === "string" && info.description.length > 0 && (
+        <DebugRow label={t("infoPanel.plugins.description")} value={info.description} />
+      )}
+      {typeof info.author === "string" && info.author.length > 0 && (
+        <DebugRow label={t("infoPanel.plugins.author")} value={info.author} />
+      )}
+      {typeof info.homepage === "string" && info.homepage.length > 0 && (
+        <DebugRow label={t("infoPanel.plugins.homepage")} value={info.homepage} />
+      )}
+      {caps.length > 0 && (
+        <DebugRow label={t("infoPanel.plugins.capabilities")} value={caps.join(", ")} />
+      )}
+      {rows.map((row, i) => (
+        <DebugRow key={`${row.label}-${i}`} label={row.label} value={row.value} />
+      ))}
+    </div>
+  );
+}
+
 /** Decode a Mumble v2-encoded version into "major.minor.patch". */
 function decodeFancyVersion(v: number): string {
   // Encoding: (major << 48) | (minor << 32) | (patch << 16)
@@ -67,6 +94,9 @@ function decodeFancyVersion(v: number): string {
   const patch = Math.trunc(v / 2 ** 16) & 0xFFFF;
   return `${major}.${minor}.${patch}`;
 }
+
+/** Minimum encoded Fancy Mumble version that supports Live Doc (0.3.2). */
+const LIVE_DOC_MIN_VERSION = 3 * 2 ** 32 + 2 * 2 ** 16;
 
 // -- Latency graph ------------------------------------------------
 
@@ -189,6 +219,10 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
   const udpActive = useAppStore((s) => s.udpActive);
   const capabilities = useAppStore((s) => s.fileServerCapabilities);
   const streamerMode = useAppStore((s) => s.streamerMode);
+  const activeLiveDocs = useAppStore((s) => s.activeLiveDocs);
+  const pendingLiveDocAnnounces = useAppStore((s) => s.pendingLiveDocAnnounces);
+  const liveDocPluginConfig = useAppStore((s) => s.liveDocPluginConfig);
+  const pluginInfos = useAppStore((s) => s.pluginInfos);
   const [info, setInfo] = useState<ServerInfo | null>(null);
   const [devMode, setDevMode] = useState(false);
   const [debugStats, setDebugStats] = useState<DebugStats | null>(null);
@@ -350,6 +384,18 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
             </section>
           )}
 
+          {/* Server plugins (always visible when any plugin advertised info) */}
+          {pluginInfos.size > 0 && (
+            <section className={styles.section}>
+              <h3 className={styles.sectionTitle}>{t("infoPanel.sectionPlugins")}</h3>
+              {[...pluginInfos.values()].map((plugin) => (
+                <Accordion key={plugin.name} title={`${plugin.name} v${plugin.version}`}>
+                  <PluginInfoCard plugin={plugin} />
+                </Accordion>
+              ))}
+            </section>
+          )}
+
           {/* Activity Log */}
           <section className={styles.section}>
             <Accordion title={t("infoPanel.accordionActivityLog")} defaultOpen>
@@ -442,6 +488,30 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
                   </div>
                 </Accordion>
               )}
+
+              {(() => {
+                const supported = info != null && info.fancy_version != null && info.fancy_version >= LIVE_DOC_MIN_VERSION;
+                const sessions = [...activeLiveDocs.values()] as LiveDocSessionInfo[];
+                return (
+                  <Accordion title={t("infoPanel.accordionLiveDoc")}>
+                    <div className={styles.debugGrid}>
+                      <DebugRow label={t("infoPanel.debug.liveDocSupported")} value={supported} />
+                      <DebugRow label={t("infoPanel.debug.liveDocVersion")} value={liveDocPluginConfig?.version ?? "—"} />
+                      <DebugRow label={t("infoPanel.debug.liveDocWsUrl")} value={liveDocPluginConfig ? (streamerMode ? maskSensitive(liveDocPluginConfig.wsBaseUrl) : liveDocPluginConfig.wsBaseUrl) : "—"} />
+                      <DebugRow label={t("infoPanel.debug.liveDocActiveSessions")} value={sessions.length} />
+                      <DebugRow label={t("infoPanel.debug.liveDocPendingAnnounces")} value={pendingLiveDocAnnounces.size} />
+                      {sessions.map((s, i) => (
+                        <Fragment key={`${s.channelId}-${s.slug}`}>
+                          <DebugRow label={`#${i + 1} ${t("infoPanel.debug.liveDocChannel")}`} value={s.channelId} />
+                          <DebugRow label={`#${i + 1} ${t("infoPanel.debug.liveDocTitle")}`} value={s.title} />
+                          <DebugRow label={`#${i + 1} ${t("infoPanel.debug.liveDocSlug")}`} value={s.slug} />
+                          <DebugRow label={`#${i + 1} ${t("infoPanel.debug.liveDocUrl")}`} value={streamerMode ? maskSensitive(s.wsUrl) : s.wsUrl} />
+                        </Fragment>
+                      ))}
+                    </div>
+                  </Accordion>
+                );
+              })()}
             </section>
           )}
         </>

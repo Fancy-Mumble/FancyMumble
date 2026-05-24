@@ -126,6 +126,13 @@
     "accordionWelcome": "Bienvenue",
     "accordionActivityLog": "Journal d'activité",
     "sectionDeveloper": "Développeur",
+    "sectionPlugins": "Plugins",
+    "plugins": {
+      "description": "Description",
+      "author": "Auteur",
+      "homepage": "Site Web",
+      "capabilities": "Fonctionnalités"
+    },
     "refreshAriaLabel": "Actualiser les statistiques de débogage",
     "refreshTitle": "Actualiser",
     "accordionAudioTransport": "Transport audio",
@@ -134,6 +141,7 @@
     "accordionMessages": "Messages",
     "accordionLatency": "Latence réseau",
     "accordionFileServer": "Serveur de fichiers",
+    "accordionLiveDoc": "Live Doc",
     "transportUdp": "UDP (chiffré)",
     "transportTcp": "Tunnel TCP",
     "systemDefault": "Défaut système",
@@ -172,7 +180,16 @@
       "fileTtl": "TTL des fichiers",
       "deleteOnDownload": "Supprimer au téléchargement",
       "deleteOnDisconnect": "Supprimer à la déconnexion",
-      "customEmotes": "Émotes personnalisées"
+      "customEmotes": "Émotes personnalisées",
+      "liveDocSupported": "Pris en charge",
+      "liveDocVersion": "Version du plugin",
+      "liveDocWsUrl": "URL WebSocket de base",
+      "liveDocActiveSessions": "Sessions actives",
+      "liveDocPendingAnnounces": "Annonces en attente",
+      "liveDocChannel": "Canal",
+      "liveDocTitle": "Titre",
+      "liveDocSlug": "Slug",
+      "liveDocUrl": "URL WebSocket"
     }
   },
   "chooseServer": "Choisissez le serveur auquel vous connecter",

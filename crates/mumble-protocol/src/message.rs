@@ -147,16 +147,14 @@ pub enum TcpMessageType {
     FancyOnboardingResponseQuery = 139,
     /// Fancy Mumble: server delivers a previously-stored onboarding response.
     FancyOnboardingResponseDeliver = 140,
-    /// Fancy Mumble: client requests opening a live collaborative document.
-    FancyLiveDocOpen = 141,
-    /// Fancy Mumble: server delivers the WebSocket invite for a live-doc room.
-    FancyLiveDocInvite = 142,
-    /// Fancy Mumble: client announces a live-doc to channel peers (server-relayed).
-    FancyLiveDocAnnounce = 143,
     /// Fancy Mumble: client announces a new poll (server-relayed to channel).
     FancyPoll = 144,
     /// Fancy Mumble: client casts a vote on a poll (server-relayed to channel).
     FancyPollVote = 145,
+    /// Fancy Mumble: generic plugin envelope (bidirectional).
+    PluginMessage = 200,
+    /// Fancy Mumble: server enumerates loaded plugins after ServerSync.
+    PluginRegistry = 201,
 }
 
 /// Generates both `TryFrom<u16> for TcpMessageType` and
@@ -330,16 +328,14 @@ pub enum ControlMessage {
     FancyOnboardingResponseQuery(mumble_tcp::FancyOnboardingResponseQuery),
     /// Fancy: server delivers a previously-stored onboarding response.
     FancyOnboardingResponseDeliver(mumble_tcp::FancyOnboardingResponseDeliver),
-    /// Fancy: client requests opening a live collaborative document.
-    FancyLiveDocOpen(mumble_tcp::FancyLiveDocOpen),
-    /// Fancy: server delivers a live-doc WebSocket invite.
-    FancyLiveDocInvite(mumble_tcp::FancyLiveDocInvite),
-    /// Fancy: client announces a live-doc to channel peers.
-    FancyLiveDocAnnounce(mumble_tcp::FancyLiveDocAnnounce),
     /// Fancy: client announces a new poll in a channel.
     FancyPoll(mumble_tcp::FancyPoll),
     /// Fancy: client casts a vote on a poll.
     FancyPollVote(mumble_tcp::FancyPollVote),
+    /// Fancy: generic plugin envelope (bidirectional).
+    PluginMessage(mumble_tcp::PluginMessage),
+    /// Fancy: server enumerates loaded plugins.
+    PluginRegistry(mumble_tcp::PluginRegistry),
     /// UDP audio tunneled through TCP (fallback path).
     UdpTunnel(Vec<u8>),
 }
@@ -371,8 +367,8 @@ message_type_mapping! {
     FancyOnboardingConfig, FancyOnboardingConfigUpdate,
     FancyOnboardingResponse, FancyOnboardingResponseQuery,
     FancyOnboardingResponseDeliver,
-    FancyLiveDocOpen, FancyLiveDocInvite, FancyLiveDocAnnounce,
     FancyPoll, FancyPollVote,
+    PluginMessage, PluginRegistry,
 }
 
 /// A decoded UDP message - either audio or a UDP ping.
@@ -530,9 +526,12 @@ mod tests {
     fn tcp_message_type_invalid_returns_error() {
         assert!(TcpMessageType::try_from(27u16).is_err());
         assert!(TcpMessageType::try_from(99u16).is_err());
+        assert!(TcpMessageType::try_from(141u16).is_err());
+        assert!(TcpMessageType::try_from(142u16).is_err());
+        assert!(TcpMessageType::try_from(143u16).is_err());
         assert!(TcpMessageType::try_from(146u16).is_err());
         assert!(TcpMessageType::try_from(199u16).is_err());
-        assert!(TcpMessageType::try_from(203u16).is_err());
+        assert!(TcpMessageType::try_from(202u16).is_err());
         assert!(TcpMessageType::try_from(u16::MAX).is_err());
     }
 

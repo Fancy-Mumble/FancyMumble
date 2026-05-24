@@ -126,6 +126,13 @@
     "accordionWelcome": "Willkommen",
     "accordionActivityLog": "Aktivitätsprotokoll",
     "sectionDeveloper": "Entwickler",
+    "sectionPlugins": "Plugins",
+    "plugins": {
+      "description": "Beschreibung",
+      "author": "Autor",
+      "homepage": "Webseite",
+      "capabilities": "Funktionen"
+    },
     "refreshAriaLabel": "Debug-Statistiken aktualisieren",
     "refreshTitle": "Aktualisieren",
     "accordionAudioTransport": "Audio-Transport",
@@ -134,6 +141,7 @@
     "accordionMessages": "Nachrichten",
     "accordionLatency": "Netzwerklatenz",
     "accordionFileServer": "Dateiserver",
+    "accordionLiveDoc": "Live Doc",
     "transportUdp": "UDP (verschlüsselt)",
     "transportTcp": "TCP-Tunnel",
     "systemDefault": "System-Standard",
@@ -172,7 +180,16 @@
       "fileTtl": "Datei-TTL",
       "deleteOnDownload": "Nach Download löschen",
       "deleteOnDisconnect": "Bei Trennung löschen",
-      "customEmotes": "Benutzerdefinierte Emotes"
+      "customEmotes": "Benutzerdefinierte Emotes",
+      "liveDocSupported": "Unterstützt",
+      "liveDocVersion": "Plugin-Version",
+      "liveDocWsUrl": "WebSocket-Basis-URL",
+      "liveDocActiveSessions": "Aktive Sitzungen",
+      "liveDocPendingAnnounces": "Ausstehende Ankündigungen",
+      "liveDocChannel": "Kanal",
+      "liveDocTitle": "Titel",
+      "liveDocSlug": "Slug",
+      "liveDocUrl": "WebSocket-URL"
     }
   },
   "chooseServer": "Wähle einen Server, mit dem du dich verbinden möchtest",

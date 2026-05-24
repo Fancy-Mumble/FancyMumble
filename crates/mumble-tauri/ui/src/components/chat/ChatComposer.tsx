@@ -1,15 +1,14 @@
 import { AttachIcon, CloseIcon, EditIcon, FileIcon, FileTextIcon, GifIcon, ImageIcon, SendIcon } from "../../icons";
-import { useState, useRef, useCallback, useMemo, useEffect, type ClipboardEvent } from "react";
+import { useState, useRef, useCallback, useEffect, type ClipboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import MarkdownInput, { type MarkdownInputApi } from "./markdown/MarkdownInput";
 import GifPicker from "./gif/GifPicker";
 import MentionAutocomplete, { type MentionCandidate, handleMentionKey } from "./mention/MentionAutocomplete";
+import { useMentionCandidates } from "./mention/useMentionCandidates";
 import styles from "./ChatView.module.css";
 import { isMobile } from "../../utils/platform";
 import { useAppStore } from "../../store";
 import { formatUserMention, parseMentionTrigger, type MentionTrigger } from "../../utils/mentions";
-import { getCachedUserAvatar } from "../../lazyBlobs";
-import { useAclGroups } from "../../hooks/useAclGroups";
 
 interface ChatComposerProps {
   readonly draft: string;
@@ -29,8 +28,6 @@ interface ChatComposerProps {
   readonly isEditing?: boolean;
   readonly onCancelEdit?: () => void;
 }
-
-const MAX_CANDIDATES = 8;
 
 function candidateInsertText(c: MentionCandidate): string {
   switch (c.kind) {
@@ -87,56 +84,13 @@ export default function ChatComposer({
   const [activeIndex, setActiveIndex] = useState(0);
 
   const users = useAppStore((s) => s.users);
-  const selectedChannel = useAppStore((s) => s.selectedChannel);
-  const ownSession = useAppStore((s) => s.ownSession);
-  const roleGroups = useAclGroups();
 
-  const candidates = useMemo<MentionCandidate[]>(() => {
-    if (!trigger) return [];
-    const q = trigger.query.toLowerCase();
+  const mentionResolver = useCallback(
+    (session: number) => users.find((u) => u.session === session)?.name,
+    [users],
+  );
 
-    if (trigger.kind === "user") {
-      const allOthers = users.filter((u) => {
-        if (u.session === ownSession) return false;
-        return u.name.toLowerCase().includes(q);
-      });
-      // Show users in the current channel first, then everyone else.
-      const inChannel = allOthers.filter(
-        (u) => selectedChannel != null && u.channel_id === selectedChannel,
-      );
-      const elsewhere = allOthers.filter(
-        (u) => selectedChannel == null || u.channel_id !== selectedChannel,
-      );
-      const ranked = [...inChannel, ...elsewhere];
-      const userCandidates: MentionCandidate[] = ranked
-        .slice(0, MAX_CANDIDATES)
-        .map((u) => ({
-          kind: "user",
-          session: u.session,
-          name: u.name,
-          avatarUrl: getCachedUserAvatar(u.session, u.texture_size) ?? undefined,
-        }));
-
-      const roleCandidates: MentionCandidate[] = roleGroups
-        .filter((g) => !g.name.startsWith("~") && g.name.toLowerCase().includes(q))
-        .slice(0, MAX_CANDIDATES)
-        .map((g) => ({ kind: "role", name: g.name }));
-
-      const extras: MentionCandidate[] = [];
-      if ("everyone".startsWith(q)) extras.push({ kind: "everyone" });
-      if ("here".startsWith(q)) extras.push({ kind: "here" });
-      return [...userCandidates, ...roleCandidates, ...extras];
-    }
-
-    if (trigger.kind === "role") {
-      return roleGroups
-        .filter((g) => !g.name.startsWith("~") && g.name.toLowerCase().includes(q))
-        .slice(0, MAX_CANDIDATES)
-        .map((g) => ({ kind: "role", name: g.name }));
-    }
-
-    return [];
-  }, [trigger, users, selectedChannel, ownSession, roleGroups]);
+  const candidates = useMentionCandidates(trigger?.kind ?? null, trigger?.query ?? "");
 
   useEffect(() => {
     if (activeIndex >= candidates.length) setActiveIndex(0);
@@ -343,6 +297,7 @@ export default function ChatComposer({
             apiRef={inputApi}
             onSelectionChange={handleSelectionChange}
             onKeyDownCapture={handleKeyDownCapture}
+            mentionResolver={mentionResolver}
           />
         </div>
 

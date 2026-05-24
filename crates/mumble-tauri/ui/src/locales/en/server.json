@@ -139,6 +139,13 @@
     "accordionWelcome": "Welcome",
     "accordionActivityLog": "Activity Log",
     "sectionDeveloper": "Developer",
+    "sectionPlugins": "Plugins",
+    "plugins": {
+      "description": "Description",
+      "author": "Author",
+      "homepage": "Homepage",
+      "capabilities": "Capabilities"
+    },
     "refreshAriaLabel": "Refresh debug stats",
     "refreshTitle": "Refresh",
     "accordionAudioTransport": "Audio Transport",
@@ -147,6 +154,7 @@
     "accordionMessages": "Messages",
     "accordionLatency": "Network Latency",
     "accordionFileServer": "File Server",
+    "accordionLiveDoc": "Live Doc",
     "transportUdp": "UDP (encrypted)",
     "transportTcp": "TCP tunnel",
     "systemDefault": "System default",
@@ -185,7 +193,16 @@
       "fileTtl": "File TTL",
       "deleteOnDownload": "Delete on Download",
       "deleteOnDisconnect": "Delete on Disconnect",
-      "customEmotes": "Custom Emotes"
+      "customEmotes": "Custom Emotes",
+      "liveDocSupported": "Supported",
+      "liveDocVersion": "Plugin Version",
+      "liveDocWsUrl": "WebSocket Base URL",
+      "liveDocActiveSessions": "Active Sessions",
+      "liveDocPendingAnnounces": "Pending Announces",
+      "liveDocChannel": "Channel",
+      "liveDocTitle": "Title",
+      "liveDocSlug": "Slug",
+      "liveDocUrl": "WebSocket URL"
     }
   },
   "chooseServer": "Choose a server to connect",

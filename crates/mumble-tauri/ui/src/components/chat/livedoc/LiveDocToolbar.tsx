@@ -15,6 +15,7 @@ import {
   AlignJustifyIcon,
   AlignLeftIcon,
   AlignRightIcon,
+  CheckboxIcon,
   ChevronDownIcon,
   Grid2x2Icon,
   ImageIcon,
@@ -129,6 +130,9 @@ export default function LiveDocToolbar({ editor, onInsertMathBlock }: LiveDocToo
       <div className={styles.toolbarGroup}>
         <ToolButton label={t("liveDoc.toolbar.bulletList")} active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}>•</ToolButton>
         <ToolButton label={t("liveDoc.toolbar.orderedList")} active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()}>1.</ToolButton>
+        <ToolButton label={t("liveDoc.toolbar.taskList")} active={editor.isActive("taskList")} onClick={() => editor.chain().focus().toggleTaskList().run()}>
+          <CheckboxIcon width={14} height={14} aria-hidden="true" />
+        </ToolButton>
         <ToolButton label={t("liveDoc.toolbar.blockquote")} active={editor.isActive("blockquote")} onClick={() => editor.chain().focus().toggleBlockquote().run()}>❝</ToolButton>
         <ToolButton label={t("liveDoc.toolbar.codeBlock")} active={editor.isActive("codeBlock")} onClick={() => editor.chain().focus().toggleCodeBlock().run()}>{"{ }"}</ToolButton>
       </div>

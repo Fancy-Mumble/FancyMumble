@@ -93,6 +93,10 @@ function serializeBlockNode(node: Node): string {
       .join("\n");
   }
 
+  if (tag === "ul" && el.getAttribute("data-type") === "taskList") {
+    return serializeTaskList(el);
+  }
+
   if (tag === "ul" || tag === "ol") {
     return serializeList(el, tag === "ol");
   }
@@ -124,6 +128,41 @@ function serializeBlockNode(node: Node): string {
 
   // Unknown / inline element at block level - render inline.
   return serializeInlineChildren(el);
+}
+
+function serializeTaskList(el: Element): string {
+  const lines: string[] = [];
+  for (const child of Array.from(el.children)) {
+    if (child.tagName.toLowerCase() !== "li") continue;
+    const checked = child.getAttribute("data-checked") === "true";
+    const marker = checked ? "- [x] " : "- [ ] ";
+    const inlineParts: string[] = [];
+    const nestedBlocks: string[] = [];
+    for (const ch of Array.from(child.childNodes)) {
+      if (ch.nodeType === Node.ELEMENT_NODE) {
+        const t = (ch as Element).tagName.toLowerCase();
+        if (t === "ul" && (ch as Element).getAttribute("data-type") === "taskList") {
+          nestedBlocks.push(serializeTaskList(ch as Element));
+          continue;
+        }
+        if (t === "ul" || t === "ol") {
+          nestedBlocks.push(serializeList(ch as Element, t === "ol"));
+          continue;
+        }
+        if (t === "p" || t === "div" || t === "label") {
+          inlineParts.push(serializeInlineChildren(ch as Element));
+          continue;
+        }
+      }
+      inlineParts.push(serializeInlineNode(ch));
+    }
+    const head = (inlineParts.join("").trim() || "").replaceAll("\n", " ");
+    lines.push(marker + head);
+    for (const nested of nestedBlocks) {
+      lines.push(nested.split("\n").map((l) => `  ${l}`).join("\n"));
+    }
+  }
+  return lines.join("\n");
 }
 
 function serializeList(el: Element, ordered: boolean): string {
@@ -208,6 +247,16 @@ function serializeInlineNode(node: Node): string {
         const latex = decodeHtmlEntities(el.getAttribute("data-latex") ?? "");
         return `$${latex}$`;
       }
+      // Mention chips round-trip as the wire markers so chat / Live Doc
+      // both speak the same format (see utils/mentions.ts).
+      if (el.hasAttribute("data-mention-session")) {
+        return `<@${el.getAttribute("data-mention-session") ?? ""}>`;
+      }
+      if (el.hasAttribute("data-mention-role")) {
+        return `<@&${el.getAttribute("data-mention-role") ?? ""}>`;
+      }
+      if (el.hasAttribute("data-mention-everyone")) return "@everyone";
+      if (el.hasAttribute("data-mention-here")) return "@here";
       if (el.hasAttribute("style") || el.hasAttribute("class")) {
         return rawInline(el, inner());
       }
@@ -415,11 +464,18 @@ function collectRawHtmlBlock(lines: string[], start: number, tag: string): numbe
   return i - start;
 }
 
+const TASK_PREFIX_RE = /^\[([ xX])\]\s+/;
+
 function parseListBlock(lines: string[], start: number): { html: string; consumed: number } {
-  const firstMatch = /^(\s*)([-*+]|\d+[.)])\s+/.exec(lines[start])!;
+  const firstMatch = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/.exec(lines[start])!;
   const baseIndent = firstMatch[1].length;
   const ordered = /\d/.test(firstMatch[2]);
-  const items: { content: string[]; nested: { html: string; consumed: number } | null }[] = [];
+  const isTaskList = !ordered && TASK_PREFIX_RE.test(firstMatch[3]);
+  const items: {
+    content: string[];
+    nested: { html: string; consumed: number } | null;
+    checked: boolean | null;
+  }[] = [];
   let i = start;
   while (i < lines.length) {
     const m = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/.exec(lines[i]);
@@ -427,15 +483,22 @@ function parseListBlock(lines: string[], start: number): { html: string; consume
     const indent = m[1].length;
     if (indent < baseIndent) break;
     if (indent > baseIndent) {
-      // Nested list belongs to the previous item.
       const nested = parseListBlock(lines, i);
       if (items.length) items[items.length - 1].nested = nested;
       i += nested.consumed;
       continue;
     }
-    items.push({ content: [m[3]], nested: null });
+    let body = m[3];
+    let checked: boolean | null = null;
+    if (isTaskList) {
+      const tm = TASK_PREFIX_RE.exec(body);
+      if (tm) {
+        checked = tm[1].toLowerCase() === "x";
+        body = body.slice(tm[0].length);
+      }
+    }
+    items.push({ content: [body], nested: null, checked });
     i++;
-    // Continuation lines (indented more than the marker) belong to this item.
     while (
       i < lines.length &&
       lines[i].trim() &&
@@ -446,12 +509,28 @@ function parseListBlock(lines: string[], start: number): { html: string; consume
       i++;
     }
   }
+
+  if (isTaskList) {
+    const renderedItems = items
+      .map((it) => {
+        const inline = parseInline(it.content.join("\n"));
+        const nested = it.nested ? it.nested.html : "";
+        const checkedAttr = it.checked ? ' data-checked="true"' : ' data-checked="false"';
+        return `<li data-type="taskItem"${checkedAttr}><p>${inline}</p>${nested}</li>`;
+      })
+      .join("");
+    return {
+      html: `<ul data-type="taskList">${renderedItems}</ul>`,
+      consumed: i - start,
+    };
+  }
+
   const tag = ordered ? "ol" : "ul";
   const renderedItems = items
     .map((it) => {
-      const body = parseInline(it.content.join("\n"));
+      const inline = parseInline(it.content.join("\n"));
       const nested = it.nested ? it.nested.html : "";
-      return `<li>${body}${nested}</li>`;
+      return `<li>${inline}${nested}</li>`;
     })
     .join("");
   return { html: `<${tag}>${renderedItems}</${tag}>`, consumed: i - start };
@@ -468,12 +547,39 @@ function parseListBlock(lines: string[], start: number): { html: string; consume
  */
 function parseInline(text: string): string {
   const stash: string[] = [];
+  const push = (html: string): string => {
+    stash.push(html);
+    return `\u0000H${stash.length - 1}\u0000`;
+  };
+
+  // Mention markers: stash before the generic HTML stash so they
+  // survive HTML escaping and aren't mistaken for raw tags.  Matches
+  // the wire format used by chat messages (see utils/mentions.ts).
+  let s = text.replaceAll(/<@(\d+)>/g, (_m, sid: string) =>
+    push(
+      `<span class="mention mention-user" data-mention-session="${sid}">@user-${sid}</span>`,
+    ),
+  );
+  s = s.replaceAll(/<@&([^>\s]+)>/g, (_m, name: string) => {
+    const safe = name.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+    return push(
+      `<span class="mention mention-role" data-mention-role="${safe}">@${safe}</span>`,
+    );
+  });
+  s = s.replaceAll(/(^|\s)@everyone\b/g, (_m, lead: string) =>
+    `${lead}${push(
+      `<span class="mention mention-everyone" data-mention-everyone="1">@everyone</span>`,
+    )}`,
+  );
+  s = s.replaceAll(/(^|\s)@here\b/g, (_m, lead: string) =>
+    `${lead}${push(
+      `<span class="mention mention-here" data-mention-here="1">@here</span>`,
+    )}`,
+  );
+
   // Stash tags that look like real HTML. We accept self-closing,
   // opening, and closing forms with any attribute payload.
-  let s = text.replaceAll(/<\/?[a-zA-Z][a-zA-Z0-9]*\b[^<>]*\/?>/g, (m) => {
-    stash.push(m);
-    return `\u0000H${stash.length - 1}\u0000`;
-  });
+  s = s.replaceAll(/<\/?[a-zA-Z][a-zA-Z0-9]*\b[^<>]*\/?>/g, (m) => push(m));
 
   // Escape leftover HTML entities so literal `<`/`&` survive.
   s = s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");

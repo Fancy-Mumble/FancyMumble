@@ -2387,62 +2387,78 @@ pub struct FancyOnboardingResponseDeliver {
     #[prost(message, optional, tag = "1")]
     pub response: ::core::option::Option<FancyOnboardingResponse>,
 }
-/// Client -> Server: request opening (or re-attaching to) a live-doc room.
-/// The server's live-doc plugin replies with FancyLiveDocInvite when the
-/// room is ready.
-/// Wire type ID = 141.
+/// ---------------------------------------------------------------------------
+/// Generic plugin envelope (Fancy Mumble extension, IDs 200-201)
+/// ---------------------------------------------------------------------------
+///
+/// The server-side plugin host (mumble-plugin-host) loads cdylib plugins
+/// at runtime.  Each plugin owns its private wire schema; the server is
+/// agnostic and merely forwards opaque payloads between clients and the
+/// matching plugin selected by `plugin_name`.  Per-plugin payloads are
+/// conventionally protobuf messages compiled from a plugin-owned .proto
+/// file; the `payload_type` field carries the inner message name so the
+/// receiver can decode the bytes.
+///
+/// Wire type ID = 200.
+/// Bidirectional.  Client -> server delivers to the plugin named in
+/// `plugin_name`.  Server -> client relays to either `target_sessions`
+/// (explicit recipients) or every authenticated user in `channel_id`
+/// (broadcast).  The server stamps `sender_session` / `sender_name`
+/// before delivery; values supplied by the client are ignored.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct FancyLiveDocOpen {
-    /// Channel the document belongs to.  Used for permission checks.
-    #[prost(uint32, optional, tag = "1")]
-    pub channel_id: ::core::option::Option<u32>,
-    /// URL-safe slug identifying the document inside the channel.
-    #[prost(string, optional, tag = "2")]
-    pub slug: ::core::option::Option<::prost::alloc::string::String>,
-    /// Human-readable title.  Truncated server-side to a sane length.
-    #[prost(string, optional, tag = "3")]
-    pub title: ::core::option::Option<::prost::alloc::string::String>,
-}
-/// Server -> Client: deliver the WebSocket invite for a live-doc room.
-/// Sent in response to FancyLiveDocOpen.
-/// Wire type ID = 142.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct FancyLiveDocInvite {
-    /// Opaque server identifier (used for client-side caching).
+pub struct PluginMessage {
+    /// Stable plugin identifier (e.g. "fancy-live-doc").  Required.
     #[prost(string, optional, tag = "1")]
-    pub server_id: ::core::option::Option<::prost::alloc::string::String>,
+    pub plugin_name: ::core::option::Option<::prost::alloc::string::String>,
+    /// Numeric alias assigned by the server in PluginRegistry.  Optional;
+    /// when set the receiver may use it instead of `plugin_name`.
     #[prost(uint32, optional, tag = "2")]
-    pub channel_id: ::core::option::Option<u32>,
+    pub plugin_slot: ::core::option::Option<u32>,
+    /// Plugin-defined sub-type, conventionally the inner proto message
+    /// name (e.g. "OpenRequest").
     #[prost(string, optional, tag = "3")]
-    pub slug: ::core::option::Option<::prost::alloc::string::String>,
-    #[prost(string, optional, tag = "4")]
-    pub title: ::core::option::Option<::prost::alloc::string::String>,
-    /// WebSocket endpoint the client should connect to (ws:// or wss://).
-    #[prost(string, optional, tag = "5")]
-    pub ws_url: ::core::option::Option<::prost::alloc::string::String>,
-    /// Short-lived JWT the client passes to the WebSocket as a query param.
-    #[prost(string, optional, tag = "6")]
-    pub token: ::core::option::Option<::prost::alloc::string::String>,
+    pub payload_type: ::core::option::Option<::prost::alloc::string::String>,
+    /// Opaque payload bytes (usually a protobuf-encoded inner message).
+    #[prost(bytes = "vec", optional, tag = "4")]
+    pub payload: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Explicit recipient sessions for server -> client relay.  When
+    /// empty and `channel_id` is unset, the message is server-bound
+    /// only (consumed by the plugin, not relayed).
+    #[prost(uint32, repeated, packed = "false", tag = "5")]
+    pub target_sessions: ::prost::alloc::vec::Vec<u32>,
+    /// Channel-scoped broadcast: server fans out to every authenticated
+    /// user in the channel.
+    #[prost(uint32, optional, tag = "6")]
+    pub channel_id: ::core::option::Option<u32>,
+    /// Server-stamped on delivery.  Ignored when sent by the client.
+    #[prost(uint32, optional, tag = "7")]
+    pub sender_session: ::core::option::Option<u32>,
+    #[prost(string, optional, tag = "8")]
+    pub sender_name: ::core::option::Option<::prost::alloc::string::String>,
 }
-/// Client -> Server -> Channel: announce that a live-doc has been opened
-/// so other channel members see a banner / quick-join button.  Server
-/// relays to every other Fancy client currently in the channel.
-/// Wire type ID = 143.
+/// One entry in the PluginRegistry list.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct FancyLiveDocAnnounce {
-    #[prost(uint32, optional, tag = "1")]
-    pub channel_id: ::core::option::Option<u32>,
-    #[prost(string, optional, tag = "2")]
-    pub slug: ::core::option::Option<::prost::alloc::string::String>,
-    #[prost(string, optional, tag = "3")]
-    pub title: ::core::option::Option<::prost::alloc::string::String>,
-    /// Session ID of the user that opened the document (set by server on
-    /// relay; ignored when sent from the client).
-    #[prost(uint32, optional, tag = "4")]
-    pub opener_session: ::core::option::Option<u32>,
-    /// Best-effort display name of the opener.
-    #[prost(string, optional, tag = "5")]
-    pub opener_name: ::core::option::Option<::prost::alloc::string::String>,
+pub struct PluginRegistryEntry {
+    #[prost(string, required, tag = "1")]
+    pub plugin_name: ::prost::alloc::string::String,
+    #[prost(string, required, tag = "2")]
+    pub version: ::prost::alloc::string::String,
+    /// Numeric alias valid for this connection.
+    #[prost(uint32, optional, tag = "3")]
+    pub plugin_slot: ::core::option::Option<u32>,
+    /// Plugin-defined capability/metadata JSON blob (opaque to server).
+    #[prost(string, optional, tag = "4")]
+    pub info_json: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Wire type ID = 201.
+/// Server -> Client: enumerate the loaded plugins so the client can
+/// route incoming PluginMessage envelopes to the right handler.  Sent
+/// once right after ServerSync (and again whenever the plugin set
+/// changes during the connection).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PluginRegistry {
+    #[prost(message, repeated, tag = "1")]
+    pub plugins: ::prost::alloc::vec::Vec<PluginRegistryEntry>,
 }
 /// Client -> Server -> Channel: announce a new poll in a channel.
 /// Wire type ID = 144.

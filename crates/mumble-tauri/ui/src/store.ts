@@ -36,10 +36,12 @@ import type {
   ReadReceiptDeliverPayload,
   FileServerConfig,
   FileServerCapabilities,
+  LiveDocPluginConfig,
   FileAccessMode,
   UploadResponse,
   DownloadEntry,
   CustomServerEmote,
+  PluginInfoRecord,
   PendingMessage,
 } from "./types";
 import type { PollPayload, PollVotePayload } from "./components/chat/poll/PollCreator";
@@ -314,8 +316,18 @@ interface AppState {
   /** Capabilities fetched from `GET {baseUrl}/capabilities` after receiving
    *  the file-server config. `null` when not yet fetched or no file-server. */
   fileServerCapabilities: FileServerCapabilities | null;
+  /** Configuration advertised by the live-doc plugin on connect via
+   *  `fancy-live-doc-config`. `null` when the server has no live-doc plugin. */
+  liveDocPluginConfig: LiveDocPluginConfig | null;
+  /** Plugin registry broadcast by the server right after `ServerSync` via
+   *  the `plugin-registry` Tauri event.  Lists every plugin the server's
+   *  plugin host loaded.  Cleared on disconnect. */
+  pluginRegistry: PluginRegistryEntry[];
   /** Custom server emotes pushed via `fancy-server-emotes`. Cleared on disconnect. */
   customServerEmotes: CustomServerEmote[];
+  /** Plugin info records broadcast by the server via `fancy-plugin-info`
+   *  shortly after connect. Keyed by plugin name. Cleared on disconnect. */
+  pluginInfos: Map<string, PluginInfoRecord>;
   /** Locally-saved downloads completed during the current session. Most
    *  recent first. Cleared on disconnect / reset. */
   downloads: DownloadEntry[];
@@ -732,7 +744,10 @@ const INITIAL: Pick<
   | "serverConfig"
   | "fileServerConfig"
   | "fileServerCapabilities"
+  | "liveDocPluginConfig"
+  | "pluginRegistry"
   | "customServerEmotes"
+  | "pluginInfos"
   | "downloads"
   | "unseenDownloadCount"
   | "serverFancyVersion"
@@ -806,7 +821,10 @@ const INITIAL: Pick<
   },
   fileServerConfig: null,
   fileServerCapabilities: null,
+  liveDocPluginConfig: null,
+  pluginRegistry: [],
   customServerEmotes: [],
+  pluginInfos: new Map(),
   downloads: [],
   unseenDownloadCount: 0,
   serverFancyVersion: null,
@@ -1822,7 +1840,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const activeServerId = get().activeServerId;
     if (get().activeLiveDocs.has(liveDocKey(activeServerId, channelId))) {
       console.log("[store] requestOpenLiveDoc: channel already has active doc; skipping wait");
-      await invoke("request_open_live_doc", { channelId, slug: sanitised, title: trimmedTitle });
+      await sendPluginMessage("fancy-live-doc", "OpenRequest", { channelId, slug: sanitised, title: trimmedTitle });
       return;
     }
     const waitForInvite = new Promise<void>((resolve, reject) => {
@@ -1845,7 +1863,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
       });
     });
-    await invoke("request_open_live_doc", { channelId, slug: sanitised, title: trimmedTitle });
+    await sendPluginMessage("fancy-live-doc", "OpenRequest", { channelId, slug: sanitised, title: trimmedTitle });
     console.log("[store] requestOpenLiveDoc: open dispatched, awaiting invite");
     await waitForInvite;
     console.log("[store] requestOpenLiveDoc: invite received");
@@ -2151,11 +2169,11 @@ function dispatchLiveDocInvite(p: LiveDocInviteEvent): void {
     ownColor: pickLiveDocCursorColor(ownSession),
   });
   // Tell everyone else in the channel that a doc was opened.
-  void invoke("announce_live_doc", {
+  sendPluginMessage("fancy-live-doc", "Announce", {
     channelId: p.channelId,
     slug: p.slug,
     title: p.title,
-  }).catch((e) => console.warn("announce_live_doc failed:", e));
+  }).catch((e) => console.warn("plugin-message Announce failed:", e));
   // If we initiated the open, post a persistent chat invite so users
   // who were not in the channel when the announce flew can still join.
   if (shouldPostInvite) {
@@ -2175,6 +2193,105 @@ function dispatchLiveDocAnnounce(p: LiveDocAnnounceEvent): void {
     channelId: p.channelId,
     slug: p.slug,
   });
+}
+
+// --- Generic plugin envelope helpers -------------------------------
+
+/** Raw `plugin-message` event payload emitted by the Tauri backend. */
+interface PluginMessageEvent {
+  pluginName: string;
+  pluginSlot: number | null;
+  payloadType: string;
+  payload: number[];
+  targetSessions: number[];
+  channelId: number | null;
+  senderSession: number | null;
+  senderName: string | null;
+}
+
+/** Raw `plugin-registry` event payload (server -> client after ServerSync). */
+export interface PluginRegistryEntry {
+  pluginName: string;
+  version: string;
+  pluginSlot: number | null;
+  infoJson: string | null;
+}
+interface PluginRegistryEvent {
+  plugins: PluginRegistryEntry[];
+}
+
+/** Decode a `plugin-message` byte array as a UTF-8 JSON object. */
+function decodePluginPayload<T>(bytes: number[]): T | null {
+  try {
+    return JSON.parse(new TextDecoder().decode(new Uint8Array(bytes))) as T;
+  } catch (e) {
+    console.error("[store] plugin-message payload is not valid JSON:", e);
+    return null;
+  }
+}
+
+/** Convenience wrapper around the `send_plugin_message` Tauri command.
+ *  Payloads are serialized as UTF-8 JSON. */
+export async function sendPluginMessage(
+  pluginName: string,
+  payloadType: string,
+  payload: unknown,
+  targetSessions: number[] = [],
+  channelId: number | null = null,
+): Promise<void> {
+  const bytes = Array.from(new TextEncoder().encode(JSON.stringify(payload)));
+  await invoke("send_plugin_message", {
+    pluginName,
+    payloadType,
+    payload: bytes,
+    targetSessions,
+    channelId,
+  });
+}
+
+/** Route an inbound plugin envelope to the appropriate in-store handler. */
+function dispatchPluginMessage(p: PluginMessageEvent): void {
+  if (p.pluginName === "fancy-live-doc") {
+    if (p.payloadType === "Invite") {
+      const data = decodePluginPayload<{
+        channelId: number;
+        slug: string;
+        title: string;
+        wsUrl: string;
+        token?: string | null;
+        serverId?: string | null;
+      }>(p.payload);
+      if (!data) return;
+      dispatchLiveDocInvite({
+        channelId: data.channelId,
+        slug: data.slug,
+        title: data.title,
+        wsUrl: data.wsUrl,
+        token: data.token ?? null,
+        serverId: data.serverId ?? null,
+      });
+      return;
+    }
+    if (p.payloadType === "Announce") {
+      const data = decodePluginPayload<{
+        channelId: number;
+        slug: string;
+        title: string;
+        openerSession: number;
+        openerName?: string | null;
+      }>(p.payload);
+      if (!data) return;
+      dispatchLiveDocAnnounce({
+        channelId: data.channelId,
+        slug: data.slug,
+        title: data.title,
+        openerSession: data.openerSession,
+        openerName: data.openerName ?? "",
+      });
+      return;
+    }
+  }
+  console.debug("[store] unhandled plugin-message:", p.pluginName, p.payloadType);
 }
 
 /** Deterministic palette mirror of `pickCursorColor` in ChatView.tsx. */
@@ -2894,9 +3011,6 @@ export async function initEventListeners(
       (event) => {
         const { data_id, data, sender_session } = event.payload;
         const bytes = new Uint8Array(data);
-        if (data_id.startsWith("fancy-live-doc/")) {
-          console.log("[plugin-data] received:", { data_id, sender_session, bytes: bytes.length });
-        }
 
         if (data_id === "fancy-file-server-config") {
           try {
@@ -2927,6 +3041,35 @@ export async function initEventListeners(
           } catch (e) {
             console.error("plugin-data file-server-config processing error:", e);
           }
+        }
+
+        if (data_id === "fancy-live-doc-config") {
+          try {
+            const json = new TextDecoder().decode(bytes);
+            const raw = JSON.parse(json) as { version: string; ws_base_url: string };
+            useAppStore.setState({
+              liveDocPluginConfig: { version: raw.version, wsBaseUrl: raw.ws_base_url },
+            });
+          } catch (e) {
+            console.error("plugin-data live-doc-config processing error:", e);
+          }
+        }
+
+        if (data_id === "fancy-plugin-info") {
+          (async () => {
+            try {
+              const rec = await invoke<PluginInfoRecord>("decode_plugin_info", {
+                envelope: Array.from(bytes),
+              });
+              useAppStore.setState((s) => {
+                const next = new Map(s.pluginInfos);
+                next.set(rec.name, rec);
+                return { pluginInfos: next };
+              });
+            } catch (e) {
+              console.error("plugin-data plugin-info decode error:", e);
+            }
+          })();
         }
 
         if (data_id === "fancy-server-emotes") {
@@ -2963,10 +3106,9 @@ export async function initEventListeners(
         }
 
         if (data_id === "fancy-live-doc/invite" || data_id === "fancy-live-doc/announce") {
-          // Legacy: ignored.  Live-doc invites/announces are now native
-          // protobuf messages (FancyLiveDocInvite, FancyLiveDocAnnounce)
-          // delivered as the "fancy-live-doc-invite" /
-          // "fancy-live-doc-announce" Tauri events below.
+          // Legacy: ignored.  Live-doc invites/announces now travel through
+          // the generic `PluginMessage` envelope (wire ID 200) and are
+          // delivered as `plugin-message` Tauri events below.
         }
 
         // Also dispatch to legacy registered handlers for extensibility.
@@ -2977,16 +3119,16 @@ export async function initEventListeners(
     ),
   );
 
-  // -- Native live-doc events --------------------------------------
+  // -- Generic plugin envelope dispatcher --------------------------
 
   unlisteners.push(
-    await listen<LiveDocInviteEvent>("fancy-live-doc-invite", (event) => {
-      dispatchLiveDocInvite(event.payload);
+    await listen<PluginMessageEvent>("plugin-message", (event) => {
+      dispatchPluginMessage(event.payload);
     }),
   );
   unlisteners.push(
-    await listen<LiveDocAnnounceEvent>("fancy-live-doc-announce", (event) => {
-      dispatchLiveDocAnnounce(event.payload);
+    await listen<PluginRegistryEvent>("plugin-registry", (event) => {
+      useAppStore.setState({ pluginRegistry: event.payload.plugins });
     }),
   );
 

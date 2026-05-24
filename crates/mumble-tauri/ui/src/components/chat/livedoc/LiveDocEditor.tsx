@@ -34,8 +34,14 @@ import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableCell } from "@tiptap/extension-table-cell";
+import TaskList from "@tiptap/extension-task-list";
+import TaskItem from "@tiptap/extension-task-item";
 import MathEditPopover, { type MathEditTarget } from "./MathEditPopover";
 import LiveDocTableControls from "./LiveDocTableControls";
+import LiveDocMentionPopover, {
+  mentionTriggerListeners,
+} from "./LiveDocMentionPopover";
+import { LiveDocMention, type MentionTriggerState } from "./liveDocMention";
 import styles from "./LiveDocEditor.module.css";
 
 interface LiveDocEditorProps {
@@ -103,6 +109,18 @@ export default function LiveDocEditor({
   const pageRef = useRef<HTMLDivElement | null>(null);
 
   const [mathEdit, setMathEdit] = useState<MathEditTarget | null>(null);
+  const [mentionTrigger, setMentionTrigger] = useState<MentionTriggerState | null>(null);
+
+  // Register/unregister this component's setter with the shared listener
+  // set that the mention plugin pushes updates into.  We keep a single
+  // shared set (rather than a per-editor option callback) so the same
+  // module can be code-split with the editor without circular deps.
+  useEffect(() => {
+    mentionTriggerListeners.add(setMentionTrigger);
+    return () => {
+      mentionTriggerListeners.delete(setMentionTrigger);
+    };
+  }, []);
 
   const handleMathClick = useCallback((node: PmNode, pos: number) => {
     const currentEditor = editorRef.current;
@@ -182,6 +200,16 @@ export default function LiveDocEditor({
       TableRow,
       TableHeader,
       TableCell,
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      LiveDocMention.configure({
+        onChange: (state: MentionTriggerState | null) => {
+          // Fan out to every subscribed setter; the only one in practice
+          // is this editor's own setMentionTrigger, but the indirection
+          // keeps the extension free of React.
+          for (const fn of mentionTriggerListeners) fn(state);
+        },
+      }),
       Collaboration.configure({ document: doc }),
       ...(awareness ? [makeCollaborationCursorExtension(awareness)] : []),
     ],
@@ -258,6 +286,13 @@ export default function LiveDocEditor({
           <LiveDocTableControls editor={editor} pageRef={pageRef} />
         </div>
       </div>
+      {mentionTrigger && (
+        <LiveDocMentionPopover
+          editor={editor}
+          trigger={mentionTrigger}
+          onClose={() => setMentionTrigger(null)}
+        />
+      )}
       {mathEdit && (
         <MathEditPopover
           target={mathEdit}

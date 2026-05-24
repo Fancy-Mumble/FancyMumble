@@ -123,15 +123,13 @@ fancy_message_support! {
     (0, 3, 1) FancyOnboardingResponseQuery   => ServerOnly,
     (0, 3, 1) FancyOnboardingResponseDeliver => ServerOnly,
 
-    // -- Live collaborative documents (server-processed) -- 0.3.2 ----
-    (0, 3, 2) FancyLiveDocOpen               => ServerOnly,
-    (0, 3, 2) FancyLiveDocInvite             => ServerOnly,
-    // Announce is server-relayed (validates sender, fans out to channel peers).
-    (0, 3, 2) FancyLiveDocAnnounce           => ServerOnly,
-
     // -- Polls (server-relayed within a channel) -- 0.3.2 ------------
     (0, 3, 2) FancyPoll                      => ServerOnly,
     (0, 3, 2) FancyPollVote                  => ServerOnly,
+
+    // -- Generic plugin envelope (server-routed) -- 0.4.0 ------------
+    (0, 4, 0) PluginMessage                  => ServerOnly,
+    (0, 4, 0) PluginRegistry                 => ServerOnly,
 }
 
 #[cfg(test)]

@@ -130,42 +130,29 @@ fn parse_playback_state(s: String) -> Option<mumble_tcp::fancy_watch_sync::Playb
 }
 
 impl AppState {
-    /// Send a `FancyLiveDocOpen` request: ask the server's live-doc
-    /// plugin to open (or attach to) a collaborative document in a
-    /// channel.  The server replies with `FancyLiveDocInvite`.
-    pub async fn send_fancy_live_doc_open(
+    /// Send a generic [`PluginMessage`](mumble_protocol::proto::mumble_tcp::PluginMessage)
+    /// envelope to the server.  The server routes the message to the
+    /// matching plugin selected by `plugin_name`; the payload bytes
+    /// are opaque to the protocol and protocol layer.
+    pub async fn send_plugin_message(
         &self,
-        channel_id: u32,
-        slug: String,
-        title: String,
+        plugin_name: String,
+        payload_type: String,
+        payload: Vec<u8>,
+        target_sessions: Vec<u32>,
+        channel_id: Option<u32>,
     ) -> Result<(), String> {
         let handle = self.client_handle()?;
         handle
-            .send(command::SendFancyLiveDocOpen {
+            .send(command::SendPluginMessage {
+                plugin_name,
+                payload_type,
+                payload,
+                target_sessions,
                 channel_id,
-                slug,
-                title,
             })
             .await
-            .map_err(|e| format!("Failed to send FancyLiveDocOpen: {e}"))
-    }
-
-    /// Announce a live-doc to channel peers (server-relayed).
-    pub async fn send_fancy_live_doc_announce(
-        &self,
-        channel_id: u32,
-        slug: String,
-        title: String,
-    ) -> Result<(), String> {
-        let handle = self.client_handle()?;
-        handle
-            .send(command::SendFancyLiveDocAnnounce {
-                channel_id,
-                slug,
-                title,
-            })
-            .await
-            .map_err(|e| format!("Failed to send FancyLiveDocAnnounce: {e}"))
+            .map_err(|e| format!("Failed to send PluginMessage: {e}"))
     }
 
     /// Announce a poll in a channel (server-relayed).

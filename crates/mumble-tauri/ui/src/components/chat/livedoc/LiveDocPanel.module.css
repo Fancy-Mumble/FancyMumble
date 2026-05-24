@@ -118,6 +118,8 @@
   flex: 1;
   min-height: 0;
   display: flex;
+  position: relative;
+  overflow: hidden;
 }
 
 .loading {
@@ -127,11 +129,84 @@
   width: 100%;
 }
 
-.errorMsg {
-  padding: 24px;
+.errorOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.errorOverlayContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 40px;
+  background: var(--color-surface-elevated, #262a32);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.48);
+  max-width: 420px;
+  width: 90%;
   text-align: center;
+}
+
+.errorOverlayTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
   color: var(--color-error, #f38ba8);
-  width: 100%;
+}
+
+.errorOverlayMessage {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted, #aab0b8);
+  word-break: break-word;
+}
+
+.errorOverlayActions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.errorActionBtnPrimary,
+.errorActionBtnSecondary {
+  padding: 8px 20px;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.errorActionBtnPrimary {
+  background: var(--color-accent, #2aabee);
+  color: #fff;
+  border-color: var(--color-accent, #2aabee);
+}
+
+.errorActionBtnPrimary:hover {
+  background: var(--color-accent-hover, #1a9bde);
+}
+
+.errorActionBtnSecondary {
+  background: transparent;
+  color: var(--color-text-primary, #f5f6f8);
+  border-color: var(--color-border-strong, rgba(255, 255, 255, 0.18));
+}
+
+.errorActionBtnSecondary:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
 }
 
 @media (max-width: 640px) {

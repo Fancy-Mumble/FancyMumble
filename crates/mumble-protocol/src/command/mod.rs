@@ -27,8 +27,7 @@ mod send_audio;
 mod send_ban_list;
 mod send_ping;
 mod send_plugin_data;
-mod send_fancy_live_doc_open;
-mod send_fancy_live_doc_announce;
+mod send_plugin_message;
 mod send_fancy_poll;
 mod send_fancy_poll_vote;
 mod send_text_message;
@@ -95,8 +94,7 @@ pub use send_ban_list::SendBanList;
 pub use send_ping::SendPing;
 #[allow(deprecated, reason = "re-exporting the bricked type so callers get the deprecation error")]
 pub use send_plugin_data::SendPluginData;
-pub use send_fancy_live_doc_open::SendFancyLiveDocOpen;
-pub use send_fancy_live_doc_announce::SendFancyLiveDocAnnounce;
+pub use send_plugin_message::SendPluginMessage;
 pub use send_fancy_poll::SendFancyPoll;
 pub use send_fancy_poll_vote::SendFancyPollVote;
 pub use send_text_message::SendTextMessage;
@@ -484,7 +482,7 @@ mod tests {
 
     // -- SendPluginData removed --
     // PluginDataTransmission is permanently bricked in Fancy Mumble.
-    // The replacement messages (FancyPoll, FancyPollVote, FancyLiveDoc*)
+    // The replacement messages (FancyPoll, FancyPollVote, PluginMessage)
     // each have their own typed `Send*` command and tests live next to
     // the message in transport/codec.rs.
 
