@@ -493,6 +493,9 @@ export interface UserPreferences {
    *  the local device (encrypted with AES-GCM) so the conversation
    *  history survives reconnects and app restarts.  Off by default. */
   persistDms?: boolean;
+  /** Override marketplace API base URL used in developer mode.
+   *  When absent or undefined the production URL is used. */
+  marketplaceBaseUrl?: string;
 }
 
 /** Identifiers for events that can trigger a notification sound. */

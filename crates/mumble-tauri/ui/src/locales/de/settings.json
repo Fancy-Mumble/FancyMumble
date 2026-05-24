@@ -472,7 +472,9 @@
     "bans": "Bans",
     "acl": "Kanal-ACL",
     "emotes": "Emotes",
-    "onboarding": "Onboarding"
+    "onboarding": "Onboarding",
+    "serverPlugins": "Server-Plugins",
+    "marketplace": "Marktplatz"
   },
   "registeredUsers": {
     "title": "Registrierte Nutzer",

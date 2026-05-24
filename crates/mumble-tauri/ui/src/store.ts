@@ -49,6 +49,30 @@ import { registerPoll, registerVote } from "./components/chat/poll/PollCard";
 import type { WatchSession, WatchSyncPayload } from "./components/chat/watch/watchTypes";
 import { applyWatchSyncEvent } from "./components/chat/watch/watchStore";
 import { applyReaction, resetReactions, setServerCustomReactions, type ServerCustomReaction } from "./components/chat/reaction/reactionStore";
+import {
+  applyInteractionResponse,
+  applyRegistryWithTrust,
+  applyTrustDecision,
+  applyTrustRevocation,
+  decodeInteractionResponse,
+  emptyPluginTier1Slice,
+  sendInteraction as sendInteractionInternal,
+  type PluginMessageSender,
+  type PluginTier1Slice,
+} from "./plugins/tier1/store";
+import type { InteractionKind } from "./plugins/tier1/types";
+import {
+  recordFromDecision,
+  type TrustDecision,
+  type TrustScope,
+} from "./plugins/tier1/trust";
+import { parseClientManifest } from "./plugins/tier1/manifest";
+import {
+  loadServerTrust,
+  revokeTrustRecord,
+  saveGlobalTrustRecord,
+  saveTrustRecord,
+} from "./plugins/tier1/trustStorage";
 import { applyReadStates, clearReadReceipts } from "./components/chat/readreceipt/readReceiptStore";
 import { useOnboardingStore } from "./components/onboarding/onboardingStore";
 import type { OnboardingConfigEvent, OnboardingResponseEvent } from "./types";
@@ -323,6 +347,28 @@ interface AppState {
    *  the `plugin-registry` Tauri event.  Lists every plugin the server's
    *  plugin host loaded.  Cleared on disconnect. */
   pluginRegistry: PluginRegistryEntry[];
+  /** Decoded Tier-1 client manifests keyed by plugin name.  Only
+   *  trusted plugins appear here; pending/denied plugins are
+   *  filtered out. */
+  pluginManifests: PluginTier1Slice["pluginManifests"];
+  /** Per-server trust decisions keyed by plugin name.  Loaded from
+   *  `pluginTrust.json` whenever the active server changes. */
+  pluginTrust: PluginTier1Slice["pluginTrust"];
+  /** Plugins whose manifest is pending the user's trust decision.
+   *  Drained one-at-a-time by `PluginTrustPrompt`. */
+  pluginTrustQueue: PluginTier1Slice["pluginTrustQueue"];
+  /** Settings panels declared by trusted plugins, plus live updates
+   *  pushed via `ResponseKind.UpdatePanel`. */
+  pluginPanels: PluginTier1Slice["pluginPanels"];
+  /** Currently-visible plugin-rendered message cards (buttons / select
+   *  menus attached to a plugin response). */
+  pluginCards: PluginTier1Slice["pluginCards"];
+  /** Active plugin-rendered modal dialog, or null. */
+  pluginModal: PluginTier1Slice["pluginModal"];
+  /** Pending plugin-pushed toasts. */
+  pluginToasts: PluginTier1Slice["pluginToasts"];
+  /** Plugin names allowed \"once\" for this session; cleared on disconnect. */
+  pluginSessionTrust: PluginTier1Slice["pluginSessionTrust"];
   /** Custom server emotes pushed via `fancy-server-emotes`. Cleared on disconnect. */
   customServerEmotes: CustomServerEmote[];
   /** Plugin info records broadcast by the server via `fancy-plugin-info`
@@ -746,6 +792,14 @@ const INITIAL: Pick<
   | "fileServerCapabilities"
   | "liveDocPluginConfig"
   | "pluginRegistry"
+  | "pluginManifests"
+  | "pluginTrust"
+  | "pluginTrustQueue"
+  | "pluginPanels"
+  | "pluginCards"
+  | "pluginModal"
+  | "pluginToasts"
+  | "pluginSessionTrust"
   | "customServerEmotes"
   | "pluginInfos"
   | "downloads"
@@ -823,6 +877,14 @@ const INITIAL: Pick<
   fileServerCapabilities: null,
   liveDocPluginConfig: null,
   pluginRegistry: [],
+  pluginManifests: emptyPluginTier1Slice.pluginManifests,
+  pluginTrust: emptyPluginTier1Slice.pluginTrust,
+  pluginTrustQueue: emptyPluginTier1Slice.pluginTrustQueue,
+  pluginPanels: emptyPluginTier1Slice.pluginPanels,
+  pluginCards: emptyPluginTier1Slice.pluginCards,
+  pluginModal: emptyPluginTier1Slice.pluginModal,
+  pluginToasts: emptyPluginTier1Slice.pluginToasts,
+  pluginSessionTrust: emptyPluginTier1Slice.pluginSessionTrust,
   customServerEmotes: [],
   pluginInfos: new Map(),
   downloads: [],
@@ -2291,7 +2353,202 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
       return;
     }
   }
+  const response = decodeInteractionResponse(p.payloadType, p.payload);
+  if (response) {
+    useAppStore.setState((s) => {
+      // Trust gate: drop responses from untrusted plugins on the
+      // floor.  The plugin is allowed to send (server-side has no way
+      // to know the user's local trust state) - we just refuse to
+      // render.  Plugins with no manifest at all (legacy) bypass the
+      // gate so live-doc / file-server still work.
+      if (s.pluginRegistry.some((e) => e.pluginName === p.pluginName)
+        && !s.pluginManifests.has(p.pluginName)
+        && [...s.pluginTrust.keys()].includes(p.pluginName) === false
+      ) {
+        // Pending trust or denied: ignore.
+        return {};
+      }
+      const next = applyInteractionResponse(
+        sliceFromState(s),
+        p.pluginName,
+        response,
+        p.channelId,
+      );
+      return slicePatch(next);
+    });
+    return;
+  }
   console.debug("[store] unhandled plugin-message:", p.pluginName, p.payloadType);
+}
+
+function sliceFromState(s: AppState): PluginTier1Slice {
+  return {
+    pluginManifests: s.pluginManifests,
+    pluginTrust: s.pluginTrust,
+    pluginTrustQueue: s.pluginTrustQueue,
+    pluginPanels: s.pluginPanels,
+    pluginCards: s.pluginCards,
+    pluginModal: s.pluginModal,
+    pluginToasts: s.pluginToasts,
+    pluginSessionTrust: s.pluginSessionTrust,
+  };
+}
+
+function slicePatch(slice: PluginTier1Slice): Partial<AppState> {
+  return {
+    pluginManifests: slice.pluginManifests,
+    pluginTrust: slice.pluginTrust,
+    pluginTrustQueue: slice.pluginTrustQueue,
+    pluginPanels: slice.pluginPanels,
+    pluginCards: slice.pluginCards,
+    pluginModal: slice.pluginModal,
+    pluginToasts: slice.pluginToasts,
+    pluginSessionTrust: slice.pluginSessionTrust,
+  };
+}
+
+/** Reconcile a fresh `plugin-registry` event against stored trust
+ *  records and update the slice in one shot.  Pulls the active server
+ *  id off the store at call time so the listener does not need to
+ *  thread it through. */
+async function reconcilePluginRegistry(
+  entries: readonly PluginRegistryEntry[],
+): Promise<void> {
+  const state = useAppStore.getState();
+  const serverId = state.activeServerId;
+  const storedTrust = new Map(
+    Object.entries(await loadServerTrust(serverId)),
+  );
+  // Overlay in-memory session grants so session-allowed plugins do not
+  // re-prompt when the server re-broadcasts the registry.
+  const effectiveTrust = new Map(storedTrust);
+  for (const name of state.pluginSessionTrust) {
+    const sessionRecord = state.pluginTrust.get(name);
+    if (sessionRecord) effectiveTrust.set(name, sessionRecord);
+  }
+  const { pluginManifests, pluginPanels, pluginTrustQueue } =
+    applyRegistryWithTrust(serverId, entries, effectiveTrust);
+  useAppStore.setState((s) => {
+    // Preserve any panel rows the plugin patched in via UpdatePanel
+    // between manifest broadcasts.  The freshly-seeded rows are only
+    // honoured for panels that did not previously exist.
+    const mergedPanels = new Map(pluginPanels);
+    for (const [k, existing] of s.pluginPanels) {
+      if (mergedPanels.has(k)) mergedPanels.set(k, existing);
+    }
+    return {
+      pluginRegistry: entries.slice(),
+      pluginManifests,
+      pluginPanels: mergedPanels,
+      pluginTrust: effectiveTrust,
+      pluginTrustQueue,
+    };
+  });
+}
+
+/** Resolve the front-of-queue trust prompt.  Persists the decision
+ *  to `pluginTrust.json` (unless scope is "once") and rolls the
+ *  in-memory slice forward. */
+export async function resolvePluginTrust(
+  pluginName: string,
+  decision: TrustDecision,
+  scope: TrustScope = "server",
+): Promise<void> {
+  const state = useAppStore.getState();
+  const pending = state.pluginTrustQueue.find(
+    (p) => p.pluginName === pluginName,
+  );
+  if (!pending) return;
+  const record = recordFromDecision(decision, pending.version, pending.manifest, scope);
+  if (decision === "allow" && scope === "global") {
+    await saveGlobalTrustRecord(pluginName, record);
+  } else if (scope !== "once") {
+    await saveTrustRecord(state.activeServerId, pluginName, record);
+  }
+  useAppStore.setState((s) => {
+    const next = applyTrustDecision(
+      sliceFromState(s),
+      pluginName,
+      record,
+      pending.manifest,
+    );
+    const nextSessionTrust =
+      decision === "allow" && scope === "once"
+        ? new Set([...s.pluginSessionTrust, pluginName])
+        : s.pluginSessionTrust;
+    return { ...slicePatch(next), pluginSessionTrust: nextSessionTrust };
+  });
+}
+
+/** Drop the stored trust record for a plugin so the next registry
+ *  refresh re-prompts.  Used by the Plugins settings tab. */
+export async function revokePluginTrust(pluginName: string): Promise<void> {
+  const state = useAppStore.getState();
+  await revokeTrustRecord(state.activeServerId, pluginName);
+  useAppStore.setState((s) => {
+    const next = applyTrustRevocation(sliceFromState(s), pluginName);
+    return slicePatch(next);
+  });
+}
+
+/** Allow a plugin that was previously denied or whose trust was revoked,
+ *  without requiring it to be in the trust-prompt queue.  Looks up the
+ *  plugin from the registry, parses its manifest, and persists the
+ *  decision according to the given scope. */
+export async function allowPlugin(
+  pluginName: string,
+  scope: TrustScope = "server",
+): Promise<void> {
+  const state = useAppStore.getState();
+  const entry = state.pluginRegistry.find((e) => e.pluginName === pluginName);
+  if (!entry) return;
+  const manifest = parseClientManifest(entry.infoJson);
+  if (!manifest) return;
+  const record = recordFromDecision("allow", entry.version, manifest, scope);
+  if (scope === "global") {
+    await saveGlobalTrustRecord(pluginName, record);
+  } else if (scope !== "once") {
+    await saveTrustRecord(state.activeServerId, pluginName, record);
+  }
+  useAppStore.setState((s) => {
+    const next = applyTrustDecision(sliceFromState(s), pluginName, record, manifest);
+    const nextSessionTrust =
+      scope === "once"
+        ? new Set([...s.pluginSessionTrust, pluginName])
+        : s.pluginSessionTrust;
+    return { ...slicePatch(next), pluginSessionTrust: nextSessionTrust };
+  });
+}
+
+/** Send a Tier-1 `Interaction` to a plugin and return the correlation id
+ *  so callers can await the matching response in `pluginCards`. */
+export function sendPluginInteraction(
+  pluginName: string,
+  kind: InteractionKind,
+  channelId: number | null = null,
+): Promise<string> {
+  const sender: PluginMessageSender = (name, type, payload, targets, ch) =>
+    sendPluginMessage(name, type, payload, targets ?? [], ch ?? null);
+  return sendInteractionInternal(sender, pluginName, kind, channelId);
+}
+
+/** Dismiss a plugin-rendered card by `messageId`. */
+export function dismissPluginCard(messageId: string): void {
+  useAppStore.setState((s) => ({
+    pluginCards: s.pluginCards.filter((c) => c.messageId !== messageId),
+  }));
+}
+
+/** Dismiss the active plugin modal without submitting. */
+export function dismissPluginModal(): void {
+  useAppStore.setState({ pluginModal: null });
+}
+
+/** Remove a finished toast from the queue. */
+export function dismissPluginToast(id: string): void {
+  useAppStore.setState((s) => ({
+    pluginToasts: s.pluginToasts.filter((t) => t.id !== id),
+  }));
 }
 
 /** Deterministic palette mirror of `pickCursorColor` in ChatView.tsx. */
@@ -3128,7 +3385,7 @@ export async function initEventListeners(
   );
   unlisteners.push(
     await listen<PluginRegistryEvent>("plugin-registry", (event) => {
-      useAppStore.setState({ pluginRegistry: event.payload.plugins });
+      void reconcilePluginRegistry(event.payload.plugins);
     }),
   );
 

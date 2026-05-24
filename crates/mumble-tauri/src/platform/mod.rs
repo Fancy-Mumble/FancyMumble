@@ -10,6 +10,8 @@
 pub(crate) mod badge;
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "windows")]
+mod windows;
 #[cfg(target_os = "android")]
 pub(crate) mod android;
 #[cfg(not(target_os = "android"))]
@@ -78,14 +80,32 @@ impl PlatformHooks for LinuxPlatform {
     }
 }
 
-// ----- No-op default (Windows, macOS, Android, …) ---------------------------
+// ----- Windows --------------------------------------------------------------
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
 #[derive(Debug)]
-/// No-op platform hooks for non-Linux targets.
+/// Windows platform hooks.
+pub struct WindowsPlatform;
+
+#[cfg(target_os = "windows")]
+impl PlatformHooks for WindowsPlatform {
+    fn try_single_instance() -> bool {
+        windows::try_forward_deep_link()
+    }
+
+    fn setup(handle: tauri::AppHandle) {
+        windows::start_deep_link_listener(handle);
+    }
+}
+
+// ----- No-op default (macOS, Android, …) ------------------------------------
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+#[derive(Debug)]
+/// No-op platform hooks for non-Linux, non-Windows targets.
 pub struct NoPlatform;
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 impl PlatformHooks for NoPlatform {}
 
 // ----- Active platform -------------------------------------------------------
@@ -93,7 +113,10 @@ impl PlatformHooks for NoPlatform {}
 #[cfg(target_os = "linux")]
 type Active = LinuxPlatform;
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
+type Active = WindowsPlatform;
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 type Active = NoPlatform;
 
 // ----- Free-function wrappers ------------------------------------------------

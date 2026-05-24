@@ -205,7 +205,7 @@ export function BioEditor({
   // Sync external `value` prop into the editor when it diverges
   // (e.g. on initial load from persisted data).
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     const current = editor.getHTML();
     const normCurrent = current === "<p></p>" ? "" : current;
     if (normCurrent !== value) {

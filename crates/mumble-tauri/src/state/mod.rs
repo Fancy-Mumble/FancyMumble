@@ -31,6 +31,7 @@ pub(crate) mod hash_names;
 pub(crate) mod local_cache;
 mod messaging;
 mod onboarding;
+mod plugin_admin;
 pub mod offload;
 mod offload_ops;
 pub(crate) mod pchat;

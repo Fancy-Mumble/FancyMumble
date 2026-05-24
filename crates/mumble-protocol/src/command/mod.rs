@@ -54,6 +54,7 @@ mod send_draw_stroke;
 mod send_watch_sync;
 mod send_fancy_onboarding_config_update;
 mod send_fancy_onboarding_response;
+mod send_fancy_plugin_admin;
 mod request_fancy_onboarding_response;
 mod request_link_preview;
 mod set_channel_state;
@@ -121,6 +122,10 @@ pub use send_draw_stroke::SendDrawStroke;
 pub use send_watch_sync::SendWatchSync;
 pub use send_fancy_onboarding_config_update::SendFancyOnboardingConfigUpdate;
 pub use send_fancy_onboarding_response::SendFancyOnboardingResponse;
+pub use send_fancy_plugin_admin::{
+    RequestFancyPluginAdminList, SendFancyPluginAdminInstall,
+    SendFancyPluginAdminSetEnabled, SendFancyPluginAdminUninstall,
+};
 pub use request_fancy_onboarding_response::RequestFancyOnboardingResponse;
 pub use request_link_preview::RequestLinkPreview;
 pub use set_channel_state::SetChannelState;

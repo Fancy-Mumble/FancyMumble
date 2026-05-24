@@ -1,4 +1,5 @@
 import { ChevronRightIcon, CloseIcon, RefreshCwIcon, ServerIcon } from "../../icons";
+import { OfficialBadge, isOfficialPlugin } from "../elements/OfficialBadge";
 /**
  * Right-side panel showing server connection details.
  *
@@ -25,7 +26,7 @@ import { useTranslation } from "react-i18next";
 import styles from "./ServerInfoPanel.module.css";
 
 function Accordion({ title, defaultOpen = false, children }: Readonly<{
-  title: string;
+  title: ReactNode;
   defaultOpen?: boolean;
   children: ReactNode;
 }>) {
@@ -389,7 +390,15 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
             <section className={styles.section}>
               <h3 className={styles.sectionTitle}>{t("infoPanel.sectionPlugins")}</h3>
               {[...pluginInfos.values()].map((plugin) => (
-                <Accordion key={plugin.name} title={`${plugin.name} v${plugin.version}`}>
+                <Accordion
+                  key={plugin.name}
+                  title={
+                    <span className={styles.pluginAccordionTitle}>
+                      {`${plugin.name} v${plugin.version}`}
+                      {isOfficialPlugin(plugin.name) && <OfficialBadge />}
+                    </span>
+                  }
+                >
                   <PluginInfoCard plugin={plugin} />
                 </Accordion>
               ))}

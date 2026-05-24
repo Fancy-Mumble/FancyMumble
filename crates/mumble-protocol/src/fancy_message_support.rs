@@ -130,6 +130,14 @@ fancy_message_support! {
     // -- Generic plugin envelope (server-routed) -- 0.4.0 ------------
     (0, 4, 0) PluginMessage                  => ServerOnly,
     (0, 4, 0) PluginRegistry                 => ServerOnly,
+
+    // -- Plugin admin / marketplace (server-processed) -- 0.5.0 ------
+    (0, 4, 0) FancyPluginAdminListRequest    => ServerOnly,
+    (0, 4, 0) FancyPluginAdminList           => ServerOnly,
+    (0, 4, 0) FancyPluginAdminSetEnabled     => ServerOnly,
+    (0, 4, 0) FancyPluginAdminInstall        => ServerOnly,
+    (0, 4, 0) FancyPluginAdminUninstall      => ServerOnly,
+    (0, 4, 0) FancyPluginAdminAck            => ServerOnly,
 }
 
 #[cfg(test)]

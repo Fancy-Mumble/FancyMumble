@@ -151,9 +151,21 @@ pub enum TcpMessageType {
     FancyPoll = 144,
     /// Fancy Mumble: client casts a vote on a poll (server-relayed to channel).
     FancyPollVote = 145,
+    /// Fancy Mumble: admin requests the server plugin inventory.
+    FancyPluginAdminListRequest = 146,
+    /// Fancy Mumble: server replies with the plugin inventory snapshot.
+    FancyPluginAdminList = 147,
+    /// Fancy Mumble: admin toggles a plugin enabled / disabled.
+    FancyPluginAdminSetEnabled = 148,
+    /// Fancy Mumble: admin installs a plugin from the marketplace.
+    FancyPluginAdminInstall = 149,
+    /// Fancy Mumble: admin removes a plugin from disk.
+    FancyPluginAdminUninstall = 150,
+    /// Fancy Mumble: server status reply for an admin plugin action.
+    FancyPluginAdminAck = 151,
     /// Fancy Mumble: generic plugin envelope (bidirectional).
     PluginMessage = 200,
-    /// Fancy Mumble: server enumerates loaded plugins after ServerSync.
+    /// Fancy Mumble: server enumerates loaded plugins after `ServerSync`.
     PluginRegistry = 201,
 }
 
@@ -332,6 +344,18 @@ pub enum ControlMessage {
     FancyPoll(mumble_tcp::FancyPoll),
     /// Fancy: client casts a vote on a poll.
     FancyPollVote(mumble_tcp::FancyPollVote),
+    /// Fancy: admin requests the server plugin inventory.
+    FancyPluginAdminListRequest(mumble_tcp::FancyPluginAdminListRequest),
+    /// Fancy: server replies with the plugin inventory snapshot.
+    FancyPluginAdminList(mumble_tcp::FancyPluginAdminList),
+    /// Fancy: admin toggles a plugin enabled / disabled.
+    FancyPluginAdminSetEnabled(mumble_tcp::FancyPluginAdminSetEnabled),
+    /// Fancy: admin installs a plugin from the marketplace.
+    FancyPluginAdminInstall(mumble_tcp::FancyPluginAdminInstall),
+    /// Fancy: admin removes a plugin from disk.
+    FancyPluginAdminUninstall(mumble_tcp::FancyPluginAdminUninstall),
+    /// Fancy: server status reply for an admin plugin action.
+    FancyPluginAdminAck(mumble_tcp::FancyPluginAdminAck),
     /// Fancy: generic plugin envelope (bidirectional).
     PluginMessage(mumble_tcp::PluginMessage),
     /// Fancy: server enumerates loaded plugins.
@@ -368,6 +392,9 @@ message_type_mapping! {
     FancyOnboardingResponse, FancyOnboardingResponseQuery,
     FancyOnboardingResponseDeliver,
     FancyPoll, FancyPollVote,
+    FancyPluginAdminListRequest, FancyPluginAdminList,
+    FancyPluginAdminSetEnabled, FancyPluginAdminInstall,
+    FancyPluginAdminUninstall, FancyPluginAdminAck,
     PluginMessage, PluginRegistry,
 }
 

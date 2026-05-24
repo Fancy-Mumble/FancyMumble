@@ -472,7 +472,9 @@
     "bans": "Liste de bans",
     "acl": "ACL canaux",
     "emotes": "Émotes",
-    "onboarding": "Onboarding"
+    "onboarding": "Onboarding",
+    "serverPlugins": "Plugins du serveur",
+    "marketplace": "Marché"
   },
   "registeredUsers": {
     "title": "Utilisateurs enregistrés",

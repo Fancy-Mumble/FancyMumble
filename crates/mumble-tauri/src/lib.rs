@@ -56,6 +56,7 @@ pub fn run() {
         .setup(move |app| {
             init_app_state(app);
             platform::setup(app.handle().clone());
+            setup_deep_link_handler(app.handle().clone());
             #[cfg(not(target_os = "android"))]
             if let Err(e) = platform::desktop::tray::setup_tray(app) {
                 tracing::warn!("Failed to create system tray icon: {e}");
@@ -243,12 +244,47 @@ fn hydrate_persisted_prefs(app: &tauri::AppHandle, state: &AppState) {
     }
 }
 
+/// Forward incoming `fancy://` URLs to the frontend as a
+/// `deep-link-open` event.  The frontend parses the URL and routes
+/// accordingly (e.g. `fancy://marketplace/plugin/<id>` opens the
+/// plugin detail page in the marketplace).  Also focuses the main
+/// window so the user sees the result.
+fn setup_deep_link_handler(handle: tauri::AppHandle) {
+    use tauri::Manager;
+    use tauri_plugin_deep_link::DeepLinkExt;
+
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    match handle.deep_link().register("fancy") {
+        Ok(()) => tracing::info!("deep-link: registered fancy:// scheme"),
+        Err(e) => tracing::warn!("deep-link: failed to register fancy:// scheme: {e}"),
+    }
+
+    let dispatch_handle = handle.clone();
+    let _registration = handle.deep_link().on_open_url(move |event| {
+        let urls: Vec<String> = event.urls().iter().map(ToString::to_string).collect();
+        if urls.is_empty() {
+            return;
+        }
+        tracing::info!("deep-link: received {} url(s): {:?}", urls.len(), urls);
+        if let Some(win) = dispatch_handle.get_webview_window("main") {
+            let _ = win.show();
+            let _ = win.unminimize();
+            let _ = win.set_focus();
+        }
+        use tauri::Emitter;
+        for url in urls {
+            let _ = dispatch_handle.emit("deep-link-open", url);
+        }
+    });
+}
+
 fn create_base_builder() -> tauri::Builder<tauri::Wry> {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_dialog::init());
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_deep_link::init());
 
     #[cfg(target_os = "android")]
     let builder = builder.plugin(
@@ -444,6 +480,12 @@ macro_rules! all_command_handlers {
             commands::onboarding::save_onboarding_config,
             commands::onboarding::submit_onboarding_response,
             commands::onboarding::request_onboarding_response,
+            commands::plugin_admin::request_server_plugins,
+            commands::plugin_admin::set_server_plugin_enabled,
+            commands::plugin_admin::install_server_plugin,
+            commands::plugin_admin::uninstall_server_plugin,
+            commands::plugin_admin::fetch_marketplace_index,
+            commands::plugin_admin::fetch_marketplace_plugin,
             commands::keyshare::confirm_custodians,
             commands::keyshare::accept_custodian_changes,
             commands::keyshare::approve_key_share,

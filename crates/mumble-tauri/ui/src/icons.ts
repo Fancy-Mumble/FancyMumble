@@ -116,4 +116,9 @@ export {
   History as HistoryIcon,
   Share2 as ShareIcon,
   Printer as PrinterIcon,
+  Globe as GlobeIcon,
+  Puzzle as PuzzleIcon,
+  Store as StoreIcon,
+  Download as DownloadIcon,
+  Power as PowerIcon,
 } from "lucide-react";

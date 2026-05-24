@@ -5,7 +5,7 @@
 //! frontend as opaque Tauri events.  The Tauri backend is intentionally
 //! agnostic to individual plugin schemas: payload bytes are forwarded
 //! verbatim and the frontend chooses how to decode them (typically JSON
-//! for FancyMumble plugins).
+//! for `FancyMumble` plugins).
 
 use mumble_protocol::proto::mumble_tcp;
 use serde::Serialize;

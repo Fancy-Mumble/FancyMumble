@@ -477,7 +477,9 @@
     "bans": "Ban List",
     "acl": "Channel ACL",
     "emotes": "Emotes",
-    "onboarding": "Onboarding"
+    "onboarding": "Onboarding",
+    "serverPlugins": "Server Plugins",
+    "marketplace": "Marketplace"
   },
   "registeredUsers": {
     "title": "Registered Users",
@@ -760,5 +762,39 @@
       "defaultChannelsEmpty": "You'll start with the full channel list. Answer the next questions to narrow it down.",
       "defaultChannelsTitle": "You'll start in these channels"
     }
+  },
+  "serverPlugins": {
+    "title": "Server Plugins",
+    "refresh": "Refresh",
+    "pluginsDir": "Plugins directory",
+    "empty": "No plugins installed on the server.",
+    "loading": "Loading plugins...",
+    "loadTimeout": "No response from server. The server may not support the plugin admin API.",
+    "unsupported": "This feature requires Fancy Mumble server version 0.4.0 or later.",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "enable": "Enable plugin",
+    "disable": "Disable plugin",
+    "uninstall": "Uninstall plugin",
+    "marketplaceBadge": "Marketplace",
+    "staleBadge": "Restart pending",
+    "confirmUninstall": "Uninstall plugin \"{{name}}\"? This removes it from the server.",
+    "unknownError": "Unknown error"
+  },
+  "marketplace": {
+    "title": "Plugin Marketplace",
+    "searchPlaceholder": "Search marketplace...",
+    "refresh": "Refresh",
+    "empty": "No plugins match your search.",
+    "loading": "Loading marketplace...",
+    "install": "Install",
+    "installing": "Installing...",
+    "official": "Official",
+    "byAuthor": "by {{author}}",
+    "downloadsCount": "{{count}} downloads",
+    "installFailed": "Install failed",
+    "installSuccess": "Installed {{name}}",
+    "missingManifestUrl": "Plugin is missing a manifest URL.",
+    "installUnsupported": "Installing plugins requires Fancy Mumble server version 0.4.0 or later."
   }
 }

@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAppStore } from "../../store";
 import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
+import { PaletteIcon, LockIcon, UsersGroupIcon } from "../../icons";
 import type { AclGroup, RegisteredUser } from "../../types";
 import { useChannelAcl } from "./useChannelAcl";
 import { rootChannelId } from "./rootChannel";
@@ -38,9 +39,9 @@ export default function RoleEditorPage() {
   const role: AclGroup | null = roleIdx === -1 ? null : (acl?.groups[roleIdx] ?? null);
 
   const subTabs: TabDef<SubTab>[] = [
-    { id: "display", label: t("roleEditor.tabDisplay"), icon: "\uD83C\uDFA8" },
-    { id: "permissions", label: t("roleEditor.tabPermissions"), icon: "\uD83D\uDD12" },
-    { id: "members", label: t("roleEditor.tabMembers"), icon: "\uD83D\uDC65" },
+    { id: "display",     label: t("roleEditor.tabDisplay"),      icon: <PaletteIcon    width={16} height={16} /> },
+    { id: "permissions", label: t("roleEditor.tabPermissions"),   icon: <LockIcon       width={16} height={16} /> },
+    { id: "members",     label: t("roleEditor.tabMembers"),       icon: <UsersGroupIcon width={16} height={16} /> },
   ];
 
   const patchRole = (patch: Partial<AclGroup>) => {

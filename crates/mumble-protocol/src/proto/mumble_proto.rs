@@ -2505,6 +2505,185 @@ pub struct FancyPollVote {
     #[prost(string, optional, tag = "5")]
     pub voter_name: ::core::option::Option<::prost::alloc::string::String>,
 }
+/// Wire type ID = 146.
+/// Admin -> Server: request the current plugin inventory.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyPluginAdminListRequest {}
+/// One entry in FancyPluginAdminList.  Mirrors what the host knows about
+/// a single plugin binary on disk: name, version, enabled state, and
+/// optional metadata JSON (same shape as PluginRegistryEntry.info_json).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyPluginAdminEntry {
+    #[prost(string, required, tag = "1")]
+    pub plugin_name: ::prost::alloc::string::String,
+    #[prost(string, required, tag = "2")]
+    pub version: ::prost::alloc::string::String,
+    /// True when the plugin's on_load() has been invoked and it is part of
+    /// the active dispatch tables.  False when it is present on disk but
+    /// gated off via plugin.<name>.enabled=false.
+    #[prost(bool, required, tag = "3")]
+    pub enabled: bool,
+    /// True when the binary is currently in memory (typically implied by
+    /// enabled=true, but kept distinct so the UI can surface stale loads
+    /// after a failed unload).
+    #[prost(bool, optional, tag = "4")]
+    pub loaded: ::core::option::Option<bool>,
+    /// Absolute path on the server's filesystem.  Useful for the admin to
+    /// confirm where the plugin came from (installed by the marketplace
+    /// vs. dropped in manually).
+    #[prost(string, optional, tag = "5")]
+    pub path: ::core::option::Option<::prost::alloc::string::String>,
+    /// info_json() output (the same JSON the runtime broadcasts to clients
+    /// via PluginRegistryEntry).  May be empty if the plugin failed to
+    /// load.
+    #[prost(string, optional, tag = "6")]
+    pub info_json: ::core::option::Option<::prost::alloc::string::String>,
+    /// Set to the marketplace ID (e.g. "fancy-greeter") when the plugin
+    /// was installed via FancyPluginAdminInstall.  Allows the UI to show
+    /// an "installed from marketplace" badge and offer one-click uninstall.
+    #[prost(string, optional, tag = "7")]
+    pub marketplace_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Wall-clock millis when the plugin was last installed/upgraded by
+    /// the marketplace flow.  Zero / unset for manually-dropped binaries.
+    #[prost(uint64, optional, tag = "8")]
+    pub installed_at: ::core::option::Option<u64>,
+    /// True for plugins that ship with the server distribution (not
+    /// user-installed).  These cannot be removed via the admin UI.
+    #[prost(bool, optional, tag = "9")]
+    pub builtin: ::core::option::Option<bool>,
+}
+/// Wire type ID = 147.
+/// Server -> Admin: snapshot of every plugin the host knows about.
+/// Also broadcast on its own to every authenticated admin whenever the
+/// plugin set changes (install, uninstall, hot-toggle).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FancyPluginAdminList {
+    #[prost(message, repeated, tag = "1")]
+    pub plugins: ::prost::alloc::vec::Vec<FancyPluginAdminEntry>,
+    /// Absolute path of the directory the server scans for plugins. The
+    /// admin UI surfaces this so operators know where their files live.
+    #[prost(string, optional, tag = "2")]
+    pub plugins_dir: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Wire type ID = 148.
+/// Admin -> Server: enable or disable a plugin by name.
+/// On success the server rewrites plugin.<plugin_name>.enabled in
+/// mumble-server.ini and, when supported, hot-loads or hot-unloads the
+/// binary without requiring a restart.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyPluginAdminSetEnabled {
+    #[prost(string, required, tag = "1")]
+    pub plugin_name: ::prost::alloc::string::String,
+    #[prost(bool, required, tag = "2")]
+    pub enabled: bool,
+}
+/// Wire type ID = 149.
+/// Admin -> Server: install (or upgrade) a plugin from the marketplace.
+/// The server downloads the manifest from manifest_url, validates its
+/// digest against expected_sha256, downloads the platform-matching
+/// artifact, extracts it into plugins_dir, then loads it.  The new
+/// plugin starts disabled; the admin must follow up with
+/// FancyPluginAdminSetEnabled to activate it.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyPluginAdminInstall {
+    /// Stable marketplace ID (e.g. "fancy-greeter").
+    #[prost(string, required, tag = "1")]
+    pub marketplace_id: ::prost::alloc::string::String,
+    /// Specific version to install (e.g. "0.1.4").  Empty selects latest.
+    #[prost(string, optional, tag = "2")]
+    pub version: ::core::option::Option<::prost::alloc::string::String>,
+    /// Fully-qualified URL of the marketplace manifest document.  The
+    /// server fetches this URL directly, validates the JSON, and downloads
+    /// the artifact it points to.  Required so the server does not need
+    /// out-of-band knowledge of the marketplace base URL.
+    #[prost(string, required, tag = "3")]
+    pub manifest_url: ::prost::alloc::string::String,
+    /// Expected SHA-256 of the manifest JSON, hex-encoded.  Optional but
+    /// strongly recommended: the client computes this before sending so
+    /// the server can confirm both endpoints are looking at the same
+    /// marketplace document.  Empty disables the check.
+    #[prost(string, optional, tag = "4")]
+    pub expected_sha256: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Wire type ID = 150.
+/// Admin -> Server: remove a plugin from disk and unload it from memory.
+/// Also strips every plugin.<plugin_name>.* key from mumble-server.ini.
+/// Refuses to remove plugins the server considers core (file-server,
+/// live-doc, etc.).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyPluginAdminUninstall {
+    #[prost(string, required, tag = "1")]
+    pub plugin_name: ::prost::alloc::string::String,
+}
+/// Wire type ID = 151.
+/// Server -> Admin: status reply for the last admin action.  Always
+/// carries the request_id of the action being acknowledged so the UI
+/// can correlate responses with in-flight buttons.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyPluginAdminAck {
+    /// Echo of FancyPluginAdminInstall/SetEnabled/Uninstall.plugin_name (or
+    /// marketplace_id for installs).  Empty for ListRequest acks.
+    #[prost(string, optional, tag = "1")]
+    pub plugin_name: ::core::option::Option<::prost::alloc::string::String>,
+    /// True when the action completed successfully.  False on any error.
+    #[prost(bool, required, tag = "2")]
+    pub ok: bool,
+    /// Free-form English error description.  Empty on success.
+    #[prost(string, optional, tag = "3")]
+    pub error: ::core::option::Option<::prost::alloc::string::String>,
+    /// Optional opaque correlation id the client may attach to the
+    /// request to match async replies.
+    #[prost(string, optional, tag = "4")]
+    pub request_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Distinguishes which admin verb this ack belongs to.
+    #[prost(enumeration = "fancy_plugin_admin_ack::Verb", optional, tag = "5")]
+    pub verb: ::core::option::Option<i32>,
+}
+/// Nested message and enum types in `FancyPluginAdminAck`.
+pub mod fancy_plugin_admin_ack {
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration
+    )]
+    #[repr(i32)]
+    pub enum Verb {
+        List = 0,
+        SetEnabled = 1,
+        Install = 2,
+        Uninstall = 3,
+    }
+    impl Verb {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::List => "LIST",
+                Self::SetEnabled => "SET_ENABLED",
+                Self::Install => "INSTALL",
+                Self::Uninstall => "UNINSTALL",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "LIST" => Some(Self::List),
+                "SET_ENABLED" => Some(Self::SetEnabled),
+                "INSTALL" => Some(Self::Install),
+                "UNINSTALL" => Some(Self::Uninstall),
+                _ => None,
+            }
+        }
+    }
+}
 /// Unified pchat protocol indicator.
 /// Each value identifies both the E2EE protocol implementation
 /// and the persistence behaviour for a channel.
