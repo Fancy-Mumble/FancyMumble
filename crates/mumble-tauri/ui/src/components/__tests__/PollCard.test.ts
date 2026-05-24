@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Unit tests for PollCard module-level stores and helpers.
  *
  * These test the poll registration, vote tracking, and local vote
@@ -13,8 +13,8 @@ import {
   getVotes,
   registerLocalVote,
   getLocalVote,
-} from "../chat/PollCard";
-import type { PollPayload, PollVotePayload } from "../chat/PollCreator";
+} from "../chat/poll/PollCard";
+import type { PollPayload, PollVotePayload } from "../chat/poll/PollCreator";
 
 // --- Helpers ------------------------------------------------------
 

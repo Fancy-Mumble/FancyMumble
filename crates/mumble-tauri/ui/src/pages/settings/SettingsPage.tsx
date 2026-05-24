@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
@@ -7,7 +7,7 @@ import { load } from "@tauri-apps/plugin-store";
 import type { AudioDevice, AudioSettings, FancyProfile, UserMode, TimeFormat, DateFormat, NumberFormat } from "../../types";
 import { getPreferences, updatePreferences, getSavedAudioSettings, saveAudioSettings } from "../../preferencesStorage";
 import { serializeProfile, dataUrlToBytes } from "../../profileFormat";
-import { setKlipyApiKey } from "../../components/chat/GifPicker";
+import { setKlipyApiKey } from "../../components/chat/gif/GifPicker";
 import { setKlipyApiKey as setKlipyApiKeyBanner } from "./KlipyGifBrowser";
 import { useAppStore } from "../../store";
 import {
@@ -79,15 +79,15 @@ const PERSONALIZATION_DEFAULTS: PersonalizationData = {
 
 function buildTabs(t: (key: string) => string): TabDef<Tab>[] {
   return [
-    { id: "profile", label: t("tabs.profile"), icon: "👤" },
-    { id: "voice", label: t("tabs.voice"), icon: "🎙️" },
-    { id: "shortcuts", label: t("tabs.shortcuts"), icon: "⌨️" },
-    { id: "identities", label: t("tabs.identities"), icon: "🔑" },
-    { id: "notifications", label: t("tabs.notifications"), icon: "🔔" },
-    { id: "privacy", label: t("tabs.privacy"), icon: "🔒" },
-    { id: "personalize", label: t("tabs.personalize"), icon: "🎨" },
-    { id: "localization", label: t("tabs.localization"), icon: "🌐" },
-    { id: "advanced", label: t("tabs.advanced"), icon: "⚙️" },
+    { id: "profile", label: t("tabs.profile"), icon: "??" },
+    { id: "voice", label: t("tabs.voice"), icon: "???" },
+    { id: "shortcuts", label: t("tabs.shortcuts"), icon: "??" },
+    { id: "identities", label: t("tabs.identities"), icon: "??" },
+    { id: "notifications", label: t("tabs.notifications"), icon: "??" },
+    { id: "privacy", label: t("tabs.privacy"), icon: "??" },
+    { id: "personalize", label: t("tabs.personalize"), icon: "??" },
+    { id: "localization", label: t("tabs.localization"), icon: "??" },
+    { id: "advanced", label: t("tabs.advanced"), icon: "??" },
   ];
 }
 

@@ -2387,6 +2387,108 @@ pub struct FancyOnboardingResponseDeliver {
     #[prost(message, optional, tag = "1")]
     pub response: ::core::option::Option<FancyOnboardingResponse>,
 }
+/// Client -> Server: request opening (or re-attaching to) a live-doc room.
+/// The server's live-doc plugin replies with FancyLiveDocInvite when the
+/// room is ready.
+/// Wire type ID = 141.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyLiveDocOpen {
+    /// Channel the document belongs to.  Used for permission checks.
+    #[prost(uint32, optional, tag = "1")]
+    pub channel_id: ::core::option::Option<u32>,
+    /// URL-safe slug identifying the document inside the channel.
+    #[prost(string, optional, tag = "2")]
+    pub slug: ::core::option::Option<::prost::alloc::string::String>,
+    /// Human-readable title.  Truncated server-side to a sane length.
+    #[prost(string, optional, tag = "3")]
+    pub title: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Server -> Client: deliver the WebSocket invite for a live-doc room.
+/// Sent in response to FancyLiveDocOpen.
+/// Wire type ID = 142.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyLiveDocInvite {
+    /// Opaque server identifier (used for client-side caching).
+    #[prost(string, optional, tag = "1")]
+    pub server_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(uint32, optional, tag = "2")]
+    pub channel_id: ::core::option::Option<u32>,
+    #[prost(string, optional, tag = "3")]
+    pub slug: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "4")]
+    pub title: ::core::option::Option<::prost::alloc::string::String>,
+    /// WebSocket endpoint the client should connect to (ws:// or wss://).
+    #[prost(string, optional, tag = "5")]
+    pub ws_url: ::core::option::Option<::prost::alloc::string::String>,
+    /// Short-lived JWT the client passes to the WebSocket as a query param.
+    #[prost(string, optional, tag = "6")]
+    pub token: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Client -> Server -> Channel: announce that a live-doc has been opened
+/// so other channel members see a banner / quick-join button.  Server
+/// relays to every other Fancy client currently in the channel.
+/// Wire type ID = 143.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyLiveDocAnnounce {
+    #[prost(uint32, optional, tag = "1")]
+    pub channel_id: ::core::option::Option<u32>,
+    #[prost(string, optional, tag = "2")]
+    pub slug: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "3")]
+    pub title: ::core::option::Option<::prost::alloc::string::String>,
+    /// Session ID of the user that opened the document (set by server on
+    /// relay; ignored when sent from the client).
+    #[prost(uint32, optional, tag = "4")]
+    pub opener_session: ::core::option::Option<u32>,
+    /// Best-effort display name of the opener.
+    #[prost(string, optional, tag = "5")]
+    pub opener_name: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Client -> Server -> Channel: announce a new poll in a channel.
+/// Wire type ID = 144.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyPoll {
+    #[prost(uint32, optional, tag = "1")]
+    pub channel_id: ::core::option::Option<u32>,
+    /// UUID v4 chosen by the originating client.
+    #[prost(string, optional, tag = "2")]
+    pub poll_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "3")]
+    pub question: ::core::option::Option<::prost::alloc::string::String>,
+    /// Answer options, presented in the order received.
+    #[prost(string, repeated, tag = "4")]
+    pub options: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// True if voters may select multiple options.
+    #[prost(bool, optional, tag = "5")]
+    pub multiple: ::core::option::Option<bool>,
+    /// Session ID of the creator (set by server on relay).
+    #[prost(uint32, optional, tag = "6")]
+    pub creator_session: ::core::option::Option<u32>,
+    /// Best-effort display name of the creator.
+    #[prost(string, optional, tag = "7")]
+    pub creator_name: ::core::option::Option<::prost::alloc::string::String>,
+    /// ISO-8601 timestamp the client created the poll at.
+    #[prost(string, optional, tag = "8")]
+    pub created_at: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Client -> Server -> Channel: cast a vote on an existing poll.
+/// Wire type ID = 145.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyPollVote {
+    #[prost(uint32, optional, tag = "1")]
+    pub channel_id: ::core::option::Option<u32>,
+    #[prost(string, optional, tag = "2")]
+    pub poll_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Zero-based indices into the poll's option list.
+    #[prost(uint32, repeated, tag = "3")]
+    pub selected: ::prost::alloc::vec::Vec<u32>,
+    /// Session ID of the voter (set by server on relay).
+    #[prost(uint32, optional, tag = "4")]
+    pub voter_session: ::core::option::Option<u32>,
+    /// Best-effort display name of the voter.
+    #[prost(string, optional, tag = "5")]
+    pub voter_name: ::core::option::Option<::prost::alloc::string::String>,
+}
 /// Unified pchat protocol indicator.
 /// Each value identifies both the E2EE protocol implementation
 /// and the persistence behaviour for a channel.

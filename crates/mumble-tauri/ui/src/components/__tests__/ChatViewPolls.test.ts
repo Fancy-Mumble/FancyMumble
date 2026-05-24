@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Unit tests for poll-related logic in ChatView.
  *
  * These test the pure-logic aspects of poll handling:
@@ -10,9 +10,9 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type { PollPayload, PollVotePayload } from "../chat/PollCreator";
+import type { PollPayload, PollVotePayload } from "../chat/poll/PollCreator";
 import type { ChatMessage } from "../../types";
-import { registerPoll, getPoll } from "../chat/PollCard";
+import { registerPoll, getPoll } from "../chat/poll/PollCard";
 
 // --- Helpers ------------------------------------------------------
 

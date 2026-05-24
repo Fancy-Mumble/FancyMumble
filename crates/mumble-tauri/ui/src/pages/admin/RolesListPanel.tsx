@@ -1,9 +1,9 @@
-﻿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAppStore } from "../../store";
 import type { AclGroup } from "../../types";
-import { RoleChip } from "../../components/elements/RoleChip";
+import { RoleChip } from "../../components/elements/role/RoleChip";
 import { useChannelAcl } from "./useChannelAcl";
 import { rootChannelId } from "./rootChannel";
 import styles from "./AdminPanel.module.css";

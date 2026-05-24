@@ -13,7 +13,7 @@ import {
   resetReactions,
   setServerCustomReactions,
   getServerCustomReactions,
-} from "../chat/reactionStore";
+} from "../chat/reaction/reactionStore";
 
 // -- Tests ---------------------------------------------------------
 

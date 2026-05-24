@@ -1580,3 +1580,96 @@ message FancyOnboardingResponseQuery {
 message FancyOnboardingResponseDeliver {
 	optional FancyOnboardingResponse response = 1;
 }
+// ---------------------------------------------------------------------------
+// Live collaborative documents (Fancy Mumble extension, IDs 141-143)
+// ---------------------------------------------------------------------------
+//
+// Replaces the legacy PluginDataTransmission carriage for live-doc
+// signalling.  PluginDataTransmission is forbidden in Fancy Mumble; all
+// new client-to-server / server-to-client traffic MUST use a native
+// protobuf message with a stable wire type ID instead.
+
+// Client -> Server: request opening (or re-attaching to) a live-doc room.
+// The server's live-doc plugin replies with FancyLiveDocInvite when the
+// room is ready.
+// Wire type ID = 141.
+message FancyLiveDocOpen {
+// Channel the document belongs to.  Used for permission checks.
+optional uint32 channel_id = 1;
+// URL-safe slug identifying the document inside the channel.
+optional string slug = 2;
+// Human-readable title.  Truncated server-side to a sane length.
+optional string title = 3;
+}
+
+// Server -> Client: deliver the WebSocket invite for a live-doc room.
+// Sent in response to FancyLiveDocOpen.
+// Wire type ID = 142.
+message FancyLiveDocInvite {
+// Opaque server identifier (used for client-side caching).
+optional string server_id = 1;
+optional uint32 channel_id = 2;
+optional string slug = 3;
+optional string title = 4;
+// WebSocket endpoint the client should connect to (ws:// or wss://).
+optional string ws_url = 5;
+// Short-lived JWT the client passes to the WebSocket as a query param.
+optional string token = 6;
+}
+
+// Client -> Server -> Channel: announce that a live-doc has been opened
+// so other channel members see a banner / quick-join button.  Server
+// relays to every other Fancy client currently in the channel.
+// Wire type ID = 143.
+message FancyLiveDocAnnounce {
+optional uint32 channel_id = 1;
+optional string slug = 2;
+optional string title = 3;
+// Session ID of the user that opened the document (set by server on
+// relay; ignored when sent from the client).
+optional uint32 opener_session = 4;
+// Best-effort display name of the opener.
+optional string opener_name = 5;
+}
+
+// ---------------------------------------------------------------------------
+// Polls (Fancy Mumble extension, IDs 144-145)
+// ---------------------------------------------------------------------------
+//
+// Native replacement for the legacy "fancy-poll" / "fancy-poll-vote"
+// PluginDataTransmission payloads.  The server validates the message and
+// re-broadcasts it to every Fancy client in the same channel (similar to
+// FancyTypingIndicator).  Cross-channel poll delivery is not supported.
+
+// Client -> Server -> Channel: announce a new poll in a channel.
+// Wire type ID = 144.
+message FancyPoll {
+optional uint32 channel_id = 1;
+// UUID v4 chosen by the originating client.
+optional string poll_id = 2;
+optional string question = 3;
+// Answer options, presented in the order received.
+repeated string options = 4;
+// True if voters may select multiple options.
+optional bool multiple = 5;
+// Session ID of the creator (set by server on relay).
+optional uint32 creator_session = 6;
+// Best-effort display name of the creator.
+optional string creator_name = 7;
+// ISO-8601 timestamp the client created the poll at.
+optional string created_at = 8;
+}
+
+// Client -> Server -> Channel: cast a vote on an existing poll.
+// Wire type ID = 145.
+message FancyPollVote {
+optional uint32 channel_id = 1;
+optional string poll_id = 2;
+// Zero-based indices into the poll's option list.
+repeated uint32 selected = 3 [packed = true];
+// Session ID of the voter (set by server on relay).
+optional uint32 voter_session = 4;
+// Best-effort display name of the voter.
+optional string voter_name = 5;
+}
+// ---------------------------------------------------------------------------

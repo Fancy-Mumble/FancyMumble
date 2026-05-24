@@ -38,7 +38,7 @@ import {
   UserListItem,
   buildRoleColorMap,
   buildRoleGroupsMap,
-} from "../components/sidebar/UserListItem";
+} from "../components/sidebar/user/UserListItem";
 import ChatView from "../components/chat/ChatView";
 import {
   FRIENDS_CHANGED_EVENT,
@@ -49,7 +49,7 @@ import {
   updateFriendAvatar,
 } from "../friendsStorage";
 import { textureToDataUrl } from "../profileFormat";
-import sidebarStyles from "../components/sidebar/ChannelSidebar.module.css";
+import sidebarStyles from "../components/sidebar/channel/ChannelSidebar.module.css";
 import styles from "./FriendsPage.module.css";
 
 interface FriendsMatch {

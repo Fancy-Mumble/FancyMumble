@@ -20,7 +20,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import DrawingOverlay from "../components/chat/DrawingOverlay";
+import DrawingOverlay from "../components/chat/drawing/DrawingOverlay";
 import styles from "./DrawOverlayPage.module.css";
 
 interface DrawOverlayContext {

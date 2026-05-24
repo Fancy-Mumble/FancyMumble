@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import type { PendingAttachment } from "./PendingAttachmentsStrip";
+import type { PendingAttachment } from "./pending/PendingAttachmentsStrip";
 
 const IMAGE_EXTS = new Set([
   "png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "svg", "ico",

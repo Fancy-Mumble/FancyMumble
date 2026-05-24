@@ -64,6 +64,36 @@ impl FileAccessMode {
     }
 }
 
+/// Request payload for [`AppState::upload_bytes`].
+///
+/// Identical to [`UploadRequest`] but carries the file content as an
+/// in-memory UTF-8 string instead of a local file path.  Used by the live-doc
+/// export flow where the markdown content lives entirely in memory and there
+/// is no disk file to reference.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadBytesRequest {
+    /// Base URL advertised by the file-server config (no trailing slash).
+    pub base_url: String,
+    /// Caller's Mumble session id.
+    pub session: u32,
+    /// Per-session upload token from the file-server config.
+    pub upload_token: String,
+    /// Channel id the upload is associated with.
+    pub channel_id: u32,
+    /// File name to advertise to the server.
+    pub filename: String,
+    /// MIME type of the content (e.g. `"text/markdown"`).
+    pub mime_type: String,
+    /// File content as a UTF-8 string.
+    pub content: String,
+    /// Access mode for the resulting file.
+    pub mode: FileAccessMode,
+    /// Required when `mode == Password`.
+    #[serde(default)]
+    pub password: Option<String>,
+}
+
 /// Request payload for [`AppState::upload_file`].
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -369,6 +399,49 @@ impl AppState {
                 let _ = map.remove(&req.upload_id);
             }
         }
+
+        if !resp.status().is_success() {
+            return Err(format!("upload failed: {}", read_error_body(resp).await));
+        }
+        resp.json::<UploadResponse>()
+            .await
+            .map_err(|e| format!("upload response parse: {e}"))
+    }
+
+    /// Upload in-memory UTF-8 content to the file-server plugin and return
+    /// the signed download URL.  Equivalent to [`AppState::upload_file`] but
+    /// accepts a string rather than a local file path, avoiding CORS
+    /// restrictions that would block a direct browser `fetch()` call.
+    pub async fn upload_bytes(&self, req: UploadBytesRequest) -> Result<UploadResponse, String> {
+        if matches!(req.mode, FileAccessMode::Password) && req.password.is_none() {
+            return Err("mode=password requires `password`".to_owned());
+        }
+
+        let body_bytes = req.content.into_bytes();
+        let part = Part::bytes(body_bytes)
+            .file_name(req.filename.clone())
+            .mime_str(&req.mime_type)
+            .unwrap_or_else(|_| Part::text("invalid mime"));
+        let mut form = Form::new()
+            .part("file", part)
+            .text("channel_id", req.channel_id.to_string())
+            .text("mode", req.mode.as_str().to_owned());
+        if let Some(pw) = req.password {
+            form = form.text("password", pw);
+        }
+
+        let endpoint = format!("{}/files", req.base_url.trim_end_matches('/'));
+        let resp = self
+            .http_client
+            .post(endpoint)
+            .query(&[
+                ("session", req.session.to_string()),
+                ("token", req.upload_token),
+            ])
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| format!("upload request failed: {e}"))?;
 
         if !resp.status().is_success() {
             return Err(format!("upload failed: {}", read_error_body(resp).await));

@@ -3,7 +3,7 @@ import { Routes, Route, useNavigate, Navigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { initEventListeners, useAppStore } from "./store";
 import { getPreferences, getSavedAudioSettings, isFirstRun, getNotificationSounds } from "./preferencesStorage";
-import { setKlipyApiKey } from "./components/chat/GifPicker";
+import { setKlipyApiKey } from "./components/chat/gif/GifPicker";
 import { setKlipyApiKey as setKlipyApiKeyBanner } from "./pages/settings/KlipyGifBrowser";
 import { loadShortcuts, applyAllGlobalShortcuts } from "./pages/settings/shortcutHelpers";
 import {

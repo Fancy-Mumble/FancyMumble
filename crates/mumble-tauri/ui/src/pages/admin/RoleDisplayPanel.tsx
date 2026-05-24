@@ -1,9 +1,9 @@
-﻿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AclGroup } from "../../types";
-import { RoleColorPicker } from "../../components/elements/RoleColorPicker";
-import { RoleIconPicker } from "../../components/elements/RoleIconPicker";
-import { RolePreviewCard } from "../../components/elements/RolePreviewCard";
+import { RoleColorPicker } from "../../components/elements/role/RoleColorPicker";
+import { RoleIconPicker } from "../../components/elements/role/RoleIconPicker";
+import { RolePreviewCard } from "../../components/elements/role/RolePreviewCard";
 import styles from "./AdminPanel.module.css";
 
 export interface RoleDisplayPanelProps {

@@ -1,9 +1,9 @@
-import { AttachIcon, CloseIcon, EditIcon, FileIcon, GifIcon, ImageIcon, SendIcon } from "../../icons";
+import { AttachIcon, CloseIcon, EditIcon, FileIcon, FileTextIcon, GifIcon, ImageIcon, SendIcon } from "../../icons";
 import { useState, useRef, useCallback, useMemo, useEffect, type ClipboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import MarkdownInput, { type MarkdownInputApi } from "./MarkdownInput";
-import GifPicker from "./GifPicker";
-import MentionAutocomplete, { type MentionCandidate, handleMentionKey } from "./MentionAutocomplete";
+import MarkdownInput, { type MarkdownInputApi } from "./markdown/MarkdownInput";
+import GifPicker from "./gif/GifPicker";
+import MentionAutocomplete, { type MentionCandidate, handleMentionKey } from "./mention/MentionAutocomplete";
 import styles from "./ChatView.module.css";
 import { isMobile } from "../../utils/platform";
 import { useAppStore } from "../../store";
@@ -21,6 +21,9 @@ interface ChatComposerProps {
   /** Open the native file picker and upload via the file-server plugin.
    *  When omitted, the file-server attach button is hidden. */
   readonly onAttachFile?: () => Promise<void> | void;
+  /** Open a Live Doc for the current channel.  When omitted, the menu
+   *  item is hidden. */
+  readonly onOpenLiveDoc?: () => Promise<void> | void;
   readonly disabled?: boolean;
   readonly hasPendingQuotes?: boolean;
   readonly isEditing?: boolean;
@@ -50,6 +53,7 @@ export default function ChatComposer({
   onFileSelected,
   onGifSelect,
   onAttachFile,
+  onOpenLiveDoc,
   disabled = false,
   hasPendingQuotes = false,
   isEditing = false,
@@ -149,20 +153,15 @@ export default function ChatComposer({
     return () => document.removeEventListener("mousedown", handler);
   }, [showAttachMenu]);
 
+  const hasMenu = Boolean(onAttachFile) || Boolean(onOpenLiveDoc);
+
   const handleAttachBtnClick = useCallback(() => {
-    if (!onAttachFile) {
+    if (!hasMenu) {
       fileInputRef.current?.click();
       return;
     }
-    if (showAttachMenu) {
-      // Second click on the button when the menu is already open: go
-      // straight to the file picker without requiring a menu item click.
-      setShowAttachMenu(false);
-      void onAttachFile();
-    } else {
-      setShowAttachMenu(true);
-    }
-  }, [onAttachFile, showAttachMenu]);
+    setShowAttachMenu((open) => !open);
+  }, [hasMenu]);
 
   const handlePickImage = useCallback(() => {
     setShowAttachMenu(false);
@@ -173,6 +172,11 @@ export default function ChatComposer({
     setShowAttachMenu(false);
     void onAttachFile?.();
   }, [onAttachFile]);
+
+  const handlePickLiveDoc = useCallback(() => {
+    setShowAttachMenu(false);
+    void onOpenLiveDoc?.();
+  }, [onOpenLiveDoc]);
 
   const handleFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -287,10 +291,24 @@ export default function ChatComposer({
                 <ImageIcon width={15} height={15} />
                 {t("composer.attachMenuImage")}
               </button>
-              <button type="button" className={styles.attachMenuItem} role="menuitem" onClick={handlePickFile}>
-                <FileIcon width={15} height={15} />
-                {t("composer.attachMenuFile")}
-              </button>
+              {onAttachFile && (
+                <button type="button" className={styles.attachMenuItem} role="menuitem" onClick={handlePickFile}>
+                  <FileIcon width={15} height={15} />
+                  {t("composer.attachMenuFile")}
+                </button>
+              )}
+              {onOpenLiveDoc && (
+                <button
+                  type="button"
+                  className={styles.attachMenuItem}
+                  role="menuitem"
+                  onClick={handlePickLiveDoc}
+                  title={t("composer.attachMenuLiveDocHint")}
+                >
+                  <FileTextIcon width={15} height={15} />
+                  {t("composer.attachMenuLiveDoc")}
+                </button>
+              )}
             </div>
           )}
         </div>

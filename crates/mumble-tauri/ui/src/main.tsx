@@ -9,6 +9,7 @@ import { applyTheme, DEFAULT_THEME } from "./themes";
 import { applyFont } from "./utils/fonts";
 import "./i18n";
 import "./global.css";
+import "katex/dist/katex.min.css";
 
 if (isMobile) {
   document.documentElement.style.setProperty("--titlebar-height", "0px");

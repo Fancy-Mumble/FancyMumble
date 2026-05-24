@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { RoleChip } from "../elements/RoleChip";
+import { RoleChip } from "../elements/role/RoleChip";
 
 describe("RoleChip", () => {
   it("renders the role name", () => {

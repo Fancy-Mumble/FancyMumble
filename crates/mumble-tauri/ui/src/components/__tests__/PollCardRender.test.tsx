@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Unit tests for PollCard React component rendering.
  *
  * Uses @testing-library/react to verify the component renders
@@ -7,8 +7,8 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import PollCard, { registerVote, registerLocalVote } from "../chat/PollCard";
-import type { PollPayload } from "../chat/PollCreator";
+import PollCard, { registerVote, registerLocalVote } from "../chat/poll/PollCard";
+import type { PollPayload } from "../chat/poll/PollCreator";
 
 // --- Helpers ------------------------------------------------------
 
@@ -92,15 +92,13 @@ describe("PollCard voting", () => {
   it("shows radio indicators for single-choice polls", () => {
     const poll = makePoll({ multiple: false, id: "radio-test" });
     render(<PollCard poll={poll} ownSession={10} onVote={vi.fn()} />);
-    // Single-choice shows radio markers (O)
-    expect(screen.getAllByText("○")).toHaveLength(3);
+    expect(screen.getAllByText("\u25CB")).toHaveLength(3);
   });
 
   it("shows checkbox indicators for multiple-choice polls", () => {
     const poll = makePoll({ multiple: true, id: "check-test" });
     render(<PollCard poll={poll} ownSession={10} onVote={vi.fn()} />);
-    // Multiple choice shows checkboxes ([_])
-    expect(screen.getAllByText("☐")).toHaveLength(3);
+    expect(screen.getAllByText("\u2610")).toHaveLength(3);
   });
 });
 

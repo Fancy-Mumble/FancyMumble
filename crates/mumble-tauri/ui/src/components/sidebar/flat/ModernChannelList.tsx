@@ -16,11 +16,11 @@ import { ChevronRightIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MicOffS
 import { useState, useMemo, useCallback, useContext, useRef, useLayoutEffect, memo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChannelEntry, UserEntry } from "../../../types";
-import { colorFor, useHoverCardPosition, UserHoverCardPortal, RoleColorsContext } from "../UserListItem";
+import { colorFor, useHoverCardPosition, UserHoverCardPortal, RoleColorsContext } from "../user/UserListItem";
 import { useUserAvatar } from "../../../lazyBlobs";
 import { parseComment } from "../../../profileFormat";
 import { useUserStats } from "../../../hooks/useUserStats";
-import { useStreamThumbnail } from "../../chat/useStreamPreview";
+import { useStreamThumbnail } from "../../chat/stream/useStreamPreview";
 import SwipeableCard from "../../elements/SwipeableCard";
 import { isMobile } from "../../../utils/platform";
 import { PERM_MOVE, PERM_ENTER } from "../../../utils/permissions";
@@ -30,7 +30,7 @@ import { PchatBadge } from "../PchatBadge";
 import {
   ChannelReorderWrapper,
   useChannelReorderHandler,
-} from "../channelReorder";
+} from "../channel/channelReorder";
 import styles from "./ModernChannelList.module.css";
 
 const MAX_STACKED = 3;

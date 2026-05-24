@@ -15,14 +15,14 @@ import {
   DEFAULT_SHORTCUTS,
   loadShortcuts,
 } from "./settings/shortcutHelpers";
-import ChannelSidebar from "../components/sidebar/ChannelSidebar";
+import ChannelSidebar from "../components/sidebar/channel/ChannelSidebar";
 import ChatView from "../components/chat/ChatView";
 import PasswordDialog from "../components/server/PasswordDialog";
 import { SuperSearch } from "../components/layout/SuperSearch";
 import styles from "./ChatPage.module.css";
 
 const ServerInfoPanel = lazy(() => import("../components/server/ServerInfoPanel"));
-const ChannelInfoPanel = lazy(() => import("../components/sidebar/ChannelInfoPanel"));
+const ChannelInfoPanel = lazy(() => import("../components/sidebar/channel/ChannelInfoPanel"));
 const UserProfileView = lazy(() => import("../components/user/UserProfileView"));
 const MobileProfileSheet = lazy(() => import("../components/user/MobileProfileSheet"));
 const MobileBottomSheet = lazy(() => import("../components/elements/MobileBottomSheet"));

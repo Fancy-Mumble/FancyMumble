@@ -1,4 +1,4 @@
-﻿import { SearchIcon } from "../../icons";
+import { SearchIcon } from "../../icons";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
@@ -7,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 import type { AclData, AclGroup, RegisteredUser, RegisteredUserUpdate } from "../../types";
 import { formatRelativeDate } from "../../utils/format";
 import KebabMenu, { type KebabMenuItem } from "../../components/elements/KebabMenu";
-import { RoleChip } from "../../components/elements/RoleChip";
+import { RoleChip } from "../../components/elements/role/RoleChip";
 import { useAppStore } from "../../store";
 import { rootChannelId } from "./rootChannel";
 import { UserRoleManagerDialog } from "./UserRoleManagerDialog";

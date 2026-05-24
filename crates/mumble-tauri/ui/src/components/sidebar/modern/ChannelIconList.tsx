@@ -13,11 +13,11 @@ import { HashIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MicOffSmallIcon
 
 import { useState, useMemo, useCallback, useContext, useRef, useLayoutEffect, memo } from "react";
 import type { ChannelEntry, UserEntry } from "../../../types";
-import { colorFor, useHoverCardPosition, UserHoverCardPortal, RoleColorsContext } from "../UserListItem";
+import { colorFor, useHoverCardPosition, UserHoverCardPortal, RoleColorsContext } from "../user/UserListItem";
 import { useUserAvatar, useChannelDescription } from "../../../lazyBlobs";
 import { parseComment } from "../../../profileFormat";
 import { useUserStats } from "../../../hooks/useUserStats";
-import { useStreamThumbnail } from "../../chat/useStreamPreview";
+import { useStreamThumbnail } from "../../chat/stream/useStreamPreview";
 import SwipeableCard from "../../elements/SwipeableCard";
 import { isMobile } from "../../../utils/platform";
 import { useUserDrag, useChannelDropTarget } from "../../../utils/userMoveDnd";
@@ -27,7 +27,7 @@ import { PchatBadge } from "../PchatBadge";
 import {
   ChannelReorderWrapper,
   useChannelReorderHandler,
-} from "../channelReorder";
+} from "../channel/channelReorder";
 import styles from "./ChannelIconList.module.css";
 
 /** Extract the src of the first <img> tag in an HTML string. */

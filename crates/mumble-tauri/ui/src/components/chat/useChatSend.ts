@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "../../store";
 import type { AclData, AclGroup, ChatMessage } from "../../types";
 import type { ToastData } from "../elements/Toast";
-import { markdownToHtml } from "./MarkdownInput";
+import { markdownToHtml } from "./markdown/MarkdownInput";
 import { mediaKind, fileToDataUrl, fitImage, fitVideo, mediaToHtml } from "../../utils/media";
 import { applyMentionsToHtml, type MentionResolver } from "../../utils/mentions";
 import { rootChannelId } from "../../pages/admin/rootChannel";

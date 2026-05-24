@@ -2,55 +2,59 @@ import { ChevronDownIcon } from "../../icons";
 import React, { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-import { useAppStore } from "../../store";
+import { useAppStore, liveDocKey } from "../../store";
 import type { ChatMessage, TimeFormat } from "../../types";
 import { getPreferences } from "../../preferencesStorage";
 import { loadPersonalization, type PersonalizationData } from "../../personalizationStorage";
 import ChatHeader from "./ChatHeader";
 import type { BroadcastInfo } from "./ChatHeader";
-import MobileCallControls from "./MobileCallControls";
-const PinnedMessagesPanel = lazy(() => import("./PinnedMessagesPanel"));
-const DownloadsPanel = lazy(() => import("./DownloadsPanel"));
-import UploadProgressItem, { type UploadPlaceholder } from "./UploadProgressItem";
-import PendingMessageItem from "./PendingMessageItem";
+import MobileCallControls from "./mobile/MobileCallControls";
+const PinnedMessagesPanel = lazy(() => import("./pinned/PinnedMessagesPanel"));
+const DownloadsPanel = lazy(() => import("./download/DownloadsPanel"));
+import UploadProgressItem, { type UploadPlaceholder } from "./upload/UploadProgressItem";
+import PendingMessageItem from "./pending/PendingMessageItem";
 import ChatComposer from "./ChatComposer";
-import { usePolls } from "./usePolls";
-import { useReactions } from "./useReactions";
-const MessageContextMenu = lazy(() => import("./MessageContextMenu"));
-const MobileMessageActionSheet = lazy(() => import("./MobileMessageActionSheet"));
-import MessageSelectionBar from "./MessageSelectionBar";
+import { usePolls } from "./poll/usePolls";
+import { useReactions } from "./reaction/useReactions";
+const MessageContextMenu = lazy(() => import("./message/MessageContextMenu"));
+const MobileMessageActionSheet = lazy(() => import("./mobile/MobileMessageActionSheet"));
+import MessageSelectionBar from "./message/MessageSelectionBar";
 import ConfirmDialog from "../elements/ConfirmDialog";
 import Toast from "../elements/Toast";
-import type { FileShareChoice } from "./FileShareDialog";
-const FileShareDialog = lazy(() => import("./FileShareDialog"));
-import { encodeFileAttachmentMarker, decodeFileAttachmentPayload, previewKindForFilename, FANCY_FILE_MARKER_RE, type FileAttachmentInfo } from "./FileAttachmentCard";
+import type { FileShareChoice } from "./file/FileShareDialog";
+const FileShareDialog = lazy(() => import("./file/FileShareDialog"));
+import { encodeFileAttachmentMarker, decodeFileAttachmentPayload, previewKindForFilename, FANCY_FILE_MARKER_RE, type FileAttachmentInfo } from "./file/FileAttachmentCard";
 import { usePersistentChat } from "../security/PersistentChatOverlays";
 import { BannerStack } from "../security/InfoBanner";
 import { useUserAvatars } from "../../lazyBlobs";
 import ChatMessageList from "./ChatMessageList";
-import QuotePreviewStrip from "./QuotePreviewStrip";
-import PendingAttachmentsStrip from "./PendingAttachmentsStrip";
+import QuotePreviewStrip from "./quote/QuotePreviewStrip";
+import PendingAttachmentsStrip from "./pending/PendingAttachmentsStrip";
 import { useDragDropAttachments } from "./useDragDropAttachments";
-import MentionPopover from "./MentionPopover";
+import MentionPopover from "./mention/MentionPopover";
 import { useChatSend } from "./useChatSend";
 import { useChatScroll } from "./useChatScroll";
-import { useMessageSelection } from "./useMessageSelection";
-import { useReadReceipts } from "./useReadReceipts";
-import { useTypingIndicator } from "./useTypingIndicator";
-import TypingIndicator from "./TypingIndicator";
+import { useMessageSelection } from "./message/useMessageSelection";
+import { useReadReceipts } from "./readreceipt/useReadReceipts";
+import { useTypingIndicator } from "./typing/useTypingIndicator";
+import TypingIndicator from "./typing/TypingIndicator";
 import { isMobile } from "../../utils/platform";
-import { htmlToMarkdown } from "./MarkdownInput";
+import { htmlToMarkdown } from "./markdown/MarkdownInput";
 import type { MessageScope } from "../../messageOffload";
-import { useScreenShare } from "./useScreenShare";
-import ScreenShareViewer, { BroadcastBanner, WebRtcErrorBanner } from "./ScreenShareViewer";
+import { useScreenShare } from "./stream/useScreenShare";
+import ScreenShareViewer, { BroadcastBanner, WebRtcErrorBanner } from "./stream/ScreenShareViewer";
+const LiveDocPanel = lazy(() => import("./livedoc/LiveDocPanel"));
+const LiveDocLaunchDialog = lazy(() => import("./livedoc/LiveDocLaunchDialog"));
+import LiveDocBanner from "./livedoc/LiveDocBanner";
+import type { LiveDocLaunchChoice } from "./livedoc/LiveDocLaunchDialog";
 import ActiveWatchBanner from "./watch/ActiveWatchBanner";
 import styles from "./ChatView.module.css";
 import { Lightbox, type LightboxHandle } from "../elements/Lightbox";
 
-const PollCreator = lazy(() => import("./PollCreator"));
+const PollCreator = lazy(() => import("./poll/PollCreator"));
 const EmojiPicker = lazy(() => import("../elements/EmojiPicker"));
-const StreamFocusView = lazy(() => import("./StreamFocusView"));
-const MultiStreamGrid = lazy(() => import("./MultiStreamGrid"));
+const StreamFocusView = lazy(() => import("./stream/StreamFocusView"));
+const MultiStreamGrid = lazy(() => import("./stream/MultiStreamGrid"));
 
 /**
  * Minimum Fancy Mumble server version required for screen sharing.
@@ -58,6 +62,7 @@ const MultiStreamGrid = lazy(() => import("./MultiStreamGrid"));
  * 0.2.12 = (0 << 48) | (2 << 32) | (12 << 16)
  */
 const SCREEN_SHARE_MIN_VERSION = 2 * 2 ** 32 + 12 * 2 ** 16;
+
 
 interface ChatViewProps {
   readonly onChannelInfoToggle?: () => void;
@@ -425,6 +430,70 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   const [uploadPlaceholders, setUploadPlaceholders] = useState<UploadPlaceholder[]>([]);
 
 
+  const activeLiveDocs = useAppStore((s) => s.activeLiveDocs);
+  const pendingLiveDocAnnounces = useAppStore((s) => s.pendingLiveDocAnnounces);
+  const requestOpenLiveDoc = useAppStore((s) => s.requestOpenLiveDoc);
+  const clearLiveDocAnnounce = useAppStore((s) => s.clearLiveDocAnnounce);
+
+  const liveDocLookupKey =
+    selectedChannel != null ? liveDocKey(activeServerId, selectedChannel) : null;
+  const activeLiveDoc = liveDocLookupKey != null ? activeLiveDocs.get(liveDocLookupKey) : undefined;
+  const pendingLiveDocAnnounce =
+    liveDocLookupKey != null ? pendingLiveDocAnnounces.get(liveDocLookupKey) : undefined;
+
+  const [showLiveDocLaunch, setShowLiveDocLaunch] = useState(false);
+  const [liveDocCompactChat, setLiveDocCompactChat] = useState(false);
+  // Reset compact-chat toggle whenever the live doc closes or the channel changes.
+  useEffect(() => {
+    if (!activeLiveDoc) setLiveDocCompactChat(false);
+  }, [activeLiveDoc]);
+  const toggleLiveDocCompactChat = useCallback(() => {
+    setLiveDocCompactChat((v) => !v);
+  }, []);
+
+  const handleOpenLiveDoc = useCallback(() => {
+    if (selectedChannel === null) return;
+    setShowLiveDocLaunch(true);
+  }, [selectedChannel]);
+
+  const handleLiveDocLaunchSubmit = useCallback(
+    async (choice: LiveDocLaunchChoice) => {
+      console.log("[ChatView] handleLiveDocLaunchSubmit:", { selectedChannel, choice });
+      if (selectedChannel === null) {
+        console.warn("[ChatView] live-doc submit aborted: no channel selected");
+        showToast({ message: "Cannot open document: no channel selected.", variant: "error" });
+        setShowLiveDocLaunch(false);
+        return;
+      }
+      setShowLiveDocLaunch(false);
+      if (choice.seedMarkdown) {
+        useAppStore.getState().setPendingLiveDocSeed(selectedChannel, choice.seedMarkdown);
+      }
+      try {
+        await requestOpenLiveDoc(selectedChannel, choice.title, choice.title);
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e);
+        console.error("[ChatView] requestOpenLiveDoc threw:", e);
+        showToast({ message: `Failed to open document: ${detail}`, variant: "error" });
+      }
+    },
+    [selectedChannel, requestOpenLiveDoc, showToast],
+  );
+
+  const handleJoinLiveDoc = useCallback(async () => {
+    if (!pendingLiveDocAnnounce) return;
+    await requestOpenLiveDoc(
+      pendingLiveDocAnnounce.channelId,
+      pendingLiveDocAnnounce.slug,
+      pendingLiveDocAnnounce.title,
+      { silent: true },
+    );
+    clearLiveDocAnnounce(
+      pendingLiveDocAnnounce.channelId,
+      pendingLiveDocAnnounce.appServerId,
+    );
+  }, [pendingLiveDocAnnounce, requestOpenLiveDoc, clearLiveDocAnnounce]);
+
   const handleAttachFile = useCallback(async () => {
     if (selectedChannel === null) return;
     if (!fileServerConfig) {
@@ -697,7 +766,11 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   }
 
   return (
-    <main className={`${styles.main} ${activeScreenShare ? styles.streamingLayout : ""}`}>
+    <main className={[
+      styles.main,
+      activeScreenShare || liveDocCompactChat ? styles.compactChat : "",
+      activeLiveDoc && !liveDocCompactChat ? styles.hiddenChat : "",
+    ].join(" ")}>
       {!inPopout && (
         selectionMode ? (
           <MessageSelectionBar
@@ -761,6 +834,22 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       )}
 
       <MobileCallControls />
+
+      {/* Live Doc panel - replaces chat top half similar to screen share. */}
+      {activeLiveDoc && (
+        <Suspense fallback={null}>
+          <LiveDocPanel
+            session={activeLiveDoc}
+            compactChat={liveDocCompactChat}
+            onToggleCompactChat={toggleLiveDocCompactChat}
+          />
+        </Suspense>
+      )}
+
+      {/* Discovery banner for someone else's open Live Doc. */}
+      {pendingLiveDocAnnounce && !activeLiveDoc && (
+        <LiveDocBanner announce={pendingLiveDocAnnounce} onJoin={handleJoinLiveDoc} />
+      )}
 
       {/* Solo own broadcast preview (no other broadcasters) */}
       {activeScreenShare?.isOwn && activeScreenShare.stream && !showFocusView && (
@@ -947,7 +1036,8 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           onPaste={handlePaste}
           onFileSelected={sendMediaFile}
           onGifSelect={handleGifSelect}
-          onAttachFile={fileServerConfig?.canShareFiles ? handleAttachFile : undefined}
+          onAttachFile={handleAttachFile}
+          onOpenLiveDoc={selectedChannel !== null && !isDmMode ? handleOpenLiveDoc : undefined}
           disabled={sending || persistent.sendBlocked}
           hasPendingQuotes={pendingQuotes.length > 0}
           isEditing={editingMessage !== null}
@@ -1042,6 +1132,16 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
             canSharePublic={fileServerConfig?.canShareFilesPublic ?? true}
             onSubmit={handleShareDialogSubmit}
             onCancel={handleShareDialogCancel}
+          />
+        </Suspense>
+      )}
+
+      {showLiveDocLaunch && (
+        <Suspense fallback={null}>
+          <LiveDocLaunchDialog
+            open={showLiveDocLaunch}
+            onSubmit={handleLiveDocLaunchSubmit}
+            onCancel={() => setShowLiveDocLaunch(false)}
           />
         </Suspense>
       )}

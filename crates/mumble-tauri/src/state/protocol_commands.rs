@@ -130,30 +130,90 @@ fn parse_playback_state(s: String) -> Option<mumble_tcp::fancy_watch_sync::Playb
 }
 
 impl AppState {
-    pub async fn send_plugin_data(
+    /// Send a `FancyLiveDocOpen` request: ask the server's live-doc
+    /// plugin to open (or attach to) a collaborative document in a
+    /// channel.  The server replies with `FancyLiveDocInvite`.
+    pub async fn send_fancy_live_doc_open(
         &self,
-        receiver_sessions: Vec<u32>,
-        data: Vec<u8>,
-        data_id: String,
+        channel_id: u32,
+        slug: String,
+        title: String,
     ) -> Result<(), String> {
-        let handle = {
-            let __session = self.inner.snapshot();
-            let state = __session.lock().map_err(|e| e.to_string())?;
-            state.conn.client_handle.clone()
-        };
-
-        let handle = handle.ok_or("Not connected")?;
-
+        let handle = self.client_handle()?;
         handle
-            .send(command::SendPluginData {
-                receiver_sessions,
-                data,
-                data_id,
+            .send(command::SendFancyLiveDocOpen {
+                channel_id,
+                slug,
+                title,
             })
             .await
-            .map_err(|e| format!("Failed to send plugin data: {e}"))?;
+            .map_err(|e| format!("Failed to send FancyLiveDocOpen: {e}"))
+    }
 
-        Ok(())
+    /// Announce a live-doc to channel peers (server-relayed).
+    pub async fn send_fancy_live_doc_announce(
+        &self,
+        channel_id: u32,
+        slug: String,
+        title: String,
+    ) -> Result<(), String> {
+        let handle = self.client_handle()?;
+        handle
+            .send(command::SendFancyLiveDocAnnounce {
+                channel_id,
+                slug,
+                title,
+            })
+            .await
+            .map_err(|e| format!("Failed to send FancyLiveDocAnnounce: {e}"))
+    }
+
+    /// Announce a poll in a channel (server-relayed).
+    pub async fn send_fancy_poll(
+        &self,
+        channel_id: u32,
+        poll_id: String,
+        question: String,
+        options: Vec<String>,
+        multiple: bool,
+        created_at: String,
+    ) -> Result<(), String> {
+        let handle = self.client_handle()?;
+        handle
+            .send(command::SendFancyPoll {
+                channel_id,
+                poll_id,
+                question,
+                options,
+                multiple,
+                created_at,
+            })
+            .await
+            .map_err(|e| format!("Failed to send FancyPoll: {e}"))
+    }
+
+    /// Cast a vote on a poll (server-relayed).
+    pub async fn send_fancy_poll_vote(
+        &self,
+        channel_id: u32,
+        poll_id: String,
+        selected: Vec<u32>,
+    ) -> Result<(), String> {
+        let handle = self.client_handle()?;
+        handle
+            .send(command::SendFancyPollVote {
+                channel_id,
+                poll_id,
+                selected,
+            })
+            .await
+            .map_err(|e| format!("Failed to send FancyPollVote: {e}"))
+    }
+
+    fn client_handle(&self) -> Result<mumble_protocol::client::ClientHandle, String> {
+        let __session = self.inner.snapshot();
+        let state = __session.lock().map_err(|e| e.to_string())?;
+        state.conn.client_handle.clone().ok_or_else(|| "Not connected".to_string())
     }
 
     pub async fn send_push_update(&self, muted_channels: Vec<u32>) -> Result<(), String> {

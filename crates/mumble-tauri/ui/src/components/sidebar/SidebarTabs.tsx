@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { getPreferences, updatePreferences } from "../../preferencesStorage";
-import styles from "./ChannelSidebar.module.css";
+import styles from "./channel/ChannelSidebar.module.css";
 
 export type SidebarTabKey = "channels" | "members";
 
