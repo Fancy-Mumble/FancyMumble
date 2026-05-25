@@ -204,7 +204,7 @@ export default function LiveDocLaunchDialog({
 
           <div className={styles.actions}>
             <button type="button" className={styles.cancelBtn} onClick={onCancel}>
-              {t("liveDoc.cancelButton")}
+              {tc("actions.cancel")}
             </button>
             <button type="submit" className={styles.uploadBtn} disabled={title.trim().length === 0}>
               {t("liveDoc.openButton")}

@@ -163,7 +163,7 @@ export default function FileShareDialog({
 
           <div className={styles.actions}>
             <button type="button" className={styles.cancelBtn} onClick={onCancel}>
-              {t("fileShare.cancel")}
+              {tc("actions.cancel")}
             </button>
             <button
               type="submit"

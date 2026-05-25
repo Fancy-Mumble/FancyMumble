@@ -56,7 +56,7 @@ interface PollCreatorProps {
 }
 
 export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorProps>) {
-  const { t } = useTranslation("chat");
+  const { t } = useTranslation(["chat", "common"]);
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState(["", ""]);
   const [multiple, setMultiple] = useState(false);
@@ -165,7 +165,7 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
 
         <div className={styles.footer}>
           <button className={styles.cancelBtn} onClick={onClose}>
-            {t("poll.creator.cancel")}
+            {t("common:actions.cancel")}
           </button>
           <button
             className={styles.submitBtn}

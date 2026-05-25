@@ -1,7 +1,6 @@
 ﻿{
   "password": {
     "title": "Mot de passe requis",
-    "closeAriaLabel": "Fermer",
     "differentUser": {
       "message": "Se connecter à <strong>{{host}}</strong> sous un autre nom.",
       "usernameLabel": "Nouveau nom d'utilisateur",
@@ -13,7 +12,6 @@
     "passwordLabel": "Mot de passe",
     "changeUsername": "Utiliser un autre nom",
     "savePassword": "Enregistrer le mot de passe",
-    "cancel": "Annuler",
     "connect": "Se connecter"
   },
   "edit": {
@@ -29,12 +27,10 @@
     "certCreateNew": "+ Créer une nouvelle identité...",
     "identityNamePlaceholder": "Nom d'identité",
     "createIdentity": "Créer",
-    "cancelIdentity": "Annuler",
     "storedPassword": "Mot de passe déjà enregistré",
     "removePassword": "Supprimer",
     "passwordPlaceholderClear": "Saisissez un nouveau mot de passe ou laissez vide",
     "passwordPlaceholderEmpty": "Laisser vide si non requis",
-    "cancel": "Annuler",
     "save": "Enregistrer"
   },
   "list": {
@@ -101,8 +97,7 @@
     "dismissTitle": "Fermer",
     "disconnectDialogTitle": "Se déconnecter du serveur",
     "disconnectDialogBody": "Se déconnecter de {{label}} ?",
-    "disconnectConfirm": "Se déconnecter",
-    "disconnectCancel": "Annuler"
+    "disconnectConfirm": "Se déconnecter"
   },
   "activityLog": {
     "empty": "Aucune activité pour l'instant"
@@ -244,7 +239,7 @@
       "step0": {
         "title": "Adresse du serveur",
         "subtitle": "Où se trouve votre serveur Mumble ?",
-        "hint": "Saisissez l'adresse du serveur fournie par votre administrateur – on s'occupe du reste."
+        "hint": "Saisissez l'adresse du serveur fournie par votre administrateur - on s'occupe du reste."
       },
       "step1": {
         "title": "Votre identité",

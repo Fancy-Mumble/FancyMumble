@@ -69,7 +69,7 @@ type SortDir = "asc" | "desc";
 
 export function RegisteredUsersTab() {
   const navigate = useNavigate();
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
   const tFn = t as TFn;
   const channels = useAppStore((s) => s.channels);
   const rootId = useMemo(() => rootChannelId(channels), [channels]);
@@ -301,7 +301,7 @@ export function RegisteredUsersTab() {
                           }}
                         />
                         <button type="button" className={styles.saveBtn} onClick={submitRename}>{t("registeredUsers.save")}</button>
-                        <button type="button" className={styles.removeBtn} onClick={cancelRename}>{t("registeredUsers.cancel")}</button>
+                        <button type="button" className={styles.removeBtn} onClick={cancelRename}>{t("common:actions.cancel")}</button>
                       </span>
                     ) : (
                       u.name

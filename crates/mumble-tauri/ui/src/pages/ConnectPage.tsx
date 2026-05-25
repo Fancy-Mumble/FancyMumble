@@ -31,7 +31,7 @@ interface StepDef {
 }
 
 export default function ConnectPage() {
-  const { t } = useTranslation("server");
+  const { t } = useTranslation(["server", "common"]);
   const {
     connect, disconnect, status, error, passwordRequired, pendingConnect,
     retryWithPassword, dismissPasswordPrompt, bootstrapStage,
@@ -519,7 +519,7 @@ export default function ConnectPage() {
                                 setNewCertName("");
                               }}
                             >
-                              {t("actions.cancel")}
+                              {t("common:actions.cancel")}
                             </button>
                           </div>
                         )}

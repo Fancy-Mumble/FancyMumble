@@ -42,8 +42,7 @@
     "noChannels": "No matching channels.",
     "member_one": "{{count}} member",
     "member_other": "{{count}} members",
-    "root": "Root",
-    "cancel": "Cancel"
+    "root": "Root"
   },
   "channelEditor": {
     "titleCreate": "Create Channel",
@@ -60,7 +59,7 @@
     "unlimited": "0 = unlimited",
     "temporaryLabel": "Temporary channel",
     "passwordLabel": "Password",
-    "passwordPlaceholderNew": "Optional — leave empty for open access",
+    "passwordPlaceholderNew": "Optional - leave empty for open access",
     "passwordPlaceholderChange": "Currently password-protected. Enter new password to change, or clear to remove",
     "persistenceTitle": "Persistence",
     "protocolLabel": "Protocol",
@@ -72,8 +71,7 @@
     "forever": "0 = forever",
     "saving": "Saving...",
     "create": "Create",
-    "save": "Save",
-    "cancel": "Cancel"
+    "save": "Save"
   },
   "channelSidebar": {
     "endCall": "End call",
@@ -108,7 +106,6 @@
     "purgeConfirm": "Purge",
     "deleteChannelTitle": "Delete Channel",
     "deleteChannelBody": "Are you sure you want to delete {{channel}}? This will permanently remove the channel and all its persistent chat messages from the server.",
-    "deleteChannelCancel": "Cancel",
     "deleteChannelConfirm": "Delete"
   },
   "sidebarTabs": {
@@ -174,7 +171,6 @@
     "browse": "Browse",
     "labelFilename": "Filename",
     "wildcardHelp": "{date} = YYYY-MM-DD, {time} = HH-MM-SS, {datetime} = date + time, {host} = server, {user} = username, {channel} = channel name",
-    "close": "Close",
     "stopRecording": "Stop Recording",
     "startRecording": "Start Recording"
   },
@@ -182,7 +178,6 @@
     "title": "Password required",
     "body": " requires a password to enter.",
     "placeholder": "Channel password",
-    "cancelBtn": "Cancel",
     "joinBtn": "Join"
   },
   "membersTab": {
@@ -198,7 +193,6 @@
     "searchPlaceholder": "Search channels...",
     "noOptions": "No matching channels",
     "destinationLabel": "Destination channel",
-    "cancelBtn": "Cancel",
     "confirmBtn": "Move users"
   },
   "pchatBadge": {
@@ -247,14 +241,12 @@
     "member_one": "{{count}} member",
     "member_other": "{{count}} members",
     "expand": "Expand",
-    "collapse": "Collapse",
     "liveBadge": "Live",
     "sharingScreen": "Sharing screen",
     "dmUnread_one": "{{count}} unread direct message",
     "dmUnread_other": "{{count}} unread direct messages"
   },
   "channelInfoPanel": {
-    "closeAriaLabel": "Close",
     "noChannel": "No channel",
     "member_one": "{{count}} member",
     "member_other": "{{count}} members",
@@ -264,7 +256,6 @@
     "editLabelDescription": "Description",
     "loadingEditor": "Loading editor...",
     "descriptionPlaceholder": "Channel description...",
-    "cancelBtn": "Cancel",
     "saving": "Saving...",
     "saveBtn": "Save",
     "noDescription": "No description",
@@ -292,7 +283,6 @@
   "keyVerification": {
     "ariaLabel": "Channel Encryption Verification",
     "title": "Channel Encryption Verification",
-    "closeAriaLabel": "Close",
     "channelLabel": "Channel:",
     "modeLabel": "Mode:",
     "distributorLabel": "Key distributed by:",
@@ -314,12 +304,10 @@
   "keyShare": {
     "ariaLabel": "Share encryption key",
     "title": "Share Encryption Key",
-    "closeAriaLabel": "Close",
     "archiveAccess": "This channel uses full archive mode. Sharing the key grants access to the entire message history{{count}}.",
     "archiveCount": " ({{count}} stored messages)",
     "genericAccess": "Sharing the encryption key grants access to encrypted messages in this channel.",
     "confirmMessage": "Are you sure you want to share the encryption key with <strong>{{name}}</strong>? This cannot be undone.",
-    "cancel": "Cancel",
     "share": "Share Key"
   },
   "custodian": {
@@ -334,8 +322,7 @@
     "dismiss": "Dismiss",
     "later": "Later",
     "accept": "Accept",
-    "confirm": "Confirm",
-    "closeAriaLabel": "Close"
+    "confirm": "Confirm"
   },
   "persistence": {
     "loadingHistory": "Loading message history...",

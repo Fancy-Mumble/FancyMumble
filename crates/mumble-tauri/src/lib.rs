@@ -267,9 +267,12 @@ fn setup_deep_link_handler(handle: tauri::AppHandle) {
         }
         tracing::info!("deep-link: received {} url(s): {:?}", urls.len(), urls);
         if let Some(win) = dispatch_handle.get_webview_window("main") {
-            let _ = win.show();
-            let _ = win.unminimize();
-            let _ = win.set_focus();
+            #[cfg(not(target_os = "android"))]
+            {
+                let _ = win.show();
+                let _ = win.unminimize();
+                let _ = win.set_focus();
+            }
         }
         use tauri::Emitter;
         for url in urls {

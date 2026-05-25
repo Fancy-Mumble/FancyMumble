@@ -37,8 +37,7 @@
     "noChannels": "Keine passenden Kanäle.",
     "member_one": "{{count}} Mitglied",
     "member_other": "{{count}} Mitglieder",
-    "root": "Root",
-    "cancel": "Abbrechen"
+    "root": "Root"
   },
   "channelEditor": {
     "titleCreate": "Kanal erstellen",
@@ -55,7 +54,7 @@
     "unlimited": "0 = unbegrenzt",
     "temporaryLabel": "Temporärer Kanal",
     "passwordLabel": "Passwort",
-    "passwordPlaceholderNew": "Optional – leer lassen für offenen Zugang",
+    "passwordPlaceholderNew": "Optional - leer lassen für offenen Zugang",
     "passwordPlaceholderChange": "Aktuell passwortgeschützt. Neues Passwort eingeben oder leeren, um den Schutz zu entfernen",
     "persistenceTitle": "Persistenz",
     "protocolLabel": "Protokoll",
@@ -67,8 +66,7 @@
     "forever": "0 = unbegrenzt",
     "saving": "Wird gespeichert...",
     "create": "Erstellen",
-    "save": "Speichern",
-    "cancel": "Abbrechen"
+    "save": "Speichern"
   },
   "channelSidebar": {
     "endCall": "Anruf beenden",
@@ -103,7 +101,6 @@
     "purgeConfirm": "Leeren",
     "deleteChannelTitle": "Kanal löschen",
     "deleteChannelBody": "Möchtest du „{{channel}}“ wirklich löschen? Der Kanal und alle gespeicherten Chatnachrichten werden dauerhaft vom Server entfernt.",
-    "deleteChannelCancel": "Abbrechen",
     "deleteChannelConfirm": "Löschen"
   },
   "sidebarTabs": {
@@ -169,14 +166,12 @@
     "browse": "Durchsuchen",
     "labelFilename": "Dateiname",
     "wildcardHelp": "{date} = JJJJ-MM-TT, {time} = HH-MM-SS, {datetime} = Datum + Uhrzeit, {host} = Server, {user} = Nutzername, {channel} = Kanalname",
-    "close": "Schließen",
     "stopRecording": "Aufnahme stoppen",
     "startRecording": "Aufnahme starten"  },
   "channelPassword": {
     "title": "Passwort erforderlich",
     "body": " benötigt ein Passwort zum Betreten.",
     "placeholder": "Kanalpasswort",
-    "cancelBtn": "Abbrechen",
     "joinBtn": "Beitreten"
   },
   "membersTab": {
@@ -192,7 +187,6 @@
     "searchPlaceholder": "Kanäle suchen...",
     "noOptions": "Keine passenden Kanäle",
     "destinationLabel": "Zielkanal",
-    "cancelBtn": "Abbrechen",
     "confirmBtn": "Nutzer verschieben"
   },
   "pchatBadge": {
@@ -241,14 +235,12 @@
     "member_one": "{{count}} Mitglied",
     "member_other": "{{count}} Mitglieder",
     "expand": "Erweitern",
-    "collapse": "Einklappen",
     "liveBadge": "Live",
     "sharingScreen": "Bildschirm freigegeben",
     "dmUnread_one": "{{count}} ungelesene Direktnachricht",
     "dmUnread_other": "{{count}} ungelesene Direktnachrichten"
   },
   "channelInfoPanel": {
-    "closeAriaLabel": "Schließen",
     "noChannel": "Kein Kanal",
     "member_one": "{{count}} Mitglied",
     "member_other": "{{count}} Mitglieder",
@@ -258,7 +250,6 @@
     "editLabelDescription": "Beschreibung",
     "loadingEditor": "Editor wird geladen...",
     "descriptionPlaceholder": "Kanalbeschreibung...",
-    "cancelBtn": "Abbrechen",
     "saving": "Wird gespeichert...",
     "saveBtn": "Speichern",
     "noDescription": "Keine Beschreibung",
@@ -286,7 +277,6 @@
   "keyVerification": {
     "ariaLabel": "Kanalverschlüsselungsverifizierung",
     "title": "Kanalverschlüsselungsverifizierung",
-    "closeAriaLabel": "Schließen",
     "channelLabel": "Kanal:",
     "modeLabel": "Modus:",
     "distributorLabel": "Schlüssel verteilt von:",
@@ -295,12 +285,12 @@
     "tabHex": "Hex",
     "loadingFingerprint": "Wird geladen...",
     "showFullFingerprint": "Vollständigen Fingerabdruck anzeigen",
-    "instructions": "Vergleiche diesen Fingerabdruck mit einem vertrauenswürdigen Kanalmitglied – per Sprachanruf, persönlich oder über einen anderen sicheren Kanal.",
+    "instructions": "Vergleiche diesen Fingerabdruck mit einem vertrauenswürdigen Kanalmitglied - per Sprachanruf, persönlich oder über einen anderen sicheren Kanal.",
     "currentTrust": "Aktueller Vertrauensstatus: {{status}}",
     "trustManuallyVerified": "Manuell verifiziert",
     "trustVerified": "Verifiziert (Konsens)",
     "trustUnverified": "Nicht verifiziert (TOFU)",
-    "trustDisputed": "Strittig – widersprüchliche Schlüssel",
+    "trustDisputed": "Strittig - widersprüchliche Schlüssel",
     "confirmLabel": "Ich habe geprüft, dass dieser Fingerabdruck übereinstimmt",
     "verifyButton": "Als verifiziert markieren",
     "verifyingButton": "Wird verifiziert..."
@@ -308,12 +298,11 @@
   "keyShare": {
     "ariaLabel": "Verschlüsselungsschlüssel teilen",
     "title": "Verschlüsselungsschlüssel teilen",
-    "closeAriaLabel": "Schließen",
     "archiveAccess": "Dieser Kanal nutzt den Vollarchiv-Modus. Wer den Schlüssel erhält, bekommt Zugriff auf den gesamten Nachrichtenverlauf{{count}}.",
     "archiveCount": " ({{count}} gespeicherte Nachrichten)",
     "genericAccess": "Wer den Verschlüsselungsschlüssel erhält, kann verschlüsselte Nachrichten in diesem Kanal lesen.",
     "confirmMessage": "Möchtest du den Verschlüsselungsschlüssel wirklich mit <strong>{{name}}</strong> teilen? Dies kann nicht rückgängig gemacht werden.",
-    "cancel": "Abbrechen",
+
     "share": "Schlüssel teilen"
   },
   "custodian": {
@@ -328,8 +317,7 @@
     "dismiss": "Bestätigen",
     "later": "Später",
     "accept": "Akzeptieren",
-    "confirm": "Bestätigen",
-    "closeAriaLabel": "Schließen"
+    "confirm": "Bestätigen"
   },
   "persistence": {
     "loadingHistory": "Nachrichtenverlauf wird geladen...",

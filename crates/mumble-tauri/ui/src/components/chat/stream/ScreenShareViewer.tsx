@@ -46,7 +46,7 @@ function VolumeControl({ muted, volume, onToggleMute, onChange }: {
   readonly onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   const [show, setShow] = useState(false);
-  const { t } = useTranslation("chat");
+  const { t } = useTranslation(["chat", "common"]);
   return (
     <div
       className={styles.volumeGroup}
@@ -84,7 +84,7 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(100);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const { t } = useTranslation("chat");
+  const { t } = useTranslation(["chat", "common"]);
 
   // Sync fullscreen state.
   useEffect(() => {
@@ -256,7 +256,7 @@ function OwnBroadcastPreview({ stream, channelId, ownSession }: OwnPreviewProps)
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const webrtcConnecting = useAppStore((s) => s.webrtcConnecting);
-  const { t } = useTranslation("chat");
+  const { t } = useTranslation(["chat", "common"]);
   // Persisted in the global store so the overlay stays open when the user
   // switches to a different server tab (which unmounts this component).
   // It is closed automatically by `stopBroadcasting()` in `useScreenShare`
@@ -345,7 +345,7 @@ function RemoteViewer({ session, channelId, ownSession }: { readonly session: nu
   const remoteStream = useRemoteStream(session);
   const broadcaster = useAppStore((s) => s.users.find((u) => u.session === session));
   const activeServerId = useAppStore((s) => s.activeServerId);
-  const { t } = useTranslation("chat");
+  const { t } = useTranslation(["chat", "common"]);
 
   const handlePopout = useCallback(() => {
     if (!ownSession || !activeServerId) return;
@@ -443,7 +443,7 @@ export function ShareScreenButton({
   active,
   onClick,
 }: Readonly<{ active: boolean; onClick: () => void }>) {
-  const { t } = useTranslation("chat");
+  const { t } = useTranslation(["chat", "common"]);
   return (
     <button
       type="button"
@@ -478,7 +478,7 @@ interface BroadcastBannerProps {
  */
 export function BroadcastBanner({ broadcasters, onWatch, sfuAvailable = true }: BroadcastBannerProps) {
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
-  const { t } = useTranslation("chat");
+  const { t } = useTranslation(["chat", "common"]);
 
   // Reset dismissed state when broadcasters change (new broadcaster should show).
   const broadcasterIds = useMemo(
@@ -529,7 +529,7 @@ export function BroadcastBanner({ broadcasters, onWatch, sfuAvailable = true }: 
             type="button"
             className={styles.broadcastBannerDismiss}
             onClick={() => handleDismiss(b.session)}
-            title={t("screenShare.dismiss")}
+            title={t("common:actions.dismiss")}
             aria-label={t("screenShare.banner.dismiss")}
           >
             <CloseIcon width={14} height={14} />
@@ -550,7 +550,7 @@ interface WebRtcErrorBannerProps {
 }
 
 export function WebRtcErrorBanner({ message, onDismiss }: WebRtcErrorBannerProps) {
-  const { t } = useTranslation("chat");
+  const { t } = useTranslation(["chat", "common"]);
   return (
     <div className={styles.broadcastBanner} role="alert">
       <ErrorCircleIcon className={styles.broadcastBannerErrorIcon} width={14} height={14} />
@@ -559,8 +559,8 @@ export function WebRtcErrorBanner({ message, onDismiss }: WebRtcErrorBannerProps
         type="button"
         className={styles.broadcastBannerDismiss}
         onClick={onDismiss}
-        title={t("screenShare.dismiss")}
-        aria-label={t("screenShare.dismiss")}
+        title={t("common:actions.dismiss")}
+        aria-label={t("common:actions.dismiss")}
       >
         <CloseIcon width={14} height={14} />
       </button>

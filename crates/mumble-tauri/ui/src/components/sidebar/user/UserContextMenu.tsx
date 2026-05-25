@@ -75,7 +75,7 @@ interface UserContextMenuProps {
 
 export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
   const { user } = menu;
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "common"]);
   const ownSession = useAppStore((s) => s.ownSession);
   const channels = useAppStore((s) => s.channels);
   const selectedChannel = useAppStore((s) => s.selectedChannel);
@@ -497,7 +497,7 @@ function MoveUserChannelPicker({
   onMoved,
   onError,
 }: MoveUserChannelPickerProps) {
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "common"]);
   const [filter, setFilter] = useState("");
   const users = useAppStore((s) => s.users);
 
@@ -599,7 +599,7 @@ function MoveUserChannelPicker({
             className={pickerStyles.cancelBtn}
             onClick={onClose}
           >
-            {t("movePicker.cancel")}
+            {t("common:actions.cancel")}
           </button>
         </div>
       </div>

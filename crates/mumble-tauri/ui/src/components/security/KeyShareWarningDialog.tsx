@@ -28,7 +28,7 @@ export default function KeyShareWarningDialog({
   onConfirm,
   onCancel,
 }: KeyShareWarningDialogProps) {
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "common"]);
   const tStr = t as (key: string, opts?: Record<string, unknown>) => string;
   if (!open) return null;
 
@@ -40,7 +40,7 @@ export default function KeyShareWarningDialog({
           <button
             className={styles.closeBtn}
             onClick={onCancel}
-            aria-label={t("keyShare.closeAriaLabel")}
+            aria-label={t("common:actions.close")}
             type="button"
           >
             &times;
@@ -63,7 +63,7 @@ export default function KeyShareWarningDialog({
               type="button"
               onClick={onCancel}
             >
-              {t("keyShare.cancel")}
+              {t("common:actions.cancel")}
             </button>
             <button
               className={styles.confirmBtn}

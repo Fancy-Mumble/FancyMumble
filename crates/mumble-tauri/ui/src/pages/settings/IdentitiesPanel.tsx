@@ -21,7 +21,7 @@ export function IdentitiesPanel({
   const [newLabel, setNewLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
 
   const handleCreate = useCallback(async () => {
     const label = newLabel.trim();
@@ -139,7 +139,7 @@ export function IdentitiesPanel({
                         className={styles.ghostBtn}
                         onClick={() => setConfirmDelete(null)}
                       >
-                        {t("identities.cancelDelete")}
+                        {t("common:actions.cancel")}
                       </button>
                     </div>
                   ) : (

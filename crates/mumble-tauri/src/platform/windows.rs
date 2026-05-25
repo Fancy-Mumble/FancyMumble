@@ -43,7 +43,7 @@ fn ipc_addr() -> SocketAddr {
 /// Returns `true` when the URL was forwarded successfully (caller should
 /// exit).  Returns `false` when no running instance was found (caller
 /// proceeds normally) or when there is no `fancy://` argument (normal
-/// launch — multiple instances are allowed).
+/// launch - multiple instances are allowed).
 pub fn try_forward_deep_link() -> bool {
     let url = match std::env::args().nth(1) {
         Some(a) if a.starts_with("fancy://") => a,

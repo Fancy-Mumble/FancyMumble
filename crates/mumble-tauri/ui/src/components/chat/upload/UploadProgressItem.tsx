@@ -17,7 +17,7 @@ interface UploadProgressItemProps {
 }
 
 export default function UploadProgressItem({ placeholder, onDismiss, onCancel }: UploadProgressItemProps) {
-  const { t } = useTranslation("chat");
+  const { t } = useTranslation(["chat", "common"]);
   const isError = placeholder.state === "error";
   const { progress } = placeholder;
   // True once all bytes are queued for the server (stream consumed) but we
@@ -85,7 +85,7 @@ export default function UploadProgressItem({ placeholder, onDismiss, onCancel }:
               type="button"
               className={styles.dismissBtn}
               onClick={() => onDismiss(placeholder.id)}
-              title={t("upload.dismiss")}
+              title={t("common:actions.dismiss")}
               aria-label={t("upload.dismissFailed")}
             >
               &#x2715;

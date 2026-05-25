@@ -505,8 +505,8 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
                   <Accordion title={t("infoPanel.accordionLiveDoc")}>
                     <div className={styles.debugGrid}>
                       <DebugRow label={t("infoPanel.debug.liveDocSupported")} value={supported} />
-                      <DebugRow label={t("infoPanel.debug.liveDocVersion")} value={liveDocPluginConfig?.version ?? "—"} />
-                      <DebugRow label={t("infoPanel.debug.liveDocWsUrl")} value={liveDocPluginConfig ? (streamerMode ? maskSensitive(liveDocPluginConfig.wsBaseUrl) : liveDocPluginConfig.wsBaseUrl) : "—"} />
+                      <DebugRow label={t("infoPanel.debug.liveDocVersion")} value={liveDocPluginConfig?.version ?? "-"} />
+                      <DebugRow label={t("infoPanel.debug.liveDocWsUrl")} value={liveDocPluginConfig ? (streamerMode ? maskSensitive(liveDocPluginConfig.wsBaseUrl) : liveDocPluginConfig.wsBaseUrl) : "-"} />
                       <DebugRow label={t("infoPanel.debug.liveDocActiveSessions")} value={sessions.length} />
                       <DebugRow label={t("infoPanel.debug.liveDocPendingAnnounces")} value={pendingLiveDocAnnounces.size} />
                       {sessions.map((s, i) => (

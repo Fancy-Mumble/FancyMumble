@@ -772,7 +772,7 @@ export default function MarkdownInput({
         }}
         onBlur={() => {
           // Do not clear `focused` while a drag selection is still in
-          // progress — the pointer may have left the element bounds.
+          // progress - the pointer may have left the element bounds.
           if (!isDragging) setFocused(false);
         }}
         disabled={disabled}

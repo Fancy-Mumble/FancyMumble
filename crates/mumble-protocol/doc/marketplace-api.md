@@ -373,7 +373,7 @@ All non-2xx responses return JSON:
 - Signing: future versions may add a detached signature
   (`Artifact.signature`) signed by the plugin author's key.  v1 trusts
   TLS + SHA-256.
-- Authenticated publishing: out of scope for this document — the
+- Authenticated publishing: out of scope for this document - the
   publishing pipeline is internal to the marketplace operators.
 - Per-user ratings / reviews: the `rating` field is exposed but the
   submission API is not part of v1.

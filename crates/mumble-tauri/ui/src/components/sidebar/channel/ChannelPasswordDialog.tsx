@@ -11,7 +11,7 @@ interface ChannelPasswordDialogProps {
 }
 
 export function ChannelPasswordDialog({ channel, onConfirm, onCancel }: Readonly<ChannelPasswordDialogProps>) {
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "common"]);
   const [password, setPassword] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -57,7 +57,7 @@ export function ChannelPasswordDialog({ channel, onConfirm, onCancel }: Readonly
           autoComplete="off"
         />
         <div className={styles.actions}>
-          <button type="button" className={styles.cancelBtn} onClick={onCancel}>{t("channelPassword.cancelBtn")}</button>
+          <button type="button" className={styles.cancelBtn} onClick={onCancel}>{t("common:actions.cancel")}</button>
           <button type="submit" className={styles.confirmBtn} disabled={!password.trim()}>
             {t("channelPassword.joinBtn")}
           </button>

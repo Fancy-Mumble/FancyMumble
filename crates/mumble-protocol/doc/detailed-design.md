@@ -73,7 +73,7 @@ All error variants derive `thiserror::Error` for automatic `Display` and
 ### 2.1 TcpMessageType
 
 An enum with `#[repr(u16)]` that maps each Mumble TCP message to its
-numeric type ID (0–26). Used by the codec for framing. Implements
+numeric type ID (0-26). Used by the codec for framing. Implements
 `TryFrom<u16>` so that invalid IDs produce `Error::UnknownMessageType`.
 
 ### 2.2 ControlMessage
@@ -585,7 +585,7 @@ Wraps `opus::Encoder` with:
 | `frame_size` | 960 (20ms @ 48kHz) | Samples per channel per frame |
 | `application` | `Voip` | Opus application mode |
 | `vbr` | `true` | Variable bitrate |
-| `complexity` | 5 | Encoder complexity (0–10) |
+| `complexity` | 5 | Encoder complexity (0-10) |
 | `fec` | `true` | Forward error correction |
 | `packet_loss_percent` | 10 | Expected packet loss % |
 | `dtx` | `false` | Discontinuous transmission |
@@ -643,7 +643,7 @@ Disabled filters are skipped. Provides `process()`, `reset()`, `push()`.
 | `NoiseGate` | `noise_gate.rs` | Voice-activity gating with hysteresis | `open_threshold`, `close_threshold`, `hold_frames`, `attack_samples`, `release_samples` |
 | `AutomaticGainControl` | `automatic_gain.rs` | Envelope-follower AGC normalizing signal level | `target_level`, `max_gain`, `min_gain`, `attack`, `release` |
 | `SpectralDenoiser` | `denoiser.rs` | RNN-based noise suppression (RNNoise via `nnnoiseless`, behind `rnnoise-denoiser` feature) | `attenuation` |
-| `VolumeFilter` | `volume.rs` | Linear gain (software volume knob) | `gain` (0.0–10.0) |
+| `VolumeFilter` | `volume.rs` | Linear gain (software volume knob) | `gain` (0.0-10.0) |
 
 **Recommended filter chain order** (outbound):
 1. `AutomaticGainControl` - normalises speech level so the denoiser sees the input it was trained on.

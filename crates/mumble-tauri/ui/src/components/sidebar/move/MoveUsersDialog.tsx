@@ -15,7 +15,7 @@ interface MoveUsersDialogProps {
 }
 
 export function MoveUsersDialog({ sourceChannel, channels, onConfirm, onCancel }: Readonly<MoveUsersDialogProps>) {
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "common"]);
   const eligibleChannels = useMemo(
     () => channels.filter((c) => c.id !== sourceChannel.id),
     [channels, sourceChannel.id],
@@ -67,7 +67,7 @@ export function MoveUsersDialog({ sourceChannel, channels, onConfirm, onCancel }
           inputRef={inputRef}
         />
         <div className={styles.actions}>
-          <button className={styles.cancelBtn} onClick={onCancel}>{t("moveUsersDialog.cancelBtn")}</button>
+          <button className={styles.cancelBtn} onClick={onCancel}>{t("common:actions.cancel")}</button>
           <button
             className={styles.confirmBtn}
             disabled={selected === null}

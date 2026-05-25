@@ -47,7 +47,7 @@
     "stopSharing": "Freigabe beenden",
     "shareScreen": "Bildschirm teilen",
     "shareScreenRelayed": "Bildschirm teilen (über Server)",
-    "shareScreenP2P": "Bildschirm teilen (kein SFU – Peer-to-Peer)",
+    "shareScreenP2P": "Bildschirm teilen (kein SFU - Peer-to-Peer)",
     "closeStream": "Stream schließen",
     "pinnedMessages": "Angeheftete Nachrichten",
     "downloads": "Downloads",
@@ -90,14 +90,12 @@
       "removeOption": "Option entfernen",
       "addOption": "+ Option hinzufügen",
       "allowMultiple": "Mehrfachauswahl erlauben",
-      "cancel": "Abbrechen",
       "submit": "Umfrage erstellen"
     }
   },
   "selection": {
     "count": "{{count}} ausgewählt",
-    "deleteButton": "Löschen ({{count}})",
-    "cancel": "Abbrechen"
+    "deleteButton": "Löschen ({{count}})"
   },
   "callControls": {
     "mute": "Stummschalten",
@@ -171,7 +169,7 @@
     "saving": "Speichern…",
     "saved": "Gespeichert",
     "save": "Speichern",
-    "savedTooltip": "Gespeichert – erneut herunterladen",
+    "savedTooltip": "Gespeichert - erneut herunterladen",
     "downloadTooltip": "Auf Festplatte speichern",
     "open": "Öffnen",
     "openTooltip": "Im Browser öffnen",
@@ -190,7 +188,6 @@
     "passwordLabel": "Passwort",
     "messageLabel": "Nachricht",
     "messagePlaceholder": "Eine Nachricht zur Datei hinzufügen...",
-    "cancel": "Abbrechen",
     "upload": "Hochladen"
   },
   "linkPreview": {
@@ -233,11 +230,9 @@
     "sendingLabel": "Nachricht wird gesendet",
     "sending": "Wird gesendet…",
     "failed": "Senden fehlgeschlagen",
-    "retry": "Erneut versuchen",
     "retrySending": "Erneut senden",
     "dismissFailed": "Fehlgeschlagene Nachricht verwerfen",
     "hidePending": "Sendeanzeige ausblenden",
-    "dismiss": "Verwerfen",
     "hide": "Ausblenden"
   },
   "quotePreview": {
@@ -274,8 +269,7 @@
     "share": "Bildschirm teilen",
     "stopSharing": "Freigabe beenden",
     "p2pLabel": "P2P",
-    "p2pTooltip": "Kein SFU auf diesem Server – der Stream läuft direkt zwischen den Teilnehmern",
-    "dismiss": "Verwerfen",
+    "p2pTooltip": "Kein SFU auf diesem Server - der Stream läuft direkt zwischen den Teilnehmern",
     "banner": {
       "isSharingScreen": "{{name}} teilt den Bildschirm",
       "watch": "Ansehen",
@@ -310,8 +304,7 @@
     "uploading": "Wird hochgeladen…",
     "percent": "{{progress}} %",
     "cancel": "Upload abbrechen",
-    "dismissFailed": "Fehlgeschlagenen Upload verwerfen",
-    "dismiss": "Verwerfen"
+    "dismissFailed": "Fehlgeschlagenen Upload verwerfen"
   },
   "watch": {
     "watching": "{{count}} sehen zu",
@@ -319,7 +312,6 @@
     "watchTogether": "Gemeinsam ansehen",
     "starting": "Wird gestartet…",
     "open": "Öffnen",
-    "collapse": "Einklappen",
     "card": {
       "watchingWithHost": "{{count}} sehen zu · Host: {{hostName}}",
       "openElsewhere": "Die Watch-Session ist an anderer Stelle auf dieser Seite geöffnet.",
@@ -364,7 +356,6 @@
       "seedTooLarge": "Datei ist zu groß (max. 1 MB)."
     },
     "openButton": "Öffnen",
-    "cancelButton": "Abbrechen",
     "closePanel": "Dokument schließen",
     "closePanelConfirm": "Das Live-Dokument für alle in diesem Kanal schließen?",
     "exportMarkdown": "Als Markdown exportieren",

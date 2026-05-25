@@ -125,7 +125,7 @@ function OverflowRow({ peer }: { readonly peer: LiveDocPeer }) {
           <span className={styles.avatarFallback}>{initials(peer.name)}</span>
         )}
       </span>
-      <span className={styles.overflowName}>{peer.name || "—"}</span>
+      <span className={styles.overflowName}>{peer.name || "-"}</span>
     </div>
   );
 }

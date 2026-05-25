@@ -1,7 +1,6 @@
 ﻿{
   "password": {
     "title": "Passwort erforderlich",
-    "closeAriaLabel": "Schließen",
     "differentUser": {
       "message": "Mit <strong>{{host}}</strong> als anderer Nutzer verbinden.",
       "usernameLabel": "Neuer Benutzername",
@@ -13,7 +12,6 @@
     "passwordLabel": "Passwort",
     "changeUsername": "Anderen Nutzernamen verwenden",
     "savePassword": "Passwort speichern",
-    "cancel": "Abbrechen",
     "connect": "Verbinden"
   },
   "edit": {
@@ -29,12 +27,10 @@
     "certCreateNew": "+ Neue Identität erstellen...",
     "identityNamePlaceholder": "Name der Identität",
     "createIdentity": "Erstellen",
-    "cancelIdentity": "Abbrechen",
     "storedPassword": "Passwort ist gespeichert",
     "removePassword": "Entfernen",
     "passwordPlaceholderClear": "Neues Passwort eingeben oder leer lassen",
     "passwordPlaceholderEmpty": "Leer lassen, falls nicht erforderlich",
-    "cancel": "Abbrechen",
     "save": "Speichern"
   },
   "list": {
@@ -101,8 +97,7 @@
     "dismissTitle": "Schließen",
     "disconnectDialogTitle": "Vom Server trennen",
     "disconnectDialogBody": "Von {{label}} trennen?",
-    "disconnectConfirm": "Trennen",
-    "disconnectCancel": "Abbrechen"
+    "disconnectConfirm": "Trennen"
   },
   "activityLog": {
     "empty": "Noch keine Aktivität"
@@ -244,7 +239,7 @@
       "step0": {
         "title": "Server-Adresse",
         "subtitle": "Wo läuft dein Mumble-Server?",
-        "hint": "Gib die Server-Adresse ein, die dir dein Admin genannt hat – um den Rest kümmern wir uns."
+        "hint": "Gib die Server-Adresse ein, die dir dein Admin genannt hat - um den Rest kümmern wir uns."
       },
       "step1": {
         "title": "Deine Identität",

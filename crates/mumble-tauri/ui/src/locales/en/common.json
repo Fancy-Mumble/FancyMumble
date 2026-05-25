@@ -151,7 +151,7 @@
     },
     "closeAriaLabel": "Close",
     "busyTitle": "Update in progress...",
-    "skipActive": "✓ Skipping v{{version}} — click to undo",
+    "skipActive": "✓ Skipping v{{version}} - click to undo",
     "skipInactive": "Skip v{{version}}",
     "closeBtn": "Close",
     "laterBtn": "Later",

@@ -556,7 +556,7 @@ mod tests {
         assert!(TcpMessageType::try_from(141u16).is_err());
         assert!(TcpMessageType::try_from(142u16).is_err());
         assert!(TcpMessageType::try_from(143u16).is_err());
-        assert!(TcpMessageType::try_from(146u16).is_err());
+        assert!(TcpMessageType::try_from(152u16).is_err());
         assert!(TcpMessageType::try_from(199u16).is_err());
         assert!(TcpMessageType::try_from(202u16).is_err());
         assert!(TcpMessageType::try_from(u16::MAX).is_err());

@@ -118,11 +118,11 @@
     "developerModeHint": "Show debug statistics (message counts, offloaded content, memory usage) in the server info panel.",
     "logLevel": "Log Level",
     "logLevelHint": "Set the verbosity of Rust backend logging. Lower levels include all messages from higher levels. Changes take effect immediately.",
-    "logLevelError": "error — errors only",
-    "logLevelWarn": "warn — warnings and errors",
-    "logLevelInfo": "info — general info (default)",
-    "logLevelDebug": "debug — verbose diagnostics",
-    "logLevelTrace": "trace — maximum verbosity",
+    "logLevelError": "error - errors only",
+    "logLevelWarn": "warn - warnings and errors",
+    "logLevelInfo": "info - general info (default)",
+    "logLevelDebug": "debug - verbose diagnostics",
+    "logLevelTrace": "trace - maximum verbosity",
     "autoReconnect": "Auto Reconnect",
     "autoReconnectHint": "Automatically retry connecting if the server connection drops unexpectedly. Manual disconnects never trigger auto-reconnect.",
     "autoUpdate": "Auto-update on startup",
@@ -133,7 +133,6 @@
     "dangerZoneHint": "Delete all saved data - servers, preferences, and certificates - and return to the welcome screen.",
     "dangerConfirmText": "Are you sure? This cannot be undone.",
     "dangerConfirmBtn": "Yes, reset everything",
-    "dangerCancelBtn": "Cancel",
     "dangerResetBtn": "Reset all data"
   },
   "shortcuts": {
@@ -189,7 +188,6 @@
     "noHashBadge": "no certificate",
     "noHashExplain": "Users with a certificate match on every server you join. Users without one stay tied to the current server.",
     "add": "Add",
-    "cancel": "Cancel",
     "remove": "Remove"
   },
   "identities": {
@@ -200,7 +198,6 @@
     "editProfile": "Edit Profile",
     "export": "Export",
     "confirmDelete": "Confirm",
-    "cancelDelete": "Cancel",
     "delete": "Delete",
     "createNew": "Create new identity",
     "createPlaceholder": "Identity name...",
@@ -440,7 +437,6 @@
   "imageEditor": {
     "titleAvatar": "Crop Avatar",
     "titleBanner": "Crop Banner",
-    "cancelBtn": "Cancel",
     "applyBtn": "Apply"
   },
   "klipyBrowser": {
@@ -495,7 +491,6 @@
     "colRoles": "Roles",
     "colActions": "Actions",
     "save": "Save",
-    "cancel": "Cancel",
     "never": "Never",
     "unknown": "Unknown",
     "deleteConfirmLabel": "Delete?",
@@ -645,11 +640,9 @@
   "roleManagerDialog": {
     "ariaLabel": "Manage roles for {{name}}",
     "title": "Manage roles for {{name}}",
-    "closeButton": "Close",
     "loading": "Loading roles...",
     "noRoles": "No roles defined on this server.",
     "inherited": "(inherited)",
-    "cancel": "Cancel",
     "saving": "Saving...",
     "save": "Save"
   },

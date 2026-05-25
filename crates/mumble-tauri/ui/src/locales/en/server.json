@@ -1,7 +1,6 @@
 ﻿{
   "password": {
     "title": "Password Required",
-    "closeAriaLabel": "Close",
     "differentUser": {
       "message": "Connect as a different user on <strong>{{host}}</strong>.",
       "usernameLabel": "New username",
@@ -13,7 +12,6 @@
     "passwordLabel": "Password",
     "changeUsername": "Use a different username",
     "savePassword": "Save password",
-    "cancel": "Cancel",
     "connect": "Connect"
   },
   "edit": {
@@ -29,12 +27,10 @@
     "certCreateNew": "+ Create new identity...",
     "identityNamePlaceholder": "Identity name",
     "createIdentity": "Create",
-    "cancelIdentity": "Cancel",
     "storedPassword": "Saved password stored",
     "removePassword": "Remove",
     "passwordPlaceholderClear": "Enter new password or leave empty",
     "passwordPlaceholderEmpty": "Leave empty if not required",
-    "cancel": "Cancel",
     "save": "Save"
   },
   "list": {
@@ -104,8 +100,7 @@
     "dismissTitle": "Dismiss",
     "disconnectDialogTitle": "Disconnect from server",
     "disconnectDialogBody": "Disconnect from {{label}}?",
-    "disconnectConfirm": "Disconnect",
-    "disconnectCancel": "Cancel"
+    "disconnectConfirm": "Disconnect"
   },
   "friendsPage": {
     "title": "Friends",

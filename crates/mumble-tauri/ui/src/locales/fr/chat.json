@@ -90,14 +90,12 @@
       "removeOption": "Supprimer l'option",
       "addOption": "+ Ajouter une option",
       "allowMultiple": "Autoriser plusieurs sélections",
-      "cancel": "Annuler",
       "submit": "Créer le sondage"
     }
   },
   "selection": {
     "count": "{{count}} sélectionné(s)",
-    "deleteButton": "Supprimer ({{count}})",
-    "cancel": "Annuler"
+    "deleteButton": "Supprimer ({{count}})"
   },
   "callControls": {
     "mute": "Couper le micro",
@@ -171,7 +169,7 @@
     "saving": "Enregistrement…",
     "saved": "Enregistré",
     "save": "Enregistrer",
-    "savedTooltip": "Enregistré – télécharger à nouveau",
+    "savedTooltip": "Enregistré - télécharger à nouveau",
     "downloadTooltip": "Télécharger sur le disque",
     "open": "Ouvrir",
     "openTooltip": "Ouvrir dans le navigateur",
@@ -190,7 +188,6 @@
     "passwordLabel": "Mot de passe",
     "messageLabel": "Message",
     "messagePlaceholder": "Ajouter un message avec le fichier...",
-    "cancel": "Annuler",
     "upload": "Envoyer"
   },
   "linkPreview": {
@@ -233,11 +230,9 @@
     "sendingLabel": "Envoi du message",
     "sending": "Envoi en cours…",
     "failed": "Échec de l'envoi",
-    "retry": "Réessayer",
     "retrySending": "Réessayer l'envoi",
     "dismissFailed": "Ignorer le message échoué",
     "hidePending": "Masquer l'indicateur d'attente",
-    "dismiss": "Ignorer",
     "hide": "Masquer"
   },
   "quotePreview": {
@@ -274,8 +269,7 @@
     "share": "Partager l'écran",
     "stopSharing": "Arrêter le partage",
     "p2pLabel": "P2P",
-    "p2pTooltip": "Pas de SFU sur ce serveur – le flux passe directement entre les participants",
-    "dismiss": "Ignorer",
+    "p2pTooltip": "Pas de SFU sur ce serveur - le flux passe directement entre les participants",
     "banner": {
       "isSharingScreen": "{{name}} partage son écran",
       "watch": "Regarder",
@@ -310,8 +304,7 @@
     "uploading": "Envoi en cours…",
     "percent": "{{progress}} %",
     "cancel": "Annuler l'envoi",
-    "dismissFailed": "Ignorer l'envoi échoué",
-    "dismiss": "Ignorer"
+    "dismissFailed": "Ignorer l'envoi échoué"
   },
   "watch": {
     "watching": "{{count}} spectateur(s)",
@@ -319,7 +312,6 @@
     "watchTogether": "Regarder ensemble",
     "starting": "Démarrage…",
     "open": "Ouvrir",
-    "collapse": "Réduire",
     "card": {
       "watchingWithHost": "{{count}} spectateur(s) · hôte : {{hostName}}",
       "openElsewhere": "La session est déjà ouverte ailleurs sur cette page.",
@@ -364,7 +356,6 @@
       "seedTooLarge": "Fichier trop volumineux (max 1 Mo)."
     },
     "openButton": "Ouvrir",
-    "cancelButton": "Annuler",
     "closePanel": "Fermer le document",
     "closePanelConfirm": "Fermer le document en direct pour tout le monde dans ce salon ?",
     "exportMarkdown": "Exporter en Markdown",

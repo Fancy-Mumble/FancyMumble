@@ -2408,14 +2408,16 @@ function slicePatch(slice: PluginTier1Slice): Partial<AppState> {
 }
 
 /** Reconcile a fresh `plugin-registry` event against stored trust
- *  records and update the slice in one shot.  Pulls the active server
- *  id off the store at call time so the listener does not need to
- *  thread it through. */
+ *  records and update the slice in one shot.  Fetches the active
+ *  server id directly from the backend to avoid a race where the
+ *  Zustand store's `activeServerId` is still null when this fires
+ *  right after `server-connected` (before `refreshSessions` settles). */
 async function reconcilePluginRegistry(
   entries: readonly PluginRegistryEntry[],
 ): Promise<void> {
   const state = useAppStore.getState();
-  const serverId = state.activeServerId;
+  const serverId =
+    state.activeServerId ?? (await invoke<string | null>("get_active_server"));
   const storedTrust = new Map(
     Object.entries(await loadServerTrust(serverId)),
   );

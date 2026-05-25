@@ -154,7 +154,7 @@ function ClassicChannelListImpl({
       return next;
     });
   }, []);
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "common"]);
   const usersByChannel = useMemo(() => {
     const map = new Map<number, UserEntry[]>();
     for (const u of users) {
@@ -245,7 +245,7 @@ function ClassicChannelListImpl({
             <button
               className={styles.expandBtn}
               onClick={() => toggleExpand(channel.id)}
-              aria-label={isOpen ? t("channelList.collapse") : t("channelList.expand")}
+              aria-label={isOpen ? t("common:actions.collapse") : t("channelList.expand")}
             >
               <ChevronRightIcon
                 className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ""}`}

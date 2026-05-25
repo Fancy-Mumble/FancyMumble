@@ -53,7 +53,7 @@ function FingerprintDisplay({
   showFull: boolean;
   onShowFull: () => void;
 }>) {
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "common"]);
   if (!fingerprints) {
     return (
       <div className={styles.fingerprint}>
@@ -99,7 +99,7 @@ export default function KeyVerificationDialog({
   distributorName,
   distributorHash,
 }: KeyVerificationDialogProps) {
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "common"]);
   const tStr = t as (key: string) => string;
   const [tab, setTab] = useState<FingerprintTab>("emoji");
   const [showFull, setShowFull] = useState(false);
@@ -158,7 +158,7 @@ export default function KeyVerificationDialog({
       <div className={styles.dialog}>
         <div className={styles.header}>
           <h3 className={styles.title}>{t("keyVerification.title")}</h3>
-          <button className={styles.closeBtn} onClick={onClose} aria-label={t("keyVerification.closeAriaLabel")}>
+          <button className={styles.closeBtn} onClick={onClose} aria-label={t("common:actions.close")}>
             <CloseIcon width={16} height={16} />
           </button>
         </div>

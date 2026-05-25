@@ -13,7 +13,7 @@ export default function MessageSelectionBar({
   onDelete,
   onCancel,
 }: MessageSelectionBarProps) {
-  const { t } = useTranslation("chat");
+  const { t } = useTranslation(["chat", "common"]);
   return (
     <div className={styles.bar}>
       <span className={styles.count}>{t("selection.count", { count })}</span>
@@ -31,7 +31,7 @@ export default function MessageSelectionBar({
         className={`${styles.actionBtn} ${styles.cancelBtn}`}
         onClick={onCancel}
       >
-        {t("selection.cancel")}
+        {t("common:actions.cancel")}
       </button>
     </div>
   );

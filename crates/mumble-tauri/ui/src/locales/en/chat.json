@@ -90,14 +90,12 @@
       "removeOption": "Remove option",
       "addOption": "+ Add option",
       "allowMultiple": "Allow multiple selections",
-      "cancel": "Cancel",
       "submit": "Create Poll"
     }
   },
   "selection": {
     "count": "{{count}} selected",
-    "deleteButton": "Delete ({{count}})",
-    "cancel": "Cancel"
+    "deleteButton": "Delete ({{count}})"
   },
   "callControls": {
     "mute": "Mute",
@@ -190,7 +188,6 @@
     "passwordLabel": "Password",
     "messageLabel": "Message",
     "messagePlaceholder": "Add a message to send with the file...",
-    "cancel": "Cancel",
     "upload": "Upload"
   },
   "linkPreview": {
@@ -233,11 +230,9 @@
     "sendingLabel": "Sending message",
     "sending": "Sending…",
     "failed": "Failed to send",
-    "retry": "Retry",
     "retrySending": "Retry sending",
     "dismissFailed": "Dismiss failed message",
     "hidePending": "Hide pending indicator",
-    "dismiss": "Dismiss",
     "hide": "Hide"
   },
   "quotePreview": {
@@ -275,7 +270,6 @@
     "stopSharing": "Stop sharing",
     "p2pLabel": "P2P",
     "p2pTooltip": "No SFU on this server - the stream connects directly between peers",
-    "dismiss": "Dismiss",
     "banner": {
       "isSharingScreen": "{{name}} is sharing their screen",
       "watch": "Watch",
@@ -310,8 +304,7 @@
     "uploading": "Uploading…",
     "percent": "{{progress}}%",
     "cancel": "Cancel upload",
-    "dismissFailed": "Dismiss failed upload",
-    "dismiss": "Dismiss"
+    "dismissFailed": "Dismiss failed upload"
   },
   "watch": {
     "watching": "{{count}} watching",
@@ -319,7 +312,6 @@
     "watchTogether": "Watch together",
     "starting": "Starting…",
     "open": "Open",
-    "collapse": "Collapse",
     "card": {
       "watchingWithHost": "{{count}} watching · host: {{hostName}}",
       "openElsewhere": "Watch session is open elsewhere on this page.",
@@ -364,7 +356,6 @@
       "seedTooLarge": "File is too large (max 1 MB)."
     },
     "openButton": "Open",
-    "cancelButton": "Cancel",
     "closePanel": "Close document",
     "closePanelConfirm": "Close the live document for everyone in this channel?",
     "exportMarkdown": "Export as Markdown",

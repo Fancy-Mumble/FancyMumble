@@ -33,7 +33,7 @@ export function ImageEditor({
   onConfirm,
   onCancel,
 }: ImageEditorProps) {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -238,7 +238,7 @@ export function ImageEditor({
             className={styles.ghostBtn}
             onClick={onCancel}
           >
-            {t("imageEditor.cancelBtn")}
+            {t("common:actions.cancel")}
           </button>
           <button
             type="button"

@@ -151,7 +151,7 @@
     },
     "closeAriaLabel": "Schließen",
     "busyTitle": "Update läuft...",
-    "skipActive": "✓ v{{version}} überspringen — klicken zum Rückgängig machen",
+    "skipActive": "✓ v{{version}} überspringen - klicken zum Rückgängig machen",
     "skipInactive": "v{{version}} überspringen",
     "closeBtn": "Schließen",
     "laterBtn": "Später",

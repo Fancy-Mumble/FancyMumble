@@ -19,7 +19,7 @@ function newId(): string {
 /** Settings section that lets the user bind global hotkeys to specific
  *  users (identified by cert hash) for one-press jump-to-DM. */
 export default function UserShortcutsSection() {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
   const sessions = useAppStore((s) => s.sessions);
   const activeServerId = useAppStore((s) => s.activeServerId);
   const users = useAppStore((s) => s.users);
@@ -154,7 +154,7 @@ export default function UserShortcutsSection() {
               className={styles.userShortcutCancel}
               onClick={() => { setPicking(false); setPickSession(""); }}
             >
-              {t("userShortcuts.cancel")}
+              {t("common:actions.cancel")}
             </button>
             <button
               type="button"

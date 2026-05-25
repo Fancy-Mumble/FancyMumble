@@ -492,8 +492,8 @@ function ColorTrigger({ inputRef, label, current, onColor, onClear, children }: 
           type="button"
           className={styles.colorClearBtn}
           onClick={onClear}
-          title={`${label} – clear`}
-          aria-label={`${label} – clear`}
+          title={`${label} - clear`}
+          aria-label={`${label} - clear`}
         >
           ×
         </button>

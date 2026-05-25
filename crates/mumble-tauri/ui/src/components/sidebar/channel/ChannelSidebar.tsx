@@ -49,7 +49,7 @@ interface SelfVoiceControlsProps {
 }
 
 function SelfVoiceControls({ voiceState, inCall, toggleMute, toggleDeafen, enableVoice, disableVoice, onCollapse }: Readonly<SelfVoiceControlsProps>) {
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "common"]);
   const isActive = voiceState === "active";
   const isInactive = voiceState === "inactive";
   const muteTitle = isActive ? t("channelSidebar.mute") : t("channelSidebar.unmute");
@@ -121,7 +121,7 @@ interface ChannelSidebarProps {
 }
 
 export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, onCollapse, searchChannelId, onSearchChannelClear, onSelectMessage }: Readonly<ChannelSidebarProps>) {
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "common"]);
   const channels = useAppStore((s) => s.channels);
   const users = useAppStore((s) => s.users);
   const selectedChannel = useAppStore((s) => s.selectedChannel);
@@ -826,7 +826,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
                 className={styles.deleteConfirmCancel}
                 onClick={() => setDeleteConfirm(null)}
               >
-                {t("channelSidebar.deleteChannelCancel")}
+                {t("common:actions.cancel")}
               </button>
               <button
                 className={styles.deleteConfirmOk}
