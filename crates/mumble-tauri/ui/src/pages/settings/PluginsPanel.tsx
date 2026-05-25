@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { allowPlugin, revokePluginTrust, useAppStore, type PluginRegistryEntry } from "../../store";
 import type { PluginPanelState } from "../../plugins/tier1/store";
 import { panelKey } from "../../plugins/tier1/store";
@@ -27,6 +28,7 @@ interface PluginRow {
  *  revoke-trust action.  Panels stay reactive to `UpdatePanel`
  *  responses thanks to the Zustand subscription. */
 export default function PluginsPanel() {
+  const { t } = useTranslation("settings");
   const registry = useAppStore((s) => s.pluginRegistry);
   const pluginManifests = useAppStore((s) => s.pluginManifests);
   const pluginTrust = useAppStore((s) => s.pluginTrust);
@@ -51,7 +53,7 @@ export default function PluginsPanel() {
   if (rows.length === 0) {
     return (
       <div className={styles.empty}>
-        No plugins are loaded on the connected server.
+        {t("plugins.empty")}
       </div>
     );
   }
@@ -65,13 +67,14 @@ export default function PluginsPanel() {
   );
 }
 
-function scopeLabel(scope: TrustScope | undefined): string {
-  if (scope === "global") return "All servers";
-  if (scope === "once") return "This session";
-  return "This server";
+function scopeKey(scope: TrustScope | undefined): "plugins.scopeGlobal" | "plugins.scopeSession" | "plugins.scopeServer" {
+  if (scope === "global") return "plugins.scopeGlobal";
+  if (scope === "once") return "plugins.scopeSession";
+  return "plugins.scopeServer";
 }
 
 function PluginCard({ row }: { readonly row: PluginRow }) {
+  const { t } = useTranslation("settings");
   const info = decodePluginInfo(row.entry.infoJson);
   const isAllowed = row.trust?.decision === "allow";
   const isDenied = row.trust?.decision === "deny";
@@ -84,24 +87,24 @@ function PluginCard({ row }: { readonly row: PluginRow }) {
 
   const allowOptions: [SplitButtonOption, ...SplitButtonOption[]] = [
     {
-      label: "Allow for this server",
-      hint: "Remembered for this server",
+      label: t("plugins.allowForServer"),
+      hint: t("plugins.allowForServerHint"),
       onSelect: () =>
         void allowPlugin(row.entry.pluginName, "server").catch((e) =>
           console.warn("[plugin-trust] allow failed:", e),
         ),
     },
     {
-      label: "Allow once",
-      hint: "This session only",
+      label: t("plugins.allowOnce"),
+      hint: t("plugins.allowOnceHint"),
       onSelect: () =>
         void allowPlugin(row.entry.pluginName, "once").catch((e) =>
           console.warn("[plugin-trust] allow failed:", e),
         ),
     },
     {
-      label: "Always allow",
-      hint: "Trusted on every server",
+      label: t("plugins.alwaysAllow"),
+      hint: t("plugins.alwaysAllowHint"),
       onSelect: () =>
         void allowPlugin(row.entry.pluginName, "global").catch((e) =>
           console.warn("[plugin-trust] allow failed:", e),
@@ -124,13 +127,13 @@ function PluginCard({ row }: { readonly row: PluginRow }) {
         </div>
         {isAllowed && (
           <span className={`${styles.trustState} ${styles.trustAllowed}`}>
-            <span className={styles.trustStateLabel}>Allowed</span>
-            <span className={styles.trustStateScope}>{scopeLabel(row.trust?.scope)}</span>
+            <span className={styles.trustStateLabel}>{t("plugins.trusted")}</span>
+            <span className={styles.trustStateScope}>{t(scopeKey(row.trust?.scope))}</span>
           </span>
         )}
         {isDenied && (
           <span className={`${styles.trustState} ${styles.trustDenied}`}>
-            Blocked
+            {t("plugins.blocked")}
           </span>
         )}
       </header>
@@ -156,9 +159,9 @@ function PluginCard({ row }: { readonly row: PluginRow }) {
               type="button"
               className={styles.btnSecondary}
               onClick={revoke}
-              title="Forget this decision so the trust prompt re-appears"
+              title={t("plugins.revokeTrustTitle")}
             >
-              Revoke trust
+              {t("plugins.revokeTrust")}
             </button>
           )}
           {!isAllowed && (
@@ -169,9 +172,9 @@ function PluginCard({ row }: { readonly row: PluginRow }) {
                   type="button"
                   className={styles.btnSecondary}
                   onClick={revoke}
-                  title="Clear this decision so the trust prompt re-appears next time the server broadcasts the plugin"
+                  title={t("plugins.repromptTitle")}
                 >
-                  Re-prompt
+                  {t("plugins.reprompt")}
                 </button>
               )}
             </>
@@ -183,11 +186,12 @@ function PluginCard({ row }: { readonly row: PluginRow }) {
 }
 
 function PanelView({ panel }: { readonly panel: PluginPanelState }) {
+  const { t } = useTranslation("settings");
   return (
     <div className={styles.panel}>
       <div className={styles.panelTitle}>{panel.title}</div>
       {panel.rows.length === 0 ? (
-        <div className={styles.emptyPanel}>(no rows)</div>
+        <div className={styles.emptyPanel}>{t("plugins.emptyPanel")}</div>
       ) : (
         <div className={styles.panelRows}>
           {panel.rows.map((row, i) => (
