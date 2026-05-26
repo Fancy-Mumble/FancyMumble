@@ -483,6 +483,7 @@ macro_rules! all_command_handlers {
             commands::onboarding::save_onboarding_config,
             commands::onboarding::submit_onboarding_response,
             commands::onboarding::request_onboarding_response,
+            commands::plugin_admin::get_plugin_registry,
             commands::plugin_admin::request_server_plugins,
             commands::plugin_admin::set_server_plugin_enabled,
             commands::plugin_admin::install_server_plugin,

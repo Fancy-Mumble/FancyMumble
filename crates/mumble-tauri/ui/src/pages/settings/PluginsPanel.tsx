@@ -7,8 +7,9 @@ import type { ClientManifest } from "../../plugins/tier1/types";
 import {
   capabilityLabel,
   decodePluginInfo,
+  TrustDecision,
   type TrustRecord,
-  type TrustScope,
+  TrustScope,
 } from "../../plugins/tier1/trust";
 import { parseClientManifest } from "../../plugins/tier1/manifest";
 import { SplitButton } from "../../components/elements/SplitButton";
@@ -68,8 +69,8 @@ export default function PluginsPanel() {
 }
 
 function scopeKey(scope: TrustScope | undefined): "plugins.scopeGlobal" | "plugins.scopeSession" | "plugins.scopeServer" {
-  if (scope === "global") return "plugins.scopeGlobal";
-  if (scope === "once") return "plugins.scopeSession";
+  if (scope === TrustScope.Global) return "plugins.scopeGlobal";
+  if (scope === TrustScope.Once) return "plugins.scopeSession";
   return "plugins.scopeServer";
 }
 
@@ -77,7 +78,7 @@ function PluginCard({ row }: { readonly row: PluginRow }) {
   const { t } = useTranslation("settings");
   const info = decodePluginInfo(row.entry.infoJson);
   const isAllowed = row.trust?.decision === "allow";
-  const isDenied = row.trust?.decision === "deny";
+  const isDenied = row.trust?.decision === TrustDecision.Deny;
   const isTrustable = !!row.manifest && (row.manifest.capabilities?.length ?? 0) > 0;
 
   const revoke = () =>
@@ -90,7 +91,7 @@ function PluginCard({ row }: { readonly row: PluginRow }) {
       label: t("plugins.allowForServer"),
       hint: t("plugins.allowForServerHint"),
       onSelect: () =>
-        void allowPlugin(row.entry.pluginName, "server").catch((e) =>
+        void allowPlugin(row.entry.pluginName, TrustScope.Server).catch((e) =>
           console.warn("[plugin-trust] allow failed:", e),
         ),
     },
@@ -98,7 +99,7 @@ function PluginCard({ row }: { readonly row: PluginRow }) {
       label: t("plugins.allowOnce"),
       hint: t("plugins.allowOnceHint"),
       onSelect: () =>
-        void allowPlugin(row.entry.pluginName, "once").catch((e) =>
+        void allowPlugin(row.entry.pluginName, TrustScope.Once).catch((e) =>
           console.warn("[plugin-trust] allow failed:", e),
         ),
     },
@@ -106,7 +107,7 @@ function PluginCard({ row }: { readonly row: PluginRow }) {
       label: t("plugins.alwaysAllow"),
       hint: t("plugins.alwaysAllowHint"),
       onSelect: () =>
-        void allowPlugin(row.entry.pluginName, "global").catch((e) =>
+        void allowPlugin(row.entry.pluginName, TrustScope.Global).catch((e) =>
           console.warn("[plugin-trust] allow failed:", e),
         ),
     },

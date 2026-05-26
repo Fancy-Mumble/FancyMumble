@@ -3,19 +3,27 @@
 // commands surfaced, components rendered, modals popped) when the user
 // has explicitly granted trust on the current server.
 
-import type { Capability, ClientManifest } from "./types";
+import { Capability } from "./types";
+import type { ClientManifest } from "./types";
 
 /** Persisted decision.  "deny" plugins stay registered but their UI is
  *  suppressed; the user can re-prompt by revoking from the Plugins
  *  settings tab. */
-export type TrustDecision = "allow" | "deny";
+export enum TrustDecision {
+  Allow = "allow",
+  Deny = "deny",
+}
 
 /** Scope of an "allow" decision.
- *  - "once"   - allowed for this app session only; never written to disk.
- *  - "server" - persisted per connected server (the default).
- *  - "global" - persisted across all servers; plugin is trusted everywhere.
+ *  - `Once`   - allowed for this app session only; never written to disk.
+ *  - `Server` - persisted per connected server (the default).
+ *  - `Global` - persisted across all servers; plugin is trusted everywhere.
  */
-export type TrustScope = "once" | "server" | "global";
+export enum TrustScope {
+  Once = "once",
+  Server = "server",
+  Global = "global",
+}
 
 /** Persisted trust entry.  Keyed by `(serverId, pluginName)`. */
 export interface TrustRecord {
@@ -45,16 +53,9 @@ export type TrustStatus =
    *  user must re-confirm. */
   | { readonly kind: "needs-prompt"; readonly previous: TrustRecord | null };
 
-/** Capabilities that gate UI surfaces.  A plugin declaring only
- *  read-only metadata (e.g. an info-only debug panel) does not require
- *  a trust grant. */
-const GATED_CAPABILITIES: readonly Capability[] = [
-  "slash-commands",
-  "modals",
-  "components",
-  "notifications",
-  "settings-panel",
-];
+const GATED_CAPABILITIES = new Set<Capability>(
+  Object.values(Capability).filter((c) => c !== Capability.RichLayout),
+);
 
 /** Decide whether a plugin's declared manifest needs a trust prompt. */
 export function evaluateTrust(
@@ -63,7 +64,7 @@ export function evaluateTrust(
   currentVersion: string,
 ): TrustStatus {
   const declared = manifest.capabilities ?? [];
-  const gated = declared.filter((c) => GATED_CAPABILITIES.includes(c));
+  const gated = declared.filter((c) => GATED_CAPABILITIES.has(c));
   if (gated.length === 0 && (manifest.slash_commands ?? []).length === 0) {
     return { kind: "no-prompt" };
   }
@@ -94,13 +95,13 @@ export function recordFromDecision(
   decision: TrustDecision,
   version: string,
   manifest: ClientManifest,
-  scope: TrustScope = "server",
+  scope: TrustScope = TrustScope.Server,
 ): TrustRecord {
   return {
     decision,
     version,
     capabilities: (manifest.capabilities ?? []).filter((c) =>
-      GATED_CAPABILITIES.includes(c),
+      GATED_CAPABILITIES.has(c),
     ),
     decidedAt: Date.now(),
     scope,
@@ -169,15 +170,17 @@ const EMPTY_DIGEST: PluginInfoDigest = {
 /** Pretty-print a capability tag for the prompt UI. */
 export function capabilityLabel(capability: Capability): string {
   switch (capability) {
-    case "slash-commands":
+    case Capability.SlashCommands:
       return "Register slash commands";
-    case "modals":
+    case Capability.Modals:
       return "Open modal dialogs";
-    case "components":
+    case Capability.Components:
       return "Send interactive components (buttons, menus)";
-    case "notifications":
+    case Capability.Notifications:
       return "Show toast notifications";
-    case "settings-panel":
+    case Capability.SettingsPanel:
       return "Add a settings panel";
+    case Capability.RichLayout:
+      return "Use rich layout (containers, sections, media)";
   }
 }

@@ -10,6 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::state::types::PluginRegistryEntryPayload;
 use crate::state::AppState;
 
 const DEFAULT_MARKETPLACE_BASE: &str = "https://plugins.fancy-mumble.com/api/v1";
@@ -20,6 +21,17 @@ fn marketplace_base() -> String {
 }
 
 // --- Server-side commands -------------------------------------------------
+
+/// Snapshot the cached server plugin registry for the active session.
+/// The `plugin-registry` Tauri event is delivered exactly once per
+/// connect (right after `ServerSync`), so the UI calls this on HMR
+/// reload to recover the registry without forcing a reconnect.
+#[tauri::command]
+pub(crate) fn get_plugin_registry(
+    state: tauri::State<'_, AppState>,
+) -> Vec<PluginRegistryEntryPayload> {
+    state.get_plugin_registry()
+}
 
 /// Admin: request the current plugin inventory from the connected server.
 /// The reply arrives asynchronously as a `plugin-admin-list` Tauri event.

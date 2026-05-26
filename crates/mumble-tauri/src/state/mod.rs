@@ -206,6 +206,11 @@ pub(super) struct SharedState {
     pub onboarding: Option<OnboardingConfig>,
     /// Local user's onboarding response, fetched on demand.
     pub onboarding_response: Option<OnboardingResponse>,
+    /// Cached snapshot of the most recent `PluginRegistry` the server
+    /// has broadcast.  The protobuf message is delivered once after
+    /// `ServerSync` and never resent, so we cache it here to let the
+    /// frontend resync after an HMR reload via `get_plugin_registry`.
+    pub plugin_registry: Vec<PluginRegistryEntryPayload>,
 }
 
 // --- Tauri-managed application state ------------------------------

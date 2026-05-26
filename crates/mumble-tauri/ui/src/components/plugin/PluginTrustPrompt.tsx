@@ -2,67 +2,73 @@ import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import { useAppStore, resolvePluginTrust } from "../../store";
 import type { PendingTrustPrompt } from "../../plugins/tier1/trust";
-import { capabilityLabel, decodePluginInfo } from "../../plugins/tier1/trust";
+import {
+  capabilityLabel,
+  decodePluginInfo,
+  TrustDecision,
+  TrustScope,
+} from "../../plugins/tier1/trust";
+import { ChevronDownIcon, ChevronRightIcon } from "../../icons";
 import { SplitButton } from "../elements/SplitButton";
 import type { SplitButtonOption } from "../elements/SplitButton";
 import styles from "./PluginTrustPrompt.module.css";
 
-/** Mounted by `PluginInteractionLayer`.  Shows the front-of-queue
- *  pending trust prompt; auto-advances as the user resolves them. */
+/** Mounted by `PluginInteractionLayer`.  Renders every queued plugin
+ *  trust prompt in a single dialog as an accordion list with bulk
+ *  Allow/Block actions, so the user no longer has to dismiss N
+ *  individual modals one-at-a-time after first connecting to a server
+ *  with several plugins. */
 export default function PluginTrustPrompt() {
-  const pending = useAppStore((s) => s.pluginTrustQueue[0] ?? null);
-  if (!pending) return null;
-  return <TrustDialog pending={pending} />;
+  const queue = useAppStore((s) => s.pluginTrustQueue);
+  if (queue.length === 0) return null;
+  return <TrustListDialog queue={queue} />;
 }
 
-function computeFingerprint(text: string): Promise<string> {
-  const encoded = new TextEncoder().encode(text);
-  return crypto.subtle.digest("SHA-256", encoded).then((buf) =>
-    Array.from(new Uint8Array(buf))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join(""),
+function TrustListDialog({ queue }: { readonly queue: readonly PendingTrustPrompt[] }) {
+  const [expanded, setExpanded] = useState<string | null>(
+    queue.length === 1 ? queue[0]!.pluginName : null,
   );
-}
 
-function TrustDialog({ pending }: { readonly pending: PendingTrustPrompt }) {
-  const info = decodePluginInfo(pending.registryEntry.infoJson);
-  const declared = pending.manifest.capabilities ?? [];
-  const isReprompt = pending.previous !== null;
-  const [fingerprint, setFingerprint] = useState<string | null>(null);
+  const toggle = (name: string) =>
+    setExpanded((prev) => (prev === name ? null : name));
 
-  useEffect(() => {
-    void computeFingerprint(pending.registryEntry.infoJson ?? "").then(setFingerprint);
-  }, [pending.registryEntry.infoJson]);
+  // Snapshot the queue before iterating: each `resolvePluginTrust`
+  // call mutates `pluginTrustQueue`, so reading state mid-loop would
+  // race with the React re-render.
+  const allowAll = (scope: TrustScope) => {
+    const names = queue.map((p) => p.pluginName);
+    for (const name of names) {
+      void resolvePluginTrust(name, TrustDecision.Allow, scope).catch((e) =>
+        console.warn("[plugin-trust] bulk allow failed:", e),
+      );
+    }
+  };
 
-  const deny = () =>
-    void resolvePluginTrust(pending.pluginName, "deny").catch((e) =>
-      console.warn("[plugin-trust] deny failed:", e),
-    );
+  const blockAll = () => {
+    const names = queue.map((p) => p.pluginName);
+    for (const name of names) {
+      void resolvePluginTrust(name, TrustDecision.Deny).catch((e) =>
+        console.warn("[plugin-trust] bulk deny failed:", e),
+      );
+    }
+  };
 
-  const allowOptions: [SplitButtonOption, ...SplitButtonOption[]] = [
+  const single = queue.length === 1;
+  const allowAllOptions: [SplitButtonOption, ...SplitButtonOption[]] = [
     {
-      label: "Allow once",
-      hint: "This session only",
-      onSelect: () =>
-        void resolvePluginTrust(pending.pluginName, "allow", "once").catch((e) =>
-          console.warn("[plugin-trust] allow failed:", e),
-        ),
-    },
-    {
-      label: "Allow for this server",
+      label: single ? "Allow for this server" : "Allow all for this server",
       hint: "Remembered for this server",
-      onSelect: () =>
-        void resolvePluginTrust(pending.pluginName, "allow", "server").catch((e) =>
-          console.warn("[plugin-trust] allow failed:", e),
-        ),
+      onSelect: () => allowAll(TrustScope.Server),
     },
     {
-      label: "Always allow",
+      label: single ? "Allow once" : "Allow all once",
+      hint: "This session only",
+      onSelect: () => allowAll(TrustScope.Once),
+    },
+    {
+      label: single ? "Always allow" : "Always allow all",
       hint: "Trusted on every server",
-      onSelect: () =>
-        void resolvePluginTrust(pending.pluginName, "allow", "global").catch((e) =>
-          console.warn("[plugin-trust] allow failed:", e),
-        ),
+      onSelect: () => allowAll(TrustScope.Global),
     },
   ];
 
@@ -76,20 +82,117 @@ function TrustDialog({ pending }: { readonly pending: PendingTrustPrompt }) {
       <div className={styles.dialog}>
         <header className={styles.header}>
           <h2 id="plugin-trust-title" className={styles.title}>
-            Server wants to enable plugin
+            {single
+              ? "Server wants to enable plugin"
+              : `Server wants to enable ${queue.length} plugins`}
           </h2>
           <p className={styles.subtitle}>
-            <strong>{pending.pluginName}</strong>
-            {" "}
-            <span style={{ opacity: 0.75 }}>v{pending.version}</span>
+            {single
+              ? "Review the plugin and choose whether to allow it."
+              : "Expand a plugin to review what it can do, then decide individually or use the buttons below to apply the same choice to all."}
           </p>
         </header>
 
-        <div className={styles.body}>
-          {info.description && (
-            <p className={styles.description}>{info.description}</p>
-          )}
+        <div className={styles.list}>
+          {queue.map((p) => (
+            <PluginRow
+              key={p.pluginName}
+              pending={p}
+              open={expanded === p.pluginName}
+              onToggle={() => toggle(p.pluginName)}
+            />
+          ))}
+        </div>
 
+        <footer className={styles.footer}>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnDanger}`}
+            onClick={blockAll}
+          >
+            {single ? "Block" : "Block all"}
+          </button>
+          <SplitButton options={allowAllOptions} variant="primary" />
+        </footer>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function PluginRow({
+  pending,
+  open,
+  onToggle,
+}: {
+  readonly pending: PendingTrustPrompt;
+  readonly open: boolean;
+  readonly onToggle: () => void;
+}) {
+  const info = decodePluginInfo(pending.registryEntry.infoJson);
+  const declared = pending.manifest.capabilities ?? [];
+  const isReprompt = pending.previous !== null;
+
+  const allow = (scope: TrustScope) =>
+    void resolvePluginTrust(pending.pluginName, TrustDecision.Allow, scope).catch((e) =>
+      console.warn("[plugin-trust] allow failed:", e),
+    );
+
+  const deny = () =>
+    void resolvePluginTrust(pending.pluginName, TrustDecision.Deny).catch((e) =>
+      console.warn("[plugin-trust] deny failed:", e),
+    );
+
+  const allowOptions: [SplitButtonOption, ...SplitButtonOption[]] = [
+    {
+      label: "Allow for this server",
+      hint: "Remembered for this server",
+      onSelect: () => allow(TrustScope.Server),
+    },
+    {
+      label: "Allow once",
+      hint: "This session only",
+      onSelect: () => allow(TrustScope.Once),
+    },
+    {
+      label: "Always allow",
+      hint: "Trusted on every server",
+      onSelect: () => allow(TrustScope.Global),
+    },
+  ];
+
+  const capCount = declared.length === 0
+    ? "no capabilities"
+    : `${declared.length} ${declared.length === 1 ? "capability" : "capabilities"}`;
+
+  return (
+    <section className={`${styles.row} ${open ? styles.rowOpen : ""}`}>
+      <button
+        type="button"
+        className={styles.rowHeader}
+        onClick={onToggle}
+        aria-expanded={open}
+      >
+        <span className={styles.rowChevron} aria-hidden="true">
+          {open
+            ? <ChevronDownIcon width={14} height={14} />
+            : <ChevronRightIcon width={14} height={14} />}
+        </span>
+        <span className={styles.rowMain}>
+          <span className={styles.rowTitle}>
+            <strong>{pending.pluginName}</strong>
+            <span className={styles.rowVersion}>v{pending.version}</span>
+            {isReprompt && <span className={styles.rowBadge}>updated</span>}
+          </span>
+          {info.description && (
+            <span className={styles.rowDesc}>{info.description}</span>
+          )}
+        </span>
+        <span className={styles.rowMeta}>{capCount}</span>
+      </button>
+
+      {open && (
+        <div className={styles.rowBody}>
           {isReprompt && (
             <div className={styles.warning}>
               This plugin's version or capability set changed since you
@@ -101,7 +204,9 @@ function TrustDialog({ pending }: { readonly pending: PendingTrustPrompt }) {
             <h3 className={styles.sectionTitle}>This plugin will be able to</h3>
             <ul className={styles.capabilities}>
               {declared.length === 0 ? (
-                <li className={styles.capability}>Nothing - manifest declares no capabilities</li>
+                <li className={styles.capability}>
+                  Nothing - manifest declares no capabilities
+                </li>
               ) : (
                 declared.map((c) => (
                   <li key={c} className={styles.capability}>
@@ -177,30 +282,45 @@ function TrustDialog({ pending }: { readonly pending: PendingTrustPrompt }) {
                 v{pending.manifest.schema_version ?? 1}
               </span>
 
-              {fingerprint !== null && (
-                <>
-                  <span className={styles.advancedLabel}>Fingerprint</span>
-                  <span className={`${styles.advancedValue} ${styles.fingerprint}`}>
-                    {fingerprint}
-                  </span>
-                </>
-              )}
+              <Fingerprint infoJson={pending.registryEntry.infoJson} />
             </div>
           </details>
+
+          <div className={styles.rowActions}>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnDanger}`}
+              onClick={deny}
+            >
+              Block
+            </button>
+            <SplitButton options={allowOptions} variant="primary" />
+          </div>
         </div>
+      )}
+    </section>
+  );
+}
 
-        <footer className={styles.footer}>
-          <button type="button" className={`${styles.btn} ${styles.btnDanger}`} onClick={deny}>
-            Block
-          </button>
-          <button type="button" className={`${styles.btn} ${styles.btnSecondary}`} onClick={deny}>
-            Not now
-          </button>
-
-          <SplitButton options={allowOptions} variant="primary" />
-        </footer>
-      </div>
-    </div>,
-    document.body,
+function Fingerprint({ infoJson }: { readonly infoJson: string | null }) {
+  const [fingerprint, setFingerprint] = useState<string | null>(null);
+  useEffect(() => {
+    const encoded = new TextEncoder().encode(infoJson ?? "");
+    void crypto.subtle.digest("SHA-256", encoded).then((buf) => {
+      setFingerprint(
+        Array.from(new Uint8Array(buf))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join(""),
+      );
+    });
+  }, [infoJson]);
+  if (!fingerprint) return null;
+  return (
+    <>
+      <span className={styles.advancedLabel}>Fingerprint</span>
+      <span className={`${styles.advancedValue} ${styles.fingerprint}`}>
+        {fingerprint}
+      </span>
+    </>
   );
 }

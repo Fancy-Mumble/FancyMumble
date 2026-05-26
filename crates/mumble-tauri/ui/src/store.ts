@@ -63,8 +63,8 @@ import {
 import type { InteractionKind } from "./plugins/tier1/types";
 import {
   recordFromDecision,
-  type TrustDecision,
-  type TrustScope,
+  TrustDecision,
+  TrustScope,
 } from "./plugins/tier1/trust";
 import { parseClientManifest } from "./plugins/tier1/manifest";
 import {
@@ -87,6 +87,7 @@ import {
 } from "./dmStorage";
 import { loadProfileData } from "./pages/settings/profileData";
 import { serializeProfile, dataUrlToBytes } from "./profileFormat";
+import { sanitiseWsUrl } from "./components/chat/livedoc/sanitiseWsUrl";
 
 /** Event payload for a pin state change delivered by the server. */
 interface PinDeliverEvent {
@@ -171,14 +172,24 @@ function fileServerBaseUrl(): string | null {
  *  access.  Only the scheme + host are replaced; path, query, and fragment
  *  are preserved unchanged.
  *
- *  Returns the original URL unchanged if no override is configured or
- *  parsing fails. */
+ *  Only rewrites URLs whose origin actually matches the file-server's
+ *  known internal origin: other plugins are free to embed arbitrary URLs
+ *  (e.g. `https://placehold.co/...`) and we must leave those alone.
+ *  Returns the original URL unchanged when there is no file-server
+ *  config, no rewrite target, the URL does not belong to the file server,
+ *  or parsing fails. */
 export function rebaseFileServerUrl(rawUrl: string): string {
-  const override = fileServerBaseUrl();
-  if (!override) return rawUrl;
+  const internal = useAppStore.getState().fileServerConfig?.internalBaseUrl;
+  if (!internal) return rawUrl;
+  const target = fileServerBaseUrl();
+  if (!target) return rawUrl;
   try {
     const u = new URL(rawUrl);
-    const o = new URL(override);
+    const internalUrl = new URL(internal);
+    if (u.protocol !== internalUrl.protocol || u.host !== internalUrl.host) {
+      return rawUrl;
+    }
+    const o = new URL(target);
     u.protocol = o.protocol;
     u.hostname = o.hostname;
     u.port = o.port;
@@ -2324,11 +2335,15 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
         serverId?: string | null;
       }>(p.payload);
       if (!data) return;
+      const fallbackHost =
+        useAppStore.getState().sessions.find(
+          (s) => s.id === useAppStore.getState().activeServerId,
+        )?.host ?? useAppStore.getState().pendingConnect?.host ?? null;
       dispatchLiveDocInvite({
         channelId: data.channelId,
         slug: data.slug,
         title: data.title,
-        wsUrl: data.wsUrl,
+        wsUrl: sanitiseWsUrl(data.wsUrl, fallbackHost),
         token: data.token ?? null,
         serverId: data.serverId ?? null,
       });
@@ -2454,7 +2469,7 @@ async function reconcilePluginRegistry(
 export async function resolvePluginTrust(
   pluginName: string,
   decision: TrustDecision,
-  scope: TrustScope = "server",
+  scope: TrustScope = TrustScope.Server,
 ): Promise<void> {
   const state = useAppStore.getState();
   const pending = state.pluginTrustQueue.find(
@@ -2462,9 +2477,9 @@ export async function resolvePluginTrust(
   );
   if (!pending) return;
   const record = recordFromDecision(decision, pending.version, pending.manifest, scope);
-  if (decision === "allow" && scope === "global") {
+  if (decision === TrustDecision.Allow && scope === TrustScope.Global) {
     await saveGlobalTrustRecord(pluginName, record);
-  } else if (scope !== "once") {
+  } else if (scope !== TrustScope.Once) {
     await saveTrustRecord(state.activeServerId, pluginName, record);
   }
   useAppStore.setState((s) => {
@@ -2475,7 +2490,7 @@ export async function resolvePluginTrust(
       pending.manifest,
     );
     const nextSessionTrust =
-      decision === "allow" && scope === "once"
+      decision === TrustDecision.Allow && scope === TrustScope.Once
         ? new Set([...s.pluginSessionTrust, pluginName])
         : s.pluginSessionTrust;
     return { ...slicePatch(next), pluginSessionTrust: nextSessionTrust };
@@ -2499,17 +2514,17 @@ export async function revokePluginTrust(pluginName: string): Promise<void> {
  *  decision according to the given scope. */
 export async function allowPlugin(
   pluginName: string,
-  scope: TrustScope = "server",
+  scope: TrustScope = TrustScope.Server,
 ): Promise<void> {
   const state = useAppStore.getState();
   const entry = state.pluginRegistry.find((e) => e.pluginName === pluginName);
   if (!entry) return;
   const manifest = parseClientManifest(entry.infoJson);
   if (!manifest) return;
-  const record = recordFromDecision("allow", entry.version, manifest, scope);
-  if (scope === "global") {
+  const record = recordFromDecision(TrustDecision.Allow, entry.version, manifest, scope);
+  if (scope === TrustScope.Global) {
     await saveGlobalTrustRecord(pluginName, record);
-  } else if (scope !== "once") {
+  } else if (scope !== TrustScope.Once) {
     await saveTrustRecord(state.activeServerId, pluginName, record);
   }
   useAppStore.setState((s) => {
@@ -2681,6 +2696,19 @@ export async function initEventListeners(
         useAppStore.setState({ ownSession });
       } catch {
         // not connected; leave as-is.
+      }
+      // The `plugin-registry` Tauri event is a one-shot fired right
+      // after ServerSync, so an HMR reload that re-registers the
+      // listener misses it entirely and the Plugins settings tab
+      // stays hidden until reconnect.  Pull the cached snapshot from
+      // the backend and replay it through the same reconcile path.
+      try {
+        const entries = await invoke<PluginRegistryEntry[]>("get_plugin_registry");
+        if (entries.length > 0) {
+          await reconcilePluginRegistry(entries);
+        }
+      } catch (e) {
+        console.error("HMR state restore (plugin registry) failed:", e);
       }
     })
     .catch(() => {});
@@ -3130,8 +3158,16 @@ export async function initEventListeners(
         return;
       }
       const rt = event.payload.reject_type;
-      // WrongUserPW = 3, WrongServerPW = 4
-      const isPasswordError = rt === 3 || rt === 4;
+      // WrongUserPW = 3, WrongServerPW = 4.  Some server implementations
+      // (notably older Fancy Mumble servers) reject auth without setting
+      // the `type` field - fall back to a reason-string heuristic so the
+      // password prompt still appears instead of silently retrying with
+      // the wrong credentials.
+      const reasonText = event.payload.reason ?? "";
+      const reasonLooksLikePwError =
+        /password|wrong\s+(?:user|server)|certificate/i.test(reasonText);
+      const isPasswordError =
+        rt === 3 || rt === 4 || (rt == null && reasonLooksLikePwError);
       if (isPasswordError) {
         const { passwordAttempted } = useAppStore.getState();
         useAppStore.setState({
@@ -3281,9 +3317,13 @@ export async function initEventListeners(
             // reverse proxy or ingress and reachable at a different
             // hostname than the Mumble TCP port.
             const override = useAppStore.getState().serverConfig.fancy_rest_api_url;
-            const baseUrl = (override && override.length > 0) ? override : raw.base_url;
+            const internalBaseUrl = String(raw.base_url).replace(/\/+$/, "");
+            const baseUrl = (override && override.length > 0)
+              ? override.replace(/\/+$/, "")
+              : internalBaseUrl;
             const cfg: FileServerConfig = {
               baseUrl,
+              internalBaseUrl,
               sessionId: raw.session_id,
               uploadToken: raw.upload_token,
               sessionJwt: raw.session_jwt,
@@ -3306,8 +3346,15 @@ export async function initEventListeners(
           try {
             const json = new TextDecoder().decode(bytes);
             const raw = JSON.parse(json) as { version: string; ws_base_url: string };
+            const fallbackHost =
+              useAppStore.getState().sessions.find(
+                (s) => s.id === useAppStore.getState().activeServerId,
+              )?.host ?? useAppStore.getState().pendingConnect?.host ?? null;
             useAppStore.setState({
-              liveDocPluginConfig: { version: raw.version, wsBaseUrl: raw.ws_base_url },
+              liveDocPluginConfig: {
+                version: raw.version,
+                wsBaseUrl: sanitiseWsUrl(raw.ws_base_url, fallbackHost),
+              },
             });
           } catch (e) {
             console.error("plugin-data live-doc-config processing error:", e);

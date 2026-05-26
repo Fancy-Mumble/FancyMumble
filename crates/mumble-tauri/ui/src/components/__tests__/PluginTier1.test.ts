@@ -28,6 +28,7 @@ import {
   decodePluginInfo,
   evaluateTrust,
   recordFromDecision,
+  TrustDecision,
 } from "../../plugins/tier1/trust";
 
 const greetManifestInfoJson = JSON.stringify({
@@ -279,13 +280,13 @@ describe("trust gate", () => {
   });
 
   it("evaluateTrust passes a matching prior record", () => {
-    const record = recordFromDecision("allow", "0.1.0", manifest);
+    const record = recordFromDecision(TrustDecision.Allow, "0.1.0", manifest);
     const status = evaluateTrust(manifest, record, "0.1.0");
     expect(status.kind).toBe("decided");
   });
 
   it("evaluateTrust re-prompts on version change", () => {
-    const record = recordFromDecision("allow", "0.1.0", manifest);
+    const record = recordFromDecision(TrustDecision.Allow, "0.1.0", manifest);
     expect(evaluateTrust(manifest, record, "0.2.0").kind).toBe("needs-prompt");
   });
 
@@ -299,7 +300,7 @@ describe("trust gate", () => {
         },
       }),
     )!;
-    const record = recordFromDecision("allow", "0.1.0", narrow);
+    const record = recordFromDecision(TrustDecision.Allow, "0.1.0", narrow);
     // Now the plugin declares more capabilities than before:
     expect(evaluateTrust(manifest, record, "0.1.0").kind).toBe("needs-prompt");
   });
@@ -332,7 +333,7 @@ describe("trust gate", () => {
 
   it("applyRegistryWithTrust surfaces allowed plugins directly", () => {
     const trust = new Map([
-      ["fancy-greeter", recordFromDecision("allow", "0.1.0", manifest)],
+      ["fancy-greeter", recordFromDecision(TrustDecision.Allow, "0.1.0", manifest)],
     ]);
     const { pluginManifests, pluginTrustQueue } = applyRegistryWithTrust(
       "server-a",
@@ -350,18 +351,18 @@ describe("trust gate", () => {
       new Map(),
     );
     const initial = { ...emptyPluginTier1Slice, pluginTrustQueue };
-    const record = recordFromDecision("allow", "0.1.0", manifest);
+    const record = recordFromDecision(TrustDecision.Allow, "0.1.0", manifest);
     const next = applyTrustDecision(initial, "fancy-greeter", record, manifest);
     expect(next.pluginManifests.has("fancy-greeter")).toBe(true);
     expect(next.pluginTrustQueue).toHaveLength(0);
-    expect(next.pluginTrust.get("fancy-greeter")?.decision).toBe("allow");
+    expect(next.pluginTrust.get("fancy-greeter")?.decision).toBe(TrustDecision.Allow);
   });
 
   it("applyTrustRevocation drops manifest + panels", () => {
     const initial = applyTrustDecision(
       emptyPluginTier1Slice,
       "fancy-greeter",
-      recordFromDecision("allow", "0.1.0", manifest),
+      recordFromDecision(TrustDecision.Allow, "0.1.0", manifest),
       manifest,
     );
     const next = applyTrustRevocation(initial, "fancy-greeter");
@@ -388,7 +389,7 @@ describe("settings panels", () => {
   it("applyRegistryWithTrust seeds panels for trusted plugins", () => {
     const manifest = parseClientManifest(panelManifestInfoJson)!;
     const trust = new Map([
-      ["fancy-greeter", recordFromDecision("allow", "0.1.0", manifest)],
+      ["fancy-greeter", recordFromDecision(TrustDecision.Allow, "0.1.0", manifest)],
     ]);
     const { pluginPanels } = applyRegistryWithTrust(
       "server-a",
@@ -403,7 +404,7 @@ describe("settings panels", () => {
   it("update-panel response mutates panel rows", () => {
     const manifest = parseClientManifest(panelManifestInfoJson)!;
     const trust = new Map([
-      ["fancy-greeter", recordFromDecision("allow", "0.1.0", manifest)],
+      ["fancy-greeter", recordFromDecision(TrustDecision.Allow, "0.1.0", manifest)],
     ]);
     const { pluginPanels } = applyRegistryWithTrust(
       "server-a",

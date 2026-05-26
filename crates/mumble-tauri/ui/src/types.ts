@@ -239,8 +239,16 @@ export type FileAccessMode = "public" | "password" | "session";
 /** Configuration for the server-side file-server plugin, advertised to the
  *  client on connect via a `fancy-file-server-config` plugin-data message. */
 export interface FileServerConfig {
-  /** Base URL of the axum file server (no trailing slash). */
+  /** Base URL of the axum file server (no trailing slash).  Equal to
+   *  `internalBaseUrl` unless the server advertises a reverse-proxy
+   *  override (`serverConfig.fancy_rest_api_url`), in which case this
+   *  is the public/proxied URL used for outbound requests. */
   baseUrl: string;
+  /** Internal origin the file-server plugin actually embeds in its
+   *  download URLs.  Used by `rebaseFileServerUrl` to decide whether
+   *  a given URL is one of ours to rewrite (otherwise unrelated plugin
+   *  URLs such as `https://placehold.co/...` would get clobbered). */
+  internalBaseUrl: string;
   /** Caller's Mumble session id (echoed back from the server). */
   sessionId: number;
   /** Per-session upload token used as `?token=` on `POST /files`. */

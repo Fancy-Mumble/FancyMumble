@@ -694,7 +694,7 @@ fn handle_control_message<H: EventHandler>(
         ControlMessage::ChannelState(cs) => state.apply_channel_state(cs),
         ControlMessage::ChannelRemove(cr) => state.remove_channel(cr.channel_id),
         ControlMessage::Reject(r) => {
-            warn!(reason = ?r.reason, "connection rejected");
+            warn!(reason = ?r.reason, reject_type = ?r.r#type, "connection rejected");
         }
         ControlMessage::PermissionDenied(pd) => {
             warn!(reason = ?pd.reason, r#type = ?pd.r#type, "permission denied");

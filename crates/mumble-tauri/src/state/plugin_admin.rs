@@ -8,9 +8,23 @@
 
 use mumble_protocol::command;
 
+use super::types::PluginRegistryEntryPayload;
 use super::AppState;
 
 impl AppState {
+    /// Snapshot the cached `PluginRegistry` for the active session.
+    /// Returns an empty vec if the server has not sent the registry
+    /// yet (or if there is no active session).  Used by the UI to
+    /// recover the registry after an HMR reload, since the
+    /// `plugin-registry` Tauri event only fires once per connect.
+    pub fn get_plugin_registry(&self) -> Vec<PluginRegistryEntryPayload> {
+        let snapshot = self.inner.snapshot();
+        let Ok(guard) = snapshot.lock() else {
+            return Vec::new();
+        };
+        guard.plugin_registry.clone()
+    }
+
     /// Admin: request the current plugin inventory from the server.
     pub async fn request_server_plugins(&self) -> Result<(), String> {
         let handle = {

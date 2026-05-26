@@ -17,6 +17,7 @@ import type {
 import {
   INTERACTION_PAYLOAD_TYPE,
   INTERACTION_RESPONSE_PAYLOAD_TYPE,
+  normaliseActionRow,
 } from "./types";
 import { newCorrelationId, parseClientManifest } from "./manifest";
 import {
@@ -411,11 +412,40 @@ export function decodeInteractionResponse(
 ): InteractionResponse | null {
   if (payloadType !== INTERACTION_RESPONSE_PAYLOAD_TYPE) return null;
   try {
-    return JSON.parse(
+    const parsed = JSON.parse(
       new TextDecoder().decode(new Uint8Array(payload)),
     ) as InteractionResponse;
+    return normaliseInboundResponse(parsed);
   } catch (e) {
     console.warn("[plugin-tier1] malformed InteractionResponse:", e);
     return null;
+  }
+}
+
+/** Run every embedded ActionRow through `normaliseActionRow` so the
+ *  renderer only has to switch over schema-v2 component discriminants. */
+function normaliseInboundResponse(response: InteractionResponse): InteractionResponse {
+  switch (response.kind) {
+    case "message":
+      return {
+        ...response,
+        components: (response.components ?? []).map(normaliseActionRow),
+      };
+    case "show-modal":
+      return {
+        ...response,
+        components: response.components.map(normaliseActionRow),
+      };
+    case "update-message":
+      return {
+        ...response,
+        components:
+          response.components == null
+            ? response.components
+            : response.components.map(normaliseActionRow),
+      };
+    case "update-panel":
+    case "toast":
+      return response;
   }
 }

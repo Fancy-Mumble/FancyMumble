@@ -1152,6 +1152,31 @@ fn reject_default_reason() {
     );
 }
 
+#[test]
+fn reject_includes_server_id_when_active() {
+    let (ctx, emitter) = make_ctx();
+    let server_id = crate::state::sessions::ServerId::new();
+    {
+        let mut state = ctx.shared.lock().unwrap();
+        state.server_id = Some(server_id);
+        state.conn.status = ConnectionStatus::Connecting;
+    }
+
+    let r = mumble_tcp::Reject {
+        reason: Some("Wrong certificate or password for existing user".into()),
+        r#type: Some(3),
+    };
+    r.handle(&ctx);
+
+    let events = emitter.events();
+    assert_eq!(events[0].0, "connection-rejected");
+    assert_eq!(
+        events[0].1["serverId"].as_str().unwrap(),
+        server_id.to_string()
+    );
+    assert_eq!(events[0].1["reject_type"].as_i64().unwrap(), 3);
+}
+
 // -- ServerConfig --------------------------------------------------
 
 #[test]

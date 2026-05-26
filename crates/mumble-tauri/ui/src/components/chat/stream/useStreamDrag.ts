@@ -85,8 +85,11 @@ export function useDragStream(onWatch: (session: number) => void, reorder: (from
 
     // Closures reference each other via let declarations so cleanup can remove
     // all three listeners using the exact same function objects that were added.
+    // eslint-disable-next-line prefer-const
     let moveFn: (e: PointerEvent) => void;
+    // eslint-disable-next-line prefer-const
     let upFn: () => void;
+    // eslint-disable-next-line prefer-const
     let cancelFn: () => void;
 
     const cleanup = () => {

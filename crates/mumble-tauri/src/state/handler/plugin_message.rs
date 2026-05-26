@@ -12,6 +12,7 @@ use serde::Serialize;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::types::PluginRegistryEntryPayload;
 
 /// Tauri event payload for an inbound `PluginMessage`.
 ///
@@ -65,15 +66,6 @@ impl HandleMessage for mumble_tcp::PluginMessage {
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct PluginRegistryEntryPayload {
-    plugin_name: String,
-    version: String,
-    plugin_slot: Option<u32>,
-    info_json: Option<String>,
-}
-
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
 struct PluginRegistryPayload {
     plugins: Vec<PluginRegistryEntryPayload>,
 }
@@ -91,6 +83,11 @@ impl HandleMessage for mumble_tcp::PluginRegistry {
             })
             .collect();
         debug!(count = plugins.len(), "received PluginRegistry");
+        // Cache for `get_plugin_registry` so the UI can resync after an
+        // HMR reload (the `plugin-registry` event is one-shot).
+        if let Ok(mut state) = ctx.shared.lock() {
+            state.plugin_registry = plugins.clone();
+        }
         ctx.emit("plugin-registry", PluginRegistryPayload { plugins });
     }
 }

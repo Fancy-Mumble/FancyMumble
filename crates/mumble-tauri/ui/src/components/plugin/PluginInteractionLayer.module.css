@@ -185,3 +185,123 @@
   min-height: 80px;
   resize: vertical;
 }
+
+/* Layout primitives (schema v2) */
+.textDisplay {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.45;
+}
+.thumbnailImg {
+  max-width: 96px;
+  max-height: 96px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+.mediaGallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px;
+}
+.mediaGalleryItem {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.mediaGalleryItem img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fileTile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--input-bg, #0f172a);
+  border: 1px solid var(--border, rgba(255,255,255,0.12));
+  border-radius: 6px;
+  color: inherit;
+  text-decoration: none;
+  font-size: 12px;
+}
+.fileTile:hover { background: rgba(255,255,255,0.05); }
+.fileMeta {
+  color: var(--text-muted, rgba(243,244,246,0.55));
+  font-size: 11px;
+}
+.separator {
+  border: 0;
+  height: 1px;
+  background: var(--border, rgba(255,255,255,0.08));
+  margin: 4px 0;
+}
+.separatorLarge { margin: 12px 0; }
+.separatorBlank { background: transparent; }
+.container {
+  border-left: 3px solid var(--border, rgba(255,255,255,0.16));
+  padding: 6px 0 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.section {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.sectionMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.labelTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, #f3f4f6);
+}
+.labelDescription {
+  font-size: 11px;
+  color: var(--text-muted, rgba(243,244,246,0.55));
+}
+.choiceList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.choiceRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 13px;
+}
+.choiceRow input { margin-top: 3px; }
+.choiceDescription {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted, rgba(243,244,246,0.55));
+}
+.fileUpload {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fileUploadPicked {
+  font-size: 11px;
+  color: var(--text-muted, rgba(243,244,246,0.65));
+}
+.spoiler {
+  filter: blur(8px);
+  cursor: pointer;
+  transition: filter 0.15s ease-out;
+}
+.spoilerRevealed { filter: none; }
+

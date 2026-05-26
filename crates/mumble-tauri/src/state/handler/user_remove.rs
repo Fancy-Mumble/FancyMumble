@@ -48,7 +48,7 @@ impl HandleMessage for mumble_tcp::UserRemove {
                 #[cfg(not(target_os = "android"))]
                 stop_audio_pipelines(&mut state);
             }
-            ctx.emit("connection-rejected", RejectedPayload { reason: reason.clone(), reject_type: None });
+            ctx.emit("connection-rejected", RejectedPayload { server_id: None, reason: reason.clone(), reject_type: None });
             // server_id stays set on shared state until the connect helper
             // tears the session down; the TauriEmitter will stamp `serverId`
             // onto the object payload so the frontend can route the event.

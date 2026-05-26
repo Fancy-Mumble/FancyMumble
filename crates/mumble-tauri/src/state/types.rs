@@ -348,6 +348,12 @@ pub(crate) struct NewDmPayload {
 
 #[derive(Clone, Serialize)]
 pub(crate) struct RejectedPayload {
+    /// Id of the session that was rejected.  Allows the frontend to
+    /// route the rejection to the correct tab and avoid clobbering
+    /// other sessions' state.  May be `None` for early connect-time
+    /// failures before a session was registered.
+    #[serde(rename = "serverId")]
+    pub server_id: Option<String>,
     pub reason: String,
     /// Protobuf `Reject.RejectType` value, if available.
     /// `3` = `WrongUserPW`, `4` = `WrongServerPW`.
@@ -391,6 +397,19 @@ pub(crate) struct ChannelDeniedPayload {
 pub(crate) struct PermissionDeniedPayload {
     pub deny_type: Option<i32>,
     pub reason: Option<String>,
+}
+
+/// Cached snapshot of the server's `PluginRegistry`.  Also forms the
+/// `plugin-registry` Tauri event payload (frontend field names match
+/// `PluginRegistryEntry` in `ui/src/store.ts`).  We cache it so the UI
+/// can resync after an HMR reload, which loses the one-shot event.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PluginRegistryEntryPayload {
+    pub plugin_name: String,
+    pub version: String,
+    pub plugin_slot: Option<u32>,
+    pub info_json: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
