@@ -119,6 +119,41 @@ pub(crate) async fn send_reaction(
     state.send_reaction(channel_id, message_id, emoji, action).await
 }
 
+/// Inject a plugin-authored chat message into the local channel
+/// history.  Invoked from the TS plugin reducer when an interaction
+/// response of kind `chat-message` is received.  The message stays
+/// purely local - it is not forwarded to the Mumble server.
+#[tauri::command]
+pub(crate) fn plugin_inject_chat_message(
+    state: tauri::State<'_, AppState>,
+    plugin_name: String,
+    channel_ids: Vec<u32>,
+    message_id: String,
+    content: String,
+    components: Option<serde_json::Value>,
+) -> Result<(), String> {
+    state.plugin_inject_chat_message(plugin_name, channel_ids, message_id, content, components)
+}
+
+/// Update a previously-injected plugin chat bubble in place.
+#[tauri::command]
+pub(crate) fn plugin_update_chat_message(
+    state: tauri::State<'_, AppState>,
+    plugin_name: String,
+    message_id: String,
+    content: Option<String>,
+    components: Option<serde_json::Value>,
+    clear_components: Option<bool>,
+) -> Result<(), String> {
+    state.plugin_update_chat_message(
+        plugin_name,
+        message_id,
+        content,
+        components,
+        clear_components.unwrap_or(false),
+    )
+}
+
 /// Pin or unpin a persisted chat message.
 #[tauri::command]
 pub(crate) async fn pin_message(

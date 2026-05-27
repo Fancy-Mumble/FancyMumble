@@ -1,0 +1,89 @@
+/* --- IdentitiesPanel - Identity list items --------------------- */
+
+.identityList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.identityItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--color-glass-bg);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm, 6px);
+}
+
+.identityItemActive {
+  background: var(--color-accent-bg, rgba(99, 179, 237, 0.1));
+  border-color: var(--color-accent, rgba(99, 179, 237, 0.4));
+}
+
+.identityLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.identityActiveBadge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-accent, #63b3ed);
+  background: var(--color-accent-bg, rgba(99, 179, 237, 0.12));
+  padding: 2px 7px;
+  border-radius: var(--radius-xs, 4px);
+  flex-shrink: 0;
+}
+
+.identityActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.identityCreateRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.identityCreateRowInput {
+  flex: 1;
+}
+
+.identityEditBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-accent);
+  background: transparent;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.identityEditBtn:hover {
+  background: var(--color-accent);
+  color: #fff;
+}

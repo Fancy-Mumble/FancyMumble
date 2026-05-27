@@ -62,6 +62,48 @@ export async function saveTrustRecord(
   await store.set(STORE_KEY, all);
 }
 
+/** One `pluginName -> record` pair for the bulk writers. */
+export interface NamedTrustRecord {
+  readonly pluginName: string;
+  readonly record: TrustRecord;
+}
+
+/** Persist a batch of trust records in a single read-modify-write.
+ *  Bulk "Allow all" / "Block all" actions go through this so they
+ *  don't race the in-memory `tauri-plugin-store` cache (parallel
+ *  `saveTrustRecord` calls otherwise clobber each other and most of
+ *  the writes silently reject). */
+export async function saveTrustRecords(
+  serverId: string | null,
+  records: readonly NamedTrustRecord[],
+): Promise<void> {
+  if (records.length === 0) return;
+  const store = await getStore();
+  const all = (await store.get<GlobalTrustMap>(STORE_KEY)) ?? {};
+  const k = keyFor(serverId);
+  const bucket: ServerTrustMap = { ...(all[k] ?? {}) };
+  for (const { pluginName, record } of records) {
+    bucket[pluginName] = record;
+  }
+  all[k] = bucket;
+  await store.set(STORE_KEY, all);
+}
+
+/** Batch equivalent of {@link saveGlobalTrustRecord}. */
+export async function saveGlobalTrustRecords(
+  records: readonly NamedTrustRecord[],
+): Promise<void> {
+  if (records.length === 0) return;
+  const store = await getStore();
+  const all = (await store.get<GlobalTrustMap>(STORE_KEY)) ?? {};
+  const bucket: ServerTrustMap = { ...(all[GLOBAL_KEY] ?? {}) };
+  for (const { pluginName, record } of records) {
+    bucket[pluginName] = record;
+  }
+  all[GLOBAL_KEY] = bucket;
+  await store.set(STORE_KEY, all);
+}
+
 /** Drop a trust record so the next registry refresh re-prompts.
  *  Removes from both the server-specific bucket and the global bucket
  *  so that "Allowed - All Servers" records are fully cleared too. */

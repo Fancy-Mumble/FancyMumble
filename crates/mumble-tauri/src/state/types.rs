@@ -190,6 +190,22 @@ pub struct ChatMessage {
     /// Unix epoch milliseconds when the message was pinned.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pinned_at: Option<u64>,
+    /// Plugin-authored origin: the `plugin_name` of the plugin that
+    /// injected this message via a `chat-message` interaction
+    /// response.  `None` for ordinary user/server messages.
+    ///
+    /// Component interactions on this message route back to this
+    /// plugin so the originating handler can react.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_name: Option<String>,
+    /// Plugin-authored UI components attached to this message,
+    /// rendered inline in the chat bubble below the body.  Stored
+    /// as opaque JSON (mirroring the
+    /// [`mumble_plugin_api::ActionRow`] wire format) so this crate
+    /// does not have to depend on the plugin API.  `None` (or an
+    /// empty array) means no interactive components.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_components: Option<serde_json::Value>,
 }
 
 impl ChatMessage {

@@ -40,13 +40,17 @@ export interface PluginMessageCard {
   readonly channelId: number | null;
 }
 
-/** An active plugin-rendered modal dialog. */
+/** An active plugin-rendered modal dialog.  Carries the merged
+ *  `ShowModal` payload: optional title / body text, optional
+ *  components, and an ephemeral flag. */
 export interface PluginModalState {
   readonly id: string;
   readonly pluginName: string;
   readonly customId: string;
   readonly title: string;
+  readonly content: string;
   readonly components: readonly ActionRow[];
+  readonly ephemeral: boolean;
   readonly channelId: number | null;
 }
 
@@ -212,10 +216,13 @@ export function applyInteractionResponse(
   channelId: number | null,
 ): PluginTier1Slice {
   switch (response.kind) {
-    case "message":
-      return applyMessageResponse(slice, pluginName, response, channelId);
     case "show-modal":
       return applyShowModal(slice, pluginName, response, channelId);
+    case "chat-message":
+      // Injection is a side effect on the message-history slice,
+      // handled by the store wrapper before this reducer runs, so
+      // the tier1 slice itself does not change.
+      return slice;
     case "update-message":
       return applyUpdateMessage(slice, response);
     case "update-panel":
@@ -223,26 +230,6 @@ export function applyInteractionResponse(
     case "toast":
       return applyToast(slice, pluginName, response);
   }
-}
-
-function applyMessageResponse(
-  slice: PluginTier1Slice,
-  pluginName: string,
-  response: Extract<ResponseKind, { kind: "message" }>,
-  channelId: number | null,
-): PluginTier1Slice {
-  const card: PluginMessageCard = {
-    id: `${pluginName}:${response.message_id}`,
-    pluginName,
-    messageId: response.message_id,
-    content: response.content ?? "",
-    components: response.components ?? [],
-    ephemeral: response.ephemeral ?? false,
-    channelId,
-  };
-  const next = slice.pluginCards.filter((c) => c.id !== card.id);
-  next.push(card);
-  return { ...slice, pluginCards: next };
 }
 
 function applyShowModal(
@@ -257,8 +244,10 @@ function applyShowModal(
       id: `${pluginName}:${response.custom_id}:${newCorrelationId()}`,
       pluginName,
       customId: response.custom_id,
-      title: response.title,
-      components: response.components,
+      title: response.title ?? "",
+      content: response.content ?? "",
+      components: response.components ?? [],
+      ephemeral: response.ephemeral ?? false,
       channelId,
     },
   };
@@ -426,15 +415,15 @@ export function decodeInteractionResponse(
  *  renderer only has to switch over schema-v2 component discriminants. */
 function normaliseInboundResponse(response: InteractionResponse): InteractionResponse {
   switch (response.kind) {
-    case "message":
+    case "show-modal":
       return {
         ...response,
         components: (response.components ?? []).map(normaliseActionRow),
       };
-    case "show-modal":
+    case "chat-message":
       return {
         ...response,
-        components: response.components.map(normaliseActionRow),
+        components: (response.components ?? []).map(normaliseActionRow),
       };
     case "update-message":
       return {

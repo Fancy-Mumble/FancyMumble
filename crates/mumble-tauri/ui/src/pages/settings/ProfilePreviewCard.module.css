@@ -1,0 +1,390 @@
+/* --- ProfilePreviewCard - Profile card preview with effects ----- */
+
+.previewCard {
+  position: relative;
+  width: 260px;
+  max-height: 360px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--color-bg-secondary, #1a1a2e);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--color-glass-border);
+  box-shadow: var(--shadow-lg);
+}
+
+.previewCard::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 90px; /* banner height */
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  border-radius: 0 0 12px 12px;
+}
+
+.previewBanner {
+  height: 90px;
+  background: #1a1a2e;
+}
+
+.previewAvatarArea {
+  padding: 0 16px;
+  margin-top: -30px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.previewNameInline {
+  flex: 1;
+  min-width: 0;
+  overflow: visible;
+  position: relative;
+}
+
+.previewAvatarWrapper {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  overflow: visible;
+  border: 3px solid var(--color-bg-secondary, #1a1a2e);
+  background: var(--color-bg-secondary, #1a1a2e);
+}
+
+.previewAvatarImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.previewAvatarPlaceholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 24px;
+  border-radius: 50%;
+  background: var(--color-bg-secondary, #1a1a2e);
+}
+
+.previewDecoration {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  font-size: 18px;
+  filter: drop-shadow(0 1px 2px var(--color-overlay-heavy));
+}
+
+.previewBody {
+  padding: 12px 16px 16px;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.previewNameRow {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  margin-bottom: 0;
+}
+
+.previewNameplate {
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  z-index: 0;
+}
+
+.previewName {
+  position: relative;
+  z-index: 1;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  word-break: break-word;
+  text-shadow: 0 1px 4px var(--color-overlay-dark);
+}
+
+.previewRegisteredBadge {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-success);
+  margin-left: 4px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 1px 2px var(--color-overlay-heavy));
+}
+
+.previewBio {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  margin: 0 0 8px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
+}
+
+.previewBio img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  display: block;
+  margin: 2px 0;
+}
+
+.previewBio a {
+  color: var(--color-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.previewBio a:hover {
+  color: #93c5fd;
+}
+
+.previewGroupChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.previewGroupChip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 99px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.previewEffectBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  border-radius: 10px;
+  background: var(--color-glass-hover);
+  color: var(--color-text-secondary);
+}
+
+.previewStatus {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin: 0 0 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.previewActivityBar {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 1px;
+}
+
+.previewActivityPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 10px;
+  line-height: 1;
+}
+
+.previewActivityOnline {
+  background: var(--color-online-medium);
+  color: var(--color-online-bright);
+}
+
+.previewActivityIdle {
+  background: var(--color-warning-bright-medium);
+  color: var(--color-warning-bright);
+}
+
+.previewActivityDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.previewActivityIcon {
+  flex-shrink: 0;
+}
+
+/* --- Card background option cards ------------------------------ */
+
+.cardBgCard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 52px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: white;
+  text-shadow: 0 1px 3px var(--color-overlay-dark);
+  border: 2px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cardBgCard:hover {
+  border-color: var(--color-glass-border-hover);
+  transform: translateY(-1px);
+}
+
+/* --- Effect overlay (animated layer over the whole card) ------- */
+
+.previewEffectOverlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.effectParticles {
+  background-image:
+    radial-gradient(1.5px 1.5px at 20% 30%, rgba(255,255,255,0.7) 50%, transparent 50%),
+    radial-gradient(2px 2px at 70% 20%, rgba(255,255,255,0.5) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 40% 70%, rgba(255,255,255,0.6) 50%, transparent 50%),
+    radial-gradient(2px 2px at 80% 80%, rgba(255,255,255,0.4) 50%, transparent 50%),
+    radial-gradient(1px 1px at 10% 60%, rgba(255,255,255,0.5) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 55% 50%, rgba(255,255,255,0.6) 50%, transparent 50%);
+  background-size: 100% 100%;
+  animation: particleFloat 6s ease-in-out infinite alternate;
+}
+
+@keyframes particleFloat {
+  0%   { transform: translateY(0); opacity: 0.7; }
+  100% { transform: translateY(-12px); opacity: 1; }
+}
+
+.effectSparkle {
+  background-image:
+    radial-gradient(2px 2px at 25% 25%, rgba(255,255,150,0.9) 50%, transparent 50%),
+    radial-gradient(2px 2px at 75% 35%, rgba(255,255,150,0.7) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 50% 75%, rgba(255,255,150,0.8) 50%, transparent 50%),
+    radial-gradient(2px 2px at 15% 65%, rgba(255,255,150,0.6) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 85% 70%, rgba(255,255,150,0.7) 50%, transparent 50%);
+  background-size: 100% 100%;
+  animation: sparkleFlicker 2s ease-in-out infinite;
+}
+
+@keyframes sparkleFlicker {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+.effectSnow {
+  background-image:
+    radial-gradient(2px 2px at 10% 0%,  rgba(255,255,255,0.8) 50%, transparent 50%),
+    radial-gradient(3px 3px at 30% 10%, rgba(255,255,255,0.6) 50%, transparent 50%),
+    radial-gradient(2px 2px at 50% 5%,  rgba(255,255,255,0.7) 50%, transparent 50%),
+    radial-gradient(2px 2px at 70% 0%,  rgba(255,255,255,0.5) 50%, transparent 50%),
+    radial-gradient(3px 3px at 90% 10%, rgba(255,255,255,0.6) 50%, transparent 50%);
+  background-size: 100% 100%;
+  animation: snowFall 4s linear infinite;
+}
+
+@keyframes snowFall {
+  0%   { transform: translateY(-10px); opacity: 0.8; }
+  100% { transform: translateY(100%); opacity: 0.3; }
+}
+
+.effectRain {
+  background-image:
+    linear-gradient(transparent 60%, rgba(100,180,255,0.15) 60%, rgba(100,180,255,0.15) 61%, transparent 61%),
+    linear-gradient(transparent 30%, rgba(100,180,255,0.12) 30%, rgba(100,180,255,0.12) 31%, transparent 31%),
+    linear-gradient(transparent 75%, rgba(100,180,255,0.1) 75%, rgba(100,180,255,0.1) 76%, transparent 76%);
+  background-size: 3px 80px, 5px 60px, 7px 100px;
+  animation: rainDrop 1.2s linear infinite;
+}
+
+@keyframes rainDrop {
+  0%   { background-position: 0 -80px; }
+  100% { background-position: 0 100%; }
+}
+
+.effectFireflies {
+  background-image:
+    radial-gradient(3px 3px at 20% 50%, rgba(255,230,100,0.9) 50%, transparent 50%),
+    radial-gradient(2px 2px at 60% 30%, rgba(255,200,80,0.8) 50%, transparent 50%),
+    radial-gradient(2.5px 2.5px at 80% 70%, rgba(255,230,100,0.6) 50%, transparent 50%);
+  background-size: 100% 100%;
+  animation: fireflyDrift 5s ease-in-out infinite alternate;
+}
+
+@keyframes fireflyDrift {
+  0%   { transform: translate(0, 0); opacity: 0.5; }
+  33%  { opacity: 1; }
+  66%  { opacity: 0.4; }
+  100% { transform: translate(6px, -8px); opacity: 0.9; }
+}
+
+.effectPulseGlow {
+  box-shadow: inset 0 0 30px rgba(99,102,241,0.3);
+  animation: pulseGlow 3s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: inset 0 0 30px rgba(99,102,241,0.15); }
+  50%      { box-shadow: inset 0 0 50px rgba(99,102,241,0.45); }
+}
+
+.effectRainbowShift {
+  background: linear-gradient(135deg,
+    rgba(255,0,0,0.08),
+    rgba(255,165,0,0.08),
+    rgba(255,255,0,0.08),
+    rgba(0,128,0,0.08),
+    rgba(0,0,255,0.08),
+    rgba(128,0,128,0.08));
+  background-size: 300% 300%;
+  animation: rainbowMove 6s linear infinite;
+}
+
+@keyframes rainbowMove {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}

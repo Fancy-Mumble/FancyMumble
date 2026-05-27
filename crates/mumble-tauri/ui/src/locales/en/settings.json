@@ -719,7 +719,7 @@
     "admin": {
       "heading": "Onboarding",
       "unsupportedServer": "The connected server does not support the onboarding workflow. It requires a Fancy Mumble server running 0.3.1 or newer.",
-      "description": "Show new members a welcome questionnaire that maps their answers to channels and Mumble ACL groups. Mirrors Discord's Community Onboarding model.",
+      "description": "Show new members a welcome questionnaire that maps their answers to channels and Mumble ACL groups.",
       "maxQuestionsHint": "Up to {{max}} questions.",
       "enabledLabel": "Enabled",
       "revisionTag": "Revision {{n}} - {{m}} channels available",

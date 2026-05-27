@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Global Zustand store for the Mumble Tauri client.
  *
  * All complex logic lives in the Rust backend - the frontend only
@@ -40,6 +40,7 @@ import type {
   FileAccessMode,
   UploadResponse,
   DownloadEntry,
+  NewDownloadInput,
   CustomServerEmote,
   PluginInfoRecord,
   PendingMessage,
@@ -51,28 +52,10 @@ import { applyWatchSyncEvent } from "./components/chat/watch/watchStore";
 import { applyReaction, resetReactions, setServerCustomReactions, type ServerCustomReaction } from "./components/chat/reaction/reactionStore";
 import {
   applyInteractionResponse,
-  applyRegistryWithTrust,
-  applyTrustDecision,
-  applyTrustRevocation,
   decodeInteractionResponse,
   emptyPluginTier1Slice,
-  sendInteraction as sendInteractionInternal,
-  type PluginMessageSender,
   type PluginTier1Slice,
 } from "./plugins/tier1/store";
-import type { InteractionKind } from "./plugins/tier1/types";
-import {
-  recordFromDecision,
-  TrustDecision,
-  TrustScope,
-} from "./plugins/tier1/trust";
-import { parseClientManifest } from "./plugins/tier1/manifest";
-import {
-  loadServerTrust,
-  revokeTrustRecord,
-  saveGlobalTrustRecord,
-  saveTrustRecord,
-} from "./plugins/tier1/trustStorage";
 import { applyReadStates, clearReadReceipts } from "./components/chat/readreceipt/readReceiptStore";
 import { useOnboardingStore } from "./components/onboarding/onboardingStore";
 import type { OnboardingConfigEvent, OnboardingResponseEvent } from "./types";
@@ -88,6 +71,45 @@ import {
 import { loadProfileData } from "./pages/settings/profileData";
 import { serializeProfile, dataUrlToBytes } from "./profileFormat";
 import { sanitiseWsUrl } from "./components/chat/livedoc/sanitiseWsUrl";
+import { TauriEvent } from "./constants/tauriEvents";
+import { PluginDataId, PluginPayloadType } from "./constants/pluginData";
+import {
+  probeFileServerCapabilities,
+  rebaseFileServerUrl,
+} from "./store/fileServer";
+export {
+  DEFAULT_FILE_SERVER_PORT,
+  fileServerBaseUrl,
+  probeFileServerCapabilities,
+  rebaseFileServerUrl,
+} from "./store/fileServer";
+import type {
+  PluginRegistryEntry,
+  PluginRegistryEvent,
+} from "./store/plugins";
+import {
+  reconcilePluginRegistry,
+  sendPluginMessage,
+  sliceFromState,
+  slicePatch,
+} from "./store/plugins";
+export type {
+  PluginRegistryEntry,
+  PluginRegistryEvent,
+} from "./store/plugins";
+export {
+  allowPlugin,
+  dismissPluginCard,
+  dismissPluginModal,
+  dismissPluginToast,
+  reconcilePluginRegistry,
+  resetPluginTrust,
+  resolvePluginTrust,
+  resolvePluginTrustBulk,
+  revokePluginTrust,
+  sendPluginInteraction,
+  sendPluginMessage,
+} from "./store/plugins";
 
 /** Event payload for a pin state change delivered by the server. */
 interface PinDeliverEvent {
@@ -138,84 +160,8 @@ const volumeAppliedSessions = new Set<number>();
 
 const AUTO_RECONNECT_DELAY_MS = 3000;
 
-/** Default port the mumble-file-server plugin binds to (see file-server config). */
-const DEFAULT_FILE_SERVER_PORT = 64739;
-
-/** Build the file-server REST base URL.
- *
- *  Preference order:
- *  1. `serverConfig.fancy_rest_api_url` (server-side override, used when the
- *     HTTP interface is fronted by a reverse proxy / ingress on a different
- *     hostname than the Mumble TCP port).
- *  2. `http://<connect host>:64739` - the plugin's default loopback bind on
- *     the same hostname the user connected to. */
-function fileServerBaseUrl(): string | null {
-  const state = useAppStore.getState();
-  const override = state.serverConfig.fancy_rest_api_url;
-  if (override && override.length > 0) return override.replace(/\/+$/, "");
-  const pending = state.pendingConnect;
-  if (!pending) return null;
-  // Normalize "localhost" to the IPv4 loopback. On Windows, "localhost"
-  // resolves to ::1 first, and Docker Desktop's IPv6 port forwarding is
-  // unreliable for published ports - the request times out even though
-  // `docker port` advertises both 0.0.0.0 and [::] mappings. Forcing
-  // IPv4 here avoids the misleading "request failed" probe error during
-  // local development.
-  const host = pending.host === "localhost" ? "127.0.0.1" : pending.host;
-  return `http://${host}:${DEFAULT_FILE_SERVER_PORT}`;
-}
-
-/** Rebase a URL returned by the file-server plugin so its origin matches
- *  the current server override URL (e.g. `https://files.mumble.magical.rocks`).
- *  The plugin embeds its own internal origin in download URLs; when the HTTP
- *  interface is fronted by a reverse proxy this origin is wrong for public
- *  access.  Only the scheme + host are replaced; path, query, and fragment
- *  are preserved unchanged.
- *
- *  Only rewrites URLs whose origin actually matches the file-server's
- *  known internal origin: other plugins are free to embed arbitrary URLs
- *  (e.g. `https://placehold.co/...`) and we must leave those alone.
- *  Returns the original URL unchanged when there is no file-server
- *  config, no rewrite target, the URL does not belong to the file server,
- *  or parsing fails. */
-export function rebaseFileServerUrl(rawUrl: string): string {
-  const internal = useAppStore.getState().fileServerConfig?.internalBaseUrl;
-  if (!internal) return rawUrl;
-  const target = fileServerBaseUrl();
-  if (!target) return rawUrl;
-  try {
-    const u = new URL(rawUrl);
-    const internalUrl = new URL(internal);
-    if (u.protocol !== internalUrl.protocol || u.host !== internalUrl.host) {
-      return rawUrl;
-    }
-    const o = new URL(target);
-    u.protocol = o.protocol;
-    u.hostname = o.hostname;
-    u.port = o.port;
-    return u.toString();
-  } catch {
-    return rawUrl;
-  }
-}
-
-/** Probe `GET {baseUrl}/capabilities` and store the result in the Zustand
- *  store.  Called whenever `serverConfig` changes so the Capabilities tab
- *  and Custom-Emotes admin tab populate even when no `fancy-file-server-config`
- *  plugin-data arrives (e.g. when the file-server plugin is loaded but the
- *  user has no upload permissions, or the capabilities endpoint is reachable
- *  via reverse proxy while the per-session config message is suppressed). */
-async function probeFileServerCapabilities(): Promise<void> {
-  const baseUrl = fileServerBaseUrl();
-  if (!baseUrl) return;
-  try {
-    const body = await invoke<string>("fetch_file_server_capabilities", { baseUrl });
-    const caps = JSON.parse(body) as FileServerCapabilities;
-    useAppStore.setState({ fileServerCapabilities: caps });
-  } catch (e) {
-    console.warn("file-server capabilities probe failed:", e);
-  }
-}
+// File-server URL helpers moved to `store/fileServer.ts`; re-exported
+// below so callers continue to `import { rebaseFileServerUrl } from "./store"`.
 
 let autoReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let manualDisconnectRequested = false;
@@ -328,7 +274,7 @@ export function liveDocKey(
 
 // --- Store shape --------------------------------------------------
 
-interface AppState {
+export interface AppState {
   // Reactive state
   status: ConnectionStatus;
   channels: ChannelEntry[];
@@ -675,7 +621,7 @@ interface AppState {
   clearUnseenPins: (channelId: number) => void;
   /** Append a completed download to the in-memory list and bump the
    *  unseen badge count. */
-  addDownload: (entry: Omit<DownloadEntry, "id" | "downloadedAt">) => void;
+  addDownload: (entry: NewDownloadInput) => void;
   /** Reset the unseen-downloads badge. Called when the panel opens. */
   markDownloadsSeen: () => void;
   /** Remove a single download from the list (does not delete the file). */
@@ -2282,16 +2228,8 @@ interface PluginMessageEvent {
   senderName: string | null;
 }
 
-/** Raw `plugin-registry` event payload (server -> client after ServerSync). */
-export interface PluginRegistryEntry {
-  pluginName: string;
-  version: string;
-  pluginSlot: number | null;
-  infoJson: string | null;
-}
-interface PluginRegistryEvent {
-  plugins: PluginRegistryEntry[];
-}
+// PluginRegistryEntry / PluginRegistryEvent moved to `store/plugins.ts`
+// (re-exported below so existing `import { PluginRegistryEntry } from "./store"` works).
 
 /** Decode a `plugin-message` byte array as a UTF-8 JSON object. */
 function decodePluginPayload<T>(bytes: number[]): T | null {
@@ -2303,29 +2241,10 @@ function decodePluginPayload<T>(bytes: number[]): T | null {
   }
 }
 
-/** Convenience wrapper around the `send_plugin_message` Tauri command.
- *  Payloads are serialized as UTF-8 JSON. */
-export async function sendPluginMessage(
-  pluginName: string,
-  payloadType: string,
-  payload: unknown,
-  targetSessions: number[] = [],
-  channelId: number | null = null,
-): Promise<void> {
-  const bytes = Array.from(new TextEncoder().encode(JSON.stringify(payload)));
-  await invoke("send_plugin_message", {
-    pluginName,
-    payloadType,
-    payload: bytes,
-    targetSessions,
-    channelId,
-  });
-}
-
 /** Route an inbound plugin envelope to the appropriate in-store handler. */
 function dispatchPluginMessage(p: PluginMessageEvent): void {
   if (p.pluginName === "fancy-live-doc") {
-    if (p.payloadType === "Invite") {
+    if (p.payloadType === PluginPayloadType.Invite) {
       const data = decodePluginPayload<{
         channelId: number;
         slug: string;
@@ -2349,7 +2268,7 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
       });
       return;
     }
-    if (p.payloadType === "Announce") {
+    if (p.payloadType === PluginPayloadType.Announce) {
       const data = decodePluginPayload<{
         channelId: number;
         slug: string;
@@ -2370,6 +2289,39 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
   }
   const response = decodeInteractionResponse(p.payloadType, p.payload);
   if (response) {
+    // Side effect for chat-message: ask the rust state to inject the
+    // bubble into local channel history.  The tier1 reducer itself
+    // is a no-op for this kind, so the side effect is the entire
+    // delivery mechanism.
+    if (response.kind === "chat-message") {
+      invoke("plugin_inject_chat_message", {
+        pluginName: p.pluginName,
+        channelIds: response.channel_ids ?? [],
+        messageId: response.message_id,
+        content: response.content ?? "",
+        components: response.components ?? null,
+      }).catch((e) =>
+        console.warn("[store] plugin_inject_chat_message failed:", e),
+      );
+    }
+    // Side effect for update-message: also try to update any
+    // matching plugin-authored chat bubble.  The tier1 reducer in
+    // parallel updates floating cards; the bubble path is restricted
+    // to messages whose `plugin_name` matches `p.pluginName`.
+    if (response.kind === "update-message") {
+      invoke("plugin_update_chat_message", {
+        pluginName: p.pluginName,
+        messageId: response.message_id,
+        content: response.content ?? null,
+        components:
+          response.components === null
+            ? null
+            : (response.components ?? null),
+        clearComponents: response.components === null,
+      }).catch((e) =>
+        console.warn("[store] plugin_update_chat_message failed:", e),
+      );
+    }
     useAppStore.setState((s) => {
       // Trust gate: drop responses from untrusted plugins on the
       // floor.  The plugin is allowed to send (server-side has no way
@@ -2396,177 +2348,6 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
   console.debug("[store] unhandled plugin-message:", p.pluginName, p.payloadType);
 }
 
-function sliceFromState(s: AppState): PluginTier1Slice {
-  return {
-    pluginManifests: s.pluginManifests,
-    pluginTrust: s.pluginTrust,
-    pluginTrustQueue: s.pluginTrustQueue,
-    pluginPanels: s.pluginPanels,
-    pluginCards: s.pluginCards,
-    pluginModal: s.pluginModal,
-    pluginToasts: s.pluginToasts,
-    pluginSessionTrust: s.pluginSessionTrust,
-  };
-}
-
-function slicePatch(slice: PluginTier1Slice): Partial<AppState> {
-  return {
-    pluginManifests: slice.pluginManifests,
-    pluginTrust: slice.pluginTrust,
-    pluginTrustQueue: slice.pluginTrustQueue,
-    pluginPanels: slice.pluginPanels,
-    pluginCards: slice.pluginCards,
-    pluginModal: slice.pluginModal,
-    pluginToasts: slice.pluginToasts,
-    pluginSessionTrust: slice.pluginSessionTrust,
-  };
-}
-
-/** Reconcile a fresh `plugin-registry` event against stored trust
- *  records and update the slice in one shot.  Fetches the active
- *  server id directly from the backend to avoid a race where the
- *  Zustand store's `activeServerId` is still null when this fires
- *  right after `server-connected` (before `refreshSessions` settles). */
-async function reconcilePluginRegistry(
-  entries: readonly PluginRegistryEntry[],
-): Promise<void> {
-  const state = useAppStore.getState();
-  const serverId =
-    state.activeServerId ?? (await invoke<string | null>("get_active_server"));
-  const storedTrust = new Map(
-    Object.entries(await loadServerTrust(serverId)),
-  );
-  // Overlay in-memory session grants so session-allowed plugins do not
-  // re-prompt when the server re-broadcasts the registry.
-  const effectiveTrust = new Map(storedTrust);
-  for (const name of state.pluginSessionTrust) {
-    const sessionRecord = state.pluginTrust.get(name);
-    if (sessionRecord) effectiveTrust.set(name, sessionRecord);
-  }
-  const { pluginManifests, pluginPanels, pluginTrustQueue } =
-    applyRegistryWithTrust(serverId, entries, effectiveTrust);
-  useAppStore.setState((s) => {
-    // Preserve any panel rows the plugin patched in via UpdatePanel
-    // between manifest broadcasts.  The freshly-seeded rows are only
-    // honoured for panels that did not previously exist.
-    const mergedPanels = new Map(pluginPanels);
-    for (const [k, existing] of s.pluginPanels) {
-      if (mergedPanels.has(k)) mergedPanels.set(k, existing);
-    }
-    return {
-      pluginRegistry: entries.slice(),
-      pluginManifests,
-      pluginPanels: mergedPanels,
-      pluginTrust: effectiveTrust,
-      pluginTrustQueue,
-    };
-  });
-}
-
-/** Resolve the front-of-queue trust prompt.  Persists the decision
- *  to `pluginTrust.json` (unless scope is "once") and rolls the
- *  in-memory slice forward. */
-export async function resolvePluginTrust(
-  pluginName: string,
-  decision: TrustDecision,
-  scope: TrustScope = TrustScope.Server,
-): Promise<void> {
-  const state = useAppStore.getState();
-  const pending = state.pluginTrustQueue.find(
-    (p) => p.pluginName === pluginName,
-  );
-  if (!pending) return;
-  const record = recordFromDecision(decision, pending.version, pending.manifest, scope);
-  if (decision === TrustDecision.Allow && scope === TrustScope.Global) {
-    await saveGlobalTrustRecord(pluginName, record);
-  } else if (scope !== TrustScope.Once) {
-    await saveTrustRecord(state.activeServerId, pluginName, record);
-  }
-  useAppStore.setState((s) => {
-    const next = applyTrustDecision(
-      sliceFromState(s),
-      pluginName,
-      record,
-      pending.manifest,
-    );
-    const nextSessionTrust =
-      decision === TrustDecision.Allow && scope === TrustScope.Once
-        ? new Set([...s.pluginSessionTrust, pluginName])
-        : s.pluginSessionTrust;
-    return { ...slicePatch(next), pluginSessionTrust: nextSessionTrust };
-  });
-}
-
-/** Drop the stored trust record for a plugin so the next registry
- *  refresh re-prompts.  Used by the Plugins settings tab. */
-export async function revokePluginTrust(pluginName: string): Promise<void> {
-  const state = useAppStore.getState();
-  await revokeTrustRecord(state.activeServerId, pluginName);
-  useAppStore.setState((s) => {
-    const next = applyTrustRevocation(sliceFromState(s), pluginName);
-    return slicePatch(next);
-  });
-}
-
-/** Allow a plugin that was previously denied or whose trust was revoked,
- *  without requiring it to be in the trust-prompt queue.  Looks up the
- *  plugin from the registry, parses its manifest, and persists the
- *  decision according to the given scope. */
-export async function allowPlugin(
-  pluginName: string,
-  scope: TrustScope = TrustScope.Server,
-): Promise<void> {
-  const state = useAppStore.getState();
-  const entry = state.pluginRegistry.find((e) => e.pluginName === pluginName);
-  if (!entry) return;
-  const manifest = parseClientManifest(entry.infoJson);
-  if (!manifest) return;
-  const record = recordFromDecision(TrustDecision.Allow, entry.version, manifest, scope);
-  if (scope === TrustScope.Global) {
-    await saveGlobalTrustRecord(pluginName, record);
-  } else if (scope !== TrustScope.Once) {
-    await saveTrustRecord(state.activeServerId, pluginName, record);
-  }
-  useAppStore.setState((s) => {
-    const next = applyTrustDecision(sliceFromState(s), pluginName, record, manifest);
-    const nextSessionTrust =
-      scope === "once"
-        ? new Set([...s.pluginSessionTrust, pluginName])
-        : s.pluginSessionTrust;
-    return { ...slicePatch(next), pluginSessionTrust: nextSessionTrust };
-  });
-}
-
-/** Send a Tier-1 `Interaction` to a plugin and return the correlation id
- *  so callers can await the matching response in `pluginCards`. */
-export function sendPluginInteraction(
-  pluginName: string,
-  kind: InteractionKind,
-  channelId: number | null = null,
-): Promise<string> {
-  const sender: PluginMessageSender = (name, type, payload, targets, ch) =>
-    sendPluginMessage(name, type, payload, targets ?? [], ch ?? null);
-  return sendInteractionInternal(sender, pluginName, kind, channelId);
-}
-
-/** Dismiss a plugin-rendered card by `messageId`. */
-export function dismissPluginCard(messageId: string): void {
-  useAppStore.setState((s) => ({
-    pluginCards: s.pluginCards.filter((c) => c.messageId !== messageId),
-  }));
-}
-
-/** Dismiss the active plugin modal without submitting. */
-export function dismissPluginModal(): void {
-  useAppStore.setState({ pluginModal: null });
-}
-
-/** Remove a finished toast from the queue. */
-export function dismissPluginToast(id: string): void {
-  useAppStore.setState((s) => ({
-    pluginToasts: s.pluginToasts.filter((t) => t.id !== id),
-  }));
-}
 
 /** Deterministic palette mirror of `pickCursorColor` in ChatView.tsx. */
 const LIVE_DOC_COLORS = [
@@ -2753,7 +2534,7 @@ export async function initEventListeners(
 
   // Server fully connected (ServerSync received).
   unlisteners.push(
-    await listen("server-connected", async () => {
+    await listen(TauriEvent.ServerConnected, async () => {
       manualDisconnectRequested = false;
       clearAutoReconnectTimer();
       // Load silenced channels for this server (pendingConnect still available).
@@ -2916,7 +2697,7 @@ export async function initEventListeners(
   // Connection dropped.
   unlisteners.push(
     await listen<{ serverId?: string | null; reason: string | null } | string | null>(
-      "server-disconnected",
+      TauriEvent.ServerDisconnected,
       async (event) => {
         // Normalise: backend now always sends an object payload, but tolerate
         // a bare reason string for forwards/backwards compatibility.
@@ -3015,7 +2796,7 @@ export async function initEventListeners(
   // Channel / user list changed - debounce rapid-fire updates.
   let stateChangeTimer: ReturnType<typeof setTimeout> | undefined;
   unlisteners.push(
-    await listen("state-changed", () => {
+    await listen(TauriEvent.StateChanged, () => {
       clearTimeout(stateChangeTimer);
       stateChangeTimer = setTimeout(() => {
         useAppStore
@@ -3029,7 +2810,7 @@ export async function initEventListeners(
   // Messages, unreads, groups, connection events.
   unlisteners.push(
     // Server activity log entry.
-    await listen<ServerLogEntry>("server-log", (event) => {
+    await listen<ServerLogEntry>(TauriEvent.ServerLog, (event) => {
       const MAX_LOG_ENTRIES = 200;
       useAppStore.setState((prev) => {
         const log = [...prev.serverLog, event.payload];
@@ -3041,7 +2822,7 @@ export async function initEventListeners(
     }),
 
     // New text message arrived.
-    await listen<{ channel_id: number; sender_session: number | null }>("new-message", async (event) => {
+    await listen<{ channel_id: number; sender_session: number | null }>(TauriEvent.NewMessage, async (event) => {
       const { channel_id, sender_session } = event.payload;
 
       // Clear the sender's typing indicator immediately.
@@ -3068,7 +2849,7 @@ export async function initEventListeners(
     }),
 
     // New direct message arrived.
-    await listen<{ session: number }>("new-dm", async (event) => {
+    await listen<{ session: number }>(TauriEvent.NewDm, async (event) => {
       const { selectedDmUser } = useAppStore.getState();
       if (selectedDmUser === event.payload.session) {
         await useAppStore
@@ -3127,7 +2908,7 @@ export async function initEventListeners(
     ),
 
     // Server rejected the connection.
-    await listen<{ serverId?: string | null; reason: string; reject_type: number | null }>("connection-rejected", async (event) => {
+    await listen<{ serverId?: string | null; reason: string; reject_type: number | null }>(TauriEvent.ConnectionRejected, async (event) => {
       // Always remember the rejection reason for this session so the
       // user sees it when they switch to its tab.
       const eventServerId = event.payload.serverId ?? null;
@@ -3214,7 +2995,7 @@ export async function initEventListeners(
     }),
 
     // Listen request was denied by the server - revert the UI.
-    await listen<{ channel_id: number }>("listen-denied", (event) => {
+    await listen<{ channel_id: number }>(TauriEvent.ListenDenied, (event) => {
       useAppStore.setState((prev) => {
         const next = new Set(prev.listenedChannels);
         next.delete(event.payload.channel_id);
@@ -3223,12 +3004,12 @@ export async function initEventListeners(
     }),
 
     // Our own user moved to a different channel.
-    await listen<{ channel_id: number }>("current-channel-changed", (event) => {
+    await listen<{ channel_id: number }>(TauriEvent.CurrentChannelChanged, (event) => {
       useAppStore.setState({ currentChannel: event.payload.channel_id });
     }),
 
     // User tapped a chat notification - navigate to the target channel.
-    await listen<{ channel_id: number }>("navigate-to-channel", (event) => {
+    await listen<{ channel_id: number }>(TauriEvent.NavigateToChannel, (event) => {
       const channelId = event.payload.channel_id;
       navigate("/chat");
       useAppStore.getState().selectChannel(channelId);
@@ -3240,7 +3021,7 @@ export async function initEventListeners(
     // voiceMutedOnReconnect. Prefs are written by the explicit action
     // handlers (enableVoice, disableVoice, toggleMute) where ordering is
     // deterministic relative to the user's intent.
-    await listen<VoiceState>("voice-state-changed", (event) => {
+    await listen<VoiceState>(TauriEvent.VoiceStateChanged, (event) => {
       const updates: Partial<ReturnType<typeof useAppStore.getState>> = { voiceState: event.payload };
       if (event.payload === "inactive") {
         updates.talkingSessions = new Set();
@@ -3249,14 +3030,14 @@ export async function initEventListeners(
     }),
 
     // Audio transport mode changed (UDP vs TCP tunnel).
-    await listen<boolean>("audio-transport-changed", (event) => {
+    await listen<boolean>(TauriEvent.AudioTransportChanged, (event) => {
       useAppStore.setState({ udpActive: event.payload });
     }),
 
     // Stream popout windows broadcast their open/close state so the main
     // window can hide its "is sharing" banner for sessions whose stream
     // is already being viewed in a detached window.
-    await listen<{ session: number; opened: boolean }>("stream-popout-state", (event) => {
+    await listen<{ session: number; opened: boolean }>(TauriEvent.StreamPopoutState, (event) => {
       const { session, opened } = event.payload;
       const prev = useAppStore.getState().poppedOutStreamSessions;
       const next = new Set(prev);
@@ -3265,7 +3046,7 @@ export async function initEventListeners(
     }),
 
     // User talking state changed (audio transmission start/stop).
-    await listen<[number, boolean]>("user-talking", (event) => {
+    await listen<[number, boolean]>(TauriEvent.UserTalking, (event) => {
       const [session, talking] = event.payload;
       const prev = useAppStore.getState().talkingSessions;
       const next = new Set(prev);
@@ -3278,7 +3059,7 @@ export async function initEventListeners(
     }),
 
     // Server config received (limits, allow_html, etc.).
-    await listen("server-config", async () => {
+    await listen(TauriEvent.ServerConfig, async () => {
       try {
         const cfg = await invoke<MumbleServerConfig>("get_server_config");
         useAppStore.setState((state) => {
@@ -3302,12 +3083,12 @@ export async function initEventListeners(
   // double-mounts where the old handler-array dispatch could fail.
   unlisteners.push(
     await listen<{ sender_session: number | null; data: number[]; data_id: string }>(
-      "plugin-data",
+      TauriEvent.PluginData,
       (event) => {
         const { data_id, data, sender_session } = event.payload;
         const bytes = new Uint8Array(data);
 
-        if (data_id === "fancy-file-server-config") {
+        if (data_id === PluginDataId.FileServerConfig) {
           try {
             const json = new TextDecoder().decode(bytes);
             const raw = JSON.parse(json);
@@ -3342,7 +3123,7 @@ export async function initEventListeners(
           }
         }
 
-        if (data_id === "fancy-live-doc-config") {
+        if (data_id === PluginDataId.LiveDocConfig) {
           try {
             const json = new TextDecoder().decode(bytes);
             const raw = JSON.parse(json) as { version: string; ws_base_url: string };
@@ -3361,7 +3142,7 @@ export async function initEventListeners(
           }
         }
 
-        if (data_id === "fancy-plugin-info") {
+        if (data_id === PluginDataId.PluginInfo) {
           (async () => {
             try {
               const rec = await invoke<PluginInfoRecord>("decode_plugin_info", {
@@ -3378,7 +3159,7 @@ export async function initEventListeners(
           })();
         }
 
-        if (data_id === "fancy-server-emotes") {
+        if (data_id === PluginDataId.ServerEmotes) {
           try {
             const json = new TextDecoder().decode(bytes);
             const raw = JSON.parse(json) as { emotes: Array<{
@@ -3405,13 +3186,13 @@ export async function initEventListeners(
           }
         }
 
-        if (data_id === "fancy-poll" || data_id === "fancy-poll-vote") {
+        if (data_id === PluginDataId.Poll || data_id === PluginDataId.PollVote) {
           // Legacy: ignored.  Polls now travel through native protobuf
           // messages (FancyPoll, FancyPollVote) and are routed via the
           // "fancy-poll" / "fancy-poll-vote" Tauri events below.
         }
 
-        if (data_id === "fancy-live-doc/invite" || data_id === "fancy-live-doc/announce") {
+        if (data_id === PluginDataId.LiveDocInvite || data_id === PluginDataId.LiveDocAnnounce) {
           // Legacy: ignored.  Live-doc invites/announces now travel through
           // the generic `PluginMessage` envelope (wire ID 200) and are
           // delivered as `plugin-message` Tauri events below.
@@ -3428,12 +3209,12 @@ export async function initEventListeners(
   // -- Generic plugin envelope dispatcher --------------------------
 
   unlisteners.push(
-    await listen<PluginMessageEvent>("plugin-message", (event) => {
+    await listen<PluginMessageEvent>(TauriEvent.PluginMessage, (event) => {
       dispatchPluginMessage(event.payload);
     }),
   );
   unlisteners.push(
-    await listen<PluginRegistryEvent>("plugin-registry", (event) => {
+    await listen<PluginRegistryEvent>(TauriEvent.PluginRegistry, (event) => {
       void reconcilePluginRegistry(event.payload.plugins);
     }),
   );
@@ -3450,7 +3231,7 @@ export async function initEventListeners(
       creatorSession: number;
       creatorName: string;
       createdAt: string;
-    }>("fancy-poll", (event) => {
+    }>(TauriEvent.FancyPoll, (event) => {
       const e = event.payload;
       const users = useAppStore.getState().users;
       const resolvedName = e.creatorName
@@ -3477,7 +3258,7 @@ export async function initEventListeners(
       selected: number[];
       voterSession: number;
       voterName: string;
-    }>("fancy-poll-vote", (event) => {
+    }>(TauriEvent.FancyPollVote, (event) => {
       const e = event.payload;
       const users = useAppStore.getState().users;
       const resolvedName = e.voterName
@@ -3499,7 +3280,7 @@ export async function initEventListeners(
 
   unlisteners.push(
     await listen<{ sender_session: number | null; target_session: number | null; signal_type: number; payload: string; serverId?: string | null }>(
-      "webrtc-signal",
+      TauriEvent.WebrtcSignal,
       (event) => {
         const { sender_session, target_session, signal_type, payload } = event.payload;
         const serverId = event.payload.serverId ?? null;
@@ -3530,7 +3311,7 @@ export async function initEventListeners(
 
   unlisteners.push(
     await listen<ServerCustomReaction[]>(
-      "custom-reactions-config",
+      TauriEvent.CustomReactionsConfig,
       (event) => {
         const reactions = event.payload;
         if (Array.isArray(reactions)) {
@@ -3544,7 +3325,7 @@ export async function initEventListeners(
 
   unlisteners.push(
     await listen<ReadReceiptDeliverPayload>(
-      "read-receipt-deliver",
+      TauriEvent.ReadReceiptDeliver,
       (event) => {
         const { channel_id, read_states } = event.payload;
         applyReadStates(channel_id, read_states);
@@ -3558,7 +3339,7 @@ export async function initEventListeners(
   // -- Onboarding workflow events ---------------------------------
 
   unlisteners.push(
-    await listen<OnboardingConfigEvent>("onboarding-config", (event) => {
+    await listen<OnboardingConfigEvent>(TauriEvent.OnboardingConfig, (event) => {
       const { config } = event.payload;
       const onboarding = useOnboardingStore.getState();
       onboarding.setConfig(config);
@@ -3582,7 +3363,7 @@ export async function initEventListeners(
   );
 
   unlisteners.push(
-    await listen<OnboardingResponseEvent>("onboarding-response", (event) => {
+    await listen<OnboardingResponseEvent>(TauriEvent.OnboardingResponse, (event) => {
       useOnboardingStore.getState().setResponse(event.payload.response ?? null);
     }),
   );
@@ -3591,7 +3372,7 @@ export async function initEventListeners(
 
   unlisteners.push(
     await listen<{ session: number; channel_id: number }>(
-      "typing-indicator",
+      TauriEvent.TypingIndicator,
       (event) => {
         const { session, channel_id } = event.payload;
         useAppStore.setState((prev) => {
@@ -3625,7 +3406,7 @@ export async function initEventListeners(
   // -- Watch-together (FancyWatchSync) events ---------------------
 
   unlisteners.push(
-    await listen<WatchSyncPayload>("watch-sync", (event) => {
+    await listen<WatchSyncPayload>(TauriEvent.WatchSync, (event) => {
       applyWatchSyncEvent(event.payload);
     }),
   );
@@ -3635,7 +3416,7 @@ export async function initEventListeners(
   unlisteners.push(
     // Channel persistence config changed (from ChannelState updates).
     await listen<{ channel_id: number; config: ChannelPersistConfig }>(
-      "persistence-config-changed",
+      TauriEvent.PersistenceConfigChanged,
       (event) => {
         const { channel_id, config } = event.payload;
         useAppStore.getState().updateChannelPersistenceConfig(channel_id, config);
@@ -3644,7 +3425,7 @@ export async function initEventListeners(
 
     // Key trust level changed for a channel.
     await listen<{ channel_id: number; trust: KeyTrustState }>(
-      "key-trust-changed",
+      TauriEvent.KeyTrustChanged,
       (event) => {
         const { channel_id, trust } = event.payload;
         useAppStore.setState((prev) => {
@@ -3661,7 +3442,7 @@ export async function initEventListeners(
 
     // Custodian list changed (TOFU change detection).
     await listen<{ channel_id: number; pin: CustodianPinState }>(
-      "custodian-pin-changed",
+      TauriEvent.CustodianPinChanged,
       (event) => {
         const { channel_id, pin } = event.payload;
         useAppStore.setState((prev) => ({
@@ -3672,7 +3453,7 @@ export async function initEventListeners(
 
     // Key dispute detected.
     await listen<{ channel_id: number; dispute: PendingDispute }>(
-      "key-dispute-detected",
+      TauriEvent.KeyDisputeDetected,
       (event) => {
         const { channel_id, dispute } = event.payload;
         useAppStore.setState((prev) => ({
@@ -3683,7 +3464,7 @@ export async function initEventListeners(
 
     // Key dispute resolved (by custodian shortcut or timeout).
     await listen<{ channel_id: number }>(
-      "key-dispute-resolved",
+      TauriEvent.KeyDisputeResolved,
       (event) => {
         const { channel_id } = event.payload;
         useAppStore.setState((prev) => {
@@ -3695,7 +3476,7 @@ export async function initEventListeners(
 
     // Pchat history loading state (waiting for key exchange).
     await listen<{ channel_id: number; loading: boolean }>(
-      "pchat-history-loading",
+      TauriEvent.PchatHistoryLoading,
       (event) => {
         const { channel_id, loading } = event.payload;
         const next = new Set(useAppStore.getState().pchatHistoryLoading);
@@ -3720,7 +3501,7 @@ export async function initEventListeners(
     // forces a get_messages via sendMessage). Refreshing here closes
     // that race for the bootstrap case.
     await listen<{ channel_id: number; has_more: boolean; total_stored: number }>(
-      "pchat-fetch-complete",
+      TauriEvent.PchatFetchComplete,
       async (event) => {
         const { channel_id, has_more, total_stored } = event.payload;
         useAppStore.setState((prev) => ({
@@ -3743,7 +3524,7 @@ export async function initEventListeners(
 
     // A new key-share consent request from the backend.
     await listen<PendingKeyShareRequest>(
-      "pchat-key-share-request",
+      TauriEvent.PchatKeyShareRequest,
       (event) => {
         const req = event.payload;
         useAppStore.setState((prev) => {
@@ -3764,7 +3545,7 @@ export async function initEventListeners(
 
     // Key-share requests changed (after approve/dismiss).
     await listen<{ channel_id: number; pending: PendingKeyShareRequest[] }>(
-      "pchat-key-share-requests-changed",
+      TauriEvent.PchatKeyShareRequestsChanged,
       (event) => {
         const { channel_id, pending } = event.payload;
         useAppStore.setState((prev) => {
@@ -3784,7 +3565,7 @@ export async function initEventListeners(
 
     // Key holders list updated by the server.
     await listen<{ channel_id: number; holders: KeyHolderEntry[] }>(
-      "pchat-key-holders-changed",
+      TauriEvent.PchatKeyHoldersChanged,
       (event) => {
         const { channel_id, holders } = event.payload;
         useAppStore.setState((prev) => ({
@@ -3798,7 +3579,7 @@ export async function initEventListeners(
 
     // Key restored: a new key was received after a previous revocation.
     await listen<{ channel_id: number }>(
-      "pchat-key-restored",
+      TauriEvent.PchatKeyRestored,
       (event) => {
         const { channel_id } = event.payload;
         useAppStore.setState((prev) => {
@@ -3811,7 +3592,7 @@ export async function initEventListeners(
 
     // Key-possession challenge failed: our key was wrong/outdated.
     await listen<{ channel_id: number }>(
-      "pchat-key-revoked",
+      TauriEvent.PchatKeyRevoked,
       (event) => {
         const { channel_id } = event.payload;
         useAppStore.setState((prev) => {
@@ -3842,7 +3623,7 @@ export async function initEventListeners(
 
     // Reaction add/remove delivered by the server (persistent channels).
     await listen<ReactionDeliverEvent>(
-      "pchat-reaction-deliver",
+      TauriEvent.PchatReactionDeliver,
       (event) => {
         const { message_id, emoji, action, sender_hash, sender_name } = event.payload;
         const resolvedName = useAppStore.getState().users.find((u) => u.hash === sender_hash)?.name ?? sender_name;
@@ -3853,7 +3634,7 @@ export async function initEventListeners(
 
     // Batch reaction fetch response (historical reactions for persistent channels).
     await listen<ReactionFetchResponseEvent>(
-      "pchat-reaction-fetch-response",
+      TauriEvent.PchatReactionFetchResponse,
       (event) => {
         const { users } = useAppStore.getState();
         for (const r of event.payload.reactions) {
@@ -3866,7 +3647,7 @@ export async function initEventListeners(
 
     // Pin/unpin delivered by the server (persistent channels).
     await listen<PinDeliverEvent>(
-      "pchat-pin-deliver",
+      TauriEvent.PchatPinDeliver,
       (event) => {
         const { channel_id, message_id, pinned, pinner_hash, pinner_name, timestamp } = event.payload;
         const resolvedName = useAppStore.getState().users.find((u) => u.hash === pinner_hash)?.name ?? pinner_name;
@@ -3895,7 +3676,7 @@ export async function initEventListeners(
 
     // Batch pin fetch response (historical pins for persistent channels).
     await listen<PinFetchResponseEvent>(
-      "pchat-pin-fetch-response",
+      TauriEvent.PchatPinFetchResponse,
       (event) => {
         const { users } = useAppStore.getState();
         const pinnedIds = new Map(event.payload.pins.map((p) => {
@@ -3913,7 +3694,7 @@ export async function initEventListeners(
 
     // Signal bridge load failure: show error banner in the UI.
     await listen<{ message: string }>(
-      "pchat-signal-bridge-error",
+      TauriEvent.PchatSignalBridgeError,
       (event) => {
         useAppStore.setState({ signalBridgeError: event.payload.message });
       },

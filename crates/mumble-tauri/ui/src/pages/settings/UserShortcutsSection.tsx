@@ -10,6 +10,7 @@ import {
   type UserShortcut,
 } from "./userShortcuts";
 import styles from "./SettingsPage.module.css";
+import panelStyles from "./UserShortcutsSection.module.css";
 
 function newId(): string {
   return globalThis.crypto?.randomUUID?.()
@@ -99,10 +100,10 @@ export default function UserShortcutsSection() {
             return t("userShortcuts.serverScopedUnknown");
           })();
           return (
-          <div key={s.id} className={styles.userShortcutRow}>
-            <div className={styles.userShortcutMeta}>
-              <span className={styles.userShortcutName}>{s.userName}</span>
-              <span className={styles.userShortcutServer}>{scopeLabel}</span>
+          <div key={s.id} className={panelStyles.userShortcutRow}>
+            <div className={panelStyles.userShortcutMeta}>
+              <span className={panelStyles.userShortcutName}>{s.userName}</span>
+              <span className={panelStyles.userShortcutServer}>{scopeLabel}</span>
             </div>
             <ShortcutRecorder
               label={t("userShortcuts.hotkeyLabel")}
@@ -111,7 +112,7 @@ export default function UserShortcutsSection() {
             />
             <button
               type="button"
-              className={styles.userShortcutRemove}
+              className={panelStyles.userShortcutRemove}
               onClick={() => void handleRemove(s.id)}
               title={t("userShortcuts.remove")}
             >
@@ -123,7 +124,7 @@ export default function UserShortcutsSection() {
       </div>
 
       {picking ? (
-        <div className={styles.userShortcutPicker}>
+        <div className={panelStyles.userShortcutPicker}>
           <label className={styles.fieldLabel} htmlFor="user-shortcut-pick">
             {t("userShortcuts.pickUser")}
           </label>
@@ -135,7 +136,7 @@ export default function UserShortcutsSection() {
           )}
           <select
             id="user-shortcut-pick"
-            className={styles.userShortcutSelect}
+            className={panelStyles.userShortcutSelect}
             value={pickSession}
             onChange={(e) => setPickSession(e.target.value)}
             disabled={!activeServerId || candidateUsers.length === 0}
@@ -148,17 +149,17 @@ export default function UserShortcutsSection() {
             ))}
           </select>
           <p className={styles.fieldHint}>{t("userShortcuts.noHashExplain")}</p>
-          <div className={styles.userShortcutPickActions}>
+          <div className={panelStyles.userShortcutPickActions}>
             <button
               type="button"
-              className={styles.userShortcutCancel}
+              className={panelStyles.userShortcutCancel}
               onClick={() => { setPicking(false); setPickSession(""); }}
             >
               {t("common:actions.cancel")}
             </button>
             <button
               type="button"
-              className={styles.userShortcutSave}
+              className={panelStyles.userShortcutSave}
               onClick={() => void handleAddConfirm()}
               disabled={!pickSession}
             >
@@ -169,7 +170,7 @@ export default function UserShortcutsSection() {
       ) : (
         <button
           type="button"
-          className={styles.userShortcutAdd}
+          className={panelStyles.userShortcutAdd}
           onClick={() => setPicking(true)}
         >
           {t("userShortcuts.addBtn")}
@@ -178,3 +179,4 @@ export default function UserShortcutsSection() {
     </section>
   );
 }
+

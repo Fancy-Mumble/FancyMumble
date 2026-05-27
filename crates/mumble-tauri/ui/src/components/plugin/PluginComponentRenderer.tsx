@@ -1,7 +1,10 @@
 // Recursive renderer for plugin-driven UI components in card (non-modal)
-// context.  Modal-only components (text-input, file-upload, radio-group,
-// checkbox-group, checkbox) silently render nothing here - the modal
-// owns its own state machine and uses dedicated controls.
+// context.  Modal-only components (text-input, file-upload, checkbox)
+// silently render nothing here - the modal owns its own state machine
+// and uses dedicated controls.  Radio-group and checkbox-group are
+// rendered here as a stack of native radio/checkbox inputs that fire
+// `sendPluginInteraction` immediately on change, matching how
+// `string-select` works in this context.
 //
 // Shared layout/display primitives (container, section, separator,
 // label, text-display, thumbnail, media-gallery, file) are rendered
@@ -96,10 +99,12 @@ export function RenderComponent({
       return <RenderSection component={component} ctx={ctx} />;
     case "label":
       return <RenderLabel component={component} ctx={ctx} />;
+    case "radio-group":
+      return <RenderRadioGroup component={component} ctx={ctx} />;
+    case "checkbox-group":
+      return <RenderCheckboxGroup component={component} ctx={ctx} />;
     case "text-input":
     case "file-upload":
-    case "radio-group":
-    case "checkbox-group":
     case "checkbox":
       // Modal-only components - skip in card context.
       return null;
@@ -160,6 +165,96 @@ function RenderButton({
     >
       {component.label}
     </button>
+  );
+}
+
+function RenderRadioGroup({
+  component,
+  ctx,
+}: {
+  readonly component: Extract<Component, { type: "radio-group" }>;
+  readonly ctx: RenderContext;
+}) {
+  const initial = component.options.find((o) => o.default)?.value;
+  const [selected, setSelected] = useState<string | undefined>(initial);
+  return (
+    <div className={styles.choiceList}>
+      {component.options.map((o) => (
+        <label key={o.value} className={styles.choiceRow}>
+          <input
+            type="radio"
+            name={component.custom_id}
+            value={o.value}
+            checked={selected === o.value}
+            onChange={() => {
+              setSelected(o.value);
+              void sendPluginInteraction(
+                ctx.pluginName,
+                {
+                  kind: "component",
+                  custom_id: component.custom_id,
+                  values: [o.value],
+                },
+                ctx.channelId,
+              );
+            }}
+          />
+          <span>
+            {o.label}
+            {o.description && (
+              <span className={styles.choiceDescription}>{o.description}</span>
+            )}
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function RenderCheckboxGroup({
+  component,
+  ctx,
+}: {
+  readonly component: Extract<Component, { type: "checkbox-group" }>;
+  readonly ctx: RenderContext;
+}) {
+  const initial = new Set(
+    component.options.filter((o) => o.default).map((o) => o.value),
+  );
+  const [selected, setSelected] = useState<Set<string>>(initial);
+  const toggle = (value: string, on: boolean) => {
+    const next = new Set(selected);
+    if (on) next.add(value);
+    else next.delete(value);
+    setSelected(next);
+    void sendPluginInteraction(
+      ctx.pluginName,
+      {
+        kind: "component",
+        custom_id: component.custom_id,
+        values: Array.from(next),
+      },
+      ctx.channelId,
+    );
+  };
+  return (
+    <div className={styles.choiceList}>
+      {component.options.map((o) => (
+        <label key={o.value} className={styles.choiceRow}>
+          <input
+            type="checkbox"
+            checked={selected.has(o.value)}
+            onChange={(e) => toggle(o.value, e.target.checked)}
+          />
+          <span>
+            {o.label}
+            {o.description && (
+              <span className={styles.choiceDescription}>{o.description}</span>
+            )}
+          </span>
+        </label>
+      ))}
+    </div>
   );
 }
 

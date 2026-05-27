@@ -1,6 +1,7 @@
 import { memo, useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { marked } from "marked";
 import type { ChatMessage, UserEntry, TimeFormat } from "../../../types";
 import type { PollPayload } from "../poll/PollCreator";
 import { useAppStore, requestLinkPreview, decodeLiveDocInviteMarker, FANCY_LIVEDOC_MARKER_RE } from "../../../store";
@@ -23,6 +24,8 @@ import WatchTogetherCard from "../watch/WatchTogetherCard";
 import WatchStartButton from "../watch/WatchStartButton";
 import LiveDocInviteCard from "../livedoc/LiveDocInviteCard";
 import QuoteBlock from "../../elements/QuoteBlock";
+import { RenderComponent } from "../../plugin/PluginComponentRenderer";
+import type { ActionRow } from "../../../plugins/tier1/types";
 import styles from "../ChatView.module.css";
 
 /** Regex to match quote reference markers in message bodies. */
@@ -374,10 +377,16 @@ export default memo(function MessageItem({
       return <>{quoteBlocks}</>;
     }
 
+    // Plugin chat messages carry a markdown body; convert to HTML so
+    // MediaPreview (which expects HTML) renders it formatted.
+    const htmlBody = msg.plugin_name
+      ? String(marked.parse(bodyWithoutQuotes, { async: false, gfm: true }))
+      : bodyWithoutQuotes;
+
     return (
       <>
         {quoteBlocks}
-        <MediaPreview html={bodyWithoutQuotes} messageId={`${index}`} compact={pureMedia} timestamp={pureMedia ? displayTimestamp : undefined} timeFormat={timeFormat} convertToLocalTime={convertToLocalTime} systemUses24h={systemUses24h} senderName={msg.sender_name} messageTimestamp={displayTimestamp} onOpenLightbox={onOpenLightbox} />
+        <MediaPreview html={htmlBody} messageId={`${index}`} compact={pureMedia} timestamp={pureMedia ? displayTimestamp : undefined} timeFormat={timeFormat} convertToLocalTime={convertToLocalTime} systemUses24h={systemUses24h} senderName={msg.sender_name} messageTimestamp={displayTimestamp} onOpenLightbox={onOpenLightbox} />
       </>
     );
   };
@@ -424,6 +433,13 @@ export default memo(function MessageItem({
           </span>
         )}
         <div className={styles.messageBody}>{renderBody()}</div>
+        {msg.plugin_components && msg.plugin_components.length > 0 && (
+          <PluginMessageComponents
+            rows={msg.plugin_components as readonly ActionRow[]}
+            pluginName={msg.plugin_name ?? msg.sender_name}
+            channelId={msg.channel_id}
+          />
+        )}
         {!offloaded && !isRestoring && !WATCH_RE.test(msg.body) && (
           <WatchStartButton body={msg.body} channelId={msg.channel_id} />
         )}
@@ -435,3 +451,33 @@ export default memo(function MessageItem({
     </div>
   );
 });
+
+/** Renders the `ActionRow[]` components attached to a plugin-authored
+ *  chat bubble (`ChatMessage.plugin_components`).  Each row gets its
+ *  own flex line, mirroring the layout used by floating plugin cards
+ *  in `PluginInteractionLayer`. */
+function PluginMessageComponents({
+  rows,
+  pluginName,
+  channelId,
+}: {
+  readonly rows: readonly ActionRow[];
+  readonly pluginName: string;
+  readonly channelId: number;
+}) {
+  return (
+    <div className={styles.pluginComponents}>
+      {rows.map((row, i) => (
+        <div key={i} className={styles.pluginComponentRow}>
+          {row.components.map((c, j) => (
+            <RenderComponent
+              key={`${pluginName}:${i}:${j}`}
+              component={c}
+              ctx={{ pluginName, channelId }}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}

@@ -1,6 +1,12 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { allowPlugin, revokePluginTrust, useAppStore, type PluginRegistryEntry } from "../../store";
+import {
+  allowPlugin,
+  resetPluginTrust,
+  revokePluginTrust,
+  useAppStore,
+  type PluginRegistryEntry,
+} from "../../store";
 import type { PluginPanelState } from "../../plugins/tier1/store";
 import { panelKey } from "../../plugins/tier1/store";
 import type { ClientManifest } from "../../plugins/tier1/types";
@@ -84,6 +90,11 @@ function PluginCard({ row }: { readonly row: PluginRow }) {
   const revoke = () =>
     void revokePluginTrust(row.entry.pluginName).catch((e) =>
       console.warn("[plugin-trust] revoke failed:", e),
+    );
+
+  const reprompt = () =>
+    void resetPluginTrust(row.entry.pluginName).catch((e) =>
+      console.warn("[plugin-trust] reprompt failed:", e),
     );
 
   const allowOptions: [SplitButtonOption, ...SplitButtonOption[]] = [
@@ -172,7 +183,7 @@ function PluginCard({ row }: { readonly row: PluginRow }) {
                 <button
                   type="button"
                   className={styles.btnSecondary}
-                  onClick={revoke}
+                  onClick={reprompt}
                   title={t("plugins.repromptTitle")}
                 >
                   {t("plugins.reprompt")}

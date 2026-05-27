@@ -20,6 +20,7 @@ import { SliderField, Toggle } from "./SharedControls";
 import { FONT_FAMILIES, applyFont } from "../../utils/fonts";
 import { FileDropZone } from "../../components/elements/FileDropZone";
 import styles from "./SettingsPage.module.css";
+import panelStyles from "./PersonalizationPanel.module.css";
 
 interface PersonalizationPanelProps {
   readonly data: PersonalizationData;
@@ -263,11 +264,11 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
               className={`${styles.optionCard} ${data.theme === theme.id ? styles.optionCardSelected : ""}`}
               onClick={() => handleThemeChange(theme.id)}
             >
-              <span className={styles.swatchGrid}>
+              <span className={panelStyles.swatchGrid}>
                 {theme.swatches.map((color) => (
                   <span
                     key={color}
-                    className={styles.swatch}
+                    className={panelStyles.swatch}
                     style={{ backgroundColor: color }}
                   />
                 ))}
@@ -499,3 +500,4 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
     </>
   );
 }
+

@@ -5,7 +5,7 @@
 // InteractionResponse envelopes through the generic PluginMessage
 // transport (wire ID 200).
 //
-// Schema v2 adds the full Discord-aligned component vocabulary:
+// Schema v2 adds the full component vocabulary:
 //   - typed selects (UserSelect, RoleSelect, MentionableSelect,
 //     ChannelSelect) on top of the renamed StringSelect (= SelectMenu)
 //   - layout primitives (ActionRow, Container, Section, Separator,
@@ -396,17 +396,27 @@ export type ToastLevel = "info" | "success" | "warning" | "error";
 
 export type ResponseKind =
   | {
-      readonly kind: "message";
-      readonly message_id: string;
+      readonly kind: "show-modal";
+      readonly custom_id: string;
+      /** Optional dialog title.  Empty when this response originates
+       *  from the legacy `message!` macro. */
+      readonly title?: string;
+      /** Body text rendered above the components. */
       readonly content?: string;
       readonly components?: readonly ActionRow[];
+      /** When `true`, the overlay is shown only to the invoking user
+       *  and disappears once they dismiss or interact with it. */
       readonly ephemeral?: boolean;
     }
   | {
-      readonly kind: "show-modal";
-      readonly custom_id: string;
-      readonly title: string;
-      readonly components: readonly ActionRow[];
+      readonly kind: "chat-message";
+      readonly message_id: string;
+      /** Channels to inject into.  An empty / missing array means
+       *  the currently-viewed channel (or active DM). */
+      readonly channel_ids?: readonly number[];
+      readonly content?: string;
+      readonly components?: readonly ActionRow[];
+      readonly ephemeral?: boolean;
     }
   | {
       readonly kind: "update-message";

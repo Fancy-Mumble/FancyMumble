@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
    Inversa Theme - Fancy Mumble
    Light theme: steel blue, dark forest, olive, yellow-green.
    Palette: (#93AEBF #1A2611 #545928 #A2A633 #8A8C3F)
@@ -100,15 +100,15 @@
   /* -- Link (steel blue from palette) ---------------------------- */
   --color-link: #93AEBF;
 
-  /* -- Discord-style palette (reactions / emoji picker) ----------- */
-  --color-discord-purple: #A2A633;
-  --color-discord-dark: #F5F5F5;
-  --color-discord-bg: #ffffff;
-  --color-discord-border: #D0D0D0;
-  --color-discord-hover: #EBEBEB;
-  --color-discord-muted: #8A8C3F;
-  --color-discord-text: #1A2611;
-  --color-discord-active: #D0D3C0;
+  /* -- Picker palette (reactions / emoji picker) ----------- */
+  --color-picker-accent: #A2A633;
+  --color-picker-dark: #F5F5F5;
+  --color-picker-bg: #ffffff;
+  --color-picker-border: #D0D0D0;
+  --color-picker-hover: #EBEBEB;
+  --color-picker-muted: #8A8C3F;
+  --color-picker-text: #1A2611;
+  --color-picker-active: #D0D3C0;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.07);

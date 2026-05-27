@@ -8,6 +8,7 @@ import { SliderField } from "./SharedControls";
 import { VuMeter, type VuMarker } from "./VuMeter";
 import { RadioCardGroup, type RadioCardOption } from "../../components/elements/RadioCardGroup";
 import styles from "./SettingsPage.module.css";
+import panelStyles from "./CalibrationPanel.module.css";
 
 type TFn = (key: string, opts?: Record<string, unknown>) => string;
 
@@ -110,15 +111,15 @@ function AutoCalibrationView({
   }, [isSpeaking]);
 
   return (
-    <div className={styles.calibrationView}>
+    <div className={panelStyles.calibrationView}>
       {!hasCalibrated && !testing && (
         <div className={styles.warningBanner}>
           <span>{t("calibration.needsCalibration")}</span>
           <p>{t("calibration.needsCalibrationPara")}</p>
         </div>
       )}
-      <div className={styles.calibrateActionRow}>
-        <div className={styles.calibrationReadouts}>
+      <div className={panelStyles.calibrateActionRow}>
+        <div className={panelStyles.calibrationReadouts}>
           <span>
             {t("calibration.threshold")} <strong>{(settings.vad_threshold * 100).toFixed(1)}%</strong>
           </span>
@@ -134,19 +135,19 @@ function AutoCalibrationView({
         </div>
         <button
           type="button"
-          className={`${styles.calibrateBtn} ${testing ? styles.micTestActive : styles.calibrateBtnPrimary} ${!hasCalibrated && !testing ? styles.calibrateBtnPulse : ""}`}
+          className={`${panelStyles.calibrateBtn} ${testing ? panelStyles.micTestActive : panelStyles.calibrateBtnPrimary} ${!hasCalibrated && !testing ? panelStyles.calibrateBtnPulse : ""}`}
           onClick={onToggleTest}
         >
           {testing ? t("calibration.stop") : t("calibration.calibrate")}
         </button>
       </div>
       {testing && (
-        <div className={styles.speechProgressBar}>
+        <div className={panelStyles.speechProgressBar}>
           <div
-            className={styles.speechProgressFill}
+            className={panelStyles.speechProgressFill}
             style={{ width: `${speechProgress * 100}%` }}
           />
-          <span className={styles.speechProgressStatus}>
+          <span className={panelStyles.speechProgressStatus}>
             {speechProgress >= 1
               ? t("calibration.nailedIt")
               : `${isSpeakingDisplay ? t("calibration.speaking") : t("calibration.notSpeaking")}  ${(speechProgress * (SPEECH_TARGET_MS / 1000)).toFixed(1)} / 5.0 s`}
@@ -154,7 +155,7 @@ function AutoCalibrationView({
         </div>
       )}
       {testing && (
-        <div className={styles.micTestRow}>
+        <div className={panelStyles.micTestRow}>
           <VuMeter
             rms={rms}
             peak={peak}
@@ -232,19 +233,19 @@ function ManualCalibrationView({
   const talking = rms > settings.vad_threshold;
 
   return (
-    <div className={styles.calibrationView}>
+    <div className={panelStyles.calibrationView}>
       <p className={styles.fieldHint}>
         {t("calibration.manualHintPre")}
-        <span className={styles.legendOpen}>{t("calibration.manualHintOpenWord")}</span>
+        <span className={panelStyles.legendOpen}>{t("calibration.manualHintOpenWord")}</span>
         {" "}{t("calibration.manualHintMid")}
-        <span className={styles.legendClose}>{t("calibration.manualHintCloseWord")}</span>
+        <span className={panelStyles.legendClose}>{t("calibration.manualHintCloseWord")}</span>
         {" "}{t("calibration.manualHintPost")}
       </p>
       <VuMeter rms={rms} peak={peak} markers={markers} talking={talking} />
-      <div className={styles.micTestRow}>
+      <div className={panelStyles.micTestRow}>
         <button
           type="button"
-          className={`${styles.micTestBtn} ${testing ? styles.micTestActive : ""}`}
+          className={`${panelStyles.micTestBtn} ${testing ? panelStyles.micTestActive : ""}`}
           onClick={onToggleTest}
         >
           {testing ? t("calibration.stopTest") : t("calibration.testMic")}
@@ -319,8 +320,8 @@ function ReplayControl({ phase, t }: Readonly<{ phase: ReplayPhase; t: TFn }>) {
   const fillPercent = Math.min(100, Math.max(0, progress * 100));
 
   return (
-    <div className={styles.replaySection}>
-      <div className={styles.replayHeader}>
+    <div className={panelStyles.replaySection}>
+      <div className={panelStyles.replayHeader}>
         <span className={styles.fieldLabel}>{t("calibration.hearYourself")}</span>
         <p className={styles.fieldHint}>
           {t("calibration.hearYourselfHint", { seconds: REPLAY_CAPACITY_MS / 1000 })}
@@ -328,16 +329,16 @@ function ReplayControl({ phase, t }: Readonly<{ phase: ReplayPhase; t: TFn }>) {
       </div>
       <button
         type="button"
-        className={`${styles.micTestBtn} ${styles.replayBtn} ${isActive ? styles.micTestActive : ""}`}
+        className={`${panelStyles.micTestBtn} ${panelStyles.replayBtn} ${isActive ? panelStyles.micTestActive : ""}`}
         onClick={toggle}
       >
         {isActive && (
           <span
-            className={`${styles.replayBtnFill} ${phase.phase === "recording" ? styles.replayBtnFillRecording : styles.replayBtnFillPlaying}`}
+            className={`${panelStyles.replayBtnFill} ${phase.phase === "recording" ? panelStyles.replayBtnFillRecording : panelStyles.replayBtnFillPlaying}`}
             style={{ width: `${fillPercent}%` }}
           />
         )}
-        <span className={styles.replayBtnLabel}>{label}</span>
+        <span className={panelStyles.replayBtnLabel}>{label}</span>
       </button>
     </div>
   );
@@ -482,7 +483,7 @@ export function CalibrationPanel({
   const mode: CalibrationMode = settings.auto_input_sensitivity ? "auto" : "manual";
 
   return (
-    <div className={styles.calibrationContainer}>
+    <div className={panelStyles.calibrationContainer}>
       <CalibrationModeSelector
         mode={mode}
         onChange={(next) =>
@@ -516,3 +517,4 @@ export function CalibrationPanel({
     </div>
   );
 }
+

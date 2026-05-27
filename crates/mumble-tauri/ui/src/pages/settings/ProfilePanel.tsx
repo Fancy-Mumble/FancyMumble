@@ -1,4 +1,4 @@
-﻿import { useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { FancyProfile } from "../../types";
 import { updatePreferences } from "../../preferencesStorage";
@@ -14,6 +14,7 @@ import { BannerEditorModal } from "./BannerEditorModal";
 import { AvatarEditorModal } from "./AvatarEditorModal";
 import { CardColorPicker } from "../../components/elements/CardColorPicker";
 import styles from "./SettingsPage.module.css";
+import panelStyles from "./ProfilePanel.module.css";
 
 export function ProfilePanel({
   defaultUsername,
@@ -68,11 +69,11 @@ export function ProfilePanel({
 
       {/* -- Identity selector (advanced mode only) ------------- */}
       {isExpert && identities.length > 0 && (
-        <section className={styles.identityBar}>
-          <div className={styles.identityBarRow}>
-            <label className={styles.identityBarLabel}>{t("profile.identityLabel")}</label>
+        <section className={panelStyles.identityBar}>
+          <div className={panelStyles.identityBarRow}>
+            <label className={panelStyles.identityBarLabel}>{t("profile.identityLabel")}</label>
             <select
-              className={styles.select}
+              className={`${styles.select} ${panelStyles.identityBarRowSelect}`}
               value={activeIdentity ?? ""}
               onChange={(e) => onSwitchIdentity(e.target.value || null)}
             >
@@ -91,7 +92,7 @@ export function ProfilePanel({
             </button>
           </div>
           {connectedCertLabel && activeIdentity !== connectedCertLabel && (
-            <p className={styles.infoBoxYellow}>
+            <p className={panelStyles.infoBoxYellow}>
               {t("profile.viewingOtherIdentity")}
             </p>
           )}
@@ -124,12 +125,12 @@ export function ProfilePanel({
         <p className={styles.fieldHint}>
           {t("profile.avatarHint")}
         </p>
-        <div className={styles.avatarRow}>
+        <div className={panelStyles.avatarRow}>
           {avatar && (
             <img
               src={avatar}
               alt="Avatar"
-              className={styles.avatarThumb}
+              className={panelStyles.avatarThumb}
             />
           )}
           <button
@@ -152,12 +153,12 @@ export function ProfilePanel({
           <img
             src={profile.banner.image}
             alt="Banner"
-            className={styles.bannerThumb}
+            className={panelStyles.bannerThumb}
           />
         )}
         {!profile.banner?.image && profile.banner?.color && (
           <div
-            className={styles.bannerThumb}
+            className={panelStyles.bannerThumb}
             style={{ background: profile.banner.color, height: 60 }}
           />
         )}
@@ -275,7 +276,7 @@ export function ProfilePanel({
                 <button
                   key={ab.id}
                   type="button"
-                  className={`${styles.avatarBorderCard} ${
+                  className={`${panelStyles.avatarBorderCard} ${
                     (profile.avatarBorder ?? "default") === ab.id
                       ? styles.optionCardSelected
                       : ""
@@ -286,7 +287,7 @@ export function ProfilePanel({
                     })
                   }
                 >
-                  <span className={styles.borderPreview} style={borderStyle} />
+                  <span className={panelStyles.borderPreview} style={borderStyle} />
                   <span className={styles.optionLabel}>{ab.label}</span>
                 </button>
               );
@@ -348,7 +349,7 @@ export function ProfilePanel({
             <button
               key={n.id}
               type="button"
-              className={`${styles.nameplateCard} ${
+              className={`${panelStyles.nameplateCard} ${
                 (profile.nameplate ?? "none") === n.id
                   ? styles.optionCardSelected
                   : ""
@@ -435,3 +436,4 @@ export function ProfilePanel({
     </>
   );
 }
+

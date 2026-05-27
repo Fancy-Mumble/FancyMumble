@@ -188,26 +188,28 @@ describe("decodeInteractionResponse + applyInteractionResponse", () => {
     expect(decodeInteractionResponse("OtherType", encode({}))).toBeNull();
   });
 
-  it("decodes a message response", () => {
+  it("decodes a show-modal response", () => {
     const r = decodeInteractionResponse(
       INTERACTION_RESPONSE_PAYLOAD_TYPE,
       encode({
-        kind: "message",
-        message_id: "m1",
+        kind: "show-modal",
+        custom_id: "m1",
+        title: "",
         content: "Hello",
         components: [],
       }),
     );
     expect(r).not.toBeNull();
-    expect(r?.kind).toBe("message");
+    expect(r?.kind).toBe("show-modal");
   });
 
-  it("applies a message response into the cards slice", () => {
+  it("applies a show-modal response into the modal slice", () => {
     const r = decodeInteractionResponse(
       INTERACTION_RESPONSE_PAYLOAD_TYPE,
       encode({
-        kind: "message",
-        message_id: "m1",
+        kind: "show-modal",
+        custom_id: "m1",
+        title: "",
         content: "Hi",
         components: [{ components: [{ type: "button", custom_id: "x", label: "X" }] }],
       }),
@@ -218,9 +220,9 @@ describe("decodeInteractionResponse + applyInteractionResponse", () => {
       r!,
       42,
     );
-    expect(next.pluginCards).toHaveLength(1);
-    expect(next.pluginCards[0].messageId).toBe("m1");
-    expect(next.pluginCards[0].channelId).toBe(42);
+    expect(next.pluginModal?.customId).toBe("m1");
+    expect(next.pluginModal?.content).toBe("Hi");
+    expect(next.pluginModal?.channelId).toBe(42);
   });
 
   it("show-modal replaces the active modal", () => {
@@ -249,13 +251,36 @@ describe("decodeInteractionResponse + applyInteractionResponse", () => {
     expect(next.pluginToasts[0].level).toBe("info");
   });
 
-  it("update-message patches an existing card", () => {
-    const initial = applyInteractionResponse(
+  it("chat-message reducer leaves the tier1 slice unchanged (injection happens via the store wrapper)", () => {
+    const next = applyInteractionResponse(
       emptyPluginTier1Slice,
       "fancy-greeter",
-      { kind: "message", message_id: "m1", content: "Old" },
-      null,
+      {
+        kind: "chat-message",
+        message_id: "cm1",
+        content: "Hello",
+        components: [],
+      },
+      7,
     );
+    expect(next).toEqual(emptyPluginTier1Slice);
+  });
+
+  it("update-message patches an existing card", () => {
+    const initial: typeof emptyPluginTier1Slice = {
+      ...emptyPluginTier1Slice,
+      pluginCards: [
+        {
+          id: "fancy-greeter:m1",
+          pluginName: "fancy-greeter",
+          messageId: "m1",
+          content: "Old",
+          components: [],
+          ephemeral: false,
+          channelId: null,
+        },
+      ],
+    };
     const next = applyInteractionResponse(initial, "fancy-greeter", {
       kind: "update-message",
       message_id: "m1",

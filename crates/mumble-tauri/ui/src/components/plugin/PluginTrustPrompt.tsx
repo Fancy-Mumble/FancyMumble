@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
-import { useAppStore, resolvePluginTrust } from "../../store";
+import { useAppStore, resolvePluginTrust, resolvePluginTrustBulk } from "../../store";
 import type { PendingTrustPrompt } from "../../plugins/tier1/trust";
 import {
   capabilityLabel,
@@ -32,41 +32,41 @@ function TrustListDialog({ queue }: { readonly queue: readonly PendingTrustPromp
   const toggle = (name: string) =>
     setExpanded((prev) => (prev === name ? null : name));
 
-  // Snapshot the queue before iterating: each `resolvePluginTrust`
-  // call mutates `pluginTrustQueue`, so reading state mid-loop would
-  // race with the React re-render.
+  // Single atomic persist + setState for every queued plugin.  Looping
+  // `resolvePluginTrust` instead races the in-memory tauri-plugin-store
+  // cache and most of the parallel writes get silently dropped, which
+  // is what made the dialog re-appear with one fewer plugin per click.
   const allowAll = (scope: TrustScope) => {
     const names = queue.map((p) => p.pluginName);
-    for (const name of names) {
-      void resolvePluginTrust(name, TrustDecision.Allow, scope).catch((e) =>
-        console.warn("[plugin-trust] bulk allow failed:", e),
-      );
-    }
+    void resolvePluginTrustBulk(names, TrustDecision.Allow, scope).catch((e) =>
+      console.warn("[plugin-trust] bulk allow failed:", e),
+    );
   };
 
   const blockAll = () => {
     const names = queue.map((p) => p.pluginName);
-    for (const name of names) {
-      void resolvePluginTrust(name, TrustDecision.Deny).catch((e) =>
-        console.warn("[plugin-trust] bulk deny failed:", e),
-      );
-    }
+    void resolvePluginTrustBulk(names, TrustDecision.Deny).catch((e) =>
+      console.warn("[plugin-trust] bulk deny failed:", e),
+    );
   };
 
   const single = queue.length === 1;
+  // With a single plugin the row is auto-expanded and already exposes
+  // its own Block + Allow buttons; an additional "Block all / Allow all"
+  // footer would be redundant noise, so we omit it.
   const allowAllOptions: [SplitButtonOption, ...SplitButtonOption[]] = [
     {
-      label: single ? "Allow for this server" : "Allow all for this server",
+      label: "Allow all for this server",
       hint: "Remembered for this server",
       onSelect: () => allowAll(TrustScope.Server),
     },
     {
-      label: single ? "Allow once" : "Allow all once",
+      label: "Allow all once",
       hint: "This session only",
       onSelect: () => allowAll(TrustScope.Once),
     },
     {
-      label: single ? "Always allow" : "Always allow all",
+      label: "Always allow all",
       hint: "Trusted on every server",
       onSelect: () => allowAll(TrustScope.Global),
     },
@@ -104,16 +104,18 @@ function TrustListDialog({ queue }: { readonly queue: readonly PendingTrustPromp
           ))}
         </div>
 
-        <footer className={styles.footer}>
-          <button
-            type="button"
-            className={`${styles.btn} ${styles.btnDanger}`}
-            onClick={blockAll}
-          >
-            {single ? "Block" : "Block all"}
-          </button>
-          <SplitButton options={allowAllOptions} variant="primary" />
-        </footer>
+        {!single && (
+          <footer className={styles.footer}>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnDanger}`}
+              onClick={blockAll}
+            >
+              Block all
+            </button>
+            <SplitButton options={allowAllOptions} variant="primary" />
+          </footer>
+        )}
       </div>
     </div>,
     document.body,

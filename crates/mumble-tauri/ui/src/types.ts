@@ -82,6 +82,13 @@ export interface ChatMessage {
   pinned_by?: string | null;
   /** Unix epoch millis when the message was pinned. */
   pinned_at?: number | null;
+  /** When set, this bubble was authored by the named plugin via the
+   *  `chat_message!` macro rather than received from a user. */
+  plugin_name?: string | null;
+  /** Opaque ActionRow[] payload for plugin-authored bubbles.  The
+   *  shape mirrors `ResponseKind.chat-message.components`; rendered
+   *  by `RenderComponent` in `MessageItem`. */
+  plugin_components?: readonly unknown[] | null;
 }
 
 /**
@@ -400,6 +407,12 @@ export interface DownloadEntry {
   downloadedAt: number;
 }
 
+/** Input shape for `addDownload`: everything in {@link DownloadEntry}
+ *  except the fields the store fills in (`id`, `downloadedAt`).  Lifted
+ *  out of the action signature so it can be referenced by name from
+ *  caller code instead of repeating the `Omit<...>` everywhere. */
+export type NewDownloadInput = Omit<DownloadEntry, "id" | "downloadedAt">;
+
 /** A link embed returned by the server after scraping Open Graph / oEmbed data. */
 export interface LinkEmbed {
   url: string;
@@ -485,7 +498,7 @@ export interface UserPreferences {
   /** When true, automatically retry connecting after an unexpected disconnect. */
   autoReconnect?: boolean;
   /** When true, app updates are downloaded and installed automatically on
-   *  startup (Discord-style). When false, the user is prompted. */
+   *  startup automatically. When false, the user is prompted. */
   autoUpdateOnStartup?: boolean;
   /** Version string the user chose to skip in the updater bootstrapper.
    *  Updates matching this version are silently ignored on startup. */

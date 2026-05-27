@@ -17,7 +17,7 @@ import Color from "@tiptap/extension-color";
 import Placeholder from "@tiptap/extension-placeholder";
 import TiptapImage from "@tiptap/extension-image";
 import { resizeImage } from "./imageUtils";
-import styles from "./SettingsPage.module.css";
+import styles from "./BioEditor.module.css";
 
 // -- Colour palette for the quick-pick colour grid -----------------
 

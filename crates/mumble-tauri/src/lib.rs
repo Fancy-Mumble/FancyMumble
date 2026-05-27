@@ -441,6 +441,8 @@ macro_rules! all_command_handlers {
             commands::messaging::send_reaction,
             commands::messaging::pin_message,
             commands::messaging::delete_pchat_messages,
+            commands::messaging::plugin_inject_chat_message,
+            commands::messaging::plugin_update_chat_message,
             commands::dm::send_dm,
             commands::dm::get_dm_messages,
             commands::dm::select_dm_user,

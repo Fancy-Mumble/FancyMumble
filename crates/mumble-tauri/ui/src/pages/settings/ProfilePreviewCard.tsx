@@ -11,7 +11,7 @@ import {
   FONTS,
   AVATAR_BORDERS,
 } from "./profileData";
-import styles from "./SettingsPage.module.css";
+import styles from "./ProfilePreviewCard.module.css";
 
 interface ProfilePreviewCardProps {
   profile: FancyProfile;
