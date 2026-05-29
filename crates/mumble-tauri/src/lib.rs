@@ -250,6 +250,7 @@ fn hydrate_persisted_prefs(app: &tauri::AppHandle, state: &AppState) {
 /// plugin detail page in the marketplace).  Also focuses the main
 /// window so the user sees the result.
 fn setup_deep_link_handler(handle: tauri::AppHandle) {
+    #[cfg(not(target_os = "android"))]
     use tauri::Manager;
     use tauri_plugin_deep_link::DeepLinkExt;
 
@@ -266,13 +267,11 @@ fn setup_deep_link_handler(handle: tauri::AppHandle) {
             return;
         }
         tracing::info!("deep-link: received {} url(s): {:?}", urls.len(), urls);
+        #[cfg(not(target_os = "android"))]
         if let Some(win) = dispatch_handle.get_webview_window("main") {
-            #[cfg(not(target_os = "android"))]
-            {
-                let _ = win.show();
-                let _ = win.unminimize();
-                let _ = win.set_focus();
-            }
+            let _ = win.show();
+            let _ = win.unminimize();
+            let _ = win.set_focus();
         }
         use tauri::Emitter;
         for url in urls {

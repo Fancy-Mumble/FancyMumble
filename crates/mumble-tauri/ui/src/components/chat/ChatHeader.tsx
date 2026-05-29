@@ -1,4 +1,4 @@
-import { BellIcon, BellOffIcon, CloseIcon, DatabaseIcon, FolderIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, UsersGroupIcon } from "../../icons";
+import { ArrowRightIcon, BellIcon, BellOffIcon, CloseIcon, DatabaseIcon, FolderIcon, PinIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, UsersGroupIcon } from "../../icons";
 import { useTranslation } from "react-i18next";
 import { isMobile } from "../../utils/platform";
 import type { KeyTrustLevel } from "../../types";
@@ -65,14 +65,32 @@ function buildKebabItems({
   onPinnedMessages,
   hasNewDownloads,
   onDownloads,
+  onChannelSearch,
+  onChannelInfoToggle,
   t,
-}: Pick<ChatHeaderProps, "onPollCreate" | "isSilenced" | "onToggleSilence" | "hasNewPins" | "onPinnedMessages" | "hasNewDownloads" | "onDownloads"> & { t: (key: string) => string }): KebabMenuItem[] {
+}: Pick<ChatHeaderProps, "onPollCreate" | "isSilenced" | "onToggleSilence" | "hasNewPins" | "onPinnedMessages" | "hasNewDownloads" | "onDownloads" | "onChannelSearch" | "onChannelInfoToggle"> & { t: (key: string) => string }): KebabMenuItem[] {
   const items: KebabMenuItem[] = [];
+  if (onChannelSearch) {
+    items.push({
+      id: "channel-search",
+      label: t("header.searchInChannel"),
+      icon: <SearchIcon width={16} height={16} />,
+      onClick: onChannelSearch,
+    });
+  }
+  if (onChannelInfoToggle) {
+    items.push({
+      id: "channel-info",
+      label: t("header.channelInfo"),
+      icon: <FolderIcon width={16} height={16} />,
+      onClick: onChannelInfoToggle,
+    });
+  }
   if (onPinnedMessages) {
     items.push({
       id: "pinned-messages",
       label: t("header.pinnedMessages"),
-      icon: <span style={{ fontSize: 15, lineHeight: 1 }}>📌</span>,
+      icon: <PinIcon width={15} height={15} />,
       badge: hasNewPins,
       onClick: onPinnedMessages,
     });
@@ -220,7 +238,7 @@ export default function ChatHeader({
             <PopoutIcon width={18} height={18} />
           </button>
         )}
-        {onChannelSearch && !privateBadge && (
+        {onChannelSearch && !privateBadge && !isMobile && (
           <button
             className={styles.serverInfoBtn}
             onClick={onChannelSearch}
@@ -230,7 +248,7 @@ export default function ChatHeader({
             <SearchIcon width={18} height={18} />
           </button>
         )}
-        {onChannelInfoToggle && !privateBadge && (
+        {onChannelInfoToggle && !privateBadge && !isMobile && (
           <button
             className={styles.serverInfoBtn}
             onClick={onChannelInfoToggle}
@@ -272,14 +290,14 @@ export default function ChatHeader({
         )}
         {!privateBadge && (
           <KebabMenu
-            items={buildKebabItems({ onPollCreate, isSilenced, onToggleSilence, hasNewPins, onPinnedMessages, hasNewDownloads, onDownloads, t: tStr })}
+            items={buildKebabItems({ onPollCreate, isSilenced, onToggleSilence, hasNewPins, onPinnedMessages, hasNewDownloads, onDownloads, onChannelSearch: isMobile ? onChannelSearch : undefined, onChannelInfoToggle: isMobile ? onChannelInfoToggle : undefined, t: tStr })}
             ariaLabel={t("header.channelOptions")}
             badge={hasNewPins || hasNewDownloads}
           />
         )}
         {!isInChannel && onJoin && (
           <button className={styles.joinBtn} onClick={onJoin}>
-            {isMobile ? t("header.join") : t("header.joinChannel")}
+            {isMobile ? <ArrowRightIcon width={18} height={18} /> : t("header.joinChannel")}
           </button>
         )}
       </div>

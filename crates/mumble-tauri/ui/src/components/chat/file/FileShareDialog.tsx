@@ -1,3 +1,4 @@
+import { CloseIcon } from "../../../icons";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { FileAccessMode } from "../../../types";
@@ -90,7 +91,7 @@ export default function FileShareDialog({
             onClick={onCancel}
             aria-label={tc("actions.close")}
           >
-            ×
+            <CloseIcon width={16} height={16} />
           </button>
         </div>
 

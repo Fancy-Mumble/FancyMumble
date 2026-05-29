@@ -1,3 +1,4 @@
+import { CloseIcon } from "../../icons";
 import { useState, useCallback, useRef, useEffect, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./PasswordDialog.module.css";
@@ -83,7 +84,7 @@ export default function PasswordDialog({
             aria-label={t("common:actions.close")}
             type="button"
           >
-            ×
+            <CloseIcon width={16} height={16} />
           </button>
         </div>
 

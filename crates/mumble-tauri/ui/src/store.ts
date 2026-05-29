@@ -2495,24 +2495,30 @@ export async function initEventListeners(
     .catch(() => {});
 
   // Ensure notification permissions and channel are set up (Android 8+ / 13+).
-  try {
-    let granted = await isPermissionGranted();
-    if (!granted) {
-      const result = await requestPermission();
-      granted = result === "granted";
+  // Deferred to the next macrotask so the Tauri webview URL settles to
+  // http://tauri.localhost/ before the IPC capability check runs; calling
+  // isPermissionGranted() synchronously during init sees URL: about:blank
+  // on Android, causing the permission check to fail.
+  setTimeout(async () => {
+    try {
+      let granted = await isPermissionGranted();
+      if (!granted) {
+        const result = await requestPermission();
+        granted = result === "granted";
+      }
+      if (granted) {
+        await createChannel({
+          id: "messages",
+          name: "Messages",
+          description: "Chat message notifications",
+          importance: Importance.High,
+          visibility: Visibility.Public,
+        });
+      }
+    } catch {
+      // Notification API may not be available on all platforms.
     }
-    if (granted) {
-      await createChannel({
-        id: "messages",
-        name: "Messages",
-        description: "Chat message notifications",
-        importance: Importance.High,
-        visibility: Visibility.Public,
-      });
-    }
-  } catch {
-    // Notification API may not be available on all platforms.
-  }
+  }, 0);
 
   // Sync the notification preference to the Rust backend.
   try {

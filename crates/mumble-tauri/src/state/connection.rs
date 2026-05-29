@@ -167,15 +167,7 @@ impl AppState {
 
             // Stop Android foreground service for the active connection.
             #[cfg(target_os = "android")]
-            {
-                if let Some(app_handle) = self.app_handle() {
-                    if let Some(handle) = app_handle
-                        .try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>()
-                    {
-                        crate::platform::android::connection_service::stop_service(&handle);
-                    }
-                }
-            }
+            self.stop_android_foreground_service();
         }
 
         let (handle, join, connect_task) = {
@@ -259,6 +251,13 @@ impl AppState {
         }
 
         Ok(())
+    }
+
+    #[cfg(target_os = "android")]
+    fn stop_android_foreground_service(&self) {
+        let Some(app_handle) = self.app_handle() else { return };
+        let Some(handle) = app_handle.try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>() else { return };
+        crate::platform::android::connection_service::stop_service(&handle);
     }
 }
 

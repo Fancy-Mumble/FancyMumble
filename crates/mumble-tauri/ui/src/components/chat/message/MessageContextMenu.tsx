@@ -1,4 +1,4 @@
-import { ArrowUpRightIcon, CheckboxIcon, CopyIcon, EditIcon, EmojiPlusIcon, PlayIcon, QuoteIcon, TrashIcon } from "../../../icons";
+import { ArrowUpRightIcon, CheckboxIcon, CopyIcon, EditIcon, EmojiPlusIcon, PinIcon, PlayIcon, QuoteIcon, TrashIcon } from "../../../icons";
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -224,7 +224,7 @@ export default function MessageContextMenu({
         )}
         {onPin && menu.message.message_id && (
           <button type="button" className={styles.menuItem} onClick={() => { onPin(menu.message); onClose(); }}>
-            <span className={styles.menuIcon}>📌</span>
+            <span className={styles.menuIcon}><PinIcon width={14} height={14} /></span>
             {menu.message.pinned ? t("contextMenu.unpin") : t("contextMenu.pin")}
           </button>
         )}
