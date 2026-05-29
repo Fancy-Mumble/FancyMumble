@@ -36,7 +36,7 @@ export function AdvancedPanel({
   onReset: () => void;
 }>) {
   const [confirming, setConfirming] = useState(false);
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
 
   return (
     <>
@@ -172,7 +172,7 @@ export function AdvancedPanel({
                 className={styles.ghostBtn}
                 onClick={() => setConfirming(false)}
               >
-                {t("advanced.dangerCancelBtn")}
+                {t("common:actions.cancel")}
               </button>
             </div>
           </div>

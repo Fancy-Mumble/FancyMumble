@@ -31,6 +31,7 @@ pub(crate) mod hash_names;
 pub(crate) mod local_cache;
 mod messaging;
 mod onboarding;
+mod plugin_admin;
 pub mod offload;
 mod offload_ops;
 pub(crate) mod pchat;
@@ -205,6 +206,11 @@ pub(super) struct SharedState {
     pub onboarding: Option<OnboardingConfig>,
     /// Local user's onboarding response, fetched on demand.
     pub onboarding_response: Option<OnboardingResponse>,
+    /// Cached snapshot of the most recent `PluginRegistry` the server
+    /// has broadcast.  The protobuf message is delivered once after
+    /// `ServerSync` and never resent, so we cache it here to let the
+    /// frontend resync after an HMR reload via `get_plugin_registry`.
+    pub plugin_registry: Vec<PluginRegistryEntryPayload>,
 }
 
 // --- Tauri-managed application state ------------------------------
@@ -242,6 +248,7 @@ pub struct AppState {
     /// (`popout-stream-<id>`).  Value is the broadcaster session, used to
     /// emit `stream-popout-state opened:false` when the OS destroys the
     /// window (any close path - Alt+F4, X button, context menu, app exit).
+    #[cfg(not(target_os = "android"))]
     pub(crate) popout_stream_sessions: Mutex<HashMap<String, u32>>,
     /// Channel/session context for the (single) drawing-overlay window.
     /// Read by the overlay via `take_drawing_overlay_context` once it
@@ -251,6 +258,7 @@ pub struct AppState {
     /// Background task that follows the shared window's screen rect
     /// (Windows only) and repositions the desktop overlay accordingly.
     /// Aborted when the overlay closes.
+    #[cfg(not(target_os = "android"))]
     pub(crate) draw_overlay_tracker: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
@@ -275,8 +283,10 @@ impl AppState {
             popout_images: Mutex::new(HashMap::new()),
             popout_streams: Mutex::new(HashMap::new()),
             popout_dms: Mutex::new(HashMap::new()),
+            #[cfg(not(target_os = "android"))]
             popout_stream_sessions: Mutex::new(HashMap::new()),
             draw_overlay_context: Mutex::new(None),
+            #[cfg(not(target_os = "android"))]
             draw_overlay_tracker: Mutex::new(None),
         }
     }
@@ -436,6 +446,8 @@ mod tests {
             pinned: false,
             pinned_by: None,
             pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
         }
     }
 

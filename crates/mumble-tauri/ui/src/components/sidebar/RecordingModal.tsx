@@ -50,7 +50,7 @@ export default function RecordingModal({
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "common"]);
 
   // Poll recording state on mount to resume UI if already recording.
   useEffect(() => {
@@ -211,7 +211,7 @@ export default function RecordingModal({
 
         <div className={styles.footer}>
           <button className={styles.cancelBtn} onClick={onClose}>
-            {t("recordingModal.close")}
+            {t("common:actions.close")}
           </button>
           {recording ? (
             <button className={styles.stopBtn} onClick={handleStop}>

@@ -1,4 +1,4 @@
-import { ChevronDownIcon } from "../../icons";
+import { ChevronDownIcon, HandIcon, MessageCircleIcon } from "../../icons";
 import React, { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
@@ -758,7 +758,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     return (
       <main className={styles.main}>
         <div className={styles.empty}>
-          <div className={styles.emptyIcon}>💬</div>
+          <div className={styles.emptyIcon}><MessageCircleIcon width={40} height={40} /></div>
           <p>{t("page.selectChannel")}</p>
         </div>
       </main>
@@ -943,7 +943,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
 
           {allMessages.length === 0 ? (
             <div className={styles.empty}>
-              <div className={styles.emptyIcon}>👋</div>
+              <div className={styles.emptyIcon}><HandIcon width={40} height={40} /></div>
               <p>No messages yet. Say hello!</p>
             </div>
           ) : (

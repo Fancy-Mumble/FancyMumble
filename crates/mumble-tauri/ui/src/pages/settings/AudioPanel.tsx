@@ -23,6 +23,7 @@ import { ActivationModeSelector } from "./ActivationModeSelector";
 import { CalibrationPanel } from "./CalibrationPanel";
 import { RadioCardGroup, type RadioCardOption } from "../../components/elements/RadioCardGroup";
 import styles from "./SettingsPage.module.css";
+import panelStyles from "./AudioPanel.module.css";
 
 const FRAME_SIZE_OPTIONS = [
   { value: 10, label: "10 ms" },
@@ -70,9 +71,9 @@ function StatsRow({ label, stats }: Readonly<{ label: string; stats: PacketStats
   const total = stats.good + stats.late + stats.lost;
   const lossPercent = total > 0 ? ((stats.lost / total) * 100).toFixed(1) : "0.0";
   return (
-    <div className={styles.statsRow}>
-      <span className={styles.statsLabel}>{label}</span>
-      <span className={styles.statsValues}>
+    <div className={panelStyles.statsRow}>
+      <span className={panelStyles.statsLabel}>{label}</span>
+      <span className={panelStyles.statsValues}>
         {stats.good} good &middot; {stats.late} late &middot; {stats.lost} lost ({lossPercent}%) &middot; {stats.resync} resync
       </span>
     </div>
@@ -152,8 +153,8 @@ export function AudioPanel({
 
       {/* -- Input & Output Devices (side by side) ---------- */}
       <section className={styles.section}>
-        <div className={styles.deviceColumns}>
-          <div className={styles.deviceColumn}>
+        <div className={panelStyles.deviceColumns}>
+          <div className={panelStyles.deviceColumn}>
             <h3 className={styles.sectionTitle}>{t("audio.inputDevice")}</h3>
             <select
               className={styles.select}
@@ -183,7 +184,7 @@ export function AudioPanel({
             />
           </div>
 
-          <div className={styles.deviceColumn}>
+          <div className={panelStyles.deviceColumn}>
             <h3 className={styles.sectionTitle}>{t("audio.outputDevice")}</h3>
             <select
               className={styles.select}

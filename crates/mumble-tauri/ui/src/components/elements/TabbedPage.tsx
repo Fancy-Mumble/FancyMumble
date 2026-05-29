@@ -6,7 +6,7 @@ import styles from "./TabbedPage.module.css";
 export interface TabDef<T extends string> {
   id: T;
   label: string;
-  icon: string;
+  icon: ReactNode;
 }
 
 interface TabbedPageProps<T extends string> {

@@ -248,6 +248,63 @@ describe("LiveDoc round-trip", () => {
     expect(out).toMatch(/<a href="https:\/\/x\.test"[^>]*>L<\/a>/);
   });
 
+  it("serialises mention chips into wire markers", () => {
+    const html = [
+      '<p>',
+      '<span class="mention mention-user" data-mention-session="42">@alice</span>',
+      ' please review ',
+      '<span class="mention mention-role" data-mention-role="ops">@ops</span>',
+      ' tag ',
+      '<span class="mention mention-everyone" data-mention-everyone="1">@everyone</span>',
+      ' and ',
+      '<span class="mention mention-here" data-mention-here="1">@here</span>',
+      '</p>',
+    ].join("");
+    const md = editorHtmlToMarkdown(html);
+    expect(md).toContain("<@42>");
+    expect(md).toContain("<@&ops>");
+    expect(md).toContain("@everyone");
+    expect(md).toContain("@here");
+  });
+
+  it("re-parses mention markers back into chip spans", () => {
+    const md = "<@42> please review <@&ops> tag @everyone and @here\n";
+    const html = markdownToEditorHtml(md);
+    expect(html).toContain('data-mention-session="42"');
+    expect(html).toContain('data-mention-role="ops"');
+    expect(html).toContain('data-mention-everyone="1"');
+    expect(html).toContain('data-mention-here="1"');
+  });
+
+  it("round-trips a task list with checked + unchecked items", () => {
+    const html = [
+      '<ul data-type="taskList">',
+      '<li data-type="taskItem" data-checked="true"><div><p>done</p></div></li>',
+      '<li data-type="taskItem" data-checked="false"><div><p>todo</p></div></li>',
+      "</ul>",
+    ].join("");
+    const md = editorHtmlToMarkdown(html);
+    expect(md).toContain("- [x] done");
+    expect(md).toContain("- [ ] todo");
+
+    const back = markdownToEditorHtml(md);
+    expect(back).toContain('<ul data-type="taskList">');
+    expect(back).toContain('data-checked="true"');
+    expect(back).toContain('data-checked="false"');
+    expect(back).toContain(">done</p>");
+    expect(back).toContain(">todo</p>");
+  });
+
+  it("preserves a task-list item that mixes mentions and plain text", () => {
+    const md = "- [ ] <@7> ship the docs\n- [x] @everyone review\n";
+    const back = markdownToEditorHtml(md);
+    expect(back).toContain('<ul data-type="taskList">');
+    expect(back).toContain('data-mention-session="7"');
+    expect(back).toContain('data-mention-everyone="1"');
+    expect(back).toContain('data-checked="true"');
+    expect(back).toContain('data-checked="false"');
+  });
+
   it("preserves a complete document with mixed content", () => {
     const html = [
       "<h1>Document</h1>",

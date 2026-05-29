@@ -32,6 +32,9 @@ interface Segment {
   code?: boolean;
   link?: boolean;
   spoiler?: boolean;
+  /** Inline user mention (<@SESSION>); rendered as @Username chip. */
+  mention?: boolean;
+  mentionSession?: number;
   /** Global CSS class from hljs for syntax-highlighted code tokens. */
   hljsClass?: string;
   /** Marker set by parseMarkdown; expanded to hljs tokens by expandFenceSegments. */
@@ -91,6 +94,19 @@ function parseMarkdown(raw: string): Segment[] {
   };
 
   while (i < raw.length) {
+    // <@SESSION> user mention token
+    if (raw[i] === "<" && raw[i + 1] === "@" && raw[i + 2] !== "&") {
+      let j = i + 2;
+      while (j < raw.length && raw[j] >= "0" && raw[j] <= "9") j++;
+      if (j > i + 2 && raw[j] === ">") {
+        pushCurrent();
+        const session = parseInt(raw.slice(i + 2, j), 10);
+        segments.push({ text: raw.slice(i, j + 1), mention: true, mentionSession: session });
+        i = j + 1;
+        continue;
+      }
+    }
+
     // ``` fenced code block (must be checked before single backtick) ```
     if (raw[i] === "`" && raw[i + 1] === "`" && raw[i + 2] === "`") {
       const lineEnd = raw.indexOf("\n", i + 3);
@@ -296,6 +312,7 @@ function renderFormattedOverlay(
   selStart: number,
   selEnd: number,
   showCursor: boolean,
+  mentionResolver?: (session: number) => string | undefined,
 ): ReactNode[] {
   const nodes: ReactNode[] = [];
   let keyIdx = 0;
@@ -320,6 +337,25 @@ function renderFormattedOverlay(
     const segStart = charIdx;
     const segEnd = charIdx + seg.text.length;
     const cls = getSegmentClass(seg);
+
+    // Mention segments are rendered atomically as @Username chips.
+    if (seg.mention && seg.mentionSession !== undefined) {
+      const name = mentionResolver?.(seg.mentionSession) ?? String(seg.mentionSession);
+      const inSel = hasSelection && segStart < selTo && segEnd > selFrom;
+      const chipCls = `${styles.mdMention}${inSel ? ` ${styles.selection}` : ""}`;
+
+      if (!cursorInserted && cursorPos === segStart) {
+        nodes.push(<span key="caret" className={styles.caret} />);
+        cursorInserted = true;
+      }
+      nodes.push(<span key={keyIdx++} className={chipCls}>{`@${name}`}</span>);
+      if (!cursorInserted && cursorPos > segStart && cursorPos <= segEnd) {
+        nodes.push(<span key="caret" className={styles.caret} />);
+        cursorInserted = true;
+      }
+      charIdx = segEnd;
+      continue;
+    }
 
     // Find split points strictly inside this segment.
     const localSplits = Array.from(boundaries)
@@ -506,6 +542,8 @@ interface MarkdownInputProps {
   onKeyDownCapture?: (e: KeyboardEvent<HTMLTextAreaElement>) => boolean;
   /** Imperative API ref for parent-driven text edits (autocomplete, etc.). */
   apiRef?: React.RefObject<MarkdownInputApi | null>;
+  /** Resolve a Mumble session ID to a display name for inline mention chips. */
+  mentionResolver?: (session: number) => string | undefined;
 }
 
 /** Imperative methods exposed to a parent via `apiRef`. */
@@ -526,6 +564,7 @@ export default function MarkdownInput({
   onSelectionChange,
   onKeyDownCapture,
   apiRef,
+  mentionResolver,
 }: Readonly<MarkdownInputProps>) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -696,6 +735,7 @@ export default function MarkdownInput({
               selStart,
               selEnd,
               showCursor,
+              mentionResolver,
             )
           : null}
         {showPlaceholder && (
@@ -732,7 +772,7 @@ export default function MarkdownInput({
         }}
         onBlur={() => {
           // Do not clear `focused` while a drag selection is still in
-          // progress — the pointer may have left the element bounds.
+          // progress - the pointer may have left the element bounds.
           if (!isDragging) setFocused(false);
         }}
         disabled={disabled}

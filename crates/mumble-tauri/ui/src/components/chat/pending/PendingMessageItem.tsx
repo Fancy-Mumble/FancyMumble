@@ -19,7 +19,7 @@ interface PendingMessageItemProps {
 }
 
 export default function PendingMessageItem({ pending }: PendingMessageItemProps) {
-  const { t } = useTranslation("chat");
+  const { t } = useTranslation(["chat", "common"]);
   const dismiss = useAppStore((s) => s.dismissPendingMessage);
   const retry = useAppStore((s) => s.retryPendingMessage);
   const isFailed = pending.state === "failed";
@@ -56,9 +56,9 @@ export default function PendingMessageItem({ pending }: PendingMessageItemProps)
                 className={styles.iconBtn}
                 onClick={() => void retry(pending.pendingId)}
                 aria-label={t("pendingMessage.retrySending")}
-                title={t("pendingMessage.retry")}
+                title={t("common:actions.retry")}
               >
-                {t("pendingMessage.retry")}
+                {t("common:actions.retry")}
               </button>
             )}
             <button
@@ -66,7 +66,7 @@ export default function PendingMessageItem({ pending }: PendingMessageItemProps)
               className={styles.iconBtn}
               onClick={() => dismiss(pending.pendingId)}
               aria-label={isFailed ? t("pendingMessage.dismissFailed") : t("pendingMessage.hidePending")}
-              title={isFailed ? t("pendingMessage.dismiss") : t("pendingMessage.hide")}
+              title={isFailed ? t("common:actions.dismiss") : t("pendingMessage.hide")}
             >
               &#x2715;
             </button>

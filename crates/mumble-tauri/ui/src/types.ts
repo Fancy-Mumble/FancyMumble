@@ -82,6 +82,13 @@ export interface ChatMessage {
   pinned_by?: string | null;
   /** Unix epoch millis when the message was pinned. */
   pinned_at?: number | null;
+  /** When set, this bubble was authored by the named plugin via the
+   *  `chat_message!` macro rather than received from a user. */
+  plugin_name?: string | null;
+  /** Opaque ActionRow[] payload for plugin-authored bubbles.  The
+   *  shape mirrors `ResponseKind.chat-message.components`; rendered
+   *  by `RenderComponent` in `MessageItem`. */
+  plugin_components?: readonly unknown[] | null;
 }
 
 /**
@@ -239,8 +246,16 @@ export type FileAccessMode = "public" | "password" | "session";
 /** Configuration for the server-side file-server plugin, advertised to the
  *  client on connect via a `fancy-file-server-config` plugin-data message. */
 export interface FileServerConfig {
-  /** Base URL of the axum file server (no trailing slash). */
+  /** Base URL of the axum file server (no trailing slash).  Equal to
+   *  `internalBaseUrl` unless the server advertises a reverse-proxy
+   *  override (`serverConfig.fancy_rest_api_url`), in which case this
+   *  is the public/proxied URL used for outbound requests. */
   baseUrl: string;
+  /** Internal origin the file-server plugin actually embeds in its
+   *  download URLs.  Used by `rebaseFileServerUrl` to decide whether
+   *  a given URL is one of ours to rewrite (otherwise unrelated plugin
+   *  URLs such as `https://placehold.co/...` would get clobbered). */
+  internalBaseUrl: string;
   /** Caller's Mumble session id (echoed back from the server). */
   sessionId: number;
   /** Per-session upload token used as `?token=` on `POST /files`. */
@@ -305,6 +320,45 @@ export interface FileServerCapabilities {
   limits: FileServerLimits;
 }
 
+/** Configuration advertised by the live-doc plugin to clients on connect
+ *  via a `fancy-live-doc-config` plugin-data message. */
+export interface LiveDocPluginConfig {
+  /** SemVer version string of the live-doc plugin (from its Cargo.toml). */
+  version: string;
+  /** Base WebSocket URL clients use for Yjs sync connections. */
+  wsBaseUrl: string;
+}
+
+/** A single key/value debug row advertised by a plugin's
+ *  `MumblePlugin::info_json` payload. Rendered verbatim in the
+ *  Server Info panel under the plugin's card. */
+export interface PluginInfoDebugRow {
+  label: string;
+  value: string | number | boolean;
+}
+
+/** Per-plugin metadata broadcast by the server via the
+ *  `fancy-plugin-info` envelope shortly after a client connects.
+ *  All fields except `name`/`version` are optional and rendered
+ *  generically. */
+export interface PluginInfoPayload {
+  description?: string;
+  author?: string;
+  homepage?: string;
+  capabilities?: string[];
+  debug_rows?: PluginInfoDebugRow[];
+  /** Allow plugins to carry forward-compatible extra fields. */
+  [extra: string]: unknown;
+}
+
+/** Decoded `fancy-plugin-info` envelope. Stored in the Zustand
+ *  `pluginInfos` map keyed by plugin name. */
+export interface PluginInfoRecord {
+  name: string;
+  version: string;
+  info: PluginInfoPayload;
+}
+
 /** A custom emote pushed by the server via the `fancy-server-emotes`
  *  plugin-data channel. The image is delivered inline as a base64 `data:`
  *  URL so it can be rendered without a follow-up HTTP request. */
@@ -352,6 +406,12 @@ export interface DownloadEntry {
   /** `Date.now()` when the download completed. */
   downloadedAt: number;
 }
+
+/** Input shape for `addDownload`: everything in {@link DownloadEntry}
+ *  except the fields the store fills in (`id`, `downloadedAt`).  Lifted
+ *  out of the action signature so it can be referenced by name from
+ *  caller code instead of repeating the `Omit<...>` everywhere. */
+export type NewDownloadInput = Omit<DownloadEntry, "id" | "downloadedAt">;
 
 /** A link embed returned by the server after scraping Open Graph / oEmbed data. */
 export interface LinkEmbed {
@@ -438,7 +498,7 @@ export interface UserPreferences {
   /** When true, automatically retry connecting after an unexpected disconnect. */
   autoReconnect?: boolean;
   /** When true, app updates are downloaded and installed automatically on
-   *  startup (Discord-style). When false, the user is prompted. */
+   *  startup automatically. When false, the user is prompted. */
   autoUpdateOnStartup?: boolean;
   /** Version string the user chose to skip in the updater bootstrapper.
    *  Updates matching this version are silently ignored on startup. */
@@ -454,6 +514,9 @@ export interface UserPreferences {
    *  the local device (encrypted with AES-GCM) so the conversation
    *  history survives reconnects and app restarts.  Off by default. */
   persistDms?: boolean;
+  /** Override marketplace API base URL used in developer mode.
+   *  When absent or undefined the production URL is used. */
+  marketplaceBaseUrl?: string;
 }
 
 /** Identifiers for events that can trigger a notification sound. */

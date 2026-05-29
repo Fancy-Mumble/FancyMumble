@@ -80,7 +80,7 @@ interface MemberItemProps {
 }
 
 function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMenu, onClick }: MemberItemProps) {
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "common"]);
   const ownSession = useAppStore((s) => s.ownSession);
   const selectedDmUser = useAppStore((s) => s.selectedDmUser);
   const dmUnread = useAppStore((s) => s.dmUnreadCounts[user.session] ?? 0);
@@ -260,7 +260,7 @@ function ModernChannelListImpl({
     });
   }, []);
 
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "common"]);
 
   // Build a map of users per channel.
   const usersByChannel = useMemo(() => {
@@ -380,7 +380,7 @@ function ModernChannelListImpl({
               type="button"
               className={styles.expandBtn}
               onClick={() => toggleCollapsed(channel.id)}
-              aria-label={isCollapsed ? t("channelList.expand") : t("channelList.collapse")}
+              aria-label={isCollapsed ? t("channelList.expand") : t("common:actions.collapse")}
             >
               <ChevronRightIcon
                 className={`${styles.chevron} ${isCollapsed ? "" : styles.chevronOpen}`}

@@ -3,6 +3,7 @@ import type { ShortcutBindings } from "./shortcutHelpers";
 import { ShortcutRecorder } from "./SharedControls";
 import UserShortcutsSection from "./UserShortcutsSection";
 import styles from "./SettingsPage.module.css";
+import panelStyles from "./ShortcutsPanel.module.css";
 
 interface Props {
   shortcuts: ShortcutBindings;
@@ -130,7 +131,7 @@ export function ShortcutsPanel({ shortcuts, onChangeShortcut, isExpert }: Props)
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>{t("shortcuts.builtinTitle")}</h3>
         <p className={styles.fieldHint}>{t("shortcuts.builtinHint")}</p>
-        <table className={styles.builtinTable}>
+        <table className={panelStyles.builtinTable}>
           <tbody>
             <tr><td>{t("shortcuts.builtinFocusComposer")}</td><td><kbd>Tab</kbd></td></tr>
             <tr><td>{t("shortcuts.builtinSendMessage")}</td><td><kbd>Enter</kbd></td></tr>
@@ -147,3 +148,4 @@ export function ShortcutsPanel({ shortcuts, onChangeShortcut, isExpert }: Props)
     </>
   );
 }
+

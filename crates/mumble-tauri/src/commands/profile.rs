@@ -4,7 +4,9 @@
 //! Mumble.  The legacy `send_plugin_data` command now refuses to
 //! transmit and returns an explanatory error.  All new client-to-server
 //! data must use a typed protobuf message defined in `Mumble.proto`
-//! (see IDs 141-145) with its own `#[tauri::command]` handler below.
+//! (e.g. `FancyPoll`, `FancyPollVote`) with its own `#[tauri::command]`
+//! handler, or be wrapped in a `PluginMessage` envelope (wire ID 200)
+//! routed via `send_plugin_message`.
 
 use crate::state::AppState;
 
@@ -52,37 +54,27 @@ pub(crate) fn send_plugin_data(
     );
     Err(format!(
         "PluginDataTransmission is forbidden in Fancy Mumble (attempted dataId={data_id:?}). \
-         Replace this call with a typed protobuf message: see proto/Mumble.proto IDs 141-145 \
-         and the send_fancy_* Tauri commands.  If you need a new payload, add a new message \
-         to proto/Mumble.proto with a stable wire ID (>= 146) and a matching Tauri command."
+         Replace this call with a typed protobuf message (e.g. FancyPoll/FancyPollVote) or \
+         wrap it in a `PluginMessage` envelope (wire ID 200) via `send_plugin_message`. \
+         For brand-new payloads add a typed message to proto/Mumble.proto with a stable wire ID."
     ))
 }
 
-/// Ask the server's live-doc plugin to open (or re-attach to) a
-/// collaborative document in a channel.  The server replies with a
-/// `FancyLiveDocInvite` (emitted as the `fancy-live-doc-invite` event).
+/// Send a generic plugin envelope to the server.  The server routes
+/// the message to the plugin identified by `pluginName`; payload
+/// bytes are opaque to the protocol (plugins choose encoding, typically
+/// JSON).  Replies arrive on the `plugin-message` Tauri event.
 #[tauri::command]
-pub(crate) async fn request_open_live_doc(
+pub(crate) async fn send_plugin_message(
     state: tauri::State<'_, AppState>,
-    channel_id: u32,
-    slug: String,
-    title: String,
+    plugin_name: String,
+    payload_type: String,
+    payload: Vec<u8>,
+    target_sessions: Vec<u32>,
+    channel_id: Option<u32>,
 ) -> Result<(), String> {
     state
-        .send_fancy_live_doc_open(channel_id, slug, title)
-        .await
-}
-
-/// Announce an open live-doc to channel peers.
-#[tauri::command]
-pub(crate) async fn announce_live_doc(
-    state: tauri::State<'_, AppState>,
-    channel_id: u32,
-    slug: String,
-    title: String,
-) -> Result<(), String> {
-    state
-        .send_fancy_live_doc_announce(channel_id, slug, title)
+        .send_plugin_message(plugin_name, payload_type, payload, target_sessions, channel_id)
         .await
 }
 

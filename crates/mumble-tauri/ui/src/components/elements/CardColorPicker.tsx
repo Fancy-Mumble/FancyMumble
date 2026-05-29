@@ -1,3 +1,4 @@
+import { ShuffleIcon } from "../../icons";
 import { useCallback } from "react";
 import { resolveThemePalette, randomThemeColors } from "../../utils/colorUtils";
 import styles from "./CardColorPicker.module.css";
@@ -56,7 +57,7 @@ export function CardColorPicker({
           onClick={handleRandom}
           title="Random colours"
         >
-          🎲
+          <ShuffleIcon width={16} height={16} />
         </button>
 
         {colors.map((color, i) => (

@@ -31,13 +31,19 @@ import { getNotificationSounds, saveNotificationSounds } from "../../preferences
 import { ProfilePreviewCard } from "./ProfilePreviewCard";
 import { loadPersonalization, savePersonalization, type PersonalizationData } from "../../personalizationStorage";
 import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
+import {
+  UserIcon, MicIcon, KeyboardIcon, KeyIcon, BellIcon, LockIcon,
+  PaletteIcon, GlobeIcon, PuzzleIcon, SlidersIcon, UsersGroupIcon,
+} from "../../icons";
 import ChannelsAndRolesPanel from "../../components/onboarding/ChannelsAndRolesPanel";
 import { isOnboardingSupported } from "../../components/onboarding/onboardingStore";
+import PluginsPanel from "./PluginsPanel";
+import { isMobile } from "../../utils/platform";
 import styles from "./SettingsPage.module.css";
 
 // -- Types & constants ----------------------------------------------
 
-type Tab = "profile" | "voice" | "shortcuts" | "identities" | "advanced" | "personalize" | "localization" | "notifications" | "privacy" | "channels-roles";
+type Tab = "profile" | "voice" | "shortcuts" | "identities" | "advanced" | "personalize" | "localization" | "notifications" | "privacy" | "channels-roles" | "plugins";
 
 const DEFAULT_AUDIO: AudioSettings = {
   selected_device: null,
@@ -77,18 +83,24 @@ const PERSONALIZATION_DEFAULTS: PersonalizationData = {
   alwaysShowMessageActions: false,
 };
 
-function buildTabs(t: (key: string) => string): TabDef<Tab>[] {
-  return [
-    { id: "profile", label: t("tabs.profile"), icon: "??" },
-    { id: "voice", label: t("tabs.voice"), icon: "???" },
-    { id: "shortcuts", label: t("tabs.shortcuts"), icon: "??" },
-    { id: "identities", label: t("tabs.identities"), icon: "??" },
-    { id: "notifications", label: t("tabs.notifications"), icon: "??" },
-    { id: "privacy", label: t("tabs.privacy"), icon: "??" },
-    { id: "personalize", label: t("tabs.personalize"), icon: "??" },
-    { id: "localization", label: t("tabs.localization"), icon: "??" },
-    { id: "advanced", label: t("tabs.advanced"), icon: "??" },
+const TAB_ICON_SIZE = 16;
+
+function buildTabs(t: (key: string) => string, hasPlugins: boolean): TabDef<Tab>[] {
+  const tabs: TabDef<Tab>[] = [
+    { id: "profile",        label: t("tabs.profile"),        icon: <UserIcon     width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "voice",          label: t("tabs.voice"),          icon: <MicIcon      width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "shortcuts",      label: t("tabs.shortcuts"),      icon: <KeyboardIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "identities",     label: t("tabs.identities"),     icon: <KeyIcon      width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "notifications",  label: t("tabs.notifications"),  icon: <BellIcon     width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "privacy",        label: t("tabs.privacy"),        icon: <LockIcon     width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "personalize",    label: t("tabs.personalize"),    icon: <PaletteIcon  width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "localization",   label: t("tabs.localization"),   icon: <GlobeIcon    width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
   ];
+  if (hasPlugins) {
+    tabs.push({ id: "plugins", label: "Plugins", icon: <PuzzleIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> });
+  }
+  tabs.push({ id: "advanced", label: t("tabs.advanced"), icon: <SlidersIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> });
+  return tabs;
 }
 
 // -- Main component -------------------------------------------------
@@ -101,11 +113,14 @@ export default function SettingsPage() {
   const connectedCertLabel = useAppStore((s) => s.connectedCertLabel);
   const serverFancyVersion = useAppStore((s) => s.serverFancyVersion);
   const onboardingSupported = isOnboardingSupported(serverFancyVersion);
-  const BASE_TABS = buildTabs(t as (key: string) => string);
+  const hasPlugins = useAppStore((s) => s.pluginRegistry.length > 0);
+  const BASE_TABS = buildTabs(t as (key: string) => string, hasPlugins).filter(
+    (tab) => !isMobile || tab.id !== "shortcuts",
+  );
   const TABS: TabDef<Tab>[] = onboardingSupported
     ? [
         ...BASE_TABS.slice(0, BASE_TABS.length - 1),
-        { id: "channels-roles", label: t("tabs.channelsRoles"), icon: "\u{1F44B}" },
+        { id: "channels-roles", label: t("tabs.channelsRoles"), icon: <UsersGroupIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
         BASE_TABS[BASE_TABS.length - 1],
       ]
     : BASE_TABS;
@@ -751,6 +766,8 @@ export default function SettingsPage() {
           )}
 
           {tab === "channels-roles" && <ChannelsAndRolesPanel />}
+
+          {tab === "plugins" && <PluginsPanel />}
 
           {tab === "advanced" && (
             <AdvancedPanel

@@ -1,7 +1,6 @@
 ﻿{
   "password": {
     "title": "Passwort erforderlich",
-    "closeAriaLabel": "Schließen",
     "differentUser": {
       "message": "Mit <strong>{{host}}</strong> als anderer Nutzer verbinden.",
       "usernameLabel": "Neuer Benutzername",
@@ -13,7 +12,6 @@
     "passwordLabel": "Passwort",
     "changeUsername": "Anderen Nutzernamen verwenden",
     "savePassword": "Passwort speichern",
-    "cancel": "Abbrechen",
     "connect": "Verbinden"
   },
   "edit": {
@@ -29,12 +27,10 @@
     "certCreateNew": "+ Neue Identität erstellen...",
     "identityNamePlaceholder": "Name der Identität",
     "createIdentity": "Erstellen",
-    "cancelIdentity": "Abbrechen",
     "storedPassword": "Passwort ist gespeichert",
     "removePassword": "Entfernen",
     "passwordPlaceholderClear": "Neues Passwort eingeben oder leer lassen",
     "passwordPlaceholderEmpty": "Leer lassen, falls nicht erforderlich",
-    "cancel": "Abbrechen",
     "save": "Speichern"
   },
   "list": {
@@ -101,8 +97,7 @@
     "dismissTitle": "Schließen",
     "disconnectDialogTitle": "Vom Server trennen",
     "disconnectDialogBody": "Von {{label}} trennen?",
-    "disconnectConfirm": "Trennen",
-    "disconnectCancel": "Abbrechen"
+    "disconnectConfirm": "Trennen"
   },
   "activityLog": {
     "empty": "Noch keine Aktivität"
@@ -126,6 +121,13 @@
     "accordionWelcome": "Willkommen",
     "accordionActivityLog": "Aktivitätsprotokoll",
     "sectionDeveloper": "Entwickler",
+    "sectionPlugins": "Plugins",
+    "plugins": {
+      "description": "Beschreibung",
+      "author": "Autor",
+      "homepage": "Webseite",
+      "capabilities": "Funktionen"
+    },
     "refreshAriaLabel": "Debug-Statistiken aktualisieren",
     "refreshTitle": "Aktualisieren",
     "accordionAudioTransport": "Audio-Transport",
@@ -134,6 +136,7 @@
     "accordionMessages": "Nachrichten",
     "accordionLatency": "Netzwerklatenz",
     "accordionFileServer": "Dateiserver",
+    "accordionLiveDoc": "Live Doc",
     "transportUdp": "UDP (verschlüsselt)",
     "transportTcp": "TCP-Tunnel",
     "systemDefault": "System-Standard",
@@ -172,7 +175,16 @@
       "fileTtl": "Datei-TTL",
       "deleteOnDownload": "Nach Download löschen",
       "deleteOnDisconnect": "Bei Trennung löschen",
-      "customEmotes": "Benutzerdefinierte Emotes"
+      "customEmotes": "Benutzerdefinierte Emotes",
+      "liveDocSupported": "Unterstützt",
+      "liveDocVersion": "Plugin-Version",
+      "liveDocWsUrl": "WebSocket-Basis-URL",
+      "liveDocActiveSessions": "Aktive Sitzungen",
+      "liveDocPendingAnnounces": "Ausstehende Ankündigungen",
+      "liveDocChannel": "Kanal",
+      "liveDocTitle": "Titel",
+      "liveDocSlug": "Slug",
+      "liveDocUrl": "WebSocket-URL"
     }
   },
   "chooseServer": "Wähle einen Server, mit dem du dich verbinden möchtest",
@@ -227,7 +239,7 @@
       "step0": {
         "title": "Server-Adresse",
         "subtitle": "Wo läuft dein Mumble-Server?",
-        "hint": "Gib die Server-Adresse ein, die dir dein Admin genannt hat – um den Rest kümmern wir uns."
+        "hint": "Gib die Server-Adresse ein, die dir dein Admin genannt hat - um den Rest kümmern wir uns."
       },
       "step1": {
         "title": "Deine Identität",

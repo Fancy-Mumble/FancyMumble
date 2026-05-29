@@ -540,10 +540,10 @@ async fn test_server_config_has_large_limits() {
 
 // -- PluginDataTransmission tests removed (feature bricked) ----------
 // PluginDataTransmission is permanently forbidden in Fancy Mumble.
-// The polls/live-doc functionality moved to typed protobuf messages
-// (FancyPoll, FancyPollVote, FancyLiveDoc*) - see proto/Mumble.proto.
-// Add new integration tests for the typed messages once the server
-// side lands the matching handlers.
+// Polls moved to typed protobuf messages (FancyPoll, FancyPollVote -
+// see proto/Mumble.proto); live-docs and other plugin-scoped features
+// travel through the generic `PluginMessage` envelope (wire ID 200)
+// routed by the server-side plugin host.
 
 
 /// When the server has a channel with a large description it sends only

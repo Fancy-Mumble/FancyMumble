@@ -72,7 +72,7 @@ export default function ServerTabsBar() {
   const refreshSessions = useAppStore((s) => s.refreshSessions);
   const disconnectSession = useAppStore((s) => s.disconnectSession);
   const sessionUnreadTotals = useAppStore((s) => s.sessionUnreadTotals);
-  const { t } = useTranslation("server");
+  const { t } = useTranslation(["server", "common"]);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -501,7 +501,7 @@ export default function ServerTabsBar() {
           title={t("tabsBar.disconnectDialogTitle")}
           body={t("tabsBar.disconnectDialogBody", { label: tabLabel(pendingDisconnect) })}
           confirmLabel={t("tabsBar.disconnectConfirm")}
-          cancelLabel={t("tabsBar.disconnectCancel")}
+          cancelLabel={t("common:actions.cancel")}
           danger
           isConfirming={isDisconnecting}
           onConfirm={() => void handleConfirmDisconnect()}

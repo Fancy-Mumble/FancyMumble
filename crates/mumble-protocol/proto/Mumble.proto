@@ -1581,55 +1581,63 @@ message FancyOnboardingResponseDeliver {
 	optional FancyOnboardingResponse response = 1;
 }
 // ---------------------------------------------------------------------------
-// Live collaborative documents (Fancy Mumble extension, IDs 141-143)
+// Generic plugin envelope (Fancy Mumble extension, IDs 200-201)
 // ---------------------------------------------------------------------------
 //
-// Replaces the legacy PluginDataTransmission carriage for live-doc
-// signalling.  PluginDataTransmission is forbidden in Fancy Mumble; all
-// new client-to-server / server-to-client traffic MUST use a native
-// protobuf message with a stable wire type ID instead.
-
-// Client -> Server: request opening (or re-attaching to) a live-doc room.
-// The server's live-doc plugin replies with FancyLiveDocInvite when the
-// room is ready.
-// Wire type ID = 141.
-message FancyLiveDocOpen {
-// Channel the document belongs to.  Used for permission checks.
-optional uint32 channel_id = 1;
-// URL-safe slug identifying the document inside the channel.
-optional string slug = 2;
-// Human-readable title.  Truncated server-side to a sane length.
-optional string title = 3;
+// The server-side plugin host (mumble-plugin-host) loads cdylib plugins
+// at runtime.  Each plugin owns its private wire schema; the server is
+// agnostic and merely forwards opaque payloads between clients and the
+// matching plugin selected by `plugin_name`.  Per-plugin payloads are
+// conventionally protobuf messages compiled from a plugin-owned .proto
+// file; the `payload_type` field carries the inner message name so the
+// receiver can decode the bytes.
+//
+// Wire type ID = 200.
+// Bidirectional.  Client -> server delivers to the plugin named in
+// `plugin_name`.  Server -> client relays to either `target_sessions`
+// (explicit recipients) or every authenticated user in `channel_id`
+// (broadcast).  The server stamps `sender_session` / `sender_name`
+// before delivery; values supplied by the client are ignored.
+message PluginMessage {
+  // Stable plugin identifier (e.g. "fancy-live-doc").  Required.
+  optional string plugin_name = 1;
+  // Numeric alias assigned by the server in PluginRegistry.  Optional;
+  // when set the receiver may use it instead of `plugin_name`.
+  optional uint32 plugin_slot = 2;
+  // Plugin-defined sub-type, conventionally the inner proto message
+  // name (e.g. "OpenRequest").
+  optional string payload_type = 3;
+  // Opaque payload bytes (usually a protobuf-encoded inner message).
+  optional bytes payload = 4;
+  // Explicit recipient sessions for server -> client relay.  When
+  // empty and `channel_id` is unset, the message is server-bound
+  // only (consumed by the plugin, not relayed).
+  repeated uint32 target_sessions = 5;
+  // Channel-scoped broadcast: server fans out to every authenticated
+  // user in the channel.
+  optional uint32 channel_id = 6;
+  // Server-stamped on delivery.  Ignored when sent by the client.
+  optional uint32 sender_session = 7;
+  optional string sender_name = 8;
 }
 
-// Server -> Client: deliver the WebSocket invite for a live-doc room.
-// Sent in response to FancyLiveDocOpen.
-// Wire type ID = 142.
-message FancyLiveDocInvite {
-// Opaque server identifier (used for client-side caching).
-optional string server_id = 1;
-optional uint32 channel_id = 2;
-optional string slug = 3;
-optional string title = 4;
-// WebSocket endpoint the client should connect to (ws:// or wss://).
-optional string ws_url = 5;
-// Short-lived JWT the client passes to the WebSocket as a query param.
-optional string token = 6;
+// One entry in the PluginRegistry list.
+message PluginRegistryEntry {
+  required string plugin_name = 1;
+  required string version = 2;
+  // Numeric alias valid for this connection.
+  optional uint32 plugin_slot = 3;
+  // Plugin-defined capability/metadata JSON blob (opaque to server).
+  optional string info_json = 4;
 }
 
-// Client -> Server -> Channel: announce that a live-doc has been opened
-// so other channel members see a banner / quick-join button.  Server
-// relays to every other Fancy client currently in the channel.
-// Wire type ID = 143.
-message FancyLiveDocAnnounce {
-optional uint32 channel_id = 1;
-optional string slug = 2;
-optional string title = 3;
-// Session ID of the user that opened the document (set by server on
-// relay; ignored when sent from the client).
-optional uint32 opener_session = 4;
-// Best-effort display name of the opener.
-optional string opener_name = 5;
+// Wire type ID = 201.
+// Server -> Client: enumerate the loaded plugins so the client can
+// route incoming PluginMessage envelopes to the right handler.  Sent
+// once right after ServerSync (and again whenever the plugin set
+// changes during the connection).
+message PluginRegistry {
+  repeated PluginRegistryEntry plugins = 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -1672,4 +1680,148 @@ optional uint32 voter_session = 4;
 // Best-effort display name of the voter.
 optional string voter_name = 5;
 }
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Plugin admin (Fancy Mumble extension, IDs 146-151)
+// ---------------------------------------------------------------------------
+//
+// Admin-only messages for managing the server's plugin set at runtime.
+// All requests require Write permission on the root channel (channel 0).
+// The server's plugin host applies changes immediately and persists the
+// effect to mumble-server.ini, so toggles survive restarts.
+//
+// Workflow:
+//   1. Admin client sends FancyPluginAdminListRequest.
+//   2. Server replies with FancyPluginAdminList enumerating every plugin
+//      currently discovered on disk (loaded OR disabled).
+//   3. Admin sends FancyPluginAdminSetEnabled / Install / Uninstall.
+//   4. Server replies with FancyPluginAdminAck describing success or the
+//      failure reason; on success, a fresh FancyPluginAdminList is also
+//      broadcast to all subscribed admins (sender included).
+//
+// All marketplace downloads happen on the SERVER (the client only
+// passes the manifest URL). This keeps headless admin tools usable and
+// avoids round-tripping multi-megabyte ZIP blobs through the Mumble TCP
+// stream.
+
+// Wire type ID = 146.
+// Admin -> Server: request the current plugin inventory.
+message FancyPluginAdminListRequest {
+}
+
+// One entry in FancyPluginAdminList.  Mirrors what the host knows about
+// a single plugin binary on disk: name, version, enabled state, and
+// optional metadata JSON (same shape as PluginRegistryEntry.info_json).
+message FancyPluginAdminEntry {
+  required string plugin_name = 1;
+  required string version = 2;
+  // True when the plugin's on_load() has been invoked and it is part of
+  // the active dispatch tables.  False when it is present on disk but
+  // gated off via plugin.<name>.enabled=false.
+  required bool enabled = 3;
+  // True when the binary is currently in memory (typically implied by
+  // enabled=true, but kept distinct so the UI can surface stale loads
+  // after a failed unload).
+  optional bool loaded = 4;
+  // Absolute path on the server's filesystem.  Useful for the admin to
+  // confirm where the plugin came from (installed by the marketplace
+  // vs. dropped in manually).
+  optional string path = 5;
+  // info_json() output (the same JSON the runtime broadcasts to clients
+  // via PluginRegistryEntry).  May be empty if the plugin failed to
+  // load.
+  optional string info_json = 6;
+  // Set to the marketplace ID (e.g. "fancy-greeter") when the plugin
+  // was installed via FancyPluginAdminInstall.  Allows the UI to show
+  // an "installed from marketplace" badge and offer one-click uninstall.
+  optional string marketplace_id = 7;
+  // Wall-clock millis when the plugin was last installed/upgraded by
+  // the marketplace flow.  Zero / unset for manually-dropped binaries.
+  optional uint64 installed_at = 8;
+  // True for plugins that ship with the server distribution (not
+  // user-installed).  These cannot be removed via the admin UI.
+  optional bool builtin = 9;
+}
+
+// Wire type ID = 147.
+// Server -> Admin: snapshot of every plugin the host knows about.
+// Also broadcast on its own to every authenticated admin whenever the
+// plugin set changes (install, uninstall, hot-toggle).
+message FancyPluginAdminList {
+  repeated FancyPluginAdminEntry plugins = 1;
+  // Absolute path of the directory the server scans for plugins. The
+  // admin UI surfaces this so operators know where their files live.
+  optional string plugins_dir = 2;
+}
+
+// Wire type ID = 148.
+// Admin -> Server: enable or disable a plugin by name.
+// On success the server rewrites plugin.<plugin_name>.enabled in
+// mumble-server.ini and, when supported, hot-loads or hot-unloads the
+// binary without requiring a restart.
+message FancyPluginAdminSetEnabled {
+  required string plugin_name = 1;
+  required bool enabled = 2;
+}
+
+// Wire type ID = 149.
+// Admin -> Server: install (or upgrade) a plugin from the marketplace.
+// The server downloads the manifest from manifest_url, validates its
+// digest against expected_sha256, downloads the platform-matching
+// artifact, extracts it into plugins_dir, then loads it.  The new
+// plugin starts disabled; the admin must follow up with
+// FancyPluginAdminSetEnabled to activate it.
+message FancyPluginAdminInstall {
+  // Stable marketplace ID (e.g. "fancy-greeter").
+  required string marketplace_id = 1;
+  // Specific version to install (e.g. "0.1.4").  Empty selects latest.
+  optional string version = 2;
+  // Fully-qualified URL of the marketplace manifest document.  The
+  // server fetches this URL directly, validates the JSON, and downloads
+  // the artifact it points to.  Required so the server does not need
+  // out-of-band knowledge of the marketplace base URL.
+  required string manifest_url = 3;
+  // Expected SHA-256 of the manifest JSON, hex-encoded.  Optional but
+  // strongly recommended: the client computes this before sending so
+  // the server can confirm both endpoints are looking at the same
+  // marketplace document.  Empty disables the check.
+  optional string expected_sha256 = 4;
+}
+
+// Wire type ID = 150.
+// Admin -> Server: remove a plugin from disk and unload it from memory.
+// Also strips every plugin.<plugin_name>.* key from mumble-server.ini.
+// Refuses to remove plugins the server considers core (file-server,
+// live-doc, etc.).
+message FancyPluginAdminUninstall {
+  required string plugin_name = 1;
+}
+
+// Wire type ID = 151.
+// Server -> Admin: status reply for the last admin action.  Always
+// carries the request_id of the action being acknowledged so the UI
+// can correlate responses with in-flight buttons.
+message FancyPluginAdminAck {
+  // Echo of FancyPluginAdminInstall/SetEnabled/Uninstall.plugin_name (or
+  // marketplace_id for installs).  Empty for ListRequest acks.
+  optional string plugin_name = 1;
+  // True when the action completed successfully.  False on any error.
+  required bool ok = 2;
+  // Free-form English error description.  Empty on success.
+  optional string error = 3;
+  // Optional opaque correlation id the client may attach to the
+  // request to match async replies.
+  optional string request_id = 4;
+  // Distinguishes which admin verb this ack belongs to.
+  optional Verb verb = 5;
+
+  enum Verb {
+    LIST = 0;
+    SET_ENABLED = 1;
+    INSTALL = 2;
+    UNINSTALL = 3;
+  }
+}
+
 // ---------------------------------------------------------------------------

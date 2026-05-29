@@ -80,7 +80,7 @@ export default function ChannelEditorDialog({
   onClose,
 }: ChannelEditorProps) {
   const isCreate = channel === null;
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "common"]);
   const createChannel = useAppStore((s) => s.createChannel);
   const updateChannel = useAppStore((s) => s.updateChannel);
 
@@ -357,7 +357,7 @@ export default function ChannelEditorDialog({
 
         <div className={styles.actions}>
           <button className={styles.cancelBtn} onClick={onClose} type="button">
-            {t("channelEditor.cancel")}
+            {t("common:actions.cancel")}
           </button>
           <button
             className={styles.submitBtn}

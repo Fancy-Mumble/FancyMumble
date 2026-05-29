@@ -45,7 +45,7 @@ function buildRoleRows(groups: readonly AclGroup[], userId: number): RoleRow[] {
  */
 export function UserRoleManagerDialog({ user, acl, onClose, onSaved }: UserRoleManagerDialogProps) {
   const groups = acl?.groups ?? [];
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
   const initialMembership = useMemo(() => {
     const set = new Set<string>();
     for (const g of groups) {
@@ -131,7 +131,7 @@ export function UserRoleManagerDialog({ user, acl, onClose, onSaved }: UserRoleM
       <div>
         <div className={styles.dialogHeader}>
           <h3 className={styles.dialogTitle}>{t("roleManagerDialog.title", { name: user.name })}</h3>
-          <button type="button" className={styles.dialogClose} onClick={onClose} aria-label={t("roleManagerDialog.closeButton")}>
+          <button type="button" className={styles.dialogClose} onClick={onClose} aria-label={t("common:actions.close")}>
             &times;
           </button>
         </div>
@@ -174,7 +174,7 @@ export function UserRoleManagerDialog({ user, acl, onClose, onSaved }: UserRoleM
 
         <div className={styles.dialogActions}>
           <button type="button" className={styles.refreshBtn} onClick={onClose} disabled={saving}>
-            {t("roleManagerDialog.cancel")}
+            {t("common:actions.cancel")}
           </button>
           <button
             type="button"

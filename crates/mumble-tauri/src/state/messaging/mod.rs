@@ -28,6 +28,25 @@ fn own_session_hash(state: &SharedState) -> Option<String> {
         .and_then(|u| u.hash.clone())
 }
 
+fn apply_plugin_message_update(
+    msg: &mut ChatMessage,
+    content: &Option<String>,
+    components: &Option<serde_json::Value>,
+    clear_components: bool,
+    now_ms: u64,
+) {
+    if let Some(c) = content {
+        msg.body = c.clone();
+    }
+    if clear_components {
+        msg.plugin_components = None;
+    }
+    if let Some(v) = components {
+        msg.plugin_components = Some(v.clone());
+    }
+    msg.edited_at = Some(now_ms);
+}
+
 fn cache_own_signal_message(state: &mut SharedState, msg: &ChatMessage, channel_id: u32) {
     let own_cert_hash = state
         .pchat_ctx.pchat
@@ -186,6 +205,8 @@ impl AppState {
             pinned: false,
             pinned_by: None,
             pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
         };
         msg.ensure_id();
 
@@ -195,6 +216,155 @@ impl AppState {
 
         let bucket = state.msgs.by_channel.entry(msg_data.channel_id).or_default();
         super::push_capped(bucket, msg);
+    }
+
+    /// Inject a plugin-authored chat message into the local channel
+    /// histories selected by `channel_ids` (falling back to the
+    /// currently-viewed channel when empty), then emit `new-message`
+    /// events so the UI scrolls and updates unread counters.
+    ///
+    /// The message is purely local: it is never forwarded to the
+    /// server, so other clients do not see it.  The originating
+    /// plugin is recorded on
+    /// [`ChatMessage::plugin_name`](super::types::ChatMessage::plugin_name)
+    /// so component interactions inside the bubble can be routed
+    /// back to the right plugin.
+    pub fn plugin_inject_chat_message(
+        &self,
+        plugin_name: String,
+        channel_ids: Vec<u32>,
+        message_id: String,
+        content: String,
+        components: Option<serde_json::Value>,
+    ) -> Result<(), String> {
+        use crate::state::types::NewMessagePayload;
+        use tauri::Emitter;
+
+        let (targets, app_handle) = {
+            let __session = self.inner.snapshot();
+            let state = __session.lock().map_err(|e| e.to_string())?;
+            let targets: Vec<u32> = if channel_ids.is_empty() {
+                state.selected_channel.into_iter().collect()
+            } else {
+                channel_ids
+            };
+            (targets, state.conn.tauri_app_handle.clone())
+        };
+
+        if targets.is_empty() {
+            return Err(
+                "plugin_inject_chat_message: empty channel_ids and no channel currently selected"
+                    .to_string(),
+            );
+        }
+
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        {
+            let __session = self.inner.snapshot();
+            let mut state = __session.lock().map_err(|e| e.to_string())?;
+            for &channel_id in &targets {
+                let msg = ChatMessage {
+                    sender_session: None,
+                    sender_name: plugin_name.clone(),
+                    sender_hash: None,
+                    body: content.clone(),
+                    channel_id,
+                    is_own: false,
+                    dm_session: None,
+                    message_id: Some(message_id.clone()),
+                    timestamp: Some(now_ms),
+                    is_legacy: false,
+                    edited_at: None,
+                    pinned: false,
+                    pinned_by: None,
+                    pinned_at: None,
+                    plugin_name: Some(plugin_name.clone()),
+                    plugin_components: components.clone(),
+                };
+                let bucket = state.msgs.by_channel.entry(channel_id).or_default();
+                super::push_capped(bucket, msg);
+            }
+        }
+
+        if let Some(app) = app_handle {
+            for &channel_id in &targets {
+                let _ = app.emit(
+                    "new-message",
+                    NewMessagePayload {
+                        channel_id,
+                        sender_session: None,
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Update an already-injected plugin chat bubble in place.  Used
+    /// by the TS reducer when a plugin sends `update-message` for a
+    /// `message_id` that was previously produced by `chat_message!`.
+    ///
+    /// Only messages whose `plugin_name` matches `plugin_name` are
+    /// touched, preventing plugin A from rewriting plugin B's
+    /// bubbles or user-authored messages.  Returns `Ok` even when
+    /// nothing was found - the plugin treats updates idempotently.
+    pub fn plugin_update_chat_message(
+        &self,
+        plugin_name: String,
+        message_id: String,
+        content: Option<String>,
+        components: Option<serde_json::Value>,
+        clear_components: bool,
+    ) -> Result<(), String> {
+        use crate::state::types::NewMessagePayload;
+        use tauri::Emitter;
+
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        let (touched, app_handle) = {
+            let __session = self.inner.snapshot();
+            let mut state = __session.lock().map_err(|e| e.to_string())?;
+            let touched: Vec<u32> = state
+                .msgs
+                .by_channel
+                .iter_mut()
+                .filter_map(|(&channel_id, bucket)| {
+                    let msg = bucket.iter_mut().find(|msg| {
+                        msg.plugin_name.as_deref() == Some(plugin_name.as_str())
+                            && msg.message_id.as_deref() == Some(message_id.as_str())
+                    })?;
+                    apply_plugin_message_update(
+                        msg,
+                        &content,
+                        &components,
+                        clear_components,
+                        now_ms,
+                    );
+                    Some(channel_id)
+                })
+                .collect();
+            (touched, state.conn.tauri_app_handle.clone())
+        };
+
+        if let Some(app) = app_handle {
+            for channel_id in touched {
+                let _ = app.emit(
+                    "new-message",
+                    NewMessagePayload {
+                        channel_id,
+                        sender_session: None,
+                    },
+                );
+            }
+        }
+        Ok(())
     }
 
     pub async fn edit_message(

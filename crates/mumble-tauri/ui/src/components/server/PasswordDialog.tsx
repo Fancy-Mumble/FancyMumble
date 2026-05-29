@@ -1,3 +1,4 @@
+import { CloseIcon } from "../../icons";
 import { useState, useCallback, useRef, useEffect, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./PasswordDialog.module.css";
@@ -23,7 +24,7 @@ export default function PasswordDialog({
   showSaveOption,
   onChangeUsername,
 }: PasswordDialogProps) {
-  const { t } = useTranslation("server");
+  const { t } = useTranslation(["server", "common"]);
   const [password, setPassword] = useState("");
   const [savePassword, setSavePassword] = useState(false);
   const [editingUsername, setEditingUsername] = useState(false);
@@ -80,10 +81,10 @@ export default function PasswordDialog({
           <button
             className={styles.closeBtn}
             onClick={onCancel}
-            aria-label={t("password.closeAriaLabel")}
+            aria-label={t("common:actions.close")}
             type="button"
           >
-            ×
+            <CloseIcon width={16} height={16} />
           </button>
         </div>
 
@@ -179,7 +180,7 @@ export default function PasswordDialog({
                 type="button"
                 onClick={onCancel}
               >
-                {t("password.cancel")}
+                {t("common:actions.cancel")}
               </button>
               <button
                 className={styles.connectBtn}

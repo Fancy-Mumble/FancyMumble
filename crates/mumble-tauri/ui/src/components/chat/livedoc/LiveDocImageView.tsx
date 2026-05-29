@@ -23,6 +23,7 @@
  *     doesn't get hit-tested during drags.
  */
 
+import { RefreshCwIcon } from "../../../icons";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
@@ -384,7 +385,7 @@ export default function LiveDocImageView(props: NodeViewProps) {
             title={t("liveDoc.image.rotate")}
             aria-label={t("liveDoc.image.rotate")}
           >
-            ↻
+            <RefreshCwIcon width={14} height={14} />
           </span>
 
 

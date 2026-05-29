@@ -27,7 +27,7 @@ export default function CustodianPrompt({
   removedCustodians,
   addedCustodians,
 }: CustodianPromptProps) {
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "common"]);
 
   // Close on Escape.
   useEffect(() => {
@@ -57,7 +57,7 @@ export default function CustodianPrompt({
       <div className={styles.dialog}>
         <div className={styles.header}>
           <h3 className={styles.title}>{title}</h3>
-          <button className={styles.closeBtn} onClick={onClose} aria-label={t("custodian.closeAriaLabel")}>
+          <button className={styles.closeBtn} onClick={onClose} aria-label={t("common:actions.close")}>
             <CloseIcon width={16} height={16} />
           </button>
         </div>

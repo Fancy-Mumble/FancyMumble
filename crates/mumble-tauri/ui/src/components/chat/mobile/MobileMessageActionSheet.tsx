@@ -1,4 +1,4 @@
-import { ArrowUpRightIcon, CheckboxIcon, CopyIcon, EditIcon, EmojiPlusIcon, PlayIcon, QuoteIcon, TrashIcon } from "../../../icons";
+import { ArrowUpRightIcon, CheckboxIcon, CopyIcon, EditIcon, EmojiPlusIcon, PinIcon, PlayIcon, QuoteIcon, TrashIcon } from "../../../icons";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatMessage } from "../../../types";
@@ -249,7 +249,7 @@ export default function MobileMessageActionSheet({
         )}
         {onPin && message.message_id && (
           <button type="button" className={styles.actionItem} onClick={act((m) => onPin(m))}>
-            <span className={styles.actionIcon}>📌</span>
+            <span className={styles.actionIcon}><PinIcon width={16} height={16} /></span>
             {message.pinned ? t("contextMenu.unpin") : t("contextMenu.pin")}
           </button>
         )}

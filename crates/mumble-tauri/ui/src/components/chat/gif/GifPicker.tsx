@@ -1,4 +1,4 @@
-import { SearchIcon } from "../../../icons";
+import { CloseIcon, SearchIcon } from "../../../icons";
 import { useTranslation } from "react-i18next";
 /**
  * GifPicker - popup GIF / Sticker search & browse powered by Klipy.
@@ -377,7 +377,7 @@ export default function GifPicker({ onSelect, onClose }: Readonly<GifPickerProps
           </button>
         </div>
         <button className={styles.closeBtn} onClick={onClose}>
-          ✕
+          <CloseIcon width={16} height={16} />
         </button>
       </div>
 

@@ -1,4 +1,4 @@
-import { CloseIcon, MoonIcon, ShieldCheckIcon } from "../../icons";
+import { CloseIcon, MoonIcon, ShieldCheckIcon, UserFilledIcon } from "../../icons";
 /**
  * Full-height right-side panel showing a user's full profile.
  *
@@ -220,7 +220,7 @@ function UserProfilePanel({
                 className={styles.avatarImg}
               />
             ) : (
-              <span className={styles.avatarPlaceholder}>👤</span>
+              <span className={styles.avatarPlaceholder}><UserFilledIcon width={48} height={48} /></span>
             )}
             {decoration && decoration.id !== "none" && (
               <span className={styles.decoration}>{decoration.preview}</span>

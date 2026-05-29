@@ -76,7 +76,7 @@ interface CollapsedProps {
 }
 
 function CollapsedSession({ title, participants, onOpen }: CollapsedProps) {
-  const { t } = useTranslation("chat");
+  const { t } = useTranslation(["chat", "common"]);
   return (
     <div className={styles.card}>
       <div className={styles.header}>
@@ -98,7 +98,7 @@ interface ExpandedProps {
 }
 
 function ExpandedSession({ sessionId, onClose }: ExpandedProps) {
-  const { t } = useTranslation("chat");
+  const { t } = useTranslation(["chat", "common"]);
   // Take the mount claim for the lifetime of this expanded view so
   // any concurrent chat-marker render falls back to a placeholder.
   useEffect(() => {
@@ -110,7 +110,7 @@ function ExpandedSession({ sessionId, onClose }: ExpandedProps) {
   return (
     <div>
       <div className={styles.actions} style={{ justifyContent: "flex-end" }}>
-        <button type="button" onClick={onClose}>{t("watch.collapse")}</button>
+        <button type="button" onClick={onClose}>{t("common:actions.collapse")}</button>
       </div>
       <WatchTogetherCard sessionId={sessionId} mountKey={`${BANNER_OWNER_PREFIX}${sessionId}`} />
     </div>

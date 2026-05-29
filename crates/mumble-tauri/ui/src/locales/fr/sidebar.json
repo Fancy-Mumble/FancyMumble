@@ -37,8 +37,7 @@
     "noChannels": "Aucun canal correspondant.",
     "member_one": "{{count}} membre",
     "member_other": "{{count}} membres",
-    "root": "Root",
-    "cancel": "Annuler"
+    "root": "Root"
   },
   "channelEditor": {
     "titleCreate": "Créer un canal",
@@ -55,7 +54,7 @@
     "unlimited": "0 = illimité",
     "temporaryLabel": "Canal temporaire",
     "passwordLabel": "Mot de passe",
-    "passwordPlaceholderNew": "Facultatif – laisser vide pour un accès ouvert",
+    "passwordPlaceholderNew": "Facultatif - laisser vide pour un accès ouvert",
     "passwordPlaceholderChange": "Actuellement protégé par mot de passe. Saisissez-en un nouveau pour le modifier, ou videz le champ pour le supprimer",
     "persistenceTitle": "Persistance",
     "protocolLabel": "Protocole",
@@ -67,8 +66,7 @@
     "forever": "0 = illimité",
     "saving": "Enregistrement...",
     "create": "Créer",
-    "save": "Enregistrer",
-    "cancel": "Annuler"
+    "save": "Enregistrer"
   },
   "channelSidebar": {
     "endCall": "Raccrocher",
@@ -103,7 +101,6 @@
     "purgeConfirm": "Purger",
     "deleteChannelTitle": "Supprimer le canal",
     "deleteChannelBody": "Voulez-vous vraiment supprimer « {{channel}} » ? Le canal et tous ses messages persistants seront définitivement effacés du serveur.",
-    "deleteChannelCancel": "Annuler",
     "deleteChannelConfirm": "Supprimer"
   },
   "sidebarTabs": {
@@ -169,7 +166,6 @@
     "browse": "Parcourir",
     "labelFilename": "Nom de fichier",
     "wildcardHelp": "{date} = AAAA-MM-JJ, {time} = HH-MM-SS, {datetime} = date + heure, {host} = serveur, {user} = utilisateur, {channel} = canal",
-    "close": "Fermer",
     "stopRecording": "Arrêter l'enregistrement",
     "startRecording": "Démarrer l'enregistrement"
   },
@@ -177,7 +173,6 @@
     "title": "Mot de passe requis",
     "body": " nécessite un mot de passe pour y entrer.",
     "placeholder": "Mot de passe du canal",
-    "cancelBtn": "Annuler",
     "joinBtn": "Rejoindre"
   },
   "membersTab": {
@@ -193,7 +188,6 @@
     "searchPlaceholder": "Rechercher des canaux...",
     "noOptions": "Aucun canal correspondant",
     "destinationLabel": "Canal de destination",
-    "cancelBtn": "Annuler",
     "confirmBtn": "Déplacer les utilisateurs"
   },
   "pchatBadge": {
@@ -242,14 +236,12 @@
     "member_one": "{{count}} membre",
     "member_other": "{{count}} membres",
     "expand": "Développer",
-    "collapse": "Réduire",
     "liveBadge": "Live",
     "sharingScreen": "Partage d'écran en cours",
     "dmUnread_one": "{{count}} message direct non lu",
     "dmUnread_other": "{{count}} messages directs non lus"
   },
   "channelInfoPanel": {
-    "closeAriaLabel": "Fermer",
     "noChannel": "Aucun canal",
     "member_one": "{{count}} membre",
     "member_other": "{{count}} membres",
@@ -259,7 +251,6 @@
     "editLabelDescription": "Description",
     "loadingEditor": "Chargement de l'éditeur...",
     "descriptionPlaceholder": "Description du canal...",
-    "cancelBtn": "Annuler",
     "saving": "Enregistrement...",
     "saveBtn": "Enregistrer",
     "noDescription": "Aucune description",
@@ -268,7 +259,7 @@
     "offlineLabel": "Hors ligne - {{count}}",
     "noUsers": "Aucun utilisateur dans ce canal",
     "keyIconAriaLabel": "Possède la clé de chiffrement",
-    "legacyClientAriaLabel": "Client hérité – incapable de lire les messages chiffrés",
+    "legacyClientAriaLabel": "Client hérité - incapable de lire les messages chiffrés",
     "resetKeyOwnership": "Réinitialiser la détention de la clé",
     "takeoverModeLabel": "Mode de reprise :",
     "takeoverFullWipe": "Effacement complet",
@@ -287,7 +278,6 @@
   "keyVerification": {
     "ariaLabel": "Vérification du chiffrement du canal",
     "title": "Vérification du chiffrement du canal",
-    "closeAriaLabel": "Fermer",
     "channelLabel": "Canal :",
     "modeLabel": "Mode :",
     "distributorLabel": "Clé distribuée par :",
@@ -296,7 +286,7 @@
     "tabHex": "Hex",
     "loadingFingerprint": "Chargement...",
     "showFullFingerprint": "Afficher l'empreinte complète",
-    "instructions": "Comparez cette empreinte avec un membre de confiance du canal – par appel vocal, en personne ou via un autre canal sécurisé.",
+    "instructions": "Comparez cette empreinte avec un membre de confiance du canal - par appel vocal, en personne ou via un autre canal sécurisé.",
     "currentTrust": "Confiance actuelle : {{status}}",
     "trustManuallyVerified": "Vérifié manuellement",
     "trustVerified": "Vérifié (consensus)",
@@ -309,12 +299,10 @@
   "keyShare": {
     "ariaLabel": "Partager la clé de chiffrement",
     "title": "Partager la clé de chiffrement",
-    "closeAriaLabel": "Fermer",
     "archiveAccess": "Ce canal utilise le mode archive complète. Le partage de la clé accorde l'accès à tout l'historique des messages{{count}}.",
     "archiveCount": " ({{count}} messages stockés)",
     "genericAccess": "Le partage de la clé de chiffrement accorde l'accès aux messages chiffrés dans ce canal.",
     "confirmMessage": "Voulez-vous vraiment partager la clé de chiffrement avec <strong>{{name}}</strong> ? Cette action est irréversible.",
-    "cancel": "Annuler",
     "share": "Partager la clé"
   },
   "custodian": {
@@ -329,8 +317,7 @@
     "dismiss": "Ignorer",
     "later": "Plus tard",
     "accept": "Accepter",
-    "confirm": "Confirmer",
-    "closeAriaLabel": "Fermer"
+    "confirm": "Confirmer"
   },
   "persistence": {
     "loadingHistory": "Chargement de l'historique des messages...",

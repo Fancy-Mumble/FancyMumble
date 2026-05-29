@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Toggle, SliderField } from "./SharedControls";
 import { FONTS } from "./profileData";
 import styles from "./SettingsPage.module.css";
+import panelStyles from "./NameStyleSection.module.css";
 
 type NameStyle = NonNullable<FancyProfile["nameStyle"]>;
 
@@ -28,7 +29,7 @@ export function NameStyleSection({
 
       {/* Live preview */}
       <div
-        className={styles.namePreview}
+        className={panelStyles.namePreview}
         style={{
           fontFamily: fontCss,
           color: nameStyle.gradient
@@ -196,3 +197,4 @@ export function NameStyleSection({
     </section>
   );
 }
+

@@ -2387,62 +2387,78 @@ pub struct FancyOnboardingResponseDeliver {
     #[prost(message, optional, tag = "1")]
     pub response: ::core::option::Option<FancyOnboardingResponse>,
 }
-/// Client -> Server: request opening (or re-attaching to) a live-doc room.
-/// The server's live-doc plugin replies with FancyLiveDocInvite when the
-/// room is ready.
-/// Wire type ID = 141.
+/// ---------------------------------------------------------------------------
+/// Generic plugin envelope (Fancy Mumble extension, IDs 200-201)
+/// ---------------------------------------------------------------------------
+///
+/// The server-side plugin host (mumble-plugin-host) loads cdylib plugins
+/// at runtime.  Each plugin owns its private wire schema; the server is
+/// agnostic and merely forwards opaque payloads between clients and the
+/// matching plugin selected by `plugin_name`.  Per-plugin payloads are
+/// conventionally protobuf messages compiled from a plugin-owned .proto
+/// file; the `payload_type` field carries the inner message name so the
+/// receiver can decode the bytes.
+///
+/// Wire type ID = 200.
+/// Bidirectional.  Client -> server delivers to the plugin named in
+/// `plugin_name`.  Server -> client relays to either `target_sessions`
+/// (explicit recipients) or every authenticated user in `channel_id`
+/// (broadcast).  The server stamps `sender_session` / `sender_name`
+/// before delivery; values supplied by the client are ignored.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct FancyLiveDocOpen {
-    /// Channel the document belongs to.  Used for permission checks.
-    #[prost(uint32, optional, tag = "1")]
-    pub channel_id: ::core::option::Option<u32>,
-    /// URL-safe slug identifying the document inside the channel.
-    #[prost(string, optional, tag = "2")]
-    pub slug: ::core::option::Option<::prost::alloc::string::String>,
-    /// Human-readable title.  Truncated server-side to a sane length.
-    #[prost(string, optional, tag = "3")]
-    pub title: ::core::option::Option<::prost::alloc::string::String>,
-}
-/// Server -> Client: deliver the WebSocket invite for a live-doc room.
-/// Sent in response to FancyLiveDocOpen.
-/// Wire type ID = 142.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct FancyLiveDocInvite {
-    /// Opaque server identifier (used for client-side caching).
+pub struct PluginMessage {
+    /// Stable plugin identifier (e.g. "fancy-live-doc").  Required.
     #[prost(string, optional, tag = "1")]
-    pub server_id: ::core::option::Option<::prost::alloc::string::String>,
+    pub plugin_name: ::core::option::Option<::prost::alloc::string::String>,
+    /// Numeric alias assigned by the server in PluginRegistry.  Optional;
+    /// when set the receiver may use it instead of `plugin_name`.
     #[prost(uint32, optional, tag = "2")]
-    pub channel_id: ::core::option::Option<u32>,
+    pub plugin_slot: ::core::option::Option<u32>,
+    /// Plugin-defined sub-type, conventionally the inner proto message
+    /// name (e.g. "OpenRequest").
     #[prost(string, optional, tag = "3")]
-    pub slug: ::core::option::Option<::prost::alloc::string::String>,
-    #[prost(string, optional, tag = "4")]
-    pub title: ::core::option::Option<::prost::alloc::string::String>,
-    /// WebSocket endpoint the client should connect to (ws:// or wss://).
-    #[prost(string, optional, tag = "5")]
-    pub ws_url: ::core::option::Option<::prost::alloc::string::String>,
-    /// Short-lived JWT the client passes to the WebSocket as a query param.
-    #[prost(string, optional, tag = "6")]
-    pub token: ::core::option::Option<::prost::alloc::string::String>,
+    pub payload_type: ::core::option::Option<::prost::alloc::string::String>,
+    /// Opaque payload bytes (usually a protobuf-encoded inner message).
+    #[prost(bytes = "vec", optional, tag = "4")]
+    pub payload: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Explicit recipient sessions for server -> client relay.  When
+    /// empty and `channel_id` is unset, the message is server-bound
+    /// only (consumed by the plugin, not relayed).
+    #[prost(uint32, repeated, packed = "false", tag = "5")]
+    pub target_sessions: ::prost::alloc::vec::Vec<u32>,
+    /// Channel-scoped broadcast: server fans out to every authenticated
+    /// user in the channel.
+    #[prost(uint32, optional, tag = "6")]
+    pub channel_id: ::core::option::Option<u32>,
+    /// Server-stamped on delivery.  Ignored when sent by the client.
+    #[prost(uint32, optional, tag = "7")]
+    pub sender_session: ::core::option::Option<u32>,
+    #[prost(string, optional, tag = "8")]
+    pub sender_name: ::core::option::Option<::prost::alloc::string::String>,
 }
-/// Client -> Server -> Channel: announce that a live-doc has been opened
-/// so other channel members see a banner / quick-join button.  Server
-/// relays to every other Fancy client currently in the channel.
-/// Wire type ID = 143.
+/// One entry in the PluginRegistry list.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct FancyLiveDocAnnounce {
-    #[prost(uint32, optional, tag = "1")]
-    pub channel_id: ::core::option::Option<u32>,
-    #[prost(string, optional, tag = "2")]
-    pub slug: ::core::option::Option<::prost::alloc::string::String>,
-    #[prost(string, optional, tag = "3")]
-    pub title: ::core::option::Option<::prost::alloc::string::String>,
-    /// Session ID of the user that opened the document (set by server on
-    /// relay; ignored when sent from the client).
-    #[prost(uint32, optional, tag = "4")]
-    pub opener_session: ::core::option::Option<u32>,
-    /// Best-effort display name of the opener.
-    #[prost(string, optional, tag = "5")]
-    pub opener_name: ::core::option::Option<::prost::alloc::string::String>,
+pub struct PluginRegistryEntry {
+    #[prost(string, required, tag = "1")]
+    pub plugin_name: ::prost::alloc::string::String,
+    #[prost(string, required, tag = "2")]
+    pub version: ::prost::alloc::string::String,
+    /// Numeric alias valid for this connection.
+    #[prost(uint32, optional, tag = "3")]
+    pub plugin_slot: ::core::option::Option<u32>,
+    /// Plugin-defined capability/metadata JSON blob (opaque to server).
+    #[prost(string, optional, tag = "4")]
+    pub info_json: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Wire type ID = 201.
+/// Server -> Client: enumerate the loaded plugins so the client can
+/// route incoming PluginMessage envelopes to the right handler.  Sent
+/// once right after ServerSync (and again whenever the plugin set
+/// changes during the connection).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PluginRegistry {
+    #[prost(message, repeated, tag = "1")]
+    pub plugins: ::prost::alloc::vec::Vec<PluginRegistryEntry>,
 }
 /// Client -> Server -> Channel: announce a new poll in a channel.
 /// Wire type ID = 144.
@@ -2488,6 +2504,185 @@ pub struct FancyPollVote {
     /// Best-effort display name of the voter.
     #[prost(string, optional, tag = "5")]
     pub voter_name: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Wire type ID = 146.
+/// Admin -> Server: request the current plugin inventory.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyPluginAdminListRequest {}
+/// One entry in FancyPluginAdminList.  Mirrors what the host knows about
+/// a single plugin binary on disk: name, version, enabled state, and
+/// optional metadata JSON (same shape as PluginRegistryEntry.info_json).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyPluginAdminEntry {
+    #[prost(string, required, tag = "1")]
+    pub plugin_name: ::prost::alloc::string::String,
+    #[prost(string, required, tag = "2")]
+    pub version: ::prost::alloc::string::String,
+    /// True when the plugin's on_load() has been invoked and it is part of
+    /// the active dispatch tables.  False when it is present on disk but
+    /// gated off via plugin.<name>.enabled=false.
+    #[prost(bool, required, tag = "3")]
+    pub enabled: bool,
+    /// True when the binary is currently in memory (typically implied by
+    /// enabled=true, but kept distinct so the UI can surface stale loads
+    /// after a failed unload).
+    #[prost(bool, optional, tag = "4")]
+    pub loaded: ::core::option::Option<bool>,
+    /// Absolute path on the server's filesystem.  Useful for the admin to
+    /// confirm where the plugin came from (installed by the marketplace
+    /// vs. dropped in manually).
+    #[prost(string, optional, tag = "5")]
+    pub path: ::core::option::Option<::prost::alloc::string::String>,
+    /// info_json() output (the same JSON the runtime broadcasts to clients
+    /// via PluginRegistryEntry).  May be empty if the plugin failed to
+    /// load.
+    #[prost(string, optional, tag = "6")]
+    pub info_json: ::core::option::Option<::prost::alloc::string::String>,
+    /// Set to the marketplace ID (e.g. "fancy-greeter") when the plugin
+    /// was installed via FancyPluginAdminInstall.  Allows the UI to show
+    /// an "installed from marketplace" badge and offer one-click uninstall.
+    #[prost(string, optional, tag = "7")]
+    pub marketplace_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Wall-clock millis when the plugin was last installed/upgraded by
+    /// the marketplace flow.  Zero / unset for manually-dropped binaries.
+    #[prost(uint64, optional, tag = "8")]
+    pub installed_at: ::core::option::Option<u64>,
+    /// True for plugins that ship with the server distribution (not
+    /// user-installed).  These cannot be removed via the admin UI.
+    #[prost(bool, optional, tag = "9")]
+    pub builtin: ::core::option::Option<bool>,
+}
+/// Wire type ID = 147.
+/// Server -> Admin: snapshot of every plugin the host knows about.
+/// Also broadcast on its own to every authenticated admin whenever the
+/// plugin set changes (install, uninstall, hot-toggle).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FancyPluginAdminList {
+    #[prost(message, repeated, tag = "1")]
+    pub plugins: ::prost::alloc::vec::Vec<FancyPluginAdminEntry>,
+    /// Absolute path of the directory the server scans for plugins. The
+    /// admin UI surfaces this so operators know where their files live.
+    #[prost(string, optional, tag = "2")]
+    pub plugins_dir: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Wire type ID = 148.
+/// Admin -> Server: enable or disable a plugin by name.
+/// On success the server rewrites plugin.<plugin_name>.enabled in
+/// mumble-server.ini and, when supported, hot-loads or hot-unloads the
+/// binary without requiring a restart.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyPluginAdminSetEnabled {
+    #[prost(string, required, tag = "1")]
+    pub plugin_name: ::prost::alloc::string::String,
+    #[prost(bool, required, tag = "2")]
+    pub enabled: bool,
+}
+/// Wire type ID = 149.
+/// Admin -> Server: install (or upgrade) a plugin from the marketplace.
+/// The server downloads the manifest from manifest_url, validates its
+/// digest against expected_sha256, downloads the platform-matching
+/// artifact, extracts it into plugins_dir, then loads it.  The new
+/// plugin starts disabled; the admin must follow up with
+/// FancyPluginAdminSetEnabled to activate it.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyPluginAdminInstall {
+    /// Stable marketplace ID (e.g. "fancy-greeter").
+    #[prost(string, required, tag = "1")]
+    pub marketplace_id: ::prost::alloc::string::String,
+    /// Specific version to install (e.g. "0.1.4").  Empty selects latest.
+    #[prost(string, optional, tag = "2")]
+    pub version: ::core::option::Option<::prost::alloc::string::String>,
+    /// Fully-qualified URL of the marketplace manifest document.  The
+    /// server fetches this URL directly, validates the JSON, and downloads
+    /// the artifact it points to.  Required so the server does not need
+    /// out-of-band knowledge of the marketplace base URL.
+    #[prost(string, required, tag = "3")]
+    pub manifest_url: ::prost::alloc::string::String,
+    /// Expected SHA-256 of the manifest JSON, hex-encoded.  Optional but
+    /// strongly recommended: the client computes this before sending so
+    /// the server can confirm both endpoints are looking at the same
+    /// marketplace document.  Empty disables the check.
+    #[prost(string, optional, tag = "4")]
+    pub expected_sha256: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Wire type ID = 150.
+/// Admin -> Server: remove a plugin from disk and unload it from memory.
+/// Also strips every plugin.<plugin_name>.* key from mumble-server.ini.
+/// Refuses to remove plugins the server considers core (file-server,
+/// live-doc, etc.).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyPluginAdminUninstall {
+    #[prost(string, required, tag = "1")]
+    pub plugin_name: ::prost::alloc::string::String,
+}
+/// Wire type ID = 151.
+/// Server -> Admin: status reply for the last admin action.  Always
+/// carries the request_id of the action being acknowledged so the UI
+/// can correlate responses with in-flight buttons.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyPluginAdminAck {
+    /// Echo of FancyPluginAdminInstall/SetEnabled/Uninstall.plugin_name (or
+    /// marketplace_id for installs).  Empty for ListRequest acks.
+    #[prost(string, optional, tag = "1")]
+    pub plugin_name: ::core::option::Option<::prost::alloc::string::String>,
+    /// True when the action completed successfully.  False on any error.
+    #[prost(bool, required, tag = "2")]
+    pub ok: bool,
+    /// Free-form English error description.  Empty on success.
+    #[prost(string, optional, tag = "3")]
+    pub error: ::core::option::Option<::prost::alloc::string::String>,
+    /// Optional opaque correlation id the client may attach to the
+    /// request to match async replies.
+    #[prost(string, optional, tag = "4")]
+    pub request_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Distinguishes which admin verb this ack belongs to.
+    #[prost(enumeration = "fancy_plugin_admin_ack::Verb", optional, tag = "5")]
+    pub verb: ::core::option::Option<i32>,
+}
+/// Nested message and enum types in `FancyPluginAdminAck`.
+pub mod fancy_plugin_admin_ack {
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration
+    )]
+    #[repr(i32)]
+    pub enum Verb {
+        List = 0,
+        SetEnabled = 1,
+        Install = 2,
+        Uninstall = 3,
+    }
+    impl Verb {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::List => "LIST",
+                Self::SetEnabled => "SET_ENABLED",
+                Self::Install => "INSTALL",
+                Self::Uninstall => "UNINSTALL",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "LIST" => Some(Self::List),
+                "SET_ENABLED" => Some(Self::SetEnabled),
+                "INSTALL" => Some(Self::Install),
+                "UNINSTALL" => Some(Self::Uninstall),
+                _ => None,
+            }
+        }
+    }
 }
 /// Unified pchat protocol indicator.
 /// Each value identifies both the E2EE protocol implementation

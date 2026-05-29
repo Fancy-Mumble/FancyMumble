@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Routes, Route, useNavigate, Navigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { initEventListeners, useAppStore } from "./store";
 import { getPreferences, getSavedAudioSettings, isFirstRun, getNotificationSounds } from "./preferencesStorage";
 import { setKlipyApiKey } from "./components/chat/gif/GifPicker";
@@ -29,6 +30,7 @@ import StreamPopoutPage from "./pages/StreamPopoutPage";
 import DmPopoutPage from "./pages/DmPopoutPage";
 import DrawOverlayPage from "./pages/DrawOverlayPage";
 import OnboardingModal from "./components/onboarding/OnboardingModal";
+import PluginInteractionLayer from "./components/plugin/PluginInteractionLayer";
 
 const ChatPage = lazy(() => import("./pages/ChatPage"));
 const SettingsPage = lazy(() => import("./pages/settings"));
@@ -36,6 +38,7 @@ const AdminPanel = lazy(() => import("./pages/admin"));
 const RoleEditorPage = lazy(() => import("./pages/admin/RoleEditorPage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const FriendsPage = lazy(() => import("./pages/FriendsPage"));
+const MarketplacePluginPage = lazy(() => import("./pages/marketplace/PluginPage"));
 
 /**
  * Returns true when this webview window is an image popout window.
@@ -257,6 +260,32 @@ function MainApp() {
     };
   }, [navigate]);
 
+  // fancy:// deep links emitted by the Rust deep-link plugin.
+  // Currently supported:
+  //   fancy://marketplace/plugin/<id>  -> open plugin detail page
+  useEffect(() => {
+    const unlisten = listen<string>("deep-link-open", (e) => {
+      const raw = e.payload;
+      let url: URL;
+      try {
+        url = new URL(raw);
+      } catch {
+        console.warn("deep-link: invalid URL", raw);
+        return;
+      }
+      if (url.protocol !== "fancy:") return;
+      // URL parsing of fancy://marketplace/plugin/<id> puts
+      // "marketplace" into the host and "/plugin/<id>" into the path.
+      const segments = [url.host, ...url.pathname.split("/")].filter(Boolean);
+      if (segments[0] === "marketplace" && segments[1] === "plugin" && segments[2]) {
+        navigate(`/marketplace/plugin/${encodeURIComponent(segments[2])}`);
+      } else {
+        console.warn("deep-link: unhandled route", segments);
+      }
+    });
+    return () => { unlisten.then((f) => f()); };
+  }, [navigate]);
+
   // Wait until we know the first-run status before rendering routes.
   if (firstRun === null) return <LoadingSplash />;
 
@@ -278,11 +307,13 @@ function MainApp() {
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/admin" element={<AdminPanel />} />
               <Route path="/admin/role/:groupName" element={<RoleEditorPage />} />
+              <Route path="/marketplace/plugin/:id" element={<MarketplacePluginPage />} />
             </>
           )}
         </Routes>
       </Suspense>
       <OnboardingModal />
+      <PluginInteractionLayer />
     </div>
   );
 }

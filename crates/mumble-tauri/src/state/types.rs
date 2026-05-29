@@ -190,6 +190,22 @@ pub struct ChatMessage {
     /// Unix epoch milliseconds when the message was pinned.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pinned_at: Option<u64>,
+    /// Plugin-authored origin: the `plugin_name` of the plugin that
+    /// injected this message via a `chat-message` interaction
+    /// response.  `None` for ordinary user/server messages.
+    ///
+    /// Component interactions on this message route back to this
+    /// plugin so the originating handler can react.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_name: Option<String>,
+    /// Plugin-authored UI components attached to this message,
+    /// rendered inline in the chat bubble below the body.  Stored
+    /// as opaque JSON (mirroring the
+    /// [`mumble_plugin_api::ActionRow`] wire format) so this crate
+    /// does not have to depend on the plugin API.  `None` (or an
+    /// empty array) means no interactive components.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_components: Option<serde_json::Value>,
 }
 
 impl ChatMessage {
@@ -348,6 +364,12 @@ pub(crate) struct NewDmPayload {
 
 #[derive(Clone, Serialize)]
 pub(crate) struct RejectedPayload {
+    /// Id of the session that was rejected.  Allows the frontend to
+    /// route the rejection to the correct tab and avoid clobbering
+    /// other sessions' state.  May be `None` for early connect-time
+    /// failures before a session was registered.
+    #[serde(rename = "serverId")]
+    pub server_id: Option<String>,
     pub reason: String,
     /// Protobuf `Reject.RejectType` value, if available.
     /// `3` = `WrongUserPW`, `4` = `WrongServerPW`.
@@ -391,6 +413,19 @@ pub(crate) struct ChannelDeniedPayload {
 pub(crate) struct PermissionDeniedPayload {
     pub deny_type: Option<i32>,
     pub reason: Option<String>,
+}
+
+/// Cached snapshot of the server's `PluginRegistry`.  Also forms the
+/// `plugin-registry` Tauri event payload (frontend field names match
+/// `PluginRegistryEntry` in `ui/src/store.ts`).  We cache it so the UI
+/// can resync after an HMR reload, which loses the one-shot event.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PluginRegistryEntryPayload {
+    pub plugin_name: String,
+    pub version: String,
+    pub plugin_slot: Option<u32>,
+    pub info_json: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -1052,7 +1087,6 @@ impl Default for AudioSettings {
 /// Current voice state.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
-#[cfg_attr(target_os = "android", allow(dead_code))]
 pub enum VoiceState {
     /// User is deaf + muted (default on connect / before enabling voice).
     #[default]

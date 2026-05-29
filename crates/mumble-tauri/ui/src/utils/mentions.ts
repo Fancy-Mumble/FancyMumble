@@ -1,5 +1,5 @@
 /**
- * Mentions support (Discord-style adapted for Mumble).
+ * Mentions support adapted for Mumble.
  *
  * Wire format inside the raw markdown / message body:
  *   <@SESSION>        user mention (numeric live session id)

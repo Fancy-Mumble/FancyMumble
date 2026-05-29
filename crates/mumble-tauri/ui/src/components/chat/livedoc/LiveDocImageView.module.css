@@ -34,7 +34,7 @@
 }
 
 /* In-flow float so surrounding text wraps around the image.  Not
-   draggable — the position is determined by where the image sits in
+   draggable - the position is determined by where the image sits in
    the document. */
 .wrap_wrap {
   float: left;

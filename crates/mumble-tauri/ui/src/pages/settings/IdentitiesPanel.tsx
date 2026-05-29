@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { deleteProfileData } from "./profileData";
 import styles from "./SettingsPage.module.css";
+import panelStyles from "./IdentitiesPanel.module.css";
 
 export function IdentitiesPanel({
   identities,
@@ -21,7 +22,7 @@ export function IdentitiesPanel({
   const [newLabel, setNewLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
 
   const handleCreate = useCallback(async () => {
     const label = newLabel.trim();
@@ -94,24 +95,24 @@ export function IdentitiesPanel({
             {t("identities.noIdentities")}
           </p>
         ) : (
-          <ul className={styles.identityList}>
+          <ul className={panelStyles.identityList}>
             {identities.map((label) => (
               <li
                 key={label}
-                className={`${styles.identityItem}${label === connectedCertLabel ? ` ${styles.identityItemActive}` : ""}`}
+                className={`${panelStyles.identityItem}${label === connectedCertLabel ? ` ${panelStyles.identityItemActive}` : ""}`}
               >
-                <span className={styles.identityLabel}>
+                <span className={panelStyles.identityLabel}>
                   {label}
                   {label === connectedCertLabel && (
-                    <span className={styles.identityActiveBadge}>{t("identities.connectedBadge")}</span>
+                    <span className={panelStyles.identityActiveBadge}>{t("identities.connectedBadge")}</span>
                   )}
                 </span>
 
-                <div className={styles.identityActions}>
+                <div className={panelStyles.identityActions}>
                   {isExpert && (
                     <button
                       type="button"
-                      className={styles.identityEditBtn}
+                      className={panelStyles.identityEditBtn}
                       onClick={() => onEditProfile(label)}
                     >
                       {t("identities.editProfile")}
@@ -139,7 +140,7 @@ export function IdentitiesPanel({
                         className={styles.ghostBtn}
                         onClick={() => setConfirmDelete(null)}
                       >
-                        {t("identities.cancelDelete")}
+                        {t("common:actions.cancel")}
                       </button>
                     </div>
                   ) : (
@@ -160,10 +161,10 @@ export function IdentitiesPanel({
 
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>{t("identities.createNew")}</h3>
-        <div className={styles.identityCreateRow}>
+        <div className={panelStyles.identityCreateRow}>
           <input
             type="text"
-            className={styles.input}
+            className={`${styles.input} ${panelStyles.identityCreateRowInput}`}
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}
             placeholder={t("identities.createPlaceholder")}
@@ -194,3 +195,4 @@ export function IdentitiesPanel({
     </>
   );
 }
+

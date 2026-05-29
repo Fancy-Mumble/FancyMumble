@@ -17,7 +17,7 @@ import Color from "@tiptap/extension-color";
 import Placeholder from "@tiptap/extension-placeholder";
 import TiptapImage from "@tiptap/extension-image";
 import { resizeImage } from "./imageUtils";
-import styles from "./SettingsPage.module.css";
+import styles from "./BioEditor.module.css";
 
 // -- Colour palette for the quick-pick colour grid -----------------
 
@@ -205,7 +205,7 @@ export function BioEditor({
   // Sync external `value` prop into the editor when it diverges
   // (e.g. on initial load from persisted data).
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     const current = editor.getHTML();
     const normCurrent = current === "<p></p>" ? "" : current;
     if (normCurrent !== value) {

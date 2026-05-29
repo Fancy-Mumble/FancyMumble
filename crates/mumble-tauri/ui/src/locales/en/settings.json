@@ -118,11 +118,11 @@
     "developerModeHint": "Show debug statistics (message counts, offloaded content, memory usage) in the server info panel.",
     "logLevel": "Log Level",
     "logLevelHint": "Set the verbosity of Rust backend logging. Lower levels include all messages from higher levels. Changes take effect immediately.",
-    "logLevelError": "error — errors only",
-    "logLevelWarn": "warn — warnings and errors",
-    "logLevelInfo": "info — general info (default)",
-    "logLevelDebug": "debug — verbose diagnostics",
-    "logLevelTrace": "trace — maximum verbosity",
+    "logLevelError": "error - errors only",
+    "logLevelWarn": "warn - warnings and errors",
+    "logLevelInfo": "info - general info (default)",
+    "logLevelDebug": "debug - verbose diagnostics",
+    "logLevelTrace": "trace - maximum verbosity",
     "autoReconnect": "Auto Reconnect",
     "autoReconnectHint": "Automatically retry connecting if the server connection drops unexpectedly. Manual disconnects never trigger auto-reconnect.",
     "autoUpdate": "Auto-update on startup",
@@ -133,7 +133,6 @@
     "dangerZoneHint": "Delete all saved data - servers, preferences, and certificates - and return to the welcome screen.",
     "dangerConfirmText": "Are you sure? This cannot be undone.",
     "dangerConfirmBtn": "Yes, reset everything",
-    "dangerCancelBtn": "Cancel",
     "dangerResetBtn": "Reset all data"
   },
   "shortcuts": {
@@ -189,7 +188,6 @@
     "noHashBadge": "no certificate",
     "noHashExplain": "Users with a certificate match on every server you join. Users without one stay tied to the current server.",
     "add": "Add",
-    "cancel": "Cancel",
     "remove": "Remove"
   },
   "identities": {
@@ -200,7 +198,6 @@
     "editProfile": "Edit Profile",
     "export": "Export",
     "confirmDelete": "Confirm",
-    "cancelDelete": "Cancel",
     "delete": "Delete",
     "createNew": "Create new identity",
     "createPlaceholder": "Identity name...",
@@ -440,7 +437,6 @@
   "imageEditor": {
     "titleAvatar": "Crop Avatar",
     "titleBanner": "Crop Banner",
-    "cancelBtn": "Cancel",
     "applyBtn": "Apply"
   },
   "klipyBrowser": {
@@ -477,7 +473,9 @@
     "bans": "Ban List",
     "acl": "Channel ACL",
     "emotes": "Emotes",
-    "onboarding": "Onboarding"
+    "onboarding": "Onboarding",
+    "serverPlugins": "Server Plugins",
+    "marketplace": "Marketplace"
   },
   "registeredUsers": {
     "title": "Registered Users",
@@ -493,7 +491,6 @@
     "colRoles": "Roles",
     "colActions": "Actions",
     "save": "Save",
-    "cancel": "Cancel",
     "never": "Never",
     "unknown": "Unknown",
     "deleteConfirmLabel": "Delete?",
@@ -643,11 +640,9 @@
   "roleManagerDialog": {
     "ariaLabel": "Manage roles for {{name}}",
     "title": "Manage roles for {{name}}",
-    "closeButton": "Close",
     "loading": "Loading roles...",
     "noRoles": "No roles defined on this server.",
     "inherited": "(inherited)",
-    "cancel": "Cancel",
     "saving": "Saving...",
     "save": "Save"
   },
@@ -724,7 +719,7 @@
     "admin": {
       "heading": "Onboarding",
       "unsupportedServer": "The connected server does not support the onboarding workflow. It requires a Fancy Mumble server running 0.3.1 or newer.",
-      "description": "Show new members a welcome questionnaire that maps their answers to channels and Mumble ACL groups. Mirrors Discord's Community Onboarding model.",
+      "description": "Show new members a welcome questionnaire that maps their answers to channels and Mumble ACL groups.",
       "maxQuestionsHint": "Up to {{max}} questions.",
       "enabledLabel": "Enabled",
       "revisionTag": "Revision {{n}} - {{m}} channels available",
@@ -760,5 +755,81 @@
       "defaultChannelsEmpty": "You'll start with the full channel list. Answer the next questions to narrow it down.",
       "defaultChannelsTitle": "You'll start in these channels"
     }
+  },
+  "serverPlugins": {
+    "title": "Server Plugins",
+    "refresh": "Refresh",
+    "pluginsDir": "Plugins directory",
+    "empty": "No plugins installed on the server.",
+    "loading": "Loading plugins...",
+    "loadTimeout": "No response from server. The server may not support the plugin admin API.",
+    "unsupported": "This feature requires Fancy Mumble server version 0.4.0 or later.",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "enable": "Enable plugin",
+    "disable": "Disable plugin",
+    "uninstall": "Uninstall plugin",
+    "marketplaceBadge": "Marketplace",
+    "staleBadge": "Restart pending",
+    "confirmUninstall": "Uninstall plugin \"{{name}}\"? This removes it from the server.",
+    "unknownError": "Unknown error"
+  },
+  "marketplace": {
+    "title": "Plugin Marketplace",
+    "searchPlaceholder": "Search marketplace...",
+    "refresh": "Refresh",
+    "empty": "No plugins match your search.",
+    "loading": "Loading marketplace...",
+    "back": "Back",
+    "install": "Install",
+    "installing": "Installing...",
+    "official": "Official",
+    "byAuthor": "by {{author}}",
+    "downloadsCount": "{{count}} downloads",
+    "installFailed": "Install failed",
+    "installSuccess": "Installed {{name}}",
+    "missingManifestUrl": "Plugin is missing a manifest URL.",
+    "installUnsupported": "Installing plugins requires Fancy Mumble server version 0.4.0 or later.",
+    "connectToInstall": "Connect to a server with admin rights to install this plugin.",
+    "homepage": "Homepage",
+    "capabilities": "Capabilities",
+    "versions": "Versions"
+  },
+  "plugins": {
+    "empty": "No plugins are loaded on the connected server.",
+    "scopeGlobal": "All servers",
+    "scopeSession": "This session",
+    "scopeServer": "This server",
+    "allowForServer": "Allow for this server",
+    "allowForServerHint": "Remembered for this server",
+    "allowOnce": "Allow once",
+    "allowOnceHint": "This session only",
+    "alwaysAllow": "Always allow",
+    "alwaysAllowHint": "Trusted on every server",
+    "trusted": "Allowed",
+    "blocked": "Blocked",
+    "revokeTrust": "Revoke trust",
+    "revokeTrustTitle": "Forget this decision so the trust prompt re-appears",
+    "reprompt": "Re-prompt",
+    "repromptTitle": "Clear this decision so the trust prompt re-appears next time the server broadcasts the plugin",
+    "emptyPanel": "(no rows)"
+  },
+  "pluginTrust": {
+    "title": "Server wants to enable plugin",
+    "repromptWarning": "This plugin's version or capability set changed since you last reviewed it. Re-confirm before re-enabling.",
+    "abilitySection": "This plugin will be able to",
+    "noCapabilities": "Nothing - manifest declares no capabilities",
+    "advanced": "Advanced",
+    "fieldPlugin": "Plugin",
+    "fieldVersion": "Version",
+    "fieldAuthor": "Author",
+    "fieldHomepage": "Homepage",
+    "fieldCapabilities": "Capabilities",
+    "fieldTags": "Tags",
+    "fieldLastReviewed": "Last reviewed",
+    "fieldSchema": "Schema",
+    "fieldFingerprint": "Fingerprint",
+    "blockBtn": "Block",
+    "notNowBtn": "Not now"
   }
 }

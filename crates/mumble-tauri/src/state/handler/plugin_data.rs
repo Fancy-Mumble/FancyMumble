@@ -6,9 +6,10 @@ use crate::state::types::PluginDataPayload;
 
 impl HandleMessage for mumble_tcp::PluginDataTransmission {
     fn handle(&self, ctx: &HandlerContext) {
+        let data_id = self.data_id.as_deref().unwrap_or("");
         debug!(
             sender = ?self.sender_session,
-            data_id = ?self.data_id,
+            data_id,
             data_len = self.data.as_ref().map(Vec::len).unwrap_or(0),
             "plugin data received"
         );
@@ -18,7 +19,7 @@ impl HandleMessage for mumble_tcp::PluginDataTransmission {
             PluginDataPayload {
                 sender_session: self.sender_session,
                 data: self.data.clone().unwrap_or_default(),
-                data_id: self.data_id.clone().unwrap_or_default(),
+                data_id: data_id.to_owned(),
             },
         );
     }

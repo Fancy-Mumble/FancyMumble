@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import type { AudioSettings } from "../../types";
 import { Toggle, SliderField, ShortcutRecorder } from "./SharedControls";
 import styles from "./SettingsPage.module.css";
+import panelStyles from "./VoicePanel.module.css";
 
 export function VoicePanel({
   settings,
@@ -73,7 +74,7 @@ export function VoicePanel({
               />
             </div>
             {settings.push_to_talk && (
-              <div className={styles.pttKeyRow}>
+              <div className={panelStyles.pttKeyRow}>
                 <ShortcutRecorder
                   label={t("voice.pttKey")}
                   value={settings.push_to_talk_key ?? ""}
@@ -89,3 +90,4 @@ export function VoicePanel({
     </>
   );
 }
+

@@ -10,7 +10,6 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
 import {
   CloseIcon,
   FileDownIcon,
@@ -22,7 +21,7 @@ import {
   PrinterIcon,
   ShareIcon,
 } from "../../../icons";
-import { useAppStore, encodeLiveDocInviteMarker } from "../../../store";
+import { useAppStore, encodeLiveDocInviteMarker, sendPluginMessage } from "../../../store";
 import { useLiveDoc, type LiveDocSessionInfo } from "./useLiveDoc";
 import LiveDocEditor, { type LiveDocEditorApi } from "./LiveDocEditor";
 import LiveDocAvatarStack from "./LiveDocAvatarStack";
@@ -69,11 +68,11 @@ export default function LiveDocPanel({
   }, [t]);
 
   const onReshareInvite = useCallback(() => {
-    void invoke("announce_live_doc", {
+    sendPluginMessage("fancy-live-doc", "Announce", {
       channelId: session.channelId,
       slug: session.slug,
       title: session.title,
-    }).catch((e) => console.warn("announce_live_doc failed:", e));
+    }).catch((e) => console.warn("plugin-message Announce failed:", e));
     const body = encodeLiveDocInviteMarker(session.slug, session.title);
     void sendMessage(session.channelId, body).catch((e) =>
       console.warn("live-doc reshare message failed:", e),
@@ -199,15 +198,39 @@ export default function LiveDocPanel({
         </div>
       </div>
       <div className={styles.body}>
-        {handle?.error ? (
-          <div className={styles.errorMsg} role="alert">{handle.error}</div>
-        ) : handle ? (
-          <LiveDocEditor
-            doc={handle.doc}
-            provider={handle.provider}
-            paperMode={paperMode}
-            onReady={onEditorReady}
-          />
+        {handle ? (
+          <>
+            <LiveDocEditor
+              doc={handle.doc}
+              provider={handle.provider}
+              paperMode={paperMode}
+              onReady={onEditorReady}
+            />
+            {handle.error && (
+              <div className={styles.errorOverlay} role="alert">
+                <div className={styles.errorOverlayContent}>
+                  <p className={styles.errorOverlayTitle}>{t("liveDoc.connectionLost")}</p>
+                  <p className={styles.errorOverlayMessage}>{handle.error}</p>
+                  <div className={styles.errorOverlayActions}>
+                    <button
+                      type="button"
+                      className={styles.errorActionBtnPrimary}
+                      onClick={onExport}
+                    >
+                      {t("liveDoc.saveLastDocument")}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.errorActionBtnSecondary}
+                      onClick={onClose}
+                    >
+                      {t("liveDoc.quitDocument")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div className={styles.loading}>{t("liveDoc.connecting")}</div>
         )}

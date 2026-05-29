@@ -99,7 +99,7 @@ export default function UpdaterWindow() {
     };
   }, [handleProgress]);
 
-  // Discord-style auto-install: as soon as we know an update is pending,
+  // Auto-install: as soon as we know an update is pending,
   // start the download/install without waiting for a click.
   useEffect(() => {
     if (autoInstall && info && !autoStartedRef.current && phase === Phase.Idle) {

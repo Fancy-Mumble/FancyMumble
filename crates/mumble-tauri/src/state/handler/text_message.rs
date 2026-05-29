@@ -269,6 +269,8 @@ fn handle_direct_message(
         pinned: false,
         pinned_by: None,
         pinned_at: None,
+        plugin_name: None,
+        plugin_components: None,
     };
     msg.ensure_id();
     state
@@ -346,6 +348,8 @@ fn handle_channel_message(
             pinned: false,
             pinned_by: None,
             pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
         };
         msg.ensure_id();
         let bucket = state.msgs.by_channel.entry(ch_id).or_default();
@@ -441,6 +445,8 @@ mod tests {
             pinned: false,
             pinned_by: None,
             pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
         }
     }
 

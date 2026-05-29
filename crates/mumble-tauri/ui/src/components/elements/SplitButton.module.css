@@ -1,0 +1,113 @@
+.root {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Primary variant */
+.primary .btnMain,
+.primary .btnChevron {
+  background: var(--accent-600, #2563eb);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 12px;
+  transition: background 0.15s;
+}
+.primary .btnMain:hover,
+.primary .btnChevron:hover {
+  background: var(--accent-700, #1d4ed8);
+}
+
+/* Danger variant */
+.danger .btnMain,
+.danger .btnChevron {
+  background: var(--error-600, #dc2626);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 12px;
+  transition: background 0.15s;
+}
+.danger .btnMain:hover,
+.danger .btnChevron:hover {
+  background: var(--error-700, #b91c1c);
+}
+
+/* Secondary variant */
+.secondary .btnMain,
+.secondary .btnChevron {
+  background: var(--surface-2, rgba(255,255,255,0.08));
+  color: var(--text-primary, #e8eaf0);
+  border: 1px solid var(--border, rgba(255,255,255,0.12));
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 12px;
+  transition: background 0.15s;
+  box-sizing: border-box;
+}
+.secondary .btnMain:hover,
+.secondary .btnChevron:hover {
+  background: var(--surface-3, rgba(255,255,255,0.12));
+}
+
+/* Shape */
+.btnMain {
+  border-radius: 6px 0 0 6px;
+  line-height: 1;
+}
+.btnChevron {
+  border-radius: 0 6px 6px 0;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+  display: flex;
+  align-items: center;
+  border-left: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Dropdown */
+.menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  background: var(--surface-overlay, #1e2130);
+  border: 1px solid var(--border, rgba(255,255,255,0.12));
+  border-radius: 8px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 200;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.menuItem {
+  background: none;
+  border: none;
+  color: var(--text-primary, #e8eaf0);
+  cursor: pointer;
+  padding: 9px 12px;
+  border-radius: 5px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: background 0.12s;
+}
+.menuItem:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.menuLabel {
+  font-size: 13px;
+  font-weight: 500;
+}
+.menuHint {
+  font-size: 11px;
+  color: var(--text-secondary, #9098b0);
+}

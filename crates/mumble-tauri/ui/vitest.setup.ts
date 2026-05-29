@@ -37,16 +37,31 @@ function interpolate(template: string, vars: Record<string, unknown>): string {
   );
 }
 
-function makeT(ns: string) {
+function makeT(ns: string | string[]) {
+  const namespacePriority = Array.isArray(ns) ? ns : [ns];
+
   return (key: string, opts?: Record<string, unknown>): unknown => {
-    const data = NAMESPACES[ns];
-    if (!data) return key;
+    let resolvedKey = key;
+    let namespacesToSearch = namespacePriority;
 
-    let value = resolveKey(data, key);
+    const colonIdx = key.indexOf(":");
+    if (colonIdx !== -1) {
+      namespacesToSearch = [key.slice(0, colonIdx)];
+      resolvedKey = key.slice(colonIdx + 1);
+    } else if (typeof opts?.ns === "string") {
+      namespacesToSearch = [opts.ns];
+    }
 
-    if (value === undefined && typeof opts?.count === "number") {
-      const suffix = opts.count === 1 ? "_one" : "_other";
-      value = resolveKey(data, `${key}${suffix}`);
+    let value: unknown;
+    for (const namespace of namespacesToSearch) {
+      const data = NAMESPACES[namespace];
+      if (!data) continue;
+      value = resolveKey(data, resolvedKey);
+      if (value === undefined && typeof opts?.count === "number") {
+        const suffix = opts.count === 1 ? "_one" : "_other";
+        value = resolveKey(data, `${resolvedKey}${suffix}`);
+      }
+      if (value !== undefined) break;
     }
 
     if (value === undefined) return key;
@@ -67,7 +82,7 @@ function makeT(ns: string) {
 }
 
 vi.mock("react-i18next", () => ({
-  useTranslation: (ns: string = "common") => ({
+  useTranslation: (ns: string | string[] = "common") => ({
     t: makeT(ns),
     i18n: {
       changeLanguage: () => Promise.resolve(),

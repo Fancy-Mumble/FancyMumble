@@ -1,4 +1,4 @@
-import { MoonIcon, ShieldCheckIcon } from "../../icons";
+import { MoonIcon, ShieldCheckIcon, UserFilledIcon } from "../../icons";
 import type { FancyProfile } from "../../types";
 import { useTranslation } from "react-i18next";
 import { SafeHtml } from "../../components/elements/SafeHtml";
@@ -11,7 +11,7 @@ import {
   FONTS,
   AVATAR_BORDERS,
 } from "./profileData";
-import styles from "./SettingsPage.module.css";
+import styles from "./ProfilePreviewCard.module.css";
 
 interface ProfilePreviewCardProps {
   profile: FancyProfile;
@@ -151,7 +151,7 @@ export function ProfilePreviewCard({
               className={styles.previewAvatarImg}
             />
           ) : (
-            <span className={styles.previewAvatarPlaceholder}>👤</span>
+            <span className={styles.previewAvatarPlaceholder}><UserFilledIcon width={48} height={48} /></span>
           )}
           {decoration && decoration.id !== "none" && (
             <span className={styles.previewDecoration}>

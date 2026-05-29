@@ -63,6 +63,8 @@ impl AppState {
                 pinned: false,
                 pinned_by: None,
                 pinned_at: None,
+                plugin_name: None,
+                plugin_components: None,
             };
             msg.ensure_id();
             let bucket = state.msgs.by_dm.entry(target_session).or_default();

@@ -21,7 +21,7 @@ interface Props {
 }
 
 function EditForm({ server, onSave, onClose }: Readonly<Props>) {
-  const { t } = useTranslation("server");
+  const { t } = useTranslation(["server", "common"]);
   const [label, setLabel] = useState(server.label || "");
   const [host, setHost] = useState(server.host);
   const [port, setPort] = useState(String(server.port));
@@ -182,7 +182,7 @@ function EditForm({ server, onSave, onClose }: Readonly<Props>) {
                 setNewCertName("");
               }}
             >
-              {t("edit.cancelIdentity")}
+              {t("common:actions.cancel")}
             </button>
           </div>
         )}
@@ -215,7 +215,7 @@ function EditForm({ server, onSave, onClose }: Readonly<Props>) {
 
       <div className={styles.actions}>
         <button type="button" className={styles.cancelBtn} onClick={onClose}>
-          {t("edit.cancel")}
+          {t("common:actions.cancel")}
         </button>
         <button type="submit" className={styles.saveBtn}>
           {t("edit.save")}

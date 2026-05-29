@@ -136,3 +136,10 @@
   border-radius: 3px;
   padding: 0 2px;
 }
+
+.mdMention {
+  color: var(--color-accent, #2aabee);
+  background: rgba(42, 171, 238, 0.15);
+  border-radius: 3px;
+  padding: 0 3px;
+}

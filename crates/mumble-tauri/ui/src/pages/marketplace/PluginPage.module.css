@@ -1,0 +1,361 @@
+.pageScroll {
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-sizing: border-box;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+}
+
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.backBtn:hover {
+  background: var(--color-glass);
+  color: var(--color-text-primary);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px;
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-md, 8px);
+}
+
+.icon {
+  flex-shrink: 0;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  object-fit: cover;
+}
+
+.headerMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.officialBadge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-bg, rgba(80, 140, 255, 0.18));
+  color: var(--color-accent, rgb(130, 170, 255));
+}
+
+.subtitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.installBtn,
+.linkBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  border: 1px solid var(--color-glass-border);
+}
+
+.installBtn {
+  background: var(--color-accent, rgb(80, 140, 255));
+  border-color: var(--color-accent, rgb(80, 140, 255));
+  color: white;
+}
+
+.installBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.installBtn:not(:disabled):hover {
+  filter: brightness(1.1);
+}
+
+.linkBtn {
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+
+.linkBtn:hover {
+  background: var(--color-glass);
+  color: var(--color-text-primary);
+}
+
+.section {
+  padding: 16px 20px;
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-md, 8px);
+}
+
+.sectionTitle {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.description {
+  margin: 0;
+  line-height: 1.55;
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+}
+
+.capRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.capBadge {
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-glass-border);
+}
+
+.empty {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.errorBanner {
+  padding: 10px 12px;
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-danger);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.warnBanner {
+  padding: 10px 12px;
+  background: rgba(220, 160, 0, 0.12);
+  border: 1px solid rgba(220, 160, 0, 0.35);
+  color: rgb(220, 170, 40);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.successBanner {
+  padding: 10px 12px;
+  background: rgba(80, 200, 120, 0.12);
+  border: 1px solid rgba(80, 200, 120, 0.35);
+  color: rgb(120, 220, 150);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.readme {
+  line-height: 1.65;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  overflow-x: auto;
+}
+
+.readme :global(h1),
+.readme :global(h2),
+.readme :global(h3),
+.readme :global(h4) {
+  margin: 1.2em 0 0.4em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.readme :global(h1) { font-size: 1.35em; }
+.readme :global(h2) { font-size: 1.2em; }
+.readme :global(h3) { font-size: 1.05em; }
+
+.readme :global(p) {
+  margin: 0.6em 0;
+}
+
+.readme :global(ul),
+.readme :global(ol) {
+  padding-left: 1.5em;
+  margin: 0.4em 0;
+}
+
+.readme :global(code) {
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.875em;
+  padding: 1px 5px;
+  background: var(--color-bg-secondary);
+  border-radius: 3px;
+}
+
+.readme :global(pre) {
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  overflow-x: auto;
+  margin: 0.6em 0;
+}
+
+.readme :global(pre code) {
+  padding: 0;
+  background: none;
+  font-size: 0.85em;
+}
+
+.readme :global(blockquote) {
+  margin: 0.6em 0;
+  padding: 4px 12px;
+  border-left: 3px solid var(--color-glass-border);
+  color: var(--color-text-muted);
+}
+
+.readme :global(a) {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.readme :global(a:hover) {
+  text-decoration: underline;
+}
+
+.readme :global(table) {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+
+.readme :global(th),
+.readme :global(td) {
+  border: 1px solid var(--color-glass-border);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.readme :global(th) {
+  background: var(--color-bg-secondary);
+  font-weight: 600;
+}
+
+.versionsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.versionsTable td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-glass-border);
+  vertical-align: top;
+  color: var(--color-text-primary);
+}
+
+.versionsTable tr:last-child td {
+  border-bottom: none;
+}
+
+.versionCell {
+  white-space: nowrap;
+  font-weight: 600;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+}
+
+.dateCell {
+  white-space: nowrap;
+  color: var(--color-text-muted) !important;
+}
+
+.reqCell {
+  white-space: nowrap;
+  color: var(--color-text-secondary) !important;
+}
+
+.changelogCell {
+  color: var(--color-text-secondary) !important;
+  word-break: break-word;
+}
+
+.yanked td {
+  opacity: 0.55;
+}
+
+.yancedBadge {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(220, 80, 80, 0.18);
+  color: rgb(220, 120, 120);
+  border: 1px solid rgba(220, 80, 80, 0.35);
+  font-family: inherit;
+  vertical-align: middle;
+}

@@ -1,4 +1,5 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import { CheckIcon } from "../../icons";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 
@@ -17,7 +18,7 @@ import styles from "./OnboardingModal.module.css";
 
 /**
  * Multi-step onboarding modal shown to new members on first connect to a
- * server with onboarding enabled.  Mirrors Discord's join-time flow:
+ * server with onboarding enabled.  Mirrors a join-time onboarding flow:
  * default-channels preview, 3-5 questions, then a single submit that
  * applies the chosen ACL groups and adds the mapped channels.
  */
@@ -183,7 +184,7 @@ export default function OnboardingModal() {
                           selected ? styles.checkmarkSelected : ""
                         }`}
                       >
-                        {selected ? "✓" : ""}
+                        {selected ? <CheckIcon width={14} height={14} /> : null}
                       </span>
                     </button>
                   );

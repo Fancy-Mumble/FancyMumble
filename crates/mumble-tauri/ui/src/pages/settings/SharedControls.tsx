@@ -1,4 +1,4 @@
-import { ChevronRightIcon } from "../../icons";
+import { ChevronRightIcon, CloseIcon } from "../../icons";
 import { useState, useCallback, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { eventToShortcut } from "./shortcutHelpers";
@@ -151,7 +151,7 @@ export function ShortcutRecorder({
         title={t("shared.clearShortcutTitle")}
         disabled={!value}
       >
-        ✕
+        <CloseIcon width={14} height={14} />
       </button>
     </div>
   );

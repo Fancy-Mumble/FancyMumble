@@ -429,6 +429,72 @@
   pointer-events: none;
 }
 
+/* Mention chips - mirror the chat-message rendering so the same
+   MentionPopover delegation works inside the Live Doc. */
+.editorContent :global(.mention) {
+  display: inline-block;
+  padding: 0 4px;
+  margin: 0 1px;
+  border-radius: 4px;
+  font-weight: 500;
+  background: color-mix(in srgb, var(--color-accent, #2aabee) 20%, transparent);
+  color: var(--color-accent, #2aabee);
+  cursor: pointer;
+}
+
+.editorContent :global(.mention:hover) {
+  background: color-mix(in srgb, var(--color-accent, #2aabee) 35%, transparent);
+}
+
+.editorContent :global(.mention-everyone),
+.editorContent :global(.mention-here) {
+  background: color-mix(in srgb, var(--color-warning, #f0b232) 22%, transparent);
+  color: var(--color-warning, #f0b232);
+}
+
+/* Task list (checkbox list) - styles the TaskItem checkbox + content
+   layout produced by @tiptap/extension-task-item. */
+.editorContent :global(ul[data-type="taskList"]) {
+  list-style: none;
+  padding-left: 4px;
+  margin: 0.4em 0;
+}
+
+.editorContent :global(ul[data-type="taskList"] li) {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0.15em 0;
+}
+
+.editorContent :global(ul[data-type="taskList"] li > label) {
+  flex-shrink: 0;
+  margin-top: 4px;
+  user-select: none;
+}
+
+.editorContent :global(ul[data-type="taskList"] li > label > input[type="checkbox"]) {
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--color-accent, #2aabee);
+}
+
+.editorContent :global(ul[data-type="taskList"] li > div) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.editorContent :global(ul[data-type="taskList"] li > div > p) {
+  margin: 0;
+}
+
+.editorContent :global(ul[data-type="taskList"] li[data-checked="true"] > div) {
+  color: var(--color-text-muted, #aab0b8);
+  text-decoration: line-through;
+}
+
 /* Floating add-row/add-col controls pinned just above the table the
    caret currently sits in.  Positioned absolutely relative to the
    editorPage container (which is `position: relative`). */

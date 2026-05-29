@@ -21,7 +21,7 @@ interface ChannelInfoPanelProps {
 }
 
 export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "common"]);
   const selectedChannel = useAppStore((s) => s.selectedChannel);
   const channels = useAppStore((s) => s.channels);
 
@@ -150,7 +150,7 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
   if (!channel) {
     return (
       <div className={styles.panel}>
-        <button className={styles.closeBtn} onClick={onClose} aria-label={t("channelInfoPanel.closeAriaLabel")}>
+        <button className={styles.closeBtn} onClick={onClose} aria-label={t("common:actions.close")}>
           <CloseIcon width={14} height={14} />
         </button>
         <div className={styles.header}>
@@ -165,7 +165,7 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
 
   return (
     <div className={styles.panel}>
-      <button className={styles.closeBtn} onClick={onClose} aria-label={t("channelInfoPanel.closeAriaLabel")}>
+      <button className={styles.closeBtn} onClick={onClose} aria-label={t("common:actions.close")}>
         <CloseIcon width={14} height={14} />
       </button>
 
@@ -223,7 +223,7 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
                 onClick={cancelEditing}
                 disabled={saving}
               >
-                {t("channelInfoPanel.cancelBtn")}
+                {t("common:actions.cancel")}
               </button>
               <button
                 className={styles.saveBtn}
@@ -352,7 +352,7 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
                 </div>
                 <div className={styles.editActions}>
                   <button className={styles.cancelBtn} onClick={() => setConfirmTakeover(null)}>
-                    {t("channelInfoPanel.cancelBtn")}
+                    {t("common:actions.cancel")}
                   </button>
                   <button className={styles.dangerBtn} onClick={handleKeyTakeover}>
                     {t("channelInfoPanel.confirmBtn")}
