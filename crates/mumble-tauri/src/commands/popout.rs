@@ -258,3 +258,43 @@ pub(crate) fn take_popout_dm(
         .ok()
         .and_then(|mut m| m.remove(&id))
 }
+
+/// Open the translation helper popout window.
+///
+/// Single-instance: if a window with label `popout-translation` already
+/// exists it is focused instead of spawning a duplicate.  The window is
+/// always-on-top so contributors can inspect strings in the main window
+/// while editing translations.
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+pub(crate) async fn open_translation_popout(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    let label = "popout-translation";
+    if let Some(win) = app.get_webview_window(label) {
+        let _ = win.set_focus();
+        return Ok(());
+    }
+    let _window = tauri::WebviewWindowBuilder::new(
+        &app,
+        label,
+        tauri::WebviewUrl::App(std::path::PathBuf::from("index.html")),
+    )
+    .title("Translation helper")
+    .decorations(false)
+    .shadow(false)
+    .transparent(false)
+    .always_on_top(true)
+    .inner_size(820.0, 720.0)
+    .min_inner_size(520.0, 480.0)
+    .resizable(true)
+    .skip_taskbar(false)
+    .build()
+    .map_err(|e: tauri::Error| e.to_string())?;
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub(crate) async fn open_translation_popout(_app: tauri::AppHandle) -> Result<(), String> {
+    Err("Translation popout is not supported on Android".to_string())
+}

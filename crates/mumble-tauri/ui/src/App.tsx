@@ -29,6 +29,9 @@ import PopoutPage from "./pages/PopoutPage";
 import StreamPopoutPage from "./pages/StreamPopoutPage";
 import DmPopoutPage from "./pages/DmPopoutPage";
 import DrawOverlayPage from "./pages/DrawOverlayPage";
+import TranslationPopoutPage from "./pages/TranslationPopoutPage";
+import TranslationPickerOverlay from "./components/translation/TranslationPickerOverlay";
+import i18n, { registerLanguage, type LocaleBundle } from "./i18n";
 import OnboardingModal from "./components/onboarding/OnboardingModal";
 import PluginInteractionLayer from "./components/plugin/PluginInteractionLayer";
 
@@ -76,6 +79,14 @@ function isDmPopoutWindow(): boolean {
   return !!label && label.startsWith("popout-dm-");
 }
 
+/** True when this webview is the translation helper popout (`popout-translation`). */
+function isTranslationPopoutWindow(): boolean {
+  if (new URLSearchParams(globalThis.location.search).has("popout-translation")) return true;
+  const tauriInternals = (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__;
+  const label = tauriInternals?.metadata?.currentWindow?.label;
+  return label === "popout-translation";
+}
+
 /**
  * Returns true when this webview window is the desktop drawing
  * overlay window. Spawned by the Rust `open_drawing_overlay` command
@@ -90,25 +101,27 @@ function isDrawOverlayWindow(): boolean {
   return label === "draw-overlay";
 }
 
-const enum WindowKind { Main, Popout, StreamPopout, DmPopout, Updater, DrawOverlay }
+const enum WindowKind { Main, Popout, StreamPopout, DmPopout, TranslationPopout, Updater, DrawOverlay }
 
 function getWindowKind(): WindowKind {
   if (isUpdaterWindow()) return WindowKind.Updater;
   if (isDrawOverlayWindow()) return WindowKind.DrawOverlay;
   if (isStreamPopoutWindow()) return WindowKind.StreamPopout;
   if (isDmPopoutWindow()) return WindowKind.DmPopout;
+  if (isTranslationPopoutWindow()) return WindowKind.TranslationPopout;
   if (isPopoutWindow()) return WindowKind.Popout;
   return WindowKind.Main;
 }
 
 export default function App() {
   switch (getWindowKind()) {
-    case WindowKind.Updater:      return <UpdaterWindow />;
-    case WindowKind.DrawOverlay:  return <DrawOverlayPage />;
-    case WindowKind.StreamPopout: return <StreamPopoutPage />;
-    case WindowKind.DmPopout:     return <DmPopoutPage />;
-    case WindowKind.Popout:       return <PopoutPage />;
-    default:                      return <MainApp />;
+    case WindowKind.Updater:           return <UpdaterWindow />;
+    case WindowKind.DrawOverlay:       return <DrawOverlayPage />;
+    case WindowKind.StreamPopout:      return <StreamPopoutPage />;
+    case WindowKind.DmPopout:          return <DmPopoutPage />;
+    case WindowKind.TranslationPopout: return <TranslationPopoutPage />;
+    case WindowKind.Popout:            return <PopoutPage />;
+    default:                           return <MainApp />;
   }
 }
 
@@ -260,6 +273,24 @@ function MainApp() {
     };
   }, [navigate]);
 
+  // Translation helper: the popout pushes its currently-edited language
+  // (and the in-progress bundle for custom languages) on every change so
+  // the main window's UI switches to it live.  Built-in languages send a
+  // null bundle since the main window already has them baked in.
+  useEffect(() => {
+    const unlisten = listen<{ code: string; bundle: Partial<LocaleBundle> | null }>(
+      "translation:apply",
+      (e) => {
+        const { code, bundle } = e.payload;
+        if (!code) return;
+        if (bundle) registerLanguage(code, bundle);
+        if (i18n.language !== code) void i18n.changeLanguage(code);
+        else i18n.emit("languageChanged", code);
+      },
+    );
+    return () => { void unlisten.then((f) => f()); };
+  }, []);
+
   // fancy:// deep links emitted by the Rust deep-link plugin.
   // Currently supported:
   //   fancy://marketplace/plugin/<id>  -> open plugin detail page
@@ -314,6 +345,7 @@ function MainApp() {
       </Suspense>
       <OnboardingModal />
       <PluginInteractionLayer />
+      <TranslationPickerOverlay />
     </div>
   );
 }

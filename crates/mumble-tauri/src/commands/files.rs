@@ -96,3 +96,56 @@ pub(crate) async fn save_markdown_file(
 
     Ok(Some(path.to_string_lossy().into_owned()))
 }
+
+/// A single file to write during a bulk translation export.
+#[derive(serde::Deserialize)]
+pub(crate) struct TranslationFile {
+    pub(crate) name: String,
+    pub(crate) content: String,
+}
+
+/// Return which of the requested `names` already exist as files inside `folder`.
+///
+/// Names that contain path separators or `..` components are silently ignored
+/// (they would be rejected by `write_translation_files` anyway).
+#[tauri::command]
+pub(crate) fn check_files_exist(folder: String, names: Vec<String>) -> Result<Vec<String>, String> {
+    let dir = std::path::Path::new(&folder);
+    if !dir.is_dir() {
+        return Err(format!("not a directory: {folder}"));
+    }
+    let existing = names
+        .into_iter()
+        .filter(|name| {
+            let has_separator = name.contains(['/', '\\']);
+            let is_dotdot = name == ".." || name.starts_with("../") || name.starts_with("..\\\\");
+            !has_separator && !is_dotdot && dir.join(name).exists()
+        })
+        .collect();
+    Ok(existing)
+}
+
+/// Write one or more translation JSON files into `folder`.
+///
+/// Each entry's `name` must be a plain file name (no path separators, no
+/// `..`).  The command rejects names that could escape the target directory.
+#[tauri::command]
+pub(crate) fn write_translation_files(
+    folder: String,
+    files: Vec<TranslationFile>,
+) -> Result<(), String> {
+    let dir = std::path::Path::new(&folder);
+    if !dir.is_dir() {
+        return Err(format!("not a directory: {folder}"));
+    }
+    for f in &files {
+        let has_separator = f.name.contains(['/', '\\']);
+        let is_dotdot = f.name == ".." || f.name.starts_with("../") || f.name.starts_with("..\\");
+        if has_separator || is_dotdot {
+            return Err(format!("invalid file name: {}", f.name));
+        }
+        let dest = dir.join(&f.name);
+        std::fs::write(&dest, f.content.as_bytes()).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}

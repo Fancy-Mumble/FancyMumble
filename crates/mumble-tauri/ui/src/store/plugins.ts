@@ -21,6 +21,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../store";
 import type { AppState } from "../store";
 import type { PluginTier1Slice } from "../plugins/tier1/store";
+import type { SessionMeta } from "../types";
 import {
   applyRegistryWithTrust,
   applyTrustDecision,
@@ -47,6 +48,63 @@ import {
 } from "../plugins/tier1/trustStorage";
 
 // --- Event payload types -------------------------------------------
+
+/** Convert a `host:port:username` triple from a `SessionMeta` into a
+ *  stable identity string usable as a trust-storage bucket key. */
+function stableKeyFromMeta(meta: SessionMeta): string {
+  return `${meta.host.toLowerCase()}:${meta.port}:${meta.username}`;
+}
+
+/** Resolve a stable, restart-survivable storage key for the currently
+ *  active server.  `ServerId` itself is a fresh `Uuid::new_v4()` per
+ *  session, so persisting trust under it means every restart re-fires
+ *  the trust prompt.  Mapping the ephemeral ServerId to its host /
+ *  port / username (which the user controls via the saved-server
+ *  entry) gives us a key that stays the same across reconnects. */
+async function stableServerKey(): Promise<string | null> {
+  const state = useAppStore.getState();
+  const serverId =
+    state.activeServerId ?? (await invoke<string | null>("get_active_server"));
+  if (!serverId) return null;
+
+  let meta = state.sessions.find((s) => s.id === serverId);
+  if (!meta) {
+    try {
+      const sessions = await invoke<SessionMeta[]>("list_servers");
+      meta = sessions.find((s) => s.id === serverId);
+    } catch {
+      // Backend unreachable; fall through to the raw serverId so the
+      // record at least round-trips within this session.
+    }
+  }
+  return meta ? stableKeyFromMeta(meta) : serverId;
+}
+
+/** Same as {@link stableServerKey} but also returns the legacy
+ *  ephemeral-UUID key so callers can read records persisted by older
+ *  builds and migrate them forward on the next write. */
+async function storedServerKeys(): Promise<{
+  primary: string | null;
+  legacy: string | null;
+}> {
+  const state = useAppStore.getState();
+  const serverId =
+    state.activeServerId ?? (await invoke<string | null>("get_active_server"));
+  if (!serverId) return { primary: null, legacy: null };
+
+  let meta = state.sessions.find((s) => s.id === serverId);
+  if (!meta) {
+    try {
+      const sessions = await invoke<SessionMeta[]>("list_servers");
+      meta = sessions.find((s) => s.id === serverId);
+    } catch {
+      // ignored - falls through to using just the raw id
+    }
+  }
+  return meta
+    ? { primary: stableKeyFromMeta(meta), legacy: serverId }
+    : { primary: serverId, legacy: null };
+}
 
 /** Raw `plugin-registry` event payload (server -> client after ServerSync). */
 export interface PluginRegistryEntry {
@@ -133,10 +191,18 @@ export async function reconcilePluginRegistry(
   entries: readonly PluginRegistryEntry[],
 ): Promise<void> {
   const state = useAppStore.getState();
+  const { primary, legacy } = await storedServerKeys();
   const serverId =
     state.activeServerId ?? (await invoke<string | null>("get_active_server"));
-  const storedTrust = new Map(
-    Object.entries(await loadServerTrust(serverId)),
+  // Read both the stable (host:port:user) bucket and the legacy
+  // (ServerId UUID) bucket so trust granted before this change still
+  // applies. Stable wins on conflict; the next save migrates the
+  // record into the stable bucket.
+  const legacyRecords =
+    legacy && legacy !== primary ? await loadServerTrust(legacy) : {};
+  const primaryRecords = primary ? await loadServerTrust(primary) : {};
+  const storedTrust = new Map<string, import("../plugins/tier1/trust").TrustRecord>(
+    Object.entries({ ...legacyRecords, ...primaryRecords }),
   );
   // Overlay in-memory session grants so session-allowed plugins do not
   // re-prompt when the server re-broadcasts the registry.
@@ -182,7 +248,7 @@ export async function resolvePluginTrust(
   if (decision === TrustDecision.Allow && scope === TrustScope.Global) {
     await saveGlobalTrustRecord(pluginName, record);
   } else if (scope !== TrustScope.Once) {
-    await saveTrustRecord(state.activeServerId, pluginName, record);
+    await saveTrustRecord(await stableServerKey(), pluginName, record);
   }
   useAppStore.setState((s) => {
     const next = applyTrustDecision(
@@ -224,7 +290,7 @@ export async function resolvePluginTrustBulk(
   if (decision === TrustDecision.Allow && scope === TrustScope.Global) {
     await saveGlobalTrustRecords(named);
   } else if (scope !== TrustScope.Once) {
-    await saveTrustRecords(state.activeServerId, named);
+    await saveTrustRecords(await stableServerKey(), named);
   }
 
   useAppStore.setState((s) => {
@@ -263,7 +329,8 @@ export async function revokePluginTrust(pluginName: string): Promise<void> {
     // Without a manifest we cannot persist a structured deny record;
     // fall back to clearing whatever is on disk so at least the
     // in-memory trust state matches the user's intent.
-    await revokeTrustRecord(state.activeServerId, pluginName);
+    const key = await stableServerKey();
+    await revokeTrustRecord(key, pluginName);
     useAppStore.setState((s) => {
       const next = applyTrustRevocation(sliceFromState(s), pluginName);
       return slicePatch(next);
@@ -279,8 +346,9 @@ export async function revokePluginTrust(pluginName: string): Promise<void> {
   // Drop any "always allow" / per-server allow record first so the
   // new per-server deny is the effective decision (per-server records
   // overlay the global ones in `loadServerTrust`).
-  await revokeTrustRecord(state.activeServerId, pluginName);
-  await saveTrustRecord(state.activeServerId, pluginName, record);
+  const key = await stableServerKey();
+  await revokeTrustRecord(key, pluginName);
+  await saveTrustRecord(key, pluginName, record);
   useAppStore.setState((s) => {
     const next = applyTrustDecision(
       sliceFromState(s),
@@ -302,7 +370,7 @@ export async function revokePluginTrust(pluginName: string): Promise<void> {
  *  explicitly asking to be asked again. */
 export async function resetPluginTrust(pluginName: string): Promise<void> {
   const state = useAppStore.getState();
-  await revokeTrustRecord(state.activeServerId, pluginName);
+  await revokeTrustRecord(await stableServerKey(), pluginName);
   const entry = state.pluginRegistry.find((e) => e.pluginName === pluginName);
   const manifest = entry ? parseClientManifest(entry.infoJson) : null;
   useAppStore.setState((s) => {
@@ -351,7 +419,7 @@ export async function allowPlugin(
   if (scope === TrustScope.Global) {
     await saveGlobalTrustRecord(pluginName, record);
   } else if (scope !== TrustScope.Once) {
-    await saveTrustRecord(state.activeServerId, pluginName, record);
+    await saveTrustRecord(await stableServerKey(), pluginName, record);
   }
   useAppStore.setState((s) => {
     const next = applyTrustDecision(sliceFromState(s), pluginName, record, manifest);

@@ -1,5 +1,6 @@
 ﻿import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
 import type { UserMode } from "../../types";
 import { Toggle } from "./SharedControls";
 import styles from "./SettingsPage.module.css";
@@ -115,6 +116,24 @@ export function AdvancedPanel({
             <option value="debug">{t("advanced.logLevelDebug")}</option>
             <option value="trace">{t("advanced.logLevelTrace")}</option>
           </select>
+        </section>
+      )}
+
+      {userMode === "developer" && (
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>{t("advanced.translationHelper")}</h3>
+          <p className={styles.fieldHint}>{t("advanced.translationHelperHint")}</p>
+          <button
+            type="button"
+            className={styles.ghostBtn}
+            onClick={() => {
+              invoke("open_translation_popout").catch((e) => {
+                console.error("open_translation_popout failed:", e);
+              });
+            }}
+          >
+            {t("advanced.translationHelperOpen")}
+          </button>
         </section>
       )}
 

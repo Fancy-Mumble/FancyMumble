@@ -1,0 +1,521 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--surface, #1e1f22);
+  color: var(--color-text-primary, #fff);
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--surface-elevated, #2a2c30);
+  border-bottom: 1px solid var(--border, #3a3c40);
+  user-select: none;
+  min-height: 36px;
+  /* Cascades to all children unless they opt out via `no-drag`.
+     Pairs with data-tauri-drag-region for cross-platform support. */
+  -webkit-app-region: drag;
+}
+
+.headerTitle {
+  flex: 1;
+  font-weight: 600;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.closeBtn {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 14px;
+  opacity: 0.7;
+  /* Opt out of the header's drag region so clicking the X closes
+     instead of starting a window drag. */
+  -webkit-app-region: no-drag;
+}
+
+.closeBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  opacity: 1;
+}
+
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border, #3a3c40);
+}
+
+.toolbarRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.toolbar select,
+.toolbar input[type="text"] {
+  background: var(--input-bg, #1a1b1d);
+  border: 1px solid var(--border, #3a3c40);
+  color: inherit;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font: inherit;
+  min-height: 28px;
+}
+
+.toolbar select {
+  min-width: 180px;
+}
+
+.btn {
+  background: var(--button-bg, #353740);
+  border: 1px solid var(--border, #3a3c40);
+  color: inherit;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+  min-height: 28px;
+}
+
+.btn:hover {
+  background: var(--button-bg-hover, #44464f);
+}
+
+.toolbarLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+.toolbarSep {
+  width: 1px;
+  height: 20px;
+  background: var(--border, #3a3c40);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.displayMissing {
+  opacity: 0.4;
+  font-style: italic;
+}
+
+.btnIcon {
+  background: var(--button-bg, #353740);
+  border: 1px solid var(--border, #3a3c40);
+  color: inherit;
+  padding: 4px;
+  width: 28px;
+  min-height: 28px;
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.btnIcon:hover {
+  background: var(--button-bg-hover, #44464f);
+}
+
+.btnPrimary {
+  background: var(--accent, #2aabee);
+  border-color: var(--accent, #2aabee);
+  color: #fff;
+}
+
+.btnPrimary:hover {
+  filter: brightness(1.1);
+}
+
+.btnDanger {
+  background: #6b2a2a;
+  border-color: #8a3636;
+  color: #fff;
+}
+
+.btnDanger:hover {
+  background: #8a3636;
+  border-color: #a04040;
+}
+
+.btnActive {
+  background: var(--accent, #2aabee);
+  color: #fff;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.dirtyBadge {
+  font-size: 11px;
+  color: #ffa066;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.list {
+  width: 320px;
+  border-right: 1px solid var(--border, #3a3c40);
+  overflow-y: auto;
+  background: var(--surface-deep, #18191b);
+}
+
+.searchRow {
+  position: sticky;
+  top: 0;
+  background: var(--surface-deep, #18191b);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border, #3a3c40);
+  z-index: 1;
+}
+
+.searchRow input {
+  width: 100%;
+  background: var(--input-bg, #1a1b1d);
+  border: 1px solid var(--border, #3a3c40);
+  color: inherit;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.nsHeader {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.6;
+  padding: 8px 10px 4px;
+  position: sticky;
+  top: 38px;
+  background: var(--surface-deep, #18191b);
+}
+
+.listItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: inherit;
+  padding: 6px 10px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  font: inherit;
+}
+
+.listItem:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.listItemActive {
+  background: rgba(42, 171, 238, 0.12);
+  border-left-color: var(--accent, #2aabee);
+}
+
+.listItemKey {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.listItemValue {
+  display: block;
+  font-size: 12px;
+  opacity: 0.6;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.listItemMissing .listItemValue {
+  color: #ffa066;
+  font-style: italic;
+}
+
+.editor {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.emptyState {
+  margin: auto;
+  text-align: center;
+  opacity: 0.55;
+  max-width: 360px;
+}
+
+.editorHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.keyPath {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.namespacePill {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--accent, #2aabee);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.sourceBlock {
+  background: var(--surface-deep, #18191b);
+  border: 1px solid var(--border, #3a3c40);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.sourceBlock h4 {
+  margin: 0 0 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.6;
+}
+
+.sourceValue {
+  white-space: pre-wrap;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.editorArea {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.editorArea label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+}
+
+.editorArea textarea {
+  width: 100%;
+  min-height: 96px;
+  background: var(--input-bg, #1a1b1d);
+  border: 1px solid var(--border, #3a3c40);
+  color: inherit;
+  border-radius: 6px;
+  padding: 8px;
+  font: 13px ui-monospace, monospace;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.editorArea textarea:focus {
+  outline: 1px solid var(--accent, #2aabee);
+  border-color: var(--accent, #2aabee);
+}
+
+.refTable {
+  border: 1px solid var(--border, #3a3c40);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.refHeader {
+  display: flex;
+  padding: 6px 10px;
+  background: var(--surface-deep, #18191b);
+  border-bottom: 1px solid var(--border, #3a3c40);
+  align-items: center;
+  gap: 8px;
+}
+
+.refHeader h4 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+  flex: 1;
+}
+
+.refHeader input {
+  flex: 0 0 160px;
+  background: var(--input-bg, #1a1b1d);
+  border: 1px solid var(--border, #3a3c40);
+  color: inherit;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font: inherit;
+}
+
+/* Cap the Autocomplete combobox width so it doesn't stretch to fill
+   the whole header row — the chips wrap to a second line if more than
+   ~3 fit. */
+.refLangSelect {
+  flex: 0 1 280px;
+  min-width: 200px;
+}
+
+.refRow {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.refRow:first-child {
+  border-top: none;
+}
+
+.refRow .refValue {
+  white-space: pre-wrap;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.refRow .refMissing {
+  opacity: 0.4;
+  font-style: italic;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  width: min(520px, 90vw);
+  background: var(--surface-elevated, #2a2c30);
+  border: 1px solid var(--border, #3a3c40);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 85vh;
+}
+
+.modal h3 {
+  margin: 0;
+}
+
+.modal .langOptions {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--border, #3a3c40);
+  border-radius: 6px;
+  background: var(--surface-deep, #18191b);
+}
+
+.langOption {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.langOption:first-child {
+  border-top: none;
+}
+
+.langOption:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.langOptionMeta {
+  font-size: 11px;
+  opacity: 0.6;
+  margin-left: auto;
+  font-family: ui-monospace, monospace;
+}
+
+.statusBar {
+  padding: 4px 10px;
+  border-top: 1px solid var(--border, #3a3c40);
+  font-size: 11px;
+  opacity: 0.75;
+  background: var(--surface-elevated, #2a2c30);
+  min-height: 22px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.statusOk {
+  color: #6dd58a;
+}
+
+.statusError {
+  color: #ff7066;
+}
+
+/* The translation popout is a desktop tool. Override the global mobile
+   touch-target minimums so the toolbar and editor stay compact even
+   when the window is narrower than 768 px. */
+@media (max-width: 768px) {
+  .toolbar button,
+  .toolbar input,
+  .toolbar select {
+    min-height: 28px;
+    min-width: unset;
+    font-size: 13px;
+  }
+
+  .refLangSelect input,
+  .refLangSelect button {
+    min-height: unset;
+    min-width: unset;
+    font-size: 13px;
+  }
+}

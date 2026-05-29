@@ -131,4 +131,6 @@ export {
   Circle as CircleIcon,
   CircleDot as CircleDotIcon,
   Square as SquareIcon,
+  Link2 as Link2Icon,
+  Columns2 as Columns2Icon,
 } from "lucide-react";

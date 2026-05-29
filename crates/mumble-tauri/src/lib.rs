@@ -108,6 +108,18 @@ pub fn run() {
                     }
                 }
             }
+            // Translation popout cleanup: if the popout had the in-window
+            // element picker enabled when it was destroyed (Alt+F4, tray
+            // kill, ...) the main window never received a stop event and
+            // its outlines would stay on screen.  Emit one here so the
+            // overlay tears itself down.
+            #[cfg(not(target_os = "android"))]
+            if matches!(event, tauri::WindowEvent::Destroyed)
+                && window.label() == "popout-translation"
+            {
+                use tauri::Emitter;
+                let _ = window.app_handle().emit("translation-picker:stop", ());
+            }
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -428,6 +440,8 @@ macro_rules! all_command_handlers {
             commands::files::save_markdown_file,
             commands::files::add_custom_emote,
             commands::files::remove_custom_emote,
+            commands::files::write_translation_files,
+            commands::files::check_files_exist,
             commands::realtime::send_push_update,
             commands::realtime::send_subscribe_push,
             commands::messaging::send_read_receipt,
@@ -508,6 +522,7 @@ macro_rules! all_command_handlers {
             commands::popout::take_popout_stream,
             commands::popout::open_dm_popout,
             commands::popout::take_popout_dm,
+            commands::popout::open_translation_popout,
             commands::draw_overlay::open_drawing_overlay,
             commands::draw_overlay::close_drawing_overlay,
             commands::draw_overlay::take_drawing_overlay_context,
