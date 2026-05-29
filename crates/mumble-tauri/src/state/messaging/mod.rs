@@ -28,6 +28,25 @@ fn own_session_hash(state: &SharedState) -> Option<String> {
         .and_then(|u| u.hash.clone())
 }
 
+fn apply_plugin_message_update(
+    msg: &mut ChatMessage,
+    content: &Option<String>,
+    components: &Option<serde_json::Value>,
+    clear_components: bool,
+    now_ms: u64,
+) {
+    if let Some(c) = content {
+        msg.body = c.clone();
+    }
+    if clear_components {
+        msg.plugin_components = None;
+    }
+    if let Some(v) = components {
+        msg.plugin_components = Some(v.clone());
+    }
+    msg.edited_at = Some(now_ms);
+}
+
 fn cache_own_signal_message(state: &mut SharedState, msg: &ChatMessage, channel_id: u32) {
     let own_cert_hash = state
         .pchat_ctx.pchat
@@ -312,27 +331,25 @@ impl AppState {
         let (touched, app_handle) = {
             let __session = self.inner.snapshot();
             let mut state = __session.lock().map_err(|e| e.to_string())?;
-            let mut touched: Vec<u32> = Vec::new();
-            for (channel_id, bucket) in state.msgs.by_channel.iter_mut() {
-                for msg in bucket.iter_mut() {
-                    if msg.plugin_name.as_deref() == Some(plugin_name.as_str())
-                        && msg.message_id.as_deref() == Some(message_id.as_str())
-                    {
-                        if let Some(c) = &content {
-                            msg.body = c.clone();
-                        }
-                        if clear_components {
-                            msg.plugin_components = None;
-                        }
-                        if let Some(v) = &components {
-                            msg.plugin_components = Some(v.clone());
-                        }
-                        msg.edited_at = Some(now_ms);
-                        touched.push(*channel_id);
-                        break;
-                    }
-                }
-            }
+            let touched: Vec<u32> = state
+                .msgs
+                .by_channel
+                .iter_mut()
+                .filter_map(|(&channel_id, bucket)| {
+                    let msg = bucket.iter_mut().find(|msg| {
+                        msg.plugin_name.as_deref() == Some(plugin_name.as_str())
+                            && msg.message_id.as_deref() == Some(message_id.as_str())
+                    })?;
+                    apply_plugin_message_update(
+                        msg,
+                        &content,
+                        &components,
+                        clear_components,
+                        now_ms,
+                    );
+                    Some(channel_id)
+                })
+                .collect();
             (touched, state.conn.tauri_app_handle.clone())
         };
 
