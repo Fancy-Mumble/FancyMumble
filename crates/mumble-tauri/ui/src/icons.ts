@@ -121,4 +121,6 @@ export {
   Store as StoreIcon,
   Download as DownloadIcon,
   Power as PowerIcon,
+  Link2 as Link2Icon,
+  Columns2 as Columns2Icon,
 } from "lucide-react";

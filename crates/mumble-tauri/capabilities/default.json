@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "Default permissions for the main window",
-  "windows": ["main", "popout-dm-*", "popout-stream-*"],
+  "windows": ["main", "popout-dm-*", "popout-stream-*", "popout-translation"],
   "permissions": [
     "core:default",
     "opener:default",

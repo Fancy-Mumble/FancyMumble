@@ -620,6 +620,54 @@
   backdrop-filter: blur(4px);
 }
 
+/* --- Privacy warning banners ------------------------------------ */
+
+.warningBanner,
+.warningBannerDanger,
+.warningBannerMuted {
+  font-size: 13px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+}
+
+.warningBanner span,
+.warningBannerDanger span,
+.warningBannerMuted span {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.warningBanner p,
+.warningBannerDanger p,
+.warningBannerMuted p {
+  opacity: 0.85;
+  font-size: 12px;
+  margin: 0;
+}
+
+/* Amber: privacy-protecting toggle is off, data is being shared */
+.warningBanner {
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  color: #c9a227;
+}
+
+/* Red: the active configuration is potentially dangerous */
+.warningBannerDanger {
+  background: var(--color-danger-subtle);
+  border: 1px solid var(--color-danger-strong);
+  color: var(--color-danger);
+}
+
+/* Muted: informational only, no immediate privacy risk */
+.warningBannerMuted {
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  color: var(--color-text-secondary);
+}
+
 /* --- Responsive: hide preview on narrow windows ----------------- */
 
 @media (max-width: 900px) {
