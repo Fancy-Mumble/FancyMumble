@@ -8,6 +8,7 @@ import {
   ArrowLeftIcon, DownloadIcon, StoreIcon, StarIcon, ArrowUpRightIcon,
 } from "../../icons";
 import { SafeHtml } from "../../components/elements/SafeHtml";
+import { safeImageUrl } from "../../utils/safeUrl";
 import { useAppStore } from "../../store";
 import { getPreferences } from "../../preferencesStorage";
 import { isPluginAdminSupported } from "../admin/index";
@@ -67,6 +68,8 @@ export default function MarketplacePluginPage() {
     return String(marked.parse(plugin.readme, { async: false, gfm: true }));
   }, [plugin?.readme]);
 
+  const iconSrc = safeImageUrl(plugin?.icon_url);
+
   useEffect(() => {
     getPreferences().then((p) => {
       setMarketplaceBaseUrl(p.marketplaceBaseUrl ?? null);
@@ -104,12 +107,22 @@ export default function MarketplacePluginPage() {
     }
     setInstalling(true);
     setLastAck(null);
+    const manifestUrl = plugin.manifest_url;
     try {
+      // Pin the SHA-256 of the manifest we reviewed so the server rejects
+      // the install if it fetches a different manifest.  Fall back to an
+      // unpinned install only if the hash cannot be computed.
+      let expectedSha256: string | null = null;
+      try {
+        expectedSha256 = await invoke<string>("fetch_plugin_manifest_sha256", { manifestUrl });
+      } catch (e) {
+        console.warn("[marketplace] manifest hash pin skipped:", e);
+      }
       await invoke("install_server_plugin", {
         marketplaceId: plugin.id,
         version: plugin.version,
-        manifestUrl: plugin.manifest_url,
-        expectedSha256: null,
+        manifestUrl,
+        expectedSha256,
       });
     } catch (err) {
       setError(String(err));
@@ -140,8 +153,8 @@ export default function MarketplacePluginPage() {
       {plugin && (
         <>
           <header className={styles.header}>
-            {plugin.icon_url ? (
-              <img className={styles.icon} src={plugin.icon_url} alt="" />
+            {iconSrc ? (
+              <img className={styles.icon} src={iconSrc} alt="" />
             ) : (
               <div className={styles.icon}><StoreIcon width={32} height={32} /></div>
             )}

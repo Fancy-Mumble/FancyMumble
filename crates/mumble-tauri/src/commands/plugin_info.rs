@@ -56,7 +56,25 @@ fn decode(buf: &[u8]) -> Result<DecodedPluginInfo, String> {
     let payload = &buf[HEADER_LEN..];
 
     let json_bytes = if flags & FLAG_ZSTD != 0 {
-        zstd::stream::decode_all(payload).map_err(|e| format!("zstd decode: {e}"))?
+        use std::io::Read;
+        // Bound the decompressed size: a malicious payload can declare a
+        // small `raw_len` (passing the header check above) yet expand to
+        // gigabytes.  Decompress through a `take`-limited reader so memory
+        // use is capped regardless of the compressed input.  Read one byte
+        // past the limit to detect overflow.
+        let decoder =
+            zstd::stream::read::Decoder::new(payload).map_err(|e| format!("zstd init: {e}"))?;
+        let mut out = Vec::new();
+        let _ = decoder
+            .take(PLUGIN_INFO_MAX_BYTES as u64 + 1)
+            .read_to_end(&mut out)
+            .map_err(|e| format!("zstd decode: {e}"))?;
+        if out.len() > PLUGIN_INFO_MAX_BYTES {
+            return Err(format!(
+                "decompressed payload exceeds limit {PLUGIN_INFO_MAX_BYTES}"
+            ));
+        }
+        out
     } else {
         payload.to_vec()
     };
@@ -141,6 +159,21 @@ mod tests {
         let mut env = build_envelope(br#"{"name":"a","version":"1","info":{}}"#, false);
         env[2..6].copy_from_slice(&u32::MAX.to_le_bytes());
         assert!(decode(&env).unwrap_err().contains("exceeds"));
+    }
+
+    #[test]
+    fn rejects_zstd_bomb_exceeding_limit() {
+        // Declares a tiny raw_len (passing the header check) but expands
+        // past the limit; the bounded decoder must reject it.
+        let big = vec![0u8; PLUGIN_INFO_MAX_BYTES + 4096];
+        let compressed = zstd::stream::encode_all(big.as_slice(), 3).unwrap();
+        let mut out = Vec::with_capacity(HEADER_LEN + compressed.len());
+        out.push(ENVELOPE_VERSION);
+        out.push(FLAG_ZSTD);
+        out.extend_from_slice(&1u32.to_le_bytes());
+        out.extend_from_slice(&compressed);
+        let err = decode(&out).unwrap_err();
+        assert!(err.contains("exceeds limit"), "unexpected error: {err}");
     }
 
     #[test]

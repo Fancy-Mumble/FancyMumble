@@ -489,6 +489,7 @@ macro_rules! all_command_handlers {
             commands::plugin_admin::set_server_plugin_enabled,
             commands::plugin_admin::install_server_plugin,
             commands::plugin_admin::uninstall_server_plugin,
+            commands::plugin_admin::fetch_plugin_manifest_sha256,
             commands::plugin_admin::fetch_marketplace_index,
             commands::plugin_admin::fetch_marketplace_plugin,
             commands::keyshare::confirm_custodians,

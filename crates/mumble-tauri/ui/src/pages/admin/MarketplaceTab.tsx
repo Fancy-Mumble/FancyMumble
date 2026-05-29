@@ -7,6 +7,7 @@ import {
   SearchIcon, DownloadIcon, RefreshCwIcon, StoreIcon, StarIcon,
 } from "../../icons";
 import { useAppStore } from "../../store";
+import { safeImageUrl } from "../../utils/safeUrl";
 import { getPreferences, updatePreferences } from "../../preferencesStorage";
 import { isPluginAdminSupported } from "./index";
 import styles from "./AdminPanel.module.css";
@@ -135,12 +136,20 @@ export function MarketplaceTab() {
     }
     setInstallingId(plugin.id);
     setLastAck(null);
+    const manifestUrl = plugin.manifest_url;
     try {
+      // Pin the manifest hash we reviewed (see PluginPage.handleInstall).
+      let expectedSha256: string | null = null;
+      try {
+        expectedSha256 = await invoke<string>("fetch_plugin_manifest_sha256", { manifestUrl });
+      } catch (e) {
+        console.warn("[marketplace] manifest hash pin skipped:", e);
+      }
       await invoke("install_server_plugin", {
         marketplaceId: plugin.id,
         version: plugin.version,
-        manifestUrl: plugin.manifest_url,
-        expectedSha256: null,
+        manifestUrl,
+        expectedSha256,
       });
     } catch (err) {
       setError(String(err));
@@ -214,11 +223,13 @@ export function MarketplaceTab() {
         </div>
       ) : (
         <div className={mk.grid}>
-          {results.map((p) => (
+          {results.map((p) => {
+            const iconSrc = safeImageUrl(p.icon_url);
+            return (
             <article key={p.id} className={mk.card}>
               <header className={mk.cardHeader}>
-                {p.icon_url ? (
-                  <img className={mk.cardIcon} src={p.icon_url} alt="" />
+                {iconSrc ? (
+                  <img className={mk.cardIcon} src={iconSrc} alt="" />
                 ) : (
                   <div className={mk.cardIcon}>
                     <StoreIcon width={20} height={20} />
@@ -280,7 +291,8 @@ export function MarketplaceTab() {
                 )}
               </footer>
             </article>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

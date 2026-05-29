@@ -14,6 +14,7 @@ import { useMemo, useState } from "react";
 import { marked } from "marked";
 import { rebaseFileServerUrl, sendPluginInteraction, useAppStore } from "../../store";
 import { useAclGroups } from "../../hooks/useAclGroups";
+import { safeImageUrl, safeLinkUrl } from "../../utils/safeUrl";
 import { SafeHtml } from "../elements/SafeHtml";
 import type {
   ButtonStyle,
@@ -138,10 +139,24 @@ function RenderButton({
   readonly ctx: RenderContext;
 }) {
   if (component.style === "link" && component.url) {
+    const href = safeLinkUrl(component.url);
+    if (!href) {
+      // Unsafe scheme (javascript:, data:, ...) - render an inert button
+      // rather than a clickable anchor.
+      return (
+        <button
+          type="button"
+          className={`${styles.btn} ${btnClass("link")}`}
+          disabled
+        >
+          {component.label}
+        </button>
+      );
+    }
     return (
       <a
         className={`${styles.btn} ${btnClass("link")}`}
-        href={component.url}
+        href={href}
         target="_blank"
         rel="noreferrer noopener"
       >
@@ -481,7 +496,7 @@ function RenderThumbnail({
   readonly component: Extract<Component, { type: "thumbnail" }>;
 }) {
   const [revealed, setRevealed] = useState(!component.spoiler);
-  const resolved = useFancyFileUrl(component.media.url);
+  const resolved = safeImageUrl(useFancyFileUrl(component.media.url));
   const cls = component.spoiler && !revealed
     ? `${styles.thumbnailImg} ${styles.spoiler}`
     : styles.thumbnailImg;
@@ -517,7 +532,7 @@ function MediaGalleryTile({
   readonly item: { readonly media: { readonly url: string }; readonly description?: string; readonly spoiler?: boolean };
 }) {
   const [revealed, setRevealed] = useState(!item.spoiler);
-  const resolved = useFancyFileUrl(item.media.url);
+  const resolved = safeImageUrl(useFancyFileUrl(item.media.url));
   const cls = item.spoiler && !revealed
     ? `${styles.mediaGalleryItem} ${styles.spoiler}`
     : styles.mediaGalleryItem;
@@ -538,19 +553,29 @@ function RenderFile({
 }: {
   readonly component: Extract<Component, { type: "file" }>;
 }) {
-  const resolved = useFancyFileUrl(component.file.url);
+  const href = safeLinkUrl(useFancyFileUrl(component.file.url));
   const sizeText =
     component.size != null
       ? ` · ${humanSize(component.size)}`
       : "";
+  const label = component.name ?? component.file.url;
+  if (!href) {
+    // Unsafe / unresolvable URL - show the metadata without a link.
+    return (
+      <span className={styles.fileTile}>
+        <span>{label}</span>
+        <span className={styles.fileMeta}>{sizeText}</span>
+      </span>
+    );
+  }
   return (
     <a
       className={styles.fileTile}
-      href={resolved ?? "#"}
+      href={href}
       target="_blank"
       rel="noreferrer noopener"
     >
-      <span>{component.name ?? component.file.url}</span>
+      <span>{label}</span>
       <span className={styles.fileMeta}>{sizeText}</span>
     </a>
   );

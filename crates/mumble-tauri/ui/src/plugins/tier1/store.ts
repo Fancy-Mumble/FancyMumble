@@ -15,6 +15,7 @@ import type {
   ToastLevel,
 } from "./types";
 import {
+  Capability,
   INTERACTION_PAYLOAD_TYPE,
   INTERACTION_RESPONSE_PAYLOAD_TYPE,
   normaliseActionRow,
@@ -205,6 +206,41 @@ export function panelKey(pluginName: string, panelId: string): string {
 // ---------------------------------------------------------------------------
 // Inbound: handle an InteractionResponse and produce a state patch
 // ---------------------------------------------------------------------------
+
+/** Capability a plugin must declare in its manifest before the client
+ *  honours an `InteractionResponse` of the given kind.  Returns null for
+ *  kinds that are not capability-gated.  Capabilities are otherwise
+ *  advisory: the trust prompt surfaces them, but only this mapping makes
+ *  a plugin's *declared* surface match what it is actually allowed to
+ *  drive at runtime. */
+export function requiredCapabilityFor(
+  kind: ResponseKind["kind"],
+): Capability | null {
+  switch (kind) {
+    case "show-modal":
+      return Capability.Modals;
+    case "toast":
+      return Capability.Notifications;
+    case "update-panel":
+      return Capability.SettingsPanel;
+    case "chat-message":
+    case "update-message":
+      return Capability.Components;
+  }
+}
+
+/** True when a trusted plugin's manifest permits emitting a response of
+ *  `kind`.  A plugin must have declared the capability backing the
+ *  surface it is trying to drive; a manifest that omits it (e.g. the
+ *  empty `{}` manifest that auto-trusts with no prompt) is refused. */
+export function manifestPermitsResponse(
+  manifest: ClientManifest,
+  kind: ResponseKind["kind"],
+): boolean {
+  const cap = requiredCapabilityFor(kind);
+  if (cap === null) return true;
+  return (manifest.capabilities ?? []).includes(cap);
+}
 
 /** Pure reducer: apply an inbound `InteractionResponse` to the slice
  *  and return the next slice.  The store calls this from its

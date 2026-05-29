@@ -54,8 +54,11 @@ import {
   applyInteractionResponse,
   decodeInteractionResponse,
   emptyPluginTier1Slice,
+  manifestPermitsResponse,
   type PluginTier1Slice,
 } from "./plugins/tier1/store";
+import type { InteractionResponse } from "./plugins/tier1/types";
+import { parseClientManifest } from "./plugins/tier1/manifest";
 import { applyReadStates, clearReadReceipts } from "./components/chat/readreceipt/readReceiptStore";
 import { useOnboardingStore } from "./components/onboarding/onboardingStore";
 import type { OnboardingConfigEvent, OnboardingResponseEvent } from "./types";
@@ -2241,6 +2244,37 @@ function decodePluginPayload<T>(bytes: number[]): T | null {
   }
 }
 
+/** Policy gate for an inbound plugin `InteractionResponse`.
+ *
+ *  - A plugin that ships a Tier-1 client manifest must be *trusted*
+ *    (present in `pluginManifests` - i.e. allowed or prompt-exempt) AND
+ *    must have declared the capability backing the response kind.  This
+ *    refuses plugins that are pending a trust decision, explicitly
+ *    denied, or reaching for a capability they never declared.
+ *  - A plugin that ships no client manifest at all keeps its historical
+ *    bypass for non-injecting responses (legacy transports), but may
+ *    never inject chat history.
+ *
+ *  Evaluated before any side effect so a blocked / under-declared plugin
+ *  cannot inject or rewrite local chat. */
+function pluginResponseAllowed(
+  s: AppState,
+  pluginName: string,
+  kind: InteractionResponse["kind"],
+): boolean {
+  const manifest = s.pluginManifests.get(pluginName);
+  if (manifest) {
+    return manifestPermitsResponse(manifest, kind);
+  }
+  const entry = s.pluginRegistry.find((e) => e.pluginName === pluginName);
+  const hasManifest = entry ? parseClientManifest(entry.infoJson) !== null : false;
+  // A manifest-bearing plugin not in `pluginManifests` is pending or
+  // denied -> refuse.  A manifest-less plugin is a legacy transport;
+  // allow everything except chat injection.
+  if (hasManifest) return false;
+  return kind !== "chat-message";
+}
+
 /** Route an inbound plugin envelope to the appropriate in-store handler. */
 function dispatchPluginMessage(p: PluginMessageEvent): void {
   if (p.pluginName === "fancy-live-doc") {
@@ -2289,6 +2323,13 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
   }
   const response = decodeInteractionResponse(p.payloadType, p.payload);
   if (response) {
+    // Trust + capability gate.  Evaluated against current state BEFORE
+    // any side effect, so a pending / denied / under-declared plugin
+    // cannot inject or rewrite chat history (the side effects below run
+    // outside the `setState` reducer).
+    if (!pluginResponseAllowed(useAppStore.getState(), p.pluginName, response.kind)) {
+      return;
+    }
     // Side effect for chat-message: ask the rust state to inject the
     // bubble into local channel history.  The tier1 reducer itself
     // is a no-op for this kind, so the side effect is the entire
@@ -2323,18 +2364,6 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
       );
     }
     useAppStore.setState((s) => {
-      // Trust gate: drop responses from untrusted plugins on the
-      // floor.  The plugin is allowed to send (server-side has no way
-      // to know the user's local trust state) - we just refuse to
-      // render.  Plugins with no manifest at all (legacy) bypass the
-      // gate so live-doc / file-server still work.
-      if (s.pluginRegistry.some((e) => e.pluginName === p.pluginName)
-        && !s.pluginManifests.has(p.pluginName)
-        && [...s.pluginTrust.keys()].includes(p.pluginName) === false
-      ) {
-        // Pending trust or denied: ignore.
-        return {};
-      }
       const next = applyInteractionResponse(
         sliceFromState(s),
         p.pluginName,

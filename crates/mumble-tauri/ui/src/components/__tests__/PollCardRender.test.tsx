@@ -91,14 +91,14 @@ describe("PollCard voting", () => {
 
   it("shows radio indicators for single-choice polls", () => {
     const poll = makePoll({ multiple: false, id: "radio-test" });
-    render(<PollCard poll={poll} ownSession={10} onVote={vi.fn()} />);
-    expect(screen.getAllByText("\u25CB")).toHaveLength(3);
+    const { container } = render(<PollCard poll={poll} ownSession={10} onVote={vi.fn()} />);
+    expect(container.querySelectorAll(".radio")).toHaveLength(3);
   });
 
   it("shows checkbox indicators for multiple-choice polls", () => {
     const poll = makePoll({ multiple: true, id: "check-test" });
-    render(<PollCard poll={poll} ownSession={10} onVote={vi.fn()} />);
-    expect(screen.getAllByText("\u2610")).toHaveLength(3);
+    const { container } = render(<PollCard poll={poll} ownSession={10} onVote={vi.fn()} />);
+    expect(container.querySelectorAll(".checkbox")).toHaveLength(3);
   });
 });
 

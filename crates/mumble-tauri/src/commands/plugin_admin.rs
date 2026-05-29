@@ -140,11 +140,18 @@ pub struct MarketplaceIndex {
 }
 
 fn resolve_marketplace_base(override_url: Option<&str>) -> String {
+    // The caller-supplied override drives the dev-mode marketplace URL
+    // switcher.  Honour it in debug builds only; in release the
+    // marketplace base is fixed (env var or the hard-coded default) so a
+    // caller cannot redirect marketplace traffic to an arbitrary host.
+    #[cfg(debug_assertions)]
     if let Some(base) = override_url {
         if !base.is_empty() {
             return base.trim_end_matches('/').to_owned();
         }
     }
+    #[cfg(not(debug_assertions))]
+    let _ = override_url;
     marketplace_base()
 }
 
@@ -209,6 +216,37 @@ pub(crate) async fn fetch_marketplace_plugin(
     resp.json::<MarketplacePlugin>()
         .await
         .map_err(|e| format!("Failed to parse marketplace response: {e}"))
+}
+
+/// Fetch a plugin manifest document and return the lowercase hex
+/// SHA-256 of its raw bytes.  The admin client calls this immediately
+/// before `install_server_plugin` so it can pin `expected_sha256` to the
+/// exact manifest it reviewed; the server rejects the install if the
+/// manifest it fetches hashes differently (defends against a manifest
+/// swapped between the admin's review and the server's fetch).
+#[tauri::command]
+pub(crate) async fn fetch_plugin_manifest_sha256(manifest_url: String) -> Result<String, String> {
+    let resp = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?
+        .get(&manifest_url)
+        .send()
+        .await
+        .map_err(|e| format!("Manifest request failed: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("Manifest returned HTTP {}", resp.status()));
+    }
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read manifest body: {e}"))?;
+    let digest = <sha2::Sha256 as sha2::Digest>::digest(&bytes);
+    let mut out = String::with_capacity(digest.len() * 2);
+    for b in digest {
+        out.push_str(&format!("{b:02x}"));
+    }
+    Ok(out)
 }
 
 /// Bare-bones URL component encoding.  Avoids pulling in another dep
