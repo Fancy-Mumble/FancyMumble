@@ -21,30 +21,44 @@ struct OwnMessageData {
     pchat_protocol: Option<PchatProtocol>,
 }
 
+/// Search `bucket` for the first message whose `plugin_name` and `message_id`
+/// match, apply the requested update fields to it, and return whether a match
+/// was found.
+fn apply_plugin_message_update(
+    bucket: &mut [ChatMessage],
+    plugin_name: &str,
+    message_id: &str,
+    content: Option<&str>,
+    components: Option<&serde_json::Value>,
+    clear_components: bool,
+    now_ms: u64,
+) -> bool {
+    for msg in bucket.iter_mut() {
+        if msg.plugin_name.as_deref() != Some(plugin_name)
+            || msg.message_id.as_deref() != Some(message_id)
+        {
+            continue;
+        }
+        if let Some(c) = content {
+            msg.body = c.to_owned();
+        }
+        if clear_components {
+            msg.plugin_components = None;
+        }
+        if let Some(v) = components {
+            msg.plugin_components = Some(v.clone());
+        }
+        msg.edited_at = Some(now_ms);
+        return true;
+    }
+    false
+}
+
 fn own_session_hash(state: &SharedState) -> Option<String> {
     state
         .conn.own_session
         .and_then(|sid| state.users.get(&sid))
         .and_then(|u| u.hash.clone())
-}
-
-fn apply_plugin_message_update(
-    msg: &mut ChatMessage,
-    content: &Option<String>,
-    components: &Option<serde_json::Value>,
-    clear_components: bool,
-    now_ms: u64,
-) {
-    if let Some(c) = content {
-        msg.body = c.clone();
-    }
-    if clear_components {
-        msg.plugin_components = None;
-    }
-    if let Some(v) = components {
-        msg.plugin_components = Some(v.clone());
-    }
-    msg.edited_at = Some(now_ms);
 }
 
 fn cache_own_signal_message(state: &mut SharedState, msg: &ChatMessage, channel_id: u32) {
@@ -331,25 +345,20 @@ impl AppState {
         let (touched, app_handle) = {
             let __session = self.inner.snapshot();
             let mut state = __session.lock().map_err(|e| e.to_string())?;
-            let touched: Vec<u32> = state
-                .msgs
-                .by_channel
-                .iter_mut()
-                .filter_map(|(&channel_id, bucket)| {
-                    let msg = bucket.iter_mut().find(|msg| {
-                        msg.plugin_name.as_deref() == Some(plugin_name.as_str())
-                            && msg.message_id.as_deref() == Some(message_id.as_str())
-                    })?;
-                    apply_plugin_message_update(
-                        msg,
-                        &content,
-                        &components,
-                        clear_components,
-                        now_ms,
-                    );
-                    Some(channel_id)
-                })
-                .collect();
+            let mut touched: Vec<u32> = Vec::new();
+            for (channel_id, bucket) in state.msgs.by_channel.iter_mut() {
+                if apply_plugin_message_update(
+                    bucket,
+                    &plugin_name,
+                    &message_id,
+                    content.as_deref(),
+                    components.as_ref(),
+                    clear_components,
+                    now_ms,
+                ) {
+                    touched.push(*channel_id);
+                }
+            }
             (touched, state.conn.tauri_app_handle.clone())
         };
 

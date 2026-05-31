@@ -9,12 +9,14 @@ import {
   filterSlashCommands,
 } from "../../plugins/tier1/manifest";
 import {
+  acceptedCapabilitiesFor,
   applyInteractionResponse,
   applyRegistryWithTrust,
   applyTrustDecision,
   applyTrustRevocation,
   decodeInteractionResponse,
   emptyPluginTier1Slice,
+  manifestPermitsResponse,
   manifestsFromRegistry,
   panelKey,
 } from "../../plugins/tier1/store";
@@ -23,7 +25,11 @@ import {
   tokenise,
   extractSlashQuery,
 } from "../../plugins/tier1/slashParser";
-import { INTERACTION_RESPONSE_PAYLOAD_TYPE } from "../../plugins/tier1/types";
+import {
+  Capability,
+  INTERACTION_RESPONSE_PAYLOAD_TYPE,
+  type ClientManifest,
+} from "../../plugins/tier1/types";
 import {
   decodePluginInfo,
   evaluateTrust,
@@ -287,6 +293,51 @@ describe("decodeInteractionResponse + applyInteractionResponse", () => {
       content: "New",
     }, null);
     expect(next.pluginCards[0].content).toBe("New");
+  });
+});
+
+describe("manifestPermitsResponse capability gate", () => {
+  const manifestWith = (caps: Capability[]): ClientManifest => ({
+    schema_version: 1,
+    capabilities: caps,
+  });
+
+  it("accepts either Modals or Components for a show-modal card", () => {
+    expect(acceptedCapabilitiesFor("show-modal")).toEqual([
+      Capability.Modals,
+      Capability.Components,
+    ]);
+  });
+
+  it("permits a show-modal card from a Components-only plugin", () => {
+    // Regression: plugins built with InteractionResponse::message
+    // (e.g. fancy-info-card, fancy-gallery-showcase) emit a show-modal
+    // response while only declaring Components.  These must not be
+    // silently dropped by the trust/capability gate.
+    const manifest = manifestWith([
+      Capability.SlashCommands,
+      Capability.Components,
+    ]);
+    expect(manifestPermitsResponse(manifest, "show-modal")).toBe(true);
+  });
+
+  it("permits a show-modal from a Modals-only plugin", () => {
+    const manifest = manifestWith([Capability.Modals]);
+    expect(manifestPermitsResponse(manifest, "show-modal")).toBe(true);
+  });
+
+  it("refuses a show-modal when the plugin declares neither capability", () => {
+    const manifest = manifestWith([Capability.Notifications]);
+    expect(manifestPermitsResponse(manifest, "show-modal")).toBe(false);
+  });
+
+  it("still gates chat-message on Components", () => {
+    expect(
+      manifestPermitsResponse(manifestWith([Capability.Components]), "chat-message"),
+    ).toBe(true);
+    expect(
+      manifestPermitsResponse(manifestWith([Capability.Modals]), "chat-message"),
+    ).toBe(false);
   });
 });
 

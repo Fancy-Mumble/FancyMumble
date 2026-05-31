@@ -38,70 +38,66 @@ export async function loadServerTrust(
   return { ...(all[GLOBAL_KEY] ?? {}), ...(all[keyFor(serverId)] ?? {}) };
 }
 
-/** Persist a trust record that applies to every server ("always allow"). */
-export async function saveGlobalTrustRecord(
-  pluginName: string,
-  record: TrustRecord,
-): Promise<void> {
-  const store = await getStore();
-  const all = (await store.get<GlobalTrustMap>(STORE_KEY)) ?? {};
-  all[GLOBAL_KEY] = { ...(all[GLOBAL_KEY] ?? {}), [pluginName]: record };
-  await store.set(STORE_KEY, all);
-}
-
-/** Persist a single trust record. */
-export async function saveTrustRecord(
-  serverId: string | null,
-  pluginName: string,
-  record: TrustRecord,
-): Promise<void> {
-  const store = await getStore();
-  const all = (await store.get<GlobalTrustMap>(STORE_KEY)) ?? {};
-  const k = keyFor(serverId);
-  all[k] = { ...(all[k] ?? {}), [pluginName]: record };
-  await store.set(STORE_KEY, all);
-}
-
 /** One `pluginName -> record` pair for the bulk writers. */
 export interface NamedTrustRecord {
   readonly pluginName: string;
   readonly record: TrustRecord;
 }
 
-/** Persist a batch of trust records in a single read-modify-write.
- *  Bulk "Allow all" / "Block all" actions go through this so they
- *  don't race the in-memory `tauri-plugin-store` cache (parallel
- *  `saveTrustRecord` calls otherwise clobber each other and most of
- *  the writes silently reject). */
-export async function saveTrustRecords(
-  serverId: string | null,
+/** Single read-modify-write that merges `records` into the bucket keyed by
+ *  `bucketKey` (server id or `GLOBAL_KEY`).  All four public save helpers
+ *  funnel through here so they cannot race each other on the in-memory
+ *  tauri-plugin-store cache and so the explicit save() — needed because
+ *  autoSave is debounced and gets lost on app close — happens in one
+ *  place. */
+async function writeRecords(
+  bucketKey: string,
   records: readonly NamedTrustRecord[],
 ): Promise<void> {
   if (records.length === 0) return;
   const store = await getStore();
   const all = (await store.get<GlobalTrustMap>(STORE_KEY)) ?? {};
-  const k = keyFor(serverId);
-  const bucket: ServerTrustMap = { ...(all[k] ?? {}) };
+  const bucket: ServerTrustMap = { ...all[bucketKey] };
   for (const { pluginName, record } of records) {
     bucket[pluginName] = record;
   }
-  all[k] = bucket;
+  all[bucketKey] = bucket;
   await store.set(STORE_KEY, all);
+  await store.save();
+}
+
+/** Persist a trust record that applies to every server ("always allow"). */
+export async function saveGlobalTrustRecord(
+  pluginName: string,
+  record: TrustRecord,
+): Promise<void> {
+  return saveGlobalTrustRecords([{ pluginName, record }]);
+}
+
+/** Persist a single trust record scoped to one server. */
+export async function saveTrustRecord(
+  serverId: string | null,
+  pluginName: string,
+  record: TrustRecord,
+): Promise<void> {
+  return saveTrustRecords(serverId, [{ pluginName, record }]);
+}
+
+/** Persist a batch of trust records scoped to one server.  Bulk
+ *  "Allow all" / "Block all" actions go through here so they don't race
+ *  parallel single-record writes against the plugin-store cache. */
+export async function saveTrustRecords(
+  serverId: string | null,
+  records: readonly NamedTrustRecord[],
+): Promise<void> {
+  return writeRecords(keyFor(serverId), records);
 }
 
 /** Batch equivalent of {@link saveGlobalTrustRecord}. */
 export async function saveGlobalTrustRecords(
   records: readonly NamedTrustRecord[],
 ): Promise<void> {
-  if (records.length === 0) return;
-  const store = await getStore();
-  const all = (await store.get<GlobalTrustMap>(STORE_KEY)) ?? {};
-  const bucket: ServerTrustMap = { ...(all[GLOBAL_KEY] ?? {}) };
-  for (const { pluginName, record } of records) {
-    bucket[pluginName] = record;
-  }
-  all[GLOBAL_KEY] = bucket;
-  await store.set(STORE_KEY, all);
+  return writeRecords(GLOBAL_KEY, records);
 }
 
 /** Drop a trust record so the next registry refresh re-prompts.
@@ -128,4 +124,5 @@ export async function revokeTrustRecord(
   }
 
   await store.set(STORE_KEY, all);
+  await store.save();
 }

@@ -28,6 +28,10 @@ struct PluginAdminEntryPayload {
 struct PluginAdminListPayload {
     plugins: Vec<PluginAdminEntryPayload>,
     plugins_dir: Option<String>,
+    /// Plugin ABI version the connected server's host was compiled
+    /// against.  The UI compares this with a marketplace plugin's
+    /// required ABI version to gate installs.
+    host_abi_version: Option<u32>,
 }
 
 #[derive(Serialize, Clone)]
@@ -72,6 +76,7 @@ impl HandleMessage for mumble_tcp::FancyPluginAdminList {
             PluginAdminListPayload {
                 plugins,
                 plugins_dir: self.plugins_dir.clone(),
+                host_abi_version: self.host_abi_version,
             },
         );
     }

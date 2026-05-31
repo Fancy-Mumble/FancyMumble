@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import GB from "country-flag-icons/react/3x2/GB";
 import DE from "country-flag-icons/react/3x2/DE";
 import FR from "country-flag-icons/react/3x2/FR";
-import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "../../i18n";
+import { BUILT_IN_LANGUAGES, type BuiltInLanguage } from "../../i18n";
 import type { TimeFormat, DateFormat, NumberFormat } from "../../types";
 import { Autocomplete, type AutocompleteOption } from "../../components/elements/Autocomplete";
 import { Toggle } from "./SharedControls";
@@ -12,7 +12,7 @@ import styles from "./SettingsPage.module.css";
 /** Native names for the supported UI languages (always shown in the
  *  language itself so users can find their language regardless of
  *  the current UI locale). */
-const NATIVE_LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
+const NATIVE_LANGUAGE_NAMES: Record<BuiltInLanguage, string> = {
   en: "English",
   de: "Deutsch",
   fr: "Français",
@@ -22,7 +22,7 @@ const NATIVE_LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
  *  we pick the language's origin country (English -> UK, German -> DE).
  *  Typed against `typeof GB` so any future language must use the same
  *  FlagComponent signature country-flag-icons exposes. */
-const LANGUAGE_FLAGS: Record<SupportedLanguage, typeof GB> = {
+const LANGUAGE_FLAGS: Record<BuiltInLanguage, typeof GB> = {
   en: GB,
   de: DE,
   fr: FR,
@@ -113,7 +113,7 @@ export function LocalizationPanel({
   onNumberFormatChange,
 }: LocalizationPanelProps) {
   const { t, i18n } = useTranslation("settings");
-  const currentLanguage = (i18n.resolvedLanguage ?? "en") as SupportedLanguage;
+  const currentLanguage = (i18n.resolvedLanguage ?? "en") as BuiltInLanguage;
   const locale = i18n.resolvedLanguage ?? "en";
 
   // Stable sample date so the previews don't tick on every render.
@@ -122,9 +122,9 @@ export function LocalizationPanel({
   // Build the Autocomplete options for the language picker. Each option
   // carries the flag SVG as a startAdornment so it shows in the dropdown
   // AND (thanks to the extended Autocomplete) next to the selected value.
-  const languageOptions = useMemo<AutocompleteOption<SupportedLanguage>[]>(
+  const languageOptions = useMemo<AutocompleteOption<BuiltInLanguage>[]>(
     () =>
-      SUPPORTED_LANGUAGES.map((lng) => {
+      BUILT_IN_LANGUAGES.map((lng) => {
         const Flag = LANGUAGE_FLAGS[lng];
         return {
           key: lng,
@@ -140,7 +140,7 @@ export function LocalizationPanel({
     languageOptions.find((o) => o.value === currentLanguage) ?? null;
 
   const handleLanguageChange = useCallback(
-    (opt: AutocompleteOption<SupportedLanguage> | null) => {
+    (opt: AutocompleteOption<BuiltInLanguage> | null) => {
       if (opt) void i18n.changeLanguage(opt.value);
     },
     [i18n],

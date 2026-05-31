@@ -175,8 +175,43 @@ fn version_updates_state() {
     assert_eq!(state.server.version_info.version_v2, Some(42));
     drop(state);
 
-    // Version handler emits no events.
-    assert!(emitter.events().is_empty());
+    // Version handler emits a `server-version` event so the frontend can
+    // refresh its cached `serverFancyVersion` reactively.
+    assert_eq!(emitter.event_names(), vec!["server-version"]);
+}
+
+#[test]
+fn version_without_fancy_preserves_known_fancy_version() {
+    let (ctx, _emitter) = make_ctx();
+
+    // A Fancy server announces its extension version.
+    let fancy = mumble_tcp::Version {
+        release: Some("Fancy Mumble".into()),
+        fancy_version: Some(mumble_protocol::state::fancy_version_encode(0, 4, 0)),
+        ..Default::default()
+    };
+    fancy.handle(&ctx);
+
+    // A later standard `Version` message omits `fancy_version`.  It must
+    // NOT erase the value learned above, otherwise the UI would wrongly
+    // gate Fancy-only features off for the rest of the session.
+    let standard = mumble_tcp::Version {
+        release: Some("Mumble 1.5".into()),
+        fancy_version: None,
+        ..Default::default()
+    };
+    standard.handle(&ctx);
+
+    let state = ctx.shared.lock().unwrap();
+    assert_eq!(
+        state.server.fancy_version,
+        Some(mumble_protocol::state::fancy_version_encode(0, 4, 0)),
+        "a later Version without fancy_version must not clobber a known value"
+    );
+    assert_eq!(
+        state.server.version_info.fancy_version,
+        Some(mumble_protocol::state::fancy_version_encode(0, 4, 0))
+    );
 }
 
 // -- ServerSync ----------------------------------------------------

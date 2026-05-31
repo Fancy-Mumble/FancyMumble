@@ -94,6 +94,17 @@ pub struct PluginVersionEntry {
     pub min_fancy_server_version: Option<String>,
     #[serde(default)]
     pub changelog: Option<String>,
+    /// Plugin ABI version this release targets
+    /// (`mumble_plugin_api::PLUGIN_ABI_VERSION`).  `None` for legacy
+    /// marketplace entries that predate ABI tagging.
+    #[serde(default)]
+    pub abi_version: Option<u32>,
+    /// Set by the marketplace when the request carried a
+    /// `server_abi_version`: true when this release's `abi_version`
+    /// matches the server, false when it is known-incompatible.  `None`
+    /// when compatibility could not be determined.
+    #[serde(default)]
+    pub compatible: Option<bool>,
 }
 
 /// One entry in the marketplace search result list.  Mirrors the
@@ -112,6 +123,13 @@ pub struct MarketplacePlugin {
     pub homepage: Option<String>,
     #[serde(default)]
     pub icon_url: Option<String>,
+    /// Wide banner shown behind the plugin header.  `None` falls back to
+    /// a deterministic gradient derived from the id.
+    #[serde(default)]
+    pub banner_url: Option<String>,
+    /// Screenshot / preview image URLs shown in the gallery strip.
+    #[serde(default)]
+    pub gallery: Vec<String>,
     #[serde(default)]
     pub manifest_url: Option<String>,
     #[serde(default)]
@@ -126,8 +144,33 @@ pub struct MarketplacePlugin {
     pub tags: Vec<String>,
     #[serde(default)]
     pub readme: Option<String>,
+    /// SPDX licence identifier (e.g. "MIT").  `None` for legacy entries.
+    #[serde(default)]
+    pub license: Option<String>,
+    /// Canonical source-repository URL.
+    #[serde(default)]
+    pub source_url: Option<String>,
+    /// Server `.ini` configuration snippet shown under "Configuration".
+    #[serde(default)]
+    pub ini_snippet: Option<String>,
+    /// Total number of ratings used to compute `rating`.
+    #[serde(default)]
+    pub rating_count: Option<u64>,
+    /// Per-star tally `[1★, 2★, 3★, 4★, 5★]`; empty for legacy entries.
+    #[serde(default)]
+    pub rating_histogram: Vec<u64>,
     #[serde(default)]
     pub versions: Vec<PluginVersionEntry>,
+    /// ABI version of the latest (default-install) release, echoed by
+    /// the marketplace for convenience so the list view can badge
+    /// compatibility without walking `versions`.
+    #[serde(default)]
+    pub abi_version: Option<u32>,
+    /// Whether the latest release is compatible with the
+    /// `server_abi_version` supplied on the request.  `None` when not
+    /// evaluated.
+    #[serde(default)]
+    pub compatible: Option<bool>,
 }
 
 /// Paginated index returned by `GET /plugins`.
@@ -165,12 +208,14 @@ pub(crate) async fn fetch_marketplace_index(
     query: Option<String>,
     page: Option<u32>,
     base_url: Option<String>,
+    server_abi_version: Option<u32>,
 ) -> Result<MarketplaceIndex, String> {
     let url = format!(
-        "{}/plugins?query={}&page={}",
+        "{}/plugins?query={}&page={}{}",
         resolve_marketplace_base(base_url.as_deref()),
         urlencoding_safe(query.as_deref().unwrap_or("")),
-        page.unwrap_or(1)
+        page.unwrap_or(1),
+        abi_query_suffix(server_abi_version),
     );
     let resp = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
@@ -196,11 +241,16 @@ pub(crate) async fn fetch_marketplace_index(
 pub(crate) async fn fetch_marketplace_plugin(
     plugin_id: String,
     base_url: Option<String>,
+    server_abi_version: Option<u32>,
 ) -> Result<MarketplacePlugin, String> {
     let url = format!(
-        "{}/plugins/{}",
+        "{}/plugins/{}{}",
         resolve_marketplace_base(base_url.as_deref()),
-        urlencoding_safe(&plugin_id)
+        urlencoding_safe(&plugin_id),
+        match server_abi_version {
+            Some(v) => format!("?server_abi_version={v}"),
+            None => String::new(),
+        },
     );
     let resp = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
@@ -247,6 +297,15 @@ pub(crate) async fn fetch_plugin_manifest_sha256(manifest_url: String) -> Result
         out.push_str(&format!("{b:02x}"));
     }
     Ok(out)
+}
+
+/// Build the `&server_abi_version=N` query suffix (empty when unknown).
+/// Lets the marketplace flag per-version compatibility and warnings.
+fn abi_query_suffix(server_abi_version: Option<u32>) -> String {
+    match server_abi_version {
+        Some(v) => format!("&server_abi_version={v}"),
+        None => String::new(),
+    }
 }
 
 /// Bare-bones URL component encoding.  Avoids pulling in another dep

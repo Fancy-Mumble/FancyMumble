@@ -14,11 +14,13 @@ interface SplitButtonProps {
    *  `onSelect` directly without opening the menu). */
   readonly options: readonly [SplitButtonOption, ...SplitButtonOption[]];
   readonly variant?: "primary" | "danger" | "secondary";
+  /** Which side the dropdown opens toward. Defaults to "up" (above the button). */
+  readonly dropDirection?: "up" | "down";
 }
 
 /** GitHub-style split button: a primary action on the left and a
  *  chevron on the right that reveals a dropdown of all options. */
-export function SplitButton({ options, variant = "primary" }: SplitButtonProps) {
+export function SplitButton({ options, variant = "primary", dropDirection = "up" }: SplitButtonProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [defaultOpt] = options;
@@ -63,7 +65,7 @@ export function SplitButton({ options, variant = "primary" }: SplitButtonProps) 
       </button>
 
       {open && (
-        <div className={styles.menu} role="menu">
+        <div className={`${styles.menu} ${dropDirection === "down" ? styles.menuDown : ""}`} role="menu">
           {options.map((opt) => (
             <button
               key={opt.label}

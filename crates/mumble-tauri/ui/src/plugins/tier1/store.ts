@@ -207,39 +207,49 @@ export function panelKey(pluginName: string, panelId: string): string {
 // Inbound: handle an InteractionResponse and produce a state patch
 // ---------------------------------------------------------------------------
 
-/** Capability a plugin must declare in its manifest before the client
- *  honours an `InteractionResponse` of the given kind.  Returns null for
- *  kinds that are not capability-gated.  Capabilities are otherwise
- *  advisory: the trust prompt surfaces them, but only this mapping makes
- *  a plugin's *declared* surface match what it is actually allowed to
- *  drive at runtime. */
-export function requiredCapabilityFor(
+/** Capabilities a plugin may declare in its manifest to be allowed to
+ *  emit an `InteractionResponse` of the given kind.  The plugin needs to
+ *  have declared *at least one* of the returned capabilities; an empty
+ *  array means the kind is not capability-gated.  Capabilities are
+ *  otherwise advisory: the trust prompt surfaces them, but only this
+ *  mapping makes a plugin's *declared* surface match what it is actually
+ *  allowed to drive at runtime.
+ *
+ *  `show-modal` backs two distinct surfaces that share one response
+ *  kind: a true input modal (built with `show_modal!`, gated by
+ *  `Modals`) and a plain floating display card (built with the
+ *  `InteractionResponse::message` constructor, which only needs
+ *  `Components`).  Accepting either capability lets component-only
+ *  plugins surface display cards without over-declaring `Modals`. */
+export function acceptedCapabilitiesFor(
   kind: ResponseKind["kind"],
-): Capability | null {
+): readonly Capability[] {
   switch (kind) {
     case "show-modal":
-      return Capability.Modals;
+      return [Capability.Modals, Capability.Components];
     case "toast":
-      return Capability.Notifications;
+      return [Capability.Notifications];
     case "update-panel":
-      return Capability.SettingsPanel;
+      return [Capability.SettingsPanel];
     case "chat-message":
     case "update-message":
-      return Capability.Components;
+      return [Capability.Components];
   }
 }
 
 /** True when a trusted plugin's manifest permits emitting a response of
- *  `kind`.  A plugin must have declared the capability backing the
- *  surface it is trying to drive; a manifest that omits it (e.g. the
- *  empty `{}` manifest that auto-trusts with no prompt) is refused. */
+ *  `kind`.  A plugin must have declared at least one of the capabilities
+ *  backing the surface it is trying to drive; a manifest that omits them
+ *  all (e.g. the empty `{}` manifest that auto-trusts with no prompt) is
+ *  refused. */
 export function manifestPermitsResponse(
   manifest: ClientManifest,
   kind: ResponseKind["kind"],
 ): boolean {
-  const cap = requiredCapabilityFor(kind);
-  if (cap === null) return true;
-  return (manifest.capabilities ?? []).includes(cap);
+  const accepted = acceptedCapabilitiesFor(kind);
+  if (accepted.length === 0) return true;
+  const declared = manifest.capabilities ?? [];
+  return accepted.some((cap) => declared.includes(cap));
 }
 
 /** Pure reducer: apply an inbound `InteractionResponse` to the slice
