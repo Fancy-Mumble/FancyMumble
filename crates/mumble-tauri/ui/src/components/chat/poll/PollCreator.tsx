@@ -9,6 +9,7 @@
  * Produces a JSON payload to send via Mumble plugin messages.
  */
 
+import { CloseIcon, CircleIcon, SquareIcon } from "../../../icons";
 import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./PollCreator.module.css";
@@ -105,7 +106,7 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
         <div className={styles.header}>
           <h3 className={styles.title}>{t("poll.creator.title")}</h3>
           <button className={styles.closeBtn} onClick={onClose}>
-            ✕
+            <CloseIcon width={16} height={16} />
           </button>
         </div>
 
@@ -126,7 +127,7 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
           {options.map((opt, i) => (
             <div key={i} className={styles.optionRow}>
               <span className={styles.optionBullet}>
-                {multiple ? "☐" : "○"}
+                {multiple ? <SquareIcon width={14} height={14} /> : <CircleIcon width={14} height={14} />}
               </span>
               <input
                 className={styles.input}
@@ -141,7 +142,7 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
                   onClick={() => removeOption(i)}
                   title={t("poll.creator.removeOption")}
                 >
-                  ✕
+                  <CloseIcon width={14} height={14} />
                 </button>
               )}
             </div>

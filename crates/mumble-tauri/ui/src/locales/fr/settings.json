@@ -753,9 +753,12 @@
     "disabled": "Désactivé",
     "enable": "Activer le plugin",
     "disable": "Désactiver le plugin",
+    "reload": "Recharger",
+    "reloadTitle": "Recharger le plugin pour appliquer les changements de configuration sans redémarrer le serveur.",
     "uninstall": "Désinstaller le plugin",
     "marketplaceBadge": "Marketplace",
     "staleBadge": "Redémarrage en attente",
+    "brokenBadge": "Défectueux",
     "confirmUninstall": "Désinstaller le plugin \"{{name}}\" ? Il sera supprimé du serveur.",
     "unknownError": "Erreur inconnue"
   },
@@ -778,7 +781,19 @@
     "connectToInstall": "Connectez-vous à un serveur avec des droits administrateur pour installer ce plugin.",
     "homepage": "Site web",
     "capabilities": "Capacités",
-    "versions": "Versions"
+    "versions": "Versions",
+    "tags": "Étiquettes",
+    "gallery": "Captures d'écran",
+    "license": "Licence",
+    "sourceCode": "Code source",
+    "configuration": "Configuration",
+    "openInStore": "Ouvrir dans le store",
+    "openInStoreTitle": "Ouvrir la page de ce plugin dans votre navigateur",
+    "ratingsReviews": "Notes et avis",
+    "noRatings": "Pas encore de note.",
+    "ratingsCount_one": "{{count}} note",
+    "ratingsCount_other": "{{count}} notes",
+    "minFancyServer": "Serveur Fancy ≥ {{version}}"
   },
   "plugins": {
     "empty": "Aucun plugin n'est chargé sur le serveur connecté.",

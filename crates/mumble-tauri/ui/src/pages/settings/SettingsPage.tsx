@@ -38,6 +38,7 @@ import {
 import ChannelsAndRolesPanel from "../../components/onboarding/ChannelsAndRolesPanel";
 import { isOnboardingSupported } from "../../components/onboarding/onboardingStore";
 import PluginsPanel from "./PluginsPanel";
+import { isMobile } from "../../utils/platform";
 import styles from "./SettingsPage.module.css";
 
 // -- Types & constants ----------------------------------------------
@@ -113,7 +114,9 @@ export default function SettingsPage() {
   const serverFancyVersion = useAppStore((s) => s.serverFancyVersion);
   const onboardingSupported = isOnboardingSupported(serverFancyVersion);
   const hasPlugins = useAppStore((s) => s.pluginRegistry.length > 0);
-  const BASE_TABS = buildTabs(t as (key: string) => string, hasPlugins);
+  const BASE_TABS = buildTabs(t as (key: string) => string, hasPlugins).filter(
+    (tab) => !isMobile || tab.id !== "shortcuts",
+  );
   const TABS: TabDef<Tab>[] = onboardingSupported
     ? [
         ...BASE_TABS.slice(0, BASE_TABS.length - 1),

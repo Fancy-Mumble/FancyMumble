@@ -83,7 +83,6 @@ pub(crate) fn load_signal_bridge(
             ?candidates,
             "signal bridge library not found; SignalV1 channels will not work"
         );
-        return None;
     }
 
     #[cfg(not(target_os = "android"))]
@@ -101,14 +100,15 @@ pub(crate) fn load_signal_bridge(
         match SignalBridge::new(lib_path, own_cert_hash) {
             Ok(bridge) => {
                 info!(?lib_path, "loaded signal bridge");
-                Some(Arc::new(bridge))
+                return Some(Arc::new(bridge));
             }
             Err(e) => {
                 warn!(?lib_path, "failed to load signal bridge: {e}");
-                None
             }
         }
     }
+
+    None
 }
 
 // -- Ensure bridge is loaded (PchatState methods) ---------------------

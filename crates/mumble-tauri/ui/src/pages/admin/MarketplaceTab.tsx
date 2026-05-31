@@ -4,9 +4,11 @@ import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
-  SearchIcon, DownloadIcon, RefreshCwIcon, StoreIcon, StarIcon,
+  SearchIcon, DownloadIcon, RefreshCwIcon, StoreIcon, StarIcon, CheckIcon,
 } from "../../icons";
+import type { ServerPluginEntry } from "./ServerPluginsTab";
 import { useAppStore } from "../../store";
+import { bannerGradient, resolveMarketplaceImage } from "../../utils/marketplaceMedia";
 import { getPreferences, updatePreferences } from "../../preferencesStorage";
 import { isPluginAdminSupported } from "./index";
 import styles from "./AdminPanel.module.css";
@@ -25,6 +27,10 @@ interface MarketplacePlugin {
   rating?: number | null;
   official?: boolean;
   capabilities?: string[];
+  /** Plugin ABI version of the latest release (null for legacy entries). */
+  abi_version?: number | null;
+  /** Whether the latest release matches the connected server's host ABI. */
+  compatible?: boolean | null;
 }
 
 interface MarketplaceIndex {
@@ -64,6 +70,7 @@ export function MarketplaceTab() {
   const { t } = useTranslation("settings");
   const navigate = useNavigate();
   const serverFancyVersion = useAppStore((s) => s.serverFancyVersion);
+  const serverHostAbiVersion = useAppStore((s) => s.serverHostAbiVersion);
   const canInstall = isPluginAdminSupported(serverFancyVersion);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -73,6 +80,7 @@ export function MarketplaceTab() {
   const [error, setError] = useState<string | null>(null);
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [lastAck, setLastAck] = useState<PluginAckPayload | null>(null);
+  const [installedPlugins, setInstalledPlugins] = useState<ServerPluginEntry[]>([]);
   const [baseUrl, setBaseUrl] = useState(PROD_URL);
   const [isDevMode, setIsDevMode] = useState(false);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -97,10 +105,28 @@ export function MarketplaceTab() {
       if (e.payload.verb === "install") {
         setLastAck(e.payload);
         setInstallingId(null);
+        if (e.payload.ok) {
+          invoke("request_server_plugins").catch(() => { /* surfaced elsewhere */ });
+        }
       }
     });
     return () => { off.then((f) => f()); };
   }, []);
+
+  // Learn the connected server's plugin host ABI version so the
+  // marketplace can flag / block incompatible plugins.  The server
+  // emits it on every plugin-admin-list; requesting the inventory here
+  // makes the value available even if the Server Plugins tab was never
+  // opened this session.
+  useEffect(() => {
+    if (!canInstall) return;
+    const off = listen<{ plugins: ServerPluginEntry[]; host_abi_version: number | null }>("plugin-admin-list", (e) => {
+      useAppStore.setState({ serverHostAbiVersion: e.payload.host_abi_version ?? null });
+      setInstalledPlugins(e.payload.plugins);
+    });
+    invoke("request_server_plugins").catch(() => { /* surfaced elsewhere */ });
+    return () => { off.then((f) => f()); };
+  }, [canInstall]);
 
   const fetchIndex = useCallback(async () => {
     setLoading(true);
@@ -110,6 +136,7 @@ export function MarketplaceTab() {
         query: debouncedQuery,
         page,
         baseUrl: baseUrl !== PROD_URL ? baseUrl : null,
+        serverAbiVersion: serverHostAbiVersion,
       });
       setResults(index.plugins);
     } catch (e) {
@@ -117,7 +144,7 @@ export function MarketplaceTab() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedQuery, page, baseUrl]);
+  }, [debouncedQuery, page, baseUrl, serverHostAbiVersion]);
 
   useEffect(() => {
     if (!prefsLoaded) return;
@@ -129,18 +156,32 @@ export function MarketplaceTab() {
       setError(t("marketplace.installUnsupported"));
       return;
     }
+    if (plugin.compatible === false) {
+      setError(t("marketplace.incompatibleAbi", {
+        defaultValue: "This plugin targets a different plugin API version than the server and cannot be installed.",
+      }));
+      return;
+    }
     if (!plugin.manifest_url) {
       setError(t("marketplace.missingManifestUrl"));
       return;
     }
     setInstallingId(plugin.id);
     setLastAck(null);
+    const manifestUrl = plugin.manifest_url;
     try {
+      // Pin the manifest hash we reviewed (see PluginPage.handleInstall).
+      let expectedSha256: string | null = null;
+      try {
+        expectedSha256 = await invoke<string>("fetch_plugin_manifest_sha256", { manifestUrl });
+      } catch (e) {
+        console.warn("[marketplace] manifest hash pin skipped:", e);
+      }
       await invoke("install_server_plugin", {
         marketplaceId: plugin.id,
         version: plugin.version,
-        manifestUrl: plugin.manifest_url,
-        expectedSha256: null,
+        manifestUrl,
+        expectedSha256,
       });
     } catch (err) {
       setError(String(err));
@@ -214,14 +255,20 @@ export function MarketplaceTab() {
         </div>
       ) : (
         <div className={mk.grid}>
-          {results.map((p) => (
+          {results.map((p) => {
+            const iconSrc = resolveMarketplaceImage(p.icon_url, baseUrl === PROD_URL ? null : baseUrl);
+            const isInstalled = installedPlugins.some((ip) => ip.marketplace_id === p.id);
+            return (
             <article key={p.id} className={mk.card}>
               <header className={mk.cardHeader}>
-                {p.icon_url ? (
-                  <img className={mk.cardIcon} src={p.icon_url} alt="" />
+                {iconSrc ? (
+                  <img className={mk.cardIcon} src={iconSrc} alt="" />
                 ) : (
-                  <div className={mk.cardIcon}>
-                    <StoreIcon width={20} height={20} />
+                  <div
+                    className={mk.cardIconFallback}
+                    style={{ background: bannerGradient(p.id || p.name) }}
+                  >
+                    {p.name.charAt(0).toUpperCase()}
                   </div>
                 )}
                 <div className={mk.cardTitleCol}>
@@ -241,6 +288,22 @@ export function MarketplaceTab() {
                   </h3>
                   <div className={mk.cardSubtitle}>
                     <span>v{p.version}</span>
+                    {isInstalled && (
+                      <span className={mk.installedBadge}>
+                        <CheckIcon width={10} height={10} />
+                        {t("marketplace.installed", { defaultValue: "Installed" })}
+                      </span>
+                    )}
+                    {p.abi_version != null && (
+                      <span
+                        className={p.compatible === false ? mk.abiBadgeBad : mk.abiBadge}
+                        title={p.compatible === false
+                          ? t("marketplace.incompatibleAbi", { defaultValue: "This plugin targets a different plugin API version than the server and cannot be installed." })
+                          : undefined}
+                      >
+                        {t("marketplace.abiVersion", { defaultValue: "API v{{version}}", version: p.abi_version })}
+                      </span>
+                    )}
                     {p.author && <span>{t("marketplace.byAuthor", { author: p.author })}</span>}
                     {p.rating != null && (
                       <span className={mk.rating}>
@@ -261,17 +324,33 @@ export function MarketplaceTab() {
                   ))}
                 </div>
               )}
+              {p.compatible === false && (
+                <p className={mk.incompatNote}>
+                  {t("marketplace.incompatibleAbi", { defaultValue: "This plugin targets a different plugin API version than the server and cannot be installed." })}
+                </p>
+              )}
               <footer className={mk.cardFooter}>
                 <button
                   type="button"
-                  className={mk.installBtn}
+                  className={isInstalled ? mk.installedBtn : mk.installBtn}
                   onClick={() => handleInstall(p)}
-                  disabled={installingId === p.id || !canInstall}
+                  disabled={installingId === p.id || !canInstall || p.compatible === false || isInstalled}
+                  title={p.compatible === false
+                    ? t("marketplace.incompatibleAbi", { defaultValue: "This plugin targets a different plugin API version than the server and cannot be installed." })
+                    : isInstalled
+                      ? t("marketplace.alreadyInstalled", { defaultValue: "Already installed on this server" })
+                      : undefined}
                 >
-                  <DownloadIcon width={14} height={14} />
+                  {isInstalled ? (
+                    <CheckIcon width={14} height={14} />
+                  ) : (
+                    <DownloadIcon width={14} height={14} />
+                  )}
                   {installingId === p.id
                     ? t("marketplace.installing")
-                    : t("marketplace.install")}
+                    : isInstalled
+                      ? t("marketplace.installed", { defaultValue: "Installed" })
+                      : t("marketplace.install")}
                 </button>
                 {p.downloads != null && (
                   <span className={mk.downloads}>
@@ -280,7 +359,8 @@ export function MarketplaceTab() {
                 )}
               </footer>
             </article>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

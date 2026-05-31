@@ -114,6 +114,14 @@ interface LatencyPoint {
   rtt: number;
 }
 
+interface CspViolationEntry {
+  readonly id: number;
+  readonly directive: string;
+  readonly blockedUri: string;
+  readonly source: string;
+  readonly disposition: string;
+}
+
 function latencyColor(rtt: number): string {
   if (rtt < 50) return "#22c55e";
   if (rtt < 120) return "#eab308";
@@ -229,6 +237,8 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
   const [debugStats, setDebugStats] = useState<DebugStats | null>(null);
   const [audioSettings, setAudioSettings] = useState<AudioSettings | null>(null);
   const [welcomeText, setWelcomeText] = useState<string | null>(null);
+  const [cspViolations, setCspViolations] = useState<CspViolationEntry[]>([]);
+  const nextCspId = useRef(0);
   const { t } = useTranslation("server");
 
   // Load server info and developer-mode preference on mount.
@@ -278,6 +288,29 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
       .then(setDebugStats)
       .catch((e) => console.error("get_debug_stats error:", e));
   }, []);
+
+  // Capture CSP violations while in developer mode.
+  useEffect(() => {
+    if (!devMode) return;
+
+    const MAX_ENTRIES = 100;
+    const handler = (ev: SecurityPolicyViolationEvent) => {
+      setCspViolations((prev) => {
+        const entry: CspViolationEntry = {
+          id: nextCspId.current++,
+          directive: ev.violatedDirective,
+          blockedUri: ev.blockedURI,
+          source: ev.sourceFile ? `${ev.sourceFile}:${ev.lineNumber}` : "(inline)",
+          disposition: ev.disposition,
+        };
+        const next = [entry, ...prev];
+        return next.length > MAX_ENTRIES ? next.slice(0, MAX_ENTRIES) : next;
+      });
+    };
+
+    document.addEventListener("securitypolicyviolation", handler);
+    return () => document.removeEventListener("securitypolicyviolation", handler);
+  }, [devMode]);
 
   return (
     <aside className={styles.panel}>
@@ -521,6 +554,34 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
                   </Accordion>
                 );
               })()}
+
+              <Accordion title={t("infoPanel.accordionCspViolations", { defaultValue: "CSP Violations" })}>
+                <div className={styles.devHeader} style={{ marginBottom: "6px" }}>
+                  <span className={styles.debugLabel}>
+                    {cspViolations.length === 0
+                      ? t("infoPanel.cspNoViolations", { defaultValue: "No violations recorded." })
+                      : t("infoPanel.cspViolationCount", { count: cspViolations.length, defaultValue: "{{count}} violation(s)" })}
+                  </span>
+                  {cspViolations.length > 0 && (
+                    <button
+                      type="button"
+                      className={styles.refreshBtn}
+                      onClick={() => setCspViolations([])}
+                      title={t("infoPanel.cspClearTitle", { defaultValue: "Clear violations" })}
+                    >
+                      <CloseIcon width={12} height={12} />
+                    </button>
+                  )}
+                </div>
+                {cspViolations.map((v) => (
+                  <div key={v.id} className={styles.debugGrid} style={{ marginBottom: "4px", padding: "4px 0", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                    <DebugRow label="directive" value={v.directive} />
+                    <DebugRow label="blocked" value={v.blockedUri || "(empty)"} />
+                    <DebugRow label="source" value={v.source} />
+                    <DebugRow label="disposition" value={v.disposition} />
+                  </div>
+                ))}
+              </Accordion>
             </section>
           )}
         </>

@@ -248,6 +248,7 @@ pub struct AppState {
     /// (`popout-stream-<id>`).  Value is the broadcaster session, used to
     /// emit `stream-popout-state opened:false` when the OS destroys the
     /// window (any close path - Alt+F4, X button, context menu, app exit).
+    #[cfg(not(target_os = "android"))]
     pub(crate) popout_stream_sessions: Mutex<HashMap<String, u32>>,
     /// Channel/session context for the (single) drawing-overlay window.
     /// Read by the overlay via `take_drawing_overlay_context` once it
@@ -257,6 +258,7 @@ pub struct AppState {
     /// Background task that follows the shared window's screen rect
     /// (Windows only) and repositions the desktop overlay accordingly.
     /// Aborted when the overlay closes.
+    #[cfg(not(target_os = "android"))]
     pub(crate) draw_overlay_tracker: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
@@ -281,8 +283,10 @@ impl AppState {
             popout_images: Mutex::new(HashMap::new()),
             popout_streams: Mutex::new(HashMap::new()),
             popout_dms: Mutex::new(HashMap::new()),
+            #[cfg(not(target_os = "android"))]
             popout_stream_sessions: Mutex::new(HashMap::new()),
             draw_overlay_context: Mutex::new(None),
+            #[cfg(not(target_os = "android"))]
             draw_overlay_tracker: Mutex::new(None),
         }
     }

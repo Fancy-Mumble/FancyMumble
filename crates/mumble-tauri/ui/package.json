@@ -47,6 +47,7 @@
     "i18next": "^24.0.0",
     "i18next-browser-languagedetector": "^8.0.0",
     "katex": "^0.16.11",
+    "language-flag-colors": "^3.2.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.11.0",
     "marked": "^18.0.4",

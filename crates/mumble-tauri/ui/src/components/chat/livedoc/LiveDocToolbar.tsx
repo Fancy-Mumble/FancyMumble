@@ -17,12 +17,19 @@ import {
   AlignRightIcon,
   CheckboxIcon,
   ChevronDownIcon,
+  CloseIcon,
   Grid2x2Icon,
   ImageIcon,
+  IndentIcon,
+  LinkIcon,
+  ListIcon,
   MinusIcon,
+  OutdentIcon,
   PaintBucketIcon,
   PaletteIcon,
+  PilcrowIcon,
   PlusIcon,
+  QuoteIcon,
   RedoIcon,
   UndoIcon,
 } from "../../../icons";
@@ -121,19 +128,19 @@ export default function LiveDocToolbar({ editor, onInsertMathBlock }: LiveDocToo
         <ToolButton label={t("liveDoc.toolbar.h1")} active={editor.isActive("heading", { level: 1 })} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>H1</ToolButton>
         <ToolButton label={t("liveDoc.toolbar.h2")} active={editor.isActive("heading", { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>H2</ToolButton>
         <ToolButton label={t("liveDoc.toolbar.h3")} active={editor.isActive("heading", { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>H3</ToolButton>
-        <ToolButton label={t("liveDoc.toolbar.paragraph")} active={editor.isActive("paragraph")} onClick={() => editor.chain().focus().setParagraph().run()}>¶</ToolButton>
+        <ToolButton label={t("liveDoc.toolbar.paragraph")} active={editor.isActive("paragraph")} onClick={() => editor.chain().focus().setParagraph().run()}><PilcrowIcon width={14} height={14} /></ToolButton>
       </div>
 
       <Divider />
 
       {/* Group 3 - block formatting */}
       <div className={styles.toolbarGroup}>
-        <ToolButton label={t("liveDoc.toolbar.bulletList")} active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}>•</ToolButton>
+        <ToolButton label={t("liveDoc.toolbar.bulletList")} active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}><ListIcon width={14} height={14} /></ToolButton>
         <ToolButton label={t("liveDoc.toolbar.orderedList")} active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()}>1.</ToolButton>
         <ToolButton label={t("liveDoc.toolbar.taskList")} active={editor.isActive("taskList")} onClick={() => editor.chain().focus().toggleTaskList().run()}>
           <CheckboxIcon width={14} height={14} aria-hidden="true" />
         </ToolButton>
-        <ToolButton label={t("liveDoc.toolbar.blockquote")} active={editor.isActive("blockquote")} onClick={() => editor.chain().focus().toggleBlockquote().run()}>❝</ToolButton>
+        <ToolButton label={t("liveDoc.toolbar.blockquote")} active={editor.isActive("blockquote")} onClick={() => editor.chain().focus().toggleBlockquote().run()}><QuoteIcon width={14} height={14} /></ToolButton>
         <ToolButton label={t("liveDoc.toolbar.codeBlock")} active={editor.isActive("codeBlock")} onClick={() => editor.chain().focus().toggleCodeBlock().run()}>{"{ }"}</ToolButton>
       </div>
 
@@ -159,8 +166,8 @@ export default function LiveDocToolbar({ editor, onInsertMathBlock }: LiveDocToo
 
       {/* Group 5 - indentation */}
       <div className={styles.toolbarGroup}>
-        <ToolButton label={t("liveDoc.toolbar.outdent")} onClick={() => editor.chain().focus().outdentBlock().run()}>⇤</ToolButton>
-        <ToolButton label={t("liveDoc.toolbar.indent")} onClick={() => editor.chain().focus().indentBlock().run()}>⇥</ToolButton>
+        <ToolButton label={t("liveDoc.toolbar.outdent")} onClick={() => editor.chain().focus().outdentBlock().run()}><OutdentIcon width={14} height={14} /></ToolButton>
+        <ToolButton label={t("liveDoc.toolbar.indent")} onClick={() => editor.chain().focus().indentBlock().run()}><IndentIcon width={14} height={14} /></ToolButton>
       </div>
 
       <Divider />
@@ -232,7 +239,7 @@ export default function LiveDocToolbar({ editor, onInsertMathBlock }: LiveDocToo
         <ToolButton label={t("liveDoc.toolbar.image")} onClick={() => imageInputRef.current?.click()}>
           <ImageIcon width={14} height={14} aria-hidden="true" />
         </ToolButton>
-        <ToolButton label={t("liveDoc.toolbar.link")} onClick={promptForLink}>🔗</ToolButton>
+        <ToolButton label={t("liveDoc.toolbar.link")} onClick={promptForLink}><LinkIcon width={14} height={14} /></ToolButton>
         <ToolButton label={t("liveDoc.toolbar.mathBlock")} onClick={promptForBlockMath}>
           <span aria-hidden="true">&#x2211;</span>
         </ToolButton>
@@ -495,7 +502,7 @@ function ColorTrigger({ inputRef, label, current, onColor, onClear, children }: 
           title={`${label} - clear`}
           aria-label={`${label} - clear`}
         >
-          ×
+          <CloseIcon width={14} height={14} />
         </button>
       )}
     </span>

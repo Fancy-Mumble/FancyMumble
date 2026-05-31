@@ -1,4 +1,4 @@
-import { PollIcon } from "../../../icons";
+import { CheckboxIcon, CircleDotIcon, CircleIcon, PollIcon, SquareIcon } from "../../../icons";
 import { useTranslation } from "react-i18next";
 /**
  * PollCard - renders a poll inside the chat message view.
@@ -169,12 +169,12 @@ export default function PollCard({ poll, ownSession, isOwn, onVote }: Readonly<P
               <span className={styles.optionText}>
                 {poll.multiple && !hasVoted && (
                   <span className={styles.checkbox}>
-                    {isSelected ? "☑" : "☐"}
+                    {isSelected ? <CheckboxIcon width={14} height={14} /> : <SquareIcon width={14} height={14} />}
                   </span>
                 )}
                 {!poll.multiple && !hasVoted && (
                   <span className={styles.radio}>
-                    {isSelected ? "◉" : "○"}
+                    {isSelected ? <CircleDotIcon width={14} height={14} /> : <CircleIcon width={14} height={14} />}
                   </span>
                 )}
                 {option}

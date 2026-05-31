@@ -1,4 +1,5 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import { CheckIcon } from "../../icons";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 
@@ -183,7 +184,7 @@ export default function OnboardingModal() {
                           selected ? styles.checkmarkSelected : ""
                         }`}
                       >
-                        {selected ? "✓" : ""}
+                        {selected ? <CheckIcon width={14} height={14} /> : null}
                       </span>
                     </button>
                   );

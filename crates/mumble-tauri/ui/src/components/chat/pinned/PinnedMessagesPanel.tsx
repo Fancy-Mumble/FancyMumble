@@ -1,4 +1,4 @@
-import { CloseIcon } from "../../../icons";
+import { CloseIcon, PinIcon } from "../../../icons";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatMessage } from "../../../types";
@@ -53,7 +53,7 @@ export default function PinnedMessagesPanel({
     <div className={styles.panel}>
       <div className={styles.header}>
         <span className={styles.title}>
-          📌 {t("pinned.title")}
+          <PinIcon width={14} height={14} /> {t("pinned.title")}
           {pinnedMessages.length > 0 && (
             <span className={styles.count}>{pinnedMessages.length}</span>
           )}

@@ -105,6 +105,12 @@
   color: var(--color-warning, #ffb700);
   border-color: var(--color-warning-border, rgba(255, 183, 0, 0.3));
 }
+.badgeError {
+  background: var(--color-danger-bg, rgba(220, 60, 60, 0.1));
+  color: var(--color-danger, #e05555);
+  border-color: var(--color-danger-border, rgba(220, 60, 60, 0.3));
+  cursor: help;
+}
 
 .path {
   font-size: 11px;

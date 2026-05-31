@@ -2564,6 +2564,12 @@ pub struct FancyPluginAdminList {
     /// admin UI surfaces this so operators know where their files live.
     #[prost(string, optional, tag = "2")]
     pub plugins_dir: ::core::option::Option<::prost::alloc::string::String>,
+    /// Plugin ABI version this server's plugin host was compiled against
+    /// (mumble_plugin_api::PLUGIN_ABI_VERSION).  Admin clients compare this
+    /// against a marketplace plugin's required ABI version to warn about /
+    /// block installs that would be rejected or fail to load.
+    #[prost(uint32, optional, tag = "3")]
+    pub host_abi_version: ::core::option::Option<u32>,
 }
 /// Wire type ID = 148.
 /// Admin -> Server: enable or disable a plugin by name.

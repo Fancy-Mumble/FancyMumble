@@ -12,6 +12,29 @@ export default defineConfig({
   server: {
     port,
     strictPort: true,
+    // Report-only Content-Security-Policy for tuning before enforcement.
+    // Served by the Vite dev server, so it is active inside the Tauri
+    // webview during `tauri dev` and logs violations (and fires
+    // `securitypolicyviolation` events) WITHOUT blocking anything.  It
+    // mirrors the policy intended for production; once the console is
+    // clean - ignoring Vite's own HMR inline-script / eval reports, which
+    // do not exist in the bundled production build - promote this string
+    // to the enforcing `app.security.csp` field in tauri.conf.json.
+    headers: {
+      "Content-Security-Policy-Report-Only": [
+        "default-src 'self'",
+        "script-src 'self'",
+        "object-src 'none'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src * data: blob: asset: http://asset.localhost",
+        "media-src * data: blob:",
+        "font-src 'self' data:",
+        "connect-src * ws: wss: ipc: http://ipc.localhost",
+        "frame-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+      ].join("; "),
+    },
     host: true,
     hmr: {
       // On Android devices, "localhost" resolves to the device itself.

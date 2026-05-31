@@ -54,8 +54,11 @@ import {
   applyInteractionResponse,
   decodeInteractionResponse,
   emptyPluginTier1Slice,
+  manifestPermitsResponse,
   type PluginTier1Slice,
 } from "./plugins/tier1/store";
+import type { InteractionResponse } from "./plugins/tier1/types";
+import { parseClientManifest } from "./plugins/tier1/manifest";
 import { applyReadStates, clearReadReceipts } from "./components/chat/readreceipt/readReceiptStore";
 import { useOnboardingStore } from "./components/onboarding/onboardingStore";
 import type { OnboardingConfigEvent, OnboardingResponseEvent } from "./types";
@@ -339,6 +342,10 @@ export interface AppState {
   unseenDownloadCount: number;
   /** Fancy Mumble version of the connected server (v2-encoded), null if not a fancy server. */
   serverFancyVersion: number | null;
+  /** Plugin ABI version the connected server's plugin host was compiled
+   *  against (from FancyPluginAdminList.host_abi_version). null until an
+   *  admin plugin list is received, or on a non-fancy server. */
+  serverHostAbiVersion: number | null;
   voiceState: VoiceState;
   /** True when audio is transported over UDP (false = TCP tunnel). */
   udpActive: boolean;
@@ -762,6 +769,7 @@ const INITIAL: Pick<
   | "downloads"
   | "unseenDownloadCount"
   | "serverFancyVersion"
+  | "serverHostAbiVersion"
   | "voiceState"
   | "udpActive"
   | "inCall"
@@ -847,6 +855,7 @@ const INITIAL: Pick<
   downloads: [],
   unseenDownloadCount: 0,
   serverFancyVersion: null,
+  serverHostAbiVersion: null,
   voiceState: "inactive" as VoiceState,
   udpActive: false,
   inCall: false,
@@ -2241,6 +2250,37 @@ function decodePluginPayload<T>(bytes: number[]): T | null {
   }
 }
 
+/** Policy gate for an inbound plugin `InteractionResponse`.
+ *
+ *  - A plugin that ships a Tier-1 client manifest must be *trusted*
+ *    (present in `pluginManifests` - i.e. allowed or prompt-exempt) AND
+ *    must have declared the capability backing the response kind.  This
+ *    refuses plugins that are pending a trust decision, explicitly
+ *    denied, or reaching for a capability they never declared.
+ *  - A plugin that ships no client manifest at all keeps its historical
+ *    bypass for non-injecting responses (legacy transports), but may
+ *    never inject chat history.
+ *
+ *  Evaluated before any side effect so a blocked / under-declared plugin
+ *  cannot inject or rewrite local chat. */
+function pluginResponseAllowed(
+  s: AppState,
+  pluginName: string,
+  kind: InteractionResponse["kind"],
+): boolean {
+  const manifest = s.pluginManifests.get(pluginName);
+  if (manifest) {
+    return manifestPermitsResponse(manifest, kind);
+  }
+  const entry = s.pluginRegistry.find((e) => e.pluginName === pluginName);
+  const hasManifest = entry ? parseClientManifest(entry.infoJson) !== null : false;
+  // A manifest-bearing plugin not in `pluginManifests` is pending or
+  // denied -> refuse.  A manifest-less plugin is a legacy transport;
+  // allow everything except chat injection.
+  if (hasManifest) return false;
+  return kind !== "chat-message";
+}
+
 /** Route an inbound plugin envelope to the appropriate in-store handler. */
 function dispatchPluginMessage(p: PluginMessageEvent): void {
   if (p.pluginName === "fancy-live-doc") {
@@ -2289,6 +2329,13 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
   }
   const response = decodeInteractionResponse(p.payloadType, p.payload);
   if (response) {
+    // Trust + capability gate.  Evaluated against current state BEFORE
+    // any side effect, so a pending / denied / under-declared plugin
+    // cannot inject or rewrite chat history (the side effects below run
+    // outside the `setState` reducer).
+    if (!pluginResponseAllowed(useAppStore.getState(), p.pluginName, response.kind)) {
+      return;
+    }
     // Side effect for chat-message: ask the rust state to inject the
     // bubble into local channel history.  The tier1 reducer itself
     // is a no-op for this kind, so the side effect is the entire
@@ -2323,18 +2370,6 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
       );
     }
     useAppStore.setState((s) => {
-      // Trust gate: drop responses from untrusted plugins on the
-      // floor.  The plugin is allowed to send (server-side has no way
-      // to know the user's local trust state) - we just refuse to
-      // render.  Plugins with no manifest at all (legacy) bypass the
-      // gate so live-doc / file-server still work.
-      if (s.pluginRegistry.some((e) => e.pluginName === p.pluginName)
-        && !s.pluginManifests.has(p.pluginName)
-        && [...s.pluginTrust.keys()].includes(p.pluginName) === false
-      ) {
-        // Pending trust or denied: ignore.
-        return {};
-      }
       const next = applyInteractionResponse(
         sliceFromState(s),
         p.pluginName,
@@ -2478,6 +2513,16 @@ export async function initEventListeners(
       } catch {
         // not connected; leave as-is.
       }
+      // Restore the server's Fancy version.  The `server-version` event
+      // is emitted when the Version protobuf message arrives, which
+      // already happened before HMR, so re-registering the listener
+      // doesn't help -- we have to pull the cached value from the backend.
+      try {
+        const info = await invoke<ServerInfo>("get_server_info");
+        useAppStore.setState({ serverFancyVersion: info.fancy_version });
+      } catch {
+        // Standard server or not connected; leave as-is.
+      }
       // The `plugin-registry` Tauri event is a one-shot fired right
       // after ServerSync, so an HMR reload that re-registers the
       // listener misses it entirely and the Plugins settings tab
@@ -2495,24 +2540,30 @@ export async function initEventListeners(
     .catch(() => {});
 
   // Ensure notification permissions and channel are set up (Android 8+ / 13+).
-  try {
-    let granted = await isPermissionGranted();
-    if (!granted) {
-      const result = await requestPermission();
-      granted = result === "granted";
+  // Deferred to the next macrotask so the Tauri webview URL settles to
+  // http://tauri.localhost/ before the IPC capability check runs; calling
+  // isPermissionGranted() synchronously during init sees URL: about:blank
+  // on Android, causing the permission check to fail.
+  setTimeout(async () => {
+    try {
+      let granted = await isPermissionGranted();
+      if (!granted) {
+        const result = await requestPermission();
+        granted = result === "granted";
+      }
+      if (granted) {
+        await createChannel({
+          id: "messages",
+          name: "Messages",
+          description: "Chat message notifications",
+          importance: Importance.High,
+          visibility: Visibility.Public,
+        });
+      }
+    } catch {
+      // Notification API may not be available on all platforms.
     }
-    if (granted) {
-      await createChannel({
-        id: "messages",
-        name: "Messages",
-        description: "Chat message notifications",
-        importance: Importance.High,
-        visibility: Visibility.Public,
-      });
-    }
-  } catch {
-    // Notification API may not be available on all platforms.
-  }
+  }, 0);
 
   // Sync the notification preference to the Rust backend.
   try {
@@ -2609,7 +2660,7 @@ export async function initEventListeners(
           // Fetch the server's Fancy Mumble version (null for standard servers).
           try {
             const info = await invoke<ServerInfo>("get_server_info");
-            useAppStore.setState({ serverFancyVersion: info.fancy_version });
+            useAppStore.setState({ serverFancyVersion: info.fancy_version, serverHostAbiVersion: null });
           } catch {
             // Server info unavailable - leave as null.
           }
@@ -3057,6 +3108,23 @@ export async function initEventListeners(
       }
       useAppStore.setState({ talkingSessions: next });
     }),
+
+    // Server announced its (Fancy) version. Keep the cached
+    // `serverFancyVersion` in sync reactively: a Fancy server may send the
+    // extension version in a `Version` message that arrives after the
+    // initial `get_server_info` bootstrap read, which would otherwise leave
+    // the UI gating Fancy-only features off until the next reconnect.
+    await listen<{ serverId?: string | null; fancy_version: number | null }>(
+      TauriEvent.ServerVersion,
+      (event) => {
+        const { activeServerId } = useAppStore.getState();
+        const eventServerId = event.payload.serverId ?? null;
+        if (eventServerId !== null && eventServerId !== activeServerId) {
+          return;
+        }
+        useAppStore.setState({ serverFancyVersion: event.payload.fancy_version });
+      },
+    ),
 
     // Server config received (limits, allow_html, etc.).
     await listen(TauriEvent.ServerConfig, async () => {
