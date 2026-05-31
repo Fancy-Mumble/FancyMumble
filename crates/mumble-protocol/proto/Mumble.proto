@@ -1753,6 +1753,11 @@ message FancyPluginAdminList {
   // Absolute path of the directory the server scans for plugins. The
   // admin UI surfaces this so operators know where their files live.
   optional string plugins_dir = 2;
+  // Plugin ABI version this server's plugin host was compiled against
+  // (mumble_plugin_api::PLUGIN_ABI_VERSION).  Admin clients compare this
+  // against a marketplace plugin's required ABI version to warn about /
+  // block installs that would be rejected or fail to load.
+  optional uint32 host_abi_version = 3;
 }
 
 // Wire type ID = 148.

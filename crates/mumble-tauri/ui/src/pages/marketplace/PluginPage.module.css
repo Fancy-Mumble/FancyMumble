@@ -37,21 +37,34 @@
   color: var(--color-text-primary);
 }
 
-.header {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 20px;
+.headerCard {
   background: var(--color-glass);
   border: 1px solid var(--color-glass-border);
   border-radius: var(--radius-md, 8px);
+  overflow: hidden;
 }
 
-.icon {
+.banner {
+  height: 120px;
+  width: 100%;
+  background: var(--color-bg-secondary);
+}
+
+.headerBody {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 20px 20px;
+}
+
+.icon,
+.iconFallback {
   flex-shrink: 0;
   width: 72px;
   height: 72px;
+  margin-top: -48px;
   border-radius: var(--radius-md, 8px);
+  border: 3px solid var(--color-bg-primary, var(--color-glass));
   background: var(--color-bg-secondary);
   display: flex;
   align-items: center;
@@ -59,6 +72,29 @@
   color: var(--color-text-secondary);
   overflow: hidden;
   object-fit: cover;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.iconFallback {
+  font-size: 30px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* --- Screenshot gallery ------------------------------------------ */
+.gallery {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.galleryImg {
+  height: 150px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-glass-border);
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 .headerMain {
@@ -132,6 +168,19 @@
 .installBtn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.installedBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  background: rgba(80, 200, 120, 0.12);
+  color: rgb(120, 220, 150);
+  border: 1px solid rgba(80, 200, 120, 0.35);
 }
 
 .installBtn:not(:disabled):hover {
@@ -338,6 +387,10 @@
   color: var(--color-text-secondary) !important;
 }
 
+.abiBad {
+  color: var(--color-danger) !important;
+}
+
 .changelogCell {
   color: var(--color-text-secondary) !important;
   word-break: break-word;
@@ -358,4 +411,130 @@
   border: 1px solid rgba(220, 80, 80, 0.35);
   font-family: inherit;
   vertical-align: middle;
+}
+
+/* --- Tags -------------------------------------------------------- */
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tagBadge {
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-glass-border);
+}
+
+/* --- Configuration snippet --------------------------------------- */
+.configBlock {
+  margin: 0;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+  padding: 12px 14px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+}
+
+/* --- Ratings summary --------------------------------------------- */
+.ratingSummary {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.ratingScore {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 96px;
+  gap: 2px;
+}
+
+.ratingBig {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-text-primary);
+}
+
+.ratingStars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: rgb(245, 197, 66);
+}
+
+.ratingCount {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.histogram {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.histRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.histLabel {
+  width: 28px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.histTrack {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--color-bg-secondary);
+  overflow: hidden;
+}
+
+.histFill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--color-accent, rgb(80, 140, 255));
+}
+
+.histValue {
+  width: 32px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+/* --- License / source footer ------------------------------------- */
+.metaRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.licenseNote {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.licenseNote strong {
+  color: var(--color-text-primary);
 }

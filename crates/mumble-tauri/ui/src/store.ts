@@ -342,6 +342,10 @@ export interface AppState {
   unseenDownloadCount: number;
   /** Fancy Mumble version of the connected server (v2-encoded), null if not a fancy server. */
   serverFancyVersion: number | null;
+  /** Plugin ABI version the connected server's plugin host was compiled
+   *  against (from FancyPluginAdminList.host_abi_version). null until an
+   *  admin plugin list is received, or on a non-fancy server. */
+  serverHostAbiVersion: number | null;
   voiceState: VoiceState;
   /** True when audio is transported over UDP (false = TCP tunnel). */
   udpActive: boolean;
@@ -765,6 +769,7 @@ const INITIAL: Pick<
   | "downloads"
   | "unseenDownloadCount"
   | "serverFancyVersion"
+  | "serverHostAbiVersion"
   | "voiceState"
   | "udpActive"
   | "inCall"
@@ -850,6 +855,7 @@ const INITIAL: Pick<
   downloads: [],
   unseenDownloadCount: 0,
   serverFancyVersion: null,
+  serverHostAbiVersion: null,
   voiceState: "inactive" as VoiceState,
   udpActive: false,
   inCall: false,
@@ -2507,6 +2513,16 @@ export async function initEventListeners(
       } catch {
         // not connected; leave as-is.
       }
+      // Restore the server's Fancy version.  The `server-version` event
+      // is emitted when the Version protobuf message arrives, which
+      // already happened before HMR, so re-registering the listener
+      // doesn't help -- we have to pull the cached value from the backend.
+      try {
+        const info = await invoke<ServerInfo>("get_server_info");
+        useAppStore.setState({ serverFancyVersion: info.fancy_version });
+      } catch {
+        // Standard server or not connected; leave as-is.
+      }
       // The `plugin-registry` Tauri event is a one-shot fired right
       // after ServerSync, so an HMR reload that re-registers the
       // listener misses it entirely and the Plugins settings tab
@@ -2644,7 +2660,7 @@ export async function initEventListeners(
           // Fetch the server's Fancy Mumble version (null for standard servers).
           try {
             const info = await invoke<ServerInfo>("get_server_info");
-            useAppStore.setState({ serverFancyVersion: info.fancy_version });
+            useAppStore.setState({ serverFancyVersion: info.fancy_version, serverHostAbiVersion: null });
           } catch {
             // Server info unavailable - leave as null.
           }
@@ -3092,6 +3108,23 @@ export async function initEventListeners(
       }
       useAppStore.setState({ talkingSessions: next });
     }),
+
+    // Server announced its (Fancy) version. Keep the cached
+    // `serverFancyVersion` in sync reactively: a Fancy server may send the
+    // extension version in a `Version` message that arrives after the
+    // initial `get_server_info` bootstrap read, which would otherwise leave
+    // the UI gating Fancy-only features off until the next reconnect.
+    await listen<{ serverId?: string | null; fancy_version: number | null }>(
+      TauriEvent.ServerVersion,
+      (event) => {
+        const { activeServerId } = useAppStore.getState();
+        const eventServerId = event.payload.serverId ?? null;
+        if (eventServerId !== null && eventServerId !== activeServerId) {
+          return;
+        }
+        useAppStore.setState({ serverFancyVersion: event.payload.fancy_version });
+      },
+    ),
 
     // Server config received (limits, allow_html, etc.).
     await listen(TauriEvent.ServerConfig, async () => {

@@ -771,9 +771,12 @@
     "disabled": "Disabled",
     "enable": "Enable plugin",
     "disable": "Disable plugin",
+    "reload": "Reload",
+    "reloadTitle": "Reload the plugin to apply configuration changes without restarting the server.",
     "uninstall": "Uninstall plugin",
     "marketplaceBadge": "Marketplace",
     "staleBadge": "Restart pending",
+    "brokenBadge": "Broken",
     "confirmUninstall": "Uninstall plugin \"{{name}}\"? This removes it from the server.",
     "unknownError": "Unknown error"
   },
@@ -796,7 +799,19 @@
     "connectToInstall": "Connect to a server with admin rights to install this plugin.",
     "homepage": "Homepage",
     "capabilities": "Capabilities",
-    "versions": "Versions"
+    "versions": "Versions",
+    "tags": "Tags",
+    "gallery": "Screenshots",
+    "license": "License",
+    "sourceCode": "Source code",
+    "configuration": "Configuration",
+    "openInStore": "Open in store",
+    "openInStoreTitle": "Open this plugin's page in your browser",
+    "ratingsReviews": "Ratings & reviews",
+    "noRatings": "No ratings yet.",
+    "ratingsCount_one": "{{count}} rating",
+    "ratingsCount_other": "{{count}} ratings",
+    "minFancyServer": "Fancy server ≥ {{version}}"
   },
   "plugins": {
     "empty": "No plugins are loaded on the connected server.",

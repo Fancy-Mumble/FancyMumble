@@ -23,11 +23,13 @@ export interface ServerPluginEntry {
   marketplace_id: string | null;
   installed_at: number | null;
   builtin: boolean;
+  load_error: string | null;
 }
 
 interface PluginListPayload {
   plugins: ServerPluginEntry[];
   plugins_dir: string | null;
+  host_abi_version: number | null;
 }
 
 interface PluginAckPayload {
@@ -63,6 +65,7 @@ export function ServerPluginsTab() {
     const offList = listen<PluginListPayload>("plugin-admin-list", (e) => {
       setPlugins(e.payload.plugins);
       setPluginsDir(e.payload.plugins_dir);
+      useAppStore.setState({ serverHostAbiVersion: e.payload.host_abi_version ?? null });
       setLoading(false);
     });
     const offAck = listen<PluginAckPayload>("plugin-admin-ack", (e) => {
@@ -105,6 +108,30 @@ export function ServerPluginsTab() {
       await invoke("set_server_plugin_enabled", {
         pluginName: entry.plugin_name,
         enabled: !entry.enabled,
+      });
+    } catch (err) {
+      setLastError(String(err));
+      setBusy(null);
+    }
+  }, []);
+
+  // Reload a loaded plugin in place: disable then re-enable. The server
+  // re-reads its INI on the enable transition, so this applies any config
+  // changes (e.g. base_url, public_url) without a full server restart.
+  // The two messages travel over the ordered control channel and are
+  // processed sequentially server-side, so on_unload fully completes
+  // (releasing sockets) before on_load re-binds.
+  const handleReload = useCallback(async (entry: ServerPluginEntry) => {
+    setBusy(entry.plugin_name);
+    setLastError(null);
+    try {
+      await invoke("set_server_plugin_enabled", {
+        pluginName: entry.plugin_name,
+        enabled: false,
+      });
+      await invoke("set_server_plugin_enabled", {
+        pluginName: entry.plugin_name,
+        enabled: true,
       });
     } catch (err) {
       setLastError(String(err));
@@ -194,6 +221,11 @@ export function ServerPluginsTab() {
                       {t("serverPlugins.staleBadge")}
                     </span>
                   )}
+                  {p.load_error && (
+                    <span className={`${sp.badge} ${sp.badgeError}`} title={p.load_error}>
+                      {t("serverPlugins.brokenBadge")}
+                    </span>
+                  )}
                 </div>
                 {p.path && <div className={sp.path}>{p.path}</div>}
               </div>
@@ -214,7 +246,21 @@ export function ServerPluginsTab() {
                     ? t("serverPlugins.enabled")
                     : t("serverPlugins.disabled")}
                 </button>
-                {!p.builtin && p.marketplace_id && (
+                {p.enabled && (
+                  <button
+                    type="button"
+                    className={styles.refreshBtn}
+                    onClick={() => handleReload(p)}
+                    disabled={busy === p.plugin_name}
+                    title={t("serverPlugins.reloadTitle", {
+                      defaultValue: "Reload the plugin to apply configuration changes without restarting the server.",
+                    })}
+                  >
+                    <RefreshCwIcon width={14} height={14} />
+                    {t("serverPlugins.reload", { defaultValue: "Reload" })}
+                  </button>
+                )}
+                {!p.builtin && (
                   <button
                     type="button"
                     className={styles.removeBtn}

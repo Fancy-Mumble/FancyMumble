@@ -61,25 +61,6 @@ fn own_session_hash(state: &SharedState) -> Option<String> {
         .and_then(|u| u.hash.clone())
 }
 
-fn apply_plugin_message_update(
-    msg: &mut ChatMessage,
-    content: &Option<String>,
-    components: &Option<serde_json::Value>,
-    clear_components: bool,
-    now_ms: u64,
-) {
-    if let Some(c) = content {
-        msg.body = c.clone();
-    }
-    if clear_components {
-        msg.plugin_components = None;
-    }
-    if let Some(v) = components {
-        msg.plugin_components = Some(v.clone());
-    }
-    msg.edited_at = Some(now_ms);
-}
-
 fn cache_own_signal_message(state: &mut SharedState, msg: &ChatMessage, channel_id: u32) {
     let own_cert_hash = state
         .pchat_ctx.pchat

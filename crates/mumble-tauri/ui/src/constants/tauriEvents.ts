@@ -46,6 +46,7 @@ export enum TauriEvent {
   ServerConfig = "server-config",
   ServerConnected = "server-connected",
   ServerDisconnected = "server-disconnected",
+  ServerVersion = "server-version",
   ServerLog = "server-log",
   StateChanged = "state-changed",
   StreamPopoutState = "stream-popout-state",
