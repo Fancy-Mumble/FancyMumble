@@ -6,7 +6,7 @@
  * lives in [`LiveDocToolbar`] so this module stays focused.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Extension } from "@tiptap/core";
@@ -28,14 +28,35 @@ import Color from "@tiptap/extension-color";
 import type * as Y from "yjs";
 import "katex/dist/katex.min.css";
 import { editorHtmlToMarkdown, markdownToEditorHtml } from "./liveDocMarkdown";
+import { insertEditorImage, imageFileFromClipboard } from "./liveDocImageInsert";
 import LiveDocToolbar from "./LiveDocToolbar";
 import { FontSize, Indent } from "./liveDocExtensions";
+import { PageBreak, SectionBreak } from "./liveDocPageBreak";
+import { TableOfContents } from "./liveDocToc";
+import { Bookmark } from "./liveDocBookmark";
+import { Caption } from "./liveDocCaption";
+import { CrossReference } from "./liveDocCrossRef";
+import { EndnoteRef } from "./liveDocEndnote";
+import { EndnotesSection } from "./liveDocEndnotesSection";
+import LiveDocOutline from "./LiveDocOutline";
+import LiveDocHeaderFooter from "./LiveDocHeaderFooter";
+import {
+  useLiveDocPageSetup,
+  pageGeometryPx,
+  useLiveDocDecoration,
+  BORDER_WIDTH_PX,
+} from "./useLiveDoc";
+import { pageContentHeightPx } from "./liveDocPagination";
+import { useLiveDocPageCount } from "./useLiveDocPageCount";
+import { LiveDocRulerHorizontal, LiveDocRulerVertical } from "./LiveDocRuler";
 import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableCell } from "@tiptap/extension-table-cell";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
+import Subscript from "@tiptap/extension-subscript";
+import Superscript from "@tiptap/extension-superscript";
 import MathEditPopover, { type MathEditTarget } from "./MathEditPopover";
 import LiveDocTableControls from "./LiveDocTableControls";
 import LiveDocMentionPopover, {
@@ -89,6 +110,14 @@ export interface LiveDocEditorApi {
   /** Replace the document with `markdown`.  Used to seed a freshly
    *  opened document from a local `.md` file. */
   setMarkdown(markdown: string): void;
+  /** Resize and insert `file` as an inline image at the current
+   *  selection.  Used by the drag-drop handler. */
+  insertImageFromFile(file: File): Promise<void>;
+  /** Insert a "next page" section break at the caret. */
+  insertSectionBreak(): void;
+  /** Insert a cover page (centred title + subtitle + page break) at the
+   *  very top of the document. */
+  insertCoverPage(title: string): void;
 }
 
 export default function LiveDocEditor({
@@ -101,6 +130,23 @@ export default function LiveDocEditor({
   const awareness = provider?.awareness ?? null;
   const { t } = useTranslation("chat");
 
+  // Document page geometry (size / orientation / margins) is shared via
+  // the Yjs `meta` map; feed it into the `--ld-*` custom properties that
+  // both the page surface and the rulers read, so they stay in sync.
+  const pageSetup = useLiveDocPageSetup(doc);
+  const geo = pageGeometryPx(pageSetup);
+  const decoration = useLiveDocDecoration(doc);
+  const pageVars = {
+    "--ld-page-w": `${geo.width}px`,
+    "--ld-page-h": `${geo.height}px`,
+    "--ld-pad-x": `${geo.margin}px`,
+    "--ld-pad-y": `${geo.margin}px`,
+  } as CSSProperties;
+  const rootVars = {
+    "--ld-pagebreak-label": `"${t("liveDoc.pageBreakLabel", { defaultValue: "Page break" })}"`,
+    "--ld-sectionbreak-label": `"${t("liveDoc.sectionBreakLabel", { defaultValue: "Section break" })}"`,
+  } as CSSProperties;
+
   // Stable ref so the math click handler (defined before the editor)
   // can always reach the live editor instance.
   const editorRef = useRef<import("@tiptap/react").Editor | null>(null);
@@ -110,6 +156,7 @@ export default function LiveDocEditor({
 
   const [mathEdit, setMathEdit] = useState<MathEditTarget | null>(null);
   const [mentionTrigger, setMentionTrigger] = useState<MentionTriggerState | null>(null);
+  const [outlineOpen, setOutlineOpen] = useState(false);
 
   // Register/unregister this component's setter with the shared listener
   // set that the mention plugin pushes updates into.  We keep a single
@@ -202,6 +249,16 @@ export default function LiveDocEditor({
       TableCell,
       TaskList,
       TaskItem.configure({ nested: true }),
+      Subscript,
+      Superscript,
+      PageBreak,
+      SectionBreak,
+      TableOfContents,
+      Bookmark,
+      Caption,
+      CrossReference,
+      EndnoteRef,
+      EndnotesSection,
       LiveDocMention.configure({
         onChange: (state: MentionTriggerState | null) => {
           // Fan out to every subscribed setter; the only one in practice
@@ -213,7 +270,6 @@ export default function LiveDocEditor({
       Collaboration.configure({ document: doc }),
       ...(awareness ? [makeCollaborationCursorExtension(awareness)] : []),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [doc, t, handleMathClick, awareness],
   );
 
@@ -223,6 +279,18 @@ export default function LiveDocEditor({
       editable: !readOnly,
       editorProps: {
         attributes: { class: styles.editorContent, "aria-label": t("liveDoc.panelTitle") },
+        // Insert pasted images directly into the document.  Without this
+        // the chat's global paste listener would hijack the image and
+        // send it as a chat message instead (see useChatSend).
+        handlePaste: (_view, event) => {
+          const file = imageFileFromClipboard(event.clipboardData);
+          const current = editorRef.current;
+          if (!file || !current) return false;
+          void insertEditorImage(current, file).catch((e) =>
+            console.warn("live-doc image paste failed:", e),
+          );
+          return true;
+        },
       },
     },
     [extensions, readOnly],
@@ -231,6 +299,11 @@ export default function LiveDocEditor({
   // Keep a stable ref so the API object always uses the latest live
   // editor, even if the instance is recreated.
   editorRef.current = editor;
+
+  // Non-destructive page-count estimate for the status indicator and the
+  // optional footer page-number token.
+  const pageContentHeight = pageContentHeightPx(geo.height, geo.margin);
+  const pageCount = useLiveDocPageCount(editor, pageContentHeight);
 
   useEffect(() => {
     if (!editor || !onReady) return;
@@ -250,19 +323,58 @@ export default function LiveDocEditor({
           }
         }, 0);
       },
+      insertImageFromFile: async (file) => {
+        const e = editorRef.current;
+        if (e && !e.isDestroyed) {
+          await insertEditorImage(e, file);
+        }
+      },
+      insertSectionBreak: () => {
+        editorRef.current?.chain().focus().setSectionBreak().run();
+      },
+      insertCoverPage: (title) => {
+        const e = editorRef.current;
+        if (!e || e.isDestroyed) return;
+        e.chain()
+          .focus()
+          .insertContentAt(0, [
+            {
+              type: "heading",
+              attrs: { level: 1, textAlign: "center" },
+              content: title ? [{ type: "text", text: title }] : [],
+            },
+            {
+              type: "paragraph",
+              attrs: { textAlign: "center" },
+              content: [{ type: "text", text: t("liveDoc.coverSubtitlePlaceholder", { defaultValue: "Subtitle" }) }],
+            },
+            { type: "pageBreak" },
+          ])
+          .run();
+      },
     });
-  }, [editor, onReady]);
+  }, [editor, onReady, t]);
 
   if (!editor) {
     return <div className={styles.loading}>{t("liveDoc.connecting")}</div>;
   }
 
   return (
-    <div className={styles.editorRoot}>
-      <LiveDocToolbar editor={editor} onInsertMathBlock={handleInsertMathBlock} />
-      <div
-        className={styles.editorScroll}
-        onClick={(e) => {
+    <div className={styles.editorRoot} data-livedoc-editor="" style={rootVars}>
+      <LiveDocToolbar
+        editor={editor}
+        onInsertMathBlock={handleInsertMathBlock}
+        outlineOpen={outlineOpen}
+        onToggleOutline={() => setOutlineOpen((v) => !v)}
+      />
+      <div className={styles.editorBody}>
+        {outlineOpen && (
+          <LiveDocOutline editor={editor} onClose={() => setOutlineOpen(false)} />
+        )}
+        <div
+          className={styles.editorScroll}
+          style={pageVars}
+          onClick={(e) => {
           // Click anywhere in the gray area or on the page surface
           // focuses the editor (matching Google Docs UX).  Only
           // intercept clicks that did not already land on an editable
@@ -277,14 +389,43 @@ export default function LiveDocEditor({
           editor.chain().focus("end").run();
         }}
       >
-        <div
-          ref={pageRef}
-          className={`${styles.editorPage} ${paperMode ? styles.editorPagePaper : ""}`}
-          data-livedoc-page=""
-        >
-          <EditorContent editor={editor} />
-          <LiveDocTableControls editor={editor} pageRef={pageRef} />
+        <LiveDocRulerHorizontal />
+        <div className={styles.pageGrid}>
+          <LiveDocRulerVertical />
+          <div className={styles.pageArea}>
+            <div
+              ref={pageRef}
+              className={`${styles.editorPage} ${paperMode ? styles.editorPagePaper : ""}`}
+              data-livedoc-page=""
+            >
+              {decoration.border !== "none" && (
+                <div
+                  className={styles.pageBorder}
+                  style={{ borderWidth: BORDER_WIDTH_PX[decoration.border] }}
+                  aria-hidden="true"
+                />
+              )}
+              {decoration.watermark.trim() && (
+                <div className={styles.watermark} aria-hidden="true">
+                  <span className={styles.watermarkText}>{decoration.watermark}</span>
+                </div>
+              )}
+              <LiveDocHeaderFooter doc={doc} zone="header" readOnly={readOnly} />
+              <EditorContent editor={editor} />
+              <LiveDocHeaderFooter
+                doc={doc}
+                zone="footer"
+                readOnly={readOnly}
+                pageCount={pageCount}
+              />
+              <LiveDocTableControls editor={editor} pageRef={pageRef} />
+            </div>
+          </div>
         </div>
+        <div className={styles.pageCountBadge} aria-live="polite">
+          {t("liveDoc.pageCount", { count: pageCount })}
+        </div>
+      </div>
       </div>
       {mentionTrigger && (
         <LiveDocMentionPopover

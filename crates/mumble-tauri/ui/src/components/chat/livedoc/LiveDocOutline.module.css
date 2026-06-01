@@ -1,0 +1,102 @@
+/* LiveDocOutline: collapsible heading navigation pane. */
+
+.outline {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 220px;
+  min-height: 0;
+  background: var(--color-surface, #1e2128);
+  border-right: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.06));
+}
+
+.headerTitle {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary, #9aa0aa);
+}
+
+.closeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-secondary, #9aa0aa);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.closeBtn:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
+  color: var(--color-text-primary, #f5f6f8);
+}
+
+.empty {
+  margin: 0;
+  padding: 16px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-secondary, #9aa0aa);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 6px 12px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.item {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.item:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
+}
+
+.item[data-level="1"] {
+  font-weight: 600;
+}
+
+.item[data-level="2"] {
+  font-weight: 500;
+}
+
+.item[data-level="3"],
+.item[data-level="4"],
+.item[data-level="5"],
+.item[data-level="6"] {
+  color: var(--color-text-secondary, #c2c7d0);
+}

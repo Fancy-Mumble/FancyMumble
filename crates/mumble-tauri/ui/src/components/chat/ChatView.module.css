@@ -9,9 +9,26 @@
   position: relative;
 }
 
+/* Chat column wraps the messages + composer (everything below the
+   live-doc / screen-share panel).  position:relative makes it the
+   containing block for the file-drag overlay so the overlay only
+   covers the chat region, not the panel above it. */
+.chatColumn {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
 /* When a stream is active or the user toggles compact chat (e.g. from
    a LiveDoc), shrink the messages area to ~25 % of the viewport so the
    panel above gets the lion's share of the height. */
+.main.compactChat .chatColumn {
+  flex: 0 0 auto;
+}
+
 .main.compactChat .messagesWrapper {
   flex: 0 0 200px;
   min-height: 200px;
@@ -20,8 +37,7 @@
 
 /* LiveDoc open with chat hidden: remove the messages + composer from
    the layout entirely so the document fills the full height. */
-.main.hiddenChat .messagesWrapper,
-.main.hiddenChat .composerWrapper {
+.main.hiddenChat .chatColumn {
   display: none;
 }
 

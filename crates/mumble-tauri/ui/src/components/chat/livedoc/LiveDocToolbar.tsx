@@ -23,6 +23,7 @@ import {
   IndentIcon,
   LinkIcon,
   ListIcon,
+  ListTreeIcon,
   MinusIcon,
   OutdentIcon,
   PaintBucketIcon,
@@ -31,14 +32,22 @@ import {
   PlusIcon,
   QuoteIcon,
   RedoIcon,
+  SeparatorHorizontalIcon,
+  SubscriptIcon,
+  SuperscriptIcon,
   UndoIcon,
 } from "../../../icons";
-import { resizeImage } from "../../../pages/settings/imageUtils";
+import { insertEditorImage } from "./liveDocImageInsert";
+import LiveDocReferenceControls from "./LiveDocReferenceControls";
 import styles from "./LiveDocEditor.module.css";
 
 interface LiveDocToolbarProps {
   readonly editor: Editor;
   readonly onInsertMathBlock: () => void;
+  /** Whether the outline pane is currently visible. */
+  readonly outlineOpen: boolean;
+  /** Toggle the outline / navigation pane. */
+  readonly onToggleOutline: () => void;
 }
 
 /** Font family options.  The first three reference the project's
@@ -61,7 +70,12 @@ const DEFAULT_FONT_SIZE_PT = 11;
 const MIN_FONT_SIZE_PT = 1;
 const MAX_FONT_SIZE_PT = 400;
 
-export default function LiveDocToolbar({ editor, onInsertMathBlock }: LiveDocToolbarProps) {
+export default function LiveDocToolbar({
+  editor,
+  onInsertMathBlock,
+  outlineOpen,
+  onToggleOutline,
+}: LiveDocToolbarProps) {
   const { t } = useTranslation("chat");
   const imageInputRef = useRef<HTMLInputElement>(null);
   const textColorInputRef = useRef<HTMLInputElement>(null);
@@ -69,7 +83,6 @@ export default function LiveDocToolbar({ editor, onInsertMathBlock }: LiveDocToo
 
   const promptForLink = useCallback(() => {
     const previous = (editor.getAttributes("link").href as string | null) ?? "";
-    // eslint-disable-next-line no-alert
     const url = window.prompt(t("liveDoc.toolbar.link"), previous);
     if (url === null) return;
     if (url === "") {
@@ -82,15 +95,10 @@ export default function LiveDocToolbar({ editor, onInsertMathBlock }: LiveDocToo
   const promptForBlockMath = onInsertMathBlock;
 
   const handleInsertImage = useCallback(
-    async (file: File) => {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const raw = e.target?.result as string | undefined;
-        if (!raw) return;
-        const dataUrl = await resizeImage(raw, 800, 800, 250_000);
-        editor.chain().focus().setImage({ src: dataUrl }).run();
-      };
-      reader.readAsDataURL(file);
+    (file: File) => {
+      void insertEditorImage(editor, file).catch((e) =>
+        console.warn("live-doc image insert failed:", e),
+      );
     },
     [editor],
   );
@@ -119,6 +127,12 @@ export default function LiveDocToolbar({ editor, onInsertMathBlock }: LiveDocToo
         <ToolButton label={t("liveDoc.toolbar.code")} active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()}>
           {"</>"}
         </ToolButton>
+        <ToolButton label={t("liveDoc.toolbar.subscript")} active={editor.isActive("subscript")} onClick={() => editor.chain().focus().toggleSubscript().run()}>
+          <SubscriptIcon width={14} height={14} aria-hidden="true" />
+        </ToolButton>
+        <ToolButton label={t("liveDoc.toolbar.superscript")} active={editor.isActive("superscript")} onClick={() => editor.chain().focus().toggleSuperscript().run()}>
+          <SuperscriptIcon width={14} height={14} aria-hidden="true" />
+        </ToolButton>
       </div>
 
       <Divider />
@@ -129,6 +143,9 @@ export default function LiveDocToolbar({ editor, onInsertMathBlock }: LiveDocToo
         <ToolButton label={t("liveDoc.toolbar.h2")} active={editor.isActive("heading", { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>H2</ToolButton>
         <ToolButton label={t("liveDoc.toolbar.h3")} active={editor.isActive("heading", { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>H3</ToolButton>
         <ToolButton label={t("liveDoc.toolbar.paragraph")} active={editor.isActive("paragraph")} onClick={() => editor.chain().focus().setParagraph().run()}><PilcrowIcon width={14} height={14} /></ToolButton>
+        <ToolButton label={t("liveDoc.toolbar.outline")} active={outlineOpen} onClick={onToggleOutline}>
+          <ListTreeIcon width={14} height={14} aria-hidden="true" />
+        </ToolButton>
       </div>
 
       <Divider />
@@ -232,7 +249,7 @@ export default function LiveDocToolbar({ editor, onInsertMathBlock }: LiveDocToo
           hidden
           onChange={(e) => {
             const file = e.target.files?.[0];
-            if (file) void handleInsertImage(file);
+            if (file) handleInsertImage(file);
             e.target.value = "";
           }}
         />
@@ -244,7 +261,24 @@ export default function LiveDocToolbar({ editor, onInsertMathBlock }: LiveDocToo
           <span aria-hidden="true">&#x2211;</span>
         </ToolButton>
         <TablePickerButton editor={editor} />
+        <ToolButton
+          label={t("liveDoc.toolbar.pageBreak")}
+          onClick={() => editor.chain().focus().setPageBreak().run()}
+        >
+          <SeparatorHorizontalIcon width={14} height={14} aria-hidden="true" />
+        </ToolButton>
+        <ToolButton
+          label={t("liveDoc.toolbar.tableOfContents")}
+          onClick={() => editor.chain().focus().insertTableOfContents().run()}
+        >
+          <ListIcon width={14} height={14} aria-hidden="true" />
+        </ToolButton>
       </div>
+
+      <Divider />
+
+      {/* Group 7b - references (bookmarks, captions, cross-references) */}
+      <LiveDocReferenceControls editor={editor} />
 
       <Divider />
 

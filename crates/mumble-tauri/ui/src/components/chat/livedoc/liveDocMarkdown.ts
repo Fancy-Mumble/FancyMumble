@@ -113,7 +113,27 @@ function serializeBlockNode(node: Node): string {
 
   if (tag === "table" || tag === "figure") return rawBlock(el);
 
+  // Auto-numbered caption block - persist its raw markup (data-kind /
+  // data-id); the visible number is regenerated live on import.
+  if (tag === "figcaption" && el.hasAttribute("data-livedoc-caption")) {
+    return rawBlock(el);
+  }
+
   if (tag === "div") {
+    // Manual page / section break - round-trips as its raw `<div>`.
+    if (el.hasAttribute("data-page-break") || el.hasAttribute("data-section-break")) {
+      return rawBlock(el);
+    }
+    // Auto-generated table of contents - persist the placeholder so the
+    // node is recreated on import (its entries are regenerated live).
+    if (el.hasAttribute("data-livedoc-toc")) {
+      return rawBlock(el);
+    }
+    // Auto-generated endnotes section - persist the placeholder; the note
+    // bodies live on the marker nodes and are regenerated live.
+    if (el.hasAttribute("data-livedoc-endnotes")) {
+      return rawBlock(el);
+    }
     if (el.getAttribute("data-type") === "block-math") {
       const latex = decodeHtmlEntities(el.getAttribute("data-latex") ?? "");
       return `$$\n${latex}\n$$`;
@@ -230,6 +250,14 @@ function serializeInlineNode(node: Node): string {
     case "del":
     case "strike":
       return wrapIfContent(inner(), "~~");
+    case "sub":
+    case "sup": {
+      // Endnote markers are inline atoms (no child text); persist their
+      // raw markup so the stable id + note text survive a round-trip.
+      if (el.hasAttribute("data-livedoc-endnote")) return rawInline(el, inner());
+      const content = inner();
+      return content ? rawInline(el, content) : "";
+    }
     case "code":
       return `\`${el.textContent ?? ""}\``;
     case "br":
@@ -257,6 +285,11 @@ function serializeInlineNode(node: Node): string {
       }
       if (el.hasAttribute("data-mention-everyone")) return "@everyone";
       if (el.hasAttribute("data-mention-here")) return "@here";
+      // Reference nodes (bookmark anchor / cross-reference) round-trip as
+      // their raw span so the stable ids survive an export/import cycle.
+      if (el.hasAttribute("data-livedoc-bookmark") || el.hasAttribute("data-livedoc-xref")) {
+        return rawInline(el, inner());
+      }
       if (el.hasAttribute("style") || el.hasAttribute("class")) {
         return rawInline(el, inner());
       }
@@ -326,7 +359,7 @@ export function markdownToEditorHtml(markdown: string): string {
 
 const RAW_BLOCK_TAGS = new Set([
   "h1", "h2", "h3", "h4", "h5", "h6",
-  "p", "div", "table", "figure", "blockquote",
+  "p", "div", "table", "figure", "figcaption", "blockquote",
   "ul", "ol", "pre", "hr", "img",
 ]);
 

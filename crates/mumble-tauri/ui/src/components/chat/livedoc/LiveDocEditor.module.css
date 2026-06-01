@@ -15,6 +15,15 @@
   overflow: hidden;
 }
 
+/* Row below the toolbar: optional outline pane + the scrolling page
+   area.  Fills the remaining editor height. */
+.editorBody {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -284,12 +293,61 @@
 }
 
 .editorScroll {
+  /* Shared ruler/page geometry. Defined here (the common ancestor of both
+     the sticky horizontal ruler and the page grid) so every descendant
+     stays in sync.  --ld-major (96px) is one "inch" at 96dpi between major
+     tick marks; --ld-page-w is the centred page width. */
+  --ld-page-w: 850px;
+  --ld-pad-x: 84px;
+  --ld-pad-y: 72px;
+  --ld-major: 96px;
+  --ld-minor: 12px;
+  --ld-ruler-size: 24px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 32px 24px 64px;
+  padding: 0;
   background: var(--color-bg, #14161b);
   cursor: text;
+  position: relative;
+}
+
+/* Non-destructive page-count indicator pinned to the bottom-right of the
+   scroll viewport (Google Docs style).  Purely informational. */
+.pageCountBadge {
+  position: sticky;
+  bottom: 10px;
+  margin-left: auto;
+  margin-right: 12px;
+  width: fit-content;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.7));
+  background: var(--color-surface, rgba(30, 33, 40, 0.92));
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Word-style page grid: a vertical ruler column hugging the left edge and
+   the centred page column.  The horizontal ruler is a sibling above this
+   grid (sticky to the top edge), not a grid row. */
+.pageGrid {
+  display: grid;
+  grid-template-columns: var(--ld-ruler-size) 1fr;
+  width: 100%;
+}
+
+/* Centres the page within its column, matching the horizontal ruler's
+   inner alignment, and adds bottom breathing room below the page. */
+.pageArea {
+  display: flex;
+  justify-content: center;
+  padding: 0 0 64px;
 }
 
 /* Google-Docs-style centered "page" surface.  Clicking anywhere on
@@ -301,14 +359,13 @@
   position: relative;
   isolation: isolate;
   width: 100%;
-  max-width: 850px;
-  min-height: 1100px;
-  margin: 0 auto;
+  max-width: var(--ld-page-w, 850px);
+  min-height: var(--ld-page-h, 1100px);
   background: var(--color-surface, #1e2128);
   border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
   border-radius: var(--radius-md, 8px);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.30), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
-  padding: 72px 84px;
+  padding: var(--ld-pad-y, 72px) var(--ld-pad-x, 84px);
   cursor: text;
   transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
@@ -316,6 +373,101 @@
 /* White-paper preview mode: override the dark surface so the document
    looks like real paper.  The toolbar above keeps its theme colours
    (only the page swaps). */
+/* Manual page break: a labelled dashed divider on screen; in print /
+   PDF it forces a real page break (see liveDocPdf.ts).  The label text
+   comes from the `--ld-pagebreak-label` / `--ld-sectionbreak-label`
+   custom properties set (translated) on `.editorRoot`. */
+:global(.livedoc-page-break),
+:global(.livedoc-section-break) {
+  display: block;
+  height: 0;
+  margin: 22px 0;
+  border-top: 2px dashed var(--color-border, rgba(255, 255, 255, 0.28));
+  position: relative;
+}
+
+/* A section break reads as a heavier, double divider to distinguish it
+   from an ordinary page break. */
+:global(.livedoc-section-break) {
+  border-top-style: double;
+  border-top-width: 3px;
+}
+
+:global(.livedoc-page-break)::after,
+:global(.livedoc-section-break)::after {
+  position: absolute;
+  top: -0.72em;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 8px;
+  background: var(--color-bg, #14161b);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.5));
+  white-space: nowrap;
+}
+
+:global(.livedoc-page-break)::after {
+  content: var(--ld-pagebreak-label, "Page break");
+}
+
+:global(.livedoc-section-break)::after {
+  content: var(--ld-sectionbreak-label, "Section break");
+}
+
+/* On the white-paper surface the labels sit on the page colour. */
+.editorPagePaper :global(.livedoc-page-break)::after,
+.editorPagePaper :global(.livedoc-section-break)::after {
+  background: #ffffff;
+  color: #6b6b70;
+}
+
+/* Page border: drawn just inside the page margins, like Word's page
+   border.  Purely decorative overlay; never intercepts clicks. */
+.pageBorder {
+  position: absolute;
+  inset: calc(var(--ld-pad-y, 72px) / 2) calc(var(--ld-pad-x, 84px) / 2);
+  border-style: solid;
+  border-color: var(--color-text-secondary, rgba(255, 255, 255, 0.45));
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.editorPagePaper .pageBorder {
+  border-color: rgba(0, 0, 0, 0.55);
+}
+
+/* Diagonal watermark sitting behind the document content. */
+.watermark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+}
+
+.watermarkText {
+  transform: rotate(-32deg);
+  font-size: clamp(40px, 12vw, 120px);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--color-text-primary, #ffffff);
+  opacity: 0.07;
+}
+
+.editorPagePaper .watermarkText {
+  color: #000000;
+  opacity: 0.08;
+}
+
 .editorPagePaper {
   background: #ffffff;
   border-color: rgba(0, 0, 0, 0.12);
@@ -348,6 +500,9 @@
   color: var(--color-text-primary, #f5f6f8);
   font-size: 15px;
   line-height: 1.6;
+  /* Keep the editable content above the decorative border / watermark. */
+  position: relative;
+  z-index: 1;
 }
 
 .editorContent h1 {
@@ -584,12 +739,17 @@
     height: 36px;
   }
   .editorScroll {
+    padding: 0;
+  }
+  .pageGrid {
+    grid-template-columns: 1fr;
+  }
+  .pageArea {
     padding: 12px 8px 32px;
   }
   .editorPage {
     padding: 24px 18px;
     border-radius: var(--radius-sm, 4px);
-    min-height: calc(100% - 8px);
     max-width: none;
   }
 }

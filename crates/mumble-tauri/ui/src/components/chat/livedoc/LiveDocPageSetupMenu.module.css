@@ -1,0 +1,131 @@
+.wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 220px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--color-surface, #1e2128);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.segment {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.toggleRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--color-text-primary, rgba(255, 255, 255, 0.9));
+  cursor: pointer;
+}
+
+.toggle input {
+  cursor: pointer;
+}
+
+.toggleDisabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.toggleDisabled input {
+  cursor: default;
+}
+
+.segmentLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.6));
+}
+
+.segmentOptions {
+  display: flex;
+  gap: 4px;
+}
+
+.segmentOption {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-primary, rgba(255, 255, 255, 0.85));
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.segmentOption:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+.segmentOptionActive {
+  background: var(--accent-soft, rgba(42, 171, 238, 0.22));
+  border-color: var(--accent, rgba(42, 171, 238, 0.7));
+  color: var(--color-text-primary, #fff);
+}
+
+.watermarkInput {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  background: var(--color-bg, rgba(0, 0, 0, 0.2));
+  color: var(--color-text-primary, rgba(255, 255, 255, 0.9));
+  font-size: 0.82rem;
+}
+
+.watermarkInput:focus {
+  outline: none;
+  border-color: var(--accent, rgba(42, 171, 238, 0.7));
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+}
+
+.actionBtn {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-primary, rgba(255, 255, 255, 0.9));
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.actionBtn:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  border-color: var(--accent, rgba(42, 171, 238, 0.5));
+}

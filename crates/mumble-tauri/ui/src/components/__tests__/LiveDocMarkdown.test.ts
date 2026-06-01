@@ -52,6 +52,30 @@ describe("editorHtmlToMarkdown", () => {
     expect(md).toContain("line one  \nline two");
   });
 
+  it("round-trips a manual page break", () => {
+    const html =
+      '<p>before</p><div data-page-break="" class="livedoc-page-break"></div><p>after</p>';
+    const md = editorHtmlToMarkdown(html);
+    expect(md).toContain("data-page-break");
+    const back = markdownToEditorHtml(md);
+    // The page-break div survives the export/import cycle so the
+    // PageBreak node can re-parse it.
+    expect(back).toContain("data-page-break");
+    expect(back).toContain("before");
+    expect(back).toContain("after");
+  });
+
+  it("round-trips a manual section break", () => {
+    const html =
+      '<p>one</p><div data-section-break="" class="livedoc-section-break"></div><p>two</p>';
+    const md = editorHtmlToMarkdown(html);
+    expect(md).toContain("data-section-break");
+    const back = markdownToEditorHtml(md);
+    expect(back).toContain("data-section-break");
+    expect(back).toContain("one");
+    expect(back).toContain("two");
+  });
+
   it("preserves empty paragraphs (Enter pressed multiple times)", () => {
     const html = "<p>before</p><p></p><p></p><p>after</p>";
     const md = editorHtmlToMarkdown(html);
@@ -117,6 +141,13 @@ describe("editorHtmlToMarkdown", () => {
     const html = '<p><a href="https://example.com">site</a></p>';
     const md = editorHtmlToMarkdown(html);
     expect(md).toContain("[site](https://example.com)");
+  });
+
+  it("serialises subscript and superscript as raw inline HTML", () => {
+    const html = "<p>H<sub>2</sub>O and E=mc<sup>2</sup></p>";
+    const md = editorHtmlToMarkdown(html);
+    expect(md).toContain("<sub>2</sub>");
+    expect(md).toContain("<sup>2</sup>");
   });
 
   it("preserves color spans as raw inline HTML", () => {
@@ -229,6 +260,13 @@ describe("LiveDoc round-trip", () => {
   it("preserves line breaks", () => {
     const html = "<p>one<br>two</p>";
     expect(roundtrip(html)).toMatch(/one<br>\s*two/);
+  });
+
+  it("preserves subscript and superscript", () => {
+    const html = "<p>H<sub>2</sub>O x<sup>n</sup></p>";
+    const out = roundtrip(html);
+    expect(out).toContain("<sub>2</sub>");
+    expect(out).toContain("<sup>n</sup>");
   });
 
   it("preserves consecutive empty paragraphs across the round-trip", () => {

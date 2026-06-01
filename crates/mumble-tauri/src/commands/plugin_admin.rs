@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::state::types::PluginRegistryEntryPayload;
+use crate::state::types::{PluginDataPayload, PluginRegistryEntryPayload};
 use crate::state::AppState;
 
 const DEFAULT_MARKETPLACE_BASE: &str = "https://plugins.fancy-mumble.com/api/v1";
@@ -31,6 +31,18 @@ pub(crate) fn get_plugin_registry(
     state: tauri::State<'_, AppState>,
 ) -> Vec<PluginRegistryEntryPayload> {
     state.get_plugin_registry()
+}
+
+/// Snapshot the cached server-originated `plugin-data` broadcasts
+/// (file-server config, live-doc config, plugin info, server emotes).
+/// These are delivered once per connect and never resent, so the UI
+/// calls this on HMR reload to re-hydrate (e.g. the document library)
+/// without forcing a reconnect.
+#[tauri::command]
+pub(crate) fn get_plugin_broadcasts(
+    state: tauri::State<'_, AppState>,
+) -> Vec<PluginDataPayload> {
+    state.get_plugin_broadcasts()
 }
 
 /// Admin: request the current plugin inventory from the connected server.

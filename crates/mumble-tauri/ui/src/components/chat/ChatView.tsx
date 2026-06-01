@@ -3,7 +3,7 @@ import React, { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRe
 import { useTranslation } from "react-i18next";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { useAppStore, liveDocKey } from "../../store";
-import type { ChatMessage, TimeFormat } from "../../types";
+import type { ChatMessage, TimeFormat, LiveDocDocLink } from "../../types";
 import { getPreferences } from "../../preferencesStorage";
 import { loadPersonalization, type PersonalizationData } from "../../personalizationStorage";
 import ChatHeader from "./ChatHeader";
@@ -30,6 +30,7 @@ import { useUserAvatars } from "../../lazyBlobs";
 import ChatMessageList from "./ChatMessageList";
 import QuotePreviewStrip from "./quote/QuotePreviewStrip";
 import PendingAttachmentsStrip from "./pending/PendingAttachmentsStrip";
+import type { PendingAttachment } from "./pending/PendingAttachmentsStrip";
 import { useDragDropAttachments } from "./useDragDropAttachments";
 import MentionPopover from "./mention/MentionPopover";
 import { useChatSend } from "./useChatSend";
@@ -45,8 +46,28 @@ import { useScreenShare } from "./stream/useScreenShare";
 import ScreenShareViewer, { BroadcastBanner, WebRtcErrorBanner } from "./stream/ScreenShareViewer";
 const LiveDocPanel = lazy(() => import("./livedoc/LiveDocPanel"));
 const LiveDocLaunchDialog = lazy(() => import("./livedoc/LiveDocLaunchDialog"));
+const LiveDocLibraryPanel = lazy(() => import("./livedoc/LiveDocLibraryPanel"));
 import LiveDocBanner from "./livedoc/LiveDocBanner";
+import { useLiveDocSidebarStore } from "./livedoc/sidebarStore";
 import type { LiveDocLaunchChoice } from "./livedoc/LiveDocLaunchDialog";
+import {
+  useLiveDocDropStore,
+  resolveDropTarget,
+  type LiveDocDropMode,
+} from "./livedoc/liveDocDropStore";
+
+/** Build a URL-safe, *unique* slug for a brand-new document so two docs
+ *  that share a title (e.g. the default "Untitled") never collapse onto
+ *  the same server-side document or the same sidebar entry. */
+function newDocSlug(title: string): string {
+  const base = title
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  const rand = Math.random().toString(36).slice(2, 8);
+  return base ? `${base}-${rand}` : `doc-${rand}`;
+}
 import ActiveWatchBanner from "./watch/ActiveWatchBanner";
 import styles from "./ChatView.module.css";
 import { Lightbox, type LightboxHandle } from "../elements/Lightbox";
@@ -442,10 +463,21 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     liveDocLookupKey != null ? pendingLiveDocAnnounces.get(liveDocLookupKey) : undefined;
 
   const [showLiveDocLaunch, setShowLiveDocLaunch] = useState(false);
+  const [showLiveDocLibrary, setShowLiveDocLibrary] = useState(false);
+  // Folder/section the next freshly-created document should be filed
+  // under in the sidebar.  `null` = the default "My documents" section.
+  const liveDocCreateTargetRef = useRef<string | null>(null);
+  const saveDocLink = useLiveDocSidebarStore((s) => s.saveDocLink);
+  const saveDocToDefault = useLiveDocSidebarStore((s) => s.saveDocToDefault);
   const [liveDocCompactChat, setLiveDocCompactChat] = useState(false);
   // Reset compact-chat toggle whenever the live doc closes or the channel changes.
   useEffect(() => {
     if (!activeLiveDoc) setLiveDocCompactChat(false);
+  }, [activeLiveDoc]);
+  // The library is a standalone browse view; once a document is open the
+  // panel takes over, so dismiss the library.
+  useEffect(() => {
+    if (activeLiveDoc) setShowLiveDocLibrary(false);
   }, [activeLiveDoc]);
   const toggleLiveDocCompactChat = useCallback(() => {
     setLiveDocCompactChat((v) => !v);
@@ -453,8 +485,36 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
 
   const handleOpenLiveDoc = useCallback(() => {
     if (selectedChannel === null) return;
+    liveDocCreateTargetRef.current = null;
     setShowLiveDocLaunch(true);
   }, [selectedChannel]);
+
+  // "New document in this folder" from the sidebar: remember the target
+  // folder so the launch handler files the created doc there.
+  const handleCreateDocInFolder = useCallback(
+    (folderId: string) => {
+      if (selectedChannel === null) return;
+      liveDocCreateTargetRef.current = folderId;
+      setShowLiveDocLaunch(true);
+    },
+    [selectedChannel],
+  );
+
+  const handleOpenDocLibrary = useCallback(() => {
+    setShowLiveDocLibrary(true);
+  }, []);
+
+  const handleOpenLibraryDoc = useCallback(
+    (link: LiveDocDocLink) => {
+      const channelId = link.channel ?? selectedChannel;
+      if (channelId === null) return;
+      const mode = link.channel === null ? "private" : "publish";
+      void requestOpenLiveDoc(channelId, link.slug, link.title, { silent: true, mode }).catch(
+        (e) => console.warn("live-doc open from library failed:", e),
+      );
+    },
+    [requestOpenLiveDoc, selectedChannel],
+  );
 
   const handleLiveDocLaunchSubmit = useCallback(
     async (choice: LiveDocLaunchChoice) => {
@@ -466,18 +526,42 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
         return;
       }
       setShowLiveDocLaunch(false);
+      const targetFolderId = liveDocCreateTargetRef.current;
+      liveDocCreateTargetRef.current = null;
       if (choice.seedMarkdown) {
         useAppStore.getState().setPendingLiveDocSeed(selectedChannel, choice.seedMarkdown);
       }
+      // A brand-new document gets a unique slug so it never collides with
+      // another doc of the same title; opening an existing one keeps using
+      // its title-derived slug for rehydration.
+      const slug = choice.mode === "new" ? newDocSlug(choice.title) : choice.title;
       try {
-        await requestOpenLiveDoc(selectedChannel, choice.title, choice.title);
+        await requestOpenLiveDoc(selectedChannel, slug, choice.title, {
+          mode: choice.visibility,
+        });
+        // File the freshly-created document into the sidebar so it stays in
+        // "My documents" and can be reopened later.  Published docs keep
+        // their channel; private docs are channel-less (lock icon).
+        if (choice.mode === "new") {
+          const link: LiveDocDocLink = {
+            slug,
+            title: choice.title,
+            channel: choice.visibility === "publish" ? selectedChannel : null,
+            owned: true,
+          };
+          if (targetFolderId) {
+            saveDocLink(targetFolderId, link);
+          } else {
+            saveDocToDefault(link, t("liveDoc.sidebar.defaultSection"));
+          }
+        }
       } catch (e) {
         const detail = e instanceof Error ? e.message : String(e);
         console.error("[ChatView] requestOpenLiveDoc threw:", e);
         showToast({ message: `Failed to open document: ${detail}`, variant: "error" });
       }
     },
-    [selectedChannel, requestOpenLiveDoc, showToast],
+    [selectedChannel, requestOpenLiveDoc, showToast, saveDocLink, saveDocToDefault, t],
   );
 
   const handleJoinLiveDoc = useCallback(async () => {
@@ -607,8 +691,57 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
 
   // -- Drag-drop preview ----------------------------------------------
   const canDropAttachments = isDmMode || selectedChannel !== null;
-  const { attachments: pendingAttachments, setAttachments: setPendingAttachments, dragActive, removeAttachment } =
-    useDragDropAttachments({ enabled: canDropAttachments });
+
+  const liveDocDropMode: LiveDocDropMode = (() => {
+    if (!activeLiveDoc) return "none";
+    return liveDocCompactChat ? "half" : "max";
+  })();
+
+  const resolveDragTarget = useCallback(
+    (x: number, y: number) =>
+      resolveDropTarget({
+        mode: liveDocDropMode,
+        point: { x, y },
+        liveDocRect: useLiveDocDropStore.getState().getRect?.() ?? null,
+      }),
+    [liveDocDropMode],
+  );
+
+  const handleLiveDocFiles = useCallback(async (items: PendingAttachment[]) => {
+    const insertImages = useLiveDocDropStore.getState().insertImages;
+    if (!insertImages) return;
+    const files: File[] = [];
+    for (const att of items) {
+      if (!att.isImage) continue;
+      try {
+        let file = att.file;
+        if (!file && att.path) {
+          const res = await fetch(convertFileSrc(att.path));
+          const blob = await res.blob();
+          file = new File([blob], att.name, { type: blob.type || "image/png" });
+        }
+        if (file) files.push(file);
+      } catch (e) {
+        console.error("read live-doc image failed:", e);
+      }
+    }
+    if (files.length > 0) insertImages(files);
+  }, []);
+
+  const {
+    attachments: pendingAttachments,
+    setAttachments: setPendingAttachments,
+    dragTarget,
+    removeAttachment,
+  } = useDragDropAttachments({
+    enabled: canDropAttachments,
+    resolveTarget: resolveDragTarget,
+    onLiveDocFiles: handleLiveDocFiles,
+  });
+
+  useEffect(() => {
+    useLiveDocDropStore.getState().setDragOver(dragTarget === "livedoc");
+  }, [dragTarget]);
 
   const sendPendingAttachments = useCallback(async () => {
     if (pendingAttachments.length === 0) return;
@@ -810,6 +943,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           onPinnedMessages={handleOpenPinnedPanel}
           hasNewDownloads={unseenDownloadCount > 0}
           onDownloads={handleOpenDownloadsPanel}
+          onOpenDocLibrary={handleOpenDocLibrary}
           onPopOutDm={inPopout ? undefined : handlePopOutDm}
         />
         )
@@ -842,6 +976,22 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
             session={activeLiveDoc}
             compactChat={liveDocCompactChat}
             onToggleCompactChat={toggleLiveDocCompactChat}
+            onCreateDoc={selectedChannel !== null && !isDmMode ? handleOpenLiveDoc : undefined}
+            onCreateDocInFolder={
+              selectedChannel !== null && !isDmMode ? handleCreateDocInFolder : undefined
+            }
+          />
+        </Suspense>
+      )}
+
+      {/* Standalone document library (browse saved docs without one open). */}
+      {showLiveDocLibrary && !activeLiveDoc && (
+        <Suspense fallback={null}>
+          <LiveDocLibraryPanel
+            onOpenDoc={handleOpenLibraryDoc}
+            onCreateDoc={handleOpenLiveDoc}
+            onCreateDocInFolder={handleCreateDocInFolder}
+            onClose={() => setShowLiveDocLibrary(false)}
           />
         </Suspense>
       )}
@@ -899,6 +1049,10 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
         <WebRtcErrorBanner message={webrtcError} onDismiss={clearWebRtcError} />
       )}
 
+      {/* Chat column: groups the messages + composer so the file-drag
+           overlay (position:absolute, inset:0) is scoped to the chat's
+           own portion and never spills over the live-doc panel above. */}
+      <div className={styles.chatColumn}>
       {/* Messages wrapper: position:relative so the key-share banner
            can overlay the scroll viewport without scrolling with it */}
       <div className={styles.messagesWrapper}>
@@ -1018,7 +1172,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       />
 
       {/* Drag overlay shown while user drags a file over the chat window */}
-      {dragActive && canDropAttachments && (
+      {dragTarget === "chat" && canDropAttachments && (
         <div className={styles.dragOverlay} aria-hidden="true">
           <div className={styles.dragOverlayInner}>
             <span>{t("dragDrop.overlayHint")}</span>
@@ -1043,6 +1197,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           isEditing={editingMessage !== null}
           onCancelEdit={cancelEdit}
         />
+      </div>
       </div>
 
       {showPollCreator && (

@@ -1,0 +1,201 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+  min-width: 240px;
+  height: 100%;
+  border-right: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  background: var(--bg-secondary, rgba(0, 0, 0, 0.15));
+  overflow: hidden;
+}
+
+.collapsed {
+  width: 40px;
+  min-width: 40px;
+}
+
+.standalone {
+  flex: 0 0 300px;
+  width: 300px;
+  min-width: 260px;
+  max-width: 340px;
+  border-right: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.headerTitle {
+  flex: 1;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.7));
+  cursor: pointer;
+}
+
+.iconBtn:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary, #fff);
+}
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0 8px;
+}
+
+.hint {
+  padding: 12px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.55));
+}
+
+.empty {
+  padding: 12px;
+  font-size: 0.78rem;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.45));
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 0.82rem;
+  color: var(--text-primary, rgba(255, 255, 255, 0.9));
+  cursor: pointer;
+  user-select: none;
+}
+
+.row:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+.rowLabel {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.docActive {
+  background: var(--accent-soft, rgba(42, 171, 238, 0.18));
+  color: var(--text-primary, #fff);
+}
+
+.caret {
+  display: inline-flex;
+  width: 16px;
+  justify-content: center;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.5));
+}
+
+.rowActions {
+  display: none;
+  gap: 2px;
+}
+
+.row:hover .rowActions {
+  display: inline-flex;
+}
+
+.miniBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+  cursor: pointer;
+}
+
+.miniBtn:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.12));
+  color: var(--text-primary, #fff);
+}
+
+.sectionName {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+}
+
+/* The row currently being dragged. */
+.dragging {
+  opacity: 0.4;
+}
+
+/* A folder/section row that is a valid drop target while dragging over it. */
+.dragOver {
+  background: var(--accent-soft, rgba(42, 171, 238, 0.22));
+  box-shadow: inset 0 0 0 1px var(--accent, rgba(42, 171, 238, 0.6));
+  border-radius: 4px;
+}
+
+/* Drop zone at the bottom of the tree for promoting a folder to a
+   top-level section. */
+.rootDropZone {
+  height: 18px;
+  margin: 2px 8px 0;
+  border-radius: 4px;
+}
+
+.rootDropZoneActive {
+  background: var(--accent-soft, rgba(42, 171, 238, 0.22));
+  box-shadow: inset 0 0 0 1px var(--accent, rgba(42, 171, 238, 0.6));
+}
+
+/* Cursor-following ghost shown while dragging a folder/document row. */
+.dragGhost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--bg-elevated, rgba(28, 30, 40, 0.96));
+  border: 1px solid var(--accent, rgba(42, 171, 238, 0.6));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  color: var(--text-primary, #fff);
+  font-size: 0.82rem;
+  pointer-events: none;
+  opacity: 0.95;
+}
+
+.dragGhostLabel {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

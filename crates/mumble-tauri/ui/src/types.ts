@@ -283,6 +283,10 @@ export interface FileServerConfig {
    *  publicly accessible links (`public` and `password` modes).  When
    *  false, only `session`-scoped uploads are permitted. */
   canShareFilesPublic: boolean;
+  /** True when the connected user is a registered (non-guest) Mumble
+   *  account.  Gates access to per-user private storage (`/me/storage`),
+   *  where the live-doc sidebar is persisted. */
+  registered: boolean;
 }
 
 /** Parsed semantic version triple as returned by `GET /capabilities`. */
@@ -318,6 +322,44 @@ export interface FileServerCapabilities {
   fancy_version: FileServerVersionInfo;
   features: FileServerFeatures;
   limits: FileServerLimits;
+}
+
+/** A saved reference to a live document in a user's personal sidebar.
+ *  References a server-scoped document by `slug`; `channel` is the
+ *  channel it was published to (or `null` for a private doc). */
+export interface LiveDocDocLink {
+  slug: string;
+  title: string;
+  channel: number | null;
+  /** True if this user created the document. */
+  owned: boolean;
+}
+
+/** A folder in the sidebar tree (nestable).  Sections and folders share
+ *  this shape; a section is simply a top-level folder. */
+export interface LiveDocFolder {
+  id: string;
+  name: string;
+  folders: LiveDocFolder[];
+  docs: LiveDocDocLink[];
+}
+
+/** A top-level user-defined section of the sidebar. */
+export type LiveDocSection = LiveDocFolder;
+
+/** The persisted per-user sidebar tree (stored in file-server private
+ *  storage under the `livedoc-sidebar` key). */
+export interface LiveDocIndex {
+  v: number;
+  sections: LiveDocSection[];
+}
+
+/** One member a document has been shared with, as pushed by the
+ *  live-doc plugin's `SharedWith` envelope. */
+export interface LiveDocSharedMember {
+  cert_hash: string;
+  user_id: number;
+  display_name: string;
 }
 
 /** Configuration advertised by the live-doc plugin to clients on connect

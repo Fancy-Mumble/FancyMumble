@@ -17,9 +17,9 @@
 
 import { Node, mergeAttributes } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
+import type { EditorView } from "@tiptap/pm/view";
 
 declare module "@tiptap/core" {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface Commands<ReturnType> {
     liveDocMention: {
       /** Insert a mention chip at the current caret. */
@@ -80,6 +80,41 @@ function detectTrigger(
   return { kind, offsetFromText: i, query: text.slice(queryStart, cursorInText) };
 }
 
+/** Value equality for trigger states, ignoring the caret `rect` (which is
+ *  positional and derived from `from`/`to`).  Used to suppress redundant
+ *  `onChange` emissions: the plugin's `view.update` fires on every editor
+ *  update, and emitting a fresh object each time drives a
+ *  re-render -> view-update -> emit feedback loop that freezes the app. */
+function sameTrigger(
+  a: MentionTriggerState | null,
+  b: MentionTriggerState | null,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.from === b.from && a.to === b.to && a.query === b.query && a.kind === b.kind;
+}
+
+/** Compute the active mention trigger for the current selection, or null. */
+function triggerForSelection(view: EditorView): MentionTriggerState | null {
+  const { state } = view;
+  const sel = state.selection;
+  if (!sel.empty) return null;
+  const $from = sel.$from;
+  if (!$from.parent.isTextblock) return null;
+  const before = $from.parent.textBetween(0, $from.parentOffset, undefined, "￼");
+  const trig = detectTrigger(before, before.length);
+  if (!trig) return null;
+  const tokenEnd = $from.pos;
+  const coords = view.coordsAtPos(tokenEnd);
+  return {
+    from: $from.start() + trig.offsetFromText,
+    to: tokenEnd,
+    rect: { left: coords.left, top: coords.top, bottom: coords.bottom },
+    query: trig.query,
+    kind: trig.kind,
+  };
+}
+
 export const LiveDocMention = Node.create<MentionPluginOptions>({
   name: "mention",
   group: "inline",
@@ -107,16 +142,16 @@ export const LiveDocMention = Node.create<MentionPluginOptions>({
         tag: "span[data-mention-session]",
         getAttrs: (el) => ({
           variant: "user",
-          target: (el as HTMLElement).dataset.mentionSession ?? "",
-          label: ((el as HTMLElement).textContent ?? "").replace(/^@/, ""),
+          target: el.dataset.mentionSession ?? "",
+          label: (el.textContent ?? "").replace(/^@/, ""),
         }),
       },
       {
         tag: "span[data-mention-role]",
         getAttrs: (el) => ({
           variant: "role",
-          target: (el as HTMLElement).dataset.mentionRole ?? "",
-          label: ((el as HTMLElement).textContent ?? "").replace(/^@/, ""),
+          target: el.dataset.mentionRole ?? "",
+          label: (el.textContent ?? "").replace(/^@/, ""),
         }),
       },
       {
@@ -179,41 +214,26 @@ export const LiveDocMention = Node.create<MentionPluginOptions>({
     return [
       new Plugin({
         key: mentionPluginKey,
-        view: () => ({
-          update(view) {
-            const { state } = view;
-            const sel = state.selection;
-            if (!sel.empty) {
+        view: () => {
+          // Remember the last emitted trigger so we only notify React when
+          // it genuinely changes.  Without this guard the unconditional
+          // emit-per-update drives an infinite render loop (e.g. clicking
+          // an inline-code span) that freezes the whole app.
+          let last: MentionTriggerState | null = null;
+          let primed = false;
+          return {
+            update(view) {
+              const next = triggerForSelection(view);
+              if (primed && sameTrigger(last, next)) return;
+              primed = true;
+              last = next;
+              onChange(next);
+            },
+            destroy() {
               onChange(null);
-              return;
-            }
-            const $from = sel.$from;
-            const parent = $from.parent;
-            if (!parent.isTextblock) {
-              onChange(null);
-              return;
-            }
-            const before = parent.textBetween(0, $from.parentOffset, undefined, "￼");
-            const trig = detectTrigger(before, before.length);
-            if (!trig) {
-              onChange(null);
-              return;
-            }
-            const tokenStart = $from.start() + trig.offsetFromText;
-            const tokenEnd = $from.pos;
-            const coords = view.coordsAtPos(tokenEnd);
-            onChange({
-              from: tokenStart,
-              to: tokenEnd,
-              rect: { left: coords.left, top: coords.top, bottom: coords.bottom },
-              query: trig.query,
-              kind: trig.kind,
-            });
-          },
-          destroy() {
-            onChange(null);
-          },
-        }),
+            },
+          };
+        },
       }),
     ];
   },

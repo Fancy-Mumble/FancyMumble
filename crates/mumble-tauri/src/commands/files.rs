@@ -3,8 +3,8 @@
 use tauri_plugin_dialog::DialogExt;
 
 use crate::state::{
-    AddEmoteRequest, AddEmoteResponse, AppState, DownloadRequest, RemoveEmoteRequest,
-    UploadBytesRequest, UploadRequest, UploadResponse,
+    AddEmoteRequest, AddEmoteResponse, AppState, DownloadRequest, PrivateStorageRequest,
+    RemoveEmoteRequest, UploadBytesRequest, UploadRequest, UploadResponse,
 };
 
 /// Upload a local file to the server-side `mumble-file-server` plugin and
@@ -48,6 +48,26 @@ pub(crate) async fn download_file(
     request: DownloadRequest,
 ) -> Result<u64, String> {
     state.download_file(request).await
+}
+
+/// Read a value from the caller's per-user private storage on the
+/// file-server (registered users only).  Returns `null` if absent.
+#[tauri::command]
+pub(crate) async fn fileserver_get_private(
+    state: tauri::State<'_, AppState>,
+    request: PrivateStorageRequest,
+) -> Result<Option<String>, String> {
+    state.private_get(request).await
+}
+
+/// Write a value to the caller's per-user private storage on the
+/// file-server (registered users only).
+#[tauri::command]
+pub(crate) async fn fileserver_put_private(
+    state: tauri::State<'_, AppState>,
+    request: PrivateStorageRequest,
+) -> Result<(), String> {
+    state.private_put(request).await
 }
 
 /// Upload a custom server emote (admin-only on the server side).

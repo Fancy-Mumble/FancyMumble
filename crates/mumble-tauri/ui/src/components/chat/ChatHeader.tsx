@@ -1,4 +1,4 @@
-import { ArrowRightIcon, BellIcon, BellOffIcon, CloseIcon, DatabaseIcon, FolderIcon, PinIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, UsersGroupIcon } from "../../icons";
+import { ArrowRightIcon, BellIcon, BellOffIcon, CloseIcon, DatabaseIcon, FileTextIcon, FolderIcon, PinIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, UsersGroupIcon } from "../../icons";
 import { useTranslation } from "react-i18next";
 import { isMobile } from "../../utils/platform";
 import type { KeyTrustLevel } from "../../types";
@@ -53,6 +53,8 @@ interface ChatHeaderProps {
   readonly hasNewDownloads?: boolean;
   /** Called when the user opens the downloads panel. */
   readonly onDownloads?: () => void;
+  /** Called when the user opens the saved document library. */
+  readonly onOpenDocLibrary?: () => void;
   /** Called when the user clicks "Pop out DM" (only meaningful when isDm). */
   readonly onPopOutDm?: () => void;
 }
@@ -65,10 +67,11 @@ function buildKebabItems({
   onPinnedMessages,
   hasNewDownloads,
   onDownloads,
+  onOpenDocLibrary,
   onChannelSearch,
   onChannelInfoToggle,
   t,
-}: Pick<ChatHeaderProps, "onPollCreate" | "isSilenced" | "onToggleSilence" | "hasNewPins" | "onPinnedMessages" | "hasNewDownloads" | "onDownloads" | "onChannelSearch" | "onChannelInfoToggle"> & { t: (key: string) => string }): KebabMenuItem[] {
+}: Pick<ChatHeaderProps, "onPollCreate" | "isSilenced" | "onToggleSilence" | "hasNewPins" | "onPinnedMessages" | "hasNewDownloads" | "onDownloads" | "onOpenDocLibrary" | "onChannelSearch" | "onChannelInfoToggle"> & { t: (key: string) => string }): KebabMenuItem[] {
   const items: KebabMenuItem[] = [];
   if (onChannelSearch) {
     items.push({
@@ -112,6 +115,14 @@ function buildKebabItems({
       onClick: onPollCreate,
     });
   }
+  if (onOpenDocLibrary) {
+    items.push({
+      id: "browse-documents",
+      label: t("header.browseDocuments"),
+      icon: <FileTextIcon width={16} height={16} />,
+      onClick: onOpenDocLibrary,
+    });
+  }
   if (onToggleSilence) {
     items.push({
       id: "toggle-silence",
@@ -149,6 +160,7 @@ export default function ChatHeader({
   onPinnedMessages,
   hasNewDownloads,
   onDownloads,
+  onOpenDocLibrary,
   onPopOutDm,
 }: ChatHeaderProps) {
   const { t } = useTranslation("chat");
@@ -290,7 +302,7 @@ export default function ChatHeader({
         )}
         {!privateBadge && (
           <KebabMenu
-            items={buildKebabItems({ onPollCreate, isSilenced, onToggleSilence, hasNewPins, onPinnedMessages, hasNewDownloads, onDownloads, onChannelSearch: isMobile ? onChannelSearch : undefined, onChannelInfoToggle: isMobile ? onChannelInfoToggle : undefined, t: tStr })}
+            items={buildKebabItems({ onPollCreate, isSilenced, onToggleSilence, hasNewPins, onPinnedMessages, hasNewDownloads, onDownloads, onOpenDocLibrary, onChannelSearch: isMobile ? onChannelSearch : undefined, onChannelInfoToggle: isMobile ? onChannelInfoToggle : undefined, t: tStr })}
             ariaLabel={t("header.channelOptions")}
             badge={hasNewPins || hasNewDownloads}
           />

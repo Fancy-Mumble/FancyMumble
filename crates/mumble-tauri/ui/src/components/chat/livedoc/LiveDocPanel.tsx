@@ -8,25 +8,43 @@
  * shows full-height as usual.
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   CloseIcon,
+  EditIcon,
   FileDownIcon,
   FileIcon,
+  GlobeIcon,
   HistoryIcon,
   MaximizeIcon,
   MinimizeIcon,
   NewspaperIcon,
   PrinterIcon,
-  ShareIcon,
+  SaveIcon,
+  StarIcon,
+  UsersGroupIcon,
 } from "../../../icons";
 import { useAppStore, encodeLiveDocInviteMarker, sendPluginMessage } from "../../../store";
-import { useLiveDoc, type LiveDocSessionInfo } from "./useLiveDoc";
+import {
+  useLiveDoc,
+  useLiveDocTitle,
+  useLiveDocPageSetup,
+  useLiveDocDecoration,
+  setLiveDocTitle,
+  type LiveDocSessionInfo,
+} from "./useLiveDoc";
 import LiveDocEditor, { type LiveDocEditorApi } from "./LiveDocEditor";
+import LiveDocPageSetupMenu from "./LiveDocPageSetupMenu";
 import LiveDocAvatarStack from "./LiveDocAvatarStack";
 import LiveDocExportDialog from "./LiveDocExportDialog";
+import LiveDocSidebar from "./LiveDocSidebar";
+import { useLiveDocSidebarStore } from "./sidebarStore";
+import { useLiveDocDropStore } from "./liveDocDropStore";
+import { useLiveDocSharedWithStore } from "./sharedWithStore";
 import { exportLiveDocToPdf } from "./liveDocPdf";
+import { openPrompt } from "../../elements/promptDialogStore";
+import type { LiveDocDocLink } from "../../../types";
 import styles from "./LiveDocPanel.module.css";
 
 interface LiveDocPanelProps {
@@ -34,23 +52,44 @@ interface LiveDocPanelProps {
   /** When true, the chat below is shrunk to ~25 % of the viewport. */
   readonly compactChat?: boolean;
   readonly onToggleCompactChat?: () => void;
+  /** Invoked when the user picks "New document" from the sidebar. */
+  readonly onCreateDoc?: () => void;
+  /** Invoked when the user picks "New document" on a specific sidebar
+   *  folder/section, so the created doc is filed under it. */
+  readonly onCreateDocInFolder?: (folderId: string) => void;
 }
 
 export default function LiveDocPanel({
   session,
   compactChat = false,
   onToggleCompactChat,
+  onCreateDoc,
+  onCreateDocInFolder,
 }: LiveDocPanelProps) {
   const { t } = useTranslation("chat");
   const closeActiveLiveDoc = useAppStore((s) => s.closeActiveLiveDoc);
   const consumePendingLiveDocSeed = useAppStore((s) => s.consumePendingLiveDocSeed);
   const sendMessage = useAppStore((s) => s.sendMessage);
+  const publishLiveDoc = useAppStore((s) => s.publishLiveDoc);
+  const requestOpenLiveDoc = useAppStore((s) => s.requestOpenLiveDoc);
+  const renameActiveLiveDoc = useAppStore((s) => s.renameActiveLiveDoc);
+  const saveLiveDoc = useAppStore((s) => s.saveLiveDoc);
   const storeUsers = useAppStore((s) => s.users);
   const activeSessions = useMemo(() => new Set(storeUsers.map((u) => u.session)), [storeUsers]);
+  const saveDocToDefault = useLiveDocSidebarStore((s) => s.saveDocToDefault);
+  const renameDocLink = useLiveDocSidebarStore((s) => s.renameDocLink);
+  const sharedWith = useLiveDocSharedWithStore((s) => s.bySlug[session.slug]);
   const handle = useLiveDoc(session);
+  const liveTitle = useLiveDocTitle(handle?.doc ?? null, session.title || t("liveDoc.untitled"));
+  const pageSetup = useLiveDocPageSetup(handle?.doc ?? null);
+  const decoration = useLiveDocDecoration(handle?.doc ?? null);
   const editorApi = useRef<LiveDocEditorApi | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const dragOver = useLiveDocDropStore((s) => s.dragOver);
   const [paperMode, setPaperMode] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
 
   // Only show peers who are still present on the Mumble server.  Yjs
   // awareness states expire after ~30 s, so without this filter a
@@ -63,11 +102,17 @@ export default function LiveDocPanel({
   }, [session.channelId, session.appServerId, closeActiveLiveDoc]);
 
   const onHistory = useCallback(() => {
-    // eslint-disable-next-line no-alert
-    window.alert(t("liveDoc.historyComingSoon"));
+    globalThis.alert(t("liveDoc.historyComingSoon"));
   }, [t]);
 
-  const onReshareInvite = useCallback(() => {
+  // Publish the document to the current channel: tell the server to bind
+  // it (so channel members may join), announce to peers, and post a
+  // persistent invite card.  Also used to re-share an already-published
+  // doc.  This replaces the old "Re-share invite" action.
+  const onPublish = useCallback(() => {
+    void publishLiveDoc(session.channelId, session.slug).catch((e) =>
+      console.warn("live-doc publish failed:", e),
+    );
     sendPluginMessage("fancy-live-doc", "Announce", {
       channelId: session.channelId,
       slug: session.slug,
@@ -75,9 +120,60 @@ export default function LiveDocPanel({
     }).catch((e) => console.warn("plugin-message Announce failed:", e));
     const body = encodeLiveDocInviteMarker(session.slug, session.title);
     void sendMessage(session.channelId, body).catch((e) =>
-      console.warn("live-doc reshare message failed:", e),
+      console.warn("live-doc publish message failed:", e),
     );
-  }, [session.channelId, session.slug, session.title, sendMessage]);
+  }, [publishLiveDoc, session.channelId, session.slug, session.title, sendMessage]);
+
+  const onSaveToDocs = useCallback(() => {
+    const link: LiveDocDocLink = {
+      slug: session.slug,
+      title: session.title || t("liveDoc.untitled"),
+      channel: session.channelId || null,
+      owned: false,
+    };
+    saveDocToDefault(link, t("liveDoc.sidebar.defaultSection"));
+  }, [saveDocToDefault, session.slug, session.title, session.channelId, t]);
+
+  const applyActiveRename = useCallback(
+    (slug: string, title: string) => {
+      if (handle?.doc) setLiveDocTitle(handle.doc, title);
+      renameActiveLiveDoc(session.channelId, slug, title, session.appServerId);
+    },
+    [handle, renameActiveLiveDoc, session.channelId, session.appServerId],
+  );
+
+  const onRename = useCallback(() => {
+    void openPrompt({
+      title: t("liveDoc.renameDoc"),
+      label: t("liveDoc.renameDocPrompt"),
+      defaultValue: liveTitle,
+    }).then((next) => {
+      const title = next?.trim();
+      if (!title || title === liveTitle) return;
+      applyActiveRename(session.slug, title);
+      renameDocLink(session.slug, title);
+    });
+  }, [t, liveTitle, applyActiveRename, renameDocLink, session.slug]);
+
+  const onSaveNow = useCallback(() => {
+    void saveLiveDoc(session.channelId, session.slug)
+      .then(() => {
+        setSavedFlash(true);
+        globalThis.setTimeout(() => setSavedFlash(false), 1500);
+      })
+      .catch((e) => console.warn("live-doc save failed:", e));
+  }, [saveLiveDoc, session.channelId, session.slug]);
+
+  const onOpenSidebarDoc = useCallback(
+    (link: LiveDocDocLink) => {
+      const channelId = link.channel ?? session.channelId;
+      const mode = link.channel === null ? "private" : "publish";
+      void requestOpenLiveDoc(channelId, link.slug, link.title, { silent: true, mode }).catch(
+        (e) => console.warn("live-doc open from sidebar failed:", e),
+      );
+    },
+    [requestOpenLiveDoc, session.channelId],
+  );
 
   const onExport = useCallback(() => setExportOpen(true), []);
   const getMarkdownForExport = useCallback(
@@ -88,9 +184,16 @@ export default function LiveDocPanel({
   const onExportPdf = useCallback(() => {
     const html = editorApi.current?.getHtml() ?? "";
     if (!html) return;
-    void exportLiveDocToPdf(html, session.title || t("liveDoc.untitled"))
+    void exportLiveDocToPdf(html, liveTitle, pageSetup, decoration)
       .catch((e) => console.warn("live-doc pdf export failed:", e));
-  }, [session.title, t]);
+  }, [liveTitle, pageSetup, decoration]);
+
+  const onInsertCoverPage = useCallback(() => {
+    editorApi.current?.insertCoverPage(liveTitle);
+  }, [liveTitle]);
+  const onInsertSectionBreak = useCallback(() => {
+    editorApi.current?.insertSectionBreak();
+  }, []);
 
   const onEditorReady = useCallback(
     (api: LiveDocEditorApi) => {
@@ -103,18 +206,46 @@ export default function LiveDocPanel({
     [consumePendingLiveDocSeed, session.channelId, session.appServerId],
   );
 
-  const statusKey = handle?.status === "connected"
-    ? "liveDoc.connected"
-    : handle?.status === "connecting"
-      ? "liveDoc.connecting"
-      : "liveDoc.disconnected";
+  useEffect(() => {
+    const { registerTarget, unregisterTarget } = useLiveDocDropStore.getState();
+    registerTarget(
+      () => bodyRef.current?.getBoundingClientRect() ?? null,
+      (files) => {
+        for (const file of files) {
+          void editorApi.current
+            ?.insertImageFromFile(file)
+            .catch((e) => console.warn("live-doc image drop failed:", e));
+        }
+      },
+    );
+    return () => unregisterTarget();
+  }, []);
+
+  let statusKey: "liveDoc.connected" | "liveDoc.connecting" | "liveDoc.disconnected" =
+    "liveDoc.disconnected";
+  if (handle?.status === "connected") {
+    statusKey = "liveDoc.connected";
+  } else if (handle?.status === "connecting") {
+    statusKey = "liveDoc.connecting";
+  }
 
   return (
     <div className={styles.panel}>
+      <div className={styles.split}>
+        <LiveDocSidebar
+          currentSlug={session.slug}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
+          onOpenDoc={onOpenSidebarDoc}
+          onCreateDoc={onCreateDoc}
+          onCreateDocInFolder={onCreateDocInFolder}
+          onRenameActiveDoc={applyActiveRename}
+        />
+        <div className={styles.main}>
       <div className={styles.header}>
         <div className={styles.title}>
           <FileIcon width={16} height={16} aria-hidden="true" />
-          <span className={styles.titleText}>{session.title || t("liveDoc.untitled")}</span>
+          <span className={styles.titleText}>{liveTitle}</span>
           <span
             className={`${styles.status} ${handle?.status === "connected" ? styles.statusOk : styles.statusBad}`}
             aria-live="polite"
@@ -122,8 +253,42 @@ export default function LiveDocPanel({
             {t(statusKey)}
           </span>
           {peers.length > 0 && <LiveDocAvatarStack peers={peers} />}
+          {sharedWith && sharedWith.length > 0 && (
+            <span
+              className={styles.sharedWith}
+              title={sharedWith.map((m) => m.display_name).join(", ")}
+            >
+              <UsersGroupIcon width={13} height={13} aria-hidden="true" />
+              {sharedWith.length}
+            </span>
+          )}
         </div>
         <div className={styles.headerActions}>
+          <button
+            type="button"
+            className={styles.headerIconBtn}
+            onClick={onRename}
+            title={t("liveDoc.renameDoc")}
+            aria-label={t("liveDoc.renameDoc")}
+          >
+            <EditIcon width={16} height={16} aria-hidden="true" />
+          </button>
+          {session.isOwner && (
+            <button
+              type="button"
+              className={`${styles.headerIconBtn} ${savedFlash ? styles.headerBtnActive : ""}`}
+              onClick={onSaveNow}
+              title={savedFlash ? t("liveDoc.saved") : t("liveDoc.saveNow")}
+              aria-label={savedFlash ? t("liveDoc.saved") : t("liveDoc.saveNow")}
+            >
+              <SaveIcon width={16} height={16} aria-hidden="true" />
+            </button>
+          )}
+          <LiveDocPageSetupMenu
+            doc={handle?.doc ?? null}
+            onInsertCoverPage={onInsertCoverPage}
+            onInsertSectionBreak={onInsertSectionBreak}
+          />
           <button
             type="button"
             className={`${styles.headerIconBtn} ${paperMode ? styles.headerBtnActive : ""}`}
@@ -164,11 +329,20 @@ export default function LiveDocPanel({
           <button
             type="button"
             className={styles.headerIconBtn}
-            onClick={onReshareInvite}
-            title={t("liveDoc.reshareInvite")}
-            aria-label={t("liveDoc.reshareInvite")}
+            onClick={onSaveToDocs}
+            title={t("liveDoc.sidebar.saveToDocs")}
+            aria-label={t("liveDoc.sidebar.saveToDocs")}
           >
-            <ShareIcon width={16} height={16} aria-hidden="true" />
+            <StarIcon width={16} height={16} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={styles.headerIconBtn}
+            onClick={onPublish}
+            title={t("liveDoc.publishToChannel")}
+            aria-label={t("liveDoc.publishToChannel")}
+          >
+            <GlobeIcon width={16} height={16} aria-hidden="true" />
           </button>
           {onToggleCompactChat && (
             <button
@@ -197,7 +371,7 @@ export default function LiveDocPanel({
           </button>
         </div>
       </div>
-      <div className={styles.body}>
+      <div className={styles.body} ref={bodyRef}>
         {handle ? (
           <>
             <LiveDocEditor
@@ -234,11 +408,20 @@ export default function LiveDocPanel({
         ) : (
           <div className={styles.loading}>{t("liveDoc.connecting")}</div>
         )}
+        {dragOver && (
+          <div className={styles.dropOverlay} aria-hidden="true">
+            <div className={styles.dropOverlayInner}>
+              <span>{t("liveDoc.dropImageHint")}</span>
+            </div>
+          </div>
+        )}
+      </div>
+        </div>
       </div>
 
       <LiveDocExportDialog
         open={exportOpen}
-        title={session.title || t("liveDoc.untitled")}
+        title={liveTitle}
         channelId={session.channelId}
         getMarkdown={getMarkdownForExport}
         onClose={() => setExportOpen(false)}

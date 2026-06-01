@@ -1,0 +1,63 @@
+/* Interim header/footer bands rendered inside the page padding zone.
+   They sit above (header) and below (footer) the editor content, span
+   the page text column, and stay subtle until hovered/focused. */
+
+.band {
+  position: absolute;
+  left: var(--ld-pad-x, 84px);
+  right: var(--ld-pad-x, 84px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 28px;
+  z-index: 1;
+}
+
+.header {
+  top: calc(var(--ld-pad-y, 72px) / 2 - 14px);
+}
+
+.footer {
+  bottom: calc(var(--ld-pad-y, 72px) / 2 - 14px);
+}
+
+.bandInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  padding: 2px 2px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.6));
+  outline: none;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.bandInput::placeholder {
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.28));
+  font-style: italic;
+}
+
+.bandInput:hover {
+  border-bottom-color: var(--color-border, rgba(255, 255, 255, 0.18));
+}
+
+.bandInput:focus-visible {
+  border-bottom-color: var(--color-accent, #4a9eff);
+  color: var(--color-text-primary, #fff);
+}
+
+.pageNumber {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.55));
+  white-space: nowrap;
+}
+
+/* White-paper preview mode: darken the band text for contrast. */
+:global(.editorPagePaper) .bandInput,
+:global(.editorPagePaper) .pageNumber {
+  color: #4a4a50;
+}

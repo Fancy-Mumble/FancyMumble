@@ -31,6 +31,10 @@ type LaunchMode = "new" | "existing";
 export interface LiveDocLaunchChoice {
   readonly mode: LaunchMode;
   readonly title: string;
+  /** Whether to publish the document to the current channel immediately
+   *  ("publish") or keep it private until explicitly published
+   *  ("private"). */
+  readonly visibility: "private" | "publish";
   /** Optional `.md` text that the parent should insert as the initial
    *  document body once the editor is mounted. */
   readonly seedMarkdown?: string;
@@ -55,6 +59,7 @@ export default function LiveDocLaunchDialog({
   const { t } = useTranslation("chat");
   const { t: tc } = useTranslation("common");
   const [mode, setMode] = useState<LaunchMode>("new");
+  const [visibility, setVisibility] = useState<"private" | "publish">("publish");
   const [title, setTitle] = useState("");
   const [seedMarkdown, setSeedMarkdown] = useState<string | undefined>(undefined);
   const [seedFilename, setSeedFilename] = useState<string | undefined>(undefined);
@@ -64,6 +69,7 @@ export default function LiveDocLaunchDialog({
   useEffect(() => {
     if (!open) return;
     setMode("new");
+    setVisibility("publish");
     setTitle(t("liveDoc.untitled"));
     setSeedMarkdown(undefined);
     setSeedFilename(undefined);
@@ -102,9 +108,9 @@ export default function LiveDocLaunchDialog({
         console.warn("[LiveDocLaunchDialog] aborted: empty title");
         return;
       }
-      onSubmit({ mode, title: trimmed, seedMarkdown, seedFilename });
+      onSubmit({ mode, title: trimmed, visibility, seedMarkdown, seedFilename });
     },
-    [mode, title, seedMarkdown, seedFilename, onSubmit],
+    [mode, title, visibility, seedMarkdown, seedFilename, onSubmit],
   );
 
   if (!open) return null;
@@ -168,6 +174,33 @@ export default function LiveDocLaunchDialog({
               placeholder={t("liveDoc.newDocPlaceholder")}
               maxLength={120}
             />
+          </div>
+
+          <div className={styles.modeList} role="radiogroup" aria-label={t("liveDoc.launch.visibilityLabel")}>
+            {(["publish", "private"] as const).map((v) => {
+              const active = visibility === v;
+              const cls = [styles.modeOption, active ? styles.modeOptionActive : ""].filter(Boolean).join(" ");
+              return (
+                <label key={v} className={cls}>
+                  <input
+                    type="radio"
+                    name="live-doc-visibility"
+                    value={v}
+                    checked={active}
+                    onChange={() => setVisibility(v)}
+                    className={styles.radio}
+                  />
+                  <div className={styles.modeText}>
+                    <div className={styles.modeName}>
+                      {v === "publish" ? t("liveDoc.launch.visPublish") : t("liveDoc.launch.visPrivate")}
+                    </div>
+                    <div className={styles.modeDesc}>
+                      {v === "publish" ? t("liveDoc.launch.visPublishDesc") : t("liveDoc.launch.visPrivateDesc")}
+                    </div>
+                  </div>
+                </label>
+              );
+            })}
           </div>
 
           {mode === "new" && (

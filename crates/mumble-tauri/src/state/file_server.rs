@@ -166,6 +166,26 @@ pub struct DownloadRequest {
     pub credential: Option<DownloadCredential>,
 }
 
+/// Request payload for the per-user private storage commands.
+///
+/// Private storage is a generic key/value namespace on the file-server
+/// scoped to the caller's cert hash and restricted to registered users.
+/// The live-doc sidebar uses it under a fixed key, but the file-server
+/// has no knowledge of that.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrivateStorageRequest {
+    /// Base URL advertised by the file-server config (no trailing slash).
+    pub base_url: String,
+    /// Session JWT from the file-server config (proves identity + `reg`).
+    pub session_jwt: String,
+    /// Storage key (opaque).
+    pub key: String,
+    /// Value to store (UTF-8); only used by the put command.
+    #[serde(default)]
+    pub value: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 struct AuthResponse {
     ticket: String,
@@ -449,6 +469,55 @@ impl AppState {
         resp.json::<UploadResponse>()
             .await
             .map_err(|e| format!("upload response parse: {e}"))
+    }
+
+    /// Fetch a value from the caller's private storage namespace.
+    /// Returns `None` when the key is absent (HTTP 404).
+    pub async fn private_get(&self, req: PrivateStorageRequest) -> Result<Option<String>, String> {
+        let endpoint = format!(
+            "{}/me/storage/{}",
+            req.base_url.trim_end_matches('/'),
+            req.key
+        );
+        let resp = self
+            .http_client
+            .get(endpoint)
+            .bearer_auth(req.session_jwt)
+            .send()
+            .await
+            .map_err(|e| format!("private get request failed: {e}"))?;
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !resp.status().is_success() {
+            return Err(format!("private get failed: {}", read_error_body(resp).await));
+        }
+        resp.text()
+            .await
+            .map(Some)
+            .map_err(|e| format!("private get body: {e}"))
+    }
+
+    /// Store a value in the caller's private storage namespace.
+    pub async fn private_put(&self, req: PrivateStorageRequest) -> Result<(), String> {
+        let endpoint = format!(
+            "{}/me/storage/{}",
+            req.base_url.trim_end_matches('/'),
+            req.key
+        );
+        let resp = self
+            .http_client
+            .put(endpoint)
+            .bearer_auth(req.session_jwt)
+            .header("content-type", "application/json")
+            .body(req.value.unwrap_or_default())
+            .send()
+            .await
+            .map_err(|e| format!("private put request failed: {e}"))?;
+        if !resp.status().is_success() {
+            return Err(format!("private put failed: {}", read_error_body(resp).await));
+        }
+        Ok(())
     }
 
     /// Download a file from the file-server plugin to `dest_path`.
