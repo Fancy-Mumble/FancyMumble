@@ -74,7 +74,6 @@ import {
 import { loadProfileData } from "./pages/settings/profileData";
 import { serializeProfile, dataUrlToBytes } from "./profileFormat";
 import { sanitiseWsUrl } from "./components/chat/livedoc/sanitiseWsUrl";
-import { useLiveDocSharedWithStore } from "./components/chat/livedoc/sharedWithStore";
 import { TauriEvent } from "./constants/tauriEvents";
 import { PluginDataId, PluginPayloadType } from "./constants/pluginData";
 import {
@@ -2386,7 +2385,11 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
         sharedWith?: import("./types").LiveDocSharedMember[];
       }>(p.payload);
       if (!data) return;
-      useLiveDocSharedWithStore.getState().setSharedWith(data.slug, data.sharedWith ?? []);
+      void import("./components/chat/livedoc/sharedWithStore").then(
+        ({ useLiveDocSharedWithStore }) => {
+          useLiveDocSharedWithStore.getState().setSharedWith(data.slug, data.sharedWith ?? []);
+        },
+      );
       return;
     }
   }

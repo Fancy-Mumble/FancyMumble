@@ -88,7 +88,6 @@
    app theme on every OS).  Triggered from a toolbar button; pops a
    floating menu of clickable items beneath it. */
 .dropdownWrap {
-  position: relative;
   display: inline-flex;
   align-items: center;
 }
@@ -107,10 +106,6 @@
 }
 
 .dropdownMenu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 50;
   min-width: 140px;
   max-height: 280px;
   overflow-y: auto;
@@ -146,6 +141,12 @@
 .dropdownItemActive {
   background: var(--color-accent-subtle, rgba(42, 171, 238, 0.18));
   color: var(--color-accent, #2aabee);
+}
+
+.dropdownSep {
+  border: none;
+  border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  margin: 3px 4px;
 }
 
 /* Font-size widget: [-] [number input] [+] [▾] */
@@ -247,10 +248,6 @@
 
 /* Table grid picker popup */
 .tablePickerPopup {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 50;
   background: var(--color-surface, #1e2128);
   border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
   border-radius: var(--radius-sm, 4px);
@@ -305,7 +302,7 @@
   --ld-ruler-size: 24px;
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
   padding: 0;
   background: var(--color-bg, #14161b);
   cursor: text;
@@ -347,7 +344,7 @@
 .pageArea {
   display: flex;
   justify-content: center;
-  padding: 0 0 64px;
+  padding: 24px 0 64px;
 }
 
 /* Google-Docs-style centered "page" surface.  Clicking anywhere on
@@ -358,8 +355,7 @@
 .editorPage {
   position: relative;
   isolation: isolate;
-  width: 100%;
-  max-width: var(--ld-page-w, 850px);
+  width: var(--ld-page-w, 850px);
   min-height: var(--ld-page-h, 1100px);
   background: var(--color-surface, #1e2128);
   border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
@@ -423,6 +419,69 @@
   color: #6b6b70;
 }
 
+/* Automatic page break (decoration widget): the previous page's leftover
+   space + a grey inter-sheet gutter that spans the full page width, so
+   content visibly continues on a fresh sheet.  View-only; see
+   liveDocPaginationDecorations.ts. */
+:global(.livedoc-page-gap) {
+  display: block;
+  position: relative;
+  width: 100%;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Trailing spacer that pads the final page out to a full sheet height. */
+:global(.livedoc-page-tail) {
+  display: block;
+  width: 100%;
+  user-select: none;
+  pointer-events: none;
+}
+
+:global(.livedoc-page-gap-band) {
+  position: absolute;
+  /* Break out of the page's left/right margins to cut clean across the
+     sheet (a couple px past the 1px page border). */
+  left: calc(-1 * var(--ld-pad-x, 84px) - 2px);
+  right: calc(-1 * var(--ld-pad-x, 84px) - 2px);
+  background: var(--color-bg, #14161b);
+  box-shadow:
+    inset 0 9px 9px -9px rgba(0, 0, 0, 0.55),
+    inset 0 -9px 9px -9px rgba(0, 0, 0, 0.55);
+}
+
+/* Footer band rendered inside the gap widget just above the grey gutter. */
+:global(.livedoc-page-gap-footer) {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+  user-select: none;
+}
+
+:global(.livedoc-page-gap-footer-text) {
+  font-size: 12px;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.55));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+:global(.livedoc-page-gap-footer-num) {
+  font-size: 12px;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.55));
+  white-space: nowrap;
+  flex: 0 0 auto;
+  padding-left: 12px;
+}
+
 /* Page border: drawn just inside the page margins, like Word's page
    border.  Purely decorative overlay; never intercepts clicks. */
 .pageBorder {
@@ -433,6 +492,17 @@
   border-radius: 2px;
   pointer-events: none;
   z-index: 0;
+}
+
+/* Ruler drag guide line: a thin accent-coloured line that spans the full
+   page while a margin handle is being dragged, so you can see exactly
+   where the margin lands on the document content. */
+.rulerGuide {
+  position: absolute;
+  background: var(--color-accent, #2aabee);
+  opacity: 0.75;
+  pointer-events: none;
+  z-index: 10;
 }
 
 .editorPagePaper .pageBorder {
@@ -500,6 +570,10 @@
   color: var(--color-text-primary, #f5f6f8);
   font-size: 15px;
   line-height: 1.6;
+  column-count: var(--ld-columns, 1);
+  column-gap: calc(var(--ld-pad-x, 84px) * 0.5);
+  overflow-wrap: anywhere;
+  word-break: break-word;
   /* Keep the editable content above the decorative border / watermark. */
   position: relative;
   z-index: 1;
@@ -534,6 +608,18 @@
   overflow-x: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
+}
+
+.editorContent img,
+.editorContent video {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.editorContent table {
+  max-width: 100%;
+  table-layout: fixed;
 }
 
 .editorContent code {
@@ -748,8 +834,8 @@
     padding: 12px 8px 32px;
   }
   .editorPage {
+    width: 100%;
     padding: 24px 18px;
     border-radius: var(--radius-sm, 4px);
-    max-width: none;
   }
 }

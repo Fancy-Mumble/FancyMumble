@@ -4,8 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { initEventListeners, useAppStore } from "./store";
 import { getPreferences, getSavedAudioSettings, isFirstRun, getNotificationSounds } from "./preferencesStorage";
-import { setKlipyApiKey } from "./components/chat/gif/GifPicker";
-import { setKlipyApiKey as setKlipyApiKeyBanner } from "./pages/settings/KlipyGifBrowser";
+import { setKlipyApiKey } from "./components/chat/gif/klipyConfig";
 import { loadShortcuts, applyAllGlobalShortcuts } from "./pages/settings/shortcutHelpers";
 import {
   loadUserShortcuts,
@@ -30,10 +29,7 @@ import StreamPopoutPage from "./pages/StreamPopoutPage";
 import DmPopoutPage from "./pages/DmPopoutPage";
 import DrawOverlayPage from "./pages/DrawOverlayPage";
 import TranslationPopoutPage from "./pages/TranslationPopoutPage";
-import TranslationPickerOverlay from "./components/translation/TranslationPickerOverlay";
 import i18n, { registerLanguage, type LocaleBundle } from "./i18n";
-import OnboardingModal from "./components/onboarding/OnboardingModal";
-import PluginInteractionLayer from "./components/plugin/PluginInteractionLayer";
 
 const ChatPage = lazy(() => import("./pages/ChatPage"));
 const SettingsPage = lazy(() => import("./pages/settings"));
@@ -42,6 +38,9 @@ const RoleEditorPage = lazy(() => import("./pages/admin/RoleEditorPage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const FriendsPage = lazy(() => import("./pages/FriendsPage"));
 const MarketplacePluginPage = lazy(() => import("./pages/marketplace/PluginPage"));
+const TranslationPickerOverlay = lazy(() => import("./components/translation/TranslationPickerOverlay"));
+const OnboardingModal = lazy(() => import("./components/onboarding/OnboardingModal"));
+const PluginInteractionLayer = lazy(() => import("./components/plugin/PluginInteractionLayer"));
 
 /**
  * Returns true when this webview window is an image popout window.
@@ -155,7 +154,6 @@ function MainApp() {
     isFirstRun().then(setFirstRun);
     getPreferences().then((prefs) => {
       setKlipyApiKey(prefs.klipyApiKey);
-      setKlipyApiKeyBanner(prefs.klipyApiKey);
       useAppStore.setState({ disableLinkPreviews: prefs.disableLinkPreviews ?? false });
       useAppStore.setState({ enableExternalEmbeds: prefs.enableExternalEmbeds ?? false });
       useAppStore.setState({ streamerMode: prefs.streamerMode ?? false });
@@ -343,9 +341,11 @@ function MainApp() {
           )}
         </Routes>
       </Suspense>
-      <OnboardingModal />
-      <PluginInteractionLayer />
-      <TranslationPickerOverlay />
+      <Suspense fallback={null}>
+        <OnboardingModal />
+        <PluginInteractionLayer />
+        <TranslationPickerOverlay />
+      </Suspense>
     </div>
   );
 }

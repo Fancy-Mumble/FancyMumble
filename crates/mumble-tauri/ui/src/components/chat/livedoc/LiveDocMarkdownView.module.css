@@ -1,0 +1,105 @@
+/* LiveDocMarkdownView: full-height source editor for the document markdown. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  background: var(--color-bg, #14161b);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--color-surface-elevated, #262a32);
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  flex-shrink: 0;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.75));
+}
+
+.flavor {
+  font-size: 11px;
+  color: var(--color-text-muted, #aab0b8);
+}
+
+.dirty {
+  font-size: 11px;
+  color: var(--color-warning, #ff9933);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.btn {
+  padding: 4px 12px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.14));
+  background: transparent;
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btnPrimary {
+  background: var(--color-accent, #2aabee);
+  border-color: var(--color-accent, #2aabee);
+  color: #fff;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  background: var(--color-accent, #2aabee);
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: 24px 16px 64px;
+}
+
+.textarea {
+  width: 100%;
+  max-width: 820px;
+  min-height: 100%;
+  height: max-content;
+  box-sizing: border-box;
+  padding: 20px 24px;
+  background: var(--color-surface, #1e2128);
+  color: var(--color-text-primary, #f5f6f8);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  tab-size: 2;
+  resize: none;
+  white-space: pre;
+  overflow-wrap: normal;
+  outline: none;
+}
+
+.textarea:focus-visible {
+  border-color: var(--color-accent, #2aabee);
+}

@@ -117,28 +117,73 @@
   pointer-events: none;
 }
 
-/* ---- Margin boundary markers (triangular handles) -------------------- */
+/* ---- Margin boundary markers (draggable triangular handles) ---------- */
+/* The handle itself is an invisible, comfortably sized hit box; the visible
+   triangle is drawn with a pseudo-element so the grab target is far larger
+   than the 8px marker. */
 .handleH {
   position: absolute;
   bottom: 0;
+  top: 0;
+  width: 12px;
+  transform: translateX(-50%);
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.handleH::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
   width: 0;
   height: 0;
-  transform: translateX(-50%);
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
   border-bottom: 6px solid var(--color-accent, #2aabee);
-  pointer-events: none;
 }
 
 .handleV {
   position: absolute;
   right: 0;
+  left: 0;
+  height: 12px;
+  transform: translateY(-50%);
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.handleV::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
   width: 0;
   height: 0;
-  transform: translateY(-50%);
   border-top: 4px solid transparent;
   border-bottom: 4px solid transparent;
   border-right: 6px solid var(--color-accent, #2aabee);
+}
+
+/* Brighten the marker while hovering / focusing so it reads as grabbable. */
+.handleH:hover::after,
+.handleV:hover::after,
+.handleH:focus-visible::after,
+.handleV:focus-visible::after {
+  filter: brightness(1.4);
+}
+
+.handleH:focus-visible,
+.handleV:focus-visible {
+  outline: 1px solid var(--color-accent, #2aabee);
+  outline-offset: -1px;
+}
+
+/* Read-only documents: keep the marker visible but non-interactive. */
+.handleStatic {
+  cursor: default;
   pointer-events: none;
 }
 
@@ -148,4 +193,55 @@
   .rulerVWrap {
     display: none;
   }
+}
+
+/* ---- Alt-key margin measurement overlay ------------------------------ */
+/* Three segments (left-margin / content / right-margin) shown as small
+   pill labels when the user holds Alt.  Positioned over the ruler body. */
+.measureOverlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.measureLabel {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 9px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 1px 3px;
+  border-radius: 3px;
+  background-color: var(--color-accent, #2aabee);
+  color: #fff;
+  pointer-events: none;
+}
+
+.measureOverlayV {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.measureLabelV {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 8px;
+  line-height: 1;
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 3px 1px;
+  border-radius: 3px;
+  background-color: var(--color-accent, #2aabee);
+  color: #fff;
+  pointer-events: none;
 }

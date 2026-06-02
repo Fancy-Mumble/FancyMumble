@@ -42,6 +42,7 @@
     "@tiptap/starter-kit": "^3.20.1",
     "@tiptap/y-tiptap": "^3.0.3",
     "@types/marked": "^5.0.2",
+    "citeproc": "^2.4.63",
     "country-flag-icons": "^1.6.17",
     "dompurify": "^3.3.3",
     "highlight.js": "^11.11.1",

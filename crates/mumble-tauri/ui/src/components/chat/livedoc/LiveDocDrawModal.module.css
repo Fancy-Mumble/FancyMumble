@@ -1,0 +1,100 @@
+/* LiveDocDrawModal: freehand drawing surface inserted as an inline image. */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--color-surface-elevated, #262a32);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary, #f5f6f8);
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.7));
+}
+
+.colorInput {
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.2));
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  cursor: pointer;
+}
+
+.canvas {
+  background: #ffffff;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.2));
+  border-radius: var(--radius-sm, 4px);
+  cursor: crosshair;
+  touch-action: none;
+  max-width: 100%;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btn {
+  padding: 6px 14px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.14));
+  background: transparent;
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.btnPrimary {
+  background: var(--color-accent, #2aabee);
+  border-color: var(--color-accent, #2aabee);
+  color: #fff;
+}
+
+.btnPrimary:hover {
+  filter: brightness(1.08);
+  background: var(--color-accent, #2aabee);
+}
+
+.spacer {
+  flex: 1;
+}

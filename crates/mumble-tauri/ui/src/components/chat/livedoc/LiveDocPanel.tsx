@@ -10,21 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  CloseIcon,
-  EditIcon,
-  FileDownIcon,
-  FileIcon,
-  GlobeIcon,
-  HistoryIcon,
-  MaximizeIcon,
-  MinimizeIcon,
-  NewspaperIcon,
-  PrinterIcon,
-  SaveIcon,
-  StarIcon,
-  UsersGroupIcon,
-} from "../../../icons";
+import { CloseIcon, FileIcon } from "../../../icons";
 import { useAppStore, encodeLiveDocInviteMarker, sendPluginMessage } from "../../../store";
 import {
   useLiveDoc,
@@ -35,14 +21,14 @@ import {
   type LiveDocSessionInfo,
 } from "./useLiveDoc";
 import LiveDocEditor, { type LiveDocEditorApi } from "./LiveDocEditor";
-import LiveDocPageSetupMenu from "./LiveDocPageSetupMenu";
-import LiveDocAvatarStack from "./LiveDocAvatarStack";
+import type { LiveDocChrome } from "./LiveDocRibbon";
 import LiveDocExportDialog from "./LiveDocExportDialog";
 import LiveDocSidebar from "./LiveDocSidebar";
 import { useLiveDocSidebarStore } from "./sidebarStore";
 import { useLiveDocDropStore } from "./liveDocDropStore";
 import { useLiveDocSharedWithStore } from "./sharedWithStore";
 import { exportLiveDocToPdf } from "./liveDocPdf";
+import { resetCiteprocCache } from "./liveDocCiteproc";
 import { openPrompt } from "../../elements/promptDialogStore";
 import type { LiveDocDocLink } from "../../../types";
 import styles from "./LiveDocPanel.module.css";
@@ -86,7 +72,6 @@ export default function LiveDocPanel({
   const editorApi = useRef<LiveDocEditorApi | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const dragOver = useLiveDocDropStore((s) => s.dragOver);
-  const [paperMode, setPaperMode] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
@@ -188,13 +173,6 @@ export default function LiveDocPanel({
       .catch((e) => console.warn("live-doc pdf export failed:", e));
   }, [liveTitle, pageSetup, decoration]);
 
-  const onInsertCoverPage = useCallback(() => {
-    editorApi.current?.insertCoverPage(liveTitle);
-  }, [liveTitle]);
-  const onInsertSectionBreak = useCallback(() => {
-    editorApi.current?.insertSectionBreak();
-  }, []);
-
   const onEditorReady = useCallback(
     (api: LiveDocEditorApi) => {
       editorApi.current = api;
@@ -221,6 +199,12 @@ export default function LiveDocPanel({
     return () => unregisterTarget();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      resetCiteprocCache();
+    };
+  }, []);
+
   let statusKey: "liveDoc.connected" | "liveDoc.connecting" | "liveDoc.disconnected" =
     "liveDoc.disconnected";
   if (handle?.status === "connected") {
@@ -228,6 +212,28 @@ export default function LiveDocPanel({
   } else if (handle?.status === "connecting") {
     statusKey = "liveDoc.connecting";
   }
+
+  // All document + window actions are surfaced by the ribbon (title bar +
+  // File backstage menu) inside the editor; bundle them into one object.
+  const chrome: LiveDocChrome = {
+    title: liveTitle,
+    statusKey,
+    connected: handle?.status === "connected",
+    peers,
+    sharedWith,
+    isOwner: session.isOwner ?? false,
+    savedFlash,
+    onRename,
+    onSaveNow,
+    onExport,
+    onExportPdf,
+    onHistory,
+    onSaveToDocs,
+    onPublish,
+    compactChat,
+    onToggleCompactChat,
+    onClose,
+  };
 
   return (
     <div className={styles.panel}>
@@ -242,142 +248,38 @@ export default function LiveDocPanel({
           onRenameActiveDoc={applyActiveRename}
         />
         <div className={styles.main}>
-      <div className={styles.header}>
-        <div className={styles.title}>
-          <FileIcon width={16} height={16} aria-hidden="true" />
-          <span className={styles.titleText}>{liveTitle}</span>
-          <span
-            className={`${styles.status} ${handle?.status === "connected" ? styles.statusOk : styles.statusBad}`}
-            aria-live="polite"
-          >
-            {t(statusKey)}
-          </span>
-          {peers.length > 0 && <LiveDocAvatarStack peers={peers} />}
-          {sharedWith && sharedWith.length > 0 && (
-            <span
-              className={styles.sharedWith}
-              title={sharedWith.map((m) => m.display_name).join(", ")}
-            >
-              <UsersGroupIcon width={13} height={13} aria-hidden="true" />
-              {sharedWith.length}
+      {/* Document chrome (title, status, all actions) now lives in the
+          ribbon inside the editor.  While still connecting there is no
+          editor yet, so show a slim fallback bar with the title + close. */}
+      {!handle && (
+        <div className={styles.header}>
+          <div className={styles.title}>
+            <FileIcon width={16} height={16} aria-hidden="true" />
+            <span className={styles.titleText}>{liveTitle}</span>
+            <span className={`${styles.status} ${styles.statusBad}`} aria-live="polite">
+              {t(statusKey)}
             </span>
-          )}
-        </div>
-        <div className={styles.headerActions}>
-          <button
-            type="button"
-            className={styles.headerIconBtn}
-            onClick={onRename}
-            title={t("liveDoc.renameDoc")}
-            aria-label={t("liveDoc.renameDoc")}
-          >
-            <EditIcon width={16} height={16} aria-hidden="true" />
-          </button>
-          {session.isOwner && (
+          </div>
+          <div className={styles.headerActions}>
             <button
               type="button"
-              className={`${styles.headerIconBtn} ${savedFlash ? styles.headerBtnActive : ""}`}
-              onClick={onSaveNow}
-              title={savedFlash ? t("liveDoc.saved") : t("liveDoc.saveNow")}
-              aria-label={savedFlash ? t("liveDoc.saved") : t("liveDoc.saveNow")}
+              className={styles.headerBtnClose}
+              onClick={onClose}
+              title={t("liveDoc.closePanel")}
+              aria-label={t("liveDoc.closePanel")}
             >
-              <SaveIcon width={16} height={16} aria-hidden="true" />
+              <CloseIcon width={16} height={16} />
             </button>
-          )}
-          <LiveDocPageSetupMenu
-            doc={handle?.doc ?? null}
-            onInsertCoverPage={onInsertCoverPage}
-            onInsertSectionBreak={onInsertSectionBreak}
-          />
-          <button
-            type="button"
-            className={`${styles.headerIconBtn} ${paperMode ? styles.headerBtnActive : ""}`}
-            onClick={() => setPaperMode((v) => !v)}
-            title={paperMode ? t("liveDoc.paperModeOff") : t("liveDoc.paperModeOn")}
-            aria-label={paperMode ? t("liveDoc.paperModeOff") : t("liveDoc.paperModeOn")}
-            aria-pressed={paperMode}
-          >
-            <NewspaperIcon width={16} height={16} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={styles.headerIconBtn}
-            onClick={onExport}
-            title={t("liveDoc.exportMarkdown")}
-            aria-label={t("liveDoc.exportMarkdown")}
-          >
-            <FileDownIcon width={16} height={16} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={styles.headerIconBtn}
-            onClick={onExportPdf}
-            title={t("liveDoc.exportPdf")}
-            aria-label={t("liveDoc.exportPdf")}
-          >
-            <PrinterIcon width={16} height={16} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={styles.headerIconBtn}
-            onClick={onHistory}
-            title={t("liveDoc.history")}
-            aria-label={t("liveDoc.history")}
-          >
-            <HistoryIcon width={16} height={16} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={styles.headerIconBtn}
-            onClick={onSaveToDocs}
-            title={t("liveDoc.sidebar.saveToDocs")}
-            aria-label={t("liveDoc.sidebar.saveToDocs")}
-          >
-            <StarIcon width={16} height={16} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={styles.headerIconBtn}
-            onClick={onPublish}
-            title={t("liveDoc.publishToChannel")}
-            aria-label={t("liveDoc.publishToChannel")}
-          >
-            <GlobeIcon width={16} height={16} aria-hidden="true" />
-          </button>
-          {onToggleCompactChat && (
-            <button
-              type="button"
-              className={`${styles.headerBtnClose} ${compactChat ? styles.headerBtnActive : ""}`}
-              onClick={onToggleCompactChat}
-              title={compactChat ? t("liveDoc.compactChatOff") : t("liveDoc.compactChatOn")}
-              aria-label={compactChat ? t("liveDoc.compactChatOff") : t("liveDoc.compactChatOn")}
-              aria-pressed={compactChat}
-            >
-              {compactChat ? (
-                <MaximizeIcon width={14} height={14} />
-              ) : (
-                <MinimizeIcon width={14} height={14} />
-              )}
-            </button>
-          )}
-          <button
-            type="button"
-            className={styles.headerBtnClose}
-            onClick={onClose}
-            title={t("liveDoc.closePanel")}
-            aria-label={t("liveDoc.closePanel")}
-          >
-            <CloseIcon width={16} height={16} />
-          </button>
+          </div>
         </div>
-      </div>
+      )}
       <div className={styles.body} ref={bodyRef}>
         {handle ? (
           <>
             <LiveDocEditor
               doc={handle.doc}
               provider={handle.provider}
-              paperMode={paperMode}
+              chrome={chrome}
               onReady={onEditorReady}
             />
             {handle.error && (

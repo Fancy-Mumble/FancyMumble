@@ -129,7 +129,6 @@ export function useLiveDoc(session: LiveDocSessionInfo | null): LiveDocHandle | 
       provider.off("status", onStatus);
       provider.off("connection-error", onError);
       provider.awareness.off("change", onAwareness);
-      provider.disconnect();
       provider.destroy();
       providerRef.current = null;
     };
@@ -193,19 +192,37 @@ export function setLiveDocTitle(doc: Y.Doc, title: string): void {
 
 export type LiveDocPageSize = "a4" | "letter" | "legal";
 export type LiveDocPageOrientation = "portrait" | "landscape";
-export type LiveDocPageMargin = "normal" | "narrow" | "wide";
+export type LiveDocPageMargin = "normal" | "narrow" | "moderate" | "wide" | "mirrored";
+export type LiveDocRulerUnit = "cm" | "in";
+export type LiveDocPageColumns = 1 | 2 | 3;
 
 /** Document-level page layout (Word-style "Page setup"). */
 export interface LiveDocPageSetup {
   readonly size: LiveDocPageSize;
   readonly orientation: LiveDocPageOrientation;
   readonly margin: LiveDocPageMargin;
+  /** Custom horizontal (left/right) margin in CSS px.  When set it
+   *  overrides the named `margin` preset; dragging a ruler handle writes
+   *  it, and picking a named preset clears it. */
+  readonly marginX?: number;
+  /** Custom vertical (top/bottom) margin in CSS px (see `marginX`). */
+  readonly marginY?: number;
+  /** Unit shown in the Alt-key ruler measurement overlay. */
+  readonly rulerUnit: LiveDocRulerUnit;
+  /** Number of text columns on the page (1 = single, default). */
+  readonly columns?: LiveDocPageColumns;
+}
+
+/** Returns the default ruler unit for a given page size. */
+export function defaultRulerUnit(size: LiveDocPageSize): LiveDocRulerUnit {
+  return size === "a4" ? "cm" : "in";
 }
 
 export const DEFAULT_PAGE_SETUP: LiveDocPageSetup = {
   size: "a4",
   orientation: "portrait",
   margin: "normal",
+  rulerUnit: defaultRulerUnit("a4"),
 };
 
 /** Page dimensions in CSS px at 96 dpi (portrait). */
@@ -214,20 +231,30 @@ const PAGE_PX: Record<LiveDocPageSize, { readonly w: number; readonly h: number 
   letter: { w: 816, h: 1056 }, // 8.5 x 11 in
   legal: { w: 816, h: 1344 }, // 8.5 x 14 in
 };
-const MARGIN_PX: Record<LiveDocPageMargin, number> = { normal: 96, narrow: 48, wide: 144 };
+const MARGIN_PX: Record<LiveDocPageMargin, { readonly x: number; readonly y: number }> = {
+  normal:   { x: 96,  y: 96  }, // 1" all sides
+  narrow:   { x: 48,  y: 48  }, // 0.5" all sides
+  moderate: { x: 72,  y: 96  }, // 0.75" left/right, 1" top/bottom
+  wide:     { x: 192, y: 96  }, // 2" left/right, 1" top/bottom
+  mirrored: { x: 120, y: 96  }, // 1.25" inner/outer, 1" top/bottom
+};
 /** Named CSS paged-media sizes (used by the print/PDF `@page` rule). */
 const PAGE_CSS_SIZE: Record<LiveDocPageSize, string> = { a4: "A4", letter: "letter", legal: "legal" };
-const MARGIN_MM: Record<LiveDocPageMargin, string> = {
-  normal: "25.4mm",
-  narrow: "12.7mm",
-  wide: "38.1mm",
-};
 
 function isPageSize(v: unknown): v is LiveDocPageSize {
   return v === "a4" || v === "letter" || v === "legal";
 }
 function isPageMargin(v: unknown): v is LiveDocPageMargin {
-  return v === "normal" || v === "narrow" || v === "wide";
+  return v === "normal" || v === "narrow" || v === "moderate" || v === "wide" || v === "mirrored";
+}
+function isMarginPx(v: unknown): v is number {
+  return typeof v === "number" && Number.isFinite(v) && v >= 0;
+}
+function isRulerUnit(v: unknown): v is LiveDocRulerUnit {
+  return v === "cm" || v === "in";
+}
+function isPageColumns(v: unknown): v is LiveDocPageColumns {
+  return v === 1 || v === 2 || v === 3;
 }
 
 function readPageSetup(doc: Y.Doc | null): LiveDocPageSetup {
@@ -236,10 +263,19 @@ function readPageSetup(doc: Y.Doc | null): LiveDocPageSetup {
   const size = meta.get("pageSize");
   const orientation = meta.get("pageOrientation");
   const margin = meta.get("pageMargin");
+  const marginX = meta.get("pageMarginX");
+  const marginY = meta.get("pageMarginY");
+  const rulerUnit = meta.get("pageRulerUnit");
+  const columns = meta.get("pageColumns");
+  const resolvedSize = isPageSize(size) ? size : DEFAULT_PAGE_SETUP.size;
   return {
-    size: isPageSize(size) ? size : DEFAULT_PAGE_SETUP.size,
+    size: resolvedSize,
     orientation: orientation === "landscape" ? "landscape" : "portrait",
     margin: isPageMargin(margin) ? margin : DEFAULT_PAGE_SETUP.margin,
+    rulerUnit: isRulerUnit(rulerUnit) ? rulerUnit : defaultRulerUnit(resolvedSize),
+    ...(isMarginPx(marginX) ? { marginX } : {}),
+    ...(isMarginPx(marginY) ? { marginY } : {}),
+    ...(isPageColumns(columns) ? { columns } : {}),
   };
 }
 
@@ -266,31 +302,60 @@ export function setLiveDocPageSetup(doc: Y.Doc, patch: Partial<LiveDocPageSetup>
   doc.transact(() => {
     if (patch.size) meta.set("pageSize", patch.size);
     if (patch.orientation) meta.set("pageOrientation", patch.orientation);
-    if (patch.margin) meta.set("pageMargin", patch.margin);
+    if (patch.margin) {
+      meta.set("pageMargin", patch.margin);
+      // Picking a named preset discards any custom ruler-drag overrides.
+      meta.delete("pageMarginX");
+      meta.delete("pageMarginY");
+    }
+    if (isMarginPx(patch.marginX)) meta.set("pageMarginX", patch.marginX);
+    if (isMarginPx(patch.marginY)) meta.set("pageMarginY", patch.marginY);
+    if (isRulerUnit(patch.rulerUnit)) meta.set("pageRulerUnit", patch.rulerUnit);
+    if (patch.columns !== undefined) {
+      if (patch.columns === 1) meta.delete("pageColumns");
+      else meta.set("pageColumns", patch.columns);
+    }
   });
+}
+
+/** Resolve the effective horizontal/vertical margins in CSS px, applying
+ *  any custom ruler-drag overrides on top of the named preset. */
+function resolveMarginsPx(setup: LiveDocPageSetup): { readonly x: number; readonly y: number } {
+  const preset = MARGIN_PX[setup.margin];
+  return {
+    x: isMarginPx(setup.marginX) ? setup.marginX : preset.x,
+    y: isMarginPx(setup.marginY) ? setup.marginY : preset.y,
+  };
 }
 
 /** Page geometry in CSS px for the on-screen editing surface. */
 export function pageGeometryPx(setup: LiveDocPageSetup): {
   readonly width: number;
   readonly height: number;
-  readonly margin: number;
+  readonly marginX: number;
+  readonly marginY: number;
 } {
   const base = PAGE_PX[setup.size];
   const portrait = setup.orientation === "portrait";
+  const margins = resolveMarginsPx(setup);
   return {
     width: portrait ? base.w : base.h,
     height: portrait ? base.h : base.w,
-    margin: MARGIN_PX[setup.margin],
+    marginX: margins.x,
+    marginY: margins.y,
   };
+}
+
+const PX_PER_MM = 96 / 25.4;
+function pxToMm(px: number): string {
+  return `${(px / PX_PER_MM).toFixed(2)}mm`;
 }
 
 /** Values for the print/PDF `@page { size; margin }` rule. */
 export function pageCssRule(setup: LiveDocPageSetup): { readonly size: string; readonly margin: string } {
-  return {
-    size: `${PAGE_CSS_SIZE[setup.size]} ${setup.orientation}`,
-    margin: MARGIN_MM[setup.margin],
-  };
+  const size = `${PAGE_CSS_SIZE[setup.size]} ${setup.orientation}`;
+  const margins = resolveMarginsPx(setup);
+  return { size, margin: `${pxToMm(margins.y)} ${pxToMm(margins.x)}` };
 }
 
 // --- Page decoration (border + watermark) ------------------------------

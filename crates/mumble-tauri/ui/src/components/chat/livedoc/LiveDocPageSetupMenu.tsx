@@ -23,13 +23,15 @@ import {
   type LiveDocPageOrientation,
   type LiveDocPageMargin,
   type LiveDocPageBorder,
+  type LiveDocRulerUnit,
 } from "./useLiveDoc";
 import panelStyles from "./LiveDocPanel.module.css";
 import styles from "./LiveDocPageSetupMenu.module.css";
 
 const SIZES: ReadonlyArray<LiveDocPageSize> = ["a4", "letter", "legal"];
+const RULER_UNITS: ReadonlyArray<LiveDocRulerUnit> = ["cm", "in"];
 const ORIENTATIONS: ReadonlyArray<LiveDocPageOrientation> = ["portrait", "landscape"];
-const MARGINS: ReadonlyArray<LiveDocPageMargin> = ["narrow", "normal", "wide"];
+const MARGINS: ReadonlyArray<LiveDocPageMargin> = ["normal", "narrow", "moderate", "wide", "mirrored"];
 const BORDERS: ReadonlyArray<LiveDocPageBorder> = ["none", "thin", "medium"];
 
 interface SegmentProps<T extends string> {
@@ -127,6 +129,13 @@ export default function LiveDocPageSetupMenu({
             value={setup.margin}
             optionLabel={(m) => t(`liveDoc.pageSetup.marginOptions.${m}`)}
             onPick={(margin) => setLiveDocPageSetup(doc, { margin })}
+          />
+          <Segment
+            label={t("liveDoc.pageSetup.rulerUnit")}
+            options={RULER_UNITS}
+            value={setup.rulerUnit}
+            optionLabel={(u) => t(`liveDoc.pageSetup.rulerUnitOptions.${u}`)}
+            onPick={(rulerUnit) => setLiveDocPageSetup(doc, { rulerUnit })}
           />
           <Segment
             label={t("liveDoc.pageSetup.border")}

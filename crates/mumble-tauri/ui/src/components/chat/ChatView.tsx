@@ -43,12 +43,17 @@ import { isMobile } from "../../utils/platform";
 import { htmlToMarkdown } from "./markdown/MarkdownInput";
 import type { MessageScope } from "../../messageOffload";
 import { useScreenShare } from "./stream/useScreenShare";
-import ScreenShareViewer, { BroadcastBanner, WebRtcErrorBanner } from "./stream/ScreenShareViewer";
+const ScreenShareViewer = lazy(() => import("./stream/ScreenShareViewer"));
+const BroadcastBanner = lazy(() =>
+  import("./stream/ScreenShareViewer").then((m) => ({ default: m.BroadcastBanner })),
+);
+const WebRtcErrorBanner = lazy(() =>
+  import("./stream/ScreenShareViewer").then((m) => ({ default: m.WebRtcErrorBanner })),
+);
 const LiveDocPanel = lazy(() => import("./livedoc/LiveDocPanel"));
 const LiveDocLaunchDialog = lazy(() => import("./livedoc/LiveDocLaunchDialog"));
 const LiveDocLibraryPanel = lazy(() => import("./livedoc/LiveDocLibraryPanel"));
-import LiveDocBanner from "./livedoc/LiveDocBanner";
-import { useLiveDocSidebarStore } from "./livedoc/sidebarStore";
+const LiveDocBanner = lazy(() => import("./livedoc/LiveDocBanner"));
 import type { LiveDocLaunchChoice } from "./livedoc/LiveDocLaunchDialog";
 import {
   useLiveDocDropStore,
@@ -467,8 +472,6 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   // Folder/section the next freshly-created document should be filed
   // under in the sidebar.  `null` = the default "My documents" section.
   const liveDocCreateTargetRef = useRef<string | null>(null);
-  const saveDocLink = useLiveDocSidebarStore((s) => s.saveDocLink);
-  const saveDocToDefault = useLiveDocSidebarStore((s) => s.saveDocToDefault);
   const [liveDocCompactChat, setLiveDocCompactChat] = useState(false);
   // Reset compact-chat toggle whenever the live doc closes or the channel changes.
   useEffect(() => {
@@ -549,6 +552,8 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
             channel: choice.visibility === "publish" ? selectedChannel : null,
             owned: true,
           };
+          const { useLiveDocSidebarStore } = await import("./livedoc/sidebarStore");
+          const { saveDocLink, saveDocToDefault } = useLiveDocSidebarStore.getState();
           if (targetFolderId) {
             saveDocLink(targetFolderId, link);
           } else {
@@ -561,7 +566,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
         showToast({ message: `Failed to open document: ${detail}`, variant: "error" });
       }
     },
-    [selectedChannel, requestOpenLiveDoc, showToast, saveDocLink, saveDocToDefault, t],
+    [selectedChannel, requestOpenLiveDoc, showToast, t],
   );
 
   const handleJoinLiveDoc = useCallback(async () => {
@@ -998,17 +1003,21 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
 
       {/* Discovery banner for someone else's open Live Doc. */}
       {pendingLiveDocAnnounce && !activeLiveDoc && (
-        <LiveDocBanner announce={pendingLiveDocAnnounce} onJoin={handleJoinLiveDoc} />
+        <Suspense fallback={null}>
+          <LiveDocBanner announce={pendingLiveDocAnnounce} onJoin={handleJoinLiveDoc} />
+        </Suspense>
       )}
 
       {/* Solo own broadcast preview (no other broadcasters) */}
       {activeScreenShare?.isOwn && activeScreenShare.stream && !showFocusView && (
-        <ScreenShareViewer
-          isOwnBroadcast
-          localStream={activeScreenShare.stream}
-          channelId={selectedChannel ?? 0}
-          ownSession={ownSession ?? 0}
-        />
+        <Suspense fallback={null}>
+          <ScreenShareViewer
+            isOwnBroadcast
+            localStream={activeScreenShare.stream}
+            channelId={selectedChannel ?? 0}
+            ownSession={ownSession ?? 0}
+          />
+        </Suspense>
       )}
 
       {/* Unified focus view: single instance keeps layout stable across swaps */}
@@ -1037,16 +1046,20 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
 
       {/* Single broadcaster notification banner */}
       {!activeScreenShare && channelBroadcasters.length === 1 && (
-        <BroadcastBanner
-          broadcasters={channelBroadcasters}
-          onWatch={screenShare.watchBroadcast}
-          sfuAvailable={sfuAvailable}
-        />
+        <Suspense fallback={null}>
+          <BroadcastBanner
+            broadcasters={channelBroadcasters}
+            onWatch={screenShare.watchBroadcast}
+            sfuAvailable={sfuAvailable}
+          />
+        </Suspense>
       )}
 
       {/* WebRTC error inline banner - same style as broadcast banner */}
       {webrtcError && (
-        <WebRtcErrorBanner message={webrtcError} onDismiss={clearWebRtcError} />
+        <Suspense fallback={null}>
+          <WebRtcErrorBanner message={webrtcError} onDismiss={clearWebRtcError} />
+        </Suspense>
       )}
 
       {/* Chat column: groups the messages + composer so the file-drag

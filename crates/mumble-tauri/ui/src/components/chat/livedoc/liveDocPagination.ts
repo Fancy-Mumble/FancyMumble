@@ -115,6 +115,9 @@ export function measureBlocks(container: HTMLElement | null): PaginationBlock[] 
   const blocks: PaginationBlock[] = [];
   for (const child of Array.from(container.children)) {
     const el = child as HTMLElement;
+    // Skip the visible page-gap widgets injected by the pagination
+    // decorations - they are view-only chrome, not document blocks.
+    if (el.dataset.ldPageGap !== undefined) continue;
     const forceBreakBefore = BREAK_CLASS_RE.test(el.className);
     blocks.push({ height: el.getBoundingClientRect().height, forceBreakBefore });
   }
