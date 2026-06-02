@@ -4,17 +4,22 @@ import "highlight.js/styles/github-dark.css";
 
 const HIGHLIGHTED = "data-hljs-highlighted";
 
+function isInsideEditor(el: Element): boolean {
+  return el.closest("[contenteditable]") !== null;
+}
+
 function highlightAllPending(root: ParentNode): void {
   const blocks = root.querySelectorAll<HTMLElement>(
     `pre > code:not([${HIGHLIGHTED}])`,
   );
   blocks.forEach((block) => {
+    if (isInsideEditor(block)) return;
+    block.setAttribute(HIGHLIGHTED, "true");
     try {
       hljs.highlightElement(block);
     } catch {
       // hljs throws on already-highlighted elements; ignore.
     }
-    block.setAttribute(HIGHLIGHTED, "true");
   });
 }
 

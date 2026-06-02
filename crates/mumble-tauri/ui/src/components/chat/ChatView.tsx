@@ -473,10 +473,35 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   // under in the sidebar.  `null` = the default "My documents" section.
   const liveDocCreateTargetRef = useRef<string | null>(null);
   const [liveDocCompactChat, setLiveDocCompactChat] = useState(false);
+  const [liveDocSplitPx, setLiveDocSplitPx] = useState<number | null>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const liveDocWrapperRef = useRef<HTMLDivElement>(null);
   // Reset compact-chat toggle whenever the live doc closes or the channel changes.
   useEffect(() => {
     if (!activeLiveDoc) setLiveDocCompactChat(false);
   }, [activeLiveDoc]);
+  // Reset custom split whenever no panel is using it.
+  useEffect(() => {
+    if (!liveDocCompactChat && !showLiveDocLibrary) setLiveDocSplitPx(null);
+  }, [liveDocCompactChat, showLiveDocLibrary]);
+
+  const handleSplitDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startPx = liveDocWrapperRef.current?.getBoundingClientRect().height ?? 300;
+    const mainEl = mainRef.current;
+    const onMove = (mv: MouseEvent) => {
+      const delta = mv.clientY - startY;
+      const mainH = mainEl?.getBoundingClientRect().height ?? window.innerHeight;
+      setLiveDocSplitPx(Math.max(150, Math.min(mainH - 120, startPx + delta)));
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, []);
   // The library is a standalone browse view; once a document is open the
   // panel takes over, so dismiss the library.
   useEffect(() => {
@@ -904,10 +929,11 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   }
 
   return (
-    <main className={[
+    <main ref={mainRef} className={[
       styles.main,
       activeScreenShare || liveDocCompactChat ? styles.compactChat : "",
       activeLiveDoc && !liveDocCompactChat ? styles.hiddenChat : "",
+      ((activeLiveDoc && liveDocCompactChat) || showLiveDocLibrary) && liveDocSplitPx !== null ? styles.splitActive : "",
     ].join(" ")}>
       {!inPopout && (
         selectionMode ? (
@@ -974,31 +1000,46 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
 
       <MobileCallControls />
 
-      {/* Live Doc panel - replaces chat top half similar to screen share. */}
-      {activeLiveDoc && (
-        <Suspense fallback={null}>
-          <LiveDocPanel
-            session={activeLiveDoc}
-            compactChat={liveDocCompactChat}
-            onToggleCompactChat={toggleLiveDocCompactChat}
-            onCreateDoc={selectedChannel !== null && !isDmMode ? handleOpenLiveDoc : undefined}
-            onCreateDocInFolder={
-              selectedChannel !== null && !isDmMode ? handleCreateDocInFolder : undefined
-            }
-          />
-        </Suspense>
+      {/* Live Doc panel or document library - fills the top area above chat. */}
+      {(activeLiveDoc || showLiveDocLibrary) && (
+        <div
+          ref={liveDocWrapperRef}
+          className={styles.liveDocWrapper}
+          style={liveDocSplitPx !== null ? { flex: `0 0 ${liveDocSplitPx}px` } : undefined}
+        >
+          {activeLiveDoc && (
+            <Suspense fallback={null}>
+              <LiveDocPanel
+                session={activeLiveDoc}
+                compactChat={liveDocCompactChat}
+                onToggleCompactChat={toggleLiveDocCompactChat}
+                onCreateDoc={selectedChannel !== null && !isDmMode ? handleOpenLiveDoc : undefined}
+                onCreateDocInFolder={
+                  selectedChannel !== null && !isDmMode ? handleCreateDocInFolder : undefined
+                }
+              />
+            </Suspense>
+          )}
+          {showLiveDocLibrary && !activeLiveDoc && (
+            <Suspense fallback={null}>
+              <LiveDocLibraryPanel
+                onOpenDoc={handleOpenLibraryDoc}
+                onCreateDoc={handleOpenLiveDoc}
+                onCreateDocInFolder={handleCreateDocInFolder}
+                onClose={() => setShowLiveDocLibrary(false)}
+              />
+            </Suspense>
+          )}
+        </div>
       )}
 
-      {/* Standalone document library (browse saved docs without one open). */}
-      {showLiveDocLibrary && !activeLiveDoc && (
-        <Suspense fallback={null}>
-          <LiveDocLibraryPanel
-            onOpenDoc={handleOpenLibraryDoc}
-            onCreateDoc={handleOpenLiveDoc}
-            onCreateDocInFolder={handleCreateDocInFolder}
-            onClose={() => setShowLiveDocLibrary(false)}
-          />
-        </Suspense>
+      {/* Drag handle: shown in compact-doc mode or whenever the library is open. */}
+      {((activeLiveDoc && liveDocCompactChat) || (showLiveDocLibrary && !activeLiveDoc)) && (
+        <div
+          className={styles.splitHandle}
+          onMouseDown={handleSplitDragStart}
+          aria-hidden="true"
+        />
       )}
 
       {/* Discovery banner for someone else's open Live Doc. */}

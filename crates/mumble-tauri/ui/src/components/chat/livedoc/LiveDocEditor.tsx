@@ -12,6 +12,10 @@ import { useTranslation } from "react-i18next";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Extension } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
+import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
+import { ReactNodeViewRenderer } from "@tiptap/react";
+import { createLowlight, common } from "lowlight";
+import LiveDocCodeBlock from "./LiveDocCodeBlock";
 import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -299,6 +303,8 @@ export default function LiveDocEditor({
     });
   }, []);
 
+  const lowlight = useMemo(() => createLowlight(common), []);
+
   const extensions = useMemo(
     () => [
       StarterKit.configure({
@@ -311,7 +317,14 @@ export default function LiveDocEditor({
         // carry custom config) are not registered twice.
         link: false,
         underline: false,
+        // Replaced by CodeBlockLowlight below.
+        codeBlock: false,
       }),
+      CodeBlockLowlight.extend({
+        addNodeView() {
+          return ReactNodeViewRenderer(LiveDocCodeBlock);
+        },
+      }).configure({ lowlight }),
       Underline,
       Link.configure({ openOnClick: false, autolink: true }),
       Placeholder.configure({
@@ -473,6 +486,10 @@ export default function LiveDocEditor({
         onToggleMarkdown={() => setMarkdownMode((v) => !v)}
       />
       <div className={styles.editorBody}>
+        {markdownMode ? (
+          <LiveDocMarkdownView editor={editor} readOnly={readOnly} />
+        ) : (
+        <>
         {outlineOpen && (
           <LiveDocOutline editor={editor} onClose={() => setOutlineOpen(false)} />
         )}
@@ -518,9 +535,6 @@ export default function LiveDocEditor({
             onDragChange={(dragging) => setRulerDragAxis(dragging ? "y" : null)}
           />
         <div className={styles.pageArea}>
-            {markdownMode ? (
-              <LiveDocMarkdownView editor={editor} readOnly={readOnly} />
-            ) : (
             <div
               ref={pageRef}
               className={`${styles.editorPage} ${paperMode ? styles.editorPagePaper : ""}`}
@@ -561,13 +575,14 @@ export default function LiveDocEditor({
               />
               <LiveDocTableControls editor={editor} pageRef={pageRef} />
             </div>
-            )}
           </div>
         </div>
         <div className={styles.pageCountBadge} aria-live="polite">
           {t("liveDoc.pageCount", { count: pageCount })}
         </div>
       </div>
+        </>
+        )}
       </div>
       <LiveDocDrawModal
         open={drawOpen}

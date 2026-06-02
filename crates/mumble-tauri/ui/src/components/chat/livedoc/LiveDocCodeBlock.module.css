@@ -1,0 +1,67 @@
+.codeBlock {
+  position: relative;
+  margin: 0.75em 0;
+  border-radius: var(--radius-md, 6px);
+  overflow: hidden;
+  background: var(--color-surface-2, #161b22);
+  border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.08));
+}
+
+.header {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.25);
+  min-height: 26px;
+}
+
+.languageSelect {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.12));
+  color: var(--color-text-muted, #8b949e);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 2px 20px 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238b949e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 5px center;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.languageSelect:hover,
+.languageSelect:focus {
+  border-color: var(--color-accent, #2aabee);
+  color: var(--color-text, #e6edf3);
+  outline: none;
+}
+
+.languageSelect option {
+  background: var(--color-surface, #1e2128);
+  color: var(--color-text, #e6edf3);
+}
+
+.languageLabel {
+  font-size: 11px;
+  color: var(--color-text-muted, #8b949e);
+  font-family: var(--font-mono, monospace);
+}
+
+.codeBlock pre {
+  margin: 0;
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  background: transparent;
+}
+
+.codeBlock pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}

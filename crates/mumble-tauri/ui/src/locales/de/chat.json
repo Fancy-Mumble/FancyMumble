@@ -504,6 +504,13 @@
       "words": "Wörter",
       "characters": "Zeichen"
     },
+    "markdown": {
+      "title": "Markdown",
+      "flavor": "Pandoc-Stil",
+      "synced": "synchron",
+      "syncing": "wird synchronisiert…",
+      "reload": "Aus Dokument neu laden"
+    },
     "draw": {
       "title": "Zeichnung einfügen",
       "color": "Farbe",

@@ -162,6 +162,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
 
   const [shakingChannelId, setShakingChannelId] = useState<number | undefined>();
   const [highlightChannelId, setHighlightChannelId] = useState<number | undefined>();
@@ -245,6 +246,17 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
     setSearchQuery("");
     onSearchChannelClear?.();
   }, [onSearchChannelClear]);
+
+  useEffect(() => {
+    if (!showSearch) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (sidebarRef.current && !sidebarRef.current.contains(e.target as Node)) {
+        closeSearch();
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [showSearch, closeSearch]);
 
   // Open search when a channel search is requested from the chat header.
   useEffect(() => {
@@ -372,7 +384,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
   return (
     <RoleColorsContext.Provider value={roleColors}>
     <RoleGroupsContext.Provider value={roleGroups}>
-    <aside className={styles.sidebar}>
+    <aside ref={sidebarRef} className={styles.sidebar}>
       {/* Header */}
       <div className={styles.header}>
         {onCollapse && (

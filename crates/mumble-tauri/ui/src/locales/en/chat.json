@@ -503,6 +503,13 @@
       "words": "Words",
       "characters": "Characters"
     },
+    "markdown": {
+      "title": "Markdown",
+      "flavor": "Pandoc-flavored",
+      "synced": "in sync",
+      "syncing": "syncing…",
+      "reload": "Reload from document"
+    },
     "draw": {
       "title": "Insert drawing",
       "color": "Color",
