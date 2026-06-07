@@ -89,7 +89,9 @@
     "searchPlaceholder": "Server suchen...",
     "noMatches": "Keine Übereinstimmungen",
     "alreadyConnected": "Bereits verbunden",
-    "connectedTag": "Verbunden"
+    "connectedTag": "Verbunden",
+    "openFriends": "Freunde",
+    "openFriendsTitle": "Deine Freundesliste öffnen"
   },
   "tabsBar": {
     "connectedServersAriaLabel": "Verbundene Server",
@@ -103,7 +105,8 @@
     "disconnectDialogTitle": "Vom Server trennen",
     "disconnectDialogBody": "Von {{label}} trennen?",
     "disconnectConfirm": "Trennen",
-    "disconnectNeverShow": "Nicht erneut fragen"
+    "disconnectNeverShow": "Nicht erneut fragen",
+    "friends": "Freunde"
   },
   "welcomeModal": {
     "title": "Willkommen",
@@ -196,7 +199,11 @@
       "liveDocTitle": "Titel",
       "liveDocSlug": "Slug",
       "liveDocUrl": "WebSocket-URL"
-    }
+    },
+    "accordionCspViolations": "CSP-Verstöße",
+    "cspViolationCount": "{{count}} Verstöße",
+    "cspNoViolations": "Keine Verstöße aufgezeichnet.",
+    "cspClearTitle": "Verstöße löschen"
   },
   "chooseServer": "Wähle einen Server, mit dem du dich verbinden möchtest",
   "publicServersLink": "Öffentliche Server durchsuchen",
@@ -270,5 +277,15 @@
     "advancedHint": "Volle Kontrolle"
   },
   "submit": "Loslegen",
-  "submitting": "Wird gestartet..."
+  "submitting": "Wird gestartet...",
+  "friendsPage": {
+    "title": "Freunde",
+    "empty": "Du hast noch keine Freunde. Klicke mit der rechten Maustaste auf einen Benutzer in der Kanalliste und wähle „Als Freund hinzufügen“.",
+    "placeholder": "Wähle links einen Freund aus, um zu chatten.",
+    "remove": "Aus Freunden entfernen",
+    "offline": "Derzeit offline",
+    "youLabel": "Du",
+    "openSettings": "Einstellungen öffnen",
+    "noMatches": "Keine Freunde entsprechen deiner Suche."
+  }
 }

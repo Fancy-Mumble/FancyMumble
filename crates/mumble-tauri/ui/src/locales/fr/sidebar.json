@@ -27,7 +27,12 @@
     "toastMessagesDeleted": "Messages de {{name}} supprimés",
     "toastDeleteFailed": "Impossible de supprimer les messages",
     "toastUserMoved": "{{name}} déplacé(e) vers {{channel}}",
-    "toastMoveFailed": "Impossible de déplacer {{name}}"
+    "toastMoveFailed": "Impossible de déplacer {{name}}",
+    "addFriend": "Ajouter en ami",
+    "removeFriend": "Retirer l'ami",
+    "toastFriendAdded": "{{name}} ajouté à vos amis",
+    "toastFriendRemoved": "{{name}} retiré de vos amis",
+    "toastFriendFailed": "Échec de la mise à jour de la liste d'amis"
   },
   "movePicker": {
     "ariaLabel": "Déplacer {{name}} vers un canal",

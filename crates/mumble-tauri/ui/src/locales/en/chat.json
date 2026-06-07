@@ -495,12 +495,34 @@
       "watermarkPlaceholder": "e.g. DRAFT, CONFIDENTIAL",
       "insertCoverPage": "Insert cover page",
       "insertSectionBreak": "Insert section break",
-      "sizes": { "a4": "A4", "letter": "Letter", "legal": "Legal" },
-      "orientations": { "portrait": "Portrait", "landscape": "Landscape" },
-      "marginOptions": { "narrow": "Narrow", "normal": "Normal", "moderate": "Moderate", "wide": "Wide", "mirrored": "Mirrored", "custom": "Custom", "customMargins": "Custom Margins..." },
-      "borderOptions": { "none": "None", "thin": "Thin", "medium": "Medium" },
+      "sizes": {
+        "a4": "A4",
+        "letter": "Letter",
+        "legal": "Legal"
+      },
+      "orientations": {
+        "portrait": "Portrait",
+        "landscape": "Landscape"
+      },
+      "marginOptions": {
+        "narrow": "Narrow",
+        "normal": "Normal",
+        "moderate": "Moderate",
+        "wide": "Wide",
+        "mirrored": "Mirrored",
+        "custom": "Custom",
+        "customMargins": "Custom Margins..."
+      },
+      "borderOptions": {
+        "none": "None",
+        "thin": "Thin",
+        "medium": "Medium"
+      },
       "rulerUnit": "Ruler unit",
-      "rulerUnitOptions": { "cm": "cm", "in": "in" },
+      "rulerUnitOptions": {
+        "cm": "cm",
+        "in": "in"
+      },
       "customMargins": {
         "title": "Custom Margins",
         "leftRight": "Left / Right",
@@ -509,7 +531,11 @@
         "cancel": "Cancel"
       },
       "columns": "Columns",
-      "columnsOptions": { "1": "Single", "2": "Two", "3": "Three" }
+      "columnsOptions": {
+        "1": "Single",
+        "2": "Two",
+        "3": "Three"
+      }
     },
     "ribbon": {
       "tabs": {
@@ -544,7 +570,8 @@
         "captions": "Captions",
         "citations": "Citations & Bibliography",
         "proofing": "Document",
-        "show": "Show"
+        "show": "Show",
+        "columns": "Columns"
       },
       "coverPage": "Cover Page",
       "pageBreak": "Page Break",
@@ -587,7 +614,12 @@
       "modelUploadFailed": "Model upload failed",
       "chart": "Chart",
       "chartData": "Values (comma separated)",
-      "chartType": { "bar": "Bar", "line": "Line", "pie": "Pie", "doughnut": "Doughnut" },
+      "chartType": {
+        "bar": "Bar",
+        "line": "Line",
+        "pie": "Pie",
+        "doughnut": "Doughnut"
+      },
       "chartEdit": "Edit data",
       "chartDone": "Done",
       "chartResize": "Resize chart",
@@ -641,7 +673,12 @@
       "iconNoResults": "No icons found",
       "videoUrl": "Video URL (YouTube, Vimeo, …)",
       "videoPreviewEmpty": "Preview appears here",
-      "videoFrame": { "plain": "Plain", "rounded": "Rounded", "shadow": "Shadow", "bordered": "Bordered" },
+      "videoFrame": {
+        "plain": "Plain",
+        "rounded": "Rounded",
+        "shadow": "Shadow",
+        "bordered": "Bordered"
+      },
       "signaturePrompt": "Signer name",
       "signError": "Could not sign: no Mumble identity available.",
       "signedBy": "Digitally signed by {{name}}",
@@ -863,5 +900,28 @@
       "openFailed": "Could not open the document",
       "syncFailed": "Live sync interrupted - your edits are not being shared right now"
     }
+  },
+  "mySharedFiles": {
+    "title": "My shared files",
+    "refresh": "Refresh",
+    "loading": "Loading your files…",
+    "error": "Could not load your files",
+    "unavailable": "File sharing is not enabled on this server.",
+    "empty": "You haven't shared any files yet.",
+    "preview": "Preview",
+    "openLink": "Open share link in browser",
+    "delete": "Delete",
+    "deleteTitle": "Delete file",
+    "confirmDelete": "Delete \"{{name}}\"? The shared link will stop working.",
+    "deleteFailed": "Delete failed",
+    "linkFailed": "Couldn't open share link",
+    "neverExpires": "Never",
+    "colName": "Name",
+    "colType": "Type",
+    "colSize": "Size",
+    "colChannel": "Channel",
+    "colAccess": "Access",
+    "colUploaded": "Uploaded",
+    "colExpires": "Expires"
   }
 }

@@ -136,7 +136,9 @@
     "dangerZoneHint": "Delete all saved data - servers, preferences, and certificates - and return to the welcome screen.",
     "dangerConfirmText": "Are you sure? This cannot be undone.",
     "dangerConfirmBtn": "Yes, reset everything",
-    "dangerResetBtn": "Reset all data"
+    "dangerResetBtn": "Reset all data",
+    "disconnectWarning": "Disconnect confirmation",
+    "disconnectWarningHint": "Ask for confirmation before disconnecting from a server."
   },
   "shortcuts": {
     "panelTitle": "Shortcuts",
@@ -244,7 +246,12 @@
     "evtVoiceActivity": "Voice activity",
     "evtVoiceActivityDesc": "Someone started speaking in your channel",
     "evtSelfMuted": "Self muted",
-    "evtSelfMutedDesc": "You muted or unmuted your microphone"
+    "evtSelfMutedDesc": "You muted or unmuted your microphone",
+    "welcomeMessage": "Welcome message",
+    "welcomeMessageHint": "Show the server's welcome message in a popup after connecting.",
+    "welcomeHide": "Hide",
+    "welcomeOnce": "Show once",
+    "welcomeAlways": "Always show"
   },
   "privacy": {
     "panelTitle": "Privacy",
@@ -314,7 +321,8 @@
     "channelViewerModern": "Modern",
     "fontSizeSmall": "Small",
     "fontSizeMedium": "Medium",
-    "fontSizeLarge": "Large"
+    "fontSizeLarge": "Large",
+    "bgPreviewAlt": "Chat background preview"
   },
   "activation": {
     "voice": "Voice Activation",
@@ -392,7 +400,9 @@
     "nameplateHint": "Background style behind your display name.",
     "sectionEffect": "Profile Effect",
     "effectHint": "Animated effect shown on your profile card.",
-    "connectedSuffix": " (connected)"
+    "connectedSuffix": " (connected)",
+    "avatarThumbAlt": "Avatar",
+    "bannerThumbAlt": "Banner"
   },
   "tabs": {
     "profile": "Profile",
@@ -404,7 +414,8 @@
     "personalize": "Personalize",
     "advanced": "Advanced",
     "localization": "Language & Format",
-    "channelsRoles": "Channels & Roles"
+    "channelsRoles": "Channels & Roles",
+    "plugins": "Plugins"
   },
   "avatarEditor": {
     "title": "Edit Avatar",
@@ -431,7 +442,14 @@
     "applyBtn": "Apply"
   },
   "bioEditor": {
-    "placeholder": "Tell others about yourself..."
+    "placeholder": "Tell others about yourself...",
+    "bold": "Bold",
+    "italic": "Italic",
+    "underline": "Underline",
+    "insertImage": "Insert image",
+    "textColor": "Text color",
+    "colorSwatchAriaLabel": "Color {{hex}}",
+    "resetColour": "Reset color"
   },
   "denoiserAdvanced": {
     "sectionLabel": "Algorithm parameters",
@@ -478,7 +496,9 @@
     "emotes": "Emotes",
     "onboarding": "Onboarding",
     "serverPlugins": "Server Plugins",
-    "marketplace": "Marketplace"
+    "marketplace": "Marketplace",
+    "fileServer": "File server",
+    "serverSettings": "Server settings"
   },
   "registeredUsers": {
     "title": "Registered Users",
@@ -602,7 +622,8 @@
     "labelUserId": "User ID",
     "colPermission": "Permission",
     "colAllow": "Allow",
-    "colDeny": "Deny"
+    "colDeny": "Deny",
+    "unknownEntry": "Unknown"
   },
   "groups": {
     "sectionTitle": "Groups",
@@ -638,7 +659,8 @@
     "errorRemoveFailed": "Remove failed: {{detail}}",
     "errorPickerFailed": "Could not open file picker.",
     "successAdded": "Emote added.",
-    "successRemoved": "Removed :{{shortcode}}:"
+    "successRemoved": "Removed :{{shortcode}}:",
+    "confirmDelete": "Delete emote :{{shortcode}}:?"
   },
   "roleManagerDialog": {
     "ariaLabel": "Manage roles for {{name}}",
@@ -667,44 +689,99 @@
     "emptyExclusions": "No exclusions",
     "addUserPlaceholder": "Add user by name or ID"
   },
-  "aclRules": {
-    "sectionTitle": "ACL Rules",
-    "addRule": "+ Add Rule",
-    "noRules": "No ACL rules defined",
-    "inherited": "Inherited",
-    "applyHere": "Apply here",
-    "applySubChannels": "Apply to sub-channels",
-    "labelGroup": "Group",
-    "labelUserId": "User ID",
-    "colPermission": "Permission",
-    "colAllow": "Allow",
-    "colDeny": "Deny",
-    "unknownEntry": "Unknown"
-  },
   "permissionMeta": {
-    "WRITE": { "title": "Write ACL", "description": "Edit the channel ACL and groups." },
-    "TRAVERSE": { "title": "Traverse", "description": "See the channel and walk into its sub-channels." },
-    "ENTER": { "title": "Enter", "description": "Join the channel." },
-    "SPEAK": { "title": "Speak", "description": "Transmit voice in the channel." },
-    "MUTE_DEAFEN": { "title": "Mute / Deafen others", "description": "Server-mute or server-deafen other users in this channel." },
-    "MOVE": { "title": "Move users", "description": "Move other users into or out of this channel." },
-    "MAKE_CHANNEL": { "title": "Make sub-channel", "description": "Create permanent sub-channels." },
-    "LINK_CHANNEL": { "title": "Link channels", "description": "Link this channel to other channels for cross-talk." },
-    "WHISPER": { "title": "Whisper", "description": "Send targeted whispers into this channel." },
-    "TEXT_MESSAGE": { "title": "Send text messages", "description": "Post text messages in the channel chat." },
-    "MAKE_TEMP_CHANNEL": { "title": "Make temporary sub-channel", "description": "Create temporary sub-channels that vanish when empty." },
-    "LISTEN": { "title": "Listen", "description": "Receive audio from this channel without joining it." },
-    "DELETE_MESSAGE": { "title": "Delete messages", "description": "Delete other users' messages in the channel." },
-    "SUBSCRIBE_PUSH": { "title": "Subscribe to push", "description": "Receive push notifications from the channel." },
-    "SHARE_FILES": { "title": "Share files", "description": "Share files in the channel." },
-    "SHARE_FILES_PUBLIC": { "title": "Share files (public)", "description": "Share files publicly in the channel." },
-    "KICK": { "title": "Kick", "description": "Kick users from the server." },
-    "BAN": { "title": "Ban", "description": "Ban users from the server." },
-    "REGISTER": { "title": "Register users", "description": "Register guest users into the server database." },
-    "SELF_REGISTER": { "title": "Self-register", "description": "Users can register themselves." },
-    "RESET_USER_CONTENT": { "title": "Reset user content", "description": "Wipe avatars, comments and other content from a user." },
-    "KEY_OWNER": { "title": "Key owner", "description": "Marks the user as a key owner for the persistent-chat key share workflow." },
-    "MANAGE_EMOTES": { "title": "Manage emotes", "description": "Manage custom server emotes." }
+    "WRITE": {
+      "title": "Write ACL",
+      "description": "Edit the channel ACL and groups."
+    },
+    "TRAVERSE": {
+      "title": "Traverse",
+      "description": "See the channel and walk into its sub-channels."
+    },
+    "ENTER": {
+      "title": "Enter",
+      "description": "Join the channel."
+    },
+    "SPEAK": {
+      "title": "Speak",
+      "description": "Transmit voice in the channel."
+    },
+    "MUTE_DEAFEN": {
+      "title": "Mute / Deafen others",
+      "description": "Server-mute or server-deafen other users in this channel."
+    },
+    "MOVE": {
+      "title": "Move users",
+      "description": "Move other users into or out of this channel."
+    },
+    "MAKE_CHANNEL": {
+      "title": "Make sub-channel",
+      "description": "Create permanent sub-channels."
+    },
+    "LINK_CHANNEL": {
+      "title": "Link channels",
+      "description": "Link this channel to other channels for cross-talk."
+    },
+    "WHISPER": {
+      "title": "Whisper",
+      "description": "Send targeted whispers into this channel."
+    },
+    "TEXT_MESSAGE": {
+      "title": "Send text messages",
+      "description": "Post text messages in the channel chat."
+    },
+    "MAKE_TEMP_CHANNEL": {
+      "title": "Make temporary sub-channel",
+      "description": "Create temporary sub-channels that vanish when empty."
+    },
+    "LISTEN": {
+      "title": "Listen",
+      "description": "Receive audio from this channel without joining it."
+    },
+    "DELETE_MESSAGE": {
+      "title": "Delete messages",
+      "description": "Delete other users' messages in the channel."
+    },
+    "SUBSCRIBE_PUSH": {
+      "title": "Subscribe to push",
+      "description": "Receive push notifications from the channel."
+    },
+    "SHARE_FILES": {
+      "title": "Share files",
+      "description": "Share files in the channel."
+    },
+    "SHARE_FILES_PUBLIC": {
+      "title": "Share files (public)",
+      "description": "Share files publicly in the channel."
+    },
+    "KICK": {
+      "title": "Kick",
+      "description": "Kick users from the server."
+    },
+    "BAN": {
+      "title": "Ban",
+      "description": "Ban users from the server."
+    },
+    "REGISTER": {
+      "title": "Register users",
+      "description": "Register guest users into the server database."
+    },
+    "SELF_REGISTER": {
+      "title": "Self-register",
+      "description": "Users can register themselves."
+    },
+    "RESET_USER_CONTENT": {
+      "title": "Reset user content",
+      "description": "Wipe avatars, comments and other content from a user."
+    },
+    "KEY_OWNER": {
+      "title": "Key owner",
+      "description": "Marks the user as a key owner for the persistent-chat key share workflow."
+    },
+    "MANAGE_EMOTES": {
+      "title": "Manage emotes",
+      "description": "Manage custom server emotes."
+    }
   },
   "onboarding": {
     "channelsAndRoles": {
@@ -778,7 +855,9 @@
     "staleBadge": "Restart pending",
     "brokenBadge": "Broken",
     "confirmUninstall": "Uninstall plugin \"{{name}}\"? This removes it from the server.",
-    "unknownError": "Unknown error"
+    "unknownError": "Unknown error",
+    "incompatible": "Incompatible",
+    "incompatibleTitle": "Incompatible with this server - cannot be enabled."
   },
   "marketplace": {
     "title": "Plugin Marketplace",
@@ -811,7 +890,11 @@
     "noRatings": "No ratings yet.",
     "ratingsCount_one": "{{count}} rating",
     "ratingsCount_other": "{{count}} ratings",
-    "minFancyServer": "Fancy server ≥ {{version}}"
+    "minFancyServer": "Fancy server ≥ {{version}}",
+    "installed": "Installed",
+    "alreadyInstalled": "Already installed on this server",
+    "abiVersion": "API v{{version}}",
+    "incompatibleAbi": "This plugin targets a different plugin API version than the server and cannot be installed."
   },
   "plugins": {
     "empty": "No plugins are loaded on the connected server.",
@@ -849,5 +932,115 @@
     "fieldFingerprint": "Fingerprint",
     "blockBtn": "Block",
     "notNowBtn": "Not now"
+  },
+  "search": {
+    "placeholder": "Search settings…",
+    "noResults": "No matching settings",
+    "results_one": "{{count}} result",
+    "results_other": "{{count}} results"
+  },
+  "serverSettings": {
+    "intro": "Change server settings at runtime. Changes apply immediately and are saved on the server.",
+    "loading": "Loading server settings…",
+    "unavailable": "Server settings aren't available. This server may not support runtime settings, or you may not have permission to change them.",
+    "save": "Save changes",
+    "saving": "Saving…",
+    "saved": "Saved"
+  },
+  "fileServer": {
+    "title": "File server storage",
+    "refresh": "Refresh",
+    "noConfig": "The file server is not enabled on this server.",
+    "loading": "Loading…",
+    "error": "Could not load files",
+    "empty": "No files stored.",
+    "search": "Search files…",
+    "resultCount": "{{count}} files",
+    "expires": "Expires",
+    "expiresAt": "Expires {{when}}",
+    "expiredAt": "Expired {{when}}",
+    "neverExpires": "Never",
+    "searchAll": "Search files & documents…",
+    "resultCountAll": "{{files}} file(s), {{docs}} doc(s)",
+    "noMatch": "No files match your search.",
+    "selectAll": "Select all ({{count}})",
+    "selectAllFiles": "Select all files",
+    "selectAllDocs": "Select all documents",
+    "selectRow": "Select",
+    "bulkDelete": "Delete selected",
+    "bulkDeleteN": "Delete selected ({{count}})",
+    "bulkDeleteConfirm": "Delete {{files}} file(s) and {{docs}} document(s)? This cannot be undone.",
+    "online": "Uploader online",
+    "offline": "Uploader offline",
+    "delete": "Delete file",
+    "deleteConfirm": "Delete \"{{name}}\" from the server? This cannot be undone.",
+    "deleteFailed": "Delete failed",
+    "preview": "Preview",
+    "previewClose": "Close",
+    "previewLoading": "Loading preview…",
+    "previewError": "Preview failed",
+    "previewUnavailable": "No inline preview for this type.",
+    "unknownOwner": "Unknown",
+    "health": {
+      "online": "File server online · {{ms}} ms",
+      "offline": "File server unreachable",
+      "checking": "Checking file server…",
+      "recheck": "Re-check"
+    },
+    "docs": {
+      "title": "Live documents",
+      "empty": "No documents persisted yet.",
+      "noMatch": "No documents match your search.",
+      "error": "Could not load documents",
+      "noExpiry": "Documents are kept until removed - unlike uploaded files, they have no automatic expiry.",
+      "delete": "Delete document",
+      "deleteConfirm": "Delete document \"{{name}}\"? This removes all its revisions and cannot be undone.",
+      "col": {
+        "name": "Document",
+        "revisions": "Revisions",
+        "size": "Size",
+        "updated": "Updated"
+      }
+    },
+    "stats": {
+      "used": "Used",
+      "free": "Free",
+      "total": "Capacity",
+      "files": "Files",
+      "maxFile": "Max upload"
+    },
+    "chart": {
+      "usage": "Storage usage",
+      "byType": "Size by type",
+      "byAccess": "By access mode",
+      "used": "Used",
+      "free": "Free"
+    },
+    "category": {
+      "image": "Images",
+      "video": "Videos",
+      "audio": "Audio",
+      "document": "Documents",
+      "archive": "Archives",
+      "other": "Other"
+    },
+    "access": {
+      "public": "Public",
+      "password": "Password",
+      "session": "Session"
+    },
+    "col": {
+      "preview": "Preview",
+      "name": "Name",
+      "type": "Type",
+      "size": "Size",
+      "access": "Access",
+      "channel": "Channel",
+      "owner": "Owner",
+      "uploaded": "Uploaded",
+      "expires": "Expires",
+      "actions": "Actions"
+    },
+    "root": "Root"
   }
 }

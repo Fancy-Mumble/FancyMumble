@@ -27,7 +27,12 @@
     "toastMessagesDeleted": "Nachrichten von {{name}} gelöscht",
     "toastDeleteFailed": "Nachrichten konnten nicht gelöscht werden",
     "toastUserMoved": "{{name}} nach {{channel}} verschoben",
-    "toastMoveFailed": "{{name}} konnte nicht verschoben werden"
+    "toastMoveFailed": "{{name}} konnte nicht verschoben werden",
+    "addFriend": "Als Freund hinzufügen",
+    "removeFriend": "Freund entfernen",
+    "toastFriendAdded": "{{name}} zu deinen Freunden hinzugefügt",
+    "toastFriendRemoved": "{{name}} aus deinen Freunden entfernt",
+    "toastFriendFailed": "Freundesliste konnte nicht aktualisiert werden"
   },
   "movePicker": {
     "ariaLabel": "{{name}} in Kanal verschieben",
@@ -170,7 +175,8 @@
     "labelFilename": "Dateiname",
     "wildcardHelp": "{date} = JJJJ-MM-TT, {time} = HH-MM-SS, {datetime} = Datum + Uhrzeit, {host} = Server, {user} = Nutzername, {channel} = Kanalname",
     "stopRecording": "Aufnahme stoppen",
-    "startRecording": "Aufnahme starten"  },
+    "startRecording": "Aufnahme starten"
+  },
   "channelPassword": {
     "title": "Passwort erforderlich",
     "body": " benötigt ein Passwort zum Betreten.",
@@ -315,7 +321,6 @@
     "archiveCount": " ({{count}} gespeicherte Nachrichten)",
     "genericAccess": "Wer den Verschlüsselungsschlüssel erhält, kann verschlüsselte Nachrichten in diesem Kanal lesen.",
     "confirmMessage": "Möchtest du den Verschlüsselungsschlüssel wirklich mit <strong>{{name}}</strong> teilen? Dies kann nicht rückgängig gemacht werden.",
-
     "share": "Schlüssel teilen"
   },
   "custodian": {

@@ -89,7 +89,9 @@
     "searchPlaceholder": "Rechercher des serveurs...",
     "noMatches": "Aucun résultat",
     "alreadyConnected": "Déjà connecté",
-    "connectedTag": "Connecté"
+    "connectedTag": "Connecté",
+    "openFriends": "Amis",
+    "openFriendsTitle": "Ouvrir votre liste d'amis"
   },
   "tabsBar": {
     "connectedServersAriaLabel": "Serveurs connectés",
@@ -103,7 +105,8 @@
     "disconnectDialogTitle": "Se déconnecter du serveur",
     "disconnectDialogBody": "Se déconnecter de {{label}} ?",
     "disconnectConfirm": "Se déconnecter",
-    "disconnectNeverShow": "Ne plus demander"
+    "disconnectNeverShow": "Ne plus demander",
+    "friends": "Amis"
   },
   "welcomeModal": {
     "title": "Bienvenue",
@@ -196,7 +199,11 @@
       "liveDocTitle": "Titre",
       "liveDocSlug": "Slug",
       "liveDocUrl": "URL WebSocket"
-    }
+    },
+    "accordionCspViolations": "Violations CSP",
+    "cspViolationCount": "{{count}} violation(s)",
+    "cspNoViolations": "Aucune violation enregistrée.",
+    "cspClearTitle": "Effacer les violations"
   },
   "chooseServer": "Choisissez le serveur auquel vous connecter",
   "publicServersLink": "Parcourir les serveurs publics",
@@ -270,5 +277,15 @@
     "advancedHint": "Contrôle total sur les réglages"
   },
   "submit": "C'est parti",
-  "submitting": "Démarrage en cours..."
+  "submitting": "Démarrage en cours...",
+  "friendsPage": {
+    "title": "Amis",
+    "empty": "Vous n'avez pas encore d'amis. Faites un clic droit sur un utilisateur dans la liste des canaux et choisissez « Ajouter en ami ».",
+    "placeholder": "Sélectionnez un ami à gauche pour commencer à discuter.",
+    "remove": "Retirer des amis",
+    "offline": "Actuellement hors ligne",
+    "youLabel": "Vous",
+    "openSettings": "Ouvrir les paramètres",
+    "noMatches": "Aucun ami ne correspond à votre recherche."
+  }
 }

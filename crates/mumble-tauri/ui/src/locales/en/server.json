@@ -209,7 +209,11 @@
       "liveDocTitle": "Title",
       "liveDocSlug": "Slug",
       "liveDocUrl": "WebSocket URL"
-    }
+    },
+    "accordionCspViolations": "CSP Violations",
+    "cspViolationCount": "{{count}} violation(s)",
+    "cspNoViolations": "No violations recorded.",
+    "cspClearTitle": "Clear violations"
   },
   "chooseServer": "Choose a server to connect",
   "publicServersLink": "Browse public servers",

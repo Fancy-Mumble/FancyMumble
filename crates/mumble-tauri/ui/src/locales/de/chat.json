@@ -7,7 +7,6 @@
     "attachMenuFile": "Datei",
     "attachMenuLiveDoc": "Live-Dokument",
     "attachMenuLiveDocHint": "Gemeinsames Dokument für diesen Kanal öffnen",
-
     "gifPickerTooltip": "GIF-Auswahl",
     "placeholderMobile": "Nachricht schreiben...",
     "placeholderDesktop": "Nachricht schreiben... (Strg+B/I/U zum Formatieren)"
@@ -496,21 +495,47 @@
       "watermarkPlaceholder": "z. B. ENTWURF, VERTRAULICH",
       "insertCoverPage": "Deckblatt einfügen",
       "insertSectionBreak": "Abschnittsumbruch einfügen",
-      "sizes": { "a4": "A4", "letter": "Letter", "legal": "Legal" },
-      "orientations": { "portrait": "Hochformat", "landscape": "Querformat" },
-      "marginOptions": { "narrow": "Schmal", "normal": "Normal", "moderate": "Mittel", "wide": "Breit", "mirrored": "Gespiegelt", "custom": "Benutzerdefiniert", "customMargins": "Benutzerdefinierte Seitenr\u00e4nder..." },
-      "borderOptions": { "none": "Keiner", "thin": "D\u00fcnn", "medium": "Mittel" },
+      "sizes": {
+        "a4": "A4",
+        "letter": "Letter",
+        "legal": "Legal"
+      },
+      "orientations": {
+        "portrait": "Hochformat",
+        "landscape": "Querformat"
+      },
+      "marginOptions": {
+        "narrow": "Schmal",
+        "normal": "Normal",
+        "moderate": "Mittel",
+        "wide": "Breit",
+        "mirrored": "Gespiegelt",
+        "custom": "Benutzerdefiniert",
+        "customMargins": "Benutzerdefinierte Seitenränder..."
+      },
+      "borderOptions": {
+        "none": "Keiner",
+        "thin": "Dünn",
+        "medium": "Mittel"
+      },
       "rulerUnit": "Lineal-Einheit",
-      "rulerUnitOptions": { "cm": "cm", "in": "in" },
+      "rulerUnitOptions": {
+        "cm": "cm",
+        "in": "in"
+      },
       "customMargins": {
-        "title": "Benutzerdefinierte Seitenr\u00e4nder",
+        "title": "Benutzerdefinierte Seitenränder",
         "leftRight": "Links / Rechts",
         "topBottom": "Oben / Unten",
-        "apply": "\u00dcbernehmen",
+        "apply": "Übernehmen",
         "cancel": "Abbrechen"
       },
       "columns": "Spalten",
-      "columnsOptions": { "1": "Einspaltig", "2": "Zweispaltig", "3": "Dreispaltig" }
+      "columnsOptions": {
+        "1": "Einspaltig",
+        "2": "Zweispaltig",
+        "3": "Dreispaltig"
+      }
     },
     "ribbon": {
       "tabs": {
@@ -545,7 +570,8 @@
         "captions": "Beschriftungen",
         "citations": "Zitate & Literaturverzeichnis",
         "proofing": "Dokument",
-        "show": "Anzeigen"
+        "show": "Anzeigen",
+        "columns": "Spalten"
       },
       "coverPage": "Deckblatt",
       "pageBreak": "Seitenumbruch",
@@ -588,7 +614,12 @@
       "modelUploadFailed": "Hochladen des Modells fehlgeschlagen",
       "chart": "Diagramm",
       "chartData": "Werte (durch Komma getrennt)",
-      "chartType": { "bar": "Balken", "line": "Linie", "pie": "Kreis", "doughnut": "Ring" },
+      "chartType": {
+        "bar": "Balken",
+        "line": "Linie",
+        "pie": "Kreis",
+        "doughnut": "Ring"
+      },
       "chartEdit": "Daten bearbeiten",
       "chartDone": "Fertig",
       "chartResize": "Diagramm skalieren",
@@ -642,7 +673,12 @@
       "iconNoResults": "Keine Symbole gefunden",
       "videoUrl": "Video-URL (YouTube, Vimeo, …)",
       "videoPreviewEmpty": "Vorschau erscheint hier",
-      "videoFrame": { "plain": "Schlicht", "rounded": "Abgerundet", "shadow": "Schatten", "bordered": "Rahmen" },
+      "videoFrame": {
+        "plain": "Schlicht",
+        "rounded": "Abgerundet",
+        "shadow": "Schatten",
+        "bordered": "Rahmen"
+      },
       "signaturePrompt": "Name des Unterzeichners",
       "signError": "Signieren nicht möglich: keine Mumble-Identität verfügbar.",
       "signedBy": "Digital signiert von {{name}}",
@@ -809,7 +845,6 @@
       "blockquote": "Zitat",
       "codeBlock": "Code-Block",
       "link": "Link einfügen",
-      "math": "Formel einfügen (LaTeX)",
       "image": "Bild einfügen",
       "alignLeft": "Linksbündig",
       "alignCenter": "Zentriert",
@@ -830,7 +865,10 @@
       "addColLeft": "Spalte links einfügen",
       "addColRight": "Spalte rechts einfügen",
       "addRowAbove": "Zeile darüber einfügen",
-      "addRowBelow": "Zeile darunter einfügen"
+      "addRowBelow": "Zeile darunter einfügen",
+      "subscript": "Tiefgestellt",
+      "superscript": "Hochgestellt",
+      "mathBlock": "Mathe-Block einfügen"
     },
     "banner": {
       "title": "{{name}} hat ein Live-Dokument geöffnet",
@@ -862,5 +900,28 @@
       "openFailed": "Dokument konnte nicht geöffnet werden",
       "syncFailed": "Live-Synchronisierung unterbrochen - deine Änderungen werden gerade nicht geteilt"
     }
+  },
+  "mySharedFiles": {
+    "title": "Meine geteilten Dateien",
+    "refresh": "Aktualisieren",
+    "loading": "Deine Dateien werden geladen…",
+    "error": "Deine Dateien konnten nicht geladen werden",
+    "unavailable": "Die Dateifreigabe ist auf diesem Server nicht aktiviert.",
+    "empty": "Du hast noch keine Dateien geteilt.",
+    "preview": "Vorschau",
+    "openLink": "Freigabelink im Browser öffnen",
+    "delete": "Löschen",
+    "deleteTitle": "Datei löschen",
+    "confirmDelete": "„{{name}}“ löschen? Der Freigabelink funktioniert dann nicht mehr.",
+    "deleteFailed": "Löschen fehlgeschlagen",
+    "linkFailed": "Freigabelink konnte nicht geöffnet werden",
+    "neverExpires": "Nie",
+    "colName": "Name",
+    "colType": "Typ",
+    "colSize": "Größe",
+    "colChannel": "Kanal",
+    "colAccess": "Zugriff",
+    "colUploaded": "Hochgeladen",
+    "colExpires": "Läuft ab"
   }
 }

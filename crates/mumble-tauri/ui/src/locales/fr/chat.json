@@ -495,21 +495,47 @@
       "watermarkPlaceholder": "p. ex. BROUILLON, CONFIDENTIEL",
       "insertCoverPage": "Insérer une page de garde",
       "insertSectionBreak": "Insérer un saut de section",
-      "sizes": { "a4": "A4", "letter": "Letter", "legal": "Legal" },
-      "orientations": { "portrait": "Portrait", "landscape": "Paysage" },
-      "marginOptions": { "narrow": "\u00c9troites", "normal": "Normales", "moderate": "Mod\u00e9r\u00e9es", "wide": "Larges", "mirrored": "En miroir", "custom": "Personnalis\u00e9es", "customMargins": "Marges personnalis\u00e9es..." },
-      "borderOptions": { "none": "Aucune", "thin": "Fine", "medium": "Moyenne" },
+      "sizes": {
+        "a4": "A4",
+        "letter": "Letter",
+        "legal": "Legal"
+      },
+      "orientations": {
+        "portrait": "Portrait",
+        "landscape": "Paysage"
+      },
+      "marginOptions": {
+        "narrow": "Étroites",
+        "normal": "Normales",
+        "moderate": "Modérées",
+        "wide": "Larges",
+        "mirrored": "En miroir",
+        "custom": "Personnalisées",
+        "customMargins": "Marges personnalisées..."
+      },
+      "borderOptions": {
+        "none": "Aucune",
+        "thin": "Fine",
+        "medium": "Moyenne"
+      },
       "rulerUnit": "Unite de regle",
-      "rulerUnitOptions": { "cm": "cm", "in": "in" },
+      "rulerUnitOptions": {
+        "cm": "cm",
+        "in": "in"
+      },
       "customMargins": {
-        "title": "Marges personnalis\u00e9es",
+        "title": "Marges personnalisées",
         "leftRight": "Gauche / Droite",
         "topBottom": "Haut / Bas",
         "apply": "Appliquer",
         "cancel": "Annuler"
       },
       "columns": "Colonnes",
-      "columnsOptions": { "1": "Simple", "2": "Deux", "3": "Trois" }
+      "columnsOptions": {
+        "1": "Simple",
+        "2": "Deux",
+        "3": "Trois"
+      }
     },
     "ribbon": {
       "tabs": {
@@ -544,7 +570,8 @@
         "captions": "Légendes",
         "citations": "Citations et bibliographie",
         "proofing": "Document",
-        "show": "Afficher"
+        "show": "Afficher",
+        "columns": "Colonnes"
       },
       "coverPage": "Page de garde",
       "pageBreak": "Saut de page",
@@ -587,7 +614,12 @@
       "modelUploadFailed": "Échec de l'envoi du modèle",
       "chart": "Graphique",
       "chartData": "Valeurs (séparées par des virgules)",
-      "chartType": { "bar": "Barres", "line": "Courbe", "pie": "Secteurs", "doughnut": "Anneau" },
+      "chartType": {
+        "bar": "Barres",
+        "line": "Courbe",
+        "pie": "Secteurs",
+        "doughnut": "Anneau"
+      },
       "chartEdit": "Modifier les données",
       "chartDone": "Terminé",
       "chartResize": "Redimensionner le graphique",
@@ -641,7 +673,12 @@
       "iconNoResults": "Aucune icône trouvée",
       "videoUrl": "URL de la vidéo (YouTube, Vimeo, …)",
       "videoPreviewEmpty": "L'aperçu apparaît ici",
-      "videoFrame": { "plain": "Simple", "rounded": "Arrondi", "shadow": "Ombre", "bordered": "Bordure" },
+      "videoFrame": {
+        "plain": "Simple",
+        "rounded": "Arrondi",
+        "shadow": "Ombre",
+        "bordered": "Bordure"
+      },
       "signaturePrompt": "Nom du signataire",
       "signError": "Signature impossible : aucune identité Mumble disponible.",
       "signedBy": "Signé numériquement par {{name}}",
@@ -808,7 +845,6 @@
       "blockquote": "Citation",
       "codeBlock": "Bloc de code",
       "link": "Insérer un lien",
-      "math": "Insérer une formule (LaTeX)",
       "image": "Insérer une image",
       "alignLeft": "Aligner à gauche",
       "alignCenter": "Centrer",
@@ -829,7 +865,10 @@
       "addColLeft": "Ajouter une colonne à gauche",
       "addColRight": "Ajouter une colonne à droite",
       "addRowAbove": "Ajouter une ligne au-dessus",
-      "addRowBelow": "Ajouter une ligne en dessous"
+      "addRowBelow": "Ajouter une ligne en dessous",
+      "subscript": "Indice",
+      "superscript": "Exposant",
+      "mathBlock": "Insérer un bloc mathématique"
     },
     "banner": {
       "title": "{{name}} a ouvert un document en direct",
@@ -861,5 +900,28 @@
       "openFailed": "Impossible d'ouvrir le document",
       "syncFailed": "Synchronisation en direct interrompue - vos modifications ne sont pas partagées"
     }
+  },
+  "mySharedFiles": {
+    "title": "Mes fichiers partagés",
+    "refresh": "Actualiser",
+    "loading": "Chargement de vos fichiers…",
+    "error": "Impossible de charger vos fichiers",
+    "unavailable": "Le partage de fichiers n'est pas activé sur ce serveur.",
+    "empty": "Vous n'avez encore partagé aucun fichier.",
+    "preview": "Aperçu",
+    "openLink": "Ouvrir le lien de partage dans le navigateur",
+    "delete": "Supprimer",
+    "deleteTitle": "Supprimer le fichier",
+    "confirmDelete": "Supprimer « {{name}} » ? Le lien de partage cessera de fonctionner.",
+    "deleteFailed": "Échec de la suppression",
+    "linkFailed": "Impossible d'ouvrir le lien de partage",
+    "neverExpires": "Jamais",
+    "colName": "Nom",
+    "colType": "Type",
+    "colSize": "Taille",
+    "colChannel": "Canal",
+    "colAccess": "Accès",
+    "colUploaded": "Téléversé",
+    "colExpires": "Expiration"
   }
 }
