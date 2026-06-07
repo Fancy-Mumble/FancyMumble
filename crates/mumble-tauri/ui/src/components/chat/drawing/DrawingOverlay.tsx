@@ -82,7 +82,6 @@ const INSTANCE_ID = (() => {
 })();
 
 function logDraw(event: string, data: Record<string, unknown>): void {
-  // eslint-disable-next-line no-console
   console.info(`[draw ${INSTANCE_ID}] ${event}`, data);
 }
 

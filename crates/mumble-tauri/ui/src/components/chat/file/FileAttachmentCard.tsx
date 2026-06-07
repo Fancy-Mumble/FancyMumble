@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { rebaseFileServerUrl, useAppStore } from "../../../store";
 import type { FileAccessMode } from "../../../types";
+import { bytesToBase64, base64ToBytes } from "../../../utils/base64";
+import { formatBytes } from "../../../utils/format";
 import { MediaLightbox } from "../media/MediaPreview";
+import { FilePasswordDialog } from "./FilePasswordDialog";
 import styles from "./FileAttachmentCard.module.css";
 
 export interface FileAttachmentInfo {
@@ -30,19 +33,6 @@ interface FileAttachmentCardProps {
  *  in place of the raw markdown link. Legacy clients see the inert comment. */
 export const FANCY_FILE_MARKER_RE = /<!-- FANCY_FILE:([A-Za-z0-9+/=]+) -->/;
 
-function bytesToBase64(bytes: Uint8Array): string {
-  let bin = "";
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin);
-}
-
-function base64ToBytes(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
 /** Serialise a {@link FileAttachmentInfo} to the FANCY_FILE marker comment. */
 export function encodeFileAttachmentMarker(info: FileAttachmentInfo): string {
   const json = JSON.stringify(info);
@@ -65,17 +55,6 @@ export function decodeFileAttachmentPayload(b64: string): FileAttachmentInfo | n
   }
 }
 
-function formatBytes(bytes: number | undefined): string {
-  if (bytes === undefined) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)} KiB`;
-  const mb = kb / 1024;
-  if (mb < 1024) return `${mb.toFixed(1)} MiB`;
-  return `${(mb / 1024).toFixed(2)} GiB`;
-}
-
-export { formatBytes };
 
 /** Best-effort preview category for a filename, used by the Downloads panel. */
 export type PreviewKind = "image" | "audio" | "video" | "text" | "other";
@@ -105,6 +84,10 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
   const [saved, setSaved] = useState(false);
   const [savedPath, setSavedPath] = useState<string | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  // Native password prompt (replaces window.prompt): the open flag drives the
+  // dialog and a stored resolver hands the entered value back to `onSave`.
+  const [pwPromptOpen, setPwPromptOpen] = useState(false);
+  const pwResolverRef = useRef<((value: string | null) => void) | null>(null);
   const initiallyExpired =
     info.expiresAt != null && info.expiresAt > 0 && info.expiresAt * 1000 < Date.now();
   const [expired, setExpired] = useState<boolean>(initiallyExpired);
@@ -177,6 +160,24 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
 
   const canOpenInBrowser = (info.mode === "public" || info.mode === "password") && !expired;
 
+  // Open the native password dialog and resolve with the entered value (or
+  // null if cancelled).
+  const askPassword = useCallback(
+    () =>
+      new Promise<string | null>((resolve) => {
+        pwResolverRef.current = resolve;
+        setPwPromptOpen(true);
+      }),
+    [],
+  );
+
+  const resolvePassword = useCallback((value: string | null) => {
+    setPwPromptOpen(false);
+    const resolve = pwResolverRef.current;
+    pwResolverRef.current = null;
+    resolve?.(value);
+  }, []);
+
   const onSave = useCallback(async () => {
     setBusy(true);
     setError(null);
@@ -190,7 +191,7 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
       }
       let password: string | undefined;
       if (info.mode === "password") {
-        const entered = window.prompt(t("fileAttachment.passwordPrompt"));
+        const entered = await askPassword();
         if (entered === null) {
           setBusy(false);
           return;
@@ -217,7 +218,7 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
     } finally {
       setBusy(false);
     }
-  }, [downloadFile, addDownload, info]);
+  }, [downloadFile, addDownload, info, askPassword]);
 
   const preview = (() => {
     if (!previewSrc) return null;
@@ -351,6 +352,13 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
           onClose={closeLightbox}
         />,
         document.body,
+      )}
+      {pwPromptOpen && (
+        <FilePasswordDialog
+          filename={info.filename}
+          onConfirm={(pw) => resolvePassword(pw)}
+          onCancel={() => resolvePassword(null)}
+        />
       )}
     </div>
   );

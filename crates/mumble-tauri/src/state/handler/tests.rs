@@ -1,4 +1,5 @@
 #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
+#![allow(deprecated, reason = "tests exercise the legacy PluginDataTransmission wire fields")]
 use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
@@ -96,7 +97,9 @@ fn make_user(session: u32, name: &str) -> UserEntry {
         channel_id: 0,
         user_id: None,
         texture: None,
+        texture_marker: None,
         comment: None,
+        comment_marker: None,
         mute: false,
         deaf: false,
         suppress: false,
@@ -490,11 +493,12 @@ fn user_state_no_session_is_noop() {
 }
 
 /// When a post-sync `UserState` arrives with `texture_hash` but no `texture`,
-/// the handler must request the full blob so the avatar becomes visible.
-/// (Before this fix, `texture_hash` was silently ignored for post-sync updates,
-/// causing missing avatars when a user joins *after* us and sets their texture.)
+/// the handler records the avatar's existence as a non-zero `texture_marker`
+/// (so the frontend knows it has one) but does NOT eagerly fetch the blob -
+/// avatars are loaded lazily on first view via `get_user_texture`, keeping the
+/// backend from holding a blob for every connected user.
 #[tokio::test]
-async fn user_state_texture_hash_triggers_blob_request() {
+async fn user_state_texture_hash_records_marker_lazily() {
     let (ctx, emitter) = make_ctx();
     {
         let mut state = ctx.shared.lock().unwrap();
@@ -513,23 +517,25 @@ async fn user_state_texture_hash_triggers_blob_request() {
     };
     us.handle(&ctx);
 
-    // The handler spawns a task to request the blob.  Give it a
-    // moment to run (it will find no client_handle and exit gracefully).
     tokio::task::yield_now().await;
 
-    // User is still present and the texture is unchanged (the blob
-    // response would fill it in later).
+    // The avatar's existence is recorded (non-zero marker) but its bytes are
+    // NOT fetched eagerly - that happens lazily on first view.
     let state = ctx.shared.lock().unwrap();
-    assert!(state.users.contains_key(&10));
+    let user = state.users.get(&10).expect("user present");
+    assert!(user.texture.is_none(), "bytes must not be fetched eagerly");
+    assert!(user.texture_marker.is_some(), "avatar existence must be recorded");
     drop(state);
 
     // The handler should emit state-changed since we are synced.
     assert!(emitter.event_names().contains(&"state-changed".to_string()));
 }
 
-/// Same as above but for `comment_hash` without comment.
+/// Same as the avatar case but for `comment_hash`: the bio's existence is
+/// recorded as a non-zero `comment_marker` without eagerly fetching the blob -
+/// it is loaded lazily on first view via `get_user_comment`.
 #[tokio::test]
-async fn user_state_comment_hash_triggers_blob_request() {
+async fn user_state_comment_hash_records_marker_lazily() {
     let (ctx, emitter) = make_ctx();
     {
         let mut state = ctx.shared.lock().unwrap();
@@ -548,7 +554,9 @@ async fn user_state_comment_hash_triggers_blob_request() {
     tokio::task::yield_now().await;
 
     let state = ctx.shared.lock().unwrap();
-    assert!(state.users.contains_key(&10));
+    let user = state.users.get(&10).expect("user present");
+    assert!(user.comment.is_none(), "bio text must not be fetched eagerly");
+    assert!(user.comment_marker.is_some(), "bio existence must be recorded");
     drop(state);
 
     assert!(emitter.event_names().contains(&"state-changed".to_string()));

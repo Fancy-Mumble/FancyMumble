@@ -13,7 +13,7 @@ import { useAppStore } from "../../store";
 import { SafeHtml } from "../elements/SafeHtml";
 import type { UserEntry, FancyProfile, UserMode } from "../../types";
 import { parseComment } from "../../profileFormat";
-import { useUserAvatar } from "../../lazyBlobs";
+import { useUserAvatar, useUserComment } from "../../lazyBlobs";
 import { getPreferences } from "../../preferencesStorage";
 import { useUserStats } from "../../hooks/useUserStats";
 import { formatDuration } from "../../utils/format";
@@ -141,10 +141,14 @@ function UserProfilePanel({
   const stats = useUserStats(user.session, true);
 
   const avatarDataUrl = useUserAvatar(user.session, user.texture_size);
+  const liveComment = useUserComment(user.session, user.comment_size);
 
   const parsed = useMemo(
-    () => (user.comment ? parseComment(user.comment) : null),
-    [user.comment],
+    () => {
+      const c = user.comment ?? liveComment;
+      return c ? parseComment(c) : null;
+    },
+    [user.comment, liveComment],
   );
 
   const profile: FancyProfile = parsed?.profile ?? {};
@@ -260,7 +264,7 @@ function UserProfilePanel({
                 {user.name}
               </span>
               {user.user_id != null && user.user_id > 0 && (
-                <span className={styles.registeredBadge} title="Registered">
+                <span className={styles.registeredBadge} title={t("userProfile.registeredTitle")}>
                   <ShieldCheckIcon width={14} height={14} strokeWidth={2.5} />
                 </span>
               )}

@@ -1,8 +1,8 @@
-import { useState, useCallback, useEffect, useRef, lazy, Suspense } from "react";
-import { createPortal } from "react-dom";
+import { useState, useCallback, useEffect, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChannelEntry, PchatProtocol } from "../../../types";
 import { useAppStore } from "../../../store";
+import { Modal } from "../../elements/Modal";
 import { useChannelDescription } from "../../../lazyBlobs";
 const BioEditor = lazy(() => import("../../../pages/settings/BioEditor").then((m) => ({ default: m.BioEditor })));
 import styles from "./ChannelEditorDialog.module.css";
@@ -122,24 +122,6 @@ export default function ChannelEditorDialog({
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const backdropRef = useRef<HTMLDivElement>(null);
-
-  // Close on Escape.
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [onClose]);
-
-  // Close on backdrop click.
-  const handleBackdropClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === backdropRef.current) onClose();
-    },
-    [onClose],
-  );
 
   const handleSubmit = useCallback(async () => {
     if (!name.trim()) return;
@@ -200,16 +182,8 @@ export default function ChannelEditorDialog({
     onClose,
   ]);
 
-  return createPortal(
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
-    <div
-      ref={backdropRef}
-      className={styles.backdrop}
-      onClick={handleBackdropClick}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
-      }}
-    >
+  return (
+    <Modal onClose={onClose} zIndex={10001} overlayClassName={styles.overlayBlur}>
       <div className={styles.dialog} role="dialog" aria-modal="true" aria-label={isCreate ? t("channelEditor.ariaCreate") : t("channelEditor.ariaEdit")}>
         <h3 className={styles.title}>{isCreate ? t("channelEditor.titleCreate") : t("channelEditor.titleEdit")}</h3>
 
@@ -373,7 +347,6 @@ export default function ChannelEditorDialog({
           </button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }

@@ -1,21 +1,5 @@
 /* LiveDocCustomMarginsDialog - modal for entering custom left/right and top/bottom margins. */
 
-.overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-overlay-heavy, rgba(0, 0, 0, 0.6));
-  animation: fadeIn 0.12s ease-out;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
 .dialog {
   background: var(--color-bg-primary, #1a1d23);
   border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.12));

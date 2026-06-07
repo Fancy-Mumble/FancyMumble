@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAppStore } from "../../store";
+import { getPreferences, updatePreferences } from "../../preferencesStorage";
 import type { ServerId, SessionMeta } from "../../types";
 import ConfirmDialog from "../elements/ConfirmDialog";
 import AddServerPopover from "./AddServerPopover";
@@ -83,8 +84,25 @@ export default function ServerTabsBar() {
 
   const [pendingDisconnect, setPendingDisconnect] = useState<SessionMeta | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [neverShowAgain, setNeverShowAgain] = useState(false);
+  // Whether to show the disconnect confirmation. Loaded from preferences; the
+  // user can opt out via "never show again" (then re-enable in Advanced).
+  const [showDisconnectWarning, setShowDisconnectWarning] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const addBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    getPreferences()
+      .then((p) => setShowDisconnectWarning(p.showDisconnectWarning ?? true))
+      .catch(() => {});
+    const onPrefs = () => {
+      getPreferences()
+        .then((p) => setShowDisconnectWarning(p.showDisconnectWarning ?? true))
+        .catch(() => {});
+    };
+    window.addEventListener("preferences-changed", onPrefs);
+    return () => window.removeEventListener("preferences-changed", onPrefs);
+  }, []);
 
   // -- Drag-and-drop reordering (pointer-based) ----------------------
   // We use pointer events instead of HTML5 drag-and-drop because the
@@ -300,9 +318,19 @@ export default function ServerTabsBar() {
     navigate("/chat");
   };
 
+  // Disconnect the session, either after confirmation or immediately when the
+  // user has opted out of the warning.
+  const requestDisconnect = (meta: SessionMeta) => {
+    if (showDisconnectWarning) {
+      setPendingDisconnect(meta);
+    } else {
+      void disconnectSession(meta.id).finally(() => void refreshSessions());
+    }
+  };
+
   const handleCloseClick = (e: React.MouseEvent, meta: SessionMeta) => {
     e.stopPropagation();
-    setPendingDisconnect(meta);
+    requestDisconnect(meta);
   };
 
   const handleConfirmDisconnect = async () => {
@@ -310,15 +338,21 @@ export default function ServerTabsBar() {
     setIsDisconnecting(true);
     try {
       await disconnectSession(pendingDisconnect.id);
+      if (neverShowAgain) {
+        await updatePreferences({ showDisconnectWarning: false });
+        setShowDisconnectWarning(false);
+      }
     } finally {
       setIsDisconnecting(false);
       setPendingDisconnect(null);
+      setNeverShowAgain(false);
       await refreshSessions();
     }
   };
 
   const handleCancelDisconnect = () => {
     setPendingDisconnect(null);
+    setNeverShowAgain(false);
   };
 
   const handleAddClick = () => {
@@ -419,7 +453,7 @@ export default function ServerTabsBar() {
                 if (e.button === 1) {
                   e.preventDefault();
                   e.stopPropagation();
-                  setPendingDisconnect(meta);
+                  requestDisconnect(meta);
                 }
               }}
               onKeyDown={(e) => {
@@ -504,6 +538,9 @@ export default function ServerTabsBar() {
           cancelLabel={t("common:actions.cancel")}
           danger
           isConfirming={isDisconnecting}
+          checkboxLabel={t("tabsBar.disconnectNeverShow", { defaultValue: "Don't ask again" })}
+          checkboxChecked={neverShowAgain}
+          onCheckboxChange={setNeverShowAgain}
           onConfirm={() => void handleConfirmDisconnect()}
           onCancel={handleCancelDisconnect}
         />

@@ -1,14 +1,30 @@
 import { CloseIcon } from "../../../icons";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { FileAccessMode } from "../../../types";
+import { useAppStore } from "../../../store";
+import { Modal } from "../../elements/Modal";
 import styles from "./FileShareDialog.module.css";
 
 export interface FileShareChoice {
   readonly mode: FileAccessMode;
   readonly password?: string;
   readonly message?: string;
+  /** Requested lifetime in seconds: `undefined` = server default, `0` = never
+   *  expire, otherwise the exact duration (clamped server-side to the max). */
+  readonly ttlSeconds?: number;
 }
+
+/** Selectable lifetime presets (seconds). Filtered against the server's
+ *  configured maximum before display. `key` indexes the i18n label;
+ *  `label` is the English fallback. */
+const TTL_PRESETS: ReadonlyArray<{ readonly secs: number; readonly key: string; readonly label: string }> = [
+  { secs: 3600, key: "h1", label: "1 hour" },
+  { secs: 86_400, key: "d1", label: "1 day" },
+  { secs: 604_800, key: "w1", label: "1 week" },
+  { secs: 2_592_000, key: "mo1", label: "1 month" },
+  { secs: 31_536_000, key: "y1", label: "1 year" },
+];
 
 interface FileShareDialogProps {
   readonly open: boolean;
@@ -34,8 +50,20 @@ export default function FileShareDialog({
   const [mode, setMode] = useState<FileAccessMode>("session");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  // Lifetime choice: "default" | "never" | "max" | a seconds string.
+  const [ttlChoice, setTtlChoice] = useState<string>("default");
   const passwordRef = useRef<HTMLInputElement>(null);
   const messageRef = useRef<HTMLTextAreaElement>(null);
+
+  const maxTtl = useAppStore((s) => s.fileServerConfig?.maxTtlSeconds ?? 0);
+  const availablePresets = useMemo(
+    () => TTL_PRESETS.filter((p) => maxTtl === 0 || p.secs <= maxTtl),
+    [maxTtl],
+  );
+  // Offer "Maximum allowed" only when the cap isn't already one of the presets.
+  const showMax = maxTtl > 0 && !TTL_PRESETS.some((p) => p.secs === maxTtl);
+  // "Never" is only honoured when there is no cap.
+  const showNever = maxTtl === 0;
 
   // If the active mode becomes disallowed (e.g. capability flag flips
   // mid-session), fall back to the always-allowed "session" mode.
@@ -50,6 +78,7 @@ export default function FileShareDialog({
     setMode("session");
     setPassword("");
     setMessage("");
+    setTtlChoice("default");
   }, [open]);
 
   useEffect(() => {
@@ -69,20 +98,32 @@ export default function FileShareDialog({
     (e: FormEvent) => {
       e.preventDefault();
       if (mode === "password" && password.length === 0) return;
+      let ttlSeconds: number | undefined;
+      if (ttlChoice === "default") ttlSeconds = undefined;
+      else if (ttlChoice === "never") ttlSeconds = 0;
+      else if (ttlChoice === "max") ttlSeconds = maxTtl;
+      else ttlSeconds = Number(ttlChoice);
       onSubmit({
         mode,
         password: mode === "password" ? password : undefined,
         message: message.trim() || undefined,
+        ttlSeconds,
       });
     },
-    [mode, password, message, onSubmit],
+    [mode, password, message, ttlChoice, maxTtl, onSubmit],
   );
 
   if (!open) return null;
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={t("fileShare.title")}>
-      <div className={styles.dialog}>
+    <Modal
+      onClose={onCancel}
+      closeOnEsc={false}
+      closeOnOverlayClick={false}
+      zIndex={200}
+      overlayClassName={styles.overlayBlur}
+    >
+      <div className={styles.dialog} role="dialog" aria-modal="true" aria-label={t("fileShare.title")}>
         <div className={styles.header}>
           <h2 className={styles.title}>{t("fileShare.title")}</h2>
           <button
@@ -100,7 +141,7 @@ export default function FileShareDialog({
             {t("fileShare.prompt", { filename })}
           </p>
 
-          <div className={styles.modeList} role="radiogroup" aria-label="Access mode">
+          <div className={styles.modeList} role="radiogroup" aria-label={t("fileShare.accessMode")}>
             {(["public", "password", "session"] as const).map((m) => {
               const restricted = !canSharePublic && (m === "public" || m === "password");
               const optionClasses = [
@@ -120,7 +161,7 @@ export default function FileShareDialog({
                     className={styles.radio}
                   />
                   <div className={styles.modeText}>
-                    <div className={styles.modeName}>{m}</div>
+                    <div className={styles.modeName}>{t(`fileShareMode.${m}`)}</div>
                     <div className={styles.modeDesc}>
                       {restricted ? t("fileShare.restrictedHint") : t(`fileShare.mode.${m}Desc`)}
                     </div>
@@ -162,6 +203,27 @@ export default function FileShareDialog({
             />
           </div>
 
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="file-share-ttl">
+              {t("fileShare.duration.label")}
+            </label>
+            <select
+              id="file-share-ttl"
+              className={styles.input}
+              value={ttlChoice}
+              onChange={(e) => setTtlChoice(e.target.value)}
+            >
+              <option value="default">{t("fileShare.duration.default")}</option>
+              {availablePresets.map((p) => (
+                <option key={p.key} value={String(p.secs)}>
+                  {t(`fileShare.duration.${p.key}`, { defaultValue: p.label })}
+                </option>
+              ))}
+              {showMax && <option value="max">{t("fileShare.duration.max")}</option>}
+              {showNever && <option value="never">{t("fileShare.duration.never")}</option>}
+            </select>
+          </div>
+
           <div className={styles.actions}>
             <button type="button" className={styles.cancelBtn} onClick={onCancel}>
               {tc("actions.cancel")}
@@ -176,6 +238,6 @@ export default function FileShareDialog({
           </div>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }

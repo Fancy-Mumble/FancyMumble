@@ -1,9 +1,9 @@
 /**
- * TranslationPopoutPage — borderless, always-on-top window dedicated to
+ * TranslationPopoutPage - borderless, always-on-top window dedicated to
  * authoring or improving fancy-mumble's UI translations.
  *
  * Workflow:
- *   1. Pick an existing language, or "Add new" — the latter opens a
+ *   1. Pick an existing language, or "Add new" - the latter opens a
  *      searchable list (from `language-flag-colors`) of every known
  *      language and creates a "---" placeholder bundle on confirm.
  *   2. The left pane lists every translation key grouped by namespace,
@@ -27,13 +27,15 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { save as saveDialog, open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   BUILT_IN_LANGUAGES,
-  BUILT_IN_RESOURCES,
   I18N_NAMESPACES,
   SOURCE_LANGUAGE,
   registerLanguage,
   type I18nNamespace,
   type LocaleBundle,
 } from "../i18n";
+// Full 3-language bundles: imported here (and only here) so they ship in this
+// lazy translator chunk rather than the app's startup bundle.
+import { BUILT_IN_RESOURCES } from "../i18n/builtInBundles";
 import {
   buildPlaceholderBundle,
   deleteCustomTranslation,
@@ -489,7 +491,7 @@ export default function TranslationPopoutPage() {
   const exportOptions = useMemo<[SplitButtonOption, ...SplitButtonOption[]]>(() => {
     const exportAll: SplitButtonOption = {
       label: "Export all namespaces",
-      hint: "Pick a folder — writes one JSON file per namespace",
+      hint: "Pick a folder - writes one JSON file per namespace",
       onSelect: () => void handleExportAll(),
     };
     if (nsFilter === "all") return [exportAll];
@@ -520,7 +522,7 @@ export default function TranslationPopoutPage() {
       </div>
 
       <div className={styles.toolbar}>
-        {/* Row 1 — language selectors */}
+        {/* Row 1 - language selectors */}
         <div className={styles.toolbarRow}>
           {!previewLinked && (
             <>
@@ -534,7 +536,7 @@ export default function TranslationPopoutPage() {
                 {allLangsForDropdown.map(({ code, entry }) => (
                   <option key={code} value={code}>
                     {entry ? `${entry.englishName} (${code})` : code}
-                    {isBuiltIn(code) ? " — built-in" : ""}
+                    {isBuiltIn(code) ? " - built-in" : ""}
                   </option>
                 ))}
               </select>
@@ -572,7 +574,7 @@ export default function TranslationPopoutPage() {
             {allLangsForDropdown.map(({ code, entry }) => (
               <option key={code} value={code}>
                 {entry ? `${entry.englishName} (${code})` : code}
-                {isBuiltIn(code) ? " — built-in" : ""}
+                {isBuiltIn(code) ? " - built-in" : ""}
               </option>
             ))}
           </select>
@@ -581,7 +583,7 @@ export default function TranslationPopoutPage() {
           </button>
         </div>
 
-        {/* Row 2 — filter, picker, and action buttons */}
+        {/* Row 2 - filter, picker, and action buttons */}
         <div className={styles.toolbarRow}>
           <select
             value={nsFilter}
@@ -767,7 +769,7 @@ export default function TranslationPopoutPage() {
 
               <div className={styles.editorArea}>
                 <label htmlFor="translation-input">
-                  Translation ({editingCode}{editingIsBuiltIn ? " — read-only built-in" : ""})
+                  Translation ({editingCode}{editingIsBuiltIn ? " - read-only built-in" : ""})
                 </label>
                 <textarea
                   id="translation-input"
@@ -888,7 +890,7 @@ function AddLanguageModal({ existing, onPick, onClose }: AddLanguageModalProps) 
                 type="button"
                 className={styles.langOption}
                 onClick={() => onPick(l)}
-                title={isExisting ? "Already in the list — selecting it will switch to it" : undefined}
+                title={isExisting ? "Already in the list - selecting it will switch to it" : undefined}
               >
                 <LanguageFlag entry={l} size={20} />
                 <span>

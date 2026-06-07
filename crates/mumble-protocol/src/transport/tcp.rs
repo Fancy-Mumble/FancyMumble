@@ -63,7 +63,17 @@ impl TcpTransport {
         let addr = format!("{}:{}", config.server_host, config.server_port);
         debug!(addr = %addr, "connecting TCP");
 
-        let tcp_stream = TcpStream::connect(&addr).await?;
+        // Bound the TCP connect: an unreachable host would otherwise hang on the
+        // OS default (tens of seconds), stalling automatic reconnect retries.
+        let tcp_stream = match tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            TcpStream::connect(&addr),
+        )
+        .await
+        {
+            Ok(res) => res?,
+            Err(_) => return Err(Error::Other(format!("connection to {addr} timed out"))),
+        };
 
         let tls_config = build_tls_config(
             config.accept_invalid_certs,

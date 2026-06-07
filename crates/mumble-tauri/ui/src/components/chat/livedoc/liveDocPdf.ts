@@ -17,6 +17,7 @@ import {
   type LiveDocPageSetup,
   type LiveDocDecoration,
 } from "./useLiveDoc";
+import { escapeHtml } from "../../../utils/html";
 
 const PRINT_STYLES = `
   body { font-family: system-ui, -apple-system, Inter, sans-serif; color: #111; line-height: 1.6; font-size: 12pt; margin: 0; }
@@ -50,13 +51,6 @@ const PRINT_STYLES = `
   .livedoc-print-border { position: fixed; inset: 0; border-style: solid; border-color: #333; pointer-events: none; }
 `;
 
-function escapeHtml(s: string): string {
-  return s
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
 
 export function exportLiveDocToPdf(
   html: string,

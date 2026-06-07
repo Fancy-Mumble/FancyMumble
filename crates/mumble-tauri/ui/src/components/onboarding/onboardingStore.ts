@@ -116,7 +116,6 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
       }
     } catch (e) {
       set({ config: null, response: null });
-      // eslint-disable-next-line no-console
       console.debug("[onboarding] hydrate skipped:", e);
     }
   },

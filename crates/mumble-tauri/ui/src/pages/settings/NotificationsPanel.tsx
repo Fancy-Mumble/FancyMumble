@@ -5,8 +5,10 @@ import type {
   NotificationSoundSettings,
   NotificationEvent,
   NotificationEventConfig,
+  WelcomeMessageDisplay,
 } from "../../types";
 import { Toggle } from "./SharedControls";
+import { registerSettings } from "./settingsSearchRegistry";
 import styles from "./SettingsPage.module.css";
 import ns from "./NotificationsPanel.module.css";
 
@@ -17,6 +19,11 @@ import sndUniv040 from "../../assets/audio/universfield-new-notification-040-493
 import sndUniv051 from "../../assets/audio/universfield-new-notification-051-494246.mp3";
 import sndUniv057 from "../../assets/audio/universfield-new-notification-057-494255.mp3";
 import sndUniv09 from "../../assets/audio/universfield-new-notification-09-352705.mp3";
+
+registerSettings("notifications")
+  .add("notifications.sounds", ["sound", "audio alert"])
+  .add("notifications.native", ["os notifications", "desktop"])
+  .add("notifications.welcomeMessage", ["welcome", "motd", "popup"]);
 
 export interface SoundOption {
   id: string;
@@ -112,12 +119,16 @@ export function NotificationsPanel({
   onChange,
   enableNativeNotifications,
   onToggleNativeNotifications,
+  welcomeMessageDisplay,
+  onWelcomeMessageDisplayChange,
   isExpert,
 }: {
   settings: NotificationSoundSettings;
   onChange: (patch: Partial<NotificationSoundSettings>) => void;
   enableNativeNotifications: boolean;
   onToggleNativeNotifications: () => void;
+  welcomeMessageDisplay: WelcomeMessageDisplay;
+  onWelcomeMessageDisplayChange: (value: WelcomeMessageDisplay) => void;
   isExpert: boolean;
 }) {
   const { t } = useTranslation("settings");
@@ -198,6 +209,20 @@ export function NotificationsPanel({
             onChange={onToggleNativeNotifications}
           />
         </div>
+      </section>
+
+      <section className={styles.section}>
+        <h3 className={styles.sectionTitle}>{t("notifications.welcomeMessage", { defaultValue: "Welcome message" })}</h3>
+        <p className={styles.fieldHint}>{t("notifications.welcomeMessageHint", { defaultValue: "Show the server's welcome message in a popup after connecting." })}</p>
+        <select
+          className={styles.select}
+          value={welcomeMessageDisplay}
+          onChange={(e) => onWelcomeMessageDisplayChange(e.target.value as WelcomeMessageDisplay)}
+        >
+          <option value="hide">{t("notifications.welcomeHide", { defaultValue: "Hide" })}</option>
+          <option value="once">{t("notifications.welcomeOnce", { defaultValue: "Show once" })}</option>
+          <option value="always">{t("notifications.welcomeAlways", { defaultValue: "Always show" })}</option>
+        </select>
       </section>
 
       {settings.masterEnabled && (

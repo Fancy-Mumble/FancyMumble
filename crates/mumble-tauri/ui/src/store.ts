@@ -75,7 +75,14 @@ import { loadProfileData } from "./pages/settings/profileData";
 import { serializeProfile, dataUrlToBytes } from "./profileFormat";
 import { sanitiseWsUrl } from "./components/chat/livedoc/sanitiseWsUrl";
 import { TauriEvent } from "./constants/tauriEvents";
-import { PluginDataId, PluginPayloadType } from "./constants/pluginData";
+import {
+  PluginDataId,
+  PluginPayloadType,
+  PLUGIN_NAME_FILE_SERVER,
+  PLUGIN_NAME_LIVE_DOC,
+  friendlyPluginName,
+} from "./constants/pluginData";
+import i18next from "i18next";
 import {
   probeFileServerCapabilities,
   rebaseFileServerUrl,
@@ -197,6 +204,17 @@ async function attemptAutoReconnect(
 
   const state = useAppStore.getState();
   if (state.status === "connected" || state.passwordRequired) return;
+
+  // A connect attempt is already in flight.  The backend can only re-bind the
+  // *same* tab when the prior session has settled to `Disconnected`; a session
+  // still `Connecting` is skipped by `take_reusable_for`, so starting a second
+  // connect now would allocate a fresh ServerId and spawn a duplicate tab on
+  // every retry (a TCP connect to an unreachable host outlives the 3s retry
+  // delay).  Wait for the in-flight attempt to resolve, then retry.
+  if (state.status === "connecting") {
+    scheduleAutoReconnect(fallbackTarget);
+    return;
+  }
 
   const target = state.pendingConnect ?? fallbackTarget;
   await state.connect(target.host, target.port, target.username, target.certLabel ?? null);
@@ -335,8 +353,18 @@ export interface AppState {
   /** Custom server emotes pushed via `fancy-server-emotes`. Cleared on disconnect. */
   customServerEmotes: CustomServerEmote[];
   /** Plugin info records broadcast by the server via `fancy-plugin-info`
-   *  shortly after connect. Keyed by plugin name. Cleared on disconnect. */
+   *  shortly after connect. Keyed by plugin name. Cleared on disconnect.
+   *  This is the canonical "which plugins are active on this server" registry:
+   *  UI gated on a plugin's presence here disappears the moment the host
+   *  broadcasts that the plugin was disabled (see `recordPluginDisabled`). */
   pluginInfos: Map<string, PluginInfoRecord>;
+  /** Set when a server plugin was disabled at runtime *and* the local user has
+   *  a view for it open, so a dialog can prompt (and, for live-doc, offer a
+   *  local save) before the view is torn down. `null` otherwise. */
+  pluginDisabledNotice: { name: string } | null;
+  /** Whether the admin File Server dashboard is currently mounted, so a runtime
+   *  disable of the file-server plugin can prompt the open admin. */
+  fileServerAdminOpen: boolean;
   /** Locally-saved downloads completed during the current session. Most
    *  recent first. Cleared on disconnect / reset. */
   downloads: DownloadEntry[];
@@ -609,6 +637,8 @@ export interface AppState {
     channelId: number;
     mode: FileAccessMode;
     password?: string;
+    /** Requested lifetime in seconds (undefined = server default, 0 = never). */
+    ttlSeconds?: number;
     filename?: string;
     mimeType?: string;
     uploadId?: string;
@@ -659,6 +689,16 @@ export interface AppState {
 
   /** Set a per-user volume override by cert hash (0-200). Persists to disk. */
   setUserVolume: (hash: string, volume: number) => void;
+
+  // Plugin lifecycle
+  /** Handle a host broadcast that a server plugin was disabled at runtime:
+   *  drop it from the registry, clear its feature state, log an activity entry,
+   *  and (when the user has a view for it open) raise `pluginDisabledNotice`. */
+  recordPluginDisabled: (name: string) => void;
+  /** Dismiss the plugin-disabled dialog and tear down the affected view. */
+  dismissPluginDisabledNotice: () => void;
+  /** Track whether the admin File Server dashboard is mounted. */
+  setFileServerAdminOpen: (open: boolean) => void;
 
   // Live Doc
   /** Open (or re-attach to) a Live Doc session and surface its panel. */
@@ -784,6 +824,8 @@ const INITIAL: Pick<
   | "pluginSessionTrust"
   | "customServerEmotes"
   | "pluginInfos"
+  | "pluginDisabledNotice"
+  | "fileServerAdminOpen"
   | "downloads"
   | "unseenDownloadCount"
   | "serverFancyVersion"
@@ -870,6 +912,8 @@ const INITIAL: Pick<
   pluginSessionTrust: emptyPluginTier1Slice.pluginSessionTrust,
   customServerEmotes: [],
   pluginInfos: new Map(),
+  pluginDisabledNotice: null,
+  fileServerAdminOpen: false,
   downloads: [],
   unseenDownloadCount: 0,
   serverFancyVersion: null,
@@ -1636,7 +1680,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     throw err;
   },
 
-  uploadFile: async ({ filePath, channelId, mode, password, filename, mimeType, uploadId }) => {
+  uploadFile: async ({ filePath, channelId, mode, password, ttlSeconds, filename, mimeType, uploadId }) => {
     const cfg = get().fileServerConfig;
     if (!cfg) {
       throw new Error("file-server is not configured for this server");
@@ -1655,6 +1699,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         mimeType,
         mode,
         password,
+        ttlSeconds,
         uploadId: uploadId ?? "",
       },
     });
@@ -1803,6 +1848,62 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ passwordRequired: false, passwordAttempted: false, pendingConnect: null, connectedCertLabel: null });
   },
 
+  // -- Plugin lifecycle -------------------------------------------
+
+  recordPluginDisabled: (name) => {
+    set((s) => {
+      const patch: Partial<AppState> = {};
+      // Drop from the canonical registry so every UI gated on plugin presence
+      // (Server Info list, LiveDoc entries, ...) disappears at once.
+      if (s.pluginInfos.has(name)) {
+        const infos = new Map(s.pluginInfos);
+        infos.delete(name);
+        patch.pluginInfos = infos;
+      }
+      // Clear the plugin's feature state so stale creds/config can't linger,
+      // and note whether the user currently has a view for it open.
+      let viewOpen = false;
+      if (name === PLUGIN_NAME_FILE_SERVER) {
+        patch.fileServerConfig = null;
+        patch.fileServerCapabilities = null;
+        patch.customServerEmotes = [];
+        viewOpen = s.fileServerAdminOpen;
+      } else if (name === PLUGIN_NAME_LIVE_DOC) {
+        patch.liveDocPluginConfig = null;
+        viewOpen = s.activeLiveDocs.size > 0;
+      }
+      patch.serverLog = [
+        ...s.serverLog,
+        {
+          timestamp_ms: Date.now(),
+          message: i18next.t("common:plugins.disabledLog", {
+            defaultValue: "Plugin “{{name}}” was disabled by the server",
+            name: friendlyPluginName(name),
+          }),
+        },
+      ];
+      // Only the file-server contributes server-custom reactions; clear them.
+      if (name === PLUGIN_NAME_FILE_SERVER) setServerCustomReactions([]);
+      if (viewOpen) patch.pluginDisabledNotice = { name };
+      return patch;
+    });
+  },
+
+  dismissPluginDisabledNotice: () => {
+    set((s) => {
+      const notice = s.pluginDisabledNotice;
+      if (!notice) return s;
+      const patch: Partial<AppState> = { pluginDisabledNotice: null };
+      // Tear down any open view for the now-disabled plugin.
+      if (notice.name === PLUGIN_NAME_LIVE_DOC && s.activeLiveDocs.size > 0) {
+        patch.activeLiveDocs = new Map();
+      }
+      return patch;
+    });
+  },
+
+  setFileServerAdminOpen: (open) => set({ fileServerAdminOpen: open }),
+
   // -- Live Doc ---------------------------------------------------
 
   openLiveDoc: (session) => {
@@ -1884,6 +1985,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     const trimmedTitle = title.trim().slice(0, 200);
     const mode = options?.mode ?? "publish";
     const key = `${channelId}|${sanitised}`;
+    // De-dupe concurrent opens: if a request for this doc is already awaiting
+    // its invite, don't fire another OpenRequest (rapid clicks would otherwise
+    // spam the server with duplicate envelopes while the first is in flight).
+    if (pendingLiveDocOpens.has(key)) {
+      console.log("[store] requestOpenLiveDoc: open already in flight; skipping duplicate", { key });
+      return;
+    }
     const activeServerId = get().activeServerId;
     if (get().activeLiveDocs.has(liveDocKey(activeServerId, channelId))) {
       console.log("[store] requestOpenLiveDoc: channel already has active doc; skipping wait");
@@ -2336,6 +2444,17 @@ function pluginResponseAllowed(
 
 /** Route an inbound plugin envelope to the appropriate in-store handler. */
 function dispatchPluginMessage(p: PluginMessageEvent): void {
+  // Host-broadcast plugin lifecycle (any plugin).  Deactivation clears the
+  // plugin's UI/state; activation is a no-op client-side (the host re-announces
+  // the plugin's `fancy-plugin-info` + config, which repopulate the registry).
+  if (p.payloadType === PluginPayloadType.PluginDeactivated) {
+    useAppStore.getState().recordPluginDisabled(p.pluginName);
+    return;
+  }
+  if (p.payloadType === PluginPayloadType.PluginActivated) {
+    return;
+  }
+
   if (p.pluginName === "fancy-live-doc") {
     if (p.payloadType === PluginPayloadType.Invite) {
       const data = decodePluginPayload<{
@@ -2586,6 +2705,7 @@ function processPluginDataEvent(
         maxFileSizeBytes: raw.max_file_size_bytes,
         deleteOnTtl: !!raw.delete_on_ttl,
         ttlSeconds: raw.ttl_seconds ?? 0,
+        maxTtlSeconds: raw.max_ttl_seconds ?? 0,
         deleteOnDownload: !!raw.delete_on_download,
         deleteOnDisconnect: !!raw.delete_on_disconnect,
         canManageEmotes: !!raw.can_manage_emotes,
@@ -2836,6 +2956,12 @@ export async function initEventListeners(
         bootstrapStage: "Fetching channels and users...",
       });
 
+      // Signal the welcome-message modal that a server join just completed.
+      if (typeof window !== "undefined") {
+        const serverKey = pending ? `${pending.host}:${pending.port}` : undefined;
+        window.dispatchEvent(new CustomEvent("server-connected", { detail: { serverKey } }));
+      }
+
       // Refresh the multi-server session list so any newly-connected
       // server appears in the sessions slice immediately.
       useAppStore.getState().refreshSessions().catch(() => {
@@ -2950,6 +3076,18 @@ export async function initEventListeners(
             }
           } catch {
             // Voice restore is best-effort.
+          }
+
+          // Authoritatively sync the self mute/deaf indicator to the backend's
+          // actual voice state.  `voiceState` is otherwise only set optimistically
+          // and via the `voice-state-changed` event, which can fire during connect
+          // before the listener is ready (or diverge after a reconnect) - leaving
+          // the self indicator stale, e.g. showing muted while voice is active.
+          try {
+            const vs = await invoke<VoiceState>("get_voice_state");
+            useAppStore.setState({ voiceState: vs, inCall: vs !== "inactive" });
+          } catch {
+            // best-effort sync
           }
         })
         .catch((err) => {

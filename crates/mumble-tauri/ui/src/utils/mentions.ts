@@ -13,17 +13,7 @@
  * for notifications without needing to re-parse the raw markup.
  */
 
-const HTML_ESCAPE: Record<string, string> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  "\"": "&quot;",
-  "'": "&#39;",
-};
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => HTML_ESCAPE[c]);
-}
+import { escapeHtml } from "./html";
 
 // -- Wire format helpers -----------------------------------------------
 

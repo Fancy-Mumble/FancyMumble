@@ -16,6 +16,7 @@ import {
   yearToDate,
   type CslItem,
 } from "./liveDocCslTypes";
+import { Modal } from "../../elements/Modal";
 import styles from "./LiveDocCitations.module.css";
 
 interface LiveDocSourceEditorProps {
@@ -71,8 +72,8 @@ export default function LiveDocSourceEditor({ initial, onSave, onCancel }: LiveD
   const tt = (k: string, d: string) => t(`liveDoc.citations.field.${k}`, { defaultValue: d });
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
-      <div className={`${styles.dialog} ${styles.dialogNarrow}`}>
+    <Modal onClose={onCancel} closeOnEsc={false} zIndex={1000} overlayClassName={styles.overlayBlur}>
+      <div className={`${styles.dialog} ${styles.dialogNarrow}`} role="dialog" aria-modal="true">
         <div className={styles.dialogHeader}>
           <span className={styles.dialogTitle}>
             {initial
@@ -102,7 +103,7 @@ export default function LiveDocSourceEditor({ initial, onSave, onCancel }: LiveD
           </label>
 
           <label className={styles.field}>
-            <span className={styles.fieldLabel}>{tt("author", "Author(s) — Family, Given; …")}</span>
+            <span className={styles.fieldLabel}>{tt("author", "Author(s) - Family, Given; …")}</span>
             <input className={styles.input} value={authors} onChange={(e) => setAuthors(e.target.value)} placeholder="Smith, John; Doe, Jane" />
           </label>
 
@@ -171,6 +172,6 @@ export default function LiveDocSourceEditor({ initial, onSave, onCancel }: LiveD
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

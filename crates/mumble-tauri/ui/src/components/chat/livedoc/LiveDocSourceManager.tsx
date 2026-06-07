@@ -17,6 +17,7 @@ import { useLiveDocMasterSourcesStore } from "./liveDocMasterSourcesStore";
 import { parseBibtex, toBibtex } from "./liveDocBibtex";
 import LiveDocSourceEditor from "./LiveDocSourceEditor";
 import LiveDocBibtexImportDialog from "./LiveDocBibtexImportDialog";
+import { Modal } from "../../elements/Modal";
 import styles from "./LiveDocCitations.module.css";
 
 interface LiveDocSourceManagerProps {
@@ -64,8 +65,8 @@ export default function LiveDocSourceManager({ doc, onClose }: LiveDocSourceMana
   const tb = (k: string, d: string) => t(`liveDoc.citations.${k}`, { defaultValue: d });
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={styles.dialog}>
+    <Modal onClose={onClose} closeOnEsc={false} zIndex={1000} overlayClassName={styles.overlayBlur}>
+      <div className={styles.dialog} role="dialog" aria-modal="true">
         <div className={styles.dialogHeader}>
           <span className={styles.dialogTitle}>{tb("manageSources", "Manage Sources")}</span>
           <button type="button" className={styles.dialogClose} onClick={onClose} aria-label={tb("close", "Close")}>
@@ -199,6 +200,6 @@ export default function LiveDocSourceManager({ doc, onClose }: LiveDocSourceMana
           onClose={() => setBibtexOpen(false)}
         />
       )}
-    </div>
+    </Modal>
   );
 }

@@ -87,11 +87,11 @@ export function issuedYear(item: CslItem): string {
   return y ? String(y) : "";
 }
 
-/** One-line label for menus / source lists: "Smith, J. (2020) — Title". */
+/** One-line label for menus / source lists: "Smith, J. (2020) - Title". */
 export function sourceLabel(item: CslItem): string {
   const who = primaryAuthor(item) || (item.title ?? item.id);
   const year = issuedYear(item);
-  const title = item.title ? ` — ${item.title}` : "";
+  const title = item.title ? ` - ${item.title}` : "";
   return year ? `${who} (${year})${title}` : `${who}${title}`;
 }
 

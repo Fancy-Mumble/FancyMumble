@@ -1,6 +1,5 @@
 import { useEffect } from "react";
-import hljs from "highlight.js/lib/common";
-import "highlight.js/styles/github-dark.css";
+import { loadHljs, loadedHljs } from "../components/chat/markdown/lazyHljs";
 
 const HIGHLIGHTED = "data-hljs-highlighted";
 
@@ -12,6 +11,14 @@ function highlightAllPending(root: ParentNode): void {
   const blocks = root.querySelectorAll<HTMLElement>(
     `pre > code:not([${HIGHLIGHTED}])`,
   );
+  if (blocks.length === 0) return; // common case: no highlighter load at all
+  const hljs = loadedHljs();
+  if (!hljs) {
+    // First code block seen: load highlight.js, then re-scan the whole document
+    // so every pending block (not just this root) gets coloured.
+    void loadHljs().then(() => highlightAllPending(document));
+    return;
+  }
   blocks.forEach((block) => {
     if (isInsideEditor(block)) return;
     block.setAttribute(HIGHLIGHTED, "true");

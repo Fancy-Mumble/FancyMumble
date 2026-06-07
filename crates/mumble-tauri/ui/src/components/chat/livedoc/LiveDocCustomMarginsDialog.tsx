@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { LiveDocRulerUnit } from "./useLiveDoc";
+import { Modal } from "../../elements/Modal";
 import styles from "./LiveDocCustomMarginsDialog.module.css";
 
 const PX_PER_CM = 96 / 2.54;
@@ -57,12 +57,12 @@ export default function LiveDocCustomMarginsDialog({
     onClose();
   }, [draftX, draftY, rulerUnit, onApply, onClose]);
 
+  // Esc + backdrop dismissal are handled by Modal; Enter-to-apply stays here.
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
       if (e.key === "Enter") handleApply();
     },
-    [onClose, handleApply],
+    [handleApply],
   );
 
   useEffect(() => {
@@ -70,12 +70,8 @@ export default function LiveDocCustomMarginsDialog({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  const handleOverlayClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) onClose();
-  };
-
-  return createPortal(
-    <div className={styles.overlay} onMouseDown={handleOverlayClick}>
+  return (
+    <Modal onClose={onClose} zIndex={9999}>
       <div
         className={styles.dialog}
         role="dialog"
@@ -131,7 +127,6 @@ export default function LiveDocCustomMarginsDialog({
           </button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }

@@ -3,8 +3,10 @@
 use tauri_plugin_dialog::DialogExt;
 
 use crate::state::{
-    AddEmoteRequest, AddEmoteResponse, AppState, DownloadRequest, PrivateStorageRequest,
-    RemoveEmoteRequest, UploadBytesRequest, UploadRequest, UploadResponse,
+    AddEmoteRequest, AddEmoteResponse, AdminDeleteDocumentRequest, AdminDeleteRequest,
+    AdminListRequest, AdminPreviewRequest, AppState, DownloadBytesRequest, DownloadRequest,
+    PrivateStorageRequest, RemoveEmoteRequest, UploadBinaryRequest, UploadBytesRequest,
+    UploadRequest, UploadResponse,
 };
 
 /// Upload a local file to the server-side `mumble-file-server` plugin and
@@ -33,10 +35,121 @@ pub(crate) async fn upload_bytes(
     state.upload_bytes(request).await
 }
 
+/// Upload in-memory binary content (base64-encoded, e.g. a `.glb` 3D model
+/// picked in the webview) to the file-server plugin and return the signed
+/// download URL.  Like [`upload_bytes`] but preserves non-UTF-8 bytes.
+#[tauri::command]
+pub(crate) async fn upload_binary(
+    state: tauri::State<'_, AppState>,
+    request: UploadBinaryRequest,
+) -> Result<UploadResponse, String> {
+    state.upload_binary(request).await
+}
+
+/// Download a (possibly access-controlled) file into memory and return its
+/// bytes as base64.  Used to render inline resources (3D models) in the webview
+/// without a CORS-blocked direct browser fetch to the file server.
+#[tauri::command]
+pub(crate) async fn download_to_base64(
+    state: tauri::State<'_, AppState>,
+    request: DownloadBytesRequest,
+) -> Result<String, String> {
+    state.download_to_base64(request).await
+}
+
 /// Cancel an in-progress upload by its `upload_id`.
 #[tauri::command]
 pub(crate) fn cancel_upload(state: tauri::State<'_, AppState>, upload_id: String) {
     let _ = state.cancel_upload(&upload_id);
+}
+
+/// Admin dashboard: list every file the server stores plus storage stats.
+/// The server gates this on the caller's session JWT granting admin rights.
+#[tauri::command]
+pub(crate) async fn fileserver_admin_list_files(
+    state: tauri::State<'_, AppState>,
+    request: AdminListRequest,
+) -> Result<serde_json::Value, String> {
+    state.admin_list_files(request).await
+}
+
+/// Admin dashboard: list every persisted live-doc document.
+/// Gated server-side on the caller's session JWT granting admin rights.
+#[tauri::command]
+pub(crate) async fn fileserver_admin_list_documents(
+    state: tauri::State<'_, AppState>,
+    request: AdminListRequest,
+) -> Result<serde_json::Value, String> {
+    state.admin_list_documents(request).await
+}
+
+/// Admin dashboard: delete a single stored file (blob + metadata).
+#[tauri::command]
+pub(crate) async fn fileserver_admin_delete_file(
+    state: tauri::State<'_, AppState>,
+    request: AdminDeleteRequest,
+) -> Result<(), String> {
+    state.admin_delete_file(request).await
+}
+
+/// Admin dashboard: delete a persisted live-doc document (all revisions).
+#[tauri::command]
+pub(crate) async fn fileserver_admin_delete_document(
+    state: tauri::State<'_, AppState>,
+    request: AdminDeleteDocumentRequest,
+) -> Result<(), String> {
+    state.admin_delete_document(request).await
+}
+
+/// Admin dashboard: stream a file's raw bytes back as base64 for an inline
+/// preview (e.g. an image thumbnail) without a CORS-blocked browser fetch.
+#[tauri::command]
+pub(crate) async fn fileserver_admin_file_base64(
+    state: tauri::State<'_, AppState>,
+    request: AdminPreviewRequest,
+) -> Result<String, String> {
+    state.admin_file_base64(request).await
+}
+
+/// "My shared files": list only the files the caller uploaded.  The server
+/// scopes the result to the caller's session JWT, so this needs no admin
+/// rights and never exposes other users' files.
+#[tauri::command]
+pub(crate) async fn fileserver_my_list_files(
+    state: tauri::State<'_, AppState>,
+    request: AdminListRequest,
+) -> Result<serde_json::Value, String> {
+    state.my_list_files(request).await
+}
+
+/// "My shared files": delete one of the caller's own files (server returns 404
+/// for any file that isn't theirs).
+#[tauri::command]
+pub(crate) async fn fileserver_my_delete_file(
+    state: tauri::State<'_, AppState>,
+    request: AdminDeleteRequest,
+) -> Result<(), String> {
+    state.my_delete_file(request).await
+}
+
+/// "My shared files": stream one of the caller's own files back as base64 for
+/// an inline preview.
+#[tauri::command]
+pub(crate) async fn fileserver_my_file_base64(
+    state: tauri::State<'_, AppState>,
+    request: AdminPreviewRequest,
+) -> Result<String, String> {
+    state.my_file_base64(request).await
+}
+
+/// "My shared files": the public, browser-openable signed download URL for one
+/// of the caller's own files (public files only; errors otherwise).
+#[tauri::command]
+pub(crate) async fn fileserver_my_file_link(
+    state: tauri::State<'_, AppState>,
+    request: AdminDeleteRequest,
+) -> Result<String, String> {
+    state.my_file_link(request).await
 }
 
 /// Download a file (optionally performing the password / session-JWT

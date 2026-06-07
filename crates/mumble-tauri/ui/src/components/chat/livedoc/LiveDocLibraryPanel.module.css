@@ -7,6 +7,7 @@
   background: var(--color-surface, #1e2128);
   border-radius: var(--radius-md, 8px);
   overflow: hidden;
+  position: relative;
 }
 
 .split {

@@ -215,7 +215,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  padding: 2px 8px;
+  padding: 2px 5px;
   border-right: 1px solid var(--color-border, rgba(255, 255, 255, 0.07));
   flex-shrink: 0;
 }
@@ -250,17 +250,93 @@
   white-space: nowrap;
 }
 
+/* ---- Collapsed group (Word-style auto-resize) ------------------------ */
+/* When the ribbon is too narrow to show every group, the lowest-priority
+   groups collapse to a single summary button that re-opens the full group in
+   a flyout - mirroring MS Word's responsive ribbon. */
+.groupCollapsed {
+  display: flex;
+  align-items: stretch;
+  border-right: 1px solid var(--color-border, rgba(255, 255, 255, 0.07));
+  flex-shrink: 0;
+}
+
+.groupCollapsedBtn {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 64px;
+  height: 100%;
+  padding: 4px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.groupCollapsedBtn:hover,
+.groupCollapsedBtnOpen {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.07));
+}
+
+.groupCollapsedBtnOpen {
+  border-color: var(--color-border, rgba(255, 255, 255, 0.14));
+}
+
+.groupCollapsedIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.groupCollapsedFoot {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  color: var(--color-text-muted, #aab0b8);
+}
+
+.groupCollapsedLabel {
+  font-size: 10.5px;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The flyout reproduces the in-ribbon group layout on a floating surface. */
+.groupFlyout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 84px;
+  padding: 8px 10px 6px;
+  background: var(--color-surface-elevated, #262a32);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+
 /* ---- Buttons --------------------------------------------------------- */
 .btnLarge {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 4px;
-  min-width: 52px;
-  max-width: 74px;
+  min-width: 44px;
+  max-width: 66px;
   height: 100%;
-  padding: 6px 6px 4px;
+  padding: 4px 4px 3px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-sm, 4px);
@@ -279,14 +355,22 @@
   align-items: center;
   justify-content: center;
   height: 28px;
+  flex-shrink: 0;
   font-size: 20px;
   line-height: 1;
 }
 
+/* Reserve two label lines so single- and double-line captions keep their
+   first line at the same height across every button; the icon band above is
+   fixed too, so all icons line up. */
 .btnLargeLabel {
-  display: block;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
   text-align: center;
+  font-size: 10.5px;
   line-height: 1.15;
+  min-height: 2.3em;
   word-break: break-word;
   hyphens: auto;
 }

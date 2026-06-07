@@ -1,5 +1,5 @@
 /**
- * TranslationPickerOverlay — main-window companion to the translation
+ * TranslationPickerOverlay - main-window companion to the translation
  * helper popout.  Lives at the top of `MainApp` and stays inert until the
  * popout sends a `translation-picker:start` Tauri event.
  *
@@ -27,7 +27,7 @@ import {
 const OVERLAY_ID = "translation-picker-overlay";
 const TOAST_ID = "translation-picker-toast";
 
-/** Legacy artefacts from earlier builds — clean up at every opportunity. */
+/** Legacy artefacts from earlier builds - clean up at every opportunity. */
 const LEGACY_HIGHLIGHT_CLASS = "translation-picker-highlight";
 const LEGACY_STYLE_ID = "translation-picker-style";
 
@@ -123,7 +123,7 @@ function showToast() {
   if (document.getElementById(TOAST_ID)) return;
   const t = document.createElement("div");
   t.id = TOAST_ID;
-  t.textContent = "Translation picker — click any UI text, ESC to cancel";
+  t.textContent = "Translation picker - click any UI text, ESC to cancel";
   Object.assign(t.style, {
     position: "fixed",
     bottom: "16px",
@@ -210,7 +210,7 @@ export default function TranslationPickerOverlay() {
 
     function attach() {
       if (active) {
-        log("attach called while already active — no-op");
+        log("attach called while already active - no-op");
         return;
       }
       log("attach");
@@ -229,7 +229,7 @@ export default function TranslationPickerOverlay() {
 
     function detach() {
       if (!active) {
-        log("detach called while inactive — sweeping anyway");
+        log("detach called while inactive - sweeping anyway");
         nukeArtefacts();
         return;
       }

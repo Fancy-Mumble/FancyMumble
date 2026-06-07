@@ -9,10 +9,10 @@ import styles from "./MessageActionBar.module.css";
 // -- Quick reactions shown as emoji buttons -----------------------
 
 export const QUICK_REACTIONS = [
-  { emoji: "\uD83D\uDC4D", label: "Like" },
-  { emoji: "\u2764\uFE0F",  label: "Heart" },
-  { emoji: "\uD83D\uDE02", label: "Laugh" },
-  { emoji: "\uD83D\uDE2E", label: "Surprise" },
+  { emoji: "\uD83D\uDC4D", key: "like" },
+  { emoji: "\u2764\uFE0F",  key: "heart" },
+  { emoji: "\uD83D\uDE02", key: "laugh" },
+  { emoji: "\uD83D\uDE2E", key: "surprise" },
 ] as const;
 
 // -- Kebab menu items (extendable) --------------------------------
@@ -116,18 +116,21 @@ export default function MessageActionBar({
       data-action-bar=""
     >
       {/* Quick-reaction emoji buttons */}
-      {QUICK_REACTIONS.map((r) => (
-        <button
-          key={r.label}
-          type="button"
-          className={styles.actionBtn}
-          title={r.label}
-          aria-label={r.label}
-          onClick={() => onReaction(message, r.emoji)}
-        >
-          {r.emoji}
-        </button>
-      ))}
+      {QUICK_REACTIONS.map((r) => {
+        const label = t(`quickReactions.${r.key}`, { ns: "chat" });
+        return (
+          <button
+            key={r.key}
+            type="button"
+            className={styles.actionBtn}
+            title={label}
+            aria-label={label}
+            onClick={() => onReaction(message, r.emoji)}
+          >
+            {r.emoji}
+          </button>
+        );
+      })}
       {/* More reactions */}
       <button
         type="button"

@@ -26,7 +26,7 @@ export default function LiveDocBibliographyView({ editor }: Readonly<NodeViewPro
       {snapshot.bibliography.length === 0 ? (
         <div className={styles.bibliographyEmpty}>
           {t("liveDoc.citations.bibliographyEmpty", {
-            defaultValue: "No citations yet — insert a citation to populate the bibliography.",
+            defaultValue: "No citations yet - insert a citation to populate the bibliography.",
           })}
         </div>
       ) : (

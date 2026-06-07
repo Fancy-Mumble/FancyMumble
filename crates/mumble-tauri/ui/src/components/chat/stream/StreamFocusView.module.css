@@ -197,7 +197,9 @@
 
 .topBar {
   position: absolute;
-  top: 12px;
+  /* Below the shared close button (top:8 + 28px) so the two top-right controls
+     don't overlap. */
+  top: 46px;
   right: 12px;
   z-index: 20;
   display: flex;

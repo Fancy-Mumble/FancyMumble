@@ -17,6 +17,7 @@ import { useLiveDocMasterSourcesStore } from "./liveDocMasterSourcesStore";
 import type { CitationItemRef } from "./liveDocCitations";
 import LiveDocSourceEditor from "./LiveDocSourceEditor";
 import LiveDocBibtexImportDialog from "./LiveDocBibtexImportDialog";
+import { Modal } from "../../elements/Modal";
 import styles from "./LiveDocCitations.module.css";
 
 interface LiveDocCitationPickerProps {
@@ -76,8 +77,8 @@ export default function LiveDocCitationPicker({ doc, onInsert, onInsertPlacehold
   }
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`${styles.dialog} ${styles.dialogNarrow}`}>
+    <Modal onClose={onClose} closeOnEsc={false} zIndex={1000} overlayClassName={styles.overlayBlur}>
+      <div className={`${styles.dialog} ${styles.dialogNarrow}`} role="dialog" aria-modal="true">
         <div className={styles.dialogHeader}>
           <span className={styles.dialogTitle}>{tb("insertCitation", "Insert Citation")}</span>
           <button type="button" className={styles.dialogClose} onClick={onClose} aria-label={tb("close", "Close")}>
@@ -150,6 +151,6 @@ export default function LiveDocCitationPicker({ doc, onInsert, onInsertPlacehold
           </>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }

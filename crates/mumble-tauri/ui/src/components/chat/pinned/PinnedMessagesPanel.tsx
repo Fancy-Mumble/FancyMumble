@@ -1,4 +1,4 @@
-import { CloseIcon, PinIcon } from "../../../icons";
+import { PinIcon } from "../../../icons";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatMessage } from "../../../types";
@@ -58,14 +58,8 @@ export default function PinnedMessagesPanel({
             <span className={styles.count}>{pinnedMessages.length}</span>
           )}
         </span>
-        <button
-          type="button"
-          className={styles.closeBtn}
-          onClick={onClose}
-          aria-label={t("pinned.closeAriaLabel")}
-        >
-          <CloseIcon width={16} height={16} />
-        </button>
+        {/* Close (×) is rendered by the shared PanelCloseButton via ChatView's
+            ResizableSplitPanel, so every panel's close looks and sits the same. */}
       </div>
 
       {pinnedMessages.length === 0 ? (

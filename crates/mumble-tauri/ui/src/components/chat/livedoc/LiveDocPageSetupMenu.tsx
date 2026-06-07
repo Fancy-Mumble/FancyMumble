@@ -159,16 +159,23 @@ export default function LiveDocPageSetupMenu({
             <label className={styles.toggle}>
               <input
                 type="checkbox"
-                checked={headerFooter.enabled}
-                onChange={(e) => setLiveDocHeaderFooter(doc, { enabled: e.target.checked })}
+                checked={headerFooter.headerEnabled}
+                onChange={(e) => setLiveDocHeaderFooter(doc, { headerEnabled: e.target.checked })}
               />
-              <span>{t("liveDoc.headerFooter.enable")}</span>
+              <span>{t("liveDoc.insert.header", { defaultValue: "Header" })}</span>
             </label>
-            <label className={`${styles.toggle} ${headerFooter.enabled ? "" : styles.toggleDisabled}`}>
+            <label className={styles.toggle}>
+              <input
+                type="checkbox"
+                checked={headerFooter.footerEnabled}
+                onChange={(e) => setLiveDocHeaderFooter(doc, { footerEnabled: e.target.checked })}
+              />
+              <span>{t("liveDoc.insert.footer", { defaultValue: "Footer" })}</span>
+            </label>
+            <label className={styles.toggle}>
               <input
                 type="checkbox"
                 checked={headerFooter.showPageNumber}
-                disabled={!headerFooter.enabled}
                 onChange={(e) => setLiveDocHeaderFooter(doc, { showPageNumber: e.target.checked })}
               />
               <span>{t("liveDoc.headerFooter.pageNumbers")}</span>

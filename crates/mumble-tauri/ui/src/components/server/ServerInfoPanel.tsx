@@ -11,12 +11,11 @@ import { OfficialBadge, isOfficialPlugin } from "../elements/OfficialBadge";
  * from the backend.
  */
 
-import { Fragment, useEffect, useState, useCallback, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { ServerInfo, DebugStats, AudioSettings, PluginInfoRecord } from "../../types";
 import { getPreferences, getSavedAudioSettings } from "../../preferencesStorage";
-import type { LiveDocSessionInfo } from "../../store";
 import { formatBandwidth, formatDuration } from "../../utils/format";
 import { useAppStore } from "../../store";
 import { maskSensitive } from "../../utils/maskSensitive";
@@ -95,9 +94,6 @@ function decodeFancyVersion(v: number): string {
   const patch = Math.trunc(v / 2 ** 16) & 0xFFFF;
   return `${major}.${minor}.${patch}`;
 }
-
-/** Minimum encoded Fancy Mumble version that supports Live Doc (0.3.2). */
-const LIVE_DOC_MIN_VERSION = 3 * 2 ** 32 + 2 * 2 ** 16;
 
 // -- Latency graph ------------------------------------------------
 
@@ -228,10 +224,19 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
   const udpActive = useAppStore((s) => s.udpActive);
   const capabilities = useAppStore((s) => s.fileServerCapabilities);
   const streamerMode = useAppStore((s) => s.streamerMode);
-  const activeLiveDocs = useAppStore((s) => s.activeLiveDocs);
-  const pendingLiveDocAnnounces = useAppStore((s) => s.pendingLiveDocAnnounces);
-  const liveDocPluginConfig = useAppStore((s) => s.liveDocPluginConfig);
   const pluginInfos = useAppStore((s) => s.pluginInfos);
+  // The plugin registry is re-broadcast on every enable/disable, so it is the
+  // live source of "which plugins are currently loaded".  `pluginInfos` is only
+  // sent once on connect and goes stale when a plugin is disabled at runtime,
+  // so filter the advertised infos down to plugins still in the registry.
+  // (Fall back to all advertised infos when no registry was sent at all.)
+  const pluginRegistry = useAppStore((s) => s.pluginRegistry);
+  const livePlugins = useMemo(() => {
+    const all = [...pluginInfos.values()];
+    if (pluginRegistry.length === 0) return all;
+    const loaded = new Set(pluginRegistry.map((r) => r.pluginName));
+    return all.filter((p) => loaded.has(p.name));
+  }, [pluginInfos, pluginRegistry]);
   const [info, setInfo] = useState<ServerInfo | null>(null);
   const [devMode, setDevMode] = useState(false);
   const [debugStats, setDebugStats] = useState<DebugStats | null>(null);
@@ -418,11 +423,11 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
             </section>
           )}
 
-          {/* Server plugins (always visible when any plugin advertised info) */}
-          {pluginInfos.size > 0 && (
+          {/* Server plugins - only those currently loaded (live registry). */}
+          {livePlugins.length > 0 && (
             <section className={styles.section}>
               <h3 className={styles.sectionTitle}>{t("infoPanel.sectionPlugins")}</h3>
-              {[...pluginInfos.values()].map((plugin) => (
+              {livePlugins.map((plugin) => (
                 <Accordion
                   key={plugin.name}
                   title={
@@ -530,30 +535,6 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
                   </div>
                 </Accordion>
               )}
-
-              {(() => {
-                const supported = info != null && info.fancy_version != null && info.fancy_version >= LIVE_DOC_MIN_VERSION;
-                const sessions = [...activeLiveDocs.values()] as LiveDocSessionInfo[];
-                return (
-                  <Accordion title={t("infoPanel.accordionLiveDoc")}>
-                    <div className={styles.debugGrid}>
-                      <DebugRow label={t("infoPanel.debug.liveDocSupported")} value={supported} />
-                      <DebugRow label={t("infoPanel.debug.liveDocVersion")} value={liveDocPluginConfig?.version ?? "-"} />
-                      <DebugRow label={t("infoPanel.debug.liveDocWsUrl")} value={liveDocPluginConfig ? (streamerMode ? maskSensitive(liveDocPluginConfig.wsBaseUrl) : liveDocPluginConfig.wsBaseUrl) : "-"} />
-                      <DebugRow label={t("infoPanel.debug.liveDocActiveSessions")} value={sessions.length} />
-                      <DebugRow label={t("infoPanel.debug.liveDocPendingAnnounces")} value={pendingLiveDocAnnounces.size} />
-                      {sessions.map((s, i) => (
-                        <Fragment key={`${s.channelId}-${s.slug}`}>
-                          <DebugRow label={`#${i + 1} ${t("infoPanel.debug.liveDocChannel")}`} value={s.channelId} />
-                          <DebugRow label={`#${i + 1} ${t("infoPanel.debug.liveDocTitle")}`} value={s.title} />
-                          <DebugRow label={`#${i + 1} ${t("infoPanel.debug.liveDocSlug")}`} value={s.slug} />
-                          <DebugRow label={`#${i + 1} ${t("infoPanel.debug.liveDocUrl")}`} value={streamerMode ? maskSensitive(s.wsUrl) : s.wsUrl} />
-                        </Fragment>
-                      ))}
-                    </div>
-                  </Accordion>
-                );
-              })()}
 
               <Accordion title={t("infoPanel.accordionCspViolations", { defaultValue: "CSP Violations" })}>
                 <div className={styles.devHeader} style={{ marginBottom: "6px" }}>

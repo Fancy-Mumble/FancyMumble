@@ -1,8 +1,8 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { createPortal } from "react-dom";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChannelEntry } from "../../../types";
 import { Autocomplete, type AutocompleteOption } from "../../elements/Autocomplete";
+import { Modal } from "../../elements/Modal";
 import styles from "./MoveUsersDialog.module.css";
 
 interface MoveUsersDialogProps {
@@ -36,24 +36,8 @@ export function MoveUsersDialog({ sourceChannel, channels, onConfirm, onCancel }
     inputRef.current?.focus();
   }, []);
 
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    },
-    [onCancel],
-  );
-
-  useEffect(() => {
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
-
-  const handleOverlayClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) onCancel();
-  };
-
-  return createPortal(
-    <div className={styles.overlay} onMouseDown={handleOverlayClick}>
+  return (
+    <Modal onClose={onCancel}>
       <div className={styles.dialog} role="dialog" aria-modal="true">
         <h3 className={styles.title}>{t("moveUsersDialog.title", { channel: sourceChannel.name })}</h3>
         <p className={styles.body}>{t("moveUsersDialog.body")}</p>
@@ -77,8 +61,7 @@ export function MoveUsersDialog({ sourceChannel, channels, onConfirm, onCancel }
           </button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }
 

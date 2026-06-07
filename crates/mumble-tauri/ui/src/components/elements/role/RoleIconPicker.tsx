@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ImageEditor } from "../../../pages/settings/ImageEditor";
 import { useAppStore } from "../../../store";
 import { dataUrlToBytes, textureToDataUrl } from "../../../profileFormat";
+import { formatBytes } from "../../../utils/format";
 import styles from "./RoleIconPicker.module.css";
 
 export interface RoleIconPickerProps {
@@ -23,11 +24,6 @@ const MIN_BUDGET_BYTES = 16 * 1024;
 const MAX_BUDGET_BYTES = 1024 * 1024;
 /** Output icon resolution. Cropped square that scales nicely in role chips. */
 const ICON_SIZE = 128;
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
-  return `${Math.round(bytes / 1024)} KiB`;
-}
 
 function clampBudget(maxBytes: number | undefined, serverMax: number): number {
   const requested = maxBytes ?? (serverMax > 0 ? serverMax : MIN_BUDGET_BYTES);

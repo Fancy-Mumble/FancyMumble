@@ -7,6 +7,7 @@ import type { PollPayload } from "../poll/PollCreator";
 import { useAppStore, requestLinkPreview, decodeLiveDocInviteMarker, FANCY_LIVEDOC_MARKER_RE } from "../../../store";
 import { parseComment } from "../../../profileFormat";
 import { ProfilePreviewCard } from "../../../pages/settings/ProfilePreviewCard";
+import { useUserComment } from "../../../lazyBlobs";
 import { useUserStats } from "../../../hooks/useUserStats";
 import { isMobile } from "../../../utils/platform";
 import { formatTimestamp, colorFor } from "../../../utils/format";
@@ -83,10 +84,15 @@ export function MessageAvatar({
   const [cardPos, setCardPos] = useState<{ top: number; left: number } | null>(null);
   const avatarRef = useRef<HTMLButtonElement>(null);
   const stats = useUserStats(senderSession, showCard);
+  // Load the sender's bio only when the hover card is open.
+  const liveComment = useUserComment(senderSession, user?.comment_size, showCard);
 
   const parsed = useMemo(
-    () => (user?.comment ? parseComment(user.comment) : null),
-    [user?.comment],
+    () => {
+      const c = user?.comment ?? liveComment;
+      return c ? parseComment(c) : null;
+    },
+    [user?.comment, liveComment],
   );
 
   const handleEnter = useCallback(() => {

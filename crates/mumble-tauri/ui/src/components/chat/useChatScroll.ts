@@ -283,7 +283,6 @@ export function useChatScroll({
     prevMsgCountRef.current = 0;
     prevFirstMsgIdRef.current = null;
     stickToBottomRef.current = pendingUnreadRef.current === 0;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedChannel, selectedDmUser]);
 
   // Offload IntersectionObserver.

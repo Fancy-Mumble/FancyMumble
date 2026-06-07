@@ -24,6 +24,39 @@
   width: 100%;
 }
 
+/* Side-by-side markdown view: rendered page surface (left) + editable
+   markdown source (right), with a draggable divider between them. */
+.splitView {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.splitPane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The rendered pane takes whatever width the markdown pane leaves. */
+.splitPaneGrow {
+  flex: 1 1 0;
+}
+
+.splitHandle {
+  flex: 0 0 6px;
+  cursor: col-resize;
+  background: var(--color-surface-elevated, #262a32);
+  touch-action: none;
+  transition: background 0.15s ease;
+}
+
+.splitHandle:hover {
+  background: var(--color-accent, #2aabee);
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -451,37 +484,6 @@
     inset 0 -9px 9px -9px rgba(0, 0, 0, 0.55);
 }
 
-/* Footer band rendered inside the gap widget just above the grey gutter. */
-:global(.livedoc-page-gap-footer) {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  pointer-events: none;
-  user-select: none;
-}
-
-:global(.livedoc-page-gap-footer-text) {
-  font-size: 12px;
-  color: var(--color-text-secondary, rgba(255, 255, 255, 0.55));
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-:global(.livedoc-page-gap-footer-num) {
-  font-size: 12px;
-  color: var(--color-text-secondary, rgba(255, 255, 255, 0.55));
-  white-space: nowrap;
-  flex: 0 0 auto;
-  padding-left: 12px;
-}
-
 /* Page border: drawn just inside the page margins, like Word's page
    border.  Purely decorative overlay; never intercepts clicks. */
 .pageBorder {
@@ -838,4 +840,291 @@
     padding: 24px 18px;
     border-radius: var(--radius-sm, 4px);
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Insert-tab content: text box, word art, embeds, comments, drop cap *
+ * (global because the nodes render plain class names, not CSS module  *
+ * scoped names).                                                      *
+ * ------------------------------------------------------------------ */
+
+:global(.ld-box) {
+  margin: 10px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.2));
+  border-radius: 6px;
+}
+
+:global(.ld-box-textbox) {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+:global(.ld-box-wordart) {
+  border: none;
+  padding: 6px 0;
+  text-align: center;
+}
+
+:global(.ld-box-wordart) > * {
+  font-size: 2.4em;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  background: linear-gradient(92deg, #2aabee, #8a5cf6 55%, #f0428a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+
+/* Drop cap - enlarge the first letter of the paragraph / heading. */
+:global([data-dropcap="true"])::first-letter {
+  float: left;
+  font-size: 3.2em;
+  line-height: 0.8;
+  font-weight: 700;
+  padding: 4px 8px 0 0;
+  color: var(--color-accent, #2aabee);
+}
+
+/* Inline comment annotation. */
+:global(.ld-comment) {
+  background: rgba(255, 196, 0, 0.22);
+  border-bottom: 2px dotted #e0a400;
+  border-radius: 2px;
+  cursor: help;
+}
+
+/* Embeds (signature / object / video / 3D model). */
+:global(.ld-embed) {
+  margin: 12px 0;
+}
+
+:global(.ld-embed-video) {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  aspect-ratio: 16 / 9;
+}
+
+:global(.ld-embed-video) iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 6px;
+}
+
+:global(.ld-embed-frame-rounded) iframe {
+  border-radius: 14px;
+}
+
+:global(.ld-embed-frame-shadow) {
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  border-radius: 6px;
+}
+
+:global(.ld-embed-frame-bordered) iframe {
+  border: 3px solid var(--color-accent, #2aabee);
+  border-radius: 4px;
+}
+
+:global(.ld-embed-card) {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.18));
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.03);
+  max-width: 360px;
+}
+
+:global(.ld-embed-icon) {
+  font-size: 26px;
+  line-height: 1;
+}
+
+:global(.ld-embed-meta) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+:global(.ld-embed-title) {
+  font-weight: 600;
+}
+
+:global(.ld-embed-link) {
+  font-size: 12px;
+  color: var(--color-accent, #2aabee);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Interactive 3D model embed (three.js canvas + a small title bar). */
+:global(.ld-embed-model-viewer) {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 640px;
+  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.18));
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--color-surface, #1e2128);
+}
+
+:global(.ld-embed-model-bar) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  font-size: 13px;
+}
+
+:global(.ld-embed-model-canvas) {
+  width: 100%;
+  height: 320px;
+  /* A subtle checker-ish backdrop so transparent models stay visible. */
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.06), transparent 70%),
+    var(--color-bg, #14161b);
+  touch-action: none;
+}
+
+:global(.ld-embed-model-loading),
+:global(.ld-embed-model-error) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 320px;
+  padding: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-text-muted, #aab0b8);
+}
+
+:global(.ld-embed-model-error) {
+  color: var(--color-warning, #ff9933);
+}
+
+/* Signature line + fields. */
+:global(.ld-sig-line) {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 320px;
+  margin: 18px 0 6px;
+}
+
+:global(.ld-sig-x) {
+  font-size: 18px;
+  line-height: 1;
+}
+
+:global(.ld-sig-rule) {
+  flex: 1;
+  border-bottom: 1.5px solid currentColor;
+  height: 0;
+  min-width: 120px;
+}
+
+:global(.ld-sig-caption) {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+:global(.ld-sig-line) :global(.ld-sig-caption) {
+  align-self: flex-start;
+}
+
+:global(.ld-sig-fields) {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin: 18px 0;
+}
+
+:global(.ld-sig-field) {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
+:global(.ld-sig-field) :global(.ld-sig-rule) {
+  width: 100%;
+}
+
+/* Digital (cryptographic) signature card. */
+:global(.ld-sig-digital) {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 12px 16px;
+  max-width: 460px;
+  border: 1px solid rgba(60, 180, 110, 0.5);
+  border-left: 4px solid #38b27a;
+  border-radius: 8px;
+  background: rgba(60, 180, 110, 0.08);
+}
+
+:global(.ld-sig-digital-seal) {
+  font-size: 28px;
+  line-height: 1;
+}
+
+:global(.ld-sig-digital-body) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+:global(.ld-sig-digital-name) {
+  font-weight: 600;
+}
+
+:global(.ld-sig-digital-meta) {
+  font-size: 11.5px;
+  opacity: 0.75;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:global(.ld-sig-digital-badge) {
+  margin-left: auto;
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2f9e68;
+  white-space: nowrap;
+}
+
+/* Content edited after signing, or a bad signature: warn that it's stale. */
+:global(.ld-sig-status-modified),
+:global(.ld-sig-status-invalid) {
+  border-color: rgba(220, 130, 50, 0.55);
+  border-left-color: #e0892f;
+  background: rgba(220, 140, 60, 0.1);
+}
+
+:global(.ld-sig-status-modified) :global(.ld-sig-digital-badge) {
+  color: #d9822b;
+}
+
+:global(.ld-sig-status-invalid) {
+  border-left-color: #e0533c;
+}
+
+:global(.ld-sig-status-invalid) :global(.ld-sig-digital-badge) {
+  color: #d9442b;
+}
+
+:global(.ld-sig-status-checking) {
+  opacity: 0.75;
 }

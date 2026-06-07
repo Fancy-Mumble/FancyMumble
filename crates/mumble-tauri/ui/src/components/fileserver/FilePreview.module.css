@@ -1,0 +1,130 @@
+/* Shared file-server file presentation: thumbnail, TTL badge, and preview
+   modal.  Used by the admin dashboard and the per-user "my shared files" bar. */
+
+.thumb {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border, #2c313a);
+  border-radius: 8px;
+  background: var(--color-surface, #1e2128);
+  color: var(--color-text-secondary, #9aa3ad);
+  cursor: pointer;
+  overflow: hidden;
+  padding: 0;
+}
+.thumb:disabled { cursor: default; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+.ttlTag {
+  margin-left: 6px;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(224, 137, 47, 0.18);
+  color: #e0a85f;
+  white-space: nowrap;
+}
+/* TTL more than a month away - reassuring "plenty of time" colour. */
+.ttlFar {
+  margin-left: 6px;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(63, 185, 80, 0.16);
+  color: #4ac26b;
+  white-space: nowrap;
+}
+/* TTL within the next hour - heightened urgency. */
+.ttlSoon {
+  margin-left: 6px;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(224, 83, 60, 0.16);
+  color: #e0892f;
+  white-space: nowrap;
+}
+/* TTL already elapsed - the file is (or is about to be) gone. */
+.ttlExpired {
+  margin-left: 6px;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(224, 83, 60, 0.22);
+  color: #e0533c;
+  white-space: nowrap;
+}
+
+/* Preview modal */
+.previewBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+.previewBox {
+  display: flex;
+  flex-direction: column;
+  max-width: min(900px, 92vw);
+  max-height: 88vh;
+  background: var(--color-surface, #1e2128);
+  border: 1px solid var(--color-border, #2c313a);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.previewHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border, #2c313a);
+}
+.previewName { flex: 1; font-weight: 600; color: var(--color-text-primary, #f5f6f8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.previewSize { font-size: 12px; color: var(--color-text-secondary, #9aa3ad); }
+.previewBody {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: auto;
+  min-height: 200px;
+}
+.previewMedia { max-width: 100%; max-height: 72vh; object-fit: contain; border-radius: 6px; }
+.previewFrame { width: 80vw; max-width: 860px; height: 72vh; border: none; background: #fff; border-radius: 6px; }
+.previewText {
+  width: 100%;
+  max-height: 72vh;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--color-text-primary, #f5f6f8);
+  background: var(--color-surface-elevated, #262a33);
+  border-radius: 6px;
+}
+.previewMsg { color: var(--color-text-secondary, #9aa3ad); padding: 32px; text-align: center; }
+
+/* Close button in the preview header. */
+.closeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border, #2c313a);
+  border-radius: 7px;
+  background: var(--color-surface-elevated, #262a33);
+  color: var(--color-text-secondary, #9aa3ad);
+  cursor: pointer;
+}
+.closeBtn:hover { color: var(--color-text-primary, #f5f6f8); background: var(--color-surface-hover, #2f343d); }

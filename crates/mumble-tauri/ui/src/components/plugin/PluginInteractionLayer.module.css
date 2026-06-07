@@ -205,7 +205,7 @@
   line-height: 1.45;
   min-width: 0;
 }
-/* Markdown produced by marked.parse() — restore list indent removed by the
+/* Markdown produced by marked.parse() - restore list indent removed by the
    global * { padding:0 } reset, add small inter-block gap so paragraphs and
    lists don't flush together, and style inline code to match the chat. */
 .textDisplay ul,

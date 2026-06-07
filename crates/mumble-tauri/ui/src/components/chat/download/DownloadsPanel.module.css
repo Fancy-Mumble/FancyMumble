@@ -5,6 +5,11 @@
   border-bottom: 1px solid var(--color-glass-border);
   animation: slideDown 0.2s ease;
   overflow: hidden;
+  /* Fill the resizable split wrapper (ResizableSplitPanel) and scroll inside. */
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 @keyframes slideDown {
@@ -16,7 +21,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  /* Extra right padding reserves space for the shared close (×) overlay so the
+     Clear button never sits under it. */
+  padding: 10px 44px 10px 14px;
   border-bottom: 1px solid var(--color-glass-border);
 }
 
@@ -89,7 +96,8 @@
 }
 
 .list {
-  max-height: 360px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding: 4px 0;
   display: flex;

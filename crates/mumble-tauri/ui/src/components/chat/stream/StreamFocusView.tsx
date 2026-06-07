@@ -1,4 +1,5 @@
 import { ChevronDownIcon, Grid2x2Icon, ScreenShareIcon } from "../../../icons";
+import PanelCloseButton from "../PanelCloseButton";
 /**
  * Focused stream view - wraps ScreenShareViewer with:
  *
@@ -452,6 +453,11 @@ interface StreamFocusViewProps {
   readonly onWatch: (session: number) => void;
   /** The local broadcast MediaStream, passed to SecondaryPanel for own-session display. */
   readonly ownBroadcastStream?: MediaStream | null;
+  /** Close/stop the stream (rendered as the top-right × so it lines up with the
+   *  other chat-splitting panels). */
+  readonly onClose?: () => void;
+  /** Accessible label for the close button. */
+  readonly closeLabel?: string;
 }
 
 export default function StreamFocusView({
@@ -461,6 +467,8 @@ export default function StreamFocusView({
   otherBroadcasters,
   onWatch,
   ownBroadcastStream,
+  onClose,
+  closeLabel,
 }: StreamFocusViewProps) {
   const [layout, setLayout] = useState<GridLayout>("solo");
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -501,6 +509,7 @@ export default function StreamFocusView({
 
   return (
     <div className={styles.container}>
+      {onClose && <PanelCloseButton onClose={onClose} label={closeLabel} />}
       <div className={`${styles.videoArea} ${LAYOUT_CSS[layout]}`}>
         <PrimaryPane
           isOwnBroadcast={isOwnBroadcast}

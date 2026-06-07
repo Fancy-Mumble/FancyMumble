@@ -3,12 +3,12 @@ import { useState, useRef, useCallback, useEffect, useMemo, lazy, Suspense, type
 import { useTranslation } from "react-i18next";
 import MarkdownInput, { type MarkdownInputApi } from "./markdown/MarkdownInput";
 const GifPicker = lazy(() => import("./gif/GifPicker"));
-import MentionAutocomplete, { type MentionCandidate, handleMentionKey } from "./mention/MentionAutocomplete";
+import MentionAutocomplete, { type MentionCandidate, handleMentionKey, candidateInsertText } from "./mention/MentionAutocomplete";
 import { useMentionCandidates } from "./mention/useMentionCandidates";
 import styles from "./ChatView.module.css";
 import { isMobile } from "../../utils/platform";
 import { sendPluginInteraction, useAppStore } from "../../store";
-import { formatUserMention, parseMentionTrigger, type MentionTrigger } from "../../utils/mentions";
+import { parseMentionTrigger, type MentionTrigger } from "../../utils/mentions";
 import SlashCommandMenu, { handleSlashKey } from "../plugin/SlashCommandMenu";
 import { collectSlashCommands, filterSlashCommands } from "../../plugins/tier1/manifest";
 import { extractSlashQuery, parseSlashLine } from "../../plugins/tier1/slashParser";
@@ -30,19 +30,6 @@ interface ChatComposerProps {
   readonly hasPendingQuotes?: boolean;
   readonly isEditing?: boolean;
   readonly onCancelEdit?: () => void;
-}
-
-function candidateInsertText(c: MentionCandidate): string {
-  switch (c.kind) {
-    case "user":
-      return formatUserMention(c.session);
-    case "role":
-      return `<@&${c.name}>`;
-    case "everyone":
-      return "@everyone";
-    case "here":
-      return "@here";
-  }
 }
 
 export default function ChatComposer({

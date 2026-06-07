@@ -8,7 +8,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../store";
 import { parseComment } from "../../profileFormat";
-import { useUserAvatar } from "../../lazyBlobs";
+import { useUserAvatar, useUserComment } from "../../lazyBlobs";
 import { useUserStats } from "../../hooks/useUserStats";
 import { ProfilePreviewCard } from "../../pages/settings/ProfilePreviewCard";
 import MobileBottomSheet from "../elements/MobileBottomSheet";
@@ -28,9 +28,13 @@ export default function MobileProfileSheet() {
   const isOpen = selectedUser !== null && user !== null;
   const stats = useUserStats(selectedUser, isOpen);
 
+  const liveComment = useUserComment(user?.session, user?.comment_size);
   const parsed = useMemo(
-    () => (user?.comment ? parseComment(user.comment) : null),
-    [user?.comment],
+    () => {
+      const c = user?.comment ?? liveComment;
+      return c ? parseComment(c) : null;
+    },
+    [user?.comment, liveComment],
   );
 
   const avatar = useUserAvatar(user?.session, user?.texture_size);

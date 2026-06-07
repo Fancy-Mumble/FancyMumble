@@ -51,6 +51,33 @@
   color: var(--color-text-primary);
 }
 
+/* Transient flash applied to a setting heading after it is chosen from the
+ * settings search, so the user's eye lands on the right control. */
+.searchHighlight {
+  border-radius: 6px;
+  animation: settingSearchFlash 3s ease-out;
+}
+
+@keyframes settingSearchFlash {
+  0%,
+  60% {
+    background: color-mix(in srgb, var(--accent, #2aabee) 30%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent, #2aabee) 30%, transparent);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .searchHighlight {
+    animation: none;
+    outline: 2px solid var(--accent, #2aabee);
+    outline-offset: 2px;
+  }
+}
+
 .groupTitle {
   font-size: 13px;
   font-weight: 600;

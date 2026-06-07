@@ -70,3 +70,36 @@ pub(crate) async fn import_certificate(
         .map_err(|e| e.to_string())?;
     state::pchat::IdentityStore::new(data_dir).import(std::path::Path::new(&src_path))
 }
+
+/// Detached signature produced with an identity's real Mumble client key.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SignatureDto {
+    /// Base64 fixed-length ECDSA signature (`r || s`).
+    signature: String,
+    /// Base64 raw uncompressed public-key point.
+    public_key: String,
+    algorithm: String,
+}
+
+/// Sign `payload` with the given identity's TLS client private key so the Live
+/// Doc editor can embed a verifiable digital signature tied to the user's real
+/// Mumble identity (not a throwaway browser key).
+#[tauri::command]
+pub(crate) async fn sign_document(
+    app: tauri::AppHandle,
+    label: String,
+    payload: String,
+) -> Result<SignatureDto, String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    let (signature, public_key) =
+        state::pchat::IdentityStore::new(data_dir).sign_payload(&label, payload.as_bytes())?;
+    Ok(SignatureDto {
+        signature,
+        public_key,
+        algorithm: "ECDSA-P256-SHA256".to_string(),
+    })
+}

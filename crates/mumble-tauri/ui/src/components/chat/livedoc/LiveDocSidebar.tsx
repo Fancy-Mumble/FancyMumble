@@ -58,6 +58,7 @@ export default function LiveDocSidebar({
   const load = useLiveDocSidebarStore((s) => s.load);
   const loaded = useLiveDocSidebarStore((s) => s.loaded);
   const available = useLiveDocSidebarStore((s) => s.available);
+  const reason = useLiveDocSidebarStore((s) => s.reason);
   const index = useLiveDocSidebarStore((s) => s.index);
   const addSection = useLiveDocSidebarStore((s) => s.addSection);
 
@@ -150,8 +151,18 @@ export default function LiveDocSidebar({
         )}
       </div>
       <div className={styles.body}>
-        {!available && loaded && (
-          <div className={styles.hint}>{t("liveDoc.sidebar.guestHint")}</div>
+        {!available && loaded && reason === "guest" && (
+          <div className={styles.warning} role="status">
+            ⚠ {t("liveDoc.sidebar.guestHint")}
+          </div>
+        )}
+        {!available && loaded && reason === "error" && (
+          <div className={styles.warning} role="alert">
+            ⚠ {t("liveDoc.sidebar.errorHint", { defaultValue: "Couldn't load your documents from the server." })}{" "}
+            <button type="button" className={styles.retryBtn} onClick={() => void load()}>
+              {t("liveDoc.sidebar.retry", { defaultValue: "Retry" })}
+            </button>
+          </div>
         )}
         <LiveDocSidebarTree
           sections={index.sections}

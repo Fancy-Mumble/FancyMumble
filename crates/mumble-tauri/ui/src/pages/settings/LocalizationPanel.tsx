@@ -3,11 +3,19 @@ import { useTranslation } from "react-i18next";
 import GB from "country-flag-icons/react/3x2/GB";
 import DE from "country-flag-icons/react/3x2/DE";
 import FR from "country-flag-icons/react/3x2/FR";
+import CN from "country-flag-icons/react/3x2/CN";
 import { BUILT_IN_LANGUAGES, type BuiltInLanguage } from "../../i18n";
 import type { TimeFormat, DateFormat, NumberFormat } from "../../types";
 import { Autocomplete, type AutocompleteOption } from "../../components/elements/Autocomplete";
 import { Toggle } from "./SharedControls";
 import styles from "./SettingsPage.module.css";
+import { registerSettings } from "./settingsSearchRegistry";
+
+registerSettings("localization")
+  .add("language.label", ["language", "translation"])
+  .add("time.title", ["time format", "12h", "24h"])
+  .add("date.title", ["date format"])
+  .add("number.title", ["number format", "separator"]);
 
 /** Native names for the supported UI languages (always shown in the
  *  language itself so users can find their language regardless of
@@ -16,6 +24,7 @@ const NATIVE_LANGUAGE_NAMES: Record<BuiltInLanguage, string> = {
   en: "English",
   de: "Deutsch",
   fr: "Français",
+  zh: "中文",
 };
 
 /** Flag chosen per language. Where multiple regions share a language
@@ -26,6 +35,7 @@ const LANGUAGE_FLAGS: Record<BuiltInLanguage, typeof GB> = {
   en: GB,
   de: DE,
   fr: FR,
+  zh: CN,
 };
 
 const FLAG_STYLE: React.CSSProperties = { width: 22, height: 16, borderRadius: 2, display: "block" };

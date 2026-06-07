@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Modal } from "../../elements/Modal";
 import { useTranslation } from "react-i18next";
 import styles from "./LiveDocDrawModal.module.css";
 
@@ -46,16 +47,6 @@ export default function LiveDocDrawModal({ open, onClose, onInsert }: LiveDocDra
   useEffect(() => {
     if (open) clear();
   }, [open, clear]);
-
-  // Close on Escape while open.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
 
   const pointAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -110,16 +101,13 @@ export default function LiveDocDrawModal({ open, onClose, onInsert }: LiveDocDra
   if (!open) return null;
 
   return (
-    <div
-      className={styles.overlay}
-      role="dialog"
-      aria-modal="true"
-      aria-label={t("liveDoc.draw.title", { defaultValue: "Insert drawing" })}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className={styles.dialog}>
+    <Modal onClose={onClose} zIndex={1000} overlayClassName={styles.overlayBlur}>
+      <div
+        className={styles.dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("liveDoc.draw.title", { defaultValue: "Insert drawing" })}
+      >
         <div className={styles.title}>{t("liveDoc.draw.title", { defaultValue: "Insert drawing" })}</div>
         <div className={styles.tools}>
           <label className={styles.tool}>
@@ -168,6 +156,6 @@ export default function LiveDocDrawModal({ open, onClose, onInsert }: LiveDocDra
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

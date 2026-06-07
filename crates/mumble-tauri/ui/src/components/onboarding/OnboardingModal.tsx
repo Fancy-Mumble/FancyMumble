@@ -1,8 +1,8 @@
 ﻿import { CheckIcon } from "../../icons";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { createPortal } from "react-dom";
 
+import { Modal } from "../elements/Modal";
 import { useAppStore } from "../../store";
 import type {
   OnboardingAnswer,
@@ -114,8 +114,8 @@ export default function OnboardingModal() {
     setModalOpen(false);
   };
 
-  return createPortal(
-    <div className={styles.overlay}>
+  return (
+    <Modal onClose={handleSkip} closeOnEsc={false} closeOnOverlayClick={false} zIndex={9000}>
       <div
         className={styles.dialog}
         role="dialog"
@@ -219,8 +219,7 @@ export default function OnboardingModal() {
           </button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }
 

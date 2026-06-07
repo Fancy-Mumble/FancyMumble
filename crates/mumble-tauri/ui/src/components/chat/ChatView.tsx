@@ -3,14 +3,17 @@ import React, { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRe
 import { useTranslation } from "react-i18next";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { useAppStore, liveDocKey } from "../../store";
+import { PLUGIN_NAME_LIVE_DOC } from "../../constants/pluginData";
 import type { ChatMessage, TimeFormat, LiveDocDocLink } from "../../types";
 import { getPreferences } from "../../preferencesStorage";
 import { loadPersonalization, type PersonalizationData } from "../../personalizationStorage";
 import ChatHeader from "./ChatHeader";
 import type { BroadcastInfo } from "./ChatHeader";
 import MobileCallControls from "./mobile/MobileCallControls";
+import ResizableSplitPanel from "./ResizableSplitPanel";
 const PinnedMessagesPanel = lazy(() => import("./pinned/PinnedMessagesPanel"));
 const DownloadsPanel = lazy(() => import("./download/DownloadsPanel"));
+const MySharedFilesPanel = lazy(() => import("./MySharedFilesPanel"));
 import UploadProgressItem, { type UploadPlaceholder } from "./upload/UploadProgressItem";
 import PendingMessageItem from "./pending/PendingMessageItem";
 import ChatComposer from "./ChatComposer";
@@ -165,6 +168,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [showPinnedPanel, setShowPinnedPanel] = useState(false);
   const [showDownloadsPanel, setShowDownloadsPanel] = useState(false);
+  const [showMySharedFilesPanel, setShowMySharedFilesPanel] = useState(false);
   const {
     polls, pollMessages, showPollCreator, openPollCreator, closePollCreator,
     handlePollCreate, handlePollVote,
@@ -218,9 +222,6 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   ).length;
   const isInChannel = currentChannel === selectedChannel;
 
-  /** Map session -> avatar data-URL for message avatars (lazy-fetched). */
-  const avatarBySession = useUserAvatars(users);
-
   /** Map session -> UserEntry for quick lookup. */
   const userBySession = useMemo(() => {
     const map = new Map<number, (typeof users)[number]>();
@@ -239,17 +240,41 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     return map;
   }, [users]);
 
+  /** Only users who have actually sent a message in this view (plus the local
+   *  user) need an avatar rendered, so we fetch just those rather than every
+   *  connected user.  Avatars are loaded lazily by the backend, so fetching
+   *  for hundreds of users in other channels would defeat that - this keeps the
+   *  backend holding a blob only for people who have spoken here. */
+  const avatarUsers = useMemo(() => {
+    const need = new Set<number>();
+    const add = (m: { sender_session?: number | null; sender_hash?: string | null }) => {
+      if (m.sender_session != null) {
+        need.add(m.sender_session);
+      } else if (m.sender_hash) {
+        const u = userByHash.get(m.sender_hash);
+        if (u) need.add(u.session);
+      }
+    };
+    for (const m of messages) add(m);
+    for (const m of dmMessages) add(m);
+    if (ownSession != null) need.add(ownSession);
+    return users.filter((u) => need.has(u.session));
+  }, [messages, dmMessages, users, userByHash, ownSession]);
+
+  /** Map session -> avatar data-URL for message avatars (lazy-fetched). */
+  const avatarBySession = useUserAvatars(avatarUsers);
+
   /** Map cert-hash -> avatar data-URL for hash-based avatar lookup. */
   const avatarByHash = useMemo(() => {
     const map = new Map<string, string>();
-    for (const u of users) {
+    for (const u of avatarUsers) {
       if (u.hash) {
         const url = avatarBySession.get(u.session);
         if (url) map.set(u.hash, url);
       }
     }
     return map;
-  }, [users, avatarBySession]);
+  }, [avatarUsers, avatarBySession]);
 
   // Persistent chat hook (banners, key verification, custodian prompt).
   const persistent = usePersistentChat(
@@ -381,6 +406,12 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   const handleCloseDownloadsPanel = useCallback(() => {
     setShowDownloadsPanel(false);
   }, []);
+  const handleOpenMySharedFiles = useCallback(() => {
+    setShowMySharedFilesPanel(true);
+  }, []);
+  const handleCloseMySharedFiles = useCallback(() => {
+    setShowMySharedFilesPanel(false);
+  }, []);
 
   const cancelEdit = useCallback(() => {
     setEditingMessage(null);
@@ -460,6 +491,9 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   const pendingLiveDocAnnounces = useAppStore((s) => s.pendingLiveDocAnnounces);
   const requestOpenLiveDoc = useAppStore((s) => s.requestOpenLiveDoc);
   const clearLiveDocAnnounce = useAppStore((s) => s.clearLiveDocAnnounce);
+  // The live-doc plugin is present only while its `fancy-plugin-info` is in the
+  // registry; entries are gated on this so they vanish when it's disabled.
+  const liveDocActive = useAppStore((s) => s.pluginInfos.has(PLUGIN_NAME_LIVE_DOC));
 
   const liveDocLookupKey =
     selectedChannel != null ? liveDocKey(activeServerId, selectedChannel) : null;
@@ -549,7 +583,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       console.log("[ChatView] handleLiveDocLaunchSubmit:", { selectedChannel, choice });
       if (selectedChannel === null) {
         console.warn("[ChatView] live-doc submit aborted: no channel selected");
-        showToast({ message: "Cannot open document: no channel selected.", variant: "error" });
+        showToast({ message: t("openDocumentNoChannel"), variant: "error" });
         setShowLiveDocLaunch(false);
         return;
       }
@@ -588,7 +622,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       } catch (e) {
         const detail = e instanceof Error ? e.message : String(e);
         console.error("[ChatView] requestOpenLiveDoc threw:", e);
-        showToast({ message: `Failed to open document: ${detail}`, variant: "error" });
+        showToast({ message: t("openDocumentFailed", { detail }), variant: "error" });
       }
     },
     [selectedChannel, requestOpenLiveDoc, showToast, t],
@@ -612,14 +646,14 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     if (selectedChannel === null) return;
     if (!fileServerConfig) {
       showToast({
-        message: "File sharing is not enabled on this server.",
+        message: t("toasts.fileSharingDisabled"),
         variant: "error",
       });
       return;
     }
     if (!fileServerConfig.canShareFiles) {
       showToast({
-        message: "You don't have permission to share files in this channel.",
+        message: t("toasts.fileSharingNoPermission"),
         variant: "error",
       });
       return;
@@ -634,9 +668,9 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     } catch (e) {
       console.error("file picker failed:", e);
       const detail = e instanceof Error ? e.message : String(e);
-      showToast({ message: `File picker failed: ${detail}`, variant: "error" });
+      showToast({ message: t("toasts.filePickerFailed", { detail }), variant: "error" });
     }
-  }, [fileServerConfig, selectedChannel, isUploading, showToast]);
+  }, [fileServerConfig, selectedChannel, isUploading, showToast, t]);
 
   const performUpload = useCallback(async (
     filePath: string,
@@ -676,6 +710,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
         channelId: selectedChannel,
         mode: choice.mode,
         password: choice.password,
+        ttlSeconds: choice.ttlSeconds,
         filename,
         uploadId: placeholderId,
       });
@@ -790,7 +825,10 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
         } catch (e) {
           console.error("send image attachment failed:", e);
           showToast({
-            message: `Failed to send ${att.name}: ${e instanceof Error ? e.message : String(e)}`,
+            message: t("sendAttachmentFailed", {
+              name: att.name,
+              error: e instanceof Error ? e.message : String(e),
+            }),
             variant: "error",
           });
         }
@@ -804,7 +842,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
         });
       }
     }
-  }, [pendingAttachments, setPendingAttachments, sendMediaFile, showToast]);
+  }, [pendingAttachments, setPendingAttachments, sendMediaFile, showToast, t]);
 
   const handleSendAndResetTyping = useCallback(async () => {
     // Send any pending drag-dropped attachments first, then the text message.
@@ -931,7 +969,10 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   return (
     <main ref={mainRef} className={[
       styles.main,
-      activeScreenShare || liveDocCompactChat ? styles.compactChat : "",
+      // Screen-share now lives in a resizable panel, so the chat just fills the
+      // remaining space (its normal layout) instead of the fixed compact strip;
+      // only the Live Doc compact mode keeps that strip.
+      liveDocCompactChat ? styles.compactChat : "",
       activeLiveDoc && !liveDocCompactChat ? styles.hiddenChat : "",
       ((activeLiveDoc && liveDocCompactChat) || showLiveDocLibrary) && liveDocSplitPx !== null ? styles.splitActive : "",
     ].join(" ")}>
@@ -974,28 +1015,56 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           onPinnedMessages={handleOpenPinnedPanel}
           hasNewDownloads={unseenDownloadCount > 0}
           onDownloads={handleOpenDownloadsPanel}
-          onOpenDocLibrary={handleOpenDocLibrary}
+          onMySharedFiles={fileServerConfig ? handleOpenMySharedFiles : undefined}
+          onOpenDocLibrary={liveDocActive ? handleOpenDocLibrary : undefined}
           onPopOutDm={inPopout ? undefined : handlePopOutDm}
         />
         )
       )}
 
       {showPinnedPanel && (
-        <Suspense fallback={null}>
-          <PinnedMessagesPanel
-            messages={allMessages}
-            unseenIds={channelUnseenPinSet}
-            onClose={handleClosePinnedPanel}
-            onNavigate={handleScrollToMessage}
-            onUnpin={handlePin}
-          />
-        </Suspense>
+        <ResizableSplitPanel
+          defaultPx={320}
+          minPx={160}
+          onClose={handleClosePinnedPanel}
+          closeLabel={t("pinned.closeAriaLabel")}
+        >
+          <Suspense fallback={null}>
+            <PinnedMessagesPanel
+              messages={allMessages}
+              unseenIds={channelUnseenPinSet}
+              onClose={handleClosePinnedPanel}
+              onNavigate={handleScrollToMessage}
+              onUnpin={handlePin}
+            />
+          </Suspense>
+        </ResizableSplitPanel>
       )}
 
       {showDownloadsPanel && (
-        <Suspense fallback={null}>
-          <DownloadsPanel onClose={handleCloseDownloadsPanel} />
-        </Suspense>
+        <ResizableSplitPanel
+          defaultPx={360}
+          minPx={160}
+          onClose={handleCloseDownloadsPanel}
+          closeLabel={t("closeDownloadsAriaLabel")}
+        >
+          <Suspense fallback={null}>
+            <DownloadsPanel />
+          </Suspense>
+        </ResizableSplitPanel>
+      )}
+
+      {showMySharedFilesPanel && (
+        <ResizableSplitPanel
+          defaultPx={360}
+          minPx={160}
+          onClose={handleCloseMySharedFiles}
+          closeLabel={t("header.mySharedFiles")}
+        >
+          <Suspense fallback={null}>
+            <MySharedFilesPanel />
+          </Suspense>
+        </ResizableSplitPanel>
       )}
 
       <MobileCallControls />
@@ -1051,28 +1120,41 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
 
       {/* Solo own broadcast preview (no other broadcasters) */}
       {activeScreenShare?.isOwn && activeScreenShare.stream && !showFocusView && (
-        <Suspense fallback={null}>
-          <ScreenShareViewer
-            isOwnBroadcast
-            localStream={activeScreenShare.stream}
-            channelId={selectedChannel ?? 0}
-            ownSession={ownSession ?? 0}
-          />
-        </Suspense>
+        <ResizableSplitPanel
+          fillByDefault
+          minPx={200}
+          onClose={screenShare.stopSharing}
+          closeLabel={t("screenShare.stopSharing")}
+        >
+          <Suspense fallback={null}>
+            <ScreenShareViewer
+              isOwnBroadcast
+              localStream={activeScreenShare.stream}
+              channelId={selectedChannel ?? 0}
+              ownSession={ownSession ?? 0}
+            />
+          </Suspense>
+        </ResizableSplitPanel>
       )}
 
       {/* Unified focus view: single instance keeps layout stable across swaps */}
       {showFocusView && activeScreenShare && (
-        <Suspense fallback={null}>
-          <StreamFocusView
-            isOwnBroadcast={activeScreenShare.isOwn}
-            localStream={activeScreenShare.isOwn ? activeScreenShare.stream : null}
-            session={activeScreenShare.isOwn ? undefined : activeScreenShare.session}
-            ownBroadcastStream={screenShare.isBroadcasting ? screenShare.localStream : null}
-            otherBroadcasters={focusViewSecondaries}
-            onWatch={handleFocusWatch}
-          />
-        </Suspense>
+        <ResizableSplitPanel fillByDefault minPx={200}>
+          <Suspense fallback={null}>
+            <StreamFocusView
+              isOwnBroadcast={activeScreenShare.isOwn}
+              localStream={activeScreenShare.isOwn ? activeScreenShare.stream : null}
+              session={activeScreenShare.isOwn ? undefined : activeScreenShare.session}
+              ownBroadcastStream={screenShare.isBroadcasting ? screenShare.localStream : null}
+              otherBroadcasters={focusViewSecondaries}
+              onWatch={handleFocusWatch}
+              onClose={activeScreenShare.isOwn ? screenShare.stopSharing : screenShare.stopWatching}
+              closeLabel={
+                activeScreenShare.isOwn ? t("screenShare.stopSharing") : t("screenShare.stopWatching")
+              }
+            />
+          </Suspense>
+        </ResizableSplitPanel>
       )}
 
       {/* Multi-stream grid: shown when 2+ broadcasters and we are not sharing or watching */}
@@ -1152,7 +1234,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           {allMessages.length === 0 ? (
             <div className={styles.empty}>
               <div className={styles.emptyIcon}><HandIcon width={40} height={40} /></div>
-              <p>No messages yet. Say hello!</p>
+              <p>{t("emptyState.noMessages")}</p>
             </div>
           ) : (
             <ChatMessageList
@@ -1210,7 +1292,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           onClick={handleScrollToBottom}
         >
           <ChevronDownIcon width={16} height={16} aria-hidden="true" />
-          {newMsgCount} new {newMsgCount === 1 ? "message" : "messages"}
+          {t("newMessagesPill.count", { count: newMsgCount })}
         </button>
       )}
 
@@ -1245,7 +1327,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           onFileSelected={sendMediaFile}
           onGifSelect={handleGifSelect}
           onAttachFile={handleAttachFile}
-          onOpenLiveDoc={selectedChannel !== null && !isDmMode ? handleOpenLiveDoc : undefined}
+          onOpenLiveDoc={liveDocActive && selectedChannel !== null && !isDmMode ? handleOpenLiveDoc : undefined}
           disabled={sending || persistent.sendBlocked}
           hasPendingQuotes={pendingQuotes.length > 0}
           isEditing={editingMessage !== null}
@@ -1317,13 +1399,13 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       {/* Delete confirmation dialog */}
       {deleteConfirm && (
         <ConfirmDialog
-          title="Delete messages"
+          title={t("deleteDialog.title")}
           body={
             deleteConfirm.ids.length === 1
-              ? "Are you sure you want to delete this message? This action cannot be undone."
-              : `Are you sure you want to delete ${deleteConfirm.ids.length} messages? This action cannot be undone.`
+              ? t("deleteDialog.singleBody")
+              : t("deleteDialog.multiBody", { count: deleteConfirm.ids.length })
           }
-          confirmLabel="Delete"
+          confirmLabel={t("deleteDialog.confirm")}
           danger
           isConfirming={isDeleting}
           onConfirm={confirmDelete}

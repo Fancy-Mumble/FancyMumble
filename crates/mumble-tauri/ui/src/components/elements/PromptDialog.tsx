@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { Modal } from "./Modal";
 import { usePromptDialogStore } from "./promptDialogStore";
 import styles from "./PromptDialog.module.css";
 
@@ -40,22 +40,17 @@ export default function PromptDialog() {
   const submit = () => confirm(value);
   const canSubmit = value.trim().length > 0;
 
+  // Esc + backdrop dismissal are handled by Modal; only Enter-to-submit lives
+  // on the input.
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && canSubmit) {
       e.preventDefault();
       submit();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      cancel();
     }
   };
 
-  const handleOverlayMouseDown = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) cancel();
-  };
-
-  return createPortal(
-    <div className={styles.overlay} onMouseDown={handleOverlayMouseDown}>
+  return (
+    <Modal onClose={cancel} zIndex={9999}>
       <div className={styles.dialog} role="dialog" aria-labelledby="prompt-title" aria-modal="true">
         <h3 id="prompt-title" className={styles.title}>
           {options.title}
@@ -80,7 +75,6 @@ export default function PromptDialog() {
           </button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }

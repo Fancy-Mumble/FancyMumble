@@ -7,12 +7,12 @@
  * - Videos show a poster frame; click opens a lightbox with playback.
  */
 
-import katex from "katex";
 import {
   useState,
   useRef,
   useEffect,
   useCallback,
+  useMemo,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -176,11 +176,26 @@ function sanitiseAttrs(child: Element, tag: string): void {
  * as KaTeX HTML in place.  Called after sanitisation so the KaTeX
  * output (which is complex but safe) is not stripped.
  */
-function renderMathNodes(root: HTMLElement): void {
-  const mathSpans = Array.from(
-    root.querySelectorAll<HTMLSpanElement>("span.math-inline, span.math-display"),
-  );
-  for (const span of mathSpans) {
+// KaTeX is ~450 kB; load it (and its stylesheet) only when a message actually
+// contains math, keeping it off the heap on the common no-math path.
+let katexModule: typeof import("katex")["default"] | null = null;
+let katexLoading: Promise<typeof import("katex")["default"]> | null = null;
+function loadKatex(): Promise<typeof import("katex")["default"]> {
+  if (katexModule) return Promise.resolve(katexModule);
+  katexLoading ??= Promise.all([
+    import("katex"),
+    import("katex/dist/katex.min.css"),
+  ]).then(([m]) => (katexModule = m.default));
+  return katexLoading;
+}
+
+function renderMathWith(
+  katex: typeof import("katex")["default"],
+  root: HTMLElement,
+): void {
+  for (const span of root.querySelectorAll<HTMLSpanElement>(
+    "span.math-inline, span.math-display",
+  )) {
     const latex = span.textContent ?? "";
     const displayMode = span.classList.contains("math-display");
     try {
@@ -193,6 +208,21 @@ function renderMathNodes(root: HTMLElement): void {
       span.textContent = displayMode ? `$$${latex}$$` : `$${latex}$`;
     }
   }
+}
+
+/**
+ * Render any LaTeX math spans inside a *live* DOM node, lazy-loading KaTeX on
+ * first use.  No-op (and no KaTeX load) when the node has no math - the common
+ * case.  Operates on the mounted element (not the detached parse tree) so the
+ * asynchronous KaTeX load can write its output back into what the user sees.
+ */
+function renderMathNodes(root: HTMLElement): void {
+  if (!root.querySelector("span.math-inline, span.math-display")) return;
+  if (katexModule) {
+    renderMathWith(katexModule, root);
+    return;
+  }
+  void loadKatex().then((katex) => renderMathWith(katex, root));
 }
 
 /** Parse `<img>` and `<video>` tags out of HTML and classify them. */
@@ -226,9 +256,8 @@ export function extractMedia(html: string): { cleaned: string; media: MediaItem[
   // Sanitise the remaining DOM tree.
   sanitiseTree(doc.body);
 
-  // Render LaTeX math spans produced by markdownToHtml.
-  renderMathNodes(doc.body);
-
+  // NOTE: math spans are left as-is here and rendered post-mount (see
+  // `renderMathNodes` in MediaPreview) so KaTeX can be lazy-loaded.
   const cleaned = doc.body.innerHTML.trim();
   return { cleaned, media };
 }
@@ -485,8 +514,15 @@ export function MediaLightbox({
 // --- Main component -----------------------------------------------
 
 export default function MediaPreview({ html, messageId, compact = false, timestamp, timeFormat = "auto", convertToLocalTime = true, systemUses24h, senderName, messageTimestamp, onOpenLightbox }: Readonly<Props>): ReactNode {
-  const { cleaned, media } = extractMedia(html);
+  // Memoised: extractMedia parses + sanitises the HTML, so re-running it on
+  // every render (e.g. hover/timestamp state changes) wasted CPU per message.
+  const { cleaned, media } = useMemo(() => extractMedia(html), [html]);
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  const contentRef = useRef<HTMLSpanElement>(null);
+  // Render (and lazy-load) KaTeX for any math in the mounted message body.
+  useEffect(() => {
+    if (contentRef.current) renderMathNodes(contentRef.current);
+  }, [cleaned]);
 
   const openLightbox = (idx: number) => {
     const item = media[idx];
@@ -507,7 +543,7 @@ export default function MediaPreview({ html, messageId, compact = false, timesta
       {/* Render remaining text (if any) */}
       {cleaned && (
         <ExternalLinkGuard>
-          <span dangerouslySetInnerHTML={{ __html: cleaned }} />
+          <span ref={contentRef} dangerouslySetInnerHTML={{ __html: cleaned }} />
         </ExternalLinkGuard>
       )}
 

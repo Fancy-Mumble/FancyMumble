@@ -89,7 +89,7 @@ function EditForm({ server, onSave, onClose }: Readonly<Props>) {
           className={styles.input}
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          placeholder="My Server"
+          placeholder={t("edit.labelPlaceholder")}
         />
       </label>
 
@@ -99,7 +99,7 @@ function EditForm({ server, onSave, onClose }: Readonly<Props>) {
           className={styles.input}
           value={host}
           onChange={(e) => setHost(e.target.value)}
-          placeholder="mumble.example.com"
+          placeholder={t("edit.hostPlaceholder")}
           required
         />
       </label>
@@ -111,7 +111,7 @@ function EditForm({ server, onSave, onClose }: Readonly<Props>) {
           type="number"
           value={port}
           onChange={(e) => setPort(e.target.value)}
-          placeholder="64738"
+          placeholder={t("edit.portPlaceholder")}
           min={1}
           max={65535}
         />
@@ -123,7 +123,7 @@ function EditForm({ server, onSave, onClose }: Readonly<Props>) {
           className={styles.input}
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="Username"
+          placeholder={t("edit.usernamePlaceholder")}
           required
         />
       </label>
@@ -226,9 +226,10 @@ function EditForm({ server, onSave, onClose }: Readonly<Props>) {
 }
 
 export default function ServerEditSheet({ server, onSave, onClose }: Readonly<Props>) {
+  const { t } = useTranslation("server");
   if (isMobile) {
     return (
-      <MobileBottomSheet open onClose={onClose} ariaLabel="Close server editor">
+      <MobileBottomSheet open onClose={onClose} ariaLabel={t("edit.closeAriaLabel")}>
         <EditForm server={server} onSave={onSave} onClose={onClose} />
       </MobileBottomSheet>
     );

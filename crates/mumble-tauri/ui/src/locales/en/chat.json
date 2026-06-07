@@ -51,6 +51,7 @@
     "closeStream": "Close stream",
     "pinnedMessages": "Pinned messages",
     "downloads": "Downloads",
+    "mySharedFiles": "My shared files",
     "createPoll": "Create poll",
     "browseDocuments": "Browse documents",
     "muteChannel": "Mute channel",
@@ -141,18 +142,17 @@
   "downloads": {
     "title": "Downloads",
     "clear": "Clear",
-    "clearTooltip": "Clear list (does not delete files)",
-    "close": "Close downloads",
+    "clearTitle": "Clear list (does not delete files)",
     "empty": "No files downloaded yet.",
     "relTime": {
       "justNow": "just now",
-      "minutesAgo": "{{min}} min ago",
-      "hoursAgo": "{{hr}} h ago"
+      "minAgo": "{{count}} min ago",
+      "hAgo": "{{count}} h ago"
     },
     "open": "Open",
     "showInFolder": "Show in folder",
     "remove": "Remove",
-    "removeTooltip": "Remove from list (does not delete file)"
+    "removeTitle": "Remove from list (does not delete file)"
   },
   "drawing": {
     "strokeWidth": "Stroke width",
@@ -163,6 +163,9 @@
   },
   "fileAttachment": {
     "passwordPrompt": "This file requires a password:",
+    "passwordDialogTitle": "Password required",
+    "passwordPlaceholder": "Password",
+    "unlockBtn": "Unlock",
     "previewError": "Preview failed to load.",
     "expired": "This download link has expired and is no longer available.",
     "expiredPrefix": "expired",
@@ -189,7 +192,18 @@
     "passwordLabel": "Password",
     "messageLabel": "Message",
     "messagePlaceholder": "Add a message to send with the file...",
-    "upload": "Upload"
+    "upload": "Upload",
+    "duration": {
+      "label": "Keep file for",
+      "default": "Server default",
+      "never": "Never (until deleted)",
+      "max": "Maximum allowed",
+      "h1": "1 hour",
+      "d1": "1 day",
+      "w1": "1 week",
+      "mo1": "1 month",
+      "y1": "1 year"
+    }
   },
   "linkPreview": {
     "privacyGateText": "This embed loads external content from {{site}}.",
@@ -206,14 +220,15 @@
     "hintEveryone": "Notify the whole channel",
     "hintHere": "Notify online users in this channel",
     "noMatches": "No matches",
-    "suggestions": "Mention suggestions"
+    "suggestions": "Mention suggestions",
+    "popupAriaLabel": "Mention suggestions"
   },
   "mentionPopover": {
     "noMembers": "No members",
     "overflow": "+{{count}} more",
     "userOffline": "User is offline",
     "onlineMembers": "Online members",
-    "membersInChannel": "Members in this channel"
+    "channelMembers": "Members in this channel"
   },
   "message": {
     "legacyBadge": "legacy",
@@ -269,6 +284,7 @@
     "waitingForStream": "Waiting for stream",
     "share": "Share screen",
     "stopSharing": "Stop sharing",
+    "stopWatching": "Stop watching",
     "p2pLabel": "P2P",
     "p2pTooltip": "No SFU on this server - the stream connects directly between peers",
     "banner": {
@@ -337,6 +353,40 @@
     "openChannelsAriaLabel": "Open channels",
     "closeChannelsAriaLabel": "Close channels"
   },
+  "emptyState": {
+    "noMessages": "No messages yet. Say hello!"
+  },
+  "newMessagesPill": {
+    "count_one": "{{count}} new message",
+    "count_other": "{{count}} new messages"
+  },
+  "deleteDialog": {
+    "title": "Delete messages",
+    "singleBody": "Are you sure you want to delete this message? This action cannot be undone.",
+    "multiBody": "Are you sure you want to delete {{count}} messages? This action cannot be undone.",
+    "confirm": "Delete"
+  },
+  "closeDownloadsAriaLabel": "Close downloads",
+  "sendAttachmentFailed": "Failed to send {{name}}: {{error}}",
+  "openDocumentFailed": "Failed to open document: {{detail}}",
+  "openDocumentNoChannel": "Cannot open document: no channel selected.",
+  "slashCommandMenu": {
+    "noMatches": "No matching commands"
+  },
+  "fileShareMode": {
+    "public": "Public",
+    "password": "Password",
+    "session": "Session"
+  },
+  "liveDocBroadcast": {
+    "sharing": "Screen sharing"
+  },
+  "quickReactions": {
+    "like": "Like",
+    "heart": "Heart",
+    "laugh": "Laugh",
+    "surprise": "Surprise"
+  },
   "liveDoc": {
     "panelTitle": "Live Doc",
     "dropImageHint": "Drop an image to add it to the document",
@@ -347,6 +397,8 @@
       "title": "Open Live Doc",
       "prompt": "Choose how you want to start the document.",
       "modeLabel": "Document mode",
+      "moreOptions": "More options",
+      "fewerOptions": "Fewer options",
       "modeNew": "New document",
       "modeNewDesc": "Start a blank collaborative document.",
       "modeExisting": "Open existing",
@@ -369,6 +421,8 @@
     "exportPdf": "Export as PDF",
     "paperModeOn": "Paper view",
     "paperModeOff": "Theme view",
+    "paginationOn": "Enable pagination",
+    "paginationOff": "Disable pagination (one continuous page)",
     "history": "Revision history",
     "renameDoc": "Rename document",
     "renameDocPrompt": "Enter a new document name",
@@ -476,7 +530,11 @@
         "pages": "Pages",
         "tables": "Tables",
         "illustrations": "Illustrations",
+        "media": "Media",
         "links": "Links",
+        "comments": "Comments",
+        "text": "Text",
+        "esignature": "eSignature",
         "symbols": "Symbols",
         "tools": "Tools",
         "pageBackground": "Page Background",
@@ -499,6 +557,7 @@
       "toc": "Contents",
       "outline": "Outline",
       "printLayout": "Paper",
+      "pagination": "Pagination",
       "pages": "Pages",
       "words": "Words",
       "characters": "Characters"
@@ -508,7 +567,98 @@
       "flavor": "Pandoc-flavored",
       "synced": "in sync",
       "syncing": "syncing…",
-      "reload": "Reload from document"
+      "reload": "Reload from document",
+      "sideBySide": "Side by side",
+      "sideBySideHint": "Show the rendered document alongside the markdown",
+      "resize": "Resize markdown split",
+      "editing": "editing",
+      "editingIn": "editing in"
+    },
+    "insert": {
+      "blankPage": "Blank Page",
+      "shapes": "Shapes",
+      "icons": "Icons",
+      "model3d": "3D Models",
+      "modelPrompt": "3D model URL (.glb / .gltf)",
+      "modelLoading": "Loading 3D model…",
+      "modelError": "Could not load model",
+      "modelNoServer": "File sharing is not available on this server.",
+      "modelTooLarge": "This model is {{size}}, which exceeds the server's upload limit of {{limit}}.",
+      "modelUploadFailed": "Model upload failed",
+      "chart": "Chart",
+      "chartData": "Values (comma separated)",
+      "chartType": { "bar": "Bar", "line": "Line", "pie": "Pie", "doughnut": "Doughnut" },
+      "chartEdit": "Edit data",
+      "chartDone": "Done",
+      "chartResize": "Resize chart",
+      "chartAddRow": "+ Row",
+      "chartAddSeries": "Add series",
+      "chartRemoveRow": "Remove row",
+      "chartRemoveSeries": "Remove series",
+      "removeHeaderFooter": "Remove header & footer",
+      "removeHeader": "Remove header",
+      "removeFooter": "Remove footer",
+      "pageNumberNone": "No page number",
+      "bandStyle": {
+        "blank": "Blank",
+        "threeColumns": "Blank (Three Columns)",
+        "austin": "Austin",
+        "banded": "Banded",
+        "facet": "Facet",
+        "filigree": "Filigree",
+        "grid": "Grid",
+        "integral": "Integral"
+      },
+      "pageNumberStyle": {
+        "page-of": "Page X of Y",
+        "page": "Page X",
+        "plain": "Plain number",
+        "dash": "- X -",
+        "slash": "X / Y",
+        "roman": "Roman (i, ii, iii)"
+      },
+      "screenshot": "Screenshot",
+      "onlineVideo": "Online Video",
+      "videoPrompt": "Video URL (YouTube, Vimeo, …)",
+      "crossRef": "Cross-ref",
+      "comment": "Comment",
+      "commentPrompt": "Comment",
+      "commentMarker": "comment",
+      "header": "Header",
+      "footer": "Footer",
+      "pageNumber": "Page Number",
+      "textBox": "Text Box",
+      "art": "Art",
+      "artPrompt": "Art text",
+      "dropCap": "Drop Cap",
+      "signatureLine": "Signature Line",
+      "signatureFields": "Signature Fields",
+      "dateTime": "Date & Time",
+      "object": "Object",
+      "symbol": "Symbol",
+      "insert": "Insert",
+      "iconSearch": "Search icons…",
+      "iconNoResults": "No icons found",
+      "videoUrl": "Video URL (YouTube, Vimeo, …)",
+      "videoPreviewEmpty": "Preview appears here",
+      "videoFrame": { "plain": "Plain", "rounded": "Rounded", "shadow": "Shadow", "bordered": "Bordered" },
+      "signaturePrompt": "Signer name",
+      "signError": "Could not sign: no Mumble identity available.",
+      "signedBy": "Digitally signed by {{name}}",
+      "sigKey": "Key",
+      "sigSigned": "Signed",
+      "sigValid": "✓ Verified",
+      "sigModified": "⚠ Content changed - re-sign",
+      "sigInvalid": "✗ Invalid signature",
+      "sigChecking": "Checking…",
+      "quickParts": {
+        "title2": "Quick Parts",
+        "author": "Author",
+        "title": "Title",
+        "subject": "Subject",
+        "company": "Company",
+        "date": "Date"
+      }
     },
     "draw": {
       "title": "Insert drawing",
@@ -527,7 +677,7 @@
       "bibliography": "Bibliography",
       "bibliographyShort": "Bibliography",
       "bibliographyTitle": "References",
-      "bibliographyEmpty": "No citations yet — insert a citation to populate the bibliography.",
+      "bibliographyEmpty": "No citations yet - insert a citation to populate the bibliography.",
       "checkPlaceholders": "Check Placeholders",
       "checkPlaceholdersShort": "Check",
       "newSource": "New source",
@@ -558,7 +708,7 @@
       "missingSource": "Source not in current list",
       "missingSourceFor": "Missing source",
       "unresolved": "citation",
-      "noPlaceholders": "All citations are resolved — no unset placeholders.",
+      "noPlaceholders": "All citations are resolved - no unset placeholders.",
       "badgePlaceholder": "placeholder",
       "badgeMissing": "missing",
       "edit": "Edit",
@@ -572,7 +722,7 @@
       "field": {
         "type": "Type",
         "title": "Title",
-        "author": "Author(s) — Family, Given; …",
+        "author": "Author(s) - Family, Given; …",
         "year": "Year",
         "container": "Journal / Book / Site",
         "publisher": "Publisher",
@@ -597,7 +747,9 @@
     "sidebar": {
       "title": "My documents",
       "empty": "No saved documents yet.",
-      "guestHint": "Register on this server to save your document library across sessions.",
+      "guestHint": "Documents won't be saved - you aren't registered on this server. Register to keep your document library across sessions.",
+      "errorHint": "Couldn't load your documents from the server.",
+      "retry": "Retry",
       "newDocument": "New document",
       "newDocumentHere": "New document here",
       "newSection": "New section",

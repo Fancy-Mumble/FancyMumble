@@ -1,30 +1,16 @@
-import { CloseIcon } from "../../../icons";
 import { useCallback } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../../store";
 import type { DownloadEntry } from "../../../types";
+import { formatBytes } from "../../../utils/format";
 import {
-  formatBytes,
   previewKindForFilename,
   type PreviewKind,
 } from "../file/FileAttachmentCard";
 import styles from "./DownloadsPanel.module.css";
 
-interface DownloadsPanelProps {
-  readonly onClose: () => void;
-}
-
-function formatRelativeTime(ts: number): string {
-  const diff = Date.now() - ts;
-  const sec = Math.round(diff / 1000);
-  if (sec < 60) return "just now";
-  const min = Math.round(sec / 60);
-  if (min < 60) return `${min} min ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr} h ago`;
-  return new Date(ts).toLocaleString();
-}
 
 function PreviewMedia({ entry, kind }: { entry: DownloadEntry; kind: PreviewKind }) {
   const src = convertFileSrc(entry.destPath);
@@ -60,10 +46,27 @@ function FileTypeIcon({ kind }: { kind: PreviewKind }) {
   return <span className={styles.typeIcon} aria-hidden="true">{map[kind]}</span>;
 }
 
-export default function DownloadsPanel({ onClose }: DownloadsPanelProps) {
+export default function DownloadsPanel() {
+  const { t } = useTranslation("chat");
   const downloads = useAppStore((s) => s.downloads);
   const removeDownload = useAppStore((s) => s.removeDownload);
   const clearDownloads = useAppStore((s) => s.clearDownloads);
+
+  // Closure over the component's typed `t` rather than passing it to a helper
+  // with a loose `(key: string) => string` signature: that assignability check
+  // makes tsc try to match the (huge, overloaded) typed-i18next `t` against the
+  // loose type, which blows past the type-instantiation limit and crashes the
+  // compiler ("Debug Failure. No error for last overload signature").
+  const formatRelativeTime = useCallback((ts: number): string => {
+    const diff = Date.now() - ts;
+    const sec = Math.round(diff / 1000);
+    if (sec < 60) return t("downloads.relTime.justNow");
+    const min = Math.round(sec / 60);
+    if (min < 60) return t("downloads.relTime.minAgo", { count: min });
+    const hr = Math.round(min / 60);
+    if (hr < 24) return t("downloads.relTime.hAgo", { count: hr });
+    return new Date(ts).toLocaleString();
+  }, [t]);
 
   const handleOpen = useCallback(async (entry: DownloadEntry) => {
     try {
@@ -85,7 +88,7 @@ export default function DownloadsPanel({ onClose }: DownloadsPanelProps) {
     <div className={styles.panel}>
       <div className={styles.header}>
         <span className={styles.title}>
-          Downloads
+          {t("downloads.title")}
           {downloads.length > 0 && (
             <span className={styles.count}>{downloads.length}</span>
           )}
@@ -96,24 +99,18 @@ export default function DownloadsPanel({ onClose }: DownloadsPanelProps) {
               type="button"
               className={styles.clearBtn}
               onClick={clearDownloads}
-              title="Clear list (does not delete files)"
+              title={t("downloads.clearTitle")}
             >
-              Clear
+              {t("downloads.clear")}
             </button>
           )}
-          <button
-            type="button"
-            className={styles.closeBtn}
-            onClick={onClose}
-            aria-label="Close downloads"
-          >
-            <CloseIcon width={16} height={16} />
-          </button>
+          {/* Close (×) is rendered by the shared PanelCloseButton via ChatView's
+              ResizableSplitPanel, so every panel's close looks and sits the same. */}
         </div>
       </div>
 
       {downloads.length === 0 ? (
-        <div className={styles.empty}>No files downloaded yet.</div>
+        <div className={styles.empty}>{t("downloads.empty")}</div>
       ) : (
         <div className={styles.list}>
           {downloads.map((entry) => {
@@ -147,18 +144,18 @@ export default function DownloadsPanel({ onClose }: DownloadsPanelProps) {
 
                 <div className={styles.actions}>
                   <button type="button" className={styles.actionBtn} onClick={() => handleOpen(entry)}>
-                    Open
+                    {t("downloads.open")}
                   </button>
                   <button type="button" className={styles.actionBtn} onClick={() => handleReveal(entry)}>
-                    Show in folder
+                    {t("downloads.showInFolder")}
                   </button>
                   <button
                     type="button"
                     className={`${styles.actionBtn} ${styles.removeBtn}`}
                     onClick={() => removeDownload(entry.id)}
-                    title="Remove from list (does not delete file)"
+                    title={t("downloads.removeTitle")}
                   >
-                    Remove
+                    {t("downloads.remove")}
                   </button>
                 </div>
               </div>

@@ -1145,16 +1145,20 @@ pub struct SuggestConfig {
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PluginDataTransmission {
     /// The session ID of the client this message was sent from
+    #[deprecated]
     #[prost(uint32, optional, tag = "1")]
     pub sender_session: ::core::option::Option<u32>,
     /// The session IDs of the clients that should receive this message
+    #[deprecated]
     #[prost(uint32, repeated, tag = "2")]
     pub receiver_sessions: ::prost::alloc::vec::Vec<u32>,
     /// The data that is sent
+    #[deprecated]
     #[prost(bytes = "vec", optional, tag = "3")]
     pub data: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     /// The ID of the sent data. This will be used by plugins to check whether they will
     /// process it or not
+    #[deprecated]
     #[prost(string, optional, tag = "4")]
     pub data_id: ::core::option::Option<::prost::alloc::string::String>,
 }
@@ -2689,6 +2693,60 @@ pub mod fancy_plugin_admin_ack {
             }
         }
     }
+}
+/// One editable server setting (schema + current value).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Setting {
+    /// Stable config key.  Core keys match murmur's config names (e.g.
+    /// "welcometext"); plugin keys are prefixed "plugin.<name>." (e.g.
+    /// "plugin.fancy-live-doc.file_server_url").
+    #[prost(string, optional, tag = "1")]
+    pub key: ::core::option::Option<::prost::alloc::string::String>,
+    /// Input type driving the client's field component:
+    /// "string" | "text" | "bool" | "int" | "enum" | "country" | "password".
+    #[prost(string, optional, tag = "2")]
+    pub r#type: ::core::option::Option<::prost::alloc::string::String>,
+    /// Group/section the setting belongs to (e.g. "General", "Registration", or
+    /// a plugin's display name).
+    #[prost(string, optional, tag = "3")]
+    pub group: ::core::option::Option<::prost::alloc::string::String>,
+    /// Human-readable label (English; the client may localise by key).
+    #[prost(string, optional, tag = "4")]
+    pub label: ::core::option::Option<::prost::alloc::string::String>,
+    /// Current value, always string-encoded (the client coerces by type).
+    /// Omitted for secret settings, which are write-only.
+    #[prost(string, optional, tag = "5")]
+    pub value: ::core::option::Option<::prost::alloc::string::String>,
+    /// Allowed values for "enum" types.
+    #[prost(string, repeated, tag = "6")]
+    pub options: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// When true the value is a secret (token/password): never sent to the client
+    /// and only transmitted client->server when (re)set.
+    #[prost(bool, optional, tag = "7")]
+    pub secret: ::core::option::Option<bool>,
+    /// Optional one-line help/description.
+    #[prost(string, optional, tag = "8")]
+    pub help: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Server -> Admin: full snapshot of editable settings.  Re-sent whenever a
+/// setting changes or the set of loaded plugins changes.
+/// Wire type ID = 152.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FancyServerSettings {
+    #[prost(message, repeated, tag = "1")]
+    pub settings: ::prost::alloc::vec::Vec<Setting>,
+    /// Monotonic revision so the client can drop stale snapshots.
+    #[prost(uint64, optional, tag = "2")]
+    pub revision: ::core::option::Option<u64>,
+}
+/// Admin -> Server: apply changed settings.  Server validates root-channel
+/// Write permission, persists + applies each at runtime, then re-broadcasts
+/// FancyServerSettings to all admins.
+/// Wire type ID = 153.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FancyServerSettingsUpdate {
+    #[prost(message, repeated, tag = "1")]
+    pub settings: ::prost::alloc::vec::Vec<Setting>,
 }
 /// Unified pchat protocol indicator.
 /// Each value identifies both the E2EE protocol implementation

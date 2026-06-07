@@ -19,7 +19,7 @@
     "labelField": "Bezeichnung",
     "hostField": "Host",
     "portField": "Port",
-    "usernameField": "Nutzername",
+    "usernameField": "Benutzername",
     "identityField": "Identität",
     "passwordField": "Passwort",
     "certNone": "Keine (anonym)",
@@ -27,11 +27,16 @@
     "certCreateNew": "+ Neue Identität erstellen...",
     "identityNamePlaceholder": "Name der Identität",
     "createIdentity": "Erstellen",
-    "storedPassword": "Passwort ist gespeichert",
+    "storedPassword": "Gespeichertes Passwort",
     "removePassword": "Entfernen",
     "passwordPlaceholderClear": "Neues Passwort eingeben oder leer lassen",
     "passwordPlaceholderEmpty": "Leer lassen, falls nicht erforderlich",
-    "save": "Speichern"
+    "save": "Speichern",
+    "labelPlaceholder": "Mein Server",
+    "hostPlaceholder": "mumble.example.com",
+    "portPlaceholder": "64738",
+    "usernamePlaceholder": "Benutzername",
+    "closeAriaLabel": "Server-Editor schließen"
   },
   "list": {
     "checking": "Prüfen...",
@@ -97,7 +102,13 @@
     "dismissTitle": "Schließen",
     "disconnectDialogTitle": "Vom Server trennen",
     "disconnectDialogBody": "Von {{label}} trennen?",
-    "disconnectConfirm": "Trennen"
+    "disconnectConfirm": "Trennen",
+    "disconnectNeverShow": "Nicht erneut fragen"
+  },
+  "welcomeModal": {
+    "title": "Willkommen",
+    "onlyShowOnce": "Nur einmal pro Server anzeigen",
+    "close": "Schließen"
   },
   "activityLog": {
     "empty": "Noch keine Aktivität"

@@ -8,6 +8,7 @@
 import { useTranslation } from "react-i18next";
 import { FileTextIcon } from "../../../icons";
 import type { LiveDocDocLink } from "../../../types";
+import PanelCloseButton from "../PanelCloseButton";
 import LiveDocSidebar from "./LiveDocSidebar";
 import styles from "./LiveDocLibraryPanel.module.css";
 
@@ -27,6 +28,7 @@ export default function LiveDocLibraryPanel({
   const { t } = useTranslation("chat");
   return (
     <div className={styles.panel}>
+      <PanelCloseButton onClose={onClose} label={t("liveDoc.sidebar.closeLibrary")} />
       <div className={styles.split}>
         <LiveDocSidebar
           currentSlug=""
@@ -36,7 +38,6 @@ export default function LiveDocLibraryPanel({
           onCreateDoc={onCreateDoc}
           onCreateDocInFolder={onCreateDocInFolder}
           standalone
-          onClose={onClose}
         />
         <div className={styles.hintPane}>
           <FileTextIcon width={40} height={40} aria-hidden="true" />

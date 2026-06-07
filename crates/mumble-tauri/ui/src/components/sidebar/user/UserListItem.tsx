@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../../store";
 import type { UserEntry, FancyProfile, AclGroup } from "../../../types";
 import { parseComment } from "../../../profileFormat";
-import { useUserAvatar } from "../../../lazyBlobs";
+import { useUserAvatar, useUserComment } from "../../../lazyBlobs";
 import { ProfilePreviewCard } from "../../../pages/settings/ProfilePreviewCard";
 import { useUserStats } from "../../../hooks/useUserStats";
 import { colorFor } from "../../../utils/format";
@@ -301,10 +301,17 @@ export const UserListItem = memo(function UserListItem({
   const streamThumbnail = useStreamThumbnail(user.session, showCard && isBroadcasting);
 
   const url = useUserAvatar(user.session, user.texture_size);
-  // Defer FancyProfile parsing until the hover card is actually shown.
+  // Defer FancyProfile parsing (and the live bio fetch) until the hover card is
+  // shown.  Offline entries get their bio via `onRequestComment` (below), so the
+  // live fetch is gated on `!offline`.
+  const liveComment = useUserComment(user.session, user.comment_size, showCard && !offline);
   const parsed = useMemo(
-    () => (showCard && user.comment ? parseComment(user.comment) : null),
-    [showCard, user.comment],
+    () => {
+      if (!showCard) return null;
+      const c = user.comment ?? liveComment;
+      return c ? parseComment(c) : null;
+    },
+    [showCard, user.comment, liveComment],
   );
 
   const isMuted = user.mute || user.self_mute;

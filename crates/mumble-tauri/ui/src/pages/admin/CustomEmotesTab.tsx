@@ -83,7 +83,7 @@ export function CustomEmotesTab() {
   }, [filePath, shortcode, aliasEmoji, description, addCustomEmote]);
 
   const handleDelete = useCallback(async (sc: string) => {
-    if (!confirm(`Delete emote :${sc}: ?`)) return;
+    if (!confirm(t("emotes.confirmDelete", { shortcode: sc }))) return;
     try {
       await removeCustomEmote(sc);
       setStatusMsg({ kind: "ok", text: t("emotes.successRemoved", { shortcode: sc }) });

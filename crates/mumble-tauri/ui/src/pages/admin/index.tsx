@@ -1,10 +1,10 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
 import {
   UsersGroupIcon, ShieldIcon, BlockIcon, LockIcon, EmojiPlusIcon,
-  PuzzleIcon, StoreIcon,
+  PuzzleIcon, StoreIcon, DatabaseIcon, SlidersIcon,
 } from "../../icons";
 import { useAppStore } from "../../store";
 import { RegisteredUsersTab } from "./RegisteredUsersTab";
@@ -14,6 +14,8 @@ import { RolesListPanel } from "./RolesListPanel";
 import { CustomEmotesTab } from "./CustomEmotesTab";
 import { ServerPluginsTab } from "./ServerPluginsTab";
 import { MarketplaceTab } from "./MarketplaceTab";
+import { FileServerTab } from "./FileServerTab";
+import { ServerSettingsTab } from "./ServerSettingsTab";
 import OnboardingAdminPanel from "../../components/onboarding/OnboardingAdminPanel";
 import { isOnboardingSupported } from "../../components/onboarding/onboardingStore";
 import { PERM_MANAGE_EMOTES, PERM_WRITE } from "../../utils/permissions";
@@ -29,7 +31,7 @@ export function isPluginAdminSupported(v: number | null | undefined): boolean {
 
 type Tab =
   | "users" | "roles" | "bans" | "acl" | "emotes" | "onboarding"
-  | "serverPlugins" | "marketplace";
+  | "serverPlugins" | "marketplace" | "fileServer" | "serverSettings";
 
 export default function AdminPanel() {
   const navigate = useNavigate();
@@ -40,7 +42,8 @@ export default function AdminPanel() {
     if (
       t === "users" || t === "roles" || t === "bans" || t === "acl" ||
       t === "emotes" || t === "onboarding" ||
-      t === "serverPlugins" || t === "marketplace"
+      t === "serverPlugins" || t === "marketplace" || t === "fileServer" ||
+      t === "serverSettings"
     ) {
       return t;
     }
@@ -48,11 +51,21 @@ export default function AdminPanel() {
   })();
   const [tab, setTab] = useState<Tab>(initialTab);
   const customEmotesSupported = useAppStore((s) => s.fileServerCapabilities?.features.custom_emotes ?? false);
+  const fileServerEnabled = useAppStore((s) => s.fileServerConfig != null);
   const rootChannelPerms = useAppStore((s) => s.channels.find((c) => c.id === 0)?.permissions ?? 0);
   const canManageEmotes = customEmotesSupported && (rootChannelPerms & PERM_MANAGE_EMOTES) !== 0;
   const serverFancyVersion = useAppStore((s) => s.serverFancyVersion);
   const onboardingSupported = isOnboardingSupported(serverFancyVersion);
   const canAdminPlugins = (rootChannelPerms & PERM_WRITE) !== 0;
+  // The file-server admin dashboard needs server-admin rights (Write on root,
+  // the same gate the server enforces) and a connected file server.
+  const canManageFileServer = fileServerEnabled && (rootChannelPerms & PERM_WRITE) !== 0;
+  // If the file-server plugin is disabled at runtime while its tab is open,
+  // its gate flips false - redirect back to a tab that still exists.
+  useEffect(() => {
+    if (tab === "fileServer" && !canManageFileServer) setTab("users");
+    if (tab === "serverSettings" && !canAdminPlugins) setTab("users");
+  }, [tab, canManageFileServer, canAdminPlugins]);
   const tabs: TabDef<Tab>[] = [
     { id: "users", label: t("adminTabs.users"), icon: <UsersGroupIcon width={16} height={16} /> },
     { id: "roles", label: t("adminTabs.roles"), icon: <ShieldIcon     width={16} height={16} /> },
@@ -70,6 +83,12 @@ export default function AdminPanel() {
     ...(canAdminPlugins
       ? [{ id: "marketplace" as const, label: t("adminTabs.marketplace"), icon: <StoreIcon width={16} height={16} /> }]
       : []),
+    ...(canManageFileServer
+      ? [{ id: "fileServer" as const, label: t("adminTabs.fileServer", { defaultValue: "File server" }), icon: <DatabaseIcon width={16} height={16} /> }]
+      : []),
+    ...(canAdminPlugins
+      ? [{ id: "serverSettings" as const, label: t("adminTabs.serverSettings", { defaultValue: "Server settings" }), icon: <SlidersIcon width={16} height={16} /> }]
+      : []),
   ];
 
   return (
@@ -80,7 +99,7 @@ export default function AdminPanel() {
       onTabChange={setTab}
       onBack={() => navigate("/chat")}
     >
-      <div className={styles.content}>
+      <div className={`${styles.content}${tab === "fileServer" ? ` ${styles.contentWide}` : ""}`}>
         {tab === "users" && <RegisteredUsersTab />}
         {tab === "roles" && <RolesListPanel />}
         {tab === "bans" && <BanListTab />}
@@ -89,6 +108,8 @@ export default function AdminPanel() {
         {tab === "onboarding" && <OnboardingAdminPanel />}
         {tab === "serverPlugins" && <ServerPluginsTab />}
         {tab === "marketplace" && <MarketplaceTab />}
+        {tab === "fileServer" && <FileServerTab />}
+        {tab === "serverSettings" && <ServerSettingsTab />}
       </div>
     </TabbedPage>
   );

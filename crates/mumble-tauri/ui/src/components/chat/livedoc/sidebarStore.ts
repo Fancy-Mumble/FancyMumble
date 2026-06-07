@@ -38,6 +38,10 @@ interface SidebarState {
   loaded: boolean;
   /** True when the sidebar can be persisted (registered user + file server). */
   available: boolean;
+  /** Why the sidebar is unavailable, so the UI can tell a genuine guest
+   *  ("register to keep documents") apart from a transient server error
+   *  ("couldn't load — try again"). `null` while available or before load. */
+  reason: "guest" | "error" | null;
   load: () => Promise<void>;
   addSection: (name: string) => void;
   addFolder: (parentId: string, name: string) => void;
@@ -91,11 +95,13 @@ export const useLiveDocSidebarStore = create<SidebarState>((set, get) => {
     index: emptyIndex(),
     loaded: false,
     available: false,
+    reason: null,
 
     load: async () => {
       const creds = privateStorageCreds();
       if (!creds) {
-        set({ index: emptyIndex(), loaded: true, available: false });
+        // No registered session / no file server: a genuine guest.
+        set({ index: emptyIndex(), loaded: true, available: false, reason: "guest" });
         return;
       }
       try {
@@ -103,14 +109,20 @@ export const useLiveDocSidebarStore = create<SidebarState>((set, get) => {
           request: { ...creds, key: SIDEBAR_KEY },
         });
         const index = raw ? normaliseIndex(JSON.parse(raw)) : emptyIndex();
-        set({ index, loaded: true, available: true });
+        set({ index, loaded: true, available: true, reason: null });
       } catch (e) {
         console.warn("[liveDocSidebar] load failed:", e);
         // A failed read means we do NOT know the stored contents, so we must
         // never mark the sidebar persistable - otherwise the next edit would
         // overwrite the real stored index with an empty one.  Keep the
         // current in-memory index untouched and leave persistence disabled.
-        set({ loaded: true, available: false });
+        //
+        // Distinguish a genuine guest (the server replied 403 - the backend
+        // prefixes that error with "forbidden:") from a transient server/network
+        // error, so the UI shows the right message instead of always claiming
+        // the user isn't registered.
+        const isGuest = String(e ?? "").startsWith("forbidden:");
+        set({ loaded: true, available: false, reason: isGuest ? "guest" : "error" });
       }
     },
 

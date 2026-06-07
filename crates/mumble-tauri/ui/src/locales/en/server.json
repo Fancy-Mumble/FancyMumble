@@ -31,7 +31,12 @@
     "removePassword": "Remove",
     "passwordPlaceholderClear": "Enter new password or leave empty",
     "passwordPlaceholderEmpty": "Leave empty if not required",
-    "save": "Save"
+    "save": "Save",
+    "labelPlaceholder": "My Server",
+    "hostPlaceholder": "mumble.example.com",
+    "portPlaceholder": "64738",
+    "usernamePlaceholder": "Username",
+    "closeAriaLabel": "Close server editor"
   },
   "list": {
     "checking": "Checking...",
@@ -100,7 +105,13 @@
     "dismissTitle": "Dismiss",
     "disconnectDialogTitle": "Disconnect from server",
     "disconnectDialogBody": "Disconnect from {{label}}?",
-    "disconnectConfirm": "Disconnect"
+    "disconnectConfirm": "Disconnect",
+    "disconnectNeverShow": "Don't ask again"
+  },
+  "welcomeModal": {
+    "title": "Welcome",
+    "onlyShowOnce": "Only show this once per server",
+    "close": "Close"
   },
   "friendsPage": {
     "title": "Friends",

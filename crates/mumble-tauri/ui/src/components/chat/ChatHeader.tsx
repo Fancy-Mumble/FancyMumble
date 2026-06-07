@@ -1,4 +1,4 @@
-import { ArrowRightIcon, BellIcon, BellOffIcon, CloseIcon, DatabaseIcon, FileTextIcon, FolderIcon, PinIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, UsersGroupIcon } from "../../icons";
+import { ArrowRightIcon, BellIcon, BellOffIcon, DatabaseIcon, FileTextIcon, FolderIcon, PinIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, UsersGroupIcon } from "../../icons";
 import { useTranslation } from "react-i18next";
 import { isMobile } from "../../utils/platform";
 import type { KeyTrustLevel } from "../../types";
@@ -53,6 +53,8 @@ interface ChatHeaderProps {
   readonly hasNewDownloads?: boolean;
   /** Called when the user opens the downloads panel. */
   readonly onDownloads?: () => void;
+  /** Called when the user opens the "my shared files" panel. */
+  readonly onMySharedFiles?: () => void;
   /** Called when the user opens the saved document library. */
   readonly onOpenDocLibrary?: () => void;
   /** Called when the user clicks "Pop out DM" (only meaningful when isDm). */
@@ -67,11 +69,12 @@ function buildKebabItems({
   onPinnedMessages,
   hasNewDownloads,
   onDownloads,
+  onMySharedFiles,
   onOpenDocLibrary,
   onChannelSearch,
   onChannelInfoToggle,
   t,
-}: Pick<ChatHeaderProps, "onPollCreate" | "isSilenced" | "onToggleSilence" | "hasNewPins" | "onPinnedMessages" | "hasNewDownloads" | "onDownloads" | "onOpenDocLibrary" | "onChannelSearch" | "onChannelInfoToggle"> & { t: (key: string) => string }): KebabMenuItem[] {
+}: Pick<ChatHeaderProps, "onPollCreate" | "isSilenced" | "onToggleSilence" | "hasNewPins" | "onPinnedMessages" | "hasNewDownloads" | "onDownloads" | "onMySharedFiles" | "onOpenDocLibrary" | "onChannelSearch" | "onChannelInfoToggle"> & { t: (key: string) => string }): KebabMenuItem[] {
   const items: KebabMenuItem[] = [];
   if (onChannelSearch) {
     items.push({
@@ -105,6 +108,14 @@ function buildKebabItems({
       icon: <FolderIcon width={16} height={16} />,
       badge: hasNewDownloads,
       onClick: onDownloads,
+    });
+  }
+  if (onMySharedFiles) {
+    items.push({
+      id: "my-shared-files",
+      label: t("header.mySharedFiles"),
+      icon: <FileTextIcon width={15} height={15} />,
+      onClick: onMySharedFiles,
     });
   }
   if (onPollCreate) {
@@ -160,6 +171,7 @@ export default function ChatHeader({
   onPinnedMessages,
   hasNewDownloads,
   onDownloads,
+  onMySharedFiles,
   onOpenDocLibrary,
   onPopOutDm,
 }: ChatHeaderProps) {
@@ -202,7 +214,7 @@ export default function ChatHeader({
               </span>
               <span className={styles.broadcastLabel}>
                 <span className={styles.liveDot} />
-                Screen sharing
+                {t("liveDocBroadcast.sharing", { ns: "chat" })}
               </span>
             </div>
           </div>
@@ -289,20 +301,12 @@ export default function ChatHeader({
             <ScreenShareIcon width={18} height={18} />
           </button>
         )}
-        {/* Stream close button (when streaming, replaces the toggle) */}
-        {isStreaming && (
-          <button
-            className={styles.streamCloseBtn}
-            onClick={broadcastInfo.onClose}
-            title={broadcastInfo.isOwnBroadcast ? t("header.stopSharing") : t("header.closeStream")}
-            aria-label={broadcastInfo.isOwnBroadcast ? t("header.stopSharing") : t("header.closeStream")}
-          >
-            <CloseIcon width={16} height={16} />
-          </button>
-        )}
+        {/* The stream close (×) now lives on the stream panel itself (top-right),
+            unified with the other chat-splitting panels - see ResizableSplitPanel
+            / StreamFocusView. */}
         {!privateBadge && (
           <KebabMenu
-            items={buildKebabItems({ onPollCreate, isSilenced, onToggleSilence, hasNewPins, onPinnedMessages, hasNewDownloads, onDownloads, onOpenDocLibrary, onChannelSearch: isMobile ? onChannelSearch : undefined, onChannelInfoToggle: isMobile ? onChannelInfoToggle : undefined, t: tStr })}
+            items={buildKebabItems({ onPollCreate, isSilenced, onToggleSilence, hasNewPins, onPinnedMessages, hasNewDownloads, onDownloads, onMySharedFiles, onOpenDocLibrary, onChannelSearch: isMobile ? onChannelSearch : undefined, onChannelInfoToggle: isMobile ? onChannelInfoToggle : undefined, t: tStr })}
             ariaLabel={t("header.channelOptions")}
             badge={hasNewPins || hasNewDownloads}
           />

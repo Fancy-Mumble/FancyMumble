@@ -1,6 +1,7 @@
 import { CloseIcon } from "../../icons";
 import { useState, useCallback, useRef, useEffect, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { Modal } from "../elements/Modal";
 import styles from "./PasswordDialog.module.css";
 
 interface PasswordDialogProps {
@@ -74,8 +75,14 @@ export default function PasswordDialog({
     : serverHost ?? "this server";
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={t("password.title")}>
-      <div className={styles.dialog}>
+    <Modal
+      onClose={onCancel}
+      closeOnEsc={false}
+      closeOnOverlayClick={false}
+      zIndex={200}
+      overlayClassName={styles.overlayBlur}
+    >
+      <div className={styles.dialog} role="dialog" aria-modal="true" aria-label={t("password.title")}>
         <div className={styles.header}>
           <h2 className={styles.title}>{t("password.title")}</h2>
           <button
@@ -193,6 +200,6 @@ export default function PasswordDialog({
           </form>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }

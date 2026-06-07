@@ -14,6 +14,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { Modal } from "../elements/Modal";
 import styles from "./RecordingModal.module.css";
 
 type RecordingFormat = "wav";
@@ -118,21 +119,8 @@ export default function RecordingModal({
   const canStart = directory.trim().length > 0 && filename.trim().length > 0;
 
   return (
-    <div
-      className={styles.backdrop}
-      onClick={onClose}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
-      }}
-      role="presentation"
-    >
-      <div
-        className={styles.modal}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
+    <Modal onClose={onClose} zIndex={200}>
+      <div className={styles.modal} role="dialog" aria-modal="true">
         <div className={styles.header}>
           <h3 className={styles.title}>{t("recordingModal.title")}</h3>
           <button className={styles.closeBtn} onClick={onClose}>
@@ -228,6 +216,6 @@ export default function RecordingModal({
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -51,6 +51,7 @@
     "closeStream": "Fermer le flux",
     "pinnedMessages": "Messages épinglés",
     "downloads": "Téléchargements",
+    "mySharedFiles": "Mes fichiers partagés",
     "createPoll": "Créer un sondage",
     "browseDocuments": "Parcourir les documents",
     "muteChannel": "Mettre le canal en sourdine",
@@ -141,18 +142,17 @@
   "downloads": {
     "title": "Téléchargements",
     "clear": "Effacer",
-    "clearTooltip": "Effacer la liste (ne supprime pas les fichiers)",
-    "close": "Fermer les téléchargements",
+    "clearTitle": "Effacer la liste (ne supprime pas les fichiers)",
     "empty": "Aucun fichier téléchargé pour l'instant.",
     "relTime": {
       "justNow": "à l'instant",
-      "minutesAgo": "il y a {{min}} min",
-      "hoursAgo": "il y a {{hr}} h"
+      "minAgo": "il y a {{count}} min",
+      "hAgo": "il y a {{count}} h"
     },
     "open": "Ouvrir",
     "showInFolder": "Afficher dans le dossier",
     "remove": "Supprimer",
-    "removeTooltip": "Supprimer de la liste (ne supprime pas le fichier)"
+    "removeTitle": "Retirer de la liste (ne supprime pas le fichier)"
   },
   "drawing": {
     "strokeWidth": "Largeur du trait",
@@ -163,6 +163,9 @@
   },
   "fileAttachment": {
     "passwordPrompt": "Ce fichier nécessite un mot de passe :",
+    "passwordDialogTitle": "Mot de passe requis",
+    "passwordPlaceholder": "Mot de passe",
+    "unlockBtn": "Déverrouiller",
     "previewError": "Impossible de charger l'aperçu.",
     "expired": "Ce lien de téléchargement a expiré et n'est plus disponible.",
     "expiredPrefix": "expiré le",
@@ -189,7 +192,18 @@
     "passwordLabel": "Mot de passe",
     "messageLabel": "Message",
     "messagePlaceholder": "Ajouter un message avec le fichier...",
-    "upload": "Envoyer"
+    "upload": "Envoyer",
+    "duration": {
+      "label": "Conserver le fichier pendant",
+      "default": "Valeur par défaut du serveur",
+      "never": "Jamais (jusqu'à suppression)",
+      "max": "Maximum autorisé",
+      "h1": "1 heure",
+      "d1": "1 jour",
+      "w1": "1 semaine",
+      "mo1": "1 mois",
+      "y1": "1 an"
+    }
   },
   "linkPreview": {
     "privacyGateText": "Cet aperçu charge du contenu externe de {{site}}.",
@@ -206,14 +220,15 @@
     "hintEveryone": "Notifier tout le canal",
     "hintHere": "Notifier les utilisateurs en ligne dans ce canal",
     "noMatches": "Aucun résultat",
-    "suggestions": "Suggestions de mention"
+    "suggestions": "Suggestions de mention",
+    "popupAriaLabel": "Suggestions de mention"
   },
   "mentionPopover": {
     "noMembers": "Aucun membre",
     "overflow": "+{{count}} de plus",
     "userOffline": "L'utilisateur est hors ligne",
     "onlineMembers": "Membres en ligne",
-    "membersInChannel": "Membres dans ce canal"
+    "channelMembers": "Membres dans ce canal"
   },
   "message": {
     "legacyBadge": "classique",
@@ -269,6 +284,7 @@
     "waitingForStream": "En attente du stream",
     "share": "Partager l'écran",
     "stopSharing": "Arrêter le partage",
+    "stopWatching": "Arrêter de regarder",
     "p2pLabel": "P2P",
     "p2pTooltip": "Pas de SFU sur ce serveur - le flux passe directement entre les participants",
     "banner": {
@@ -337,6 +353,40 @@
     "openChannelsAriaLabel": "Ouvrir les canaux",
     "closeChannelsAriaLabel": "Fermer les canaux"
   },
+  "emptyState": {
+    "noMessages": "Aucun message pour l'instant. Dites bonjour !"
+  },
+  "newMessagesPill": {
+    "count_one": "{{count}} nouveau message",
+    "count_other": "{{count}} nouveaux messages"
+  },
+  "deleteDialog": {
+    "title": "Supprimer des messages",
+    "singleBody": "Voulez-vous vraiment supprimer ce message ? Cette action est irréversible.",
+    "multiBody": "Voulez-vous vraiment supprimer {{count}} messages ? Cette action est irréversible.",
+    "confirm": "Supprimer"
+  },
+  "closeDownloadsAriaLabel": "Fermer les téléchargements",
+  "sendAttachmentFailed": "Échec de l'envoi de {{name}} : {{error}}",
+  "openDocumentFailed": "Impossible d'ouvrir le document : {{detail}}",
+  "openDocumentNoChannel": "Impossible d'ouvrir le document : aucun canal sélectionné.",
+  "slashCommandMenu": {
+    "noMatches": "Aucune commande correspondante"
+  },
+  "fileShareMode": {
+    "public": "Public",
+    "password": "Mot de passe",
+    "session": "Session"
+  },
+  "liveDocBroadcast": {
+    "sharing": "Partage d'écran"
+  },
+  "quickReactions": {
+    "like": "J'aime",
+    "heart": "Cœur",
+    "laugh": "Rire",
+    "surprise": "Surprise"
+  },
   "liveDoc": {
     "panelTitle": "Doc en direct",
     "dropImageHint": "Déposez une image pour l'ajouter au document",
@@ -347,6 +397,8 @@
       "title": "Ouvrir un Doc en direct",
       "prompt": "Choisissez comment démarrer le document.",
       "modeLabel": "Mode du document",
+      "moreOptions": "Plus d'options",
+      "fewerOptions": "Moins d'options",
       "modeNew": "Nouveau document",
       "modeNewDesc": "Démarrer un document collaboratif vierge.",
       "modeExisting": "Ouvrir existant",
@@ -369,6 +421,8 @@
     "exportPdf": "Exporter en PDF",
     "paperModeOn": "Vue papier",
     "paperModeOff": "Vue thème",
+    "paginationOn": "Activer la pagination",
+    "paginationOff": "Désactiver la pagination (une page continue)",
     "history": "Historique des révisions",
     "renameDoc": "Renommer le document",
     "renameDocPrompt": "Saisir un nouveau nom de document",
@@ -476,7 +530,11 @@
         "pages": "Pages",
         "tables": "Tableaux",
         "illustrations": "Illustrations",
+        "media": "Média",
         "links": "Liens",
+        "comments": "Commentaires",
+        "text": "Texte",
+        "esignature": "eSignature",
         "symbols": "Symboles",
         "tools": "Outils",
         "pageBackground": "Arrière-plan",
@@ -499,6 +557,7 @@
       "toc": "Sommaire",
       "outline": "Plan",
       "printLayout": "Papier",
+      "pagination": "Pagination",
       "pages": "Pages",
       "words": "Mots",
       "characters": "Caractères"
@@ -508,7 +567,98 @@
       "flavor": "Style Pandoc",
       "synced": "synchronisé",
       "syncing": "synchronisation…",
-      "reload": "Recharger depuis le document"
+      "reload": "Recharger depuis le document",
+      "sideBySide": "Côte à côte",
+      "sideBySideHint": "Afficher le document rendu à côté du markdown",
+      "resize": "Redimensionner la vue markdown",
+      "editing": "en cours d’édition",
+      "editingIn": "édite"
+    },
+    "insert": {
+      "blankPage": "Page vierge",
+      "shapes": "Formes",
+      "icons": "Icônes",
+      "model3d": "Modèles 3D",
+      "modelPrompt": "URL du modèle 3D (.glb / .gltf)",
+      "modelLoading": "Chargement du modèle 3D…",
+      "modelError": "Impossible de charger le modèle",
+      "modelNoServer": "Le partage de fichiers n'est pas disponible sur ce serveur.",
+      "modelTooLarge": "Ce modèle fait {{size}}, ce qui dépasse la limite d'envoi du serveur de {{limit}}.",
+      "modelUploadFailed": "Échec de l'envoi du modèle",
+      "chart": "Graphique",
+      "chartData": "Valeurs (séparées par des virgules)",
+      "chartType": { "bar": "Barres", "line": "Courbe", "pie": "Secteurs", "doughnut": "Anneau" },
+      "chartEdit": "Modifier les données",
+      "chartDone": "Terminé",
+      "chartResize": "Redimensionner le graphique",
+      "chartAddRow": "+ Ligne",
+      "chartAddSeries": "Ajouter une série",
+      "chartRemoveRow": "Supprimer la ligne",
+      "chartRemoveSeries": "Supprimer la série",
+      "removeHeaderFooter": "Supprimer en-tête et pied de page",
+      "removeHeader": "Supprimer l’en-tête",
+      "removeFooter": "Supprimer le pied de page",
+      "pageNumberNone": "Aucun numéro de page",
+      "bandStyle": {
+        "blank": "Vierge",
+        "threeColumns": "Vierge (trois colonnes)",
+        "austin": "Austin",
+        "banded": "Bandes",
+        "facet": "Facette",
+        "filigree": "Filigrane",
+        "grid": "Grille",
+        "integral": "Intégral"
+      },
+      "pageNumberStyle": {
+        "page-of": "Page X sur Y",
+        "page": "Page X",
+        "plain": "Nombre simple",
+        "dash": "- X -",
+        "slash": "X / Y",
+        "roman": "Romain (i, ii, iii)"
+      },
+      "screenshot": "Capture d'écran",
+      "onlineVideo": "Vidéo en ligne",
+      "videoPrompt": "URL de la vidéo (YouTube, Vimeo, …)",
+      "crossRef": "Renvoi",
+      "comment": "Commentaire",
+      "commentPrompt": "Commentaire",
+      "commentMarker": "commentaire",
+      "header": "En-tête",
+      "footer": "Pied de page",
+      "pageNumber": "Numéro de page",
+      "textBox": "Zone de texte",
+      "art": "Art",
+      "artPrompt": "Texte Art",
+      "dropCap": "Lettrine",
+      "signatureLine": "Ligne de signature",
+      "signatureFields": "Champs de signature",
+      "dateTime": "Date et heure",
+      "object": "Objet",
+      "symbol": "Symbole",
+      "insert": "Insérer",
+      "iconSearch": "Rechercher des icônes…",
+      "iconNoResults": "Aucune icône trouvée",
+      "videoUrl": "URL de la vidéo (YouTube, Vimeo, …)",
+      "videoPreviewEmpty": "L'aperçu apparaît ici",
+      "videoFrame": { "plain": "Simple", "rounded": "Arrondi", "shadow": "Ombre", "bordered": "Bordure" },
+      "signaturePrompt": "Nom du signataire",
+      "signError": "Signature impossible : aucune identité Mumble disponible.",
+      "signedBy": "Signé numériquement par {{name}}",
+      "sigKey": "Clé",
+      "sigSigned": "Signé",
+      "sigValid": "✓ Vérifié",
+      "sigModified": "⚠ Contenu modifié - re-signer",
+      "sigInvalid": "✗ Signature invalide",
+      "sigChecking": "Vérification…",
+      "quickParts": {
+        "title2": "QuickPart",
+        "author": "Auteur",
+        "title": "Titre",
+        "subject": "Sujet",
+        "company": "Société",
+        "date": "Date"
+      }
     },
     "draw": {
       "title": "Insérer un dessin",
@@ -527,7 +677,7 @@
       "bibliography": "Bibliographie",
       "bibliographyShort": "Bibliographie",
       "bibliographyTitle": "Références",
-      "bibliographyEmpty": "Aucune citation — insérez une citation pour remplir la bibliographie.",
+      "bibliographyEmpty": "Aucune citation - insérez une citation pour remplir la bibliographie.",
       "checkPlaceholders": "Vérifier les espaces réservés",
       "checkPlaceholdersShort": "Vérifier",
       "newSource": "Nouvelle source",
@@ -558,7 +708,7 @@
       "missingSource": "Source absente de la liste actuelle",
       "missingSourceFor": "Source manquante",
       "unresolved": "citation",
-      "noPlaceholders": "Toutes les citations sont résolues — aucun espace réservé.",
+      "noPlaceholders": "Toutes les citations sont résolues - aucun espace réservé.",
       "badgePlaceholder": "espace réservé",
       "badgeMissing": "manquant",
       "edit": "Modifier",
@@ -572,7 +722,7 @@
       "field": {
         "type": "Type",
         "title": "Titre",
-        "author": "Auteur(s) — Nom, Prénom; …",
+        "author": "Auteur(s) - Nom, Prénom; …",
         "year": "Année",
         "container": "Revue / Livre / Site",
         "publisher": "Éditeur",
@@ -597,7 +747,9 @@
     "sidebar": {
       "title": "Mes documents",
       "empty": "Aucun document enregistre pour l'instant.",
-      "guestHint": "Inscrivez-vous sur ce serveur pour conserver votre bibliotheque de documents.",
+      "guestHint": "Les documents ne seront pas enregistres - vous n'etes pas inscrit sur ce serveur. Inscrivez-vous pour conserver votre bibliotheque de documents.",
+      "errorHint": "Impossible de charger vos documents depuis le serveur.",
+      "retry": "Reessayer",
       "newDocument": "Nouveau document",
       "newDocumentHere": "Nouveau document ici",
       "newSection": "Nouvelle section",

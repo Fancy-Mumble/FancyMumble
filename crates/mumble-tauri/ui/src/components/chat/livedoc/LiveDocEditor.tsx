@@ -7,7 +7,7 @@
  * [`LiveDocRibbon`] so this module stays focused.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Extension } from "@tiptap/core";
@@ -36,7 +36,7 @@ import { editorHtmlToMarkdown, markdownToEditorHtml } from "./liveDocMarkdown";
 import { insertEditorImage, imageFileFromClipboard } from "./liveDocImageInsert";
 import { FontSize, Indent } from "./liveDocExtensions";
 import { PageBreak, SectionBreak } from "./liveDocPageBreak";
-import { LiveDocPaginationDecorations } from "./liveDocPaginationDecorations";
+import { LiveDocPaginationDecorations, GAP_BAND_PX } from "./liveDocPaginationDecorations";
 import { TableOfContents } from "./liveDocToc";
 import { Bookmark } from "./liveDocBookmark";
 import { Caption } from "./liveDocCaption";
@@ -45,6 +45,10 @@ import { EndnoteRef } from "./liveDocEndnote";
 import { EndnotesSection } from "./liveDocEndnotesSection";
 import { Citation } from "./liveDocCitation";
 import { Bibliography } from "./liveDocBibliography";
+import { LiveDocBox, LiveDocEmbed, Comment as LiveDocComment, DropCap } from "./liveDocInsert";
+import LiveDocEmbedView from "./LiveDocEmbedView";
+import { LiveDocChart } from "./liveDocChart";
+import LiveDocChartView from "./LiveDocChartView";
 import { LiveDocCitationStore } from "./liveDocCitationStore";
 import { useLiveDocCitations } from "./useLiveDocCitations";
 import LiveDocOutline from "./LiveDocOutline";
@@ -57,11 +61,9 @@ import {
   setLiveDocPageSetup,
   pageGeometryPx,
   useLiveDocDecoration,
-  useLiveDocHeaderFooter,
   BORDER_WIDTH_PX,
 } from "./useLiveDoc";
 import { pageContentHeightPx } from "./liveDocPagination";
-import { useLiveDocPageCount } from "./useLiveDocPageCount";
 import { LiveDocRulerHorizontal, LiveDocRulerVertical } from "./LiveDocRuler";
 import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
@@ -150,7 +152,6 @@ export default function LiveDocEditor({
   const pageSetup = useLiveDocPageSetup(doc);
   const geo = pageGeometryPx(pageSetup);
   const decoration = useLiveDocDecoration(doc);
-  const headerFooter = useLiveDocHeaderFooter(doc);
 
   // Live margin preview while a ruler handle is being dragged.  `undefined`
   // means "not dragging this axis", so the committed geometry applies.
@@ -205,11 +206,196 @@ export default function LiveDocEditor({
   const [outlineOpen, setOutlineOpen] = useState(false);
   // Paper / print-layout preview (white page) - toggled from the View tab.
   const [paperMode, setPaperMode] = useState(false);
+  // Pagination on/off (View tab).  When off the document is one continuous page
+  // with no sheet gutters.
+  const [paginated, setPaginated] = useState(true);
   // Freehand drawing modal (Draw tab).
   const [drawOpen, setDrawOpen] = useState(false);
-  // Markdown source view (View tab) - swaps the page surface for an
-  // editable Pandoc-flavored markdown view of the same document.
+  // Markdown source view (View tab) - splits the editor into the rendered
+  // page surface (left) and an editable Pandoc-flavored markdown view of the
+  // same document (right).  Both bind the one editor instance, so edits on
+  // either side flow live into the other.
   const [markdownMode, setMarkdownMode] = useState(false);
+  // Whether the markdown view shows the rendered document alongside it
+  // (side-by-side) or fills the width on its own.  Toggled from the
+  // markdown view's toolbar.
+  const [splitView, setSplitView] = useState(true);
+  // Fraction of the split width given to the rendered (left) pane.
+  const [splitRatio, setSplitRatio] = useState(0.5);
+  const splitRef = useRef<HTMLDivElement | null>(null);
+  // The two scroll viewports, kept in lock-step in split view.
+  const renderedScrollRef = useRef<HTMLDivElement | null>(null);
+  const markdownScrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Toggling the markdown view (or the side-by-side split) re-parents the
+  // rendered page surface, which remounts it and resets its scrollTop to 0.
+  // Capture the scroll *fraction* before the toggle and restore it afterwards
+  // so the user stays where they were instead of being thrown to the top.
+  const pendingScrollFracRef = useRef<number | null>(null);
+  const captureScrollFraction = useCallback(() => {
+    const el = renderedScrollRef.current ?? markdownScrollRef.current;
+    if (!el) {
+      pendingScrollFracRef.current = null;
+      return;
+    }
+    const max = el.scrollHeight - el.clientHeight;
+    pendingScrollFracRef.current = max > 0 ? el.scrollTop / max : 0;
+  }, []);
+  const toggleMarkdownMode = useCallback(() => {
+    captureScrollFraction();
+    setMarkdownMode((v) => !v);
+  }, [captureScrollFraction]);
+  const toggleSplitView = useCallback(() => {
+    captureScrollFraction();
+    setSplitView((v) => !v);
+  }, [captureScrollFraction]);
+
+  const startSplitDrag = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    const container = splitRef.current;
+    if (!container) return;
+    const move = (ev: PointerEvent) => {
+      const rect = container.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const ratio = (ev.clientX - rect.left) / rect.width;
+      setSplitRatio(Math.min(0.8, Math.max(0.2, ratio)));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
+
+  // Keep the markdown and rendered panes scrolled in lock-step in split view.
+  // Each page boundary is an anchor (the rendered sheet gutters and the
+  // markdown page markers mark the same blocks), so the two panes line up
+  // exactly at every page and interpolate linearly within a page - they can
+  // never drift more than a single page out of sync.
+  useEffect(() => {
+    if (!markdownMode || !splitView) return;
+    const rendered = renderedScrollRef.current;
+    const markdown = markdownScrollRef.current;
+    if (!rendered || !markdown) return;
+    // Remember the pane we just scrolled programmatically so its echoed scroll
+    // event doesn't bounce back and start a feedback loop.
+    let echo: HTMLElement | null = null;
+    // Suspend syncing while the user is dragging (resizing/rotating an image,
+    // dragging a ruler, selecting text...).  Such drags fire doc updates that
+    // re-flow the markdown pane and emit reflow scroll events; mirroring those
+    // back would yank the rendered pane (and the element under the cursor) to
+    // the top, cancelling the drag.  We re-align once on release.
+    let dragging = false;
+
+    const topIn = (el: HTMLElement, c: HTMLElement) =>
+      el.getBoundingClientRect().top - c.getBoundingClientRect().top + c.scrollTop;
+    const bottomIn = (el: HTMLElement, c: HTMLElement) =>
+      el.getBoundingClientRect().bottom - c.getBoundingClientRect().top + c.scrollTop;
+
+    // Matching anchor tables for both panes: [0, ...page boundaries..., max].
+    // A gutter's bottom and a page marker's top are the same page's content
+    // top.  null when the counts disagree mid-relayout (use proportional then).
+    const anchors = (): { rendered: number[]; markdown: number[] } | null => {
+      const gaps = Array.from(rendered.querySelectorAll<HTMLElement>("[data-ld-page-gap]"));
+      const marks = Array.from(markdown.querySelectorAll<HTMLElement>("[data-md-page-anchor]"));
+      if (gaps.length !== marks.length) return null;
+      return {
+        rendered: [0, ...gaps.map((g) => bottomIn(g, rendered)), rendered.scrollHeight],
+        markdown: [0, ...marks.map((m) => topIn(m, markdown)), markdown.scrollHeight],
+      };
+    };
+
+    const lerp = (top: number, from: number[], to: number[]): number => {
+      let i = 0;
+      while (i < from.length - 1 && from[i + 1] <= top) i++;
+      const a0 = from[i];
+      const a1 = from[Math.min(i + 1, from.length - 1)];
+      const b0 = to[i];
+      const b1 = to[Math.min(i + 1, to.length - 1)];
+      const span = a1 - a0;
+      const f = span > 0 ? Math.min(1, Math.max(0, (top - a0) / span)) : 0;
+      return b0 + f * (b1 - b0);
+    };
+
+    const sync = (src: HTMLElement, dst: HTMLElement, srcIsRendered: boolean) => {
+      if (dragging) return;
+      if (echo === src) {
+        echo = null;
+        return;
+      }
+      const a = anchors();
+      let target: number;
+      if (a) {
+        const from = srcIsRendered ? a.rendered : a.markdown;
+        const to = srcIsRendered ? a.markdown : a.rendered;
+        target = lerp(src.scrollTop, from, to);
+      } else {
+        const srcMax = src.scrollHeight - src.clientHeight;
+        const dstMax = dst.scrollHeight - dst.clientHeight;
+        target = srcMax > 0 ? (src.scrollTop / srcMax) * dstMax : 0;
+      }
+      target = Math.max(0, Math.min(dst.scrollHeight - dst.clientHeight, target));
+      if (Math.abs(dst.scrollTop - target) < 1) return;
+      echo = dst;
+      dst.scrollTop = target;
+    };
+
+    const onRendered = () => sync(rendered, markdown, true);
+    const onMarkdown = () => sync(markdown, rendered, false);
+    rendered.addEventListener("scroll", onRendered, { passive: true });
+    markdown.addEventListener("scroll", onMarkdown, { passive: true });
+
+    const onPointerDown = () => {
+      dragging = true;
+    };
+    const onPointerUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      // The drag may have changed heights (e.g. a resized image); re-align the
+      // markdown pane to wherever the rendered pane now sits.
+      sync(rendered, markdown, true);
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("pointerup", onPointerUp, true);
+    window.addEventListener("pointercancel", onPointerUp, true);
+
+    return () => {
+      rendered.removeEventListener("scroll", onRendered);
+      markdown.removeEventListener("scroll", onMarkdown);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("pointerup", onPointerUp, true);
+      window.removeEventListener("pointercancel", onPointerUp, true);
+    };
+  }, [markdownMode, splitView]);
+
+  // After a markdown/split toggle re-mounts the panes, restore the scroll
+  // fraction captured just before the toggle (see `captureScrollFraction`).
+  // Two rAFs let the pagination plugin settle its decorations first so the
+  // scrollHeight we measure against is the final one.
+  useLayoutEffect(() => {
+    const frac = pendingScrollFracRef.current;
+    if (frac == null) return;
+    pendingScrollFracRef.current = null;
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        for (const el of [renderedScrollRef.current, markdownScrollRef.current]) {
+          if (!el) continue;
+          const max = el.scrollHeight - el.clientHeight;
+          if (max > 0) el.scrollTop = frac * max;
+        }
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
+  }, [markdownMode, splitView]);
 
   // Shared editor commands used by both the imperative API (onReady) and
   // the ribbon controls, so the two paths stay in lockstep.
@@ -361,6 +547,19 @@ export default function LiveDocEditor({
       EndnotesSection,
       Citation,
       Bibliography,
+      LiveDocBox,
+      LiveDocEmbed.extend({
+        addNodeView() {
+          return ReactNodeViewRenderer(LiveDocEmbedView);
+        },
+      }),
+      LiveDocComment,
+      DropCap,
+      LiveDocChart.extend({
+        addNodeView() {
+          return ReactNodeViewRenderer(LiveDocChartView);
+        },
+      }),
       LiveDocCitationStore,
       LiveDocMention.configure({
         onChange: (state: MentionTriggerState | null) => {
@@ -409,7 +608,19 @@ export default function LiveDocEditor({
   // doesn't re-run its ResizeObserver on every pointermove; it settles when
   // the drag commits.
   const pageContentHeight = pageContentHeightPx(geo.height, geo.marginY);
-  const pageCount = useLiveDocPageCount(editor, pageContentHeight);
+  // The pagination plugin is the source of truth for where the on-screen sheet
+  // gutters land.  It reports the top-level block index that starts each page,
+  // which drives both the per-page header/footer bands and the page-aligned
+  // scroll anchors for the markdown split view.
+  const [pageCount, setPageCount] = useState(1);
+  const [pageStartBlocks, setPageStartBlocks] = useState<number[]>([0]);
+  const handlePages = useCallback((starts: number[]) => {
+    setPageStartBlocks(starts.length ? starts : [0]);
+    setPageCount(Math.max(1, starts.length));
+  }, []);
+  // Inner page boundaries (page 0 excluded) for the markdown scroll anchors;
+  // memoised so the markdown overlay isn't rebuilt on every editor transaction.
+  const pageAnchorBlocks = useMemo(() => pageStartBlocks.slice(1), [pageStartBlocks]);
 
   // Compute formatted citations + bibliography once per change and publish
   // them to the shared citation store the node views read from.
@@ -418,21 +629,24 @@ export default function LiveDocEditor({
   // Feed the live page geometry and footer config to the pagination plugin so
   // the visible page-break gutters land at the right offsets with correct
   // footer content.  Decorations are view-only (no Yjs steps).
+  //
+  // Multi-column layout flows the editable content into CSS columns, so the
+  // top-level blocks no longer stack vertically; the height-based pagination
+  // measurement then reads bogus block tops (a block at a column top sits
+  // *above* the previous one) and thrashes the layout in a feedback loop.
+  // Disable the auto page-gutters while columns are active - the document
+  // becomes one continuous multi-column page (manual breaks still render).
+  const columnsActive = (pageSetup.columns ?? 1) > 1;
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
-    const footer = headerFooter.enabled
-      ? {
-          footerText: headerFooter.footer,
-          showPageNumber: headerFooter.showPageNumber,
-          pageCount,
-          pageNumberLabel: (n: number) =>
-            pageCount > 1
-              ? t("liveDoc.headerFooter.pageNumberOf", { number: n, total: pageCount })
-              : t("liveDoc.headerFooter.pageNumber", { number: n }),
-        }
-      : undefined;
-    editor.commands.setPaginationMetrics({ pageContentHeight, marginY: geo.marginY, footer });
-  }, [editor, pageContentHeight, geo.marginY, headerFooter, pageCount, t]);
+    editor.commands.setPaginationMetrics({
+      // A non-positive content height disables pagination in the plugin (no
+      // gutters, no trailing filler) - the whole document is one page.
+      pageContentHeight: paginated && !columnsActive ? pageContentHeight : 0,
+      marginY: geo.marginY,
+      onPages: handlePages,
+    });
+  }, [editor, pageContentHeight, geo.marginY, handlePages, paginated, columnsActive]);
 
   useEffect(() => {
     if (!editor || !onReady) return;
@@ -467,42 +681,28 @@ export default function LiveDocEditor({
     return <div className={styles.loading}>{t("liveDoc.connecting")}</div>;
   }
 
-  return (
-    <div className={styles.editorRoot} data-livedoc-editor="" style={rootVars}>
-      <LiveDocRibbon
-        editor={editor}
-        doc={doc}
-        chrome={chrome}
-        pageCount={pageCount}
-        outlineOpen={outlineOpen}
-        onToggleOutline={() => setOutlineOpen((v) => !v)}
-        paperMode={paperMode}
-        onTogglePaperMode={() => setPaperMode((v) => !v)}
-        onInsertCoverPage={() => insertCoverPageWithTitle(chrome.title)}
-        onInsertSectionBreak={insertSectionBreak}
-        onInsertMathBlock={handleInsertMathBlock}
-        onOpenDraw={() => setDrawOpen(true)}
-        markdownMode={markdownMode}
-        onToggleMarkdown={() => setMarkdownMode((v) => !v)}
-      />
-      <div className={styles.editorBody}>
-        {markdownMode ? (
-          <LiveDocMarkdownView editor={editor} readOnly={readOnly} />
-        ) : (
-        <>
-        {outlineOpen && (
-          <LiveDocOutline editor={editor} onClose={() => setOutlineOpen(false)} />
-        )}
-        <div
-          className={styles.editorScroll}
-          style={pageVars}
-          onClick={(e) => {
+  // The rendered page surface (rulers + page + page-count badge).  Shared
+  // between the normal full-width layout and the left pane of the markdown
+  // split view, so both stay pixel-identical.
+  const richBody = (
+    <>
+      {outlineOpen && (
+        <LiveDocOutline editor={editor} onClose={() => setOutlineOpen(false)} />
+      )}
+      <div
+        ref={renderedScrollRef}
+        className={styles.editorScroll}
+        style={pageVars}
+        onClick={(e) => {
           // Click anywhere in the gray area or on the page surface
           // focuses the editor (matching Google Docs UX).  Only
           // intercept clicks that did not already land on an editable
           // element so we don't move the caret on a true text click.
           const target = e.target as HTMLElement;
           if (target.closest(`.${styles.editorContent}`)) return;
+          // Clicks on a header/footer band must keep focus in that band's
+          // input, not jump the caret into the document body.
+          if (target.closest("[data-livedoc-band]")) return;
           // If the click was the tail of a drag-select that started
           // inside the editor and ended in the gray area, the editor
           // selection is non-empty.  Calling focus("end") in that case
@@ -534,7 +734,7 @@ export default function LiveDocEditor({
             onCommit={commitMarginY}
             onDragChange={(dragging) => setRulerDragAxis(dragging ? "y" : null)}
           />
-        <div className={styles.pageArea}>
+          <div className={styles.pageArea}>
             <div
               ref={pageRef}
               className={`${styles.editorPage} ${paperMode ? styles.editorPagePaper : ""}`}
@@ -564,14 +764,26 @@ export default function LiveDocEditor({
                   <div className={styles.rulerGuide} style={{ bottom: `${padY}px`, left: 0, right: 0, height: "1px" }} aria-hidden="true" />
                 </>
               )}
-              <LiveDocHeaderFooter doc={doc} zone="header" readOnly={readOnly} />
+              <LiveDocHeaderFooter
+                doc={doc}
+                zone="header"
+                readOnly={readOnly}
+                paginated={paginated}
+                pageCount={pageCount}
+                pageHeightPx={geo.height}
+                marginYPx={geo.marginY}
+                gapPx={GAP_BAND_PX}
+              />
               <EditorContent editor={editor} />
               <LiveDocHeaderFooter
                 doc={doc}
                 zone="footer"
                 readOnly={readOnly}
-                pageNumber={pageCount}
+                paginated={paginated}
                 pageCount={pageCount}
+                pageHeightPx={geo.height}
+                marginYPx={geo.marginY}
+                gapPx={GAP_BAND_PX}
               />
               <LiveDocTableControls editor={editor} pageRef={pageRef} />
             </div>
@@ -581,7 +793,68 @@ export default function LiveDocEditor({
           {t("liveDoc.pageCount", { count: pageCount })}
         </div>
       </div>
-        </>
+    </>
+  );
+
+  return (
+    <div className={styles.editorRoot} data-livedoc-editor="" style={rootVars}>
+      <LiveDocRibbon
+        editor={editor}
+        doc={doc}
+        chrome={chrome}
+        pageCount={pageCount}
+        outlineOpen={outlineOpen}
+        onToggleOutline={() => setOutlineOpen((v) => !v)}
+        paperMode={paperMode}
+        onTogglePaperMode={() => setPaperMode((v) => !v)}
+        paginated={paginated}
+        onTogglePagination={() => setPaginated((v) => !v)}
+        onInsertCoverPage={() => insertCoverPageWithTitle(chrome.title)}
+        onInsertSectionBreak={insertSectionBreak}
+        onInsertMathBlock={handleInsertMathBlock}
+        onOpenDraw={() => setDrawOpen(true)}
+        markdownMode={markdownMode}
+        onToggleMarkdown={toggleMarkdownMode}
+      />
+      <div className={styles.editorBody}>
+        {markdownMode ? (
+          splitView ? (
+            <div className={styles.splitView} ref={splitRef}>
+              <div className={styles.splitPane} style={{ flex: `0 0 ${splitRatio * 100}%` }}>
+                <LiveDocMarkdownView
+                  editor={editor}
+                  doc={doc}
+                  awareness={awareness}
+                  scrollRef={markdownScrollRef}
+                  pageAnchors={pageAnchorBlocks}
+                  readOnly={readOnly}
+                  splitView
+                  onToggleSplit={toggleSplitView}
+                />
+              </div>
+              <div
+                className={styles.splitHandle}
+                role="separator"
+                aria-orientation="vertical"
+                aria-label={t("liveDoc.markdown.resize", { defaultValue: "Resize markdown split" })}
+                onPointerDown={startSplitDrag}
+              />
+              <div className={`${styles.splitPane} ${styles.splitPaneGrow}`}>
+                {richBody}
+              </div>
+            </div>
+          ) : (
+            <LiveDocMarkdownView
+              editor={editor}
+              doc={doc}
+              awareness={awareness}
+              readOnly={readOnly}
+              splitView={false}
+              onToggleSplit={toggleSplitView}
+            />
+          )
+        ) : (
+          richBody
         )}
       </div>
       <LiveDocDrawModal

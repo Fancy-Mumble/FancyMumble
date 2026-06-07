@@ -1,13 +1,7 @@
 /* --- File Share Dialog ----------------------------------------- */
 
-.overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-overlay-heavy);
+/* Additive backdrop blur layered onto the shared Modal overlay. */
+.overlayBlur {
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
 }
@@ -65,6 +59,21 @@
   margin: 0 0 14px;
   line-height: 1.5;
   word-break: break-all;
+}
+
+/* "More options" disclosure toggle (LiveDocLaunchDialog advanced section). */
+.moreToggle {
+  display: inline-block;
+  margin: 2px 0 14px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--color-accent);
+  font-size: 13px;
+  cursor: pointer;
+}
+.moreToggle:hover {
+  text-decoration: underline;
 }
 
 .modeList {

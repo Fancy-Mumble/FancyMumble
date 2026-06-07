@@ -10,6 +10,7 @@ import type { Editor } from "@tiptap/react";
 import { CloseIcon } from "../../../icons";
 import { scrollToPos } from "./liveDocHeadings";
 import { useCitationSnapshot } from "./liveDocCitationStore";
+import { Modal } from "../../elements/Modal";
 import styles from "./LiveDocCitations.module.css";
 
 interface LiveDocPlaceholderCheckerProps {
@@ -28,8 +29,8 @@ export default function LiveDocPlaceholderChecker({ editor, onClose }: LiveDocPl
   };
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`${styles.dialog} ${styles.dialogNarrow}`}>
+    <Modal onClose={onClose} closeOnEsc={false} zIndex={1000} overlayClassName={styles.overlayBlur}>
+      <div className={`${styles.dialog} ${styles.dialogNarrow}`} role="dialog" aria-modal="true">
         <div className={styles.dialogHeader}>
           <span className={styles.dialogTitle}>{tb("checkPlaceholders", "Check Placeholders")}</span>
           <button type="button" className={styles.dialogClose} onClick={onClose} aria-label={tb("close", "Close")}>
@@ -39,7 +40,7 @@ export default function LiveDocPlaceholderChecker({ editor, onClose }: LiveDocPl
 
         {snapshot.unresolved.length === 0 ? (
           <div className={styles.allGood}>
-            {tb("noPlaceholders", "All citations are resolved — no unset placeholders.")}
+            {tb("noPlaceholders", "All citations are resolved - no unset placeholders.")}
           </div>
         ) : (
           <div className={styles.form}>
@@ -64,6 +65,6 @@ export default function LiveDocPlaceholderChecker({ editor, onClose }: LiveDocPl
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -19,6 +19,14 @@ const REPLAYABLE_BROADCAST_IDS: &[&str] = &[
 /// rather than collapsing to the latest.
 const MULTI_BROADCAST_IDS: &[&str] = &["fancy-plugin-info"];
 
+// Legacy receive path: modern Fancy traffic arrives natively as `PluginMessage`
+// (wire id 200), but server-originated broadcasts and pre-`PluginMessage` peers
+// still deliver data through the deprecated `PluginDataTransmission` fields, so
+// this handler must read them.
+#[allow(
+    deprecated,
+    reason = "legacy PluginData receive path; modern clients use PluginMessage"
+)]
 impl HandleMessage for mumble_tcp::PluginDataTransmission {
     fn handle(&self, ctx: &HandlerContext) {
         let data_id = self.data_id.as_deref().unwrap_or("");

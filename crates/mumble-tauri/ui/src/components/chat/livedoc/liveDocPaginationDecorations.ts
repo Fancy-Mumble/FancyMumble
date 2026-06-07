@@ -13,7 +13,10 @@
  *   2. draws the page's bottom/top margins plus a grey inter-sheet gutter,
  *      so following content visibly starts on a fresh sheet.
  *
- * Crucially these are *decorations*: pure view state with zero document
+ * It also reports the laid-out page count (`onPageCount`) so React can render
+ * one editable header/footer band per page, aligned with these gutters.
+ *
+ * Crucially the gutters are *decorations*: pure view state with zero document
  * steps.  Nothing is written to the shared Yjs doc, so pagination never
  * syncs and never conflicts - every peer paginates locally from its own
  * font metrics / page setup.  Manual page/section breaks remain real
@@ -26,29 +29,20 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { EditorView } from "@tiptap/pm/view";
 import { paginate } from "./liveDocPagination";
 
-/** Height in px of the grey gutter drawn between two sheets. */
-const GAP_BAND_PX = 26;
-/** Height in px of the footer band rendered at the bottom of each page gap. */
-const FOOTER_BAND_PX = 28;
-
-/** Optional per-page footer rendered inside every automatic page-gap widget. */
-interface FooterConfig {
-  readonly footerText: string;
-  readonly showPageNumber: boolean;
-  /** Total number of pages — included in the widget cache key so the DOM is
-   *  recreated (and page labels updated) whenever the count changes. */
-  readonly pageCount: number;
-  /** Formats a 1-based page number into display text, e.g. "Page 3 of 5". */
-  readonly pageNumberLabel: (pageNumber: number) => string;
-}
+/** Height in px of the grey gutter drawn between two sheets.  Exported so the
+ *  per-page header/footer bands can compute each sheet's screen position from
+ *  the same page geometry the gutters use. */
+export const GAP_BAND_PX = 26;
 
 interface PageMetrics {
   /** Usable content height of one page (page height - 2 * margin). */
   readonly pageContentHeight: number;
   /** Vertical page margin in px (drawn as whitespace either side of the gap). */
   readonly marginY: number;
-  /** When set, each page-gap widget renders a footer band for the closing page. */
-  readonly footer?: FooterConfig;
+  /** Notified (deduped) with the top-level block index that starts each page
+   *  (`[0, ...]`, length = page count).  Lets React render per-page bands and
+   *  page-aligned scroll anchors for the markdown split view. */
+  readonly onPages?: (pageStartBlocks: number[]) => void;
 }
 
 interface PaginationPluginState {
@@ -68,38 +62,18 @@ declare module "@tiptap/core" {
   }
 }
 
-/** Build the DOM for one page-gap widget (filler + optional footer + grey gutter band). */
-function buildGap(
-  totalHeight: number,
-  gapTop: number,
-  pageNumber: number,
-  footer: FooterConfig | undefined,
-): HTMLElement {
+/**
+ * Build the DOM for one page-gap widget: the leftover space of the closing
+ * page, its bottom margin, the grey inter-sheet gutter, and the opening page's
+ * top margin.  The repeated header/footer bands are drawn by React
+ * (`LiveDocHeaderFooter`) on top of the page surface, not inside the gap.
+ */
+export function buildGap(totalHeight: number, gapTop: number): HTMLElement {
   const el = document.createElement("div");
   el.className = "livedoc-page-gap";
   el.setAttribute("data-ld-page-gap", "");
   el.setAttribute("contenteditable", "false");
   el.style.height = `${totalHeight}px`;
-
-  if (footer && (footer.footerText || footer.showPageNumber)) {
-    const footerEl = document.createElement("div");
-    footerEl.className = "livedoc-page-gap-footer";
-    footerEl.style.top = `${gapTop - FOOTER_BAND_PX - 4}px`;
-
-    const textSpan = document.createElement("span");
-    textSpan.className = "livedoc-page-gap-footer-text";
-    textSpan.textContent = footer.footerText;
-    footerEl.appendChild(textSpan);
-
-    if (footer.showPageNumber) {
-      const numSpan = document.createElement("span");
-      numSpan.className = "livedoc-page-gap-footer-num";
-      numSpan.textContent = footer.pageNumberLabel(pageNumber);
-      footerEl.appendChild(numSpan);
-    }
-
-    el.appendChild(footerEl);
-  }
 
   const band = document.createElement("div");
   band.className = "livedoc-page-gap-band";
@@ -129,6 +103,56 @@ interface MeasuredBlock {
   eff: number;
 }
 
+/** One page-gap to draw: where it goes and how tall it is.  `filler` is the
+ *  leftover content space of the page it closes. */
+export interface PlannedGap {
+  readonly pos: number;
+  readonly total: number;
+  readonly filler: number;
+}
+
+export interface PaginationPlan {
+  readonly gaps: ReadonlyArray<PlannedGap>;
+  /** Spacer that pads the final page out to a full sheet (0 = not needed). */
+  readonly trailingFiller: number;
+  /** Top-level block index that starts each page (`[0, ...]`, length = page
+   *  count). */
+  readonly pageStartBlocks: number[];
+}
+
+/**
+ * Pure planner: turn the paginated pages into the gap widgets to draw between
+ * them.  Extracted from `measure` so the page boundaries (and thus the page
+ * count React lays bands out against) are unit-testable without a live editor.
+ */
+export function planPagination(
+  blocks: ReadonlyArray<{ readonly pos: number; readonly eff: number; readonly forced: boolean }>,
+  pageContentHeight: number,
+  marginY: number,
+): PaginationPlan {
+  const { pages } = paginate(
+    blocks.map((b) => ({ height: b.eff, forceBreakBefore: b.forced })),
+    pageContentHeight,
+  );
+
+  const gaps: PlannedGap[] = [];
+  for (let p = 1; p < pages.length; p++) {
+    const block = blocks[pages[p].start];
+    if (!block) continue;
+    const filler = Math.max(0, pageContentHeight - pages[p - 1].usedHeight);
+    gaps.push({
+      pos: block.pos,
+      total: filler + marginY * 2 + GAP_BAND_PX,
+      filler,
+    });
+  }
+
+  const lastPage = pages[pages.length - 1];
+  const trailingFiller = lastPage ? Math.max(0, pageContentHeight - lastPage.usedHeight) : 0;
+  const pageStartBlocks = pages.map((p) => p.start);
+  return { gaps, trailingFiller, pageStartBlocks };
+}
+
 /**
  * Measure the editor's top-level blocks and return the widget decorations
  * for every automatic page boundary, or `null` when nothing should change.
@@ -139,11 +163,13 @@ interface MeasuredBlock {
  * content layout and re-measuring after our own insertion is stable (no
  * feedback loop).
  */
-function measure(view: EditorView): { signature: string; decorations: Decoration[] } | null {
+function measure(
+  view: EditorView,
+): { signature: string; decorations: Decoration[]; pageStartBlocks: number[] } | null {
   const pluginState = paginationKey.getState(view.state);
   if (!pluginState) return null;
   const { pageContentHeight, marginY } = pluginState.metrics;
-  if (pageContentHeight <= 0) return { signature: "unbounded", decorations: [] };
+  if (pageContentHeight <= 0) return { signature: "unbounded", decorations: [], pageStartBlocks: [0] };
 
   // Heights of gap widgets already in the view, keyed by their position, so
   // we can subtract them back out of the live layout measurements.
@@ -178,40 +204,28 @@ function measure(view: EditorView): { signature: string; decorations: Decoration
     blocks[i].eff = next ? Math.max(0, next.top - blocks[i].top) : blocks[i].height;
   }
 
-  const { pages } = paginate(
-    blocks.map((b) => ({ height: b.eff, forceBreakBefore: b.forced })),
-    pageContentHeight,
-  );
+  const { gaps, trailingFiller, pageStartBlocks } = planPagination(blocks, pageContentHeight, marginY);
 
   const decorations: Decoration[] = [];
-  const footer = pluginState.metrics.footer;
-  const footerSig = footer ? `${footer.footerText}:${footer.showPageNumber}:${footer.pageCount}` : "";
-  const sigParts: string[] = [`${Math.round(pageContentHeight)}/${Math.round(marginY)}/${footerSig}`];
-  for (let p = 1; p < pages.length; p++) {
-    const startIdx = pages[p].start;
-    const block = blocks[startIdx];
-    if (!block) continue;
-    // Manual page/section breaks already render their own divider.
-    if (block.forced) continue;
-    const filler = Math.max(0, pageContentHeight - pages[p - 1].usedHeight);
-    const total = filler + marginY * 2 + GAP_BAND_PX;
-    const gapTop = filler + marginY;
-    sigParts.push(`${block.pos}:${Math.round(total)}`);
-    const pageNumber = p;
+  const sigParts: string[] = [`${Math.round(pageContentHeight)}/${Math.round(marginY)}`];
+  for (const gap of gaps) {
+    // Every page boundary - automatic *or* a manual page/section break - gets a
+    // gap widget that fills the rest of the closing sheet and draws the
+    // inter-sheet gutter, so following content visibly starts on a fresh sheet
+    // (a manual break's node still renders its own dashed marker at the top).
+    sigParts.push(`${gap.pos}:${Math.round(gap.total)}`);
     decorations.push(
-      Decoration.widget(block.pos, () => buildGap(total, gapTop, pageNumber, footer), {
+      Decoration.widget(gap.pos, () => buildGap(gap.total, gap.filler + marginY), {
         side: -1,
         ignoreSelection: true,
-        key: `ld-page-gap-${block.pos}-${Math.round(total)}-${footer?.pageCount ?? 0}`,
-        ldHeight: total,
+        key: `ld-page-gap-${gap.pos}-${Math.round(gap.total)}`,
+        ldHeight: gap.total,
       } as Parameters<typeof Decoration.widget>[2] & { ldHeight: number }),
     );
   }
 
   // Pad the final page's content area out to a whole sheet so the last (or
   // only) page is always full paper height, even with little/no content.
-  const lastPage = pages[pages.length - 1];
-  const trailingFiller = lastPage ? Math.max(0, pageContentHeight - lastPage.usedHeight) : 0;
   if (trailingFiller > 1) {
     const endPos = view.state.doc.content.size;
     sigParts.push(`tail:${Math.round(trailingFiller)}`);
@@ -225,7 +239,7 @@ function measure(view: EditorView): { signature: string; decorations: Decoration
     );
   }
 
-  return { signature: sigParts.join("|"), decorations };
+  return { signature: sigParts.join("|"), decorations, pageStartBlocks };
 }
 
 export const LiveDocPaginationDecorations = Extension.create({
@@ -267,11 +281,21 @@ export const LiveDocPaginationDecorations = Extension.create({
         view: (view) => {
           let raf = 0;
           let signature = "";
+          let lastPagesKey = "";
 
           const recompute = () => {
             raf = 0;
             const result = measure(view);
-            if (!result || result.signature === signature) return;
+            if (!result) return;
+            // Report the page-start blocks (deduped) so React can lay out
+            // per-page header/footer bands and page-aligned scroll anchors
+            // against the same pagination as the gutters.
+            const pagesKey = result.pageStartBlocks.join(",");
+            if (pagesKey !== lastPagesKey) {
+              lastPagesKey = pagesKey;
+              paginationKey.getState(view.state)?.metrics.onPages?.(result.pageStartBlocks);
+            }
+            if (result.signature === signature) return;
             signature = result.signature;
             const decorations = DecorationSet.create(view.state.doc, result.decorations);
             view.dispatch(
@@ -288,7 +312,14 @@ export const LiveDocPaginationDecorations = Extension.create({
           schedule();
 
           return {
-            update: schedule,
+            update: (_view, prevState) => {
+              // A document change - including a full `setContent` replace, which
+              // wipes our gap decorations even when the new content is identical
+              // (e.g. editing only the header/footer metadata in the Markdown
+              // view) - must force a redraw, so reset the dedup signature.
+              if (view.state.doc !== prevState.doc) signature = "";
+              schedule();
+            },
             destroy: () => {
               observer.disconnect();
               if (raf) cancelAnimationFrame(raf);

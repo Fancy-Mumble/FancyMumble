@@ -11,6 +11,28 @@ use fancy_utils::hex::{bytes_to_hex, hex_decode};
 
 use super::settings::*;
 
+/// Decode the base64 body of a single PEM block to DER bytes.
+fn pem_to_der(pem: &[u8]) -> Option<Vec<u8>> {
+    use base64::Engine as _;
+    let text = std::str::from_utf8(pem).ok()?;
+    let mut body = String::new();
+    let mut in_body = false;
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with("-----BEGIN") {
+            in_body = true;
+        } else if line.starts_with("-----END") {
+            break;
+        } else if in_body {
+            body.push_str(line);
+        }
+    }
+    if body.is_empty() {
+        return None;
+    }
+    base64::engine::general_purpose::STANDARD.decode(body).ok()
+}
+
 /// Encapsulates all filesystem operations for identity management.
 ///
 /// Wraps the application data directory and provides methods for
@@ -156,6 +178,34 @@ impl IdentityStore {
         let cert = std::fs::read(dir.join(TLS_CERT_FILE)).ok();
         let key = std::fs::read(dir.join(TLS_KEY_FILE)).ok();
         (cert, key)
+    }
+
+    /// Sign `payload` with the identity's TLS client private key (the user's
+    /// real Mumble key, ECDSA P-256) and return `(signature_b64,
+    /// public_key_b64)`.  The signature is a fixed-length `r || s` pair and the
+    /// public key is the raw uncompressed point, so the UI can verify it with
+    /// `WebCrypto` and bind a document to the signer's real identity.
+    pub fn sign_payload(&self, label: &str, payload: &[u8]) -> Result<(String, String), String> {
+        use base64::Engine as _;
+
+        let (_, key) = self.load_cert(label);
+        let key_pem = key.ok_or_else(|| format!("identity '{label}' has no private key"))?;
+        let der = pem_to_der(&key_pem).ok_or_else(|| "invalid private key PEM".to_string())?;
+
+        let rng = ring::rand::SystemRandom::new();
+        let key_pair = ring::signature::EcdsaKeyPair::from_pkcs8(
+            &ring::signature::ECDSA_P256_SHA256_FIXED_SIGNING,
+            &der,
+            &rng,
+        )
+        .map_err(|e| format!("load signing key: {e}"))?;
+        let signature = key_pair
+            .sign(&rng, payload)
+            .map_err(|e| format!("sign failed: {e}"))?;
+        let public_key = ring::signature::KeyPair::public_key(&key_pair).as_ref();
+
+        let b64 = base64::engine::general_purpose::STANDARD;
+        Ok((b64.encode(signature.as_ref()), b64.encode(public_key)))
     }
 
     /// List all identity labels (subdirectories of `identities/`).

@@ -81,6 +81,8 @@
     "closeSearch": "Close search",
     "closeSearchTooltip": "Close search (Esc)",
     "channels": "Channels",
+    "hideEmptyChannels": "Hide empty channels",
+    "showAllChannels": "Show all channels",
     "serverInfo": "Server info",
     "audioSettings": "Audio settings",
     "adminPanel": "Admin panel",
@@ -119,6 +121,7 @@
     "labelSession": "Session",
     "labelChannel": "Channel",
     "labelRegistered": "Registered",
+    "registeredTitle": "Registered",
     "yes": "Yes",
     "no": "No"
   },
@@ -232,6 +235,16 @@
     "liveBadgeP2P": "P2P",
     "dmUnreadTitle_one": "{{count}} unread direct message",
     "dmUnreadTitle_other": "{{count}} unread direct messages"
+  },
+  "channelIconList": {
+    "liveBadgeTitle": "Sharing screen",
+    "liveBadgeLabel": "Live",
+    "rootFallback": "Root",
+    "lockBadgeTitle": "No permission to join",
+    "listenBadgeTitle": "Listening",
+    "showMembersTitle": "Show members",
+    "hideMembersTitle": "Hide members",
+    "swipeJoinLabel": "Join"
   },
   "channelList": {
     "root": "Root",

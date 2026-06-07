@@ -15,13 +15,28 @@ pub(crate) fn get_users(state: tauri::State<'_, AppState>) -> Vec<UserEntry> {
 }
 
 /// Return the avatar bytes for a single user.  The frontend calls this
-/// lazily after `get_users` (which returns only `texture_size`).
+/// lazily after `get_users` (which returns only `texture_size`).  When the
+/// avatar exists but has not been loaded yet, this requests the blob from the
+/// server and waits for it - so avatars are fetched only on first view rather
+/// than eagerly for every connected user.
 #[tauri::command]
-pub(crate) fn get_user_texture(
+pub(crate) async fn get_user_texture(
     state: tauri::State<'_, AppState>,
     session: u32,
-) -> Option<Vec<u8>> {
-    state.user_texture(session)
+) -> Result<Option<Vec<u8>>, ()> {
+    Ok(state.user_texture_or_fetch(session).await)
+}
+
+/// Return the comment/bio text for a single user.  Like `get_user_texture`,
+/// the bio is fetched (and held) only when first viewed rather than eagerly for
+/// every connected user.  The frontend calls this after `get_users` (which
+/// returns only `comment_size`).
+#[tauri::command]
+pub(crate) async fn get_user_comment(
+    state: tauri::State<'_, AppState>,
+    session: u32,
+) -> Result<Option<String>, ()> {
+    Ok(state.user_comment_or_fetch(session).await)
 }
 
 /// Return the description text for a single channel.  The frontend calls

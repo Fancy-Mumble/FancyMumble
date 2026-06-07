@@ -148,7 +148,6 @@ export function SuperSearch({
   let flatIdx = 0;
 
   return createPortal(
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <div
       ref={backdropRef}
       className={styles.backdrop}
@@ -211,8 +210,8 @@ export function SuperSearch({
 
         {/* Footer hints */}
         <div className={styles.footer}>
-          <span><span className={styles.footerKey}>↑↓</span> {t("superSearch.hintNavigate")}</span>
-          <span><span className={styles.footerKey}>↵</span> {t("superSearch.hintSelect")}</span>
+          <span><span className={styles.footerKey}>â†‘â†“</span> {t("superSearch.hintNavigate")}</span>
+          <span><span className={styles.footerKey}>â†µ</span> {t("superSearch.hintSelect")}</span>
           <span><span className={styles.footerKey}>esc</span> {t("superSearch.hintClose")}</span>
         </div>
       </div>

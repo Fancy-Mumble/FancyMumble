@@ -10,7 +10,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
 import { CloseIcon, FileIcon } from "../../../icons";
+import { setLiveDocLocalSave } from "./liveDocLocalSave";
 import { useAppStore, encodeLiveDocInviteMarker, sendPluginMessage } from "../../../store";
 import {
   useLiveDoc,
@@ -165,6 +167,21 @@ export default function LiveDocPanel({
     () => editorApi.current?.getMarkdown() ?? "",
     [],
   );
+
+  // Expose a "save this document to a local file" callback while the panel is
+  // mounted, so the plugin-disabled dialog can offer it before tearing the
+  // live-doc UI down if the live-doc plugin is disabled mid-session.
+  useEffect(() => {
+    const save = async () => {
+      const content = editorApi.current?.getMarkdown() ?? "";
+      await invoke("save_markdown_file", {
+        content,
+        defaultFilename: `${liveTitle || "document"}.md`,
+      });
+    };
+    setLiveDocLocalSave(save);
+    return () => setLiveDocLocalSave(null);
+  }, [liveTitle]);
 
   const onExportPdf = useCallback(() => {
     const html = editorApi.current?.getHtml() ?? "";

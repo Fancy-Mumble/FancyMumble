@@ -12,6 +12,7 @@
 import { CloseIcon, CircleIcon, SquareIcon } from "../../../icons";
 import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { Modal } from "../../elements/Modal";
 import styles from "./PollCreator.module.css";
 
 // --- Poll data format ---------------------------------------------
@@ -90,19 +91,8 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
   }, [canSubmit, question, options, multiple, onSubmit, onClose]);
 
   return (
-    <div
-      className={styles.backdrop}
-      onClick={onClose}
-      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
-      role="presentation"
-    >
-      <div
-        className={styles.modal}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
+    <Modal onClose={onClose} zIndex={200}>
+      <div className={styles.modal} role="dialog" aria-modal="true">
         <div className={styles.header}>
           <h3 className={styles.title}>{t("poll.creator.title")}</h3>
           <button className={styles.closeBtn} onClick={onClose}>
@@ -177,6 +167,6 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

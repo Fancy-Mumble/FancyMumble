@@ -46,6 +46,7 @@ import {
   ReviewTab,
   ViewTab,
 } from "./LiveDocRibbonTabs";
+import { RibbonGroupRow } from "./liveDocRibbonGroups";
 import styles from "./LiveDocRibbon.module.css";
 
 /** i18n keys for the connection-status pill. */
@@ -106,6 +107,8 @@ interface LiveDocRibbonProps {
   readonly onToggleOutline: () => void;
   readonly paperMode: boolean;
   readonly onTogglePaperMode: () => void;
+  readonly paginated: boolean;
+  readonly onTogglePagination: () => void;
   readonly markdownMode: boolean;
   readonly onToggleMarkdown: () => void;
   readonly onInsertCoverPage: () => void;
@@ -139,11 +142,12 @@ export default function LiveDocRibbon(props: LiveDocRibbonProps) {
         ))}
       </div>
 
-      <div className={styles.panel} role="tabpanel">
+      <RibbonGroupRow className={styles.panel} role="tabpanel">
         {activeTab === "home" && <HomeTab editor={editor} />}
         {activeTab === "insert" && (
           <InsertTab
             editor={editor}
+            doc={doc}
             onInsertCoverPage={props.onInsertCoverPage}
             onInsertMathBlock={props.onInsertMathBlock}
           />
@@ -161,11 +165,13 @@ export default function LiveDocRibbon(props: LiveDocRibbonProps) {
             onToggleOutline={props.onToggleOutline}
             paperMode={props.paperMode}
             onTogglePaperMode={props.onTogglePaperMode}
+            paginated={props.paginated}
+            onTogglePagination={props.onTogglePagination}
             markdownMode={props.markdownMode}
             onToggleMarkdown={props.onToggleMarkdown}
           />
         )}
-      </div>
+      </RibbonGroupRow>
     </div>
   );
 }

@@ -91,8 +91,68 @@
   },
   "autocomplete": {
     "placeholder": "Rechercher...",
-    "noOptions": "Aucune option"
+    "noOptions": "Aucune option",
+    "removeChipAriaLabel": "Supprimer {{name}}",
+    "clearSelectionAriaLabel": "Effacer la sélection"
   },
+  "officialBadge": {
+    "label": "Officiel",
+    "title": "Plugin FancyMumble officiel"
+  },
+  "cardColorPicker": {
+    "randomTitle": "Couleurs aléatoires",
+    "roleBg": "fond",
+    "roleBorder": "bordure",
+    "roleAccent": "accent",
+    "removeTitle": "Supprimer la couleur",
+    "addTitle": "Ajouter une couleur",
+    "glassLabel": "Effet de verre",
+    "accentTitle": "Couleur d'accent"
+  },
+  "splitButton": {
+    "moreOptionsAriaLabel": "Plus d'options"
+  },
+  "pluginTrust": {
+    "bulkAllowServer": "Tout autoriser pour ce serveur",
+    "bulkAllowOnce": "Tout autoriser une fois",
+    "bulkAllowAlways": "Toujours tout autoriser",
+    "scopeServer": "Autoriser pour ce serveur",
+    "scopeOnce": "Autoriser une fois",
+    "scopeAlways": "Toujours autoriser",
+    "scopeServerHint": "Mémorisé pour ce serveur",
+    "scopeOnceHint": "Cette session uniquement",
+    "scopeGlobalHint": "Approuvé sur tous les serveurs",
+    "singleTitle": "Le serveur souhaite activer un plugin",
+    "multiTitle": "Le serveur souhaite activer {{count}} plugins",
+    "singleSubtitle": "Examinez le plugin et choisissez de l'autoriser ou non.",
+    "multiSubtitle": "Dépliez un plugin pour voir ce qu'il peut faire, puis décidez un par un ou utilisez les boutons ci-dessous pour appliquer le même choix à tous.",
+    "blockAll": "Tout bloquer",
+    "capNone": "aucune capacité",
+    "capCount_one": "{{count}} capacité",
+    "capCount_other": "{{count}} capacités",
+    "updatedBadge": "mis à jour",
+    "repromptWarning": "La version ou l'ensemble des capacités de ce plugin a changé depuis votre dernier examen. Reconfirmez avant de réactiver.",
+    "capabilitiesHeading": "Ce plugin pourra :",
+    "capEmpty": "Rien - le manifeste ne déclare aucune capacité",
+    "advancedSummary": "Avancé",
+    "fieldPlugin": "Plugin",
+    "fieldVersion": "Version",
+    "fieldAuthor": "Auteur",
+    "fieldHomepage": "Site",
+    "fieldCapabilities": "Capacités",
+    "fieldTags": "Étiquettes",
+    "fieldLastReviewed": "Dernier examen",
+    "fieldSchema": "Schéma",
+    "fieldFingerprint": "Empreinte",
+    "block": "Bloquer"
+  },
+  "pluginModalForm": {
+    "addFiles": "Ajouter des fichiers",
+    "chooseFile": "Choisir un fichier",
+    "filesAttached_one": "{{count}} fichier joint",
+    "filesAttached_other": "{{count}} fichiers joints"
+  },
+  "klipyFooter": "Propulsé par Klipy",
   "emojiPicker": {
     "searchPlaceholder": "Rechercher un emoji...",
     "empty": "Aucun emoji trouvé",
@@ -157,5 +217,15 @@
     "laterBtn": "Plus tard",
     "retryBtn": "Réessayer",
     "updateNowBtn": "Mettre à jour maintenant"
+  },
+  "plugins": {
+    "fileServer": "Serveur de fichiers",
+    "liveDoc": "Documents collaboratifs",
+    "disabledLog": "Le plugin « {{name}} » a été désactivé par le serveur",
+    "disabledTitle": "{{name}} a été désactivé",
+    "disabledBody": "Le serveur a désactivé ce plugin. Toutes les vues {{name}} ouvertes seront fermées.",
+    "disabledSave": "Enregistrer une copie locale",
+    "disabledSaving": "Enregistrement…",
+    "disabledClose": "Fermer"
   }
 }

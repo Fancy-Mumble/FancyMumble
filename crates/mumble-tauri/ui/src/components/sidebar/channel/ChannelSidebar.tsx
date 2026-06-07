@@ -26,6 +26,7 @@ const MembersTab = lazy(() => import("../MembersTab").then((m) => ({ default: m.
 const RecordingModal = lazy(() => import("../RecordingModal"));
 import { SidebarTabs } from "../SidebarTabs";
 import { PERM_LISTEN, PERM_WRITE } from "../../../utils/permissions";
+import { filterVisibleChannels } from "../../../utils/channelVisibility";
 
 /** Check whether a channel's cached permissions include the Listen bit. */
 function canListen(channel: ChannelEntry | undefined): boolean {
@@ -275,6 +276,11 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
   // Section collapse state (all expanded by default, restored from prefs).
   const [channelsOpen, setChannelsOpen] = useState(true);
 
+  // When true, channels with no members are hidden from the viewer (restored
+  // from prefs).  Ancestors of populated channels and the current/selected
+  // channel are always kept so the tree stays consistent.
+  const [hideEmptyChannels, setHideEmptyChannels] = useState(false);
+
   // Members pane is mounted lazily on first activation by SidebarTabs.
   // Once shown it stays mounted (hidden via CSS) so subsequent tab
   // switches are pure CSS toggles.
@@ -289,6 +295,15 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
       if (s) {
         setChannelsOpen(s.channels);
       }
+      setHideEmptyChannels(prefs.hideEmptyChannels ?? false);
+    });
+  }, []);
+
+  const toggleHideEmptyChannels = useCallback(() => {
+    setHideEmptyChannels((prev) => {
+      const next = !prev;
+      updatePreferences({ hideEmptyChannels: next });
+      return next;
     });
   }, []);
 
@@ -380,6 +395,19 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
     const ch = channels.find((c) => c.id === channelId);
     return ch?.name || "Root";
   };
+
+  // Channels passed to the list renderers.  When "hide empty" is on, only
+  // channels with members (plus the current/selected/listened ones) are shown -
+  // empty parents are hidden too, with populated subchannels re-parented so the
+  // tree stays consistent.  See filterVisibleChannels for the details.
+  const visibleChannels = useMemo(() => {
+    if (!hideEmptyChannels) return channels;
+    return filterVisibleChannels(channels, users, {
+      currentChannel,
+      selectedChannel,
+      listenedChannels,
+    });
+  }, [channels, users, hideEmptyChannels, currentChannel, selectedChannel, listenedChannels]);
 
   return (
     <RoleColorsContext.Provider value={roleColors}>
@@ -495,6 +523,16 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
           />
           <span>{t("channelSidebar.channels")}</span>
         </button>
+        <button
+          type="button"
+          className={`${styles.sectionHeaderAction} ${hideEmptyChannels ? styles.sectionHeaderActionActive : ""}`}
+          onClick={toggleHideEmptyChannels}
+          aria-pressed={hideEmptyChannels}
+          title={hideEmptyChannels ? t("channelSidebar.showAllChannels") : t("channelSidebar.hideEmptyChannels")}
+          aria-label={hideEmptyChannels ? t("channelSidebar.showAllChannels") : t("channelSidebar.hideEmptyChannels")}
+        >
+          <UsersGroupIcon width={14} height={14} />
+        </button>
       </div>
 
       {/* Channel list */}
@@ -503,7 +541,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
         <Suspense fallback={null}>
         {channelsOpen && channelViewerStyle === "flat" && (
           <ModernChannelList
-            channels={channels}
+            channels={visibleChannels}
             users={users}
             selectedChannel={selectedChannel}
             currentChannel={currentChannel}
@@ -524,7 +562,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
 
         {channelsOpen && channelViewerStyle === "modern" && (
           <ChannelIconList
-            channels={channels}
+            channels={visibleChannels}
             users={users}
             selectedChannel={selectedChannel}
             currentChannel={currentChannel}
@@ -545,7 +583,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
 
         {channelsOpen && channelViewerStyle === "classic" && (
           <ClassicChannelList
-            channels={channels}
+            channels={visibleChannels}
             users={users}
             selectedChannel={selectedChannel}
             currentChannel={currentChannel}

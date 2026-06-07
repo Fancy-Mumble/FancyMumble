@@ -64,6 +64,49 @@
   flex: 1;
 }
 
+/* Live collaborator presence: where other people are currently editing. */
+.presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.presenceChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 220px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--color-surface, #1e2128);
+  font-size: 11px;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.7));
+  white-space: nowrap;
+}
+
+.presenceDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.presenceName {
+  font-weight: 600;
+  color: var(--color-text-primary, #f5f6f8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.presenceWhere {
+  color: var(--color-text-muted, #aab0b8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .btn {
   padding: 4px 12px;
   border-radius: var(--radius-sm, 4px);
@@ -76,6 +119,14 @@
 
 .btn:hover:not(:disabled) {
   background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+/* Pressed state for the side-by-side toggle. */
+.btnActive,
+.btnActive:hover:not(:disabled) {
+  background: var(--color-accent-subtle, rgba(42, 171, 238, 0.18));
+  border-color: var(--color-accent, #2aabee);
+  color: var(--color-accent, #2aabee);
 }
 
 /* The scrolling viewport.  Flush against the editor pane (no margin). */
@@ -118,6 +169,7 @@
   inset: 0;
   pointer-events: none;
   overflow: hidden;
+  z-index: 1;
   /* highlight.js github-dark adds its own background; keep the sheet colour. */
   background: transparent !important;
   color: var(--color-text-primary, #f5f6f8);
@@ -129,25 +181,100 @@
   min-height: 100%;
   resize: none;
   overflow: hidden; /* auto-grown via JS; the .scroll viewport scrolls */
+  z-index: 2;
   background: transparent;
   color: transparent;
-  caret-color: var(--color-text-primary, #f5f6f8);
+  /* The overlay draws its own caret + selection (mention chips change glyph
+     widths, so the native ones would drift out of alignment). */
+  caret-color: transparent;
   outline: none;
 }
 
+/* Hide the native selection *entirely* - both its background and its text
+   colour.  Setting only the background leaves the browser painting the
+   selected (otherwise-transparent) text in its default selection colour, which
+   masks the overlay's own selection highlight. */
 .textarea::selection {
-  background: var(--color-accent-subtle, rgba(42, 171, 238, 0.3));
+  background: transparent;
+  color: transparent;
 }
 
 .textarea::-moz-selection {
-  background: var(--color-accent-subtle, rgba(42, 171, 238, 0.3));
+  background: transparent;
+  color: transparent;
+}
+
+/* Custom caret drawn in the overlay at the mapped character position. */
+.caret {
+  display: inline-block;
+  width: 0;
+  height: 1.15em;
+  border-left: 1.5px solid var(--color-text-primary, #f5f6f8);
+  vertical-align: text-bottom;
+  margin: 0 -0.75px;
+  animation: ldCaretBlink 1s step-end infinite;
+  pointer-events: none;
+}
+
+@keyframes ldCaretBlink {
+  50% {
+    border-color: transparent;
+  }
+}
+
+/* Custom selection highlight (the native one is hidden above).  Uses the
+   prominent "glow" accent (like the chat markdown input) - `accent-subtle` is
+   far too faint to read as a selection. */
+.selection {
+  background: var(--color-accent-glow, rgba(42, 171, 238, 0.35));
+  border-radius: 1px;
+}
+
+/* A remote collaborator's caret, drawn in their assigned colour with a name
+   flag - mirrors the rendered view's collaboration cursors. */
+.remoteCaret {
+  position: relative;
+  display: inline-block;
+  width: 2px;
+  height: 1.15em;
+  vertical-align: text-bottom;
+  margin: 0 -1px;
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+/* Zero-width, invisible per-page scroll anchor (measured, never drawn). */
+.pageAnchor {
+  display: inline-block;
+  width: 0;
+  height: 0;
+}
+
+.remoteCaretFlag {
+  position: absolute;
+  top: -1.25em;
+  left: -1px;
+  padding: 0 4px;
+  border-radius: 3px 3px 3px 0;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  color: rgba(0, 0, 0, 0.85);
+  pointer-events: none;
+}
+
+/* Mention chip - the friendly `@USERNAME` shown for a `<@SESSION>` marker. */
+.mdMention {
+  color: var(--color-accent, #2aabee);
+  background: var(--color-accent-subtle, rgba(42, 171, 238, 0.15));
+  border-radius: 3px;
+  font-style: normal;
 }
 
 /* Collapsed base64 image reference, rendered in the overlay as a chip.
-   It must NOT change layout width (no padding / margin / border box) so the
-   monospace glyphs stay aligned with the textarea underneath; the box look
-   comes from background + inset ring + rounded corners only.  Global because
-   the overlay HTML is injected via dangerouslySetInnerHTML. */
+   Global because the same class name is shared with the (legacy) injected
+   markup; the box look comes from background + inset ring + rounded corners. */
 :global(.ld-md-imgchip) {
   background: var(--color-accent-subtle, rgba(42, 171, 238, 0.22));
   color: var(--color-accent, #2aabee) !important;

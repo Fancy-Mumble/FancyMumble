@@ -15,7 +15,8 @@ import {
 function readMeta(doc: Y.Doc) {
   const meta = doc.getMap("meta");
   return {
-    enabled: meta.get("headerFooterEnabled"),
+    headerEnabled: meta.get("headerEnabled"),
+    footerEnabled: meta.get("footerEnabled"),
     header: meta.get("headerText"),
     footer: meta.get("footerText"),
     showPageNumber: meta.get("showPageNumber"),
@@ -25,35 +26,42 @@ function readMeta(doc: Y.Doc) {
 describe("liveDoc header/footer meta", () => {
   it("exposes disabled empty defaults", () => {
     expect(DEFAULT_HEADER_FOOTER).toEqual({
-      enabled: false,
+      headerEnabled: false,
+      footerEnabled: false,
       header: "",
       footer: "",
       showPageNumber: false,
+      headerStyle: "blank",
+      footerStyle: "blank",
+      pageNumberStyle: "page-of",
     });
   });
 
   it("writes a full patch to the shared meta map", () => {
     const doc = new Y.Doc();
     setLiveDocHeaderFooter(doc, {
-      enabled: true,
+      headerEnabled: true,
+      footerEnabled: true,
       header: "My report",
       footer: "Confidential",
       showPageNumber: true,
     });
     expect(readMeta(doc)).toEqual({
-      enabled: true,
+      headerEnabled: true,
+      footerEnabled: true,
       header: "My report",
       footer: "Confidential",
       showPageNumber: true,
     });
   });
 
-  it("patches only the provided keys", () => {
+  it("toggles header and footer independently", () => {
     const doc = new Y.Doc();
-    setLiveDocHeaderFooter(doc, { enabled: true, header: "First" });
+    setLiveDocHeaderFooter(doc, { headerEnabled: true, header: "First" });
     setLiveDocHeaderFooter(doc, { footer: "Bottom" });
     const meta = readMeta(doc);
-    expect(meta.enabled).toBe(true);
+    expect(meta.headerEnabled).toBe(true);
+    expect(meta.footerEnabled).toBeUndefined();
     expect(meta.header).toBe("First");
     expect(meta.footer).toBe("Bottom");
   });

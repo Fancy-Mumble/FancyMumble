@@ -428,33 +428,132 @@ export function setLiveDocDecoration(doc: Y.Doc, patch: Partial<LiveDocDecoratio
 
 const HEADER_FOOTER_MAX = 200;
 
-/** Document-level header/footer band (interim, single-zone). */
+/** Named header/footer theme (Word-style design gallery). */
+export type LiveDocBandStyle =
+  | "blank"
+  | "threeColumns"
+  | "austin"
+  | "banded"
+  | "facet"
+  | "filigree"
+  | "grid"
+  | "integral";
+/** Numbering-style template for the footer page number. */
+export type LiveDocPageNumberStyle = "page-of" | "page" | "plain" | "dash" | "slash" | "roman";
+
+export const BAND_STYLES: ReadonlyArray<LiveDocBandStyle> = [
+  "blank", "threeColumns", "austin", "banded", "facet", "filigree", "grid", "integral",
+];
+export const PAGE_NUMBER_STYLES: ReadonlyArray<LiveDocPageNumberStyle> = [
+  "page-of", "page", "plain", "dash", "slash", "roman",
+];
+
+/** Document-level header/footer bands.  Header, footer and the page-number
+ *  token are three independent toggles - turning on one never forces another. */
 export interface LiveDocHeaderFooter {
-  readonly enabled: boolean;
+  /** Show the running header at the top of every page. */
+  readonly headerEnabled: boolean;
+  /** Show the running footer at the bottom of every page. */
+  readonly footerEnabled: boolean;
   readonly header: string;
   readonly footer: string;
-  /** Append an automatic "Page N" token to the footer. */
+  /** Show an automatic page number at the bottom of every page (independent of
+   *  the footer text zone). */
   readonly showPageNumber: boolean;
+  readonly headerStyle: LiveDocBandStyle;
+  readonly footerStyle: LiveDocBandStyle;
+  readonly pageNumberStyle: LiveDocPageNumberStyle;
 }
 
 export const DEFAULT_HEADER_FOOTER: LiveDocHeaderFooter = {
-  enabled: false,
+  headerEnabled: false,
+  footerEnabled: false,
   header: "",
   footer: "",
   showPageNumber: false,
+  headerStyle: "blank",
+  footerStyle: "blank",
+  pageNumberStyle: "page-of",
 };
+
+function readBandStyle(value: unknown, fallback: LiveDocBandStyle): LiveDocBandStyle {
+  return BAND_STYLES.includes(value as LiveDocBandStyle) ? (value as LiveDocBandStyle) : fallback;
+}
 
 function readHeaderFooter(doc: Y.Doc | null): LiveDocHeaderFooter {
   if (!doc) return DEFAULT_HEADER_FOOTER;
   const meta = doc.getMap("meta");
   const header = meta.get("headerText");
   const footer = meta.get("footerText");
+  const pageNumberStyle = meta.get("pageNumberStyle");
+  // Migration: the old single `headerFooterEnabled` flag turned both zones on.
+  const legacyEnabled = meta.get("headerFooterEnabled") === true;
+  const headerFlag = meta.get("headerEnabled");
+  const footerFlag = meta.get("footerEnabled");
   return {
-    enabled: meta.get("headerFooterEnabled") === true,
+    headerEnabled: headerFlag === undefined ? legacyEnabled : headerFlag === true,
+    footerEnabled: footerFlag === undefined ? legacyEnabled : footerFlag === true,
     header: typeof header === "string" ? header : DEFAULT_HEADER_FOOTER.header,
     footer: typeof footer === "string" ? footer : DEFAULT_HEADER_FOOTER.footer,
     showPageNumber: meta.get("showPageNumber") === true,
+    headerStyle: readBandStyle(meta.get("headerStyle"), DEFAULT_HEADER_FOOTER.headerStyle),
+    footerStyle: readBandStyle(meta.get("footerStyle"), DEFAULT_HEADER_FOOTER.footerStyle),
+    pageNumberStyle: PAGE_NUMBER_STYLES.includes(pageNumberStyle as LiveDocPageNumberStyle)
+      ? (pageNumberStyle as LiveDocPageNumberStyle)
+      : DEFAULT_HEADER_FOOTER.pageNumberStyle,
   };
+}
+
+const ROMAN: ReadonlyArray<readonly [number, string]> = [
+  [1000, "m"], [900, "cm"], [500, "d"], [400, "cd"], [100, "c"], [90, "xc"],
+  [50, "l"], [40, "xl"], [10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"],
+];
+
+function toRoman(n: number): string {
+  if (n <= 0) return String(n);
+  let out = "";
+  let rem = n;
+  for (const [value, sym] of ROMAN) {
+    while (rem >= value) {
+      out += sym;
+      rem -= value;
+    }
+  }
+  return out;
+}
+
+/** Minimal translate signature (cast the i18next `t` to this at call sites -
+ *  relating its huge overload set to a plain function type crashes tsc). */
+export type LiveDocTranslate = (key: string, opts?: Record<string, unknown>) => string;
+
+/**
+ * Format a 1-based page number per the chosen numbering-style template.
+ * `t` is used only for the word-based styles ("Page N", "Page N of M").
+ */
+export function formatPageNumber(
+  style: LiveDocPageNumberStyle,
+  pageNumber: number,
+  pageCount: number | undefined,
+  t: LiveDocTranslate,
+): string {
+  const total = pageCount && pageCount > 0 ? pageCount : pageNumber;
+  switch (style) {
+    case "plain":
+      return `${pageNumber}`;
+    case "dash":
+      return `- ${pageNumber} -`;
+    case "slash":
+      return `${pageNumber} / ${total}`;
+    case "roman":
+      return toRoman(pageNumber);
+    case "page":
+      return t("liveDoc.headerFooter.pageNumber", { number: pageNumber });
+    case "page-of":
+    default:
+      return total > 1
+        ? t("liveDoc.headerFooter.pageNumberOf", { number: pageNumber, total })
+        : t("liveDoc.headerFooter.pageNumber", { number: pageNumber });
+  }
 }
 
 /** Observe the document's header/footer from the shared `meta` map. */
@@ -478,10 +577,14 @@ export function useLiveDocHeaderFooter(doc: Y.Doc | null): LiveDocHeaderFooter {
 export function setLiveDocHeaderFooter(doc: Y.Doc, patch: Partial<LiveDocHeaderFooter>): void {
   const meta = doc.getMap("meta");
   doc.transact(() => {
-    if (patch.enabled !== undefined) meta.set("headerFooterEnabled", patch.enabled);
+    if (patch.headerEnabled !== undefined) meta.set("headerEnabled", patch.headerEnabled);
+    if (patch.footerEnabled !== undefined) meta.set("footerEnabled", patch.footerEnabled);
     if (patch.header !== undefined) meta.set("headerText", patch.header.slice(0, HEADER_FOOTER_MAX));
     if (patch.footer !== undefined) meta.set("footerText", patch.footer.slice(0, HEADER_FOOTER_MAX));
     if (patch.showPageNumber !== undefined) meta.set("showPageNumber", patch.showPageNumber);
+    if (patch.headerStyle !== undefined) meta.set("headerStyle", patch.headerStyle);
+    if (patch.footerStyle !== undefined) meta.set("footerStyle", patch.footerStyle);
+    if (patch.pageNumberStyle !== undefined) meta.set("pageNumberStyle", patch.pageNumberStyle);
   });
 }
 

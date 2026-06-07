@@ -270,8 +270,8 @@ export function BioEditor({
           type="button"
           className={`${styles.bioToolBtn} ${editor.isActive("bold") ? styles.bioToolBtnActive : ""}`}
           onClick={() => editor.chain().focus().toggleBold().run()}
-          title="Bold"
-          aria-label="Bold"
+          title={t("bioEditor.bold")}
+          aria-label={t("bioEditor.bold")}
         >
           <strong>B</strong>
         </button>
@@ -279,8 +279,8 @@ export function BioEditor({
           type="button"
           className={`${styles.bioToolBtn} ${editor.isActive("italic") ? styles.bioToolBtnActive : ""}`}
           onClick={() => editor.chain().focus().toggleItalic().run()}
-          title="Italic"
-          aria-label="Italic"
+          title={t("bioEditor.italic")}
+          aria-label={t("bioEditor.italic")}
         >
           <em>I</em>
         </button>
@@ -288,8 +288,8 @@ export function BioEditor({
           type="button"
           className={`${styles.bioToolBtn} ${editor.isActive("underline") ? styles.bioToolBtnActive : ""}`}
           onClick={() => editor.chain().focus().toggleUnderline().run()}
-          title="Underline"
-          aria-label="Underline"
+          title={t("bioEditor.underline")}
+          aria-label={t("bioEditor.underline")}
         >
           <u>U</u>
         </button>
@@ -312,8 +312,8 @@ export function BioEditor({
           type="button"
           className={styles.bioToolBtn}
           onClick={() => fileInputRef.current?.click()}
-          title="Insert image"
-          aria-label="Insert image"
+          title={t("bioEditor.insertImage")}
+          aria-label={t("bioEditor.insertImage")}
         >
           <ImageIcon width={14} height={14} aria-hidden="true" />
         </button>
@@ -325,8 +325,8 @@ export function BioEditor({
             type="button"
             className={`${styles.bioToolBtn} ${showColourPicker ? styles.bioToolBtnActive : ""}`}
             onClick={() => setShowColourPicker((v) => !v)}
-            title="Text colour"
-            aria-label="Text colour"
+            title={t("bioEditor.textColor")}
+            aria-label={t("bioEditor.textColor")}
           >
             <span
               className={styles.bioColourIcon}
@@ -350,7 +350,7 @@ export function BioEditor({
                     className={styles.bioColourSwatch}
                     style={{ background: c }}
                     onClick={() => applyColour(c)}
-                    aria-label={`Colour ${c}`}
+                    aria-label={t("bioEditor.colorSwatchAriaLabel", { hex: c })}
                   />
                 ))}
               </div>
@@ -359,7 +359,7 @@ export function BioEditor({
                 className={styles.bioColourReset}
                 onClick={clearColour}
               >
-                Reset colour
+                {t("bioEditor.resetColour")}
               </button>
             </div>
           )}

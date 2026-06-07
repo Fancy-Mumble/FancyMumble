@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { CloseIcon } from "../../../icons";
 import { parseBibtex } from "./liveDocBibtex";
 import { sourceLabel, type CslItem } from "./liveDocCslTypes";
+import { Modal } from "../../elements/Modal";
 import styles from "./LiveDocCitations.module.css";
 
 const PLACEHOLDER = `@article{key,
@@ -33,8 +34,8 @@ export default function LiveDocBibtexImportDialog({ onImport, onClose }: LiveDoc
   const tb = (k: string, d: string) => t(`liveDoc.citations.${k}`, { defaultValue: d });
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`${styles.dialog} ${styles.dialogNarrow}`}>
+    <Modal onClose={onClose} closeOnEsc={false} zIndex={1000} overlayClassName={styles.overlayBlur}>
+      <div className={`${styles.dialog} ${styles.dialogNarrow}`} role="dialog" aria-modal="true">
         <div className={styles.dialogHeader}>
           <span className={styles.dialogTitle}>{tb("newFromBibtex", "New Source from BibTeX")}</span>
           <button type="button" className={styles.dialogClose} onClick={onClose} aria-label={tb("close", "Close")}>
@@ -85,6 +86,6 @@ export default function LiveDocBibtexImportDialog({ onImport, onClose }: LiveDoc
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

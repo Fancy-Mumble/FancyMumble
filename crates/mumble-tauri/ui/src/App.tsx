@@ -24,11 +24,6 @@ import ConnectPage from "./pages/ConnectPage";
 import LoadingSplash from "./components/elements/LoadingSplash";
 import { isUpdaterWindow } from "./updater";
 import UpdaterWindow from "./updater/UpdaterWindow";
-import PopoutPage from "./pages/PopoutPage";
-import StreamPopoutPage from "./pages/StreamPopoutPage";
-import DmPopoutPage from "./pages/DmPopoutPage";
-import DrawOverlayPage from "./pages/DrawOverlayPage";
-import TranslationPopoutPage from "./pages/TranslationPopoutPage";
 import i18n, { registerLanguage, type LocaleBundle } from "./i18n";
 
 const ChatPage = lazy(() => import("./pages/ChatPage"));
@@ -41,6 +36,18 @@ const MarketplacePluginPage = lazy(() => import("./pages/marketplace/PluginPage"
 const TranslationPickerOverlay = lazy(() => import("./components/translation/TranslationPickerOverlay"));
 const OnboardingModal = lazy(() => import("./components/onboarding/OnboardingModal"));
 const PluginInteractionLayer = lazy(() => import("./components/plugin/PluginInteractionLayer"));
+const PluginDisabledDialog = lazy(() => import("./components/elements/PluginDisabledDialog"));
+const WelcomeMessageModal = lazy(() => import("./components/server/WelcomeMessageModal"));
+// Popout pages each render only in their own dedicated window, so the main
+// window must not pay their cost.  TranslationPopoutPage in particular pulled
+// `country-flag-icons` (~330 kB, all flags) + `language-flag-colors` (~345 kB)
+// into the main startup bundle/heap; lazying it keeps both out of every window
+// that doesn't show the translator.
+const PopoutPage = lazy(() => import("./pages/PopoutPage"));
+const StreamPopoutPage = lazy(() => import("./pages/StreamPopoutPage"));
+const DmPopoutPage = lazy(() => import("./pages/DmPopoutPage"));
+const DrawOverlayPage = lazy(() => import("./pages/DrawOverlayPage"));
+const TranslationPopoutPage = lazy(() => import("./pages/TranslationPopoutPage"));
 
 /**
  * Returns true when this webview window is an image popout window.
@@ -112,7 +119,7 @@ function getWindowKind(): WindowKind {
   return WindowKind.Main;
 }
 
-export default function App() {
+function renderWindowContent() {
   switch (getWindowKind()) {
     case WindowKind.Updater:           return <UpdaterWindow />;
     case WindowKind.DrawOverlay:       return <DrawOverlayPage />;
@@ -122,6 +129,12 @@ export default function App() {
     case WindowKind.Popout:            return <PopoutPage />;
     default:                           return <MainApp />;
   }
+}
+
+export default function App() {
+  // Outer Suspense boundary for the now-lazy popout pages; MainApp keeps its
+  // own inner Suspense for routes.
+  return <Suspense fallback={<LoadingSplash />}>{renderWindowContent()}</Suspense>;
 }
 
 function MainApp() {
@@ -345,6 +358,8 @@ function MainApp() {
         <OnboardingModal />
         <PluginInteractionLayer />
         <TranslationPickerOverlay />
+        <PluginDisabledDialog />
+        <WelcomeMessageModal />
       </Suspense>
     </div>
   );

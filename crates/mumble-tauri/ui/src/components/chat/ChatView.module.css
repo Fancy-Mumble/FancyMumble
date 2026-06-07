@@ -519,6 +519,20 @@
   align-items: flex-end;
   gap: 8px;
   width: 100%;
+  /*
+   * Render-virtualization.  Up to MAX_MESSAGES_PER_THREAD (500) groups can be
+   * in the DOM at once; this lets the browser skip style/layout/paint - and
+   * release the render-side memory (layout boxes + rasterised tiles) - for
+   * groups scrolled out of view, slashing initial-render CPU and idle RAM.
+   *
+   * Unlike JS windowing it keeps every node in the DOM, so the custom
+   * stick-to-bottom scroller, `data-msg-id` scroll-to-message, find-in-page and
+   * the heavy-content offload manager all keep working unchanged.  `auto`
+   * remembers each group's real height after its first paint so the scrollbar
+   * stays stable; 120px is only the pre-measurement estimate.
+   */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
 }
 
 .messageGroupOwn {

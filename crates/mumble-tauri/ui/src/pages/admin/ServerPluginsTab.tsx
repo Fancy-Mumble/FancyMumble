@@ -102,6 +102,10 @@ export function ServerPluginsTab() {
   }, [loading, t]);
 
   const handleToggle = useCallback(async (entry: ServerPluginEntry) => {
+    // Incompatible plugins (failed to load - e.g. ABI mismatch) can never be
+    // enabled; the server has no loaded instance to toggle, so guard here in
+    // addition to disabling the button.
+    if (entry.load_error) return;
     setBusy(entry.plugin_name);
     setLastError(null);
     try {
@@ -210,7 +214,9 @@ export function ServerPluginsTab() {
               <div className={sp.bodyCol}>
                 <div className={sp.title}>
                   <span className={sp.name}>{p.plugin_name}</span>
-                  <span className={sp.version}>v{p.version}</span>
+                  {!p.load_error && p.version && (
+                    <span className={sp.version}>v{p.version}</span>
+                  )}
                   {p.marketplace_id && (
                     <span className={sp.badge}>
                       {t("serverPlugins.marketplaceBadge")}
@@ -234,17 +240,23 @@ export function ServerPluginsTab() {
                   type="button"
                   className={p.enabled ? sp.btnEnabled : sp.btnDisabled}
                   onClick={() => handleToggle(p)}
-                  disabled={busy === p.plugin_name}
+                  disabled={busy === p.plugin_name || !!p.load_error}
                   title={
-                    p.enabled
-                      ? t("serverPlugins.disable")
-                      : t("serverPlugins.enable")
+                    p.load_error
+                      ? t("serverPlugins.incompatibleTitle", {
+                          defaultValue: "Incompatible with this server - cannot be enabled.",
+                        })
+                      : p.enabled
+                        ? t("serverPlugins.disable")
+                        : t("serverPlugins.enable")
                   }
                 >
                   <PowerIcon width={14} height={14} />
-                  {p.enabled
-                    ? t("serverPlugins.enabled")
-                    : t("serverPlugins.disabled")}
+                  {p.load_error
+                    ? t("serverPlugins.incompatible", { defaultValue: "Incompatible" })
+                    : p.enabled
+                      ? t("serverPlugins.enabled")
+                      : t("serverPlugins.disabled")}
                 </button>
                 {p.enabled && (
                   <button
