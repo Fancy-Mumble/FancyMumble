@@ -522,7 +522,7 @@ async fn user_state_texture_hash_records_marker_lazily() {
     // The avatar's existence is recorded (non-zero marker) but its bytes are
     // NOT fetched eagerly - that happens lazily on first view.
     let state = ctx.shared.lock().unwrap();
-    let user = state.users.get(&10).expect("user present");
+    let user = state.users.get(&10).unwrap();
     assert!(user.texture.is_none(), "bytes must not be fetched eagerly");
     assert!(user.texture_marker.is_some(), "avatar existence must be recorded");
     drop(state);
@@ -554,7 +554,7 @@ async fn user_state_comment_hash_records_marker_lazily() {
     tokio::task::yield_now().await;
 
     let state = ctx.shared.lock().unwrap();
-    let user = state.users.get(&10).expect("user present");
+    let user = state.users.get(&10).unwrap();
     assert!(user.comment.is_none(), "bio text must not be fetched eagerly");
     assert!(user.comment_marker.is_some(), "bio existence must be recorded");
     drop(state);
