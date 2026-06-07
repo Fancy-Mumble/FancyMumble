@@ -611,11 +611,11 @@ function ModalFileUpload({
         className={`${styles.btn} ${styles.btnSecondary}`}
         onClick={() => void pick()}
       >
-        {multi ? t("common:pluginModalForm.addFiles") : t("common:pluginModalForm.chooseFile")}
+        {multi ? t("pluginModalForm.addFiles") : t("pluginModalForm.chooseFile")}
       </button>
       {ids.length > 0 && (
         <span className={styles.fileUploadPicked}>
-          {t("common:pluginModalForm.filesAttached", { count: ids.length })}
+          {t("pluginModalForm.filesAttached", { count: ids.length })}
         </span>
       )}
     </div>

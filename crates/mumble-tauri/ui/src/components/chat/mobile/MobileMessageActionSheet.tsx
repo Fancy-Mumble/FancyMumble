@@ -146,10 +146,10 @@ export default function MobileMessageActionSheet({
         <div className={styles.reactionRow}>
           {QUICK_REACTIONS.map((r) => (
             <button
-              key={r.label}
+              key={r.key}
               type="button"
               className={styles.reactionBtn}
-              aria-label={r.label}
+              aria-label={t(`quickReactions.${r.key}`)}
               onClick={actEmoji(r.emoji)}
             >
               {r.emoji}

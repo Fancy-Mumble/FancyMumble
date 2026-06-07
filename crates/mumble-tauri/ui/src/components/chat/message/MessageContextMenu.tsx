@@ -162,10 +162,10 @@ export default function MessageContextMenu({
           <div className={styles.reactionRow}>
             {QUICK_REACTIONS.map((r) => (
               <button
-                key={r.label}
+                key={r.key}
                 type="button"
                 className={styles.reactionBtn}
-                aria-label={r.label}
+                aria-label={t(`quickReactions.${r.key}`)}
                 onClick={() => { onReaction(menu.message, r.emoji); onClose(); }}
               >
                 {r.emoji}
