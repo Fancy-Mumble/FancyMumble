@@ -40,8 +40,16 @@ export interface UserEntry {
    *  The actual bytes must be fetched lazily via `get_user_texture` -
    *  use `useUserAvatar(session, texture_size)` from the store. */
   texture_size: number | null;
-  /** Mumble comment - may contain FancyMumble profile JSON marker. */
-  comment: string | null;
+  /** Existence/version marker for a live user's comment/bio, or null if none.
+   *  The text is fetched lazily via `get_user_comment` - use
+   *  `useUserComment(session, comment_size)`.  (Bios may carry a FancyMumble
+   *  profile JSON marker.)  Optional only so test/synthetic `UserEntry`
+   *  literals need not set it; live backend payloads always include it. */
+  comment_size?: number | null;
+  /** Inline comment text.  Only set on synthetic/offline member entries
+   *  (registered-members list); live users leave this undefined and resolve
+   *  the bio through `comment_size` + `useUserComment`. */
+  comment?: string | null;
   /** Server-side admin mute. */
   mute: boolean;
   /** Server-side admin deafen. */
@@ -267,8 +275,10 @@ export interface FileServerConfig {
   maxFileSizeBytes: number;
   /** When true, files are deleted after the TTL expires. */
   deleteOnTtl: boolean;
-  /** Time-to-live in seconds (only meaningful when `deleteOnTtl` is true). */
+  /** Default time-to-live in seconds (only meaningful when `deleteOnTtl`). */
   ttlSeconds: number;
+  /** Maximum lifetime in seconds an uploader may request (`0` = no maximum). */
+  maxTtlSeconds: number;
   /** When true, files are deleted after a single successful download. */
   deleteOnDownload: boolean;
   /** When true, all files uploaded by a session are deleted on disconnect. */
@@ -283,6 +293,10 @@ export interface FileServerConfig {
    *  publicly accessible links (`public` and `password` modes).  When
    *  false, only `session`-scoped uploads are permitted. */
   canShareFilesPublic: boolean;
+  /** True when the connected user is a registered (non-guest) Mumble
+   *  account.  Gates access to per-user private storage (`/me/storage`),
+   *  where the live-doc sidebar is persisted. */
+  registered: boolean;
 }
 
 /** Parsed semantic version triple as returned by `GET /capabilities`. */
@@ -308,6 +322,7 @@ export interface FileServerLimits {
   max_file_size_bytes: number;
   max_total_storage_bytes: number;
   ttl_seconds: number;
+  max_ttl_seconds: number;
 }
 
 /** Response from `GET {baseUrl}/capabilities`. Populated once per
@@ -318,6 +333,120 @@ export interface FileServerCapabilities {
   fancy_version: FileServerVersionInfo;
   features: FileServerFeatures;
   limits: FileServerLimits;
+}
+
+/** Access mode of a stored file (chosen by the uploader). */
+export type FileServerAccessMode = "public" | "password" | "session";
+
+/** One stored file as returned by the admin dashboard endpoint
+ *  `GET /admin/files` (proxied via `fileserver_admin_list_files`). */
+export interface AdminFileEntry {
+  id: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  access_mode: FileServerAccessMode;
+  channel_id: number;
+  server_id: number;
+  /** Unix-millis upload time. */
+  uploaded_at: number;
+  /** Unix-millis last download, or null. */
+  downloaded_at: number | null;
+  /** Unix-seconds TTL expiry, or null. */
+  expires_at: number | null;
+  /** Display name of the uploader captured at upload time (null for files
+   *  uploaded before this was recorded). */
+  uploader_name: string | null;
+  /** Stable cert hash of the uploader, used to match a connected user. */
+  uploader_cert_hash: string | null;
+  /** Stable registered user id of the uploader (>= 0), or null. Preferred over
+   *  the cert hash for matching a connected user, since it survives certificate
+   *  regeneration across sessions. */
+  uploader_user_id: number | null;
+  /** Whether the uploader's session is still connected. */
+  uploader_online: boolean;
+}
+
+/** Aggregate storage usage from the admin dashboard endpoint. */
+export interface FileServerStorageStats {
+  total_bytes_used: number;
+  max_total_storage_bytes: number;
+  max_file_size_bytes: number;
+  file_count: number;
+}
+
+/** `GET /admin/files` response body. */
+export interface AdminFilesResponse {
+  files: AdminFileEntry[];
+  stats: FileServerStorageStats;
+}
+
+/** `GET /me/files` response body - the caller's own uploaded files (no
+ *  server-wide storage stats, which are admin-only). */
+export interface MyFilesResponse {
+  files: AdminFileEntry[];
+}
+
+/** One persisted live-doc document from the admin dashboard endpoint. */
+export interface DocumentSummary {
+  /** Stable document name (the live-doc `DocKey` filename). */
+  name: string;
+  /** Sequence number of the most recent revision. */
+  latest_rev: number;
+  /** Total number of stored revisions. */
+  revision_count: number;
+  /** Size in bytes of the latest revision. */
+  size_bytes: number;
+  /** Unix-millis time the document was last written. */
+  updated_at: number;
+  /** Display name of the creator (first to persist it), or null for documents
+   *  stored before owner tracking existed. */
+  owner_name: string | null;
+  /** Stable cert hash of the creator, so the client can match a live user. */
+  owner_cert_hash: string | null;
+}
+
+/** `GET /admin/documents` response body. */
+export interface AdminDocumentsResponse {
+  documents: DocumentSummary[];
+}
+
+/** A saved reference to a live document in a user's personal sidebar.
+ *  References a server-scoped document by `slug`; `channel` is the
+ *  channel it was published to (or `null` for a private doc). */
+export interface LiveDocDocLink {
+  slug: string;
+  title: string;
+  channel: number | null;
+  /** True if this user created the document. */
+  owned: boolean;
+}
+
+/** A folder in the sidebar tree (nestable).  Sections and folders share
+ *  this shape; a section is simply a top-level folder. */
+export interface LiveDocFolder {
+  id: string;
+  name: string;
+  folders: LiveDocFolder[];
+  docs: LiveDocDocLink[];
+}
+
+/** A top-level user-defined section of the sidebar. */
+export type LiveDocSection = LiveDocFolder;
+
+/** The persisted per-user sidebar tree (stored in file-server private
+ *  storage under the `livedoc-sidebar` key). */
+export interface LiveDocIndex {
+  v: number;
+  sections: LiveDocSection[];
+}
+
+/** One member a document has been shared with, as pushed by the
+ *  live-doc plugin's `SharedWith` envelope. */
+export interface LiveDocSharedMember {
+  cert_hash: string;
+  user_id: number;
+  display_name: string;
 }
 
 /** Configuration advertised by the live-doc plugin to clients on connect
@@ -477,6 +606,8 @@ export interface UserPreferences {
   logLevel?: string;
   /** Collapsed/expanded state of sidebar sections. */
   sidebarSections?: SidebarSections;
+  /** When true, the channel viewer hides channels that have no members. */
+  hideEmptyChannels?: boolean;
   /** Per-event notification sound configuration. */
   notificationSounds?: NotificationSoundSettings;
   /** When true, the client does not send read receipts to the server. */
@@ -517,7 +648,17 @@ export interface UserPreferences {
   /** Override marketplace API base URL used in developer mode.
    *  When absent or undefined the production URL is used. */
   marketplaceBaseUrl?: string;
+  /** How the server's welcome message is shown after connecting:
+   *  "hide" never shows it, "once" shows it once per server (until dismissed),
+   *  "always" shows it on every connect.  Defaults to "once". */
+  welcomeMessageDisplay?: WelcomeMessageDisplay;
+  /** When false, the disconnect confirmation dialog is skipped (the user chose
+   *  "never show again").  Defaults to true. */
+  showDisconnectWarning?: boolean;
 }
+
+/** Controls when the server welcome message modal appears on connect. */
+export type WelcomeMessageDisplay = "hide" | "once" | "always";
 
 /** Identifiers for events that can trigger a notification sound. */
 export type NotificationEvent =
@@ -1032,4 +1173,40 @@ export interface OnboardingConfigEvent {
 export interface OnboardingResponseEvent {
   response: OnboardingResponse | null;
   serverId?: string | null;
+}
+
+/** Input type for a server setting, mapped to a form control by the factory. */
+export type ServerSettingType =
+  | "string" | "text" | "bool" | "int" | "enum" | "country" | "password";
+
+/** One editable server setting (schema + current value), advertised by the
+ *  server. The `type` drives the client's form-control factory. */
+export interface ServerSetting {
+  /** Config key (core key, or `plugin.<name>.<key>` for plugin settings). */
+  key: string;
+  /** Input type driving the form control. */
+  type: ServerSettingType | string;
+  /** Group/section the setting belongs to. */
+  group: string;
+  /** Human-readable label. */
+  label: string;
+  /** Current value (string-encoded). Omitted for secret settings. */
+  value?: string | null;
+  /** Allowed values for `enum` types. */
+  options: string[];
+  /** Whether the value is a secret (masked, write-only). */
+  secret: boolean;
+  /** Optional one-line help text. */
+  help?: string | null;
+}
+
+/** Editable server-settings snapshot advertised by the server to admins. */
+export interface ServerSettingsSnapshot {
+  settings: ServerSetting[];
+  revision: number;
+}
+
+/** Event payload emitted when a `FancyServerSettings` broadcast arrives. */
+export interface ServerSettingsEvent {
+  settings: ServerSettingsSnapshot;
 }

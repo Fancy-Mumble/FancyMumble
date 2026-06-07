@@ -3,7 +3,20 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import type { UserMode } from "../../types";
 import { Toggle } from "./SharedControls";
+import { registerSettings } from "./settingsSearchRegistry";
 import styles from "./SettingsPage.module.css";
+
+registerSettings("advanced")
+  .add("advanced.expertMode", ["expert"])
+  .add("advanced.klipyApiKey", ["gif", "klipy", "api key"])
+  .add("advanced.developerMode", ["developer", "debug"])
+  .add("advanced.logLevel", ["logging", "log"])
+  .add("advanced.translationHelper")
+  .add("advanced.autoReconnect", ["reconnect"])
+  .add("advanced.autoUpdate", ["update", "auto update"])
+  .add("advanced.persistDms", ["direct messages", "history"])
+  .add("advanced.disconnectWarning", ["disconnect", "confirmation"])
+  .add("advanced.dangerZone", ["reset", "delete"]);
 
 export function AdvancedPanel({
   userMode,
@@ -12,12 +25,14 @@ export function AdvancedPanel({
   autoReconnect,
   autoUpdateOnStartup,
   persistDms,
+  showDisconnectWarning,
   onToggleMode,
   onKlipyApiKeyChange,
   onLogLevelChange,
   onToggleAutoReconnect,
   onToggleAutoUpdate,
   onTogglePersistDms,
+  onToggleDisconnectWarning,
   onToggleDeveloperMode,
   onReset,
 }: Readonly<{
@@ -27,12 +42,14 @@ export function AdvancedPanel({
   autoReconnect: boolean;
   autoUpdateOnStartup: boolean;
   persistDms: boolean;
+  showDisconnectWarning: boolean;
   onToggleMode: () => void;
   onKlipyApiKeyChange: (key: string) => void;
   onLogLevelChange: (level: string) => void;
   onToggleAutoReconnect: () => void;
   onToggleAutoUpdate: () => void;
   onTogglePersistDms: () => void;
+  onToggleDisconnectWarning: () => void;
   onToggleDeveloperMode: () => void;
   onReset: () => void;
 }>) {
@@ -167,6 +184,16 @@ export function AdvancedPanel({
             <p className={styles.fieldHint}>{t("advanced.persistDmsHint")}</p>
           </div>
           <Toggle checked={persistDms} onChange={onTogglePersistDms} />
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.toggleRow}>
+          <div className={styles.toggleInfo}>
+            <h3 className={styles.sectionTitle}>{t("advanced.disconnectWarning", { defaultValue: "Disconnect confirmation" })}</h3>
+            <p className={styles.fieldHint}>{t("advanced.disconnectWarningHint", { defaultValue: "Ask for confirmation before disconnecting from a server." })}</p>
+          </div>
+          <Toggle checked={showDisconnectWarning} onChange={onToggleDisconnectWarning} />
         </div>
       </section>
 

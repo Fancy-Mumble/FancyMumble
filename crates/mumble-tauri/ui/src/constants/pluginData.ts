@@ -12,6 +12,8 @@
  * Both must stay in lock-step with the corresponding strings on the
  * Rust side (`mumble-protocol`/`mumble-server` plugins).
  */
+
+import i18next from "i18next";
 export enum PluginDataId {
   FileServerConfig = "fancy-file-server-config",
   LiveDocConfig = "fancy-live-doc-config",
@@ -33,4 +35,28 @@ export enum PluginDataId {
 export enum PluginPayloadType {
   Invite = "Invite",
   Announce = "Announce",
+  /** Host-broadcast lifecycle events: a server plugin was enabled/disabled at
+   *  runtime.  `pluginName` identifies which plugin; no payload.  Mirrors the
+   *  host's `PAYLOAD_TYPE_PLUGIN_ACTIVATED` / `_DEACTIVATED` string constants
+   *  (kept as strings on the wire - the generic `payload_type` field is
+   *  intentionally plugin-agnostic). */
+  PluginActivated = "PluginActivated",
+  PluginDeactivated = "PluginDeactivated",
+}
+
+/** Stable plugin identifiers used by the host's plugin-status broadcasts and
+ *  the `fancy-plugin-info` registry. */
+export const PLUGIN_NAME_FILE_SERVER = "fancy-file-server";
+export const PLUGIN_NAME_LIVE_DOC = "fancy-live-doc";
+
+/** Human-friendly display name for a known plugin id (falls back to the id). */
+export function friendlyPluginName(name: string): string {
+  switch (name) {
+    case PLUGIN_NAME_FILE_SERVER:
+      return i18next.t("common:plugins.fileServer", { defaultValue: "File server" });
+    case PLUGIN_NAME_LIVE_DOC:
+      return i18next.t("common:plugins.liveDoc", { defaultValue: "Live documents" });
+    default:
+      return name;
+  }
 }

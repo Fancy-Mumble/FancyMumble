@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import styles from "./GifPicker.module.css";
+import { getActiveApiKey } from "./klipyConfig";
 
 // --- Klipy API Types ----------------------------------------------
 
@@ -42,18 +43,6 @@ type TabId = "gifs" | "stickers";
  * Full URL pattern: https://api.klipy.com/api/v1/{API_KEY}/{content_type}/{action}
  */
 const KLIPY_BASE = "https://api.klipy.com/api/v1";
-
-/** Module-level custom API key. Set from preferences on component mount. */
-let customApiKey: string | undefined;
-
-/** Called by the GifPicker to apply a user-provided API key. */
-export function setKlipyApiKey(key: string | undefined) {
-  customApiKey = key?.trim() || undefined;
-}
-
-function getActiveApiKey(): string | undefined {
-  return customApiKey || undefined;
-}
 
 /**
  * Low-level Klipy API fetch. The API key is embedded in the URL path.

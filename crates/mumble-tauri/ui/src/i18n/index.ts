@@ -2,23 +2,17 @@ import i18n from "i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
 import { initReactI18next } from "react-i18next";
 
+// Only the source/fallback language (en) is bundled eagerly.  de/fr/zh (and any
+// custom languages) load on demand via the backend below, keeping ~200 kB of
+// inactive-language JSON off the startup heap.  The full 4-language set for the
+// translation editor lives in `./builtInBundles.ts` (loaded with that lazy page).
 import enCommon from "../locales/en/common.json";
 import enSettings from "../locales/en/settings.json";
 import enChat from "../locales/en/chat.json";
 import enServer from "../locales/en/server.json";
 import enSidebar from "../locales/en/sidebar.json";
-import deCommon from "../locales/de/common.json";
-import deSettings from "../locales/de/settings.json";
-import deChat from "../locales/de/chat.json";
-import deServer from "../locales/de/server.json";
-import deSidebar from "../locales/de/sidebar.json";
-import frCommon from "../locales/fr/common.json";
-import frSettings from "../locales/fr/settings.json";
-import frChat from "../locales/fr/chat.json";
-import frServer from "../locales/fr/server.json";
-import frSidebar from "../locales/fr/sidebar.json";
 
-export const BUILT_IN_LANGUAGES = ["en", "de", "fr"] as const;
+export const BUILT_IN_LANGUAGES = ["en", "de", "fr", "zh"] as const;
 export type BuiltInLanguage = (typeof BUILT_IN_LANGUAGES)[number];
 
 /** Public list of namespaces shipped with the app. */
@@ -39,7 +33,7 @@ export const SOURCE_LANGUAGE: BuiltInLanguage = "en";
  *
  * The header BODY uses **Unicode tag characters** (U+E0020..U+E007F).
  * Tag chars are explicitly marked as *default-ignorable code points*
- * in Unicode and every modern browser — Windows included — renders
+ * in Unicode and every modern browser - Windows included - renders
  * them as truly zero-width.  Each one maps 1:1 to a printable ASCII
  * character (U+E0061 ↔ 'a'), so we can decode the header back to
  * `"settings:profile.panelTitle"` in the picker overlay.
@@ -49,7 +43,7 @@ export const SOURCE_LANGUAGE: BuiltInLanguage = "en";
  * scan without false positives from real text.
  *
  * The previous (visible-ASCII) scheme leaked the ns + key path into
- * the UI as readable text — this scheme cloaks it entirely.
+ * the UI as readable text - this scheme cloaks it entirely.
  */
 export const PICKER_MARK_START = String.fromCodePoint(0x200B);
 export const PICKER_MARK_END = String.fromCodePoint(0x200D);
@@ -87,11 +81,31 @@ function decodeTags(s: string): string {
   return out;
 }
 
-export const BUILT_IN_RESOURCES = {
+const EN_RESOURCES = {
   en: { common: enCommon, settings: enSettings, chat: enChat, server: enServer, sidebar: enSidebar },
-  de: { common: deCommon, settings: deSettings, chat: deChat, server: deServer, sidebar: deSidebar },
-  fr: { common: frCommon, settings: frSettings, chat: frChat, server: frServer, sidebar: frSidebar },
 } as const;
+
+/**
+ * Minimal i18next backend that lazy-loads a built-in language's namespace from
+ * its split JSON chunk.  Called by i18next only for languages not already in
+ * `resources` (i.e. de/fr/zh) - en is preloaded and custom languages are injected
+ * via `addResourceBundle`, so neither hits this path.
+ */
+const lazyLocaleBackend = {
+  type: "backend" as const,
+  init() {
+    /* no options */
+  },
+  read(
+    language: string,
+    namespace: string,
+    callback: (err: unknown, data: Record<string, unknown> | null) => void,
+  ) {
+    import(`../locales/${language}/${namespace}.json`)
+      .then((m: { default: Record<string, unknown> }) => callback(null, m.default))
+      .catch((err: unknown) => callback(err, null));
+  },
+};
 
 /** Strongly-typed shape of a single language bundle. */
 export type LocaleBundle = Record<I18nNamespace, Record<string, unknown>>;
@@ -100,7 +114,7 @@ let pickerActive = false;
 
 // Register the picker post-processor *before* init.  i18next reads the
 // `postProcess` array during init and silently drops names it doesn't
-// recognise yet — registering later would mean the picker is a no-op
+// recognise yet - registering later would mean the picker is a no-op
 // on the first render after a hot reload, which is exactly when the
 // user toggles it.
 i18n.use({
@@ -113,7 +127,7 @@ i18n.use({
     if (!keyStr) return value;
     // When i18next can't find a translation it returns the key itself.
     // Wrapping that with a marker leaves the visible key path in the
-    // UI, which looks broken — skip the marker so callers see the bare
+    // UI, which looks broken - skip the marker so callers see the bare
     // key (matching the no-picker behaviour) and pick a different
     // string to translate.
     if (value === keyStr) return value;
@@ -131,10 +145,13 @@ i18n.use({
 });
 
 void i18n
+  .use(lazyLocaleBackend)
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
-    resources: BUILT_IN_RESOURCES,
+    resources: EN_RESOURCES,
+    // en is bundled; de/fr/zh come from `lazyLocaleBackend` on demand.
+    partialBundledLanguages: true,
     fallbackLng: SOURCE_LANGUAGE,
     nonExplicitSupportedLngs: true,
     defaultNS: "common",
@@ -181,7 +198,7 @@ export function isPickerActive(): boolean {
  *
  * A text node may contain multiple markers concatenated together when a
  * component renders several `t()` results adjacently.  This helper returns
- * the *first* marker it finds — callers that need every key in a node can
+ * the *first* marker it finds - callers that need every key in a node can
  * use `parseAllPickerMarkers` instead.
  */
 export function parsePickerMarker(
@@ -191,7 +208,7 @@ export function parsePickerMarker(
   if (start < 0) return null;
   const headerEnd = text.indexOf(PICKER_MARK_END, start);
   if (headerEnd < 0) return null;
-  // Header body is tag-encoded ASCII — decode back into "ns:key".
+  // Header body is tag-encoded ASCII - decode back into "ns:key".
   const encodedHeader = text.slice(start + PICKER_MARK_START.length, headerEnd);
   const decoded = decodeTags(encodedHeader);
   const sep = decoded.indexOf(NS_KEY_DELIM);

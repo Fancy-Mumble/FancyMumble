@@ -1,6 +1,7 @@
-import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAppStore, resolvePluginTrust, resolvePluginTrustBulk } from "../../store";
+import { Modal } from "../elements/Modal";
 import type { PendingTrustPrompt } from "../../plugins/tier1/trust";
 import {
   capabilityLabel,
@@ -25,6 +26,7 @@ export default function PluginTrustPrompt() {
 }
 
 function TrustListDialog({ queue }: { readonly queue: readonly PendingTrustPrompt[] }) {
+  const { t } = useTranslation("common");
   const [expanded, setExpanded] = useState<string | null>(
     queue.length === 1 ? queue[0]!.pluginName : null,
   );
@@ -56,40 +58,40 @@ function TrustListDialog({ queue }: { readonly queue: readonly PendingTrustPromp
   // footer would be redundant noise, so we omit it.
   const allowAllOptions: [SplitButtonOption, ...SplitButtonOption[]] = [
     {
-      label: "Allow all for this server",
-      hint: "Remembered for this server",
+      label: t("pluginTrust.bulkAllowServer"),
+      hint: t("pluginTrust.scopeServerHint"),
       onSelect: () => allowAll(TrustScope.Server),
     },
     {
-      label: "Allow all once",
-      hint: "This session only",
+      label: t("pluginTrust.bulkAllowOnce"),
+      hint: t("pluginTrust.scopeOnceHint"),
       onSelect: () => allowAll(TrustScope.Once),
     },
     {
-      label: "Always allow all",
-      hint: "Trusted on every server",
+      label: t("pluginTrust.bulkAllowAlways"),
+      hint: t("pluginTrust.scopeGlobalHint"),
       onSelect: () => allowAll(TrustScope.Global),
     },
   ];
 
-  return createPortal(
-    <div
-      className={styles.scrim}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="plugin-trust-title"
-    >
-      <div className={styles.dialog}>
+  return (
+    <Modal onClose={() => {}} closeOnEsc={false} closeOnOverlayClick={false} zIndex={250}>
+      <div
+        className={styles.dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="plugin-trust-title"
+      >
         <header className={styles.header}>
           <h2 id="plugin-trust-title" className={styles.title}>
             {single
-              ? "Server wants to enable plugin"
-              : `Server wants to enable ${queue.length} plugins`}
+              ? t("pluginTrust.singleTitle")
+              : t("pluginTrust.multiTitle", { count: queue.length })}
           </h2>
           <p className={styles.subtitle}>
             {single
-              ? "Review the plugin and choose whether to allow it."
-              : "Expand a plugin to review what it can do, then decide individually or use the buttons below to apply the same choice to all."}
+              ? t("pluginTrust.singleSubtitle")
+              : t("pluginTrust.multiSubtitle")}
           </p>
         </header>
 
@@ -111,14 +113,13 @@ function TrustListDialog({ queue }: { readonly queue: readonly PendingTrustPromp
               className={`${styles.btn} ${styles.btnDanger}`}
               onClick={blockAll}
             >
-              Block all
+              {t("pluginTrust.blockAll")}
             </button>
             <SplitButton options={allowAllOptions} variant="primary" />
           </footer>
         )}
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }
 
@@ -131,6 +132,7 @@ function PluginRow({
   readonly open: boolean;
   readonly onToggle: () => void;
 }) {
+  const { t } = useTranslation("common");
   const info = decodePluginInfo(pending.registryEntry.infoJson);
   const declared = pending.manifest.capabilities ?? [];
   const isReprompt = pending.previous !== null;
@@ -147,25 +149,25 @@ function PluginRow({
 
   const allowOptions: [SplitButtonOption, ...SplitButtonOption[]] = [
     {
-      label: "Allow for this server",
-      hint: "Remembered for this server",
+      label: t("pluginTrust.scopeServer"),
+      hint: t("pluginTrust.scopeServerHint"),
       onSelect: () => allow(TrustScope.Server),
     },
     {
-      label: "Allow once",
-      hint: "This session only",
+      label: t("pluginTrust.scopeOnce"),
+      hint: t("pluginTrust.scopeOnceHint"),
       onSelect: () => allow(TrustScope.Once),
     },
     {
-      label: "Always allow",
-      hint: "Trusted on every server",
+      label: t("pluginTrust.scopeAlways"),
+      hint: t("pluginTrust.scopeGlobalHint"),
       onSelect: () => allow(TrustScope.Global),
     },
   ];
 
   const capCount = declared.length === 0
-    ? "no capabilities"
-    : `${declared.length} ${declared.length === 1 ? "capability" : "capabilities"}`;
+    ? t("pluginTrust.capNone")
+    : t("pluginTrust.capCount", { count: declared.length });
 
   return (
     <section className={`${styles.row} ${open ? styles.rowOpen : ""}`}>
@@ -184,7 +186,7 @@ function PluginRow({
           <span className={styles.rowTitle}>
             <strong>{pending.pluginName}</strong>
             <span className={styles.rowVersion}>v{pending.version}</span>
-            {isReprompt && <span className={styles.rowBadge}>updated</span>}
+            {isReprompt && <span className={styles.rowBadge}>{t("pluginTrust.updatedBadge")}</span>}
           </span>
           {info.description && (
             <span className={styles.rowDesc}>{info.description}</span>
@@ -197,17 +199,16 @@ function PluginRow({
         <div className={styles.rowBody}>
           {isReprompt && (
             <div className={styles.warning}>
-              This plugin's version or capability set changed since you
-              last reviewed it. Re-confirm before re-enabling.
+              {t("pluginTrust.repromptWarning")}
             </div>
           )}
 
           <section>
-            <h3 className={styles.sectionTitle}>This plugin will be able to</h3>
+            <h3 className={styles.sectionTitle}>{t("pluginTrust.capabilitiesHeading")}</h3>
             <ul className={styles.capabilities}>
               {declared.length === 0 ? (
                 <li className={styles.capability}>
-                  Nothing - manifest declares no capabilities
+                  {t("pluginTrust.capEmpty")}
                 </li>
               ) : (
                 declared.map((c) => (
@@ -220,24 +221,24 @@ function PluginRow({
           </section>
 
           <details className={styles.advanced}>
-            <summary>Advanced</summary>
+            <summary>{t("pluginTrust.advancedSummary")}</summary>
             <div className={styles.advancedContent}>
-              <span className={styles.advancedLabel}>Plugin</span>
+              <span className={styles.advancedLabel}>{t("pluginTrust.fieldPlugin")}</span>
               <span className={styles.advancedValue}>{pending.pluginName}</span>
 
-              <span className={styles.advancedLabel}>Version</span>
+              <span className={styles.advancedLabel}>{t("pluginTrust.fieldVersion")}</span>
               <span className={styles.advancedValue}>{pending.version}</span>
 
               {info.author && (
                 <>
-                  <span className={styles.advancedLabel}>Author</span>
+                  <span className={styles.advancedLabel}>{t("pluginTrust.fieldAuthor")}</span>
                   <span className={styles.advancedValue}>{info.author}</span>
                 </>
               )}
 
               {info.homepage && (
                 <>
-                  <span className={styles.advancedLabel}>Homepage</span>
+                  <span className={styles.advancedLabel}>{t("pluginTrust.fieldHomepage")}</span>
                   <span className={styles.advancedValue}>
                     <a href={info.homepage} target="_blank" rel="noreferrer">
                       {info.homepage}
@@ -246,7 +247,7 @@ function PluginRow({
                 </>
               )}
 
-              <span className={styles.advancedLabel}>Capabilities</span>
+              <span className={styles.advancedLabel}>{t("pluginTrust.fieldCapabilities")}</span>
               <span className={styles.advancedValue}>
                 <div className={styles.tagList}>
                   {(declared as readonly string[]).map((c) => (
@@ -257,7 +258,7 @@ function PluginRow({
 
               {info.capabilityTags.length > 0 && (
                 <>
-                  <span className={styles.advancedLabel}>Tags</span>
+                  <span className={styles.advancedLabel}>{t("pluginTrust.fieldTags")}</span>
                   <span className={styles.advancedValue}>
                     <div className={styles.tagList}>
                       {info.capabilityTags.map((t) => (
@@ -270,7 +271,7 @@ function PluginRow({
 
               {pending.previous && (
                 <>
-                  <span className={styles.advancedLabel}>Last reviewed</span>
+                  <span className={styles.advancedLabel}>{t("pluginTrust.fieldLastReviewed")}</span>
                   <span className={styles.advancedValue}>
                     v{pending.previous.version}
                     {" - "}
@@ -279,7 +280,7 @@ function PluginRow({
                 </>
               )}
 
-              <span className={styles.advancedLabel}>Schema</span>
+              <span className={styles.advancedLabel}>{t("pluginTrust.fieldSchema")}</span>
               <span className={styles.advancedValue}>
                 v{pending.manifest.schema_version ?? 1}
               </span>
@@ -294,7 +295,7 @@ function PluginRow({
               className={`${styles.btn} ${styles.btnDanger}`}
               onClick={deny}
             >
-              Block
+              {t("pluginTrust.block")}
             </button>
             <SplitButton options={allowOptions} variant="primary" />
           </div>
@@ -305,6 +306,7 @@ function PluginRow({
 }
 
 function Fingerprint({ infoJson }: { readonly infoJson: string | null }) {
+  const { t } = useTranslation("common");
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   useEffect(() => {
     const encoded = new TextEncoder().encode(infoJson ?? "");
@@ -319,7 +321,7 @@ function Fingerprint({ infoJson }: { readonly infoJson: string | null }) {
   if (!fingerprint) return null;
   return (
     <>
-      <span className={styles.advancedLabel}>Fingerprint</span>
+      <span className={styles.advancedLabel}>{t("pluginTrust.fieldFingerprint")}</span>
       <span className={`${styles.advancedValue} ${styles.fingerprint}`}>
         {fingerprint}
       </span>

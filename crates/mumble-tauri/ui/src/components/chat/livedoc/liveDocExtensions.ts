@@ -15,7 +15,6 @@
 import { Extension } from "@tiptap/core";
 
 declare module "@tiptap/core" {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface Commands<ReturnType> {
     indent: {
       indentBlock: () => ReturnType;

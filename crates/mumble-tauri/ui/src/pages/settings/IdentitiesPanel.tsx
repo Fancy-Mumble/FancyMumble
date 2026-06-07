@@ -5,6 +5,10 @@ import { save, open } from "@tauri-apps/plugin-dialog";
 import { deleteProfileData } from "./profileData";
 import styles from "./SettingsPage.module.css";
 import panelStyles from "./IdentitiesPanel.module.css";
+import { registerSettings } from "./settingsSearchRegistry";
+
+registerSettings("identities")
+  .add("identities.createNew", ["certificate", "key", "identity"]);
 
 export function IdentitiesPanel({
   identities,

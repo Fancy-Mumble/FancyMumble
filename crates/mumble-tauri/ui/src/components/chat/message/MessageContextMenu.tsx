@@ -147,7 +147,6 @@ export default function MessageContextMenu({
     return readers
       .filter((r) => r.name && (!ownHash || r.cert_hash !== ownHash))
       .map((r) => ({ certHash: r.cert_hash, name: r.name, isOnline: r.is_online, avatarUrl: avatarByHash?.get(r.cert_hash) }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menu.message, channelId, allMessageIds, avatarByHash, ownHash, readReceiptVersion]);
 
   return createPortal(
@@ -163,10 +162,10 @@ export default function MessageContextMenu({
           <div className={styles.reactionRow}>
             {QUICK_REACTIONS.map((r) => (
               <button
-                key={r.label}
+                key={r.key}
                 type="button"
                 className={styles.reactionBtn}
-                aria-label={r.label}
+                aria-label={t(`quickReactions.${r.key}`)}
                 onClick={() => { onReaction(menu.message, r.emoji); onClose(); }}
               >
                 {r.emoji}

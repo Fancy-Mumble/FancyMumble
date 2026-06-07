@@ -283,6 +283,12 @@ export function useChatSend({ pendingQuotes, clearQuotes, draft, clearDraft, edi
         return;
       }
 
+      // Pastes that land inside the Live Doc editor belong to that
+      // editor (it inserts images at the caret); never hijack them
+      // into the chat as a media message.
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.("[data-livedoc-editor]")) return;
+
       // Try synchronous DataTransfer first.
       const clip = e.clipboardData;
       if (clip && extractAndSendImage(clip)) {

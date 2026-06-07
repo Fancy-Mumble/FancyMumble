@@ -1,4 +1,5 @@
 import type { KeyboardEvent } from "react";
+import { useTranslation } from "react-i18next";
 import type { SlashCommandEntry } from "../../plugins/tier1/manifest";
 import styles from "./SlashCommandMenu.module.css";
 
@@ -15,8 +16,9 @@ export default function SlashCommandMenu({
   onPick,
   onActiveIndexChange,
 }: Props) {
+  const { t } = useTranslation("chat");
   if (entries.length === 0) {
-    return <div className={styles.menu}><div className={styles.empty}>No matching commands</div></div>;
+    return <div className={styles.menu}><div className={styles.empty}>{t("slashCommandMenu.noMatches")}</div></div>;
   }
   return (
     <div className={styles.menu} role="listbox">

@@ -8,7 +8,7 @@
 
 use mumble_protocol::command;
 
-use super::types::PluginRegistryEntryPayload;
+use super::types::{PluginDataPayload, PluginRegistryEntryPayload};
 use super::AppState;
 
 impl AppState {
@@ -23,6 +23,19 @@ impl AppState {
             return Vec::new();
         };
         guard.plugin_registry.clone()
+    }
+
+    /// Snapshot the cached server-originated `plugin-data` broadcasts
+    /// (file-server config, live-doc config, plugin info, server
+    /// emotes) for the active session.  Used by the UI to re-hydrate
+    /// after an HMR reload, since those broadcasts are delivered once
+    /// per connect and never resent.
+    pub fn get_plugin_broadcasts(&self) -> Vec<PluginDataPayload> {
+        let snapshot = self.inner.snapshot();
+        let Ok(guard) = snapshot.lock() else {
+            return Vec::new();
+        };
+        guard.plugin_broadcasts.clone()
     }
 
     /// Admin: request the current plugin inventory from the server.

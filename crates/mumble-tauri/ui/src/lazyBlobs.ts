@@ -24,8 +24,10 @@ interface CachedBlob<T> {
 const CACHE_MAX = 200;
 const avatarCache = new Map<number, CachedBlob<string>>();
 const descriptionCache = new Map<number, CachedBlob<string>>();
+const commentCache = new Map<number, CachedBlob<string>>();
 const avatarPending = new Map<number, Promise<string | null>>();
 const descriptionPending = new Map<number, Promise<string | null>>();
+const commentPending = new Map<number, Promise<string | null>>();
 
 function lruTouch<T>(cache: Map<number, CachedBlob<T>>, key: number, entry: CachedBlob<T>): void {
   cache.delete(key);
@@ -120,6 +122,73 @@ export function useUserAvatar(session: number | null | undefined, textureSize: n
   }, [session, textureSize]);
 
   return url;
+}
+
+/** Synchronously returns a cached comment/bio if present (and matches size). */
+export function getCachedUserComment(session: number, commentSize: number | null): string | null {
+  if (commentSize == null || commentSize === 0) return null;
+  const cached = commentCache.get(session);
+  return cached && cached.size === commentSize ? cached.value : null;
+}
+
+async function fetchUserComment(session: number, expectedSize: number): Promise<string | null> {
+  if (session <= 0) return null;
+  const existing = commentPending.get(session);
+  if (existing) return existing;
+  const promise = (async () => {
+    try {
+      const text = await invoke<string | null>("get_user_comment", { session });
+      if (!text) return null;
+      lruTouch(commentCache, session, { size: expectedSize, value: text });
+      return text;
+    } catch (e) {
+      console.error("get_user_comment failed", session, e);
+      return null;
+    } finally {
+      commentPending.delete(session);
+    }
+  })();
+  commentPending.set(session, promise);
+  return promise;
+}
+
+/**
+ * React hook: returns the user's comment/bio text, or `null` while loading,
+ * unset, or disabled.  `enabled` gates the (lazy) fetch so hover cards only
+ * load a bio when actually shown - otherwise rendering a user list would
+ * eagerly fetch every member's bio.
+ */
+export function useUserComment(
+  session: number | null | undefined,
+  commentSize: number | null | undefined,
+  enabled = true,
+): string | null {
+  const initial = enabled && session != null && commentSize != null
+    ? getCachedUserComment(session, commentSize)
+    : null;
+  const [text, setText] = useState<string | null>(initial);
+
+  useEffect(() => {
+    if (!enabled || session == null || session <= 0 || commentSize == null || commentSize === 0) {
+      setText(null);
+      return;
+    }
+    const cached = getCachedUserComment(session, commentSize);
+    if (cached) {
+      setText(cached);
+      return;
+    }
+    setText(null);
+    let cancelled = false;
+    fetchUserComment(session, commentSize).then((t) => {
+      if (!cancelled) setText(t);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session, commentSize, enabled]);
+
+  return text;
 }
 
 /** React hook: returns the description text for a channel, or `null` while loading or empty. */
@@ -226,6 +295,8 @@ export function prefetchChannelDescription(channelId: number, descriptionSize: n
 export function _clearLazyBlobsForTests(): void {
   avatarCache.clear();
   descriptionCache.clear();
+  commentCache.clear();
   avatarPending.clear();
   descriptionPending.clear();
+  commentPending.clear();
 }

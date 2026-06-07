@@ -67,7 +67,6 @@ export function ImageEditor({
         y: cropTop + cropH / 2 - (ih * mz) / 2,
       });
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
 
   /** Clamp position so the image always covers the crop area. */

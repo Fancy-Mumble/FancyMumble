@@ -134,7 +134,11 @@
     "dangerZoneHint": "Supprime toutes les données enregistrées (serveurs, préférences, certificats) et revient à l'écran d'accueil.",
     "dangerConfirmText": "Vraiment ? Cette action est irréversible.",
     "dangerConfirmBtn": "Oui, tout réinitialiser",
-    "dangerResetBtn": "Réinitialiser toutes les données"
+    "dangerResetBtn": "Réinitialiser toutes les données",
+    "persistDms": "Conserver l'historique des MP",
+    "persistDmsHint": "Les messages privés échangés avec vos amis sont enregistrés sur cet appareil, chiffrés avec AES-GCM. Désactivez pour conserver les MP uniquement en mémoire ; l'historique existant est supprimé lorsque vous désactivez cette option.",
+    "disconnectWarning": "Confirmation de déconnexion",
+    "disconnectWarningHint": "Demander une confirmation avant de se déconnecter d'un serveur."
   },
   "shortcuts": {
     "panelTitle": "Raccourcis",
@@ -242,7 +246,12 @@
     "evtVoiceActivity": "Activité vocale",
     "evtVoiceActivityDesc": "Quelqu'un a commencé à parler dans votre canal",
     "evtSelfMuted": "Micro coupé (par vous-même)",
-    "evtSelfMutedDesc": "Vous avez coupé ou réactivé votre microphone"
+    "evtSelfMutedDesc": "Vous avez coupé ou réactivé votre microphone",
+    "welcomeMessage": "Message de bienvenue",
+    "welcomeMessageHint": "Afficher le message de bienvenue du serveur dans une fenêtre après la connexion.",
+    "welcomeHide": "Masquer",
+    "welcomeOnce": "Afficher une fois",
+    "welcomeAlways": "Toujours afficher"
   },
   "privacy": {
     "panelTitle": "Confidentialité",
@@ -312,7 +321,8 @@
     "channelViewerModern": "Moderne",
     "fontSizeSmall": "Petit",
     "fontSizeMedium": "Moyen",
-    "fontSizeLarge": "Grand"
+    "fontSizeLarge": "Grand",
+    "bgPreviewAlt": "Aperçu de l'arrière-plan du chat"
   },
   "activation": {
     "voice": "Activation vocale",
@@ -390,7 +400,9 @@
     "nameplateHint": "Style d'arrière-plan derrière votre nom affiché.",
     "sectionEffect": "Effet de profil",
     "effectHint": "Effet animé appliqué à votre carte de profil.",
-    "connectedSuffix": " (connecté)"
+    "connectedSuffix": " (connecté)",
+    "avatarThumbAlt": "Avatar",
+    "bannerThumbAlt": "Bannière"
   },
   "tabs": {
     "profile": "Profil",
@@ -402,7 +414,8 @@
     "personalize": "Personnaliser",
     "advanced": "Avancé",
     "localization": "Langue & Format",
-    "channelsRoles": "Canaux & Rôles"
+    "channelsRoles": "Canaux & Rôles",
+    "plugins": "Plugins"
   },
   "avatarEditor": {
     "title": "Modifier l'avatar",
@@ -412,7 +425,9 @@
     "dropLabel": "Déposez une image ou un GIF ici, ou cliquez pour parcourir",
     "unsavedHint": "Vous avez des modifications non enregistrées. Appliquez-les ou abandonnez-les.",
     "discardBtn": "Abandonner",
-    "applyBtn": "Appliquer"
+    "applyBtn": "Appliquer",
+    "previewAlt": "Aperçu de l'avatar",
+    "imgAlt": "Avatar"
   },
   "bannerEditor": {
     "title": "Modifier la bannière",
@@ -423,10 +438,18 @@
     "dropLabel": "Déposez une image ou un GIF ici, ou cliquez pour parcourir",
     "unsavedHint": "Vous avez des modifications non enregistrées. Appliquez-les ou abandonnez-les.",
     "discardBtn": "Abandonner",
-    "applyBtn": "Appliquer"
+    "applyBtn": "Appliquer",
+    "imgAlt": "Bannière"
   },
   "bioEditor": {
-    "placeholder": "Parlez de vous aux autres..."
+    "placeholder": "Parlez de vous aux autres...",
+    "bold": "Gras",
+    "italic": "Italique",
+    "underline": "Souligné",
+    "insertImage": "Insérer une image",
+    "textColor": "Couleur du texte",
+    "colorSwatchAriaLabel": "Couleur {{hex}}",
+    "resetColour": "Réinitialiser la couleur"
   },
   "denoiserAdvanced": {
     "sectionLabel": "Paramètres de l'algorithme",
@@ -473,7 +496,9 @@
     "emotes": "Émotes",
     "onboarding": "Onboarding",
     "serverPlugins": "Plugins du serveur",
-    "marketplace": "Marché"
+    "marketplace": "Marché",
+    "fileServer": "Serveur de fichiers",
+    "serverSettings": "Paramètres du serveur"
   },
   "registeredUsers": {
     "title": "Utilisateurs enregistrés",
@@ -652,7 +677,8 @@
     "errorRemoveFailed": "Échec de la suppression : {{detail}}",
     "errorPickerFailed": "Impossible d'ouvrir le sélecteur de fichiers.",
     "successAdded": "Émote ajoutée.",
-    "successRemoved": ":{{shortcode}} : supprimé"
+    "successRemoved": ":{{shortcode}} : supprimé",
+    "confirmDelete": "Supprimer l'émote :{{shortcode}}: ?"
   },
   "roleManagerDialog": {
     "ariaLabel": "Gérer les rôles pour {{name}}",
@@ -664,29 +690,98 @@
     "save": "Enregistrer"
   },
   "permissionMeta": {
-    "WRITE": { "title": "Modifier l'ACL", "description": "Modifier la configuration ACL et les groupes du canal." },
-    "TRAVERSE": { "title": "Traverser", "description": "Voir le canal et accéder à ses sous-canaux." },
-    "ENTER": { "title": "Entrer", "description": "Rejoindre le canal." },
-    "SPEAK": { "title": "Parler", "description": "Transmettre sa voix dans le canal." },
-    "MUTE_DEAFEN": { "title": "Couper micro / casque", "description": "Couper le micro ou le casque d'un autre utilisateur dans ce canal (côté serveur)." },
-    "MOVE": { "title": "Déplacer des utilisateurs", "description": "Déplacer d'autres utilisateurs dans ce canal ou en dehors." },
-    "MAKE_CHANNEL": { "title": "Créer un sous-canal", "description": "Créer des sous-canaux permanents." },
-    "LINK_CHANNEL": { "title": "Lier des canaux", "description": "Lier ce canal à d'autres canaux pour que la voix circule entre eux." },
-    "WHISPER": { "title": "Chuchoter", "description": "Envoyer des chuchotements ciblés dans ce canal." },
-    "TEXT_MESSAGE": { "title": "Envoyer des messages texte", "description": "Publier des messages texte dans le chat du canal." },
-    "MAKE_TEMP_CHANNEL": { "title": "Créer un sous-canal temporaire", "description": "Créer des sous-canaux temporaires qui disparaissent lorsqu'ils sont vides." },
-    "LISTEN": { "title": "Écouter", "description": "Recevoir l'audio de ce canal sans le rejoindre." },
-    "DELETE_MESSAGE": { "title": "Supprimer des messages", "description": "Supprimer les messages d'autres utilisateurs dans le canal." },
-    "SUBSCRIBE_PUSH": { "title": "S'abonner aux notifications", "description": "Recevoir des notifications push de ce canal." },
-    "SHARE_FILES": { "title": "Partager des fichiers", "description": "Partager des fichiers dans le canal." },
-    "SHARE_FILES_PUBLIC": { "title": "Partager des fichiers (public)", "description": "Partager des fichiers publiquement dans le canal." },
-    "KICK": { "title": "Expulser", "description": "Expulser des utilisateurs du serveur." },
-    "BAN": { "title": "Bannir", "description": "Bannir des utilisateurs du serveur." },
-    "REGISTER": { "title": "Inscrire des utilisateurs", "description": "Enregistrer des invités dans la base de données du serveur." },
-    "SELF_REGISTER": { "title": "Auto-inscription", "description": "Les utilisateurs peuvent s'inscrire eux-mêmes." },
-    "RESET_USER_CONTENT": { "title": "Réinitialiser le contenu utilisateur", "description": "Supprimer les avatars, commentaires et autres contenus d'un utilisateur." },
-    "KEY_OWNER": { "title": "Propriétaire de clé", "description": "Marque l'utilisateur comme propriétaire de clé pour le partage de clé du chat persistant." },
-    "MANAGE_EMOTES": { "title": "Gérer les émotes", "description": "Gérer les émotes personnalisées du serveur." }
+    "WRITE": {
+      "title": "Modifier l'ACL",
+      "description": "Modifier la configuration ACL et les groupes du canal."
+    },
+    "TRAVERSE": {
+      "title": "Traverser",
+      "description": "Voir le canal et accéder à ses sous-canaux."
+    },
+    "ENTER": {
+      "title": "Entrer",
+      "description": "Rejoindre le canal."
+    },
+    "SPEAK": {
+      "title": "Parler",
+      "description": "Transmettre sa voix dans le canal."
+    },
+    "MUTE_DEAFEN": {
+      "title": "Couper micro / casque",
+      "description": "Couper le micro ou le casque d'un autre utilisateur dans ce canal (côté serveur)."
+    },
+    "MOVE": {
+      "title": "Déplacer des utilisateurs",
+      "description": "Déplacer d'autres utilisateurs dans ce canal ou en dehors."
+    },
+    "MAKE_CHANNEL": {
+      "title": "Créer un sous-canal",
+      "description": "Créer des sous-canaux permanents."
+    },
+    "LINK_CHANNEL": {
+      "title": "Lier des canaux",
+      "description": "Lier ce canal à d'autres canaux pour que la voix circule entre eux."
+    },
+    "WHISPER": {
+      "title": "Chuchoter",
+      "description": "Envoyer des chuchotements ciblés dans ce canal."
+    },
+    "TEXT_MESSAGE": {
+      "title": "Envoyer des messages texte",
+      "description": "Publier des messages texte dans le chat du canal."
+    },
+    "MAKE_TEMP_CHANNEL": {
+      "title": "Créer un sous-canal temporaire",
+      "description": "Créer des sous-canaux temporaires qui disparaissent lorsqu'ils sont vides."
+    },
+    "LISTEN": {
+      "title": "Écouter",
+      "description": "Recevoir l'audio de ce canal sans le rejoindre."
+    },
+    "DELETE_MESSAGE": {
+      "title": "Supprimer des messages",
+      "description": "Supprimer les messages d'autres utilisateurs dans le canal."
+    },
+    "SUBSCRIBE_PUSH": {
+      "title": "S'abonner aux notifications",
+      "description": "Recevoir des notifications push de ce canal."
+    },
+    "SHARE_FILES": {
+      "title": "Partager des fichiers",
+      "description": "Partager des fichiers dans le canal."
+    },
+    "SHARE_FILES_PUBLIC": {
+      "title": "Partager des fichiers (public)",
+      "description": "Partager des fichiers publiquement dans le canal."
+    },
+    "KICK": {
+      "title": "Expulser",
+      "description": "Expulser des utilisateurs du serveur."
+    },
+    "BAN": {
+      "title": "Bannir",
+      "description": "Bannir des utilisateurs du serveur."
+    },
+    "REGISTER": {
+      "title": "Inscrire des utilisateurs",
+      "description": "Enregistrer des invités dans la base de données du serveur."
+    },
+    "SELF_REGISTER": {
+      "title": "Auto-inscription",
+      "description": "Les utilisateurs peuvent s'inscrire eux-mêmes."
+    },
+    "RESET_USER_CONTENT": {
+      "title": "Réinitialiser le contenu utilisateur",
+      "description": "Supprimer les avatars, commentaires et autres contenus d'un utilisateur."
+    },
+    "KEY_OWNER": {
+      "title": "Propriétaire de clé",
+      "description": "Marque l'utilisateur comme propriétaire de clé pour le partage de clé du chat persistant."
+    },
+    "MANAGE_EMOTES": {
+      "title": "Gérer les émotes",
+      "description": "Gérer les émotes personnalisées du serveur."
+    }
   },
   "onboarding": {
     "channelsAndRoles": {
@@ -760,7 +855,9 @@
     "staleBadge": "Redémarrage en attente",
     "brokenBadge": "Défectueux",
     "confirmUninstall": "Désinstaller le plugin \"{{name}}\" ? Il sera supprimé du serveur.",
-    "unknownError": "Erreur inconnue"
+    "unknownError": "Erreur inconnue",
+    "incompatible": "Incompatible",
+    "incompatibleTitle": "Incompatible avec ce serveur — ne peut pas être activé."
   },
   "marketplace": {
     "title": "Marketplace de plugins",
@@ -793,7 +890,11 @@
     "noRatings": "Pas encore de note.",
     "ratingsCount_one": "{{count}} note",
     "ratingsCount_other": "{{count}} notes",
-    "minFancyServer": "Serveur Fancy ≥ {{version}}"
+    "minFancyServer": "Serveur Fancy ≥ {{version}}",
+    "installed": "Installé",
+    "alreadyInstalled": "Déjà installé sur ce serveur",
+    "abiVersion": "API v{{version}}",
+    "incompatibleAbi": "Ce plugin cible une version de l'API de plugin différente de celle du serveur et ne peut pas être installé."
   },
   "plugins": {
     "empty": "Aucun plugin n'est chargé sur le serveur connecté.",
@@ -831,5 +932,115 @@
     "fieldFingerprint": "Empreinte",
     "blockBtn": "Bloquer",
     "notNowBtn": "Pas maintenant"
+  },
+  "search": {
+    "placeholder": "Rechercher dans les paramètres…",
+    "noResults": "Aucun paramètre correspondant",
+    "results_one": "{{count}} résultat",
+    "results_other": "{{count}} résultats"
+  },
+  "serverSettings": {
+    "intro": "Modifier les paramètres du serveur à chaud. Les changements s'appliquent immédiatement et sont enregistrés sur le serveur.",
+    "loading": "Chargement des paramètres du serveur…",
+    "unavailable": "Les paramètres du serveur ne sont pas disponibles. Ce serveur ne prend peut-être pas en charge les paramètres à chaud, ou vous n'avez pas l'autorisation de les modifier.",
+    "save": "Enregistrer les modifications",
+    "saving": "Enregistrement…",
+    "saved": "Enregistré"
+  },
+  "fileServer": {
+    "title": "Stockage du serveur de fichiers",
+    "refresh": "Actualiser",
+    "noConfig": "Le serveur de fichiers n'est pas activé sur ce serveur.",
+    "loading": "Chargement…",
+    "error": "Impossible de charger les fichiers",
+    "empty": "Aucun fichier stocké.",
+    "search": "Rechercher des fichiers…",
+    "resultCount": "{{count}} fichiers",
+    "expires": "Expiration",
+    "expiresAt": "Expire {{when}}",
+    "expiredAt": "Expiré {{when}}",
+    "neverExpires": "Jamais",
+    "searchAll": "Rechercher fichiers et documents…",
+    "resultCountAll": "{{files}} fichier(s), {{docs}} document(s)",
+    "noMatch": "Aucun fichier ne correspond à votre recherche.",
+    "selectAll": "Tout sélectionner ({{count}})",
+    "selectAllFiles": "Sélectionner tous les fichiers",
+    "selectAllDocs": "Sélectionner tous les documents",
+    "selectRow": "Sélectionner",
+    "bulkDelete": "Supprimer la sélection",
+    "bulkDeleteN": "Supprimer la sélection ({{count}})",
+    "bulkDeleteConfirm": "Supprimer {{files}} fichier(s) et {{docs}} document(s) ? Cette action est irréversible.",
+    "online": "Téléverseur en ligne",
+    "offline": "Téléverseur hors ligne",
+    "delete": "Supprimer le fichier",
+    "deleteConfirm": "Supprimer « {{name}} » du serveur ? Cette action est irréversible.",
+    "deleteFailed": "Échec de la suppression",
+    "preview": "Aperçu",
+    "previewClose": "Fermer",
+    "previewLoading": "Chargement de l'aperçu…",
+    "previewError": "Échec de l'aperçu",
+    "previewUnavailable": "Aucun aperçu intégré pour ce type.",
+    "unknownOwner": "Inconnu",
+    "health": {
+      "online": "Serveur de fichiers en ligne · {{ms}} ms",
+      "offline": "Serveur de fichiers injoignable",
+      "checking": "Vérification du serveur de fichiers…",
+      "recheck": "Revérifier"
+    },
+    "docs": {
+      "title": "Documents en direct",
+      "empty": "Aucun document conservé pour l'instant.",
+      "noMatch": "Aucun document ne correspond à votre recherche.",
+      "error": "Impossible de charger les documents",
+      "noExpiry": "Les documents sont conservés jusqu'à leur suppression — contrairement aux fichiers téléversés, ils n'expirent pas automatiquement.",
+      "delete": "Supprimer le document",
+      "deleteConfirm": "Supprimer le document « {{name}} » ? Cela supprime toutes ses révisions et est irréversible.",
+      "col": {
+        "name": "Document",
+        "revisions": "Révisions",
+        "size": "Taille",
+        "updated": "Mis à jour"
+      }
+    },
+    "stats": {
+      "used": "Utilisé",
+      "free": "Libre",
+      "total": "Capacité",
+      "files": "Fichiers",
+      "maxFile": "Téléversement max."
+    },
+    "chart": {
+      "usage": "Utilisation du stockage",
+      "byType": "Taille par type",
+      "byAccess": "Par mode d'accès",
+      "used": "Utilisé",
+      "free": "Libre"
+    },
+    "category": {
+      "image": "Images",
+      "video": "Vidéos",
+      "audio": "Audio",
+      "document": "Documents",
+      "archive": "Archives",
+      "other": "Autres"
+    },
+    "access": {
+      "public": "Public",
+      "password": "Mot de passe",
+      "session": "Session"
+    },
+    "col": {
+      "preview": "Aperçu",
+      "name": "Nom",
+      "type": "Type",
+      "size": "Taille",
+      "access": "Accès",
+      "channel": "Canal",
+      "owner": "Propriétaire",
+      "uploaded": "Téléversé",
+      "expires": "Expiration",
+      "actions": "Actions"
+    },
+    "root": "Racine"
   }
 }

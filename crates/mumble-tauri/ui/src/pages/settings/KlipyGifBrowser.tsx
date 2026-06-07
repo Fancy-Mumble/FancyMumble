@@ -2,18 +2,9 @@ import { SearchIcon } from "../../icons";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./KlipyGifBrowser.module.css";
+import { getActiveApiKey } from "../../components/chat/gif/klipyConfig";
 
 const KLIPY_BASE = "https://api.klipy.com/api/v1";
-
-let customApiKey: string | undefined;
-
-export function setKlipyApiKey(key: string | undefined) {
-  customApiKey = key?.trim() || undefined;
-}
-
-function getActiveApiKey(): string | undefined {
-  return customApiKey || undefined;
-}
 
 interface KlipyFileMeta {
   url: string;

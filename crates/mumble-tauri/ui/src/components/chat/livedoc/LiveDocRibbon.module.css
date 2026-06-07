@@ -1,0 +1,548 @@
+/* LiveDocRibbon: MS Word-style ribbon (title bar + tab strip + panel). */
+
+.ribbon {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex-shrink: 0;
+  background: var(--color-surface-elevated, #262a32);
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  user-select: none;
+}
+
+/* ---- Title bar: quick-access + doc title + window controls ----------- */
+.titleBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  min-height: 32px;
+}
+
+.qat {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.qatBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.7));
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.qatBtn:hover:not(:disabled) {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--color-text-primary, #f5f6f8);
+}
+
+.qatBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.qatActive {
+  color: var(--color-accent, #2aabee);
+}
+
+.qatSep {
+  width: 1px;
+  height: 18px;
+  background: var(--color-border, rgba(255, 255, 255, 0.14));
+  margin: 0 4px;
+}
+
+.titleArea {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  justify-content: center;
+  color: var(--color-text-primary, #f5f6f8);
+}
+
+.titleText {
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40ch;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+.statusOk {
+  background: rgba(102, 204, 102, 0.16);
+  color: #6cce6c;
+}
+
+.statusBad {
+  background: rgba(255, 153, 51, 0.16);
+  color: #ff9933;
+}
+
+.sharedWith {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--color-text-muted, #aab0b8);
+  white-space: nowrap;
+}
+
+.windowControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.winBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.winBtn:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.winBtnActive {
+  background: var(--color-accent-subtle, rgba(42, 171, 238, 0.18));
+  border-color: var(--color-accent, #2aabee);
+  color: var(--color-accent, #2aabee);
+}
+
+.winBtnClose:hover {
+  background: rgba(255, 80, 80, 0.18);
+  color: #ff8585;
+}
+
+/* ---- Tab strip ------------------------------------------------------- */
+.tabStrip {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 0 8px;
+  height: 30px;
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabStrip::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.7));
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+
+.tab:hover {
+  color: var(--color-text-primary, #f5f6f8);
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.05));
+}
+
+.tabActive {
+  color: var(--color-accent, #2aabee);
+  border-bottom-color: var(--color-accent, #2aabee);
+}
+
+/* Word colours the File tab as a solid accent "backstage" entry. */
+.fileTab {
+  background: var(--color-accent, #2aabee);
+  color: #fff;
+  font-weight: 600;
+  border-radius: var(--radius-sm, 4px) var(--radius-sm, 4px) 0 0;
+}
+
+.fileTab:hover {
+  background: var(--color-accent, #2aabee);
+  color: #fff;
+  filter: brightness(1.08);
+}
+
+/* ---- Ribbon panel: horizontal row of grouped controls ---------------- */
+.panel {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 6px 8px;
+  min-height: 84px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 5px;
+  border-right: 1px solid var(--color-border, rgba(255, 255, 255, 0.07));
+  flex-shrink: 0;
+}
+
+.groupBody {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+/* Stack small controls in up-to-three rows like Word's compact groups. */
+.groupRows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  justify-content: center;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.groupCaption {
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-muted, #aab0b8);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* ---- Collapsed group (Word-style auto-resize) ------------------------ */
+/* When the ribbon is too narrow to show every group, the lowest-priority
+   groups collapse to a single summary button that re-opens the full group in
+   a flyout - mirroring MS Word's responsive ribbon. */
+.groupCollapsed {
+  display: flex;
+  align-items: stretch;
+  border-right: 1px solid var(--color-border, rgba(255, 255, 255, 0.07));
+  flex-shrink: 0;
+}
+
+.groupCollapsedBtn {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 64px;
+  height: 100%;
+  padding: 4px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.groupCollapsedBtn:hover,
+.groupCollapsedBtnOpen {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.07));
+}
+
+.groupCollapsedBtnOpen {
+  border-color: var(--color-border, rgba(255, 255, 255, 0.14));
+}
+
+.groupCollapsedIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.groupCollapsedFoot {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  color: var(--color-text-muted, #aab0b8);
+}
+
+.groupCollapsedLabel {
+  font-size: 10.5px;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The flyout reproduces the in-ribbon group layout on a floating surface. */
+.groupFlyout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 84px;
+  padding: 8px 10px 6px;
+  background: var(--color-surface-elevated, #262a32);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+
+/* ---- Buttons --------------------------------------------------------- */
+.btnLarge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 44px;
+  max-width: 66px;
+  height: 100%;
+  padding: 4px 4px 3px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.btnLarge:hover:not(:disabled) {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.07));
+}
+
+.btnLargeIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  flex-shrink: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* Reserve two label lines so single- and double-line captions keep their
+   first line at the same height across every button; the icon band above is
+   fixed too, so all icons line up. */
+.btnLargeLabel {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  text-align: center;
+  font-size: 10.5px;
+  line-height: 1.15;
+  min-height: 2.3em;
+  word-break: break-word;
+  hyphens: auto;
+}
+
+.btnSmall {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 26px;
+  height: 24px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.btnSmall:hover:not(:disabled) {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.07));
+}
+
+.btnSmallLabel {
+  font-size: 11.5px;
+}
+
+.btnLarge:disabled,
+.btnSmall:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btnActive {
+  background: var(--color-accent-subtle, rgba(42, 171, 238, 0.15));
+  border-color: var(--color-accent, #2aabee);
+  color: var(--color-accent, #2aabee);
+}
+
+/* Compact dropdown trigger used inside ribbon groups (font, margins...) */
+.ribbonField {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ribbonFieldLabel {
+  font-size: 10px;
+  color: var(--color-text-muted, #aab0b8);
+}
+
+.inlineTrigger {
+  height: 24px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+/* ---- File backstage menu --------------------------------------------- */
+.fileMenuWrap {
+  display: inline-flex;
+}
+
+.fileMenu {
+  min-width: 220px;
+  background: var(--color-surface, #1e2128);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.fileMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fileMenuItem:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.fileMenuSep {
+  height: 1px;
+  background: var(--color-border, rgba(255, 255, 255, 0.1));
+  margin: 4px 2px;
+}
+
+/* ---- Field controls (Design watermark, Layout toggles, Draw stroke) -- */
+.textInput {
+  height: 24px;
+  width: 150px;
+  padding: 0 8px;
+  background: var(--color-surface, #1e2128);
+  color: var(--color-text-primary, #f5f6f8);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  font-size: 12px;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text-primary, #f5f6f8);
+  cursor: pointer;
+}
+
+.toggleDisabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rangeInput {
+  width: 96px;
+}
+
+/* ---- Review stats ---------------------------------------------------- */
+.stats {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 4px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 56px;
+}
+
+.statValue {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text-primary, #f5f6f8);
+  line-height: 1.1;
+}
+
+.statLabel {
+  font-size: 10px;
+  color: var(--color-text-muted, #aab0b8);
+}
+
+.swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.2));
+}
+
+/* Hide the title-bar quick-access labels / collapse paddings on narrow. */
+@media (max-width: 640px) {
+  .titleArea {
+    justify-content: flex-start;
+  }
+  .sharedWith {
+    display: none;
+  }
+}

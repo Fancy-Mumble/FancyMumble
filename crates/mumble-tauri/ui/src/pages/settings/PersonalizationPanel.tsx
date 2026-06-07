@@ -21,6 +21,16 @@ import { FONT_FAMILIES, applyFont } from "../../utils/fonts";
 import { FileDropZone } from "../../components/elements/FileDropZone";
 import styles from "./SettingsPage.module.css";
 import panelStyles from "./PersonalizationPanel.module.css";
+import { registerSettings } from "./settingsSearchRegistry";
+
+registerSettings("personalize")
+  .add("personalize.theme", ["dark", "light", "colors"])
+  .add("personalize.chatBackground", ["wallpaper"])
+  .add("personalize.bgEffects")
+  .add("personalize.messageStyle")
+  .add("personalize.font", ["typeface", "text size"])
+  .add("personalize.messageList")
+  .add("personalize.channelViewer", ["hide empty channels"]);
 
 interface PersonalizationPanelProps {
   readonly data: PersonalizationData;
@@ -293,7 +303,7 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
             hasBackground && previewImage ? (
               <img
                 src={previewImage}
-                alt="Chat background preview"
+                alt={t("personalize.bgPreviewAlt")}
                 style={{ opacity: data.chatBgOpacity }}
               />
             ) : undefined

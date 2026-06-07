@@ -26,30 +26,20 @@ impl AppState {
     ) -> Result<(), String> {
         let app_handle = self.app_handle().ok_or("App not initialized")?;
 
-        // Drop any stale, fully-disconnected session that targets the
-        // exact same `(host, port, username)`.  Without this prune the
-        // automatic reconnect path would leak one extra tab per retry
-        // (each `connect` allocates a fresh `ServerId`) and rapidly
-        // spam the tab strip when the server is briefly unreachable.
-        let pruned = self
-            .registry
-            .prune_disconnected_for(&host, port, &username);
-        if !pruned.is_empty() {
-            info!(
-                count = pruned.len(),
-                host = %host,
-                port,
-                username = %username,
-                "pruned stale disconnected sessions before reconnect"
-            );
-        }
-
-        // Allocate a fresh `SharedState` for this session and register
-        // it.  Existing sessions stay alive on their own `Arc`s; we
-        // simply swap the `inner` handle to point at the new one so it
-        // becomes the active session.
-        let server_id = ServerId::new();
-        let inner = self.fresh_session_state();
+        // Reuse the existing session slot for this exact `(host, port,
+        // username)` target so an automatic reconnect re-binds the *same*
+        // tab instead of spawning a new one on every retry (which spammed
+        // the tab strip when the server was unreachable).  A first connect
+        // - or a connect to a target with no disconnected session - falls
+        // back to allocating a fresh `ServerId` with clean state.  Either
+        // way we make the session active and point `inner` at it.
+        let (server_id, inner) = match self.registry.take_reusable_for(&host, port, &username) {
+            Some((id, arc)) => {
+                info!(host = %host, port, username = %username, server_id = %id, "reusing session slot for reconnect");
+                (id, arc)
+            }
+            None => (ServerId::new(), self.fresh_session_state()),
+        };
         let _ = self
             .registry
             .register_active(server_id, std::sync::Arc::clone(&inner));
@@ -413,8 +403,14 @@ async fn handle_connect_result(
             {
                 tracing::error!("Failed to send auth: {e}");
                 mark_disconnected(inner);
-                let _ = registry.remove(server_id);
-                rebind_active(active_handle, registry);
+                // Keep the session in the registry (now `Disconnected`),
+                // exactly like a dropped established connection, so its tab
+                // persists and the next reconnect reuses it instead of
+                // spawning a fresh tab.  Only switch the active session away
+                // when another live session exists.
+                if registry.activate_fallback(server_id) {
+                    rebind_active(active_handle, registry);
+                }
                 let reason = format!("Failed to authenticate: {e}");
                 emit_session_rejected(app_handle, server_id, reason);
                 return;
@@ -434,8 +430,12 @@ async fn handle_connect_result(
         Err(e) => {
             tracing::error!("Connection failed: {e}");
             mark_disconnected(inner);
-            let _ = registry.remove(server_id);
-            rebind_active(active_handle, registry);
+            // Keep the session as `Disconnected` (see auth-failure branch
+            // above) so its tab survives the retry loop and the next
+            // reconnect reuses the same slot rather than opening a new tab.
+            if registry.activate_fallback(server_id) {
+                rebind_active(active_handle, registry);
+            }
             let reason = format!("Connection failed: {e}");
             emit_session_rejected(app_handle, server_id, reason);
         }

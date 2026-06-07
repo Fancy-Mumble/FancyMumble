@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import type { UserEntry } from "../../../types";
 import { useAppStore } from "../../../store";
 import { useAclGroups } from "../../../hooks/useAclGroups";
 import { useUserStats } from "../../../hooks/useUserStats";
 import { parseComment } from "../../../profileFormat";
-import { useUserAvatars } from "../../../lazyBlobs";
+import { useUserAvatars, useUserComment } from "../../../lazyBlobs";
 import { colorFor } from "../../../utils/format";
 import { ProfilePreviewCard } from "../../../pages/settings/ProfilePreviewCard";
 import styles from "../ChatView.module.css";
@@ -59,9 +60,13 @@ interface UserMentionCardProps {
 
 function UserMentionCard({ session, user, avatarUrl }: UserMentionCardProps) {
   const stats = useUserStats(session, true);
+  const liveComment = useUserComment(session, user.comment_size);
   const parsed = useMemo(
-    () => (user.comment ? parseComment(user.comment) : null),
-    [user.comment],
+    () => {
+      const c = user.comment ?? liveComment;
+      return c ? parseComment(c) : null;
+    },
+    [user.comment, liveComment],
   );
   return (
     <ProfilePreviewCard
@@ -84,6 +89,7 @@ interface MemberListProps {
 }
 
 function MemberList({ title, subtitle, members, avatarBySession }: MemberListProps) {
+  const { t } = useTranslation("chat");
   const total = members.length;
   const displayed = total > MAX_DISPLAYED_MEMBERS
     ? members.slice(0, MAX_DISPLAYED_MEMBERS)
@@ -98,7 +104,7 @@ function MemberList({ title, subtitle, members, avatarBySession }: MemberListPro
       </div>
       {subtitle && <div className={styles.mentionMemberSubtitle}>{subtitle}</div>}
       {total === 0 ? (
-        <div className={styles.mentionMemberEmpty}>No members</div>
+        <div className={styles.mentionMemberEmpty}>{t("mentionPopover.noMembers")}</div>
       ) : (
         <div className={styles.mentionMemberScroll}>
           {displayed.map((u) => (
@@ -110,7 +116,7 @@ function MemberList({ title, subtitle, members, avatarBySession }: MemberListPro
           ))}
           {overflow > 0 && (
             <div className={styles.mentionMemberOverflow}>
-              +{overflow} more
+              {t("mentionPopover.overflow", { count: overflow })}
             </div>
           )}
         </div>
@@ -198,6 +204,7 @@ export function membersForRole(
  * so it works regardless of how/when message HTML is injected.
  */
 export default function MentionPopover() {
+  const { t } = useTranslation("chat");
   const [state, setState] = useState<MentionState | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -211,8 +218,23 @@ export default function MentionPopover() {
     return m;
   }, [users]);
 
+  // Only the members the (open) popover actually shows need an avatar - and
+  // none at all while it is closed - so fetch just those rather than every
+  // connected user.  This component is mounted permanently at the chat root,
+  // so fetching all users here would eagerly load every avatar.
+  const avatarMembers = useMemo<readonly UserEntry[]>(() => {
+    if (!state) return [];
+    if (state.kind === "user") {
+      const s = Number(state.target);
+      const u = Number.isFinite(s) ? usersBySession.get(s) : undefined;
+      return u ? [u] : [];
+    }
+    if (state.kind === "role") return membersForRole(users, state.target, aclGroups);
+    return membersForChannelMention(users, selectedChannel);
+  }, [state, users, usersBySession, aclGroups, selectedChannel]);
+
   // Lazy-fetched avatar data-URLs keyed by session.
-  const avatarBySession = useUserAvatars(users);
+  const avatarBySession = useUserAvatars(avatarMembers);
 
   // Document-level click delegation so mention chips become interactive
   // regardless of which component injected the HTML.
@@ -266,7 +288,7 @@ export default function MentionPopover() {
     const session = Number(state.target);
     const user = Number.isFinite(session) ? usersBySession.get(session) : undefined;
     if (!user) {
-      body = <div className={styles.mentionMemberEmpty}>User is offline</div>;
+      body = <div className={styles.mentionMemberEmpty}>{t("mentionPopover.userOffline")}</div>;
     } else {
       body = (
         <UserMentionCard
@@ -281,7 +303,7 @@ export default function MentionPopover() {
     body = (
       <MemberList
         title={`@${state.target}`}
-        subtitle="Online members"
+        subtitle={t("mentionPopover.onlineMembers")}
         members={members}
         avatarBySession={avatarBySession}
       />
@@ -292,7 +314,7 @@ export default function MentionPopover() {
     body = (
       <MemberList
         title={label}
-        subtitle="Members in this channel"
+        subtitle={t("mentionPopover.channelMembers")}
         members={members}
         avatarBySession={avatarBySession}
       />

@@ -3,12 +3,12 @@
  *
  * Windows ships no emoji-flag glyphs, so the cross-platform 🇺🇸-style
  * emoji from `language-flag-colors` renders as "US" / "DE" / etc. on
- * that platform — visible-but-ugly.  To get a real flag everywhere we
+ * that platform - visible-but-ugly.  To get a real flag everywhere we
  * pull the matching SVG from `country-flag-icons` (already a
  * dependency) using its registry export.
  *
  * Importing the whole namespace pulls in ~1.4 MB of SVGs at build time.
- * Acceptable because the translation helper is a developer-mode tool —
+ * Acceptable because the translation helper is a developer-mode tool -
  * the cost only lands when that popout is opened, not in the main app
  * bundle's hot path.  Languages whose `countryCode` has no matching
  * SVG (and `entry === null`) fall back to the language emoji and

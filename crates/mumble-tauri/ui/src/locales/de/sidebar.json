@@ -27,7 +27,12 @@
     "toastMessagesDeleted": "Nachrichten von {{name}} gelöscht",
     "toastDeleteFailed": "Nachrichten konnten nicht gelöscht werden",
     "toastUserMoved": "{{name}} nach {{channel}} verschoben",
-    "toastMoveFailed": "{{name}} konnte nicht verschoben werden"
+    "toastMoveFailed": "{{name}} konnte nicht verschoben werden",
+    "addFriend": "Als Freund hinzufügen",
+    "removeFriend": "Freund entfernen",
+    "toastFriendAdded": "{{name}} zu deinen Freunden hinzugefügt",
+    "toastFriendRemoved": "{{name}} aus deinen Freunden entfernt",
+    "toastFriendFailed": "Freundesliste konnte nicht aktualisiert werden"
   },
   "movePicker": {
     "ariaLabel": "{{name}} in Kanal verschieben",
@@ -76,6 +81,8 @@
     "closeSearch": "Suche schließen",
     "closeSearchTooltip": "Suche schließen (Esc)",
     "channels": "Kanäle",
+    "hideEmptyChannels": "Leere Kanäle ausblenden",
+    "showAllChannels": "Alle Kanäle anzeigen",
     "serverInfo": "Serverinfo",
     "audioSettings": "Audioeinstellungen",
     "adminPanel": "Adminbereich",
@@ -114,6 +121,7 @@
     "labelSession": "Sitzung",
     "labelChannel": "Kanal",
     "labelRegistered": "Registriert",
+    "registeredTitle": "Registriert",
     "yes": "Ja",
     "no": "Nein"
   },
@@ -167,7 +175,8 @@
     "labelFilename": "Dateiname",
     "wildcardHelp": "{date} = JJJJ-MM-TT, {time} = HH-MM-SS, {datetime} = Datum + Uhrzeit, {host} = Server, {user} = Nutzername, {channel} = Kanalname",
     "stopRecording": "Aufnahme stoppen",
-    "startRecording": "Aufnahme starten"  },
+    "startRecording": "Aufnahme starten"
+  },
   "channelPassword": {
     "title": "Passwort erforderlich",
     "body": " benötigt ein Passwort zum Betreten.",
@@ -215,17 +224,27 @@
   "userListItem": {
     "registeredTitle": "Registriert",
     "serverMutedTitle": "Vom Server stummgeschaltet",
-    "selfMutedTitle": "Mikrofon stummgeschaltet",
+    "selfMutedTitle": "Selbst stummgeschaltet",
     "serverDeafenedTitle": "Vom Server taubgeschaltet",
-    "selfDeafenedTitle": "Audio stummgeschaltet",
-    "prioritySpeakerTitle": "Prioritätssprecher",
+    "selfDeafenedTitle": "Selbst taubgeschaltet",
+    "prioritySpeakerTitle": "Bevorzugter Sprecher",
     "sharingScreenTitle": "Bildschirm wird geteilt",
-    "sharingScreenSfuTitle": "Bildschirmfreigabe (Server-relayiert)",
-    "sharingScreenP2PTitle": "Bildschirmfreigabe (Peer-to-Peer)",
+    "sharingScreenSfuTitle": "Bildschirm wird geteilt (über Server)",
+    "sharingScreenP2PTitle": "Bildschirm wird geteilt (Peer-to-Peer)",
     "liveBadge": "Live",
     "liveBadgeP2P": "P2P",
     "dmUnreadTitle_one": "{{count}} ungelesene Direktnachricht",
     "dmUnreadTitle_other": "{{count}} ungelesene Direktnachrichten"
+  },
+  "channelIconList": {
+    "liveBadgeTitle": "Bildschirm wird geteilt",
+    "liveBadgeLabel": "Live",
+    "rootFallback": "Root",
+    "lockBadgeTitle": "Keine Berechtigung zum Beitreten",
+    "listenBadgeTitle": "Wird gehört",
+    "showMembersTitle": "Mitglieder anzeigen",
+    "hideMembersTitle": "Mitglieder ausblenden",
+    "swipeJoinLabel": "Beitreten"
   },
   "channelList": {
     "root": "Stammkanal",
@@ -302,7 +321,6 @@
     "archiveCount": " ({{count}} gespeicherte Nachrichten)",
     "genericAccess": "Wer den Verschlüsselungsschlüssel erhält, kann verschlüsselte Nachrichten in diesem Kanal lesen.",
     "confirmMessage": "Möchtest du den Verschlüsselungsschlüssel wirklich mit <strong>{{name}}</strong> teilen? Dies kann nicht rückgängig gemacht werden.",
-
     "share": "Schlüssel teilen"
   },
   "custodian": {

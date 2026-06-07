@@ -11,6 +11,7 @@ import { useEffect, useRef, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./MentionAutocomplete.module.css";
 import { colorFor } from "../../../utils/format";
+import { formatUserMention, formatRoleMention } from "../../../utils/mentions";
 
 export type MentionCandidate =
   | {
@@ -102,7 +103,7 @@ export default function MentionAutocomplete({
   }
 
   return (
-    <div className={styles.popup} role="listbox" aria-label="Mention suggestions">
+    <div className={styles.popup} role="listbox" aria-label={t("mention.popupAriaLabel")}>
       <ul ref={listRef} className={styles.list}>
         {candidates.map((c, idx) => {
           const label = candidateLabel(c);
@@ -148,6 +149,25 @@ function CandidateIcon({ candidate }: { readonly candidate: MentionCandidate }) 
     );
   }
   return <div className={styles.iconBadge} aria-hidden>@</div>;
+}
+
+/**
+ * Wire-format text to insert into a plain-text draft when a candidate is
+ * picked: `<@SESSION>` / `<@&ROLE>` / `@everyone` / `@here`.  Shared by the
+ * chat composer and the Live Doc markdown view so both insert the same
+ * markers (which both round-trip back into mention chips).
+ */
+export function candidateInsertText(c: MentionCandidate): string {
+  switch (c.kind) {
+    case "user":
+      return formatUserMention(c.session);
+    case "role":
+      return formatRoleMention(c.name);
+    case "everyone":
+      return "@everyone";
+    case "here":
+      return "@here";
+  }
 }
 
 /**

@@ -5,6 +5,11 @@
   padding: 32px 40px;
   max-width: 900px;
 }
+/* Wide variant for data-dense tabs (e.g. the File server dashboard) so a big
+   table can use the full available width instead of the 900px reading column. */
+.contentWide {
+  max-width: none;
+}
 
 .panelTitle {
   font-size: 22px;

@@ -247,7 +247,6 @@ export default function StreamPopoutPage() {
         onLoadedMetadata={() => setVideoReady(true)}
         style={{ display: stream ? "block" : "none" }}
       >
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <track kind="captions" />
       </video>
       {payload && (

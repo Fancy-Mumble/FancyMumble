@@ -4,10 +4,11 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useNavigate } from "react-router-dom";
-import type { AclData, AclGroup, RegisteredUser, RegisteredUserUpdate } from "../../types";
+import type { AclData, AclGroup, RegisteredUser, RegisteredUserUpdate, UserEntry } from "../../types";
 import { formatRelativeDate } from "../../utils/format";
 import KebabMenu, { type KebabMenuItem } from "../../components/elements/KebabMenu";
 import { RoleChip } from "../../components/elements/role/RoleChip";
+import UserHoverCard from "../../components/sidebar/user/UserHoverCard";
 import { useAppStore } from "../../store";
 import { rootChannelId } from "./rootChannel";
 import { UserRoleManagerDialog } from "./UserRoleManagerDialog";
@@ -73,6 +74,14 @@ export function RegisteredUsersTab() {
   const tFn = t as TFn;
   const channels = useAppStore((s) => s.channels);
   const rootId = useMemo(() => rootChannelId(channels), [channels]);
+  // Currently-connected users, keyed by registered id, so a registered user
+  // who is online shows the same live profile card on hover as elsewhere.
+  const onlineUsers = useAppStore((s) => s.users);
+  const connectedById = useMemo(() => {
+    const m = new Map<number, UserEntry>();
+    for (const u of onlineUsers) if (u.user_id != null) m.set(u.user_id, u);
+    return m;
+  }, [onlineUsers]);
 
   const [users, setUsers] = useState<RegisteredUser[]>([]);
   const [rootAcl, setRootAcl] = useState<AclData | null>(null);
@@ -303,6 +312,8 @@ export function RegisteredUsersTab() {
                         <button type="button" className={styles.saveBtn} onClick={submitRename}>{t("registeredUsers.save")}</button>
                         <button type="button" className={styles.removeBtn} onClick={cancelRename}>{t("common:actions.cancel")}</button>
                       </span>
+                    ) : connectedById.has(u.user_id) ? (
+                      <UserHoverCard user={connectedById.get(u.user_id)!}>{u.name}</UserHoverCard>
                     ) : (
                       u.name
                     )}

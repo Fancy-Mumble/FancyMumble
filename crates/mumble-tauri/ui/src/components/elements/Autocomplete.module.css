@@ -126,7 +126,7 @@
 
 /* MUI-style: the wrapper is the bordered box, chips and the input
    share one row, no double borders.  Note `.input` defines border /
-   background / padding — `.inputMulti` below resets all of those so
+   background / padding - `.inputMulti` below resets all of those so
    the input visually dissolves into the wrapper. */
 .inputWrapperMulti {
   flex-wrap: wrap;

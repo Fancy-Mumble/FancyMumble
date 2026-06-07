@@ -3,6 +3,7 @@ import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import type { KeyTrustLevel, KeyFingerprints, PersistenceMode } from "../../types";
+import { Modal } from "../elements/Modal";
 import styles from "./KeyVerificationDialog.module.css";
 
 type FingerprintTab = "emoji" | "words" | "hex";
@@ -139,23 +140,13 @@ export default function KeyVerificationDialog({
     }
   }, [onVerify, onClose]);
 
-  // Close on Escape.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
   if (!open) return null;
 
   const needsVerification = trustLevel === "Unverified" || trustLevel === "Disputed";
 
   return (
-    <dialog className={styles.overlay} open aria-label={t("keyVerification.ariaLabel")}>
-      <div className={styles.dialog}>
+    <Modal onClose={onClose} closeOnOverlayClick={false} zIndex={200} overlayClassName={styles.overlayBlur}>
+      <div className={styles.dialog} role="dialog" aria-modal="true" aria-label={t("keyVerification.ariaLabel")}>
         <div className={styles.header}>
           <h3 className={styles.title}>{t("keyVerification.title")}</h3>
           <button className={styles.closeBtn} onClick={onClose} aria-label={t("common:actions.close")}>
@@ -231,6 +222,6 @@ export default function KeyVerificationDialog({
           </button>
         </div>
       </div>
-    </dialog>
+    </Modal>
   );
 }

@@ -1,0 +1,142 @@
+/* Interim header/footer bands rendered inside the page padding zone.
+   They sit above (header) and below (footer) the editor content, span
+   the page text column, and stay subtle until hovered/focused. */
+
+/* Bands repeat once per page; their vertical `top` is set inline from the
+   page geometry so they line up with each sheet's margins. */
+.band {
+  position: absolute;
+  left: var(--ld-pad-x, 84px);
+  right: var(--ld-pad-x, 84px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 28px;
+  /* Above the editable content layer (`.editorContent` is z-index: 1) so the
+     header band - which renders before the content in the DOM - stays
+     clickable on every page, not just the footer. */
+  z-index: 2;
+}
+
+.bandInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  padding: 2px 2px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.6));
+  outline: none;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.bandInput::placeholder {
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.28));
+  font-style: italic;
+}
+
+.bandInput:hover {
+  border-bottom-color: var(--color-border, rgba(255, 255, 255, 0.18));
+}
+
+.bandInput:focus-visible {
+  border-bottom-color: var(--color-accent, #4a9eff);
+  color: var(--color-text-primary, #fff);
+}
+
+/* Fills the band when the footer text input is hidden (page-number-only),
+   so the number keeps its usual right-hand alignment. */
+.bandSpacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pageNumber {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.55));
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ *
+ * Named header/footer themes (Word-style gallery).                    *
+ * ------------------------------------------------------------------ */
+
+/* Three Columns: spread text + page number with light column rules. */
+.band[data-band-style="threeColumns"] {
+  justify-content: space-between;
+}
+.band[data-band-style="threeColumns"] .bandInput {
+  text-align: center;
+  border-left: 1px solid var(--color-border, rgba(255, 255, 255, 0.14));
+  border-right: 1px solid var(--color-border, rgba(255, 255, 255, 0.14));
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+/* Austin: bold title over a thick accent underline. */
+.band[data-band-style="austin"] .bandInput {
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  border-bottom: 3px solid var(--color-accent, #2aabee);
+  padding-bottom: 3px;
+}
+
+/* Banded: full-width tinted band behind the text. */
+.band[data-band-style="banded"] {
+  background: var(--color-accent-subtle, rgba(42, 171, 238, 0.16));
+  border-radius: 4px;
+  padding: 0 10px;
+}
+.band[data-band-style="banded"] .bandInput {
+  font-weight: 600;
+}
+
+/* Facet: angular left accent bar + uppercase title. */
+.band[data-band-style="facet"] {
+  border-left: 5px solid #8a5cf6;
+  padding-left: 10px;
+}
+.band[data-band-style="facet"] .bandInput {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 11px;
+}
+
+/* Filigree: centred decorative serif between double rules. */
+.band[data-band-style="filigree"] {
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.25));
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.25));
+}
+.band[data-band-style="filigree"] .bandInput {
+  text-align: center;
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+}
+
+/* Grid: boxed title. */
+.band[data-band-style="grid"] {
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.3));
+  border-radius: 3px;
+  padding: 0 8px;
+}
+
+/* Integral: vertical accent bar + small-caps title. */
+.band[data-band-style="integral"] {
+  border-left: 3px solid var(--color-accent, #2aabee);
+  padding-left: 10px;
+}
+.band[data-band-style="integral"] .bandInput {
+  font-variant: small-caps;
+  font-weight: 600;
+}
+
+/* White-paper preview mode: darken the band text for contrast. */
+:global(.editorPagePaper) .bandInput,
+:global(.editorPagePaper) .pageNumber {
+  color: #4a4a50;
+}

@@ -86,7 +86,7 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
-/* Drop downward variant — for use when the button is near the top of the screen. */
+/* Drop downward variant - for use when the button is near the top of the screen. */
 .menuDown {
   bottom: auto;
   top: calc(100% + 6px);

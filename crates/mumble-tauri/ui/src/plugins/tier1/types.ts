@@ -83,11 +83,11 @@ export interface ClientManifest {
 /** Reference to a piece of media addressable by URL.
  *
  *  Plugins use one of the following URL schemes:
- *   - `https://...` / `http://...` — fetched directly by the browser
- *   - `fancy-file://<file_id>` — a file uploaded via Fancy Mumble's
+ *   - `https://...` / `http://...` - fetched directly by the browser
+ *   - `fancy-file://<file_id>` - a file uploaded via Fancy Mumble's
  *     file-server plugin; the client resolves the id to a signed
  *     download URL at render time
- *   - `attachment://<name>` — a file attached to the originating
+ *   - `attachment://<name>` - a file attached to the originating
  *     message under the matching `name`
  */
 export interface UnfurledMediaItem {

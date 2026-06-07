@@ -21,14 +21,16 @@ fn serialize_pchat_protocol<S: Serializer>(protocol: &Option<PchatProtocol>, s: 
     }
 }
 
-/// Emit only the byte length of an `Option<Vec<u8>>` (used for `texture`)
-/// so large avatar blobs do not bloat the IPC payload.  The frontend
-/// fetches the actual bytes on demand via `get_user_texture`.
-fn serialize_blob_len_owned<S: Serializer>(bytes: &Option<Vec<u8>>, s: S) -> Result<S::Ok, S::Error> {
-    match bytes {
-        Some(b) if !b.is_empty() => s.serialize_some(&(b.len() as u32)),
-        _ => s.serialize_none(),
+/// Derive a stable, non-zero `u32` "marker" from a blob hash (or the blob
+/// itself).  Used as the serialised `texture_size`: it is non-zero whenever an
+/// avatar exists (so the frontend knows to fetch it) and changes when the
+/// avatar changes (so caches invalidate), without ever shipping the bytes.
+pub(super) fn blob_marker(bytes: &[u8]) -> u32 {
+    let mut buf = [0u8; 4];
+    for (i, b) in bytes.iter().take(4).enumerate() {
+        buf[i] = *b;
     }
+    u32::from_le_bytes(buf) | 1
 }
 
 /// Emit only the byte length of a `String` (used for channel
@@ -94,13 +96,31 @@ pub struct UserEntry {
     /// Registered user ID. `None` means the user is not registered.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_id: Option<u32>,
-    /// Avatar blob.  Serialised to the frontend as
-    /// `texture_size: u32 | null` (byte length only) to keep
-    /// `get_users` payloads small; fetched lazily via
-    /// `get_user_texture`.
-    #[serde(rename = "texture_size", serialize_with = "serialize_blob_len_owned")]
+    /// Loaded avatar bytes.  Internal only: never serialised (the frontend
+    /// fetches them on demand via `get_user_texture`).  `None` until the blob
+    /// has actually been requested + received, so the backend does NOT hold an
+    /// avatar for every connected user - only for those a client has viewed.
+    #[serde(skip)]
     pub texture: Option<Vec<u8>>,
+    /// Avatar existence/version marker, serialised to the frontend as
+    /// `texture_size: u32 | null`.  Non-zero whenever the user HAS an avatar -
+    /// even before its bytes are loaded - so the UI knows to fetch it; its
+    /// value changes when the avatar changes so caches invalidate.  Derived
+    /// from the server's `texture_hash` (or the inline blob length).
+    #[serde(rename = "texture_size")]
+    pub texture_marker: Option<u32>,
+    /// Loaded comment/bio text.  Internal only: never serialised (the frontend
+    /// fetches it on demand via `get_user_comment`).  `None` until requested,
+    /// so the backend does not hold every user's (potentially banner-laden) bio
+    /// - only those a client has viewed.
+    #[serde(skip)]
     pub comment: Option<String>,
+    /// Comment existence/version marker, serialised as `comment_size: u32 | null`
+    /// (mirrors `texture_size`).  Non-zero whenever the user HAS a comment - even
+    /// before its text is loaded - so the UI knows to fetch it; changes when the
+    /// comment changes so caches invalidate.
+    #[serde(rename = "comment_size")]
+    pub comment_marker: Option<u32>,
     /// Server-side admin mute.
     pub mute: bool,
     /// Server-side admin deafen.
@@ -130,6 +150,8 @@ impl UserEntry {
             channel_id: 0,
             user_id: None,
             texture: None,
+            texture_marker: None,
+            comment_marker: None,
             comment: None,
             mute: false,
             deaf: false,
@@ -1146,6 +1168,44 @@ pub struct OnboardingConfig {
     pub updated_by: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<u64>,
+}
+
+/// One editable server setting (schema + current value), cached from a
+/// `FancyServerSettings` broadcast and surfaced to the admin "Server Settings"
+/// panel.  `type` drives the client's form-control factory.
+#[derive(Debug, Clone, Default, Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct ServerSetting {
+    /// Config key (core keys, or `plugin.<name>.<key>` for plugin settings).
+    pub key: String,
+    /// Input type: `string` | `text` | `bool` | `int` | `enum` | `country` |
+    /// `password`.
+    #[serde(rename = "type")]
+    pub r#type: String,
+    /// Group/section the setting belongs to.
+    pub group: String,
+    /// Human-readable label.
+    pub label: String,
+    /// Current value (string-encoded).  Omitted for secret settings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    /// Allowed values for `enum` types.
+    #[serde(default)]
+    pub options: Vec<String>,
+    /// Whether the value is a secret (masked, write-only).
+    #[serde(default)]
+    pub secret: bool,
+    /// Optional one-line help text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub help: Option<String>,
+}
+
+/// Editable server-settings snapshot advertised by the server to admins.
+#[derive(Debug, Clone, Default, Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct ServerSettingsSnapshot {
+    /// All editable settings (core + currently-loaded plugins).
+    pub settings: Vec<ServerSetting>,
+    /// Monotonic revision so stale broadcasts can be dropped.
+    pub revision: u64,
 }
 
 /// Selected answer ids for one question.

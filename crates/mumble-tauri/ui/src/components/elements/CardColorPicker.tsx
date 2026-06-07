@@ -1,5 +1,6 @@
 import { ShuffleIcon } from "../../icons";
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { resolveThemePalette, randomThemeColors } from "../../utils/colorUtils";
 import styles from "./CardColorPicker.module.css";
 
@@ -19,6 +20,7 @@ export function CardColorPicker({
   glass,
   onGlassChange,
 }: Readonly<CardColorPickerProps>) {
+  const { t } = useTranslation("common");
   const handleAdd = useCallback(() => {
     if (colors.length >= MAX_COLORS) return;
     onChange([...colors, DEFAULT_NEW_COLOR]);
@@ -55,7 +57,7 @@ export function CardColorPicker({
           type="button"
           className={styles.randomBtn}
           onClick={handleRandom}
-          title="Random colours"
+          title={t("cardColorPicker.randomTitle")}
         >
           <ShuffleIcon width={16} height={16} />
         </button>
@@ -69,19 +71,19 @@ export function CardColorPicker({
               onChange={(e) => handleChange(i, e.target.value)}
             />
             {i < 3 && colors.length > 3 && (
-              <span className={styles.roleBadge}>bg</span>
+              <span className={styles.roleBadge}>{t("cardColorPicker.roleBg")}</span>
             )}
             {i === 3 && (
-              <span className={styles.roleBadge}>border</span>
+              <span className={styles.roleBadge}>{t("cardColorPicker.roleBorder")}</span>
             )}
             {i === 4 && (
-              <span className={styles.roleBadge}>accent</span>
+              <span className={styles.roleBadge}>{t("cardColorPicker.roleAccent")}</span>
             )}
             <button
               type="button"
               className={styles.removeBtn}
               onClick={() => handleRemove(i)}
-              title="Remove colour"
+              title={t("cardColorPicker.removeTitle")}
             >
               &times;
             </button>
@@ -93,7 +95,7 @@ export function CardColorPicker({
             type="button"
             className={styles.addBtn}
             onClick={handleAdd}
-            title="Add colour"
+            title={t("cardColorPicker.addTitle")}
           >
             +
           </button>
@@ -107,7 +109,7 @@ export function CardColorPicker({
             checked={glass ?? false}
             onChange={(e) => onGlassChange(e.target.checked)}
           />
-          <span>Glass effect</span>
+          <span>{t("cardColorPicker.glassLabel")}</span>
         </label>
       )}
 
@@ -125,7 +127,7 @@ export function CardColorPicker({
             <div
               className={styles.accentDot}
               style={{ background: palette.accentColor }}
-              title="Accent colour"
+              title={t("cardColorPicker.accentTitle")}
             />
           )}
         </div>

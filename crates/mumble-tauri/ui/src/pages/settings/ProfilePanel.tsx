@@ -15,6 +15,19 @@ import { AvatarEditorModal } from "./AvatarEditorModal";
 import { CardColorPicker } from "../../components/elements/CardColorPicker";
 import styles from "./SettingsPage.module.css";
 import panelStyles from "./ProfilePanel.module.css";
+import { registerSettings } from "./settingsSearchRegistry";
+
+registerSettings("profile")
+  .add("profile.sectionUsername", ["name", "nickname"])
+  .add("profile.sectionAvatar", ["picture", "photo"])
+  .add("profile.sectionBanner")
+  .add("profile.sectionBio", ["about", "description"])
+  .add("profile.sectionStatus")
+  .add("profile.sectionCardBackground")
+  .add("profile.sectionAvatarBorder")
+  .add("profile.sectionDecoration")
+  .add("profile.sectionNameplate")
+  .add("profile.sectionEffect");
 
 export function ProfilePanel({
   defaultUsername,
@@ -129,7 +142,7 @@ export function ProfilePanel({
           {avatar && (
             <img
               src={avatar}
-              alt="Avatar"
+              alt={t("profile.avatarThumbAlt")}
               className={panelStyles.avatarThumb}
             />
           )}
@@ -152,7 +165,7 @@ export function ProfilePanel({
         {profile.banner?.image && (
           <img
             src={profile.banner.image}
-            alt="Banner"
+            alt={t("profile.bannerThumbAlt")}
             className={panelStyles.bannerThumb}
           />
         )}

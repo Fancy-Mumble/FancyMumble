@@ -75,7 +75,14 @@ import { loadProfileData } from "./pages/settings/profileData";
 import { serializeProfile, dataUrlToBytes } from "./profileFormat";
 import { sanitiseWsUrl } from "./components/chat/livedoc/sanitiseWsUrl";
 import { TauriEvent } from "./constants/tauriEvents";
-import { PluginDataId, PluginPayloadType } from "./constants/pluginData";
+import {
+  PluginDataId,
+  PluginPayloadType,
+  PLUGIN_NAME_FILE_SERVER,
+  PLUGIN_NAME_LIVE_DOC,
+  friendlyPluginName,
+} from "./constants/pluginData";
+import i18next from "i18next";
 import {
   probeFileServerCapabilities,
   rebaseFileServerUrl,
@@ -198,6 +205,17 @@ async function attemptAutoReconnect(
   const state = useAppStore.getState();
   if (state.status === "connected" || state.passwordRequired) return;
 
+  // A connect attempt is already in flight.  The backend can only re-bind the
+  // *same* tab when the prior session has settled to `Disconnected`; a session
+  // still `Connecting` is skipped by `take_reusable_for`, so starting a second
+  // connect now would allocate a fresh ServerId and spawn a duplicate tab on
+  // every retry (a TCP connect to an unreachable host outlives the 3s retry
+  // delay).  Wait for the in-flight attempt to resolve, then retry.
+  if (state.status === "connecting") {
+    scheduleAutoReconnect(fallbackTarget);
+    return;
+  }
+
   const target = state.pendingConnect ?? fallbackTarget;
   await state.connect(target.host, target.port, target.username, target.certLabel ?? null);
 
@@ -256,6 +274,9 @@ export interface LiveDocSessionInfo {
   readonly ownSession: number;
   readonly ownName: string;
   readonly ownColor: string;
+  /** True when this client created the session (non-silent opener).
+   *  Gates owner-only controls such as manual "save now". */
+  readonly isOwner?: boolean;
 }
 
 /** Pending announce shown as a chat banner. */
@@ -332,8 +353,18 @@ export interface AppState {
   /** Custom server emotes pushed via `fancy-server-emotes`. Cleared on disconnect. */
   customServerEmotes: CustomServerEmote[];
   /** Plugin info records broadcast by the server via `fancy-plugin-info`
-   *  shortly after connect. Keyed by plugin name. Cleared on disconnect. */
+   *  shortly after connect. Keyed by plugin name. Cleared on disconnect.
+   *  This is the canonical "which plugins are active on this server" registry:
+   *  UI gated on a plugin's presence here disappears the moment the host
+   *  broadcasts that the plugin was disabled (see `recordPluginDisabled`). */
   pluginInfos: Map<string, PluginInfoRecord>;
+  /** Set when a server plugin was disabled at runtime *and* the local user has
+   *  a view for it open, so a dialog can prompt (and, for live-doc, offer a
+   *  local save) before the view is torn down. `null` otherwise. */
+  pluginDisabledNotice: { name: string } | null;
+  /** Whether the admin File Server dashboard is currently mounted, so a runtime
+   *  disable of the file-server plugin can prompt the open admin. */
+  fileServerAdminOpen: boolean;
   /** Locally-saved downloads completed during the current session. Most
    *  recent first. Cleared on disconnect / reset. */
   downloads: DownloadEntry[];
@@ -606,6 +637,8 @@ export interface AppState {
     channelId: number;
     mode: FileAccessMode;
     password?: string;
+    /** Requested lifetime in seconds (undefined = server default, 0 = never). */
+    ttlSeconds?: number;
     filename?: string;
     mimeType?: string;
     uploadId?: string;
@@ -657,6 +690,16 @@ export interface AppState {
   /** Set a per-user volume override by cert hash (0-200). Persists to disk. */
   setUserVolume: (hash: string, volume: number) => void;
 
+  // Plugin lifecycle
+  /** Handle a host broadcast that a server plugin was disabled at runtime:
+   *  drop it from the registry, clear its feature state, log an activity entry,
+   *  and (when the user has a view for it open) raise `pluginDisabledNotice`. */
+  recordPluginDisabled: (name: string) => void;
+  /** Dismiss the plugin-disabled dialog and tear down the affected view. */
+  dismissPluginDisabledNotice: () => void;
+  /** Track whether the admin File Server dashboard is mounted. */
+  setFileServerAdminOpen: (open: boolean) => void;
+
   // Live Doc
   /** Open (or re-attach to) a Live Doc session and surface its panel. */
   openLiveDoc: (session: LiveDocSessionInfo) => void;
@@ -686,8 +729,23 @@ export interface AppState {
     channelId: number,
     slug: string,
     title: string,
-    options?: { silent?: boolean },
+    options?: { silent?: boolean; mode?: "private" | "publish" },
   ) => Promise<void>;
+  /** Publish an already-open document to a channel (owner only). */
+  publishLiveDoc: (channelId: number, slug: string) => Promise<void>;
+  /** Rename the active Live Doc: update the local session title and send
+   *  a best-effort `Rename` plugin message so the server can persist the
+   *  new name.  Live propagation to peers is handled separately via the
+   *  shared Yjs document. */
+  renameActiveLiveDoc: (
+    channelId: number,
+    slug: string,
+    title: string,
+    appServerId?: import("./types").ServerId | null,
+  ) => void;
+  /** Ask the live-doc server to flush/snapshot the document now
+   *  (owner-initiated manual save).  Best-effort plugin message. */
+  saveLiveDoc: (channelId: number, slug: string) => Promise<void>;
   /** Stash markdown text for the editor to consume on next mount. */
   setPendingLiveDocSeed: (
     channelId: number,
@@ -766,6 +824,8 @@ const INITIAL: Pick<
   | "pluginSessionTrust"
   | "customServerEmotes"
   | "pluginInfos"
+  | "pluginDisabledNotice"
+  | "fileServerAdminOpen"
   | "downloads"
   | "unseenDownloadCount"
   | "serverFancyVersion"
@@ -852,6 +912,8 @@ const INITIAL: Pick<
   pluginSessionTrust: emptyPluginTier1Slice.pluginSessionTrust,
   customServerEmotes: [],
   pluginInfos: new Map(),
+  pluginDisabledNotice: null,
+  fileServerAdminOpen: false,
   downloads: [],
   unseenDownloadCount: 0,
   serverFancyVersion: null,
@@ -1618,7 +1680,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     throw err;
   },
 
-  uploadFile: async ({ filePath, channelId, mode, password, filename, mimeType, uploadId }) => {
+  uploadFile: async ({ filePath, channelId, mode, password, ttlSeconds, filename, mimeType, uploadId }) => {
     const cfg = get().fileServerConfig;
     if (!cfg) {
       throw new Error("file-server is not configured for this server");
@@ -1637,6 +1699,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         mimeType,
         mode,
         password,
+        ttlSeconds,
         uploadId: uploadId ?? "",
       },
     });
@@ -1785,6 +1848,62 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ passwordRequired: false, passwordAttempted: false, pendingConnect: null, connectedCertLabel: null });
   },
 
+  // -- Plugin lifecycle -------------------------------------------
+
+  recordPluginDisabled: (name) => {
+    set((s) => {
+      const patch: Partial<AppState> = {};
+      // Drop from the canonical registry so every UI gated on plugin presence
+      // (Server Info list, LiveDoc entries, ...) disappears at once.
+      if (s.pluginInfos.has(name)) {
+        const infos = new Map(s.pluginInfos);
+        infos.delete(name);
+        patch.pluginInfos = infos;
+      }
+      // Clear the plugin's feature state so stale creds/config can't linger,
+      // and note whether the user currently has a view for it open.
+      let viewOpen = false;
+      if (name === PLUGIN_NAME_FILE_SERVER) {
+        patch.fileServerConfig = null;
+        patch.fileServerCapabilities = null;
+        patch.customServerEmotes = [];
+        viewOpen = s.fileServerAdminOpen;
+      } else if (name === PLUGIN_NAME_LIVE_DOC) {
+        patch.liveDocPluginConfig = null;
+        viewOpen = s.activeLiveDocs.size > 0;
+      }
+      patch.serverLog = [
+        ...s.serverLog,
+        {
+          timestamp_ms: Date.now(),
+          message: i18next.t("common:plugins.disabledLog", {
+            defaultValue: "Plugin “{{name}}” was disabled by the server",
+            name: friendlyPluginName(name),
+          }),
+        },
+      ];
+      // Only the file-server contributes server-custom reactions; clear them.
+      if (name === PLUGIN_NAME_FILE_SERVER) setServerCustomReactions([]);
+      if (viewOpen) patch.pluginDisabledNotice = { name };
+      return patch;
+    });
+  },
+
+  dismissPluginDisabledNotice: () => {
+    set((s) => {
+      const notice = s.pluginDisabledNotice;
+      if (!notice) return s;
+      const patch: Partial<AppState> = { pluginDisabledNotice: null };
+      // Tear down any open view for the now-disabled plugin.
+      if (notice.name === PLUGIN_NAME_LIVE_DOC && s.activeLiveDocs.size > 0) {
+        patch.activeLiveDocs = new Map();
+      }
+      return patch;
+    });
+  },
+
+  setFileServerAdminOpen: (open) => set({ fileServerAdminOpen: open }),
+
   // -- Live Doc ---------------------------------------------------
 
   openLiveDoc: (session) => {
@@ -1864,11 +1983,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       throw new Error("Document name produces empty slug; pick a different title.");
     }
     const trimmedTitle = title.trim().slice(0, 200);
+    const mode = options?.mode ?? "publish";
     const key = `${channelId}|${sanitised}`;
+    // De-dupe concurrent opens: if a request for this doc is already awaiting
+    // its invite, don't fire another OpenRequest (rapid clicks would otherwise
+    // spam the server with duplicate envelopes while the first is in flight).
+    if (pendingLiveDocOpens.has(key)) {
+      console.log("[store] requestOpenLiveDoc: open already in flight; skipping duplicate", { key });
+      return;
+    }
     const activeServerId = get().activeServerId;
     if (get().activeLiveDocs.has(liveDocKey(activeServerId, channelId))) {
       console.log("[store] requestOpenLiveDoc: channel already has active doc; skipping wait");
-      await sendPluginMessage("fancy-live-doc", "OpenRequest", { channelId, slug: sanitised, title: trimmedTitle });
+      await sendPluginMessage("fancy-live-doc", "OpenRequest", { channelId, slug: sanitised, title: trimmedTitle, mode });
       return;
     }
     const waitForInvite = new Promise<void>((resolve, reject) => {
@@ -1884,6 +2011,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }, 8000);
       pendingLiveDocOpens.set(key, {
         silent,
+        mode,
         resolve: () => {
           clearTimeout(timer);
           pendingLiveDocOpens.delete(key);
@@ -1891,10 +2019,35 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
       });
     });
-    await sendPluginMessage("fancy-live-doc", "OpenRequest", { channelId, slug: sanitised, title: trimmedTitle });
+    await sendPluginMessage("fancy-live-doc", "OpenRequest", { channelId, slug: sanitised, title: trimmedTitle, mode });
     console.log("[store] requestOpenLiveDoc: open dispatched, awaiting invite");
     await waitForInvite;
     console.log("[store] requestOpenLiveDoc: invite received");
+  },
+
+  publishLiveDoc: async (channelId, slug) => {
+    await sendPluginMessage("fancy-live-doc", "Publish", { channelId, slug });
+  },
+
+  renameActiveLiveDoc: (channelId, slug, title, appServerId) => {
+    const trimmed = title.trim().slice(0, 200);
+    if (!trimmed) return;
+    set((state) => {
+      const targetServer = appServerId !== undefined ? appServerId : state.activeServerId;
+      const k = liveDocKey(targetServer, channelId);
+      const current = state.activeLiveDocs.get(k);
+      if (!current || current.title === trimmed) return state;
+      const next = new Map(state.activeLiveDocs);
+      next.set(k, { ...current, title: trimmed });
+      return { activeLiveDocs: next };
+    });
+    sendPluginMessage("fancy-live-doc", "Rename", { channelId, slug, title: trimmed }).catch((e) =>
+      console.warn("plugin-message Rename failed:", e),
+    );
+  },
+
+  saveLiveDoc: async (channelId, slug) => {
+    await sendPluginMessage("fancy-live-doc", "Persist", { channelId, slug });
   },
 
   // -- Silenced channels ------------------------------------------
@@ -2172,10 +2325,15 @@ function dispatchLiveDocInvite(p: LiveDocInviteEvent): void {
   if (ownSession === null) return;
   const pendingKey = `${p.channelId}|${p.slug}`;
   const pending = pendingLiveDocOpens.get(pendingKey);
-  // Only post a fresh chat invite when WE initiated a *new* open and
-  // did not flag the call as silent (silent = joining an existing
-  // invite card; the original chat message is still in the channel).
-  const shouldPostInvite = pending !== undefined && !pending.silent;
+  // Announce to the channel (banner + persistent chat invite card) only
+  // when WE initiated a *new, non-silent* open of a *published* document.
+  // A private document is exactly that - private - so it must never leak
+  // an "X opened a shared document" banner/message to the channel.  Silent
+  // opens (joining an existing invite) also never re-announce.
+  // We own the document whenever we initiated a non-silent open, whether
+  // it is private or published (gates owner-only controls like "save now").
+  const isOwner = pending !== undefined && !pending.silent;
+  const shouldPublish = isOwner && pending?.mode === "publish";
   if (pending) pending.resolve();
   const ownUser = state.users.find((u) => u.session === ownSession);
   // Convert serverId string -> numeric session-id-like value (legacy field).
@@ -2195,16 +2353,19 @@ function dispatchLiveDocInvite(p: LiveDocInviteEvent): void {
     ownSession,
     ownName: ownUser?.name ?? "You",
     ownColor: pickLiveDocCursorColor(ownSession),
+    isOwner,
   });
-  // Tell everyone else in the channel that a doc was opened.
-  sendPluginMessage("fancy-live-doc", "Announce", {
-    channelId: p.channelId,
-    slug: p.slug,
-    title: p.title,
-  }).catch((e) => console.warn("plugin-message Announce failed:", e));
-  // If we initiated the open, post a persistent chat invite so users
-  // who were not in the channel when the announce flew can still join.
-  if (shouldPostInvite) {
+  // Only a *published* open fans out to the channel.  Private documents
+  // stay private: no banner announce and no persistent chat invite card.
+  if (shouldPublish) {
+    // Tell everyone else in the channel that a doc was opened.
+    sendPluginMessage("fancy-live-doc", "Announce", {
+      channelId: p.channelId,
+      slug: p.slug,
+      title: p.title,
+    }).catch((e) => console.warn("plugin-message Announce failed:", e));
+    // Post a persistent chat invite so users who were not in the channel
+    // when the announce flew can still join.
     const payload = encodeLiveDocInviteMarker(p.slug, p.title);
     void state.sendMessage(p.channelId, payload).catch((e) =>
       console.warn("live-doc auto-invite message failed:", e),
@@ -2283,6 +2444,17 @@ function pluginResponseAllowed(
 
 /** Route an inbound plugin envelope to the appropriate in-store handler. */
 function dispatchPluginMessage(p: PluginMessageEvent): void {
+  // Host-broadcast plugin lifecycle (any plugin).  Deactivation clears the
+  // plugin's UI/state; activation is a no-op client-side (the host re-announces
+  // the plugin's `fancy-plugin-info` + config, which repopulate the registry).
+  if (p.payloadType === PluginPayloadType.PluginDeactivated) {
+    useAppStore.getState().recordPluginDisabled(p.pluginName);
+    return;
+  }
+  if (p.payloadType === PluginPayloadType.PluginActivated) {
+    return;
+  }
+
   if (p.pluginName === "fancy-live-doc") {
     if (p.payloadType === PluginPayloadType.Invite) {
       const data = decodePluginPayload<{
@@ -2324,6 +2496,19 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
         openerSession: data.openerSession,
         openerName: data.openerName ?? "",
       });
+      return;
+    }
+    if (p.payloadType === "SharedWith") {
+      const data = decodePluginPayload<{
+        slug: string;
+        sharedWith?: import("./types").LiveDocSharedMember[];
+      }>(p.payload);
+      if (!data) return;
+      void import("./components/chat/livedoc/sharedWithStore").then(
+        ({ useLiveDocSharedWithStore }) => {
+          useLiveDocSharedWithStore.getState().setSharedWith(data.slug, data.sharedWith ?? []);
+        },
+      );
       return;
     }
   }
@@ -2461,7 +2646,10 @@ const pendingPreviewRequests = new Set<string>();
 /** In-flight `requestOpenLiveDoc` invocations keyed by `${channelId}|${slug}`.
  *  Resolved when the matching `fancy-live-doc/invite` PluginDataTransmission
  *  arrives; rejected by the request's own timeout if the server never replies. */
-const pendingLiveDocOpens = new Map<string, { resolve: () => void; silent: boolean }>();
+const pendingLiveDocOpens = new Map<
+  string,
+  { resolve: () => void; silent: boolean; mode: "private" | "publish" }
+>();
 
 /** Request link previews from the server for the given URLs. */
 export async function requestLinkPreview(urls: string[], requestId: string): Promise<void> {
@@ -2479,6 +2667,139 @@ export async function requestLinkPreview(urls: string[], requestId: string): Pro
  * Subscribe to backend events and translate them into store updates.
  * Call once from the root `<App>` component; returns cleanup functions.
  */
+/**
+ * Process a single `plugin-data` envelope.
+ *
+ * Shared by the live `TauriEvent.PluginData` listener and the HMR
+ * restore path: the server broadcasts connect-time configs (file-server,
+ * live-doc, plugin-info, server-emotes) exactly once, so after a Vite
+ * HMR full reload they must be replayed from the backend cache through
+ * this same code to re-hydrate the store without a full reconnect.
+ */
+function processPluginDataEvent(
+  payload: { sender_session: number | null; data: number[]; data_id: string },
+): void {
+  const { data_id, data, sender_session } = payload;
+  const bytes = new Uint8Array(data);
+
+  if (data_id === PluginDataId.FileServerConfig) {
+    try {
+      const json = new TextDecoder().decode(bytes);
+      const raw = JSON.parse(json);
+      // The server-wide override (advertised in `ServerConfig`)
+      // takes precedence over the per-plugin `base_url`. This
+      // matters when the HTTP interface is hosted behind a
+      // reverse proxy or ingress and reachable at a different
+      // hostname than the Mumble TCP port.
+      const override = useAppStore.getState().serverConfig.fancy_rest_api_url;
+      const internalBaseUrl = String(raw.base_url).replace(/\/+$/, "");
+      const baseUrl = (override && override.length > 0)
+        ? override.replace(/\/+$/, "")
+        : internalBaseUrl;
+      const cfg: FileServerConfig = {
+        baseUrl,
+        internalBaseUrl,
+        sessionId: raw.session_id,
+        uploadToken: raw.upload_token,
+        sessionJwt: raw.session_jwt,
+        maxFileSizeBytes: raw.max_file_size_bytes,
+        deleteOnTtl: !!raw.delete_on_ttl,
+        ttlSeconds: raw.ttl_seconds ?? 0,
+        maxTtlSeconds: raw.max_ttl_seconds ?? 0,
+        deleteOnDownload: !!raw.delete_on_download,
+        deleteOnDisconnect: !!raw.delete_on_disconnect,
+        canManageEmotes: !!raw.can_manage_emotes,
+        canShareFiles: raw.can_share_files !== false,
+        canShareFilesPublic: raw.can_share_files_public !== false,
+        registered: !!raw.registered,
+      };
+      useAppStore.setState({ fileServerConfig: cfg });
+    } catch (e) {
+      console.error("plugin-data file-server-config processing error:", e);
+    }
+  }
+
+  if (data_id === PluginDataId.LiveDocConfig) {
+    try {
+      const json = new TextDecoder().decode(bytes);
+      const raw = JSON.parse(json) as { version: string; ws_base_url: string };
+      const fallbackHost =
+        useAppStore.getState().sessions.find(
+          (s) => s.id === useAppStore.getState().activeServerId,
+        )?.host ?? useAppStore.getState().pendingConnect?.host ?? null;
+      useAppStore.setState({
+        liveDocPluginConfig: {
+          version: raw.version,
+          wsBaseUrl: sanitiseWsUrl(raw.ws_base_url, fallbackHost),
+        },
+      });
+    } catch (e) {
+      console.error("plugin-data live-doc-config processing error:", e);
+    }
+  }
+
+  if (data_id === PluginDataId.PluginInfo) {
+    (async () => {
+      try {
+        const rec = await invoke<PluginInfoRecord>("decode_plugin_info", {
+          envelope: Array.from(bytes),
+        });
+        useAppStore.setState((s) => {
+          const next = new Map(s.pluginInfos);
+          next.set(rec.name, rec);
+          return { pluginInfos: next };
+        });
+      } catch (e) {
+        console.error("plugin-data plugin-info decode error:", e);
+      }
+    })();
+  }
+
+  if (data_id === PluginDataId.ServerEmotes) {
+    try {
+      const json = new TextDecoder().decode(bytes);
+      const raw = JSON.parse(json) as { emotes: Array<{
+        shortcode: string;
+        alias_emoji: string;
+        description?: string;
+        image_data_url: string;
+      }> };
+      const emotes: CustomServerEmote[] = (raw.emotes ?? []).map((e) => ({
+        shortcode: e.shortcode,
+        aliasEmoji: e.alias_emoji,
+        description: e.description,
+        imageDataUrl: e.image_data_url,
+      }));
+      useAppStore.setState({ customServerEmotes: emotes });
+      const reactions: ServerCustomReaction[] = emotes.map((e) => ({
+        shortcode: `:${e.shortcode}:`,
+        display: e.imageDataUrl,
+        label: e.description ?? e.aliasEmoji,
+      }));
+      setServerCustomReactions(reactions);
+    } catch (e) {
+      console.error("plugin-data server-emotes processing error:", e);
+    }
+  }
+
+  if (data_id === PluginDataId.Poll || data_id === PluginDataId.PollVote) {
+    // Legacy: ignored.  Polls now travel through native protobuf
+    // messages (FancyPoll, FancyPollVote) and are routed via the
+    // "fancy-poll" / "fancy-poll-vote" Tauri events below.
+  }
+
+  if (data_id === PluginDataId.LiveDocInvite || data_id === PluginDataId.LiveDocAnnounce) {
+    // Legacy: ignored.  Live-doc invites/announces now travel through
+    // the generic `PluginMessage` envelope (wire ID 200) and are
+    // delivered as `plugin-message` Tauri events below.
+  }
+
+  // Also dispatch to legacy registered handlers for extensibility.
+  for (const handler of pluginDataHandlers) {
+    handler(data_id, bytes, sender_session);
+  }
+}
+
 export async function initEventListeners(
   navigate: (path: string) => void,
 ): Promise<UnlistenFn[]> {
@@ -2535,6 +2856,22 @@ export async function initEventListeners(
         }
       } catch (e) {
         console.error("HMR state restore (plugin registry) failed:", e);
+      }
+      // The server's connect-time plugin-data broadcasts (file-server
+      // config, live-doc config, plugin info, server emotes) are sent
+      // once after ServerSync and never resent, so an HMR full reload
+      // loses them and e.g. the document library goes blank until a
+      // real reconnect.  Replay the backend-cached payloads through the
+      // same processing path so the store re-hydrates in place.
+      try {
+        const broadcasts = await invoke<
+          { sender_session: number | null; data: number[]; data_id: string }[]
+        >("get_plugin_broadcasts");
+        for (const payload of broadcasts) {
+          processPluginDataEvent(payload);
+        }
+      } catch (e) {
+        console.error("HMR state restore (plugin broadcasts) failed:", e);
       }
     })
     .catch(() => {});
@@ -2618,6 +2955,12 @@ export async function initEventListeners(
         userVolumes: storedVolumes,
         bootstrapStage: "Fetching channels and users...",
       });
+
+      // Signal the welcome-message modal that a server join just completed.
+      if (typeof window !== "undefined") {
+        const serverKey = pending ? `${pending.host}:${pending.port}` : undefined;
+        window.dispatchEvent(new CustomEvent("server-connected", { detail: { serverKey } }));
+      }
 
       // Refresh the multi-server session list so any newly-connected
       // server appears in the sessions slice immediately.
@@ -2733,6 +3076,18 @@ export async function initEventListeners(
             }
           } catch {
             // Voice restore is best-effort.
+          }
+
+          // Authoritatively sync the self mute/deaf indicator to the backend's
+          // actual voice state.  `voiceState` is otherwise only set optimistically
+          // and via the `voice-state-changed` event, which can fire during connect
+          // before the listener is ready (or diverge after a reconnect) - leaving
+          // the self indicator stale, e.g. showing muted while voice is active.
+          try {
+            const vs = await invoke<VoiceState>("get_voice_state");
+            useAppStore.setState({ voiceState: vs, inCall: vs !== "inactive" });
+          } catch {
+            // best-effort sync
           }
         })
         .catch((err) => {
@@ -3152,125 +3507,7 @@ export async function initEventListeners(
   unlisteners.push(
     await listen<{ sender_session: number | null; data: number[]; data_id: string }>(
       TauriEvent.PluginData,
-      (event) => {
-        const { data_id, data, sender_session } = event.payload;
-        const bytes = new Uint8Array(data);
-
-        if (data_id === PluginDataId.FileServerConfig) {
-          try {
-            const json = new TextDecoder().decode(bytes);
-            const raw = JSON.parse(json);
-            // The server-wide override (advertised in `ServerConfig`)
-            // takes precedence over the per-plugin `base_url`. This
-            // matters when the HTTP interface is hosted behind a
-            // reverse proxy or ingress and reachable at a different
-            // hostname than the Mumble TCP port.
-            const override = useAppStore.getState().serverConfig.fancy_rest_api_url;
-            const internalBaseUrl = String(raw.base_url).replace(/\/+$/, "");
-            const baseUrl = (override && override.length > 0)
-              ? override.replace(/\/+$/, "")
-              : internalBaseUrl;
-            const cfg: FileServerConfig = {
-              baseUrl,
-              internalBaseUrl,
-              sessionId: raw.session_id,
-              uploadToken: raw.upload_token,
-              sessionJwt: raw.session_jwt,
-              maxFileSizeBytes: raw.max_file_size_bytes,
-              deleteOnTtl: !!raw.delete_on_ttl,
-              ttlSeconds: raw.ttl_seconds ?? 0,
-              deleteOnDownload: !!raw.delete_on_download,
-              deleteOnDisconnect: !!raw.delete_on_disconnect,
-              canManageEmotes: !!raw.can_manage_emotes,
-              canShareFiles: raw.can_share_files !== false,
-              canShareFilesPublic: raw.can_share_files_public !== false,
-            };
-            useAppStore.setState({ fileServerConfig: cfg });
-          } catch (e) {
-            console.error("plugin-data file-server-config processing error:", e);
-          }
-        }
-
-        if (data_id === PluginDataId.LiveDocConfig) {
-          try {
-            const json = new TextDecoder().decode(bytes);
-            const raw = JSON.parse(json) as { version: string; ws_base_url: string };
-            const fallbackHost =
-              useAppStore.getState().sessions.find(
-                (s) => s.id === useAppStore.getState().activeServerId,
-              )?.host ?? useAppStore.getState().pendingConnect?.host ?? null;
-            useAppStore.setState({
-              liveDocPluginConfig: {
-                version: raw.version,
-                wsBaseUrl: sanitiseWsUrl(raw.ws_base_url, fallbackHost),
-              },
-            });
-          } catch (e) {
-            console.error("plugin-data live-doc-config processing error:", e);
-          }
-        }
-
-        if (data_id === PluginDataId.PluginInfo) {
-          (async () => {
-            try {
-              const rec = await invoke<PluginInfoRecord>("decode_plugin_info", {
-                envelope: Array.from(bytes),
-              });
-              useAppStore.setState((s) => {
-                const next = new Map(s.pluginInfos);
-                next.set(rec.name, rec);
-                return { pluginInfos: next };
-              });
-            } catch (e) {
-              console.error("plugin-data plugin-info decode error:", e);
-            }
-          })();
-        }
-
-        if (data_id === PluginDataId.ServerEmotes) {
-          try {
-            const json = new TextDecoder().decode(bytes);
-            const raw = JSON.parse(json) as { emotes: Array<{
-              shortcode: string;
-              alias_emoji: string;
-              description?: string;
-              image_data_url: string;
-            }> };
-            const emotes: CustomServerEmote[] = (raw.emotes ?? []).map((e) => ({
-              shortcode: e.shortcode,
-              aliasEmoji: e.alias_emoji,
-              description: e.description,
-              imageDataUrl: e.image_data_url,
-            }));
-            useAppStore.setState({ customServerEmotes: emotes });
-            const reactions: ServerCustomReaction[] = emotes.map((e) => ({
-              shortcode: `:${e.shortcode}:`,
-              display: e.imageDataUrl,
-              label: e.description ?? e.aliasEmoji,
-            }));
-            setServerCustomReactions(reactions);
-          } catch (e) {
-            console.error("plugin-data server-emotes processing error:", e);
-          }
-        }
-
-        if (data_id === PluginDataId.Poll || data_id === PluginDataId.PollVote) {
-          // Legacy: ignored.  Polls now travel through native protobuf
-          // messages (FancyPoll, FancyPollVote) and are routed via the
-          // "fancy-poll" / "fancy-poll-vote" Tauri events below.
-        }
-
-        if (data_id === PluginDataId.LiveDocInvite || data_id === PluginDataId.LiveDocAnnounce) {
-          // Legacy: ignored.  Live-doc invites/announces now travel through
-          // the generic `PluginMessage` envelope (wire ID 200) and are
-          // delivered as `plugin-message` Tauri events below.
-        }
-
-        // Also dispatch to legacy registered handlers for extensibility.
-        for (const handler of pluginDataHandlers) {
-          handler(data_id, bytes, sender_session);
-        }
-      },
+      (event) => processPluginDataEvent(event.payload),
     ),
   );
 

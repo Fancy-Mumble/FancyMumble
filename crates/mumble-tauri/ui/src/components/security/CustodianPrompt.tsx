@@ -1,6 +1,7 @@
 ﻿import { CloseIcon, ShieldIcon, WarningIcon } from "../../icons";
-import { useEffect, useCallback } from "react";
+import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { Modal } from "../elements/Modal";
 import styles from "./CustodianPrompt.module.css";
 
 interface Custodian {
@@ -29,16 +30,6 @@ export default function CustodianPrompt({
 }: CustodianPromptProps) {
   const { t } = useTranslation(["sidebar", "common"]);
 
-  // Close on Escape.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
   const handleConfirm = useCallback(() => {
     onConfirm();
     onClose();
@@ -53,8 +44,8 @@ export default function CustodianPrompt({
     : t("custodian.descriptionFirstJoin", { count: custodians.length });
 
   return (
-    <dialog className={styles.overlay} open aria-label={title}>
-      <div className={styles.dialog}>
+    <Modal onClose={onClose} closeOnOverlayClick={false} zIndex={200} overlayClassName={styles.overlayBlur}>
+      <div className={styles.dialog} role="dialog" aria-modal="true" aria-label={title}>
         <div className={styles.header}>
           <h3 className={styles.title}>{title}</h3>
           <button className={styles.closeBtn} onClick={onClose} aria-label={t("common:actions.close")}>
@@ -124,6 +115,6 @@ export default function CustodianPrompt({
           </button>
         </div>
       </div>
-    </dialog>
+    </Modal>
   );
 }

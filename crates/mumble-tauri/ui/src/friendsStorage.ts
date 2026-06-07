@@ -13,6 +13,10 @@
  */
 
 import { load } from "@tauri-apps/plugin-store";
+import { bytesToBase64, base64ToBytes } from "./utils/base64";
+
+// Re-exported for backwards compatibility with prior consumers.
+export { base64ToBytes };
 
 export interface Friend {
   /** Stable id (UUID) for editing/removing individual entries. */
@@ -38,18 +42,6 @@ export interface Friend {
   avatarUpdatedAt?: number;
 }
 
-function bytesToBase64(bytes: Uint8Array): string {
-  let s = "";
-  for (const b of bytes) s += String.fromCodePoint(b);
-  return btoa(s);
-}
-
-export function base64ToBytes(s: string): Uint8Array {
-  const bin = atob(s);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.codePointAt(i) ?? 0;
-  return out;
-}
 
 const FRIENDS_STORE = "friends.json";
 const FRIENDS_KEY = "friends";

@@ -17,6 +17,9 @@ interface TabbedPageProps<T extends string> {
   onBack: () => void;
   /** Extra CSS class applied to `.mainArea` (e.g. grid layout for preview pane). */
   mainAreaClassName?: string;
+  /** Optional content rendered in the sidebar between the heading and the tab
+   *  list (e.g. a settings search box). */
+  sidebarExtra?: ReactNode;
   children: ReactNode;
 }
 
@@ -29,6 +32,7 @@ export function TabbedPage<T extends string>({
   onTabChange,
   onBack,
   mainAreaClassName,
+  sidebarExtra,
   children,
 }: Readonly<TabbedPageProps<T>>) {
   const { t } = useTranslation("common");
@@ -49,6 +53,8 @@ export function TabbedPage<T extends string>({
         </button>
 
         <h2 className={styles.sidebarHeading}>{heading}</h2>
+
+        {sidebarExtra}
 
         <ul className={styles.tabList}>
           {tabs.map((t) => (

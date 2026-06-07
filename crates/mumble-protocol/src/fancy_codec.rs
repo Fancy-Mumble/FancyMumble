@@ -140,6 +140,15 @@ impl FancyCodec for NativeCodec {
 #[derive(Debug)]
 pub struct LegacyCodec;
 
+// The `LegacyCodec` is the compatibility shim that tunnels Fancy extension
+// messages through `PluginDataTransmission` for servers that lack native
+// `PluginMessage` (wire id 200) support.  Reading/writing the deprecated
+// `PluginDataTransmission` fields is inherent to that legacy path - there is no
+// non-deprecated alternative short of dropping old-server support.
+#[allow(
+    deprecated,
+    reason = "legacy fallback codec: wraps Fancy messages in PluginData for servers without native PluginMessage support"
+)]
 impl FancyCodec for LegacyCodec {
     fn encode(&self, msg: ControlMessage, state: &ServerState) -> Option<ControlMessage> {
         if !msg.is_fancy_extension() {
@@ -291,6 +300,7 @@ fn channel_members_except_self(state: &ServerState, own_session: u32) -> Vec<u32
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
+    #![allow(deprecated, reason = "tests exercise the legacy PluginDataTransmission wire fields")]
 
     use super::*;
     use crate::proto::mumble_tcp;

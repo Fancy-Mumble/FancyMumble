@@ -134,7 +134,11 @@
     "dangerZoneHint": "Löscht alle gespeicherten Daten - Server, Einstellungen und Zertifikate - und führt zurück zum Willkommensbildschirm.",
     "dangerConfirmText": "Bist du sicher? Das kann nicht rückgängig gemacht werden.",
     "dangerConfirmBtn": "Ja, alles zurücksetzen",
-    "dangerResetBtn": "Alle Daten zurücksetzen"
+    "dangerResetBtn": "Alle Daten zurücksetzen",
+    "persistDms": "DM-Verlauf speichern",
+    "persistDmsHint": "Mit Freunden ausgetauschte Direktnachrichten werden auf diesem Gerät gespeichert und mit AES-GCM verschlüsselt. Deaktivieren, um DMs nur im Arbeitsspeicher zu behalten; vorhandener Verlauf wird beim Deaktivieren entfernt.",
+    "disconnectWarning": "Trennung bestätigen",
+    "disconnectWarningHint": "Vor dem Trennen von einem Server um Bestätigung bitten."
   },
   "shortcuts": {
     "panelTitle": "Tastenkürzel",
@@ -242,7 +246,12 @@
     "evtVoiceActivity": "Sprachaktivität",
     "evtVoiceActivityDesc": "Jemand hat in deinem Kanal zu sprechen begonnen",
     "evtSelfMuted": "Selbst stummgeschaltet",
-    "evtSelfMutedDesc": "Du hast dein Mikrofon stumm- oder wieder eingeschaltet"
+    "evtSelfMutedDesc": "Du hast dein Mikrofon stumm- oder wieder eingeschaltet",
+    "welcomeMessage": "Willkommensnachricht",
+    "welcomeMessageHint": "Die Willkommensnachricht des Servers nach dem Verbinden in einem Pop-up anzeigen.",
+    "welcomeHide": "Ausblenden",
+    "welcomeOnce": "Einmal anzeigen",
+    "welcomeAlways": "Immer anzeigen"
   },
   "privacy": {
     "panelTitle": "Datenschutz",
@@ -312,7 +321,8 @@
     "channelViewerModern": "Modern",
     "fontSizeSmall": "Klein",
     "fontSizeMedium": "Mittel",
-    "fontSizeLarge": "Groß"
+    "fontSizeLarge": "Groß",
+    "bgPreviewAlt": "Chat-Hintergrundvorschau"
   },
   "activation": {
     "voice": "Sprachaktivierung",
@@ -390,7 +400,9 @@
     "nameplateHint": "Hintergrundstil hinter deinem Anzeigenamen.",
     "sectionEffect": "Profileffekt",
     "effectHint": "Animierter Effekt auf deiner Profilkarte.",
-    "connectedSuffix": " (verbunden)"
+    "connectedSuffix": " (verbunden)",
+    "avatarThumbAlt": "Avatar",
+    "bannerThumbAlt": "Banner"
   },
   "tabs": {
     "profile": "Profil",
@@ -402,7 +414,8 @@
     "personalize": "Anpassen",
     "advanced": "Erweitert",
     "localization": "Sprache & Format",
-    "channelsRoles": "Kanäle & Rollen"
+    "channelsRoles": "Kanäle & Rollen",
+    "plugins": "Plugins"
   },
   "avatarEditor": {
     "title": "Avatar bearbeiten",
@@ -412,7 +425,9 @@
     "dropLabel": "Bild oder GIF hier ablegen oder zum Durchsuchen klicken",
     "unsavedHint": "Du hast nicht gespeicherte Änderungen. Übernimm oder verwirf sie.",
     "discardBtn": "Verwerfen",
-    "applyBtn": "Übernehmen"
+    "applyBtn": "Übernehmen",
+    "previewAlt": "Avatar-Vorschau",
+    "imgAlt": "Avatar"
   },
   "bannerEditor": {
     "title": "Banner bearbeiten",
@@ -423,10 +438,18 @@
     "dropLabel": "Bild oder GIF hier ablegen oder zum Durchsuchen klicken",
     "unsavedHint": "Du hast nicht gespeicherte Änderungen. Übernimm oder verwirf sie.",
     "discardBtn": "Verwerfen",
-    "applyBtn": "Übernehmen"
+    "applyBtn": "Übernehmen",
+    "imgAlt": "Banner"
   },
   "bioEditor": {
-    "placeholder": "Erzähl anderen etwas über dich..."
+    "placeholder": "Erzähl anderen etwas über dich...",
+    "bold": "Fett",
+    "italic": "Kursiv",
+    "underline": "Unterstrichen",
+    "insertImage": "Bild einfügen",
+    "textColor": "Textfarbe",
+    "colorSwatchAriaLabel": "Farbe {{hex}}",
+    "resetColour": "Farbe zurücksetzen"
   },
   "denoiserAdvanced": {
     "sectionLabel": "Algorithmus-Parameter",
@@ -473,7 +496,9 @@
     "emotes": "Emotes",
     "onboarding": "Onboarding",
     "serverPlugins": "Server-Plugins",
-    "marketplace": "Marktplatz"
+    "marketplace": "Marktplatz",
+    "fileServer": "Dateiserver",
+    "serverSettings": "Servereinstellungen"
   },
   "registeredUsers": {
     "title": "Registrierte Nutzer",
@@ -652,7 +677,8 @@
     "errorRemoveFailed": "Entfernen fehlgeschlagen: {{detail}}",
     "errorPickerFailed": "Dateiauswahl konnte nicht geöffnet werden.",
     "successAdded": "Emote hinzugefügt.",
-    "successRemoved": ":{{shortcode}}: entfernt"
+    "successRemoved": ":{{shortcode}}: entfernt",
+    "confirmDelete": "Emote :{{shortcode}}: löschen?"
   },
   "roleManagerDialog": {
     "ariaLabel": "Rollen für {{name}} verwalten",
@@ -664,29 +690,98 @@
     "save": "Speichern"
   },
   "permissionMeta": {
-    "WRITE": { "title": "ACL bearbeiten", "description": "Kanalkonfiguration und Gruppen bearbeiten." },
-    "TRAVERSE": { "title": "Durchqueren", "description": "Den Kanal sehen und Unterkanäle betreten." },
-    "ENTER": { "title": "Betreten", "description": "Den Kanal betreten." },
-    "SPEAK": { "title": "Sprechen", "description": "Sprache im Kanal übertragen." },
-    "MUTE_DEAFEN": { "title": "Stumm- / Taubschalten", "description": "Andere im Kanal serverseitig stumm- oder taubschalten." },
-    "MOVE": { "title": "Nutzer verschieben", "description": "Andere Nutzer in diesen Kanal oder aus ihm heraus verschieben." },
-    "MAKE_CHANNEL": { "title": "Unterkanal erstellen", "description": "Dauerhafte Unterkanäle erstellen." },
-    "LINK_CHANNEL": { "title": "Kanäle verknüpfen", "description": "Diesen Kanal mit anderen Kanälen verknüpfen, damit Sprache zwischen ihnen übertragen wird." },
-    "WHISPER": { "title": "Flüstern", "description": "Gezielte Flüsternachrichten in diesen Kanal senden." },
-    "TEXT_MESSAGE": { "title": "Textnachrichten senden", "description": "Textnachrichten im Kanal-Chat posten." },
-    "MAKE_TEMP_CHANNEL": { "title": "Temp. Unterkanal erstellen", "description": "Temporäre Unterkanäle erstellen, die bei Leere verschwinden." },
-    "LISTEN": { "title": "Zuhören", "description": "Audio aus diesem Kanal empfangen, ohne ihm beizutreten." },
-    "DELETE_MESSAGE": { "title": "Nachrichten löschen", "description": "Nachrichten anderer Nutzer im Kanal löschen." },
-    "SUBSCRIBE_PUSH": { "title": "Push abonnieren", "description": "Push-Benachrichtigungen vom Kanal empfangen." },
-    "SHARE_FILES": { "title": "Dateien teilen", "description": "Dateien im Kanal teilen." },
-    "SHARE_FILES_PUBLIC": { "title": "Dateien öffentlich teilen", "description": "Dateien öffentlich im Kanal teilen." },
-    "KICK": { "title": "Kicken", "description": "Nutzer vom Server kicken." },
-    "BAN": { "title": "Bannen", "description": "Nutzer vom Server bannen." },
-    "REGISTER": { "title": "Nutzer registrieren", "description": "Gastnutzer in die Serverdatenbank aufnehmen." },
-    "SELF_REGISTER": { "title": "Selbst registrieren", "description": "Nutzer können sich selbst registrieren." },
-    "RESET_USER_CONTENT": { "title": "Nutzerdaten zurücksetzen", "description": "Avatare, Kommentare und andere Inhalte eines Nutzers löschen." },
-    "KEY_OWNER": { "title": "Schlüsselinhaber", "description": "Markiert den Nutzer als Schlüsselinhaber für den persistenten Chat." },
-    "MANAGE_EMOTES": { "title": "Emotes verwalten", "description": "Benutzerdefinierte Server-Emotes verwalten." }
+    "WRITE": {
+      "title": "ACL bearbeiten",
+      "description": "Kanalkonfiguration und Gruppen bearbeiten."
+    },
+    "TRAVERSE": {
+      "title": "Durchqueren",
+      "description": "Den Kanal sehen und Unterkanäle betreten."
+    },
+    "ENTER": {
+      "title": "Betreten",
+      "description": "Den Kanal betreten."
+    },
+    "SPEAK": {
+      "title": "Sprechen",
+      "description": "Sprache im Kanal übertragen."
+    },
+    "MUTE_DEAFEN": {
+      "title": "Stumm- / Taubschalten",
+      "description": "Andere im Kanal serverseitig stumm- oder taubschalten."
+    },
+    "MOVE": {
+      "title": "Nutzer verschieben",
+      "description": "Andere Nutzer in diesen Kanal oder aus ihm heraus verschieben."
+    },
+    "MAKE_CHANNEL": {
+      "title": "Unterkanal erstellen",
+      "description": "Dauerhafte Unterkanäle erstellen."
+    },
+    "LINK_CHANNEL": {
+      "title": "Kanäle verknüpfen",
+      "description": "Diesen Kanal mit anderen Kanälen verknüpfen, damit Sprache zwischen ihnen übertragen wird."
+    },
+    "WHISPER": {
+      "title": "Flüstern",
+      "description": "Gezielte Flüsternachrichten in diesen Kanal senden."
+    },
+    "TEXT_MESSAGE": {
+      "title": "Textnachrichten senden",
+      "description": "Textnachrichten im Kanal-Chat posten."
+    },
+    "MAKE_TEMP_CHANNEL": {
+      "title": "Temp. Unterkanal erstellen",
+      "description": "Temporäre Unterkanäle erstellen, die bei Leere verschwinden."
+    },
+    "LISTEN": {
+      "title": "Zuhören",
+      "description": "Audio aus diesem Kanal empfangen, ohne ihm beizutreten."
+    },
+    "DELETE_MESSAGE": {
+      "title": "Nachrichten löschen",
+      "description": "Nachrichten anderer Nutzer im Kanal löschen."
+    },
+    "SUBSCRIBE_PUSH": {
+      "title": "Push abonnieren",
+      "description": "Push-Benachrichtigungen vom Kanal empfangen."
+    },
+    "SHARE_FILES": {
+      "title": "Dateien teilen",
+      "description": "Dateien im Kanal teilen."
+    },
+    "SHARE_FILES_PUBLIC": {
+      "title": "Dateien öffentlich teilen",
+      "description": "Dateien öffentlich im Kanal teilen."
+    },
+    "KICK": {
+      "title": "Kicken",
+      "description": "Nutzer vom Server kicken."
+    },
+    "BAN": {
+      "title": "Bannen",
+      "description": "Nutzer vom Server bannen."
+    },
+    "REGISTER": {
+      "title": "Nutzer registrieren",
+      "description": "Gastnutzer in die Serverdatenbank aufnehmen."
+    },
+    "SELF_REGISTER": {
+      "title": "Selbst registrieren",
+      "description": "Nutzer können sich selbst registrieren."
+    },
+    "RESET_USER_CONTENT": {
+      "title": "Nutzerdaten zurücksetzen",
+      "description": "Avatare, Kommentare und andere Inhalte eines Nutzers löschen."
+    },
+    "KEY_OWNER": {
+      "title": "Schlüsselinhaber",
+      "description": "Markiert den Nutzer als Schlüsselinhaber für den persistenten Chat."
+    },
+    "MANAGE_EMOTES": {
+      "title": "Emotes verwalten",
+      "description": "Benutzerdefinierte Server-Emotes verwalten."
+    }
   },
   "onboarding": {
     "channelsAndRoles": {
@@ -760,7 +855,9 @@
     "staleBadge": "Neustart ausstehend",
     "brokenBadge": "Defekt",
     "confirmUninstall": "Plugin \"{{name}}\" deinstallieren? Es wird vom Server entfernt.",
-    "unknownError": "Unbekannter Fehler"
+    "unknownError": "Unbekannter Fehler",
+    "incompatible": "Inkompatibel",
+    "incompatibleTitle": "Mit diesem Server inkompatibel – kann nicht aktiviert werden."
   },
   "marketplace": {
     "title": "Plugin-Marketplace",
@@ -793,7 +890,11 @@
     "noRatings": "Noch keine Bewertungen.",
     "ratingsCount_one": "{{count}} Bewertung",
     "ratingsCount_other": "{{count}} Bewertungen",
-    "minFancyServer": "Fancy-Server ≥ {{version}}"
+    "minFancyServer": "Fancy-Server ≥ {{version}}",
+    "installed": "Installiert",
+    "alreadyInstalled": "Bereits auf diesem Server installiert",
+    "abiVersion": "API v{{version}}",
+    "incompatibleAbi": "Dieses Plugin zielt auf eine andere Plugin-API-Version als der Server ab und kann nicht installiert werden."
   },
   "plugins": {
     "empty": "Auf dem verbundenen Server sind keine Plugins geladen.",
@@ -831,5 +932,115 @@
     "fieldFingerprint": "Fingerabdruck",
     "blockBtn": "Blockieren",
     "notNowBtn": "Nicht jetzt"
+  },
+  "search": {
+    "placeholder": "Einstellungen durchsuchen…",
+    "noResults": "Keine passenden Einstellungen",
+    "results_one": "{{count}} Ergebnis",
+    "results_other": "{{count}} Ergebnisse"
+  },
+  "serverSettings": {
+    "intro": "Servereinstellungen zur Laufzeit ändern. Änderungen werden sofort wirksam und auf dem Server gespeichert.",
+    "loading": "Servereinstellungen werden geladen…",
+    "unavailable": "Servereinstellungen sind nicht verfügbar. Dieser Server unterstützt möglicherweise keine Laufzeiteinstellungen, oder du hast keine Berechtigung, sie zu ändern.",
+    "save": "Änderungen speichern",
+    "saving": "Wird gespeichert…",
+    "saved": "Gespeichert"
+  },
+  "fileServer": {
+    "title": "Dateiserver-Speicher",
+    "refresh": "Aktualisieren",
+    "noConfig": "Der Dateiserver ist auf diesem Server nicht aktiviert.",
+    "loading": "Wird geladen…",
+    "error": "Dateien konnten nicht geladen werden",
+    "empty": "Keine Dateien gespeichert.",
+    "search": "Dateien durchsuchen…",
+    "resultCount": "{{count}} Dateien",
+    "expires": "Läuft ab",
+    "expiresAt": "Läuft ab {{when}}",
+    "expiredAt": "Abgelaufen {{when}}",
+    "neverExpires": "Nie",
+    "searchAll": "Dateien & Dokumente durchsuchen…",
+    "resultCountAll": "{{files}} Datei(en), {{docs}} Dokument(e)",
+    "noMatch": "Keine Dateien entsprechen deiner Suche.",
+    "selectAll": "Alle auswählen ({{count}})",
+    "selectAllFiles": "Alle Dateien auswählen",
+    "selectAllDocs": "Alle Dokumente auswählen",
+    "selectRow": "Auswählen",
+    "bulkDelete": "Auswahl löschen",
+    "bulkDeleteN": "Auswahl löschen ({{count}})",
+    "bulkDeleteConfirm": "{{files}} Datei(en) und {{docs}} Dokument(e) löschen? Dies kann nicht rückgängig gemacht werden.",
+    "online": "Uploader online",
+    "offline": "Uploader offline",
+    "delete": "Datei löschen",
+    "deleteConfirm": "„{{name}}“ vom Server löschen? Dies kann nicht rückgängig gemacht werden.",
+    "deleteFailed": "Löschen fehlgeschlagen",
+    "preview": "Vorschau",
+    "previewClose": "Schließen",
+    "previewLoading": "Vorschau wird geladen…",
+    "previewError": "Vorschau fehlgeschlagen",
+    "previewUnavailable": "Keine Inline-Vorschau für diesen Typ.",
+    "unknownOwner": "Unbekannt",
+    "health": {
+      "online": "Dateiserver online · {{ms}} ms",
+      "offline": "Dateiserver nicht erreichbar",
+      "checking": "Dateiserver wird geprüft…",
+      "recheck": "Erneut prüfen"
+    },
+    "docs": {
+      "title": "Live-Dokumente",
+      "empty": "Noch keine Dokumente gespeichert.",
+      "noMatch": "Keine Dokumente entsprechen deiner Suche.",
+      "error": "Dokumente konnten nicht geladen werden",
+      "noExpiry": "Dokumente werden bis zur Entfernung aufbewahrt – anders als hochgeladene Dateien haben sie kein automatisches Ablaufdatum.",
+      "delete": "Dokument löschen",
+      "deleteConfirm": "Dokument „{{name}}“ löschen? Dadurch werden alle Revisionen entfernt; dies kann nicht rückgängig gemacht werden.",
+      "col": {
+        "name": "Dokument",
+        "revisions": "Revisionen",
+        "size": "Größe",
+        "updated": "Aktualisiert"
+      }
+    },
+    "stats": {
+      "used": "Belegt",
+      "free": "Frei",
+      "total": "Kapazität",
+      "files": "Dateien",
+      "maxFile": "Max. Upload"
+    },
+    "chart": {
+      "usage": "Speichernutzung",
+      "byType": "Größe nach Typ",
+      "byAccess": "Nach Zugriffsart",
+      "used": "Belegt",
+      "free": "Frei"
+    },
+    "category": {
+      "image": "Bilder",
+      "video": "Videos",
+      "audio": "Audio",
+      "document": "Dokumente",
+      "archive": "Archive",
+      "other": "Sonstige"
+    },
+    "access": {
+      "public": "Öffentlich",
+      "password": "Passwort",
+      "session": "Sitzung"
+    },
+    "col": {
+      "preview": "Vorschau",
+      "name": "Name",
+      "type": "Typ",
+      "size": "Größe",
+      "access": "Zugriff",
+      "channel": "Kanal",
+      "owner": "Eigentümer",
+      "uploaded": "Hochgeladen",
+      "expires": "Läuft ab",
+      "actions": "Aktionen"
+    },
+    "root": "Stamm"
   }
 }

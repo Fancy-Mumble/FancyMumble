@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDownIcon } from "../../icons";
 import styles from "./SplitButton.module.css";
 
@@ -21,6 +22,7 @@ interface SplitButtonProps {
 /** GitHub-style split button: a primary action on the left and a
  *  chevron on the right that reveals a dropdown of all options. */
 export function SplitButton({ options, variant = "primary", dropDirection = "up" }: SplitButtonProps) {
+  const { t } = useTranslation("common");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [defaultOpt] = options;
@@ -56,7 +58,7 @@ export function SplitButton({ options, variant = "primary", dropDirection = "up"
       <button
         type="button"
         className={`${styles.btnChevron}`}
-        aria-label="More options"
+        aria-label={t("splitButton.moreOptionsAriaLabel")}
         aria-haspopup="true"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}

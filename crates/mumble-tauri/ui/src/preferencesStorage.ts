@@ -38,6 +38,9 @@ const DEFAULTS: UserPreferences = {
   autoUpdateOnStartup: false,
   skippedUpdateVersion: null,
   persistDms: false,
+  hideEmptyChannels: false,
+  welcomeMessageDisplay: "once",
+  showDisconnectWarning: true,
 };
 
 async function getStore() {
@@ -71,6 +74,11 @@ export async function setPreferences(
   const store = await getStore();
   await store.set(KEY, prefs);
   cachedPrefs = Promise.resolve(prefs);
+  // Signal listeners (e.g. the server tab bar) so they can react to a pref
+  // change without remounting.
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("preferences-changed", { detail: prefs }));
+  }
 }
 
 /** Update specific preference fields. */
@@ -259,6 +267,30 @@ export async function setMutedPushChannel(
   map[serverKey] = updated;
   await store.set(MUTED_PUSH_CHANNELS_KEY, map);
   return updated;
+}
+
+// -- Welcome-message "shown once" tracking (per-server) ------------
+
+/**
+ * Server keys ("host:port") whose welcome message has already been shown
+ * under the "Show once" preference, so it isn't shown again on reconnect.
+ */
+const WELCOME_SHOWN_KEY = "welcomeShownServers";
+
+/** Whether the welcome message has already been shown for a server. */
+export async function hasShownWelcome(serverKey: string): Promise<boolean> {
+  const store = await getStore();
+  const seen = (await store.get<string[]>(WELCOME_SHOWN_KEY)) ?? [];
+  return seen.includes(serverKey);
+}
+
+/** Record that a server's welcome message has been shown. */
+export async function markWelcomeShown(serverKey: string): Promise<void> {
+  const store = await getStore();
+  const seen = (await store.get<string[]>(WELCOME_SHOWN_KEY)) ?? [];
+  if (!seen.includes(serverKey)) {
+    await store.set(WELCOME_SHOWN_KEY, [...seen, serverKey]);
+  }
 }
 
 // -- Notification sound settings -----------------------------------

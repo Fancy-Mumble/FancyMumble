@@ -138,6 +138,10 @@ fancy_message_support! {
     (0, 4, 0) FancyPluginAdminInstall        => ServerOnly,
     (0, 4, 0) FancyPluginAdminUninstall      => ServerOnly,
     (0, 4, 0) FancyPluginAdminAck            => ServerOnly,
+
+    // -- Runtime server settings (server-processed) -- 0.4.x ---------
+    (0, 4, 0) FancyServerSettings            => ServerOnly,
+    (0, 4, 0) FancyServerSettingsUpdate      => ServerOnly,
 }
 
 #[cfg(test)]

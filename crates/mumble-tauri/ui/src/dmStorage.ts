@@ -18,6 +18,7 @@
 import { load } from "@tauri-apps/plugin-store";
 import type { ChatMessage } from "./types";
 import { getPreferences } from "./preferencesStorage";
+import { bytesToBase64, base64ToBytes } from "./utils/base64";
 
 const STORE_FILE = "dm-history.json";
 const KEY_STORE_FILE = "dm-key.json";
@@ -28,19 +29,6 @@ const MAX_MESSAGES_PER_FRIEND = 5000;
 const IV_LENGTH = 12;
 
 let cachedKey: Promise<CryptoKey> | null = null;
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let s = "";
-  for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s);
-}
-
-function base64ToBytes(s: string): Uint8Array {
-  const bin = atob(s);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
 
 async function importRawKey(raw: Uint8Array): Promise<CryptoKey> {
   return crypto.subtle.importKey(

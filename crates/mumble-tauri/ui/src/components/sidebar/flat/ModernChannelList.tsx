@@ -17,7 +17,7 @@ import { useState, useMemo, useCallback, useContext, useRef, useLayoutEffect, me
 import { useTranslation } from "react-i18next";
 import type { ChannelEntry, UserEntry } from "../../../types";
 import { colorFor, useHoverCardPosition, UserHoverCardPortal, RoleColorsContext } from "../user/UserListItem";
-import { useUserAvatar } from "../../../lazyBlobs";
+import { useUserAvatar, useUserComment } from "../../../lazyBlobs";
 import { parseComment } from "../../../profileFormat";
 import { useUserStats } from "../../../hooks/useUserStats";
 import { useStreamThumbnail } from "../../chat/stream/useStreamPreview";
@@ -97,9 +97,14 @@ function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMe
   // Defer FancyProfile parsing until the hover card is actually shown.
   // The result is consumed only inside the portal below, and parsing
   // adds measurable mount cost when many members are visible.
+  const liveComment = useUserComment(user.session, user.comment_size, showCard);
   const parsed = useMemo(
-    () => (showCard && user.comment ? parseComment(user.comment) : null),
-    [showCard, user.comment],
+    () => {
+      if (!showCard) return null;
+      const c = user.comment ?? liveComment;
+      return c ? parseComment(c) : null;
+    },
+    [showCard, user.comment, liveComment],
   );
   const stats = useUserStats(user.session, showCard);
   const streamThumbnail = useStreamThumbnail(user.session, showCard && isBroadcasting);
@@ -479,7 +484,7 @@ function ModernChannelListImpl({
             <div key={channel.id} ref={setRef}>
               <SwipeableCard
                 rightSwipeAction={{
-                  label: "Join",
+                  label: t("channelIconList.swipeJoinLabel"),
                   color: "var(--color-accent, #2aabee)",
                   onTrigger: () => onJoinChannel(channel.id),
                 }}

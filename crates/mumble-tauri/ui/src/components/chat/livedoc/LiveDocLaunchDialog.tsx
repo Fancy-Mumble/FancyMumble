@@ -24,6 +24,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { useTranslation } from "react-i18next";
 import { FileDropZone } from "../../elements/FileDropZone";
 import { FileTextIcon } from "../../../icons";
+import { Modal } from "../../elements/Modal";
 import styles from "../file/FileShareDialog.module.css";
 
 type LaunchMode = "new" | "existing";
@@ -31,6 +32,10 @@ type LaunchMode = "new" | "existing";
 export interface LiveDocLaunchChoice {
   readonly mode: LaunchMode;
   readonly title: string;
+  /** Whether to publish the document to the current channel immediately
+   *  ("publish") or keep it private until explicitly published
+   *  ("private"). */
+  readonly visibility: "private" | "publish";
   /** Optional `.md` text that the parent should insert as the initial
    *  document body once the editor is mounted. */
   readonly seedMarkdown?: string;
@@ -55,15 +60,21 @@ export default function LiveDocLaunchDialog({
   const { t } = useTranslation("chat");
   const { t: tc } = useTranslation("common");
   const [mode, setMode] = useState<LaunchMode>("new");
+  const [visibility, setVisibility] = useState<"private" | "publish">("private");
   const [title, setTitle] = useState("");
   const [seedMarkdown, setSeedMarkdown] = useState<string | undefined>(undefined);
   const [seedFilename, setSeedFilename] = useState<string | undefined>(undefined);
   const [seedError, setSeedError] = useState<string | null>(null);
+  // Collapsed by default: a simple "name + open" flow.  The advanced section
+  // (new/existing, private/publish, seed file) is revealed via "More options".
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
     setMode("new");
+    setVisibility("private");
+    setShowAdvanced(false);
     setTitle(t("liveDoc.untitled"));
     setSeedMarkdown(undefined);
     setSeedFilename(undefined);
@@ -102,16 +113,16 @@ export default function LiveDocLaunchDialog({
         console.warn("[LiveDocLaunchDialog] aborted: empty title");
         return;
       }
-      onSubmit({ mode, title: trimmed, seedMarkdown, seedFilename });
+      onSubmit({ mode, title: trimmed, visibility, seedMarkdown, seedFilename });
     },
-    [mode, title, seedMarkdown, seedFilename, onSubmit],
+    [mode, title, visibility, seedMarkdown, seedFilename, onSubmit],
   );
 
   if (!open) return null;
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={t("liveDoc.launch.title")}>
-      <div className={styles.dialog}>
+    <Modal onClose={onCancel} closeOnEsc={false} closeOnOverlayClick={false} zIndex={200} overlayClassName={styles.overlayBlur}>
+      <div className={styles.dialog} role="dialog" aria-modal="true" aria-label={t("liveDoc.launch.title")}>
         <div className={styles.header}>
           <h2 className={styles.title}>{t("liveDoc.launch.title")}</h2>
           <button
@@ -125,35 +136,6 @@ export default function LiveDocLaunchDialog({
         </div>
 
         <form className={styles.body} onSubmit={handleSubmit}>
-          <p className={styles.message}>{t("liveDoc.launch.prompt")}</p>
-
-          <div className={styles.modeList} role="radiogroup" aria-label={t("liveDoc.launch.modeLabel")}>
-            {(["new", "existing"] as const).map((m) => {
-              const active = mode === m;
-              const cls = [styles.modeOption, active ? styles.modeOptionActive : ""].filter(Boolean).join(" ");
-              return (
-                <label key={m} className={cls}>
-                  <input
-                    type="radio"
-                    name="live-doc-launch-mode"
-                    value={m}
-                    checked={active}
-                    onChange={() => setMode(m)}
-                    className={styles.radio}
-                  />
-                  <div className={styles.modeText}>
-                    <div className={styles.modeName}>
-                      {m === "new" ? t("liveDoc.launch.modeNew") : t("liveDoc.launch.modeExisting")}
-                    </div>
-                    <div className={styles.modeDesc}>
-                      {m === "new" ? t("liveDoc.launch.modeNewDesc") : t("liveDoc.launch.modeExistingDesc")}
-                    </div>
-                  </div>
-                </label>
-              );
-            })}
-          </div>
-
           <div className={styles.field}>
             <label className={styles.label} htmlFor="live-doc-title">
               {t("liveDoc.launch.titleLabel")}
@@ -170,36 +152,103 @@ export default function LiveDocLaunchDialog({
             />
           </div>
 
-          {mode === "new" && (
-            <div className={styles.field}>
-              <label className={styles.label}>
-                {t("liveDoc.launch.seedLabel")}{" "}
-                <span className={styles.labelOptional}>{tc("actions.optional")}</span>
-              </label>
-              <FileDropZone
-                accept=".md,.markdown,text/markdown,text/plain"
-                onFile={(f) => void handleFile(f)}
-                label={t("liveDoc.launch.seedDropHint")}
-                preview={
-                  seedFilename ? (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      <FileTextIcon width={20} height={20} aria-hidden="true" />
-                      <span>{seedFilename}</span>
-                    </span>
-                  ) : undefined
-                }
-                onRemove={
-                  seedFilename
-                    ? () => {
-                        setSeedMarkdown(undefined);
-                        setSeedFilename(undefined);
-                        setSeedError(null);
-                      }
-                    : undefined
-                }
-              />
-              {seedError && <p className={styles.message} role="alert">{seedError}</p>}
-            </div>
+          <button
+            type="button"
+            className={styles.moreToggle}
+            onClick={() => setShowAdvanced((v) => !v)}
+            aria-expanded={showAdvanced}
+          >
+            {showAdvanced ? t("liveDoc.launch.fewerOptions") : t("liveDoc.launch.moreOptions")}
+          </button>
+
+          {showAdvanced && (
+            <>
+              <div className={styles.modeList} role="radiogroup" aria-label={t("liveDoc.launch.modeLabel")}>
+                {(["new", "existing"] as const).map((m) => {
+                  const active = mode === m;
+                  const cls = [styles.modeOption, active ? styles.modeOptionActive : ""].filter(Boolean).join(" ");
+                  return (
+                    <label key={m} className={cls}>
+                      <input
+                        type="radio"
+                        name="live-doc-launch-mode"
+                        value={m}
+                        checked={active}
+                        onChange={() => setMode(m)}
+                        className={styles.radio}
+                      />
+                      <div className={styles.modeText}>
+                        <div className={styles.modeName}>
+                          {m === "new" ? t("liveDoc.launch.modeNew") : t("liveDoc.launch.modeExisting")}
+                        </div>
+                        <div className={styles.modeDesc}>
+                          {m === "new" ? t("liveDoc.launch.modeNewDesc") : t("liveDoc.launch.modeExistingDesc")}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div className={styles.modeList} role="radiogroup" aria-label={t("liveDoc.launch.visibilityLabel")}>
+                {(["publish", "private"] as const).map((v) => {
+                  const active = visibility === v;
+                  const cls = [styles.modeOption, active ? styles.modeOptionActive : ""].filter(Boolean).join(" ");
+                  return (
+                    <label key={v} className={cls}>
+                      <input
+                        type="radio"
+                        name="live-doc-visibility"
+                        value={v}
+                        checked={active}
+                        onChange={() => setVisibility(v)}
+                        className={styles.radio}
+                      />
+                      <div className={styles.modeText}>
+                        <div className={styles.modeName}>
+                          {v === "publish" ? t("liveDoc.launch.visPublish") : t("liveDoc.launch.visPrivate")}
+                        </div>
+                        <div className={styles.modeDesc}>
+                          {v === "publish" ? t("liveDoc.launch.visPublishDesc") : t("liveDoc.launch.visPrivateDesc")}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {mode === "new" && (
+                <div className={styles.field}>
+                  <label className={styles.label}>
+                    {t("liveDoc.launch.seedLabel")}{" "}
+                    <span className={styles.labelOptional}>{tc("actions.optional")}</span>
+                  </label>
+                  <FileDropZone
+                    accept=".md,.markdown,text/markdown,text/plain"
+                    onFile={(f) => void handleFile(f)}
+                    label={t("liveDoc.launch.seedDropHint")}
+                    preview={
+                      seedFilename ? (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                          <FileTextIcon width={20} height={20} aria-hidden="true" />
+                          <span>{seedFilename}</span>
+                        </span>
+                      ) : undefined
+                    }
+                    onRemove={
+                      seedFilename
+                        ? () => {
+                            setSeedMarkdown(undefined);
+                            setSeedFilename(undefined);
+                            setSeedError(null);
+                          }
+                        : undefined
+                    }
+                  />
+                  {seedError && <p className={styles.message} role="alert">{seedError}</p>}
+                </div>
+              )}
+            </>
           )}
 
           <div className={styles.actions}>
@@ -212,6 +261,6 @@ export default function LiveDocLaunchDialog({
           </div>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -4,6 +4,7 @@
 // (for schema-2 plugins) on confirm.
 
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import {
   dismissPluginModal,
@@ -29,6 +30,7 @@ export default function PluginModalForm({
 }: {
   readonly modal: PluginModalState;
 }) {
+  const { t } = useTranslation(["common", "settings"]);
   const [fields, setFields] = useState<FieldMap>(() => initialFields(modal));
   useEffect(() => {
     setFields(initialFields(modal));
@@ -71,7 +73,7 @@ export default function PluginModalForm({
             type="button"
             className={styles.cardClose}
             onClick={dismissPluginModal}
-            aria-label="Close"
+            aria-label={t("common:actions.close")}
           >
             <CloseIcon width={16} height={16} />
           </button>
@@ -96,7 +98,7 @@ export default function PluginModalForm({
             className={`${styles.btn} ${styles.btnSecondary}`}
             onClick={dismissPluginModal}
           >
-            Cancel
+            {t("common:actions.cancel")}
           </button>
           <button
             type="button"
@@ -577,6 +579,7 @@ function ModalFileUpload({
   readonly setField: (id: string, value: ModalFieldValue) => void;
   readonly channelId: number | null;
 }) {
+  const { t } = useTranslation("common");
   const ids = getStringArray(fields, component.custom_id);
   const uploadFile = useAppStore((s) => s.uploadFile);
   const selectedChannel = useAppStore((s) => s.selectedChannel);
@@ -608,11 +611,11 @@ function ModalFileUpload({
         className={`${styles.btn} ${styles.btnSecondary}`}
         onClick={() => void pick()}
       >
-        {multi ? "Add files" : "Choose file"}
+        {multi ? t("pluginModalForm.addFiles") : t("pluginModalForm.chooseFile")}
       </button>
       {ids.length > 0 && (
         <span className={styles.fileUploadPicked}>
-          {ids.length} file{ids.length === 1 ? "" : "s"} attached
+          {t("pluginModalForm.filesAttached", { count: ids.length })}
         </span>
       )}
     </div>

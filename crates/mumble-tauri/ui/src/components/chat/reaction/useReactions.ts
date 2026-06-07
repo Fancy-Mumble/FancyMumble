@@ -105,7 +105,6 @@ export function useReactions() {
   /** Get reaction summaries for a given message (convenience wrapper). */
   const getMessageReactions = useCallback(
     (messageId: string): ReactionSummary[] => getReactions(messageId),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reactionVersion triggers re-computation
     [reactionVersion],
   );
 

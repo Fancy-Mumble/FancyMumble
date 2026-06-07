@@ -2,6 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import type { PublicServer, ServerPingResult } from "../../types";
+import { fuzzyMatch } from "../../utils/fuzzy";
 import styles from "./PublicServerList.module.css";
 
 type SortKey = "country" | "name" | "users" | "ping" | "version";
@@ -29,16 +30,6 @@ function countryFlag(code: string): string {
     (code.codePointAt(0) ?? 65) + offset,
     (code.codePointAt(1) ?? 65) + offset,
   );
-}
-
-/** Simple fuzzy matching: all query characters must appear in order. */
-function fuzzyMatch(query: string, text: string): boolean {
-  const lower = text.toLowerCase();
-  let qi = 0;
-  for (let i = 0; i < lower.length && qi < query.length; i++) {
-    if (lower[i] === query[qi]) qi++;
-  }
-  return qi === query.length;
 }
 
 export default function PublicServerList({

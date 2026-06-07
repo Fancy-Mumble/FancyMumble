@@ -47,8 +47,8 @@ export interface NamedTrustRecord {
 /** Single read-modify-write that merges `records` into the bucket keyed by
  *  `bucketKey` (server id or `GLOBAL_KEY`).  All four public save helpers
  *  funnel through here so they cannot race each other on the in-memory
- *  tauri-plugin-store cache and so the explicit save() — needed because
- *  autoSave is debounced and gets lost on app close — happens in one
+ *  tauri-plugin-store cache and so the explicit save() - needed because
+ *  autoSave is debounced and gets lost on app close - happens in one
  *  place. */
 async function writeRecords(
   bucketKey: string,

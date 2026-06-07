@@ -706,15 +706,15 @@ message SuggestConfig {
 
 // Used to send plugin messages between clients
 message PluginDataTransmission {
-	// The session ID of the client this message was sent from
-	optional uint32 senderSession = 1;
+		// The session ID of the client this message was sent from
+	optional uint32 senderSession = 1 [deprecated=true];
 	// The session IDs of the clients that should receive this message
-	repeated uint32 receiverSessions = 2 [packed = true];
+	repeated uint32 receiverSessions = 2 [packed = true, deprecated=true];
 	// The data that is sent
-	optional bytes data = 3;
+	optional bytes data = 3 [deprecated=true];
 	// The ID of the sent data. This will be used by plugins to check whether they will
 	// process it or not
-	optional string dataID = 4;
+	optional string dataID = 4 [deprecated=true];
 }
 
 // ---- Persistent Chat (pchat) native protocol messages ----
@@ -1827,6 +1827,59 @@ message FancyPluginAdminAck {
     INSTALL = 2;
     UNINSTALL = 3;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Fancy Mumble: runtime server settings (IDs 152-153) - introduced in 0.4.x
+// ---------------------------------------------------------------------------
+//
+// A server-advertised, schema-driven view of editable server settings (core
+// murmur settings plus the config of currently-loaded plugins).  The server is
+// the single source of truth: each Setting carries its own type/group/label so
+// the client renders a generic form without hard-coding the field list.  Only
+// users with Write permission on the root channel receive or may change these.
+
+// One editable server setting (schema + current value).
+message Setting {
+  // Stable config key.  Core keys match murmur's config names (e.g.
+  // "welcometext"); plugin keys are prefixed "plugin.<name>." (e.g.
+  // "plugin.fancy-live-doc.file_server_url").
+  optional string key = 1;
+  // Input type driving the client's field component:
+  // "string" | "text" | "bool" | "int" | "enum" | "country" | "password".
+  optional string type = 2;
+  // Group/section the setting belongs to (e.g. "General", "Registration", or
+  // a plugin's display name).
+  optional string group = 3;
+  // Human-readable label (English; the client may localise by key).
+  optional string label = 4;
+  // Current value, always string-encoded (the client coerces by type).
+  // Omitted for secret settings, which are write-only.
+  optional string value = 5;
+  // Allowed values for "enum" types.
+  repeated string options = 6;
+  // When true the value is a secret (token/password): never sent to the client
+  // and only transmitted client->server when (re)set.
+  optional bool secret = 7;
+  // Optional one-line help/description.
+  optional string help = 8;
+}
+
+// Server -> Admin: full snapshot of editable settings.  Re-sent whenever a
+// setting changes or the set of loaded plugins changes.
+// Wire type ID = 152.
+message FancyServerSettings {
+  repeated Setting settings = 1;
+  // Monotonic revision so the client can drop stale snapshots.
+  optional uint64 revision = 2;
+}
+
+// Admin -> Server: apply changed settings.  Server validates root-channel
+// Write permission, persists + applies each at runtime, then re-broadcasts
+// FancyServerSettings to all admins.
+// Wire type ID = 153.
+message FancyServerSettingsUpdate {
+  repeated Setting settings = 1;
 }
 
 // ---------------------------------------------------------------------------

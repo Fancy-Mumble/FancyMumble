@@ -18,7 +18,8 @@ import {
   type ClipboardEvent,
   type ReactNode,
 } from "react";
-import hljs from "highlight.js/lib/common";
+import { flattenHljs } from "./hljsTokens";
+import { loadHljs, loadedHljs, type HljsApi } from "./lazyHljs";
 import styles from "./MarkdownInput.module.css";
 
 // --- Markdown -> decorated spans -----------------------------------
@@ -229,35 +230,11 @@ function pushWithUrls(
 }
 
 /**
- * Walk an hljs-produced HTML fragment and return flat `{text, cls}` tokens.
- * Inherits the nearest ancestor's class name for each text leaf.
- */
-function flattenHljs(html: string): Array<{ text: string; cls: string }> {
-  const container = document.createElement("div");
-  container.innerHTML = html;
-  const tokens: Array<{ text: string; cls: string }> = [];
-
-  function visit(node: Node, cls: string): void {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const t = node.textContent ?? "";
-      if (t) tokens.push({ text: t, cls });
-    } else if (node.nodeType === Node.ELEMENT_NODE) {
-      const el = node as HTMLElement;
-      const childCls = el.className || cls;
-      for (const child of el.childNodes) visit(child, childCls);
-    }
-  }
-
-  for (const child of container.childNodes) visit(child, "");
-  return tokens;
-}
-
-/**
  * Expand any `fenceCode` segments into hljs-coloured sub-segments.
  * All other segments pass through unchanged. Called once per value change
  * via useMemo so hljs runs only on edit, not on every cursor move.
  */
-function expandFenceSegments(segments: Segment[]): Segment[] {
+function expandFenceSegments(segments: Segment[], hljs: HljsApi | null): Segment[] {
   const result: Segment[] = [];
   for (const seg of segments) {
     if (!seg.fenceCode) {
@@ -267,13 +244,19 @@ function expandFenceSegments(segments: Segment[]): Segment[] {
     const { lang, body } = seg.fenceCode;
     result.push({ text: `\`\`\`${lang}\n` });
     let tokens: Array<{ text: string; cls: string }>;
-    try {
-      const hl =
-        lang && hljs.getLanguage(lang)
-          ? hljs.highlight(body, { language: lang, ignoreIllegals: true })
-          : hljs.highlightAuto(body);
-      tokens = flattenHljs(hl.value);
-    } catch {
+    if (hljs) {
+      try {
+        const hl =
+          lang && hljs.getLanguage(lang)
+            ? hljs.highlight(body, { language: lang, ignoreIllegals: true })
+            : hljs.highlightAuto(body);
+        tokens = flattenHljs(hl.value);
+      } catch {
+        tokens = [{ text: body, cls: "" }];
+      }
+    } else {
+      // Highlighter not loaded yet: show the code plain; a re-render colourises
+      // it once `loadHljs` resolves.
       tokens = [{ text: body, cls: "" }];
     }
     for (const t of tokens) {
@@ -721,7 +704,15 @@ export default function MarkdownInput({
     [onSubmit, wrapSelection, onKeyDownCapture],
   );
 
-  const segments = useMemo(() => expandFenceSegments(parseMarkdown(value)), [value]);
+  const [hljs, setHljs] = useState<HljsApi | null>(() => loadedHljs());
+  const parsed = useMemo(() => parseMarkdown(value), [value]);
+  const hasFence = useMemo(() => parsed.some((s) => s.fenceCode), [parsed]);
+  // Load the highlighter the first time a code fence appears; the state update
+  // re-runs the segments memo to colourise it.
+  useEffect(() => {
+    if (hasFence && !hljs) void loadHljs().then(setHljs);
+  }, [hasFence, hljs]);
+  const segments = useMemo(() => expandFenceSegments(parsed, hljs), [parsed, hljs]);
   const showCursor = (focused || isDragging) && !composing;
   const showPlaceholder = !value && !focused;
 

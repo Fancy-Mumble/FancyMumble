@@ -10,6 +10,10 @@
       "allow": [{ "path": "**" }]
     },
     {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://*" }, { "url": "http://*" }]
+    },
+    {
       "identifier": "opener:allow-reveal-item-in-dir",
       "allow": [{ "path": "**" }]
     },

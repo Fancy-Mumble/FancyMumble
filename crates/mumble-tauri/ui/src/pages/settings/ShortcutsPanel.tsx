@@ -4,6 +4,10 @@ import { ShortcutRecorder } from "./SharedControls";
 import UserShortcutsSection from "./UserShortcutsSection";
 import styles from "./SettingsPage.module.css";
 import panelStyles from "./ShortcutsPanel.module.css";
+import { registerSettings } from "./settingsSearchRegistry";
+
+registerSettings("shortcuts")
+  .add("shortcuts.builtinTitle", ["keybinds", "hotkeys", "keyboard", "push to talk"]);
 
 interface Props {
   shortcuts: ShortcutBindings;

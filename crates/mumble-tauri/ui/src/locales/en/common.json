@@ -91,8 +91,68 @@
   },
   "autocomplete": {
     "placeholder": "Search...",
-    "noOptions": "No options"
+    "noOptions": "No options",
+    "removeChipAriaLabel": "Remove {{name}}",
+    "clearSelectionAriaLabel": "Clear selection"
   },
+  "officialBadge": {
+    "label": "Official",
+    "title": "Official FancyMumble plugin"
+  },
+  "cardColorPicker": {
+    "randomTitle": "Random colours",
+    "roleBg": "bg",
+    "roleBorder": "border",
+    "roleAccent": "accent",
+    "removeTitle": "Remove colour",
+    "addTitle": "Add colour",
+    "glassLabel": "Glass effect",
+    "accentTitle": "Accent colour"
+  },
+  "splitButton": {
+    "moreOptionsAriaLabel": "More options"
+  },
+  "pluginTrust": {
+    "bulkAllowServer": "Allow all for this server",
+    "bulkAllowOnce": "Allow all once",
+    "bulkAllowAlways": "Always allow all",
+    "scopeServer": "Allow for this server",
+    "scopeOnce": "Allow once",
+    "scopeAlways": "Always allow",
+    "scopeServerHint": "Remembered for this server",
+    "scopeOnceHint": "This session only",
+    "scopeGlobalHint": "Trusted on every server",
+    "singleTitle": "Server wants to enable plugin",
+    "multiTitle": "Server wants to enable {{count}} plugins",
+    "singleSubtitle": "Review the plugin and choose whether to allow it.",
+    "multiSubtitle": "Expand a plugin to review what it can do, then decide individually or use the buttons below to apply the same choice to all.",
+    "blockAll": "Block all",
+    "capNone": "no capabilities",
+    "capCount_one": "{{count}} capability",
+    "capCount_other": "{{count}} capabilities",
+    "updatedBadge": "updated",
+    "repromptWarning": "This plugin's version or capability set changed since you last reviewed it. Re-confirm before re-enabling.",
+    "capabilitiesHeading": "This plugin will be able to",
+    "capEmpty": "Nothing - manifest declares no capabilities",
+    "advancedSummary": "Advanced",
+    "fieldPlugin": "Plugin",
+    "fieldVersion": "Version",
+    "fieldAuthor": "Author",
+    "fieldHomepage": "Homepage",
+    "fieldCapabilities": "Capabilities",
+    "fieldTags": "Tags",
+    "fieldLastReviewed": "Last reviewed",
+    "fieldSchema": "Schema",
+    "fieldFingerprint": "Fingerprint",
+    "block": "Block"
+  },
+  "pluginModalForm": {
+    "addFiles": "Add files",
+    "chooseFile": "Choose file",
+    "filesAttached_one": "{{count}} file attached",
+    "filesAttached_other": "{{count}} files attached"
+  },
+  "klipyFooter": "Powered by Klipy",
   "emojiPicker": {
     "searchPlaceholder": "Search emoji...",
     "empty": "No emoji found",
@@ -157,5 +217,15 @@
     "laterBtn": "Later",
     "retryBtn": "Retry",
     "updateNowBtn": "Update now"
+  },
+  "plugins": {
+    "fileServer": "File server",
+    "liveDoc": "Live documents",
+    "disabledLog": "Plugin “{{name}}” was disabled by the server",
+    "disabledTitle": "{{name}} was disabled",
+    "disabledBody": "The server disabled this plugin. Any open {{name}} views will be closed.",
+    "disabledSave": "Save a local copy",
+    "disabledSaving": "Saving…",
+    "disabledClose": "Close"
   }
 }

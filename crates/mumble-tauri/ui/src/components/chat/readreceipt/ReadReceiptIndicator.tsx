@@ -44,7 +44,6 @@ export default function ReadReceiptIndicator({
         activeHashes,
         ownHash,
       ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [channelId, messageId, allMessageIds, activeHashes, ownHash, readReceiptVersion],
   );
 
@@ -55,7 +54,6 @@ export default function ReadReceiptIndicator({
         ? readers.filter((r) => r.cert_hash !== ownHash).length
         : readers.length;
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [channelId, messageId, allMessageIds, ownHash, readReceiptVersion],
   );
 

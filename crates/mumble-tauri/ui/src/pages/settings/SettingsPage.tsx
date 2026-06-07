@@ -4,11 +4,10 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { load } from "@tauri-apps/plugin-store";
-import type { AudioDevice, AudioSettings, FancyProfile, UserMode, TimeFormat, DateFormat, NumberFormat } from "../../types";
+import type { AudioDevice, AudioSettings, FancyProfile, UserMode, TimeFormat, DateFormat, NumberFormat, WelcomeMessageDisplay } from "../../types";
 import { getPreferences, updatePreferences, getSavedAudioSettings, saveAudioSettings } from "../../preferencesStorage";
 import { serializeProfile, dataUrlToBytes } from "../../profileFormat";
-import { setKlipyApiKey } from "../../components/chat/gif/GifPicker";
-import { setKlipyApiKey as setKlipyApiKeyBanner } from "./KlipyGifBrowser";
+import { setKlipyApiKey } from "../../components/chat/gif/klipyConfig";
 import { useAppStore } from "../../store";
 import {
   type ShortcutBindings,
@@ -27,6 +26,7 @@ import { IdentitiesPanel } from "./IdentitiesPanel";
 import { PersonalizationPanel } from "./PersonalizationPanel";
 import { LocalizationPanel } from "./LocalizationPanel";
 import { NotificationsPanel, DEFAULT_NOTIFICATION_SOUNDS } from "./NotificationsPanel";
+import { SettingsSearch } from "./SettingsSearch";
 import { getNotificationSounds, saveNotificationSounds } from "../../preferencesStorage";
 import { ProfilePreviewCard } from "./ProfilePreviewCard";
 import { loadPersonalization, savePersonalization, type PersonalizationData } from "../../personalizationStorage";
@@ -97,7 +97,7 @@ function buildTabs(t: (key: string) => string, hasPlugins: boolean): TabDef<Tab>
     { id: "localization",   label: t("tabs.localization"),   icon: <GlobeIcon    width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
   ];
   if (hasPlugins) {
-    tabs.push({ id: "plugins", label: "Plugins", icon: <PuzzleIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> });
+    tabs.push({ id: "plugins", label: t("tabs.plugins"), icon: <PuzzleIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> });
   }
   tabs.push({ id: "advanced", label: t("tabs.advanced"), icon: <SlidersIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> });
   return tabs;
@@ -109,6 +109,41 @@ export default function SettingsPage() {
   const navigate = useNavigate();
   const { t } = useTranslation("settings");
   const [tab, setTab] = useState<Tab>("profile");
+  // Settings-search: term to flash-highlight on the active tab after a result
+  // is chosen, and a ref to the content area we scan for matching settings.
+  const [highlightTerm, setHighlightTerm] = useState<string | null>(null);
+  const contentRef = useRef<HTMLElement>(null);
+
+  // Flash-highlight settings on the active tab whose heading matches the search
+  // term picked from the search results, and scroll the first into view.
+  useEffect(() => {
+    if (!highlightTerm) return;
+    const root = contentRef.current;
+    if (!root) return;
+    const term = highlightTerm.toLowerCase();
+    const cls = styles.searchHighlight;
+    const matched: HTMLElement[] = [];
+    const rafId = requestAnimationFrame(() => {
+      let first: HTMLElement | null = null;
+      root.querySelectorAll<HTMLElement>("h3").forEach((el) => {
+        if (el.textContent && el.textContent.toLowerCase().includes(term)) {
+          el.classList.add(cls);
+          matched.push(el);
+          if (!first) first = el;
+        }
+      });
+      (first as HTMLElement | null)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    const timer = setTimeout(() => {
+      matched.forEach((el) => el.classList.remove(cls));
+      setHighlightTerm(null);
+    }, 3200);
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timer);
+      matched.forEach((el) => el.classList.remove(cls));
+    };
+  }, [highlightTerm, tab]);
   const isConnected = useAppStore((s) => s.status) === "connected";
   const connectedCertLabel = useAppStore((s) => s.connectedCertLabel);
   const serverFancyVersion = useAppStore((s) => s.serverFancyVersion);
@@ -137,6 +172,7 @@ export default function SettingsPage() {
   const [defaultUsername, setDefaultUsername] = useState("");
   const [klipyApiKey, setKlipyApiKeyState] = useState("");
   const [enableNotifications, setEnableNotifications] = useState(true);
+  const [welcomeMessageDisplay, setWelcomeMessageDisplay] = useState<WelcomeMessageDisplay>("once");
   const [enableDualPath, setEnableDualPath] = useState(false);
   const [disableReadReceipts, setDisableReadReceipts] = useState(false);
   const [disableTypingIndicators, setDisableTypingIndicators] = useState(false);
@@ -147,6 +183,7 @@ export default function SettingsPage() {
   const [autoReconnect, setAutoReconnect] = useState(false);
   const [autoUpdateOnStartup, setAutoUpdateOnStartup] = useState(false);
   const [persistDms, setPersistDms] = useState(false);
+  const [showDisconnectWarning, setShowDisconnectWarning] = useState(true);
   const [logLevel, setLogLevel] = useState<string>("info");
   const [useRodioBackend, setUseRodioBackend] = useState(true);
   const [timeFormat, setTimeFormat] = useState<TimeFormat>("auto");
@@ -207,8 +244,8 @@ export default function SettingsPage() {
         setDefaultUsername(prefs.defaultUsername);
         setKlipyApiKeyState(prefs.klipyApiKey ?? "");
         setKlipyApiKey(prefs.klipyApiKey);
-        setKlipyApiKeyBanner(prefs.klipyApiKey);
         setEnableNotifications(prefs.enableNotifications ?? true);
+        setWelcomeMessageDisplay(prefs.welcomeMessageDisplay ?? "once");
         setEnableDualPath(prefs.enableDualPath ?? false);
         setDisableReadReceipts(prefs.disableReadReceipts ?? false);
         setDisableTypingIndicators(prefs.disableTypingIndicators ?? false);
@@ -219,6 +256,7 @@ export default function SettingsPage() {
         setAutoReconnect(prefs.autoReconnect ?? false);
         setAutoUpdateOnStartup(prefs.autoUpdateOnStartup ?? false);
         setPersistDms(prefs.persistDms ?? false);
+        setShowDisconnectWarning(prefs.showDisconnectWarning ?? true);
         setLogLevel(prefs.logLevel ?? (prefs.debugLogging ? "debug" : "info"));
         setTimeFormat(prefs.timeFormat);
         setConvertToLocalTime(prefs.convertToLocalTime);
@@ -412,7 +450,6 @@ export default function SettingsPage() {
   const handleKlipyApiKeyChange = useCallback(async (key: string) => {
     setKlipyApiKeyState(key);
     setKlipyApiKey(key);
-    setKlipyApiKeyBanner(key);
     await updatePreferences({ klipyApiKey: key });
   }, []);
 
@@ -465,6 +502,11 @@ export default function SettingsPage() {
       );
       return next;
     });
+  }, []);
+
+  const handleWelcomeMessageDisplayChange = useCallback((value: WelcomeMessageDisplay) => {
+    setWelcomeMessageDisplay(value);
+    void updatePreferences({ welcomeMessageDisplay: value });
   }, []);
 
   const handleNotificationSoundsChange = useCallback(
@@ -567,6 +609,14 @@ export default function SettingsPage() {
     });
   }, []);
 
+  const handleToggleDisconnectWarning = useCallback(() => {
+    setShowDisconnectWarning((prev) => {
+      const next = !prev;
+      updatePreferences({ showDisconnectWarning: next });
+      return next;
+    });
+  }, []);
+
   const handleToggleDeveloperMode = useCallback(async () => {
     const next: UserMode = userMode === "developer" ? "expert" : "developer";
     setUserMode(next);
@@ -660,9 +710,18 @@ export default function SettingsPage() {
       onTabChange={setTab}
       onBack={handleBack}
       mainAreaClassName={tab === "profile" ? styles.mainAreaWithPreview : undefined}
+      sidebarExtra={
+        <SettingsSearch
+          tabs={TABS}
+          onSelect={(tabId, term) => {
+            setTab(tabId as Tab);
+            setHighlightTerm(term);
+          }}
+        />
+      }
     >
       {/* Content */}
-      <main className={styles.content}>
+      <main className={styles.content} ref={contentRef}>
         {loadError && <p className={styles.error}>{loadError}</p>}
 
         {tab === "profile" && (
@@ -742,6 +801,8 @@ export default function SettingsPage() {
               onChange={handleNotificationSoundsChange}
               enableNativeNotifications={enableNotifications}
               onToggleNativeNotifications={handleToggleNotifications}
+              welcomeMessageDisplay={welcomeMessageDisplay}
+              onWelcomeMessageDisplayChange={handleWelcomeMessageDisplayChange}
               isExpert={userMode !== "normal"}
             />
           )}
@@ -777,12 +838,14 @@ export default function SettingsPage() {
               autoReconnect={autoReconnect}
               autoUpdateOnStartup={autoUpdateOnStartup}
               persistDms={persistDms}
+              showDisconnectWarning={showDisconnectWarning}
               onToggleMode={handleToggleMode}
               onKlipyApiKeyChange={handleKlipyApiKeyChange}
               onLogLevelChange={handleLogLevelChange}
               onToggleAutoReconnect={handleToggleAutoReconnect}
               onToggleAutoUpdate={handleToggleAutoUpdate}
               onTogglePersistDms={handleTogglePersistDms}
+              onToggleDisconnectWarning={handleToggleDisconnectWarning}
               onToggleDeveloperMode={handleToggleDeveloperMode}
               onReset={handleReset}
             />

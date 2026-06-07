@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { PendingAttachment } from "./pending/PendingAttachmentsStrip";
+import type { DragRegion } from "./livedoc/liveDocDropStore";
+
+/** Shape of the Tauri native drag-drop event payload we consume. */
+type DragDropPayload =
+  | { readonly type: "enter" | "over" | "drop"; readonly position?: { readonly x: number; readonly y: number }; readonly paths?: string[] }
+  | { readonly type: "leave" };
 
 const IMAGE_EXTS = new Set([
   "png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "svg", "ico",
@@ -40,12 +46,18 @@ function attachmentFromFile(file: File): PendingAttachment {
 interface UseDragDropAttachmentsOptions {
   /** Whether drag-drop should be accepted (e.g. only when a channel is open). */
   readonly enabled: boolean;
+  /** Decide which region a drag at the given viewport CSS coordinates targets.
+   *  Defaults to always "chat". */
+  readonly resolveTarget?: (x: number, y: number) => DragRegion;
+  /** Invoked with dropped items routed to the live doc instead of the chat. */
+  readonly onLiveDocFiles?: (items: PendingAttachment[]) => void;
 }
 
 interface UseDragDropAttachmentsResult {
   readonly attachments: PendingAttachment[];
   readonly setAttachments: React.Dispatch<React.SetStateAction<PendingAttachment[]>>;
-  readonly dragActive: boolean;
+  /** Region currently under the drag, or null when no drag is active. */
+  readonly dragTarget: DragRegion;
   readonly addFromFile: (file: File) => void;
   readonly removeAttachment: (id: string) => void;
   readonly clearAttachments: () => void;
@@ -53,11 +65,17 @@ interface UseDragDropAttachmentsResult {
 
 /**
  * Hook that listens to Tauri's native drag-drop events and exposes
- * pending attachments + a "drag active" flag for overlay rendering.
+ * pending attachments + the region currently under the drag.  Native
+ * file drops are global to the webview, so the target region is resolved
+ * from the pointer position via `resolveTarget`.
  */
-export function useDragDropAttachments({ enabled }: UseDragDropAttachmentsOptions): UseDragDropAttachmentsResult {
+export function useDragDropAttachments({
+  enabled,
+  resolveTarget,
+  onLiveDocFiles,
+}: UseDragDropAttachmentsOptions): UseDragDropAttachmentsResult {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
-  const [dragActive, setDragActive] = useState(false);
+  const [dragTarget, setDragTarget] = useState<DragRegion>(null);
 
   const addFromFile = useCallback((file: File) => {
     setAttachments((prev) => [...prev, attachmentFromFile(file)]);
@@ -73,22 +91,39 @@ export function useDragDropAttachments({ enabled }: UseDragDropAttachmentsOption
     if (!enabled) return;
     let unlisten: (() => void) | undefined;
     let cancelled = false;
+
+    const targetAt = (position: { x: number; y: number } | undefined): DragRegion => {
+      if (!position) return "chat";
+      const dpr = window.devicePixelRatio || 1;
+      return resolveTarget?.(position.x / dpr, position.y / dpr) ?? "chat";
+    };
+
+    const handleDrop = (region: DragRegion, paths: string[] | undefined): void => {
+      if (!paths || paths.length === 0) return;
+      const items = paths.map(attachmentFromPath);
+      if (region === "livedoc" && onLiveDocFiles) {
+        onLiveDocFiles(items);
+      } else {
+        setAttachments((prev) => [...prev, ...items]);
+      }
+    };
+
+    const handleEvent = (payload: DragDropPayload): void => {
+      if (payload.type === "enter" || payload.type === "over") {
+        setDragTarget(targetAt(payload.position));
+      } else if (payload.type === "leave") {
+        setDragTarget(null);
+      } else if (payload.type === "drop") {
+        const region = targetAt(payload.position);
+        setDragTarget(null);
+        handleDrop(region, payload.paths);
+      }
+    };
+
     (async () => {
       try {
         const webview = getCurrentWebview();
-        const fn = await webview.onDragDropEvent((event) => {
-          if (event.payload.type === "enter" || event.payload.type === "over") {
-            setDragActive(true);
-          } else if (event.payload.type === "leave") {
-            setDragActive(false);
-          } else if (event.payload.type === "drop") {
-            setDragActive(false);
-            const paths = event.payload.paths;
-            if (paths && paths.length > 0) {
-              setAttachments((prev) => [...prev, ...paths.map(attachmentFromPath)]);
-            }
-          }
-        });
+        const fn = await webview.onDragDropEvent((event) => handleEvent(event.payload));
         if (cancelled) {
           fn();
         } else {
@@ -102,7 +137,7 @@ export function useDragDropAttachments({ enabled }: UseDragDropAttachmentsOption
       cancelled = true;
       unlisten?.();
     };
-  }, [enabled]);
+  }, [enabled, resolveTarget, onLiveDocFiles]);
 
-  return { attachments, setAttachments, dragActive, addFromFile, removeAttachment, clearAttachments };
+  return { attachments, setAttachments, dragTarget, addFromFile, removeAttachment, clearAttachments };
 }

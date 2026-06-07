@@ -1,6 +1,7 @@
 ﻿import { WarningIcon } from "../../icons";
 import { useTranslation } from "react-i18next";
 import type { PersistenceMode } from "../../types";
+import { Modal } from "../elements/Modal";
 import styles from "./KeyShareWarningDialog.module.css";
 
 interface KeyShareWarningDialogProps {
@@ -33,8 +34,8 @@ export default function KeyShareWarningDialog({
   if (!open) return null;
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={t("keyShare.ariaLabel")}>
-      <div className={styles.dialog}>
+    <Modal onClose={onCancel} closeOnEsc={false} closeOnOverlayClick={false} zIndex={200} overlayClassName={styles.overlayBlur}>
+      <div className={styles.dialog} role="dialog" aria-modal="true" aria-label={t("keyShare.ariaLabel")}>
         <div className={styles.header}>
           <h2 className={styles.title}>{t("keyShare.title")}</h2>
           <button
@@ -75,6 +76,6 @@ export default function KeyShareWarningDialog({
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -25,12 +25,17 @@ mod emotes;
 pub use emotes::{AddEmoteRequest, AddEmoteResponse, RemoveEmoteRequest};
 mod event_handler;
 mod file_server;
-pub use file_server::{DownloadRequest, UploadBytesRequest, UploadRequest, UploadResponse};
+pub use file_server::{
+    AdminDeleteDocumentRequest, AdminDeleteRequest, AdminListRequest, AdminPreviewRequest,
+    DownloadBytesRequest, DownloadRequest, PrivateStorageRequest, UploadBinaryRequest,
+    UploadBytesRequest, UploadRequest, UploadResponse,
+};
 mod handler;
 pub(crate) mod hash_names;
 pub(crate) mod local_cache;
 mod messaging;
 mod onboarding;
+mod server_settings;
 mod plugin_admin;
 pub mod offload;
 mod offload_ops;
@@ -206,11 +211,20 @@ pub(super) struct SharedState {
     pub onboarding: Option<OnboardingConfig>,
     /// Local user's onboarding response, fetched on demand.
     pub onboarding_response: Option<OnboardingResponse>,
+    /// Latest editable server-settings snapshot (`None` until a
+    /// `FancyServerSettings` arrives; only admins receive it).
+    pub server_settings: Option<ServerSettingsSnapshot>,
     /// Cached snapshot of the most recent `PluginRegistry` the server
     /// has broadcast.  The protobuf message is delivered once after
     /// `ServerSync` and never resent, so we cache it here to let the
     /// frontend resync after an HMR reload via `get_plugin_registry`.
     pub plugin_registry: Vec<PluginRegistryEntryPayload>,
+    /// Cached server-originated `plugin-data` broadcasts (file-server
+    /// config, live-doc config, plugin info, server emotes).  These are
+    /// sent once after `ServerSync` and never resent, so we cache them
+    /// to let the frontend resync after an HMR reload via
+    /// `get_plugin_broadcasts` instead of forcing a full reconnect.
+    pub plugin_broadcasts: Vec<PluginDataPayload>,
 }
 
 // --- Tauri-managed application state ------------------------------

@@ -152,7 +152,6 @@ export default function DmPopoutPage() {
       }
       unlistenersBox.current = [];
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleClose = useCallback(async () => {
@@ -177,7 +176,7 @@ export default function DmPopoutPage() {
           @ {payload.user_name}
           {payload.server_label && (
             <>
-              {" • "}
+              {" â€¢ "}
               <span className={styles.serverLabel}>{payload.server_label}</span>
             </>
           )}

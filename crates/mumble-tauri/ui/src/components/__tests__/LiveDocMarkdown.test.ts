@@ -52,6 +52,30 @@ describe("editorHtmlToMarkdown", () => {
     expect(md).toContain("line one  \nline two");
   });
 
+  it("round-trips a manual page break", () => {
+    const html =
+      '<p>before</p><div data-page-break="" class="livedoc-page-break"></div><p>after</p>';
+    const md = editorHtmlToMarkdown(html);
+    expect(md).toContain("data-page-break");
+    const back = markdownToEditorHtml(md);
+    // The page-break div survives the export/import cycle so the
+    // PageBreak node can re-parse it.
+    expect(back).toContain("data-page-break");
+    expect(back).toContain("before");
+    expect(back).toContain("after");
+  });
+
+  it("round-trips a manual section break", () => {
+    const html =
+      '<p>one</p><div data-section-break="" class="livedoc-section-break"></div><p>two</p>';
+    const md = editorHtmlToMarkdown(html);
+    expect(md).toContain("data-section-break");
+    const back = markdownToEditorHtml(md);
+    expect(back).toContain("data-section-break");
+    expect(back).toContain("one");
+    expect(back).toContain("two");
+  });
+
   it("preserves empty paragraphs (Enter pressed multiple times)", () => {
     const html = "<p>before</p><p></p><p></p><p>after</p>";
     const md = editorHtmlToMarkdown(html);
@@ -96,6 +120,24 @@ describe("editorHtmlToMarkdown", () => {
     expect(md).toContain("```ts\nconst x = 1;\n```");
   });
 
+  it("fills in an auto-detected language for bare code fences when a detector is given", () => {
+    const html = "<pre><code>print('hi')</code></pre>";
+    const md = editorHtmlToMarkdown(html, { detectLanguage: () => "python" });
+    expect(md).toContain("```python\nprint('hi')\n```");
+  });
+
+  it("does not override an explicit code language with the detector", () => {
+    const html = '<pre><code class="language-ts">const x = 1;</code></pre>';
+    const md = editorHtmlToMarkdown(html, { detectLanguage: () => "python" });
+    expect(md).toContain("```ts\nconst x = 1;\n```");
+  });
+
+  it("leaves the fence bare when the detector declines (null)", () => {
+    const html = "<pre><code>ambiguous</code></pre>";
+    const md = editorHtmlToMarkdown(html, { detectLanguage: () => null });
+    expect(md).toContain("```\nambiguous\n```");
+  });
+
   it("serialises horizontal rules", () => {
     const html = "<p>before</p><hr><p>after</p>";
     const md = editorHtmlToMarkdown(html);
@@ -117,6 +159,13 @@ describe("editorHtmlToMarkdown", () => {
     const html = '<p><a href="https://example.com">site</a></p>';
     const md = editorHtmlToMarkdown(html);
     expect(md).toContain("[site](https://example.com)");
+  });
+
+  it("serialises subscript and superscript as raw inline HTML", () => {
+    const html = "<p>H<sub>2</sub>O and E=mc<sup>2</sup></p>";
+    const md = editorHtmlToMarkdown(html);
+    expect(md).toContain("<sub>2</sub>");
+    expect(md).toContain("<sup>2</sup>");
   });
 
   it("preserves color spans as raw inline HTML", () => {
@@ -231,6 +280,13 @@ describe("LiveDoc round-trip", () => {
     expect(roundtrip(html)).toMatch(/one<br>\s*two/);
   });
 
+  it("preserves subscript and superscript", () => {
+    const html = "<p>H<sub>2</sub>O x<sup>n</sup></p>";
+    const out = roundtrip(html);
+    expect(out).toContain("<sub>2</sub>");
+    expect(out).toContain("<sup>n</sup>");
+  });
+
   it("preserves consecutive empty paragraphs across the round-trip", () => {
     const html = "<p>before</p><p></p><p></p><p>after</p>";
     const out = roundtrip(html);
@@ -276,6 +332,19 @@ describe("LiveDoc round-trip", () => {
     expect(html).toContain('data-mention-here="1"');
   });
 
+  it("labels a user mention with the resolved display name", () => {
+    const html = markdownToEditorHtml("Ping <@7> please", {
+      resolveMention: (s) => (s === 7 ? "Alice" : undefined),
+    });
+    expect(html).toContain('data-mention-session="7"');
+    expect(html).toContain(">@Alice</span>");
+  });
+
+  it("falls back to a placeholder when no mention resolver is provided", () => {
+    const html = markdownToEditorHtml("Ping <@7>");
+    expect(html).toContain(">@user-7</span>");
+  });
+
   it("round-trips a task list with checked + unchecked items", () => {
     const html = [
       '<ul data-type="taskList">',
@@ -303,6 +372,94 @@ describe("LiveDoc round-trip", () => {
     expect(back).toContain('data-mention-everyone="1"');
     expect(back).toContain('data-checked="true"');
     expect(back).toContain('data-checked="false"');
+  });
+
+  it("serialises a simple table as a GFM pipe table", () => {
+    const html = [
+      "<table><tbody>",
+      '<tr><th colspan="1" rowspan="1"><p>Name</p></th><th colspan="1" rowspan="1"><p>Age</p></th></tr>',
+      '<tr><td colspan="1" rowspan="1"><p>Alice</p></td><td colspan="1" rowspan="1"><p>30</p></td></tr>',
+      "</tbody></table>",
+    ].join("");
+    const md = editorHtmlToMarkdown(html);
+    expect(md).toContain("| Name | Age |");
+    expect(md).toContain("| --- | --- |");
+    expect(md).toContain("| Alice | 30 |");
+    expect(md).not.toContain("<table");
+  });
+
+  it("encodes per-column alignment in the delimiter row", () => {
+    const html = [
+      "<table><tbody>",
+      '<tr><th><p style="text-align: center">C</p></th><th><p style="text-align: right">R</p></th></tr>',
+      "<tr><td><p>1</p></td><td><p>2</p></td></tr>",
+      "</tbody></table>",
+    ].join("");
+    const md = editorHtmlToMarkdown(html);
+    expect(md).toContain("| :-: | --: |");
+  });
+
+  it("escapes literal pipes in table cells", () => {
+    const html = "<table><tbody><tr><th><p>a | b</p></th></tr><tr><td><p>c</p></td></tr></tbody></table>";
+    const md = editorHtmlToMarkdown(html);
+    expect(md).toContain("a \\| b");
+  });
+
+  it("keeps tables with merged cells as raw HTML", () => {
+    const html = '<table><tbody><tr><th colspan="2"><p>Wide</p></th></tr><tr><td><p>a</p></td><td><p>b</p></td></tr></tbody></table>';
+    const md = editorHtmlToMarkdown(html);
+    expect(md).toContain("<table");
+  });
+
+  it("parses a GFM pipe table into table HTML", () => {
+    const html = markdownToEditorHtml("| A | B |\n| --- | --- |\n| 1 | 2 |");
+    expect(html).toContain("<table>");
+    expect(html).toContain("<th><p>A</p></th>");
+    expect(html).toContain("<th><p>B</p></th>");
+    expect(html).toContain("<td><p>1</p></td>");
+    expect(html).toContain("<td><p>2</p></td>");
+  });
+
+  it("parses column alignment onto the cell paragraphs", () => {
+    const html = markdownToEditorHtml("| A | B |\n| :-: | --: |\n| 1 | 2 |");
+    expect(html).toContain('<th><p style="text-align: center">A</p></th>');
+    expect(html).toContain('<th><p style="text-align: right">B</p></th>');
+    expect(html).toContain('<td><p style="text-align: center">1</p></td>');
+  });
+
+  it("round-trips a table (header + body + alignment + pipe escape)", () => {
+    const html = [
+      "<table><tbody>",
+      '<tr><th><p>Name</p></th><th><p style="text-align: right">Score</p></th></tr>',
+      "<tr><td><p>a | b</p></td><td><p>9</p></td></tr>",
+      "</tbody></table>",
+    ].join("");
+    const out = roundtrip(html);
+    expect(out).toContain("<table>");
+    expect(out).toContain("Name");
+    expect(out).toContain('text-align: right');
+    expect(out).toContain("a | b");
+    expect(out).toContain(">9</p>");
+  });
+
+  it("serialises a plain image as markdown image syntax", () => {
+    const html = '<p><img src="https://x.test/a.png" alt="pic"></p>';
+    const md = editorHtmlToMarkdown(html);
+    expect(md).toContain("![pic](https://x.test/a.png)");
+    expect(md).not.toContain("<img");
+  });
+
+  it("keeps sized/styled images as raw HTML", () => {
+    const html = '<p><img src="https://x.test/a.png" alt="pic" width="120"></p>';
+    const md = editorHtmlToMarkdown(html);
+    expect(md).toContain("<img");
+    expect(md).toContain('width="120"');
+  });
+
+  it("round-trips a plain markdown image", () => {
+    const out = roundtrip('<p><img src="https://x.test/a.png" alt="pic"></p>');
+    expect(out).toContain('src="https://x.test/a.png"');
+    expect(out).toContain('alt="pic"');
   });
 
   it("preserves a complete document with mixed content", () => {

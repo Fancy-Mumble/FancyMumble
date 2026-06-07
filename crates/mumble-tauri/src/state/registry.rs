@@ -87,26 +87,26 @@ impl Registry {
         removed
     }
 
-    /// Remove every disconnected session whose `(host, port, username)`
-    /// matches the supplied target.  Used by `connect()` to eliminate
-    /// stale tabs left behind by an automatic reconnect attempt against
-    /// the same target - without this pruning each retry would leave
-    /// the previous failed session in the registry, spamming the tab
-    /// strip with one entry per attempt.
+    /// Reuse a single *disconnected* session targeting `(host, port,
+    /// username)` for a reconnect: returns its id and shared state so the
+    /// caller can re-bind the **same** tab instead of allocating a fresh
+    /// [`ServerId`].  Without this, every automatic reconnect attempt
+    /// would create a new session and spam the tab strip with one entry
+    /// per retry.
     ///
-    /// Sessions whose status is still `Connecting` or `Connected` are
-    /// left alone: the user may legitimately have several attempts in
-    /// flight, and we never want to silently kill a live session.
-    pub(crate) fn prune_disconnected_for(
+    /// Any *additional* disconnected duplicates for the same target are
+    /// dropped so the strip never accumulates stale tabs.  Sessions whose
+    /// status is `Connecting` or `Connected` are never reused or removed:
+    /// the user may legitimately have several attempts in flight, and we
+    /// must never silently kill a live session.
+    pub(crate) fn take_reusable_for(
         &self,
         host: &str,
         port: u16,
         username: &str,
-    ) -> Vec<ServerId> {
-        let Ok(mut guard) = self.inner.lock() else {
-            return Vec::new();
-        };
-        let stale: Vec<ServerId> = guard
+    ) -> Option<(ServerId, Arc<Mutex<SharedState>>)> {
+        let mut guard = self.inner.lock().ok()?;
+        let mut matches: Vec<ServerId> = guard
             .sessions
             .iter()
             .filter_map(|(id, shared)| {
@@ -118,13 +118,53 @@ impl Registry {
                 matches.then_some(*id)
             })
             .collect();
-        for id in &stale {
-            let _ = guard.sessions.remove(id);
-            if guard.active == Some(*id) {
+        let reuse = matches.pop();
+        // Drop any extra stale duplicates targeting the same server.
+        for id in matches {
+            let _ = guard.sessions.remove(&id);
+            if guard.active == Some(id) {
                 guard.active = None;
             }
         }
-        stale
+        let reuse_id = reuse?;
+        let shared = guard.sessions.get(&reuse_id).cloned()?;
+        Some((reuse_id, shared))
+    }
+
+    /// After a session fails to connect, prefer to keep the user on a
+    /// still-live session: if any session *other* than `failed_id`
+    /// exists, make one active (preferring a `Connected` one) and return
+    /// `true`.  When `failed_id` is the only session, leave it active -
+    /// so its tab can show the reconnect overlay while auto-reconnect
+    /// retries - and return `false`.
+    pub(crate) fn activate_fallback(&self, failed_id: ServerId) -> bool {
+        let Ok(mut guard) = self.inner.lock() else {
+            return false;
+        };
+        let mut fallback: Option<ServerId> = None;
+        for (id, shared) in &guard.sessions {
+            if *id == failed_id {
+                continue;
+            }
+            let connected = shared
+                .lock()
+                .map(|s| s.conn.status == super::types::ConnectionStatus::Connected)
+                .unwrap_or(false);
+            if connected {
+                fallback = Some(*id);
+                break;
+            }
+            if fallback.is_none() {
+                fallback = Some(*id);
+            }
+        }
+        match fallback {
+            Some(id) => {
+                guard.active = Some(id);
+                true
+            }
+            None => false,
+        }
     }
 
     /// Search every connected session for a user whose certificate hash
@@ -209,7 +249,11 @@ fn format_label(username: &str, host: &str, port: u16) -> String {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "unwrap/expect is acceptable in test code"
+)]
 mod tests {
     use super::*;
 
@@ -255,16 +299,17 @@ mod tests {
     }
 
     #[test]
-    fn prune_removes_only_disconnected_matching_target() {
+    fn take_reusable_reuses_one_and_drops_duplicate_disconnected() {
         use super::super::types::ConnectionStatus;
 
         let reg = Registry::default();
-        // Two stale disconnected sessions targeting the same server.
+        // Two stale disconnected sessions targeting the same server: one
+        // must be reused, the other dropped.
         let stale_a = ServerId::new();
         let stale_b = ServerId::new();
-        // A live connecting session to the same target - must NOT be pruned.
+        // A live connecting session to the same target - must NOT be touched.
         let live = ServerId::new();
-        // A disconnected session targeting a *different* server - must NOT be pruned.
+        // A disconnected session targeting a *different* server - must NOT be touched.
         let other = ServerId::new();
 
         let stale_a_shared = make_shared("h", 1, "u");
@@ -278,13 +323,57 @@ mod tests {
         let _ = reg.register_active(live, live_shared);
         let _ = reg.register_active(other, other_shared);
 
-        let pruned = reg.prune_disconnected_for("h", 1, "u");
-        assert_eq!(pruned.len(), 2);
-        assert!(pruned.contains(&stale_a));
-        assert!(pruned.contains(&stale_b));
+        let (reused_id, _shared) = reg
+            .take_reusable_for("h", 1, "u")
+            .expect("a disconnected match must be reusable");
+        assert!(reused_id == stale_a || reused_id == stale_b);
+
         let remaining: Vec<_> = reg.list_meta().into_iter().map(|m| m.id).collect();
+        // The reused session stays; the duplicate stale one is dropped;
+        // the live + other-target sessions are untouched.
+        assert!(remaining.contains(&reused_id));
         assert!(remaining.contains(&live));
         assert!(remaining.contains(&other));
-        assert_eq!(remaining.len(), 2);
+        assert_eq!(remaining.len(), 3);
+    }
+
+    #[test]
+    fn take_reusable_returns_none_without_disconnected_match() {
+        use super::super::types::ConnectionStatus;
+
+        let reg = Registry::default();
+        let live = ServerId::new();
+        let live_shared = make_shared("h", 1, "u");
+        live_shared.lock().unwrap().conn.status = ConnectionStatus::Connected;
+        let _ = reg.register_active(live, live_shared);
+
+        // No *disconnected* session for this target: nothing to reuse, and
+        // the connected one must be left intact.
+        assert!(reg.take_reusable_for("h", 1, "u").is_none());
+        assert_eq!(reg.list_meta().len(), 1);
+    }
+
+    #[test]
+    fn activate_fallback_prefers_connected_or_keeps_sole_session() {
+        use super::super::types::ConnectionStatus;
+
+        let reg = Registry::default();
+        let failed = ServerId::new();
+        let _ = reg.register_active(failed, make_shared("h", 1, "u"));
+
+        // Sole session: fallback leaves it active and reports no switch.
+        assert!(!reg.activate_fallback(failed));
+        assert_eq!(reg.active_id(), Some(failed));
+
+        // Add a live connected session: fallback switches active to it.
+        let alive = ServerId::new();
+        let alive_shared = make_shared("a", 2, "u2");
+        alive_shared.lock().unwrap().conn.status = ConnectionStatus::Connected;
+        let _ = reg.register_active(alive, alive_shared);
+        // register_active made `alive` active; simulate the failed one
+        // being active again before its connect attempt fails.
+        reg.set_active(failed).unwrap();
+        assert!(reg.activate_fallback(failed));
+        assert_eq!(reg.active_id(), Some(alive));
     }
 }

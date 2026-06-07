@@ -19,7 +19,7 @@
     "labelField": "Bezeichnung",
     "hostField": "Host",
     "portField": "Port",
-    "usernameField": "Nutzername",
+    "usernameField": "Benutzername",
     "identityField": "Identität",
     "passwordField": "Passwort",
     "certNone": "Keine (anonym)",
@@ -27,11 +27,16 @@
     "certCreateNew": "+ Neue Identität erstellen...",
     "identityNamePlaceholder": "Name der Identität",
     "createIdentity": "Erstellen",
-    "storedPassword": "Passwort ist gespeichert",
+    "storedPassword": "Gespeichertes Passwort",
     "removePassword": "Entfernen",
     "passwordPlaceholderClear": "Neues Passwort eingeben oder leer lassen",
     "passwordPlaceholderEmpty": "Leer lassen, falls nicht erforderlich",
-    "save": "Speichern"
+    "save": "Speichern",
+    "labelPlaceholder": "Mein Server",
+    "hostPlaceholder": "mumble.example.com",
+    "portPlaceholder": "64738",
+    "usernamePlaceholder": "Benutzername",
+    "closeAriaLabel": "Server-Editor schließen"
   },
   "list": {
     "checking": "Prüfen...",
@@ -84,7 +89,9 @@
     "searchPlaceholder": "Server suchen...",
     "noMatches": "Keine Übereinstimmungen",
     "alreadyConnected": "Bereits verbunden",
-    "connectedTag": "Verbunden"
+    "connectedTag": "Verbunden",
+    "openFriends": "Freunde",
+    "openFriendsTitle": "Deine Freundesliste öffnen"
   },
   "tabsBar": {
     "connectedServersAriaLabel": "Verbundene Server",
@@ -97,7 +104,14 @@
     "dismissTitle": "Schließen",
     "disconnectDialogTitle": "Vom Server trennen",
     "disconnectDialogBody": "Von {{label}} trennen?",
-    "disconnectConfirm": "Trennen"
+    "disconnectConfirm": "Trennen",
+    "disconnectNeverShow": "Nicht erneut fragen",
+    "friends": "Freunde"
+  },
+  "welcomeModal": {
+    "title": "Willkommen",
+    "onlyShowOnce": "Nur einmal pro Server anzeigen",
+    "close": "Schließen"
   },
   "activityLog": {
     "empty": "Noch keine Aktivität"
@@ -185,7 +199,11 @@
       "liveDocTitle": "Titel",
       "liveDocSlug": "Slug",
       "liveDocUrl": "WebSocket-URL"
-    }
+    },
+    "accordionCspViolations": "CSP-Verstöße",
+    "cspViolationCount": "{{count}} Verstöße",
+    "cspNoViolations": "Keine Verstöße aufgezeichnet.",
+    "cspClearTitle": "Verstöße löschen"
   },
   "chooseServer": "Wähle einen Server, mit dem du dich verbinden möchtest",
   "publicServersLink": "Öffentliche Server durchsuchen",
@@ -259,5 +277,15 @@
     "advancedHint": "Volle Kontrolle"
   },
   "submit": "Loslegen",
-  "submitting": "Wird gestartet..."
+  "submitting": "Wird gestartet...",
+  "friendsPage": {
+    "title": "Freunde",
+    "empty": "Du hast noch keine Freunde. Klicke mit der rechten Maustaste auf einen Benutzer in der Kanalliste und wähle „Als Freund hinzufügen“.",
+    "placeholder": "Wähle links einen Freund aus, um zu chatten.",
+    "remove": "Aus Freunden entfernen",
+    "offline": "Derzeit offline",
+    "youLabel": "Du",
+    "openSettings": "Einstellungen öffnen",
+    "noMatches": "Keine Freunde entsprechen deiner Suche."
+  }
 }

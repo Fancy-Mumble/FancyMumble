@@ -385,7 +385,7 @@
 }
 
 /* Cap the Autocomplete combobox width so it doesn't stretch to fill
-   the whole header row — the chips wrap to a second line if more than
+   the whole header row - the chips wrap to a second line if more than
    ~3 fit. */
 .refLangSelect {
   flex: 0 1 280px;

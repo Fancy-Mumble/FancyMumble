@@ -148,7 +148,6 @@ export default function MathEditPopover({
         />
         <div
           className={`${styles.preview} ${target.type === "blockMath" ? styles.block : ""}`}
-          // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: preview.html }}
         />
         {preview.error && <div className={styles.error}>{preview.error}</div>}

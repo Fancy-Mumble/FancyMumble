@@ -66,7 +66,7 @@ const MAX_VISIBLE = 200;
  *   last chip in multiple mode)
  *
  * Multiple mode keeps the dropdown open after a selection and never
- * hides already-selected options — they stay in the list with a
+ * hides already-selected options - they stay in the list with a
  * check-mark adornment so the user can both add and remove from the
  * same dropdown.
  */
@@ -81,7 +81,7 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
   const internalRef = useRef<HTMLInputElement>(null);
   const inputEl = externalRef ?? internalRef;
   const listboxRef = useRef<HTMLUListElement>(null);
-  /** Wrapper around the input + chips — used as the popper's anchor. */
+  /** Wrapper around the input + chips - used as the popper's anchor. */
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [popperRect, setPopperRect] = useState<{ top: number; left: number; width: number } | null>(null);
 
@@ -99,7 +99,7 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
 
   // The input value is the user's free-text filter.  In single-select
   // mode it doubles as the display string for the committed value and
-  // snaps back to that label on blur — multi-select never does this
+  // snaps back to that label on blur - multi-select never does this
   // because the chips already show what's chosen.
   const [inputValue, setInputValue] = useState(
     multiple ? "" : props.value?.label ?? "",
@@ -118,7 +118,7 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
   // Track the wrapper's viewport rect so the portaled listbox can
   // position itself underneath it.  Portaling sidesteps `overflow:
   // hidden` / stacking-context bugs that would otherwise hide or clip
-  // the dropdown — fixed-position relative to the viewport plus a
+  // the dropdown - fixed-position relative to the viewport plus a
   // sufficiently-high z-index always wins.
   useLayoutEffect(() => {
     if (!open) return;
@@ -184,7 +184,7 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
         setInputValue("");
         setHighlightedIndex(0);
         // Keep the dropdown open so the user can pick / unpick several
-        // in a row — that's the whole point of multiple mode.
+        // in a row - that's the whole point of multiple mode.
         inputEl.current?.focus();
       } else {
         props.onChange(opt);
@@ -209,8 +209,8 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
   const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
     setOpen(true);
     // Single mode pre-selects the existing text so the user can type to
-    // replace it.  In multi mode there is no "current text" — chips
-    // hold the state — so leave the caret where it is.
+    // replace it.  In multi mode there is no "current text" - chips
+    // hold the state - so leave the caret where it is.
     if (!multiple) e.target.select();
   };
 
@@ -222,7 +222,7 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
     }
     setOpen(false);
     // Single mode snaps the text back to the committed label on blur.
-    // Multi mode just clears the filter — chips are already visible.
+    // Multi mode just clears the filter - chips are already visible.
     if (multiple) setInputValue("");
     else setInputValue(singleValue?.label ?? "");
   };
@@ -288,7 +288,7 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
       <div
         ref={wrapperRef}
         className={`${styles.inputWrapper} ${multiple ? styles.inputWrapperMulti : ""}`}
-        // Clicking anywhere in the wrapper focuses the input — important
+        // Clicking anywhere in the wrapper focuses the input - important
         // in multi-select where the chips occupy most of the row.
         onMouseDown={(e) => {
           if (e.target === e.currentTarget) {
@@ -309,7 +309,7 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
               type="button"
               className={styles.chipClose}
               tabIndex={-1}
-              aria-label={`Remove ${opt.label}`}
+              aria-label={t("autocomplete.removeChipAriaLabel", { name: opt.label })}
               onMouseDown={() => { ignoreBlur.current = true; }}
               onClick={(e) => {
                 e.stopPropagation();
@@ -349,7 +349,7 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
             type="button"
             className={styles.clearBtn}
             tabIndex={-1}
-            aria-label="Clear selection"
+            aria-label={t("autocomplete.clearSelectionAriaLabel")}
             onMouseDown={() => { ignoreBlur.current = true; }}
             onClick={handleClear}
           >

@@ -1,6 +1,16 @@
 import { useTranslation } from "react-i18next";
 import { Toggle } from "./SharedControls";
 import styles from "./SettingsPage.module.css";
+import { registerSettings } from "./settingsSearchRegistry";
+
+registerSettings("privacy")
+  .add("privacy.dualPath", ["encryption"])
+  .add("privacy.readReceipts")
+  .add("privacy.typingIndicators", ["typing"])
+  .add("privacy.osmMaps", ["maps", "geolocation", "openstreetmap"])
+  .add("privacy.linkPreviews", ["embeds", "previews"])
+  .add("privacy.externalEmbeds", ["youtube", "watch together"])
+  .add("privacy.streamerMode", ["stream", "hide ip"]);
 
 export function PrivacyPanel({
   enableDualPath,

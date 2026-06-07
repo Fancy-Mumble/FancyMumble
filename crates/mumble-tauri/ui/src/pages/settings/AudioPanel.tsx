@@ -24,6 +24,18 @@ import { CalibrationPanel } from "./CalibrationPanel";
 import { RadioCardGroup, type RadioCardOption } from "../../components/elements/RadioCardGroup";
 import styles from "./SettingsPage.module.css";
 import panelStyles from "./AudioPanel.module.css";
+import { registerSettings } from "./settingsSearchRegistry";
+
+registerSettings("voice")
+  .add("audio.inputDevice", ["microphone", "mic"])
+  .add("audio.outputDevice", ["speaker", "headphones"])
+  .add("audio.activationMode", ["voice activity", "vad", "push to talk", "ptt"])
+  .add("audio.noiseSuppression", ["denoise", "background noise"])
+  .add("audio.audioProcessing", ["echo", "gain"])
+  .add("audio.compression")
+  .add("audio.network", ["jitter", "bandwidth"])
+  .add("audio.stats.title", ["statistics", "debug"])
+  .add("audio.expert");
 
 const FRAME_SIZE_OPTIONS = [
   { value: 10, label: "10 ms" },
