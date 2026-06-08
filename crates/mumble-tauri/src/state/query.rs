@@ -49,6 +49,16 @@ impl AppState {
             .and_then(|s| s.users.get(&session).and_then(|u| u.texture.clone()))
     }
 
+    /// Return the avatar bytes for a registered (offline) user by `user_id`,
+    /// cached from the `UserList` response.  The frontend fetches these on
+    /// demand after the bulk `user-list` event delivered only `texture_size`.
+    pub fn registered_user_texture(&self, user_id: u32) -> Option<Vec<u8>> {
+        self.inner.snapshot()
+            .lock()
+            .ok()
+            .and_then(|s| s.registered_user_textures.get(&user_id).cloned())
+    }
+
     /// Like [`Self::user_texture`], but when the user HAS an avatar whose bytes
     /// are not yet loaded, lazily requests the blob from the server and waits
     /// (bounded) for it to arrive.  This is what lets the backend avoid holding

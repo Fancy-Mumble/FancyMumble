@@ -16,6 +16,21 @@ path = "src/main.rs"
 [features]
 default = []
 deepfilternet-denoiser = ["mumble-protocol/deepfilternet-denoiser"]
+# Production asset mode: serve the embedded `ui/dist` via the custom Tauri
+# protocol instead of loading `devUrl` (localhost:1420). The Tauri CLI enables
+# this automatically for `cargo tauri build`; define it here so a plain
+# `cargo build/run --features custom-protocol` also produces a standalone
+# binary that needs no running vite dev server (e.g. for profiling).
+custom-protocol = ["tauri/custom-protocol"]
+# Webview devtools (F12 + right-click "Inspect Element"). Auto-enabled in debug
+# builds, but NOT in optimized profiles like `release-debug`, so expose it as a
+# feature to opt in when profiling an optimized build.
+devtools = ["tauri/devtools"]
+# Heap profiling: replaces the global allocator with dhat's profiling
+# allocator and writes `dhat-heap.json` on exit (view at
+# https://nnethercote.github.io/dh_view/dh_view.html). Mutually exclusive
+# with mimalloc at runtime; the dhat allocator takes priority when enabled.
+dhat-heap = ["dep:dhat"]
 
 [dependencies]
 fancy-utils = { path = "../fancy-utils" }
@@ -49,6 +64,12 @@ chrono = "0.4"
 
 # Desktop-only dependencies (cpal, global shortcuts, and Opus are not available on Android).
 [target.'cfg(not(target_os = "android"))'.dependencies]
+# Compacting allocator that returns freed pages to the OS far more
+# aggressively than the Windows system heap, which otherwise holds the
+# startup high-water mark (~280 MB) for the whole process lifetime.
+mimalloc = { version = "0.1", default-features = false }
+# Optional heap profiler, enabled only via the `dhat-heap` feature.
+dhat = { version = "0.3", optional = true }
 png = "0.18"
 mumble-protocol = { path = "../mumble-protocol", features = ["opus-codec", "persistent-chat", "rnnoise-denoiser"] }
 cpal = "0.17.3"

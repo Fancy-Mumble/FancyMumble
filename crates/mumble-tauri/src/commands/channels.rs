@@ -27,6 +27,18 @@ pub(crate) async fn get_user_texture(
     Ok(state.user_texture_or_fetch(session).await)
 }
 
+/// Return the avatar bytes for a registered (offline) user by `user_id`.
+/// The bulk `user-list` event delivers only `texture_size`; the frontend
+/// calls this lazily for users it actually renders, so registered avatars
+/// are never shipped en masse (which spiked the heap during emit).
+#[tauri::command]
+pub(crate) fn get_registered_user_texture(
+    state: tauri::State<'_, AppState>,
+    user_id: u32,
+) -> Option<Vec<u8>> {
+    state.registered_user_texture(user_id)
+}
+
 /// Return the comment/bio text for a single user.  Like `get_user_texture`,
 /// the bio is fetched (and held) only when first viewed rather than eagerly for
 /// every connected user.  The frontend calls this after `get_users` (which

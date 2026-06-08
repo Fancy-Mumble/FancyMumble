@@ -43,6 +43,22 @@ export default defineConfig({
     },
   },
 
+  // These deps are only reached through lazily-imported LiveDoc components,
+  // so Vite's dependency scanner doesn't see them at startup. It then fails
+  // to resolve them on first navigation ("Failed to resolve import
+  // 'chart.js' ...") and re-optimizes + reloads the page. Pre-declaring them
+  // here makes Vite bundle them up front, so the error and reload go away.
+  optimizeDeps: {
+    include: [
+      "chart.js",
+      "dayjs",
+      "dayjs/plugin/relativeTime",
+      "three",
+      "three/examples/jsm/controls/OrbitControls.js",
+      "three/examples/jsm/loaders/GLTFLoader.js",
+    ],
+  },
+
   // Expose TAURI_* env variables to client code.
   envPrefix: ["VITE_", "TAURI_"],
 

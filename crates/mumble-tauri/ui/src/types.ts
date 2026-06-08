@@ -1024,8 +1024,10 @@ export interface RegisteredUser {
   name: string;
   last_seen?: string | null;
   last_channel?: number | null;
-  /** Avatar image bytes from the server's UserList response, if the user has one set. */
-  texture?: number[] | null;
+  /** Avatar byte length, present when the user has an avatar. The bytes are
+   * fetched on demand via `get_registered_user_texture` (the bulk `user-list`
+   * event ships only this marker, not the avatar bytes). */
+  texture_size?: number | null;
   /** Short comment (len < 128) included inline by the server. */
   comment?: string | null;
   /** SHA-1 hash bytes present when the comment is >= 128 chars.

@@ -341,7 +341,15 @@ export async function getCachedRegisteredUsers(
   return map[serverKey] ?? null;
 }
 
-/** Persist the registered-user list for a server. */
+/** Persist the registered-user list for a server.
+ *
+ * Only lightweight identity fields are persisted. Inline comments are
+ * dropped (only the `comment_hash` marker is kept); avatars never reach
+ * this cache because the backend now ships `texture_size` (a marker) rather
+ * than the bytes. This keeps the store tiny - it previously grew to ~129 MB
+ * on disk / ~250 MB resident when avatar bytes were persisted as `number[]`.
+ * Avatars and long comments are fetched on demand and refreshed by the
+ * background request. */
 export async function saveCachedRegisteredUsers(
   serverKey: string,
   users: readonly RegisteredUser[],
@@ -349,6 +357,15 @@ export async function saveCachedRegisteredUsers(
   const store = await getStore();
   const map =
     (await store.get<RegisteredUsersCacheMap>(REGISTERED_USERS_KEY)) ?? {};
-  map[serverKey] = { users, cachedAt: Date.now() };
+  const lean: RegisteredUser[] = users.map((u) => ({
+    user_id: u.user_id,
+    name: u.name,
+    last_seen: u.last_seen,
+    last_channel: u.last_channel,
+    // Small markers only: avatar presence and "a comment exists".
+    texture_size: u.texture_size ?? null,
+    comment_hash: u.comment_hash ? u.comment_hash : null,
+  }));
+  map[serverKey] = { users: lean, cachedAt: Date.now() };
   await store.set(REGISTERED_USERS_KEY, map);
 }

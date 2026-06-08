@@ -11,6 +11,37 @@
 // intentional (proc-macro visibility, Tauri command system, internal APIs).
 #![allow(unreachable_pub, reason = "application crate: pub items in private modules are intentional for Tauri command system")]
 
+// --- Global allocator -------------------------------------------------
+//
+// The Windows system heap holds onto the startup high-water mark (~280 MB
+// of transient allocations from loading the embedded frontend, spinning up
+// WebView2, and building the TLS root store) for the whole process
+// lifetime, even at idle while disconnected. mimalloc returns freed pages
+// to the OS, which collapses idle RSS to the genuinely-live working set.
+//
+// When the `dhat-heap` profiling feature is on, dhat's allocator takes the
+// slot instead so we can attribute live/peak heap to allocation sites.
+#[cfg(all(not(target_os = "android"), not(feature = "dhat-heap")))]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
+// Holds the dhat profiler for the program's lifetime. Tauri's `.run()` never
+// returns (the platform event loop calls `std::process::exit`), so a local
+// guard in `run()` would never drop and dhat would never write its output.
+// We instead drop this explicitly in the `RunEvent::Exit` handler.
+#[cfg(feature = "dhat-heap")]
+static DHAT_PROFILER: std::sync::Mutex<Option<dhat::Profiler>> = std::sync::Mutex::new(None);
+
+// With `dhat-heap` on, dhat owns the allocator slot, so mimalloc is linked
+// but unused on desktop. Acknowledge it to keep `unused_crate_dependencies`
+// quiet without dropping the dependency declaration.
+#[cfg(all(not(target_os = "android"), feature = "dhat-heap"))]
+use mimalloc as _;
+
 mod audio;
 pub(crate) mod commands;
 pub mod platform;
@@ -29,6 +60,99 @@ use tracing_subscriber::reload;
 pub(crate) static LOG_RELOAD_HANDLE: OnceLock<reload::Handle<EnvFilter, tracing_subscriber::Registry>> =
     OnceLock::new();
 
+/// Manages the Vite dev server when the app is run via plain `cargo run`.
+///
+/// `cargo tauri dev` starts the dev server (its `beforeDevCommand`) and kills
+/// it when the app exits. A plain `cargo run` of a dev build (anything without
+/// the `custom-protocol` feature, e.g. profiling with `--features dhat-heap`)
+/// loads the same dev URL but does NOT manage the server, leaving a stray Vite
+/// holding the port. This module starts Vite on launch and tears it down on
+/// exit so the dev server's lifetime follows the app. It is compiled only into
+/// dev builds (`cfg(dev)`), so it is absent from production binaries.
+#[cfg(all(dev, not(target_os = "android")))]
+mod dev_server {
+    use std::net::{SocketAddr, TcpStream};
+    use std::process::Child;
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+
+    /// The dev-server port (must match `build.devUrl` in `tauri.conf.json`).
+    const DEV_PORT: u16 = 1420;
+
+    /// Holds the spawned Vite child so [`stop`] can terminate it on exit.
+    static DEV_SERVER: Mutex<Option<Child>> = Mutex::new(None);
+
+    /// Whether something is already serving the dev URL.
+    fn port_in_use() -> bool {
+        let addr = SocketAddr::from(([127, 0, 0, 1], DEV_PORT));
+        TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok()
+    }
+
+    /// Spawn the Vite dev server unless one is already running on the port
+    /// (e.g. under `cargo tauri dev`, which owns its own server).
+    pub(super) fn start() {
+        if port_in_use() {
+            tracing::info!("dev server already on :{DEV_PORT}; leaving it to its owner");
+            return;
+        }
+        let ui_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ui");
+        // `npm` is `npm.cmd` on Windows, which is only resolvable through the
+        // shell, so route the command through `cmd /C` there.
+        let mut cmd = if cfg!(windows) {
+            let mut c = std::process::Command::new("cmd");
+            let _ = c.args(["/C", "npm", "run", "dev"]);
+            c
+        } else {
+            let mut c = std::process::Command::new("npm");
+            let _ = c.args(["run", "dev"]);
+            c
+        };
+        let _ = cmd.current_dir(&ui_dir);
+        match cmd.spawn() {
+            Ok(child) => {
+                tracing::info!(pid = child.id(), "started Vite dev server");
+                if let Ok(mut guard) = DEV_SERVER.lock() {
+                    *guard = Some(child);
+                }
+                wait_until_ready();
+            }
+            Err(e) => tracing::warn!("failed to start Vite dev server: {e}"),
+        }
+    }
+
+    /// Block (briefly) until the dev server accepts connections so the webview
+    /// does not load before Vite is ready (which shows `ERR_CONNECTION_REFUSED`).
+    fn wait_until_ready() {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while Instant::now() < deadline {
+            if port_in_use() {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        }
+        tracing::warn!("Vite dev server did not come up within 30s");
+    }
+
+    /// Terminate the spawned dev server (and its `node` child) if we started it.
+    pub(super) fn stop() {
+        let child = DEV_SERVER.lock().ok().and_then(|mut g| g.take());
+        if let Some(mut child) = child {
+            let pid = child.id();
+            // `cmd /C npm run dev` spawns a `node` grandchild; kill the whole
+            // tree, otherwise Vite keeps holding the port after the app exits.
+            #[cfg(windows)]
+            {
+                let _ = std::process::Command::new("taskkill")
+                    .args(["/F", "/T", "/PID", &pid.to_string()])
+                    .output();
+            }
+            let _ = child.kill();
+            let _ = child.wait();
+            tracing::info!(pid, "stopped Vite dev server");
+        }
+    }
+}
+
 /// Entry point for the Tauri application.
 ///
 /// Initialises the TLS crypto provider, sets up logging, registers all
@@ -36,6 +160,14 @@ pub(crate) static LOG_RELOAD_HANDLE: OnceLock<reload::Handle<EnvFilter, tracing_
 #[allow(clippy::expect_used, reason = "Tauri builder failure during startup is unrecoverable")]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Start heap profiling. Dropped in the `RunEvent::Exit` handler (see
+    // below), which writes `dhat-heap.json` to the working dir. View it at
+    // https://nnethercote.github.io/dh_view/dh_view.html.
+    #[cfg(feature = "dhat-heap")]
+    if let Ok(mut guard) = DHAT_PROFILER.lock() {
+        *guard = Some(dhat::Profiler::new_heap());
+    }
+
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     configure_runtime_env();
@@ -47,6 +179,11 @@ pub fn run() {
     platform::init();
     init_logging();
     platform::check_dependencies();
+
+    // When run via plain `cargo run` (not `cargo tauri dev`), start the Vite
+    // dev server so it is available for the webview and torn down on exit.
+    #[cfg(all(dev, not(target_os = "android")))]
+    dev_server::start();
 
     let builder = create_base_builder();
     let builder = register_commands(builder);
@@ -125,6 +262,14 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
+                // Flush the dhat heap profile before the process exits.
+                #[cfg(feature = "dhat-heap")]
+                if let Ok(mut guard) = DHAT_PROFILER.lock() {
+                    drop(guard.take());
+                }
+                // Tear down the Vite dev server if we started it.
+                #[cfg(all(dev, not(target_os = "android")))]
+                dev_server::stop();
                 if let Some(state) = app.try_state::<AppState>() {
                     state.shutdown_offload_store();
                 }
@@ -153,6 +298,13 @@ pub fn run() {
 /// the `WebView2` defaults turns out to be the better trade-off.
 fn configure_runtime_env() {
     set_env_if_unset("TOKIO_WORKER_THREADS", "4");
+    // mimalloc: return decommitted pages to the OS promptly (100 ms after
+    // they go idle) instead of holding the high-water mark. Cheap for our
+    // bursty allocation pattern (startup + occasional messages/audio).
+    #[cfg(all(not(target_os = "android"), not(feature = "dhat-heap")))]
+    {
+        set_env_if_unset("MIMALLOC_PURGE_DELAY", "100");
+    }
 }
 
 fn set_env_if_unset(key: &str, value: &str) {
@@ -378,6 +530,7 @@ macro_rules! all_command_handlers {
             commands::channels::get_channels,
             commands::channels::get_users,
             commands::channels::get_user_texture,
+            commands::channels::get_registered_user_texture,
             commands::channels::get_user_comment,
             commands::channels::get_channel_description,
             commands::messaging::get_messages,
