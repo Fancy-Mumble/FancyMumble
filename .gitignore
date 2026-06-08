@@ -56,3 +56,5 @@ coverage/
 
 google-services.json
 .env.local
+# dhat heap profiler output (cargo run --features dhat-heap)
+dhat-heap*.json

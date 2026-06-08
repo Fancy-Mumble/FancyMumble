@@ -10,7 +10,6 @@ import {
   saveCachedRegisteredUsers,
 } from "../../preferencesStorage";
 import { UserListItem } from "./user/UserListItem";
-import { setUserAvatarBytes } from "../../lazyBlobs";
 import styles from "./channel/ChannelSidebar.module.css";
 
 /**
@@ -35,7 +34,7 @@ function fingerprintRegistered(users: readonly RegisteredUser[]): string {
       hash = ((hash * 33) ^ name.charCodeAt(i)) | 0;
     }
     hash = ((hash * 33) ^ (u.last_channel ?? 0)) | 0;
-    hash = ((hash * 33) ^ (u.texture?.length ?? 0)) | 0;
+    hash = ((hash * 33) ^ (u.texture_size ?? 0)) | 0;
     const ch = u.comment_hash;
     if (ch && ch.length > 0) {
       hash = ((hash * 33) ^ ch.length) | 0;
@@ -78,8 +77,9 @@ const KEY_GUESTS = "__guests__";
  *
  * The session id is set to a negative number derived from the user_id
  * to keep it unique and to ensure no DM/talking lookups ever match.
- * Avatar bytes are NOT installed here so callers can do that once per
- * `registered` payload instead of on every render.
+ * The avatar itself is fetched lazily by `useUserAvatar` for this negative
+ * session (which routes to `get_registered_user_texture`); only the
+ * `texture_size` marker travels in the bulk payload.
  */
 export function synthesiseOfflineEntry(
   reg: RegisteredUser,
@@ -87,13 +87,12 @@ export function synthesiseOfflineEntry(
 ): UserEntry {
   const comment = fetchedComments.get(reg.user_id) ?? reg.comment ?? null;
   const session = -(reg.user_id + 1);
-  const textureBytes = reg.texture && reg.texture.length > 0 ? reg.texture : null;
   return {
     session,
     name: reg.name,
     channel_id: reg.last_channel ?? 0,
     user_id: reg.user_id,
-    texture_size: textureBytes ? textureBytes.length : null,
+    texture_size: reg.texture_size && reg.texture_size > 0 ? reg.texture_size : null,
     comment,
     mute: false,
     deaf: false,
@@ -469,17 +468,6 @@ function MembersTabImpl({
     (channelId: number): string => channelNameById.get(channelId) ?? "Root",
     [channelNameById],
   );
-
-  // Install registered-user avatar bytes into the LRU cache once per
-  // payload.  setUserAvatarBytes is a no-op when the cache already holds
-  // an entry of the same size, so this is cheap on repeat renders.
-  useEffect(() => {
-    for (const reg of registered) {
-      if (reg.texture && reg.texture.length > 0) {
-        setUserAvatarBytes(-(reg.user_id + 1), reg.texture);
-      }
-    }
-  }, [registered]);
 
   // Build offline `UserEntry` objects with stable per-user_id references
   // so the `memo`-wrapped `UserListItem` skips re-renders when nothing

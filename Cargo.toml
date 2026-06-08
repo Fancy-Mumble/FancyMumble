@@ -59,3 +59,21 @@ codegen-units = 1         # Single codegen unit for maximum optimization
 opt-level = 3             # Full optimizations
 strip = "symbols"         # Strip debug symbols from the binary
 panic = "abort"           # Abort on panic (smaller binary, no unwind overhead)
+
+# -- Release + debug-info profile (for profiling) --------------------
+# Fully optimized like `release`, but keeps debug symbols so heap/CPU
+# profilers (dhat via `--features dhat-heap`, perf, VTune, Superluminal)
+# can attribute samples to real function names and line numbers.
+# Build with:  cargo build --profile release-debug
+# Artifacts land in `target/release-debug/`.
+[profile.release-debug]
+inherits = "release"
+# Profiling/iteration build: optimized enough to mirror release memory
+# behaviour, but tuned for FAST builds (the retained heap we profile is the
+# same at any opt level). Overrides release's fat LTO + codegen-units = 1,
+# which together cost ~30 min for no profiling benefit.
+lto = false               # no LTO — the single biggest build-time win
+codegen-units = 256       # parallel codegen
+debug = true              # full debug info so dhat/perf symbolicate stacks
+strip = false             # keep symbols
+split-debuginfo = "packed"

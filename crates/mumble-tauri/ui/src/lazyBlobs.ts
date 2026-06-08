@@ -53,18 +53,24 @@ export function getCachedChannelDescription(channelId: number, descriptionSize: 
 }
 
 async function fetchUserAvatar(session: number, expectedSize: number): Promise<string | null> {
-  if (session <= 0) return null;
+  if (session === 0) return null;
   const existing = avatarPending.get(session);
   if (existing) return existing;
   const promise = (async () => {
     try {
-      const bytes = await invoke<number[] | null>("get_user_texture", { session });
+      // Offline registered users use a negative pseudo-session
+      // `-(user_id + 1)` (see MembersTab.synthesiseOfflineEntry); their avatar
+      // lives in the per-user_id cache, fetched via a separate command.
+      const bytes =
+        session < 0
+          ? await invoke<number[] | null>("get_registered_user_texture", { userId: -session - 1 })
+          : await invoke<number[] | null>("get_user_texture", { session });
       if (!bytes || bytes.length === 0) return null;
       const url = textureToDataUrl(bytes);
       lruTouch(avatarCache, session, { size: expectedSize, value: url });
       return url;
     } catch (e) {
-      console.error("get_user_texture failed", session, e);
+      console.error("fetchUserAvatar failed", session, e);
       return null;
     } finally {
       avatarPending.delete(session);
@@ -102,7 +108,10 @@ export function useUserAvatar(session: number | null | undefined, textureSize: n
   const [url, setUrl] = useState<string | null>(initial);
 
   useEffect(() => {
-    if (session == null || session <= 0 || textureSize == null || textureSize === 0) {
+    // Negative sessions are offline registered users (-(user_id + 1)); their
+    // avatars are fetched via `get_registered_user_texture`, so only `0` (no
+    // user) is excluded here.
+    if (session == null || session === 0 || textureSize == null || textureSize === 0) {
       setUrl(null);
       return;
     }

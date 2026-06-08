@@ -191,6 +191,12 @@ pub(super) struct SharedState {
     pub server: ServerMetadata,
     pub users: HashMap<u32, UserEntry>,
     pub channels: HashMap<u32, ChannelEntry>,
+    /// Avatar bytes for registered (offline) users, keyed by `user_id`.
+    /// Populated from `UserList` responses; the bulk `user-list` event ships
+    /// only size markers and the frontend fetches each avatar on demand via
+    /// `get_registered_user_texture`. Cleared on disconnect with the rest of
+    /// the per-session state.
+    pub registered_user_textures: HashMap<u32, Vec<u8>>,
     pub selected_channel: Option<u32>,
     pub current_channel: Option<u32>,
     pub permanently_listened: HashSet<u32>,

@@ -732,8 +732,13 @@ pub struct RegisteredUserPayload {
     pub last_seen: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_channel: Option<u32>,
+    /// Avatar byte length, so the frontend knows an avatar exists without
+    /// shipping the bytes in the bulk list. The bytes are cached backend-side
+    /// and fetched on demand via `get_registered_user_texture` (mirrors how
+    /// online users use `UserEntry::texture_size`). Shipping the bytes inline
+    /// previously spiked the heap to >1 GB while emitting the `user-list` event.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub texture: Option<Vec<u8>>,
+    pub texture_size: Option<u32>,
     /// Full comment when len < 128 (included inline by the server).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
