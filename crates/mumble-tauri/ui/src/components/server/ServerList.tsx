@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { SavedServer, ServerPingResult } from "../../types";
 import { isMobile } from "../../utils/platform";
 import SwipeableCard from "../elements/SwipeableCard";
+import { TID } from "../../testids";
 import styles from "./ServerList.module.css";
 
 interface Props {
@@ -202,6 +203,8 @@ function ServerCardItem({
     >
       <div
         className={cardClasses}
+        data-testid={TID.serverCard}
+        data-server-id={s.id}
         onClick={() => { if (!disabled && !firedRef.current) onConnect(s); }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
