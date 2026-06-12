@@ -11,6 +11,10 @@ registerSettings("advanced")
   .add("advanced.klipyApiKey", ["gif", "klipy", "api key"])
   .add("advanced.developerMode", ["developer", "debug"])
   .add("advanced.logLevel", ["logging", "log"])
+  .add("advanced.logToFile", ["logging", "log", "file"])
+  .add("advanced.terminalLogging", ["logging", "log", "terminal", "console", "stdout"])
+  .add("advanced.autoZipLogs", ["logging", "log", "zip", "compress", "zstd"])
+  .add("advanced.logFiles", ["logging", "log", "export", "view", "folder"])
   .add("advanced.translationHelper")
   .add("advanced.autoReconnect", ["reconnect"])
   .add("advanced.autoUpdate", ["update", "auto update"])
@@ -22,6 +26,9 @@ export function AdvancedPanel({
   userMode,
   klipyApiKey,
   logLevel,
+  logToFile,
+  terminalLogging,
+  autoZipLogs,
   autoReconnect,
   autoUpdateOnStartup,
   persistDms,
@@ -29,6 +36,9 @@ export function AdvancedPanel({
   onToggleMode,
   onKlipyApiKeyChange,
   onLogLevelChange,
+  onToggleLogToFile,
+  onToggleTerminalLogging,
+  onToggleAutoZipLogs,
   onToggleAutoReconnect,
   onToggleAutoUpdate,
   onTogglePersistDms,
@@ -39,6 +49,9 @@ export function AdvancedPanel({
   userMode: UserMode;
   klipyApiKey: string;
   logLevel: string;
+  logToFile: boolean;
+  terminalLogging: boolean;
+  autoZipLogs: boolean;
   autoReconnect: boolean;
   autoUpdateOnStartup: boolean;
   persistDms: boolean;
@@ -46,6 +59,9 @@ export function AdvancedPanel({
   onToggleMode: () => void;
   onKlipyApiKeyChange: (key: string) => void;
   onLogLevelChange: (level: string) => void;
+  onToggleLogToFile: () => void;
+  onToggleTerminalLogging: () => void;
+  onToggleAutoZipLogs: () => void;
   onToggleAutoReconnect: () => void;
   onToggleAutoUpdate: () => void;
   onTogglePersistDms: () => void;
@@ -54,7 +70,41 @@ export function AdvancedPanel({
   onReset: () => void;
 }>) {
   const [confirming, setConfirming] = useState(false);
+  const [logBusy, setLogBusy] = useState(false);
   const { t } = useTranslation(["settings", "common"]);
+
+  const handleExportLogs = async () => {
+    setLogBusy(true);
+    try {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const dest = await save({
+        defaultPath: "fancy-mumble-logs.log.zst",
+        filters: [{ name: "zstd log archive", extensions: ["zst"] }],
+      });
+      if (!dest) return;
+      await invoke("export_logs", { destPath: dest });
+      const { message } = await import("@tauri-apps/plugin-dialog");
+      await message(t("advanced.exportLogsDone"), { kind: "info" });
+    } catch (e) {
+      console.error("export_logs failed:", e);
+      const { message } = await import("@tauri-apps/plugin-dialog");
+      await message(t("advanced.exportLogsError", { error: String(e) }), {
+        kind: "error",
+      });
+    } finally {
+      setLogBusy(false);
+    }
+  };
+
+  const handleViewLogs = async () => {
+    try {
+      const dir = await invoke<string>("get_log_directory");
+      const { openPath } = await import("@tauri-apps/plugin-opener");
+      await openPath(dir);
+    } catch (e) {
+      console.error("open log directory failed:", e);
+    }
+  };
 
   return (
     <>
@@ -133,6 +183,59 @@ export function AdvancedPanel({
             <option value="debug">{t("advanced.logLevelDebug")}</option>
             <option value="trace">{t("advanced.logLevelTrace")}</option>
           </select>
+        </section>
+      )}
+
+      {userMode === "developer" && (
+        <section className={styles.section}>
+          <div className={styles.toggleRow}>
+            <div className={styles.toggleInfo}>
+              <h3 className={styles.sectionTitle}>{t("advanced.logToFile")}</h3>
+              <p className={styles.fieldHint}>{t("advanced.logToFileHint")}</p>
+            </div>
+            <Toggle checked={logToFile} onChange={onToggleLogToFile} />
+          </div>
+
+          <div className={styles.toggleRow}>
+            <div className={styles.toggleInfo}>
+              <h3 className={styles.sectionTitle}>{t("advanced.autoZipLogs")}</h3>
+              <p className={styles.fieldHint}>{t("advanced.autoZipLogsHint")}</p>
+            </div>
+            <Toggle
+              checked={autoZipLogs}
+              disabled={!logToFile}
+              onChange={onToggleAutoZipLogs}
+            />
+          </div>
+
+          <div className={styles.toggleRow}>
+            <div className={styles.toggleInfo}>
+              <h3 className={styles.sectionTitle}>{t("advanced.terminalLogging")}</h3>
+              <p className={styles.fieldHint}>{t("advanced.terminalLoggingHint")}</p>
+            </div>
+            <Toggle checked={terminalLogging} onChange={onToggleTerminalLogging} />
+          </div>
+
+          <p className={styles.fieldHint} style={{ marginTop: "0.75rem" }}>
+            {t("advanced.logFilesHint")}
+          </p>
+          <div className={styles.confirmBtns}>
+            <button
+              type="button"
+              className={styles.ghostBtn}
+              onClick={() => void handleViewLogs()}
+            >
+              {t("advanced.viewLogsBtn")}
+            </button>
+            <button
+              type="button"
+              className={styles.ghostBtn}
+              disabled={logBusy}
+              onClick={() => void handleExportLogs()}
+            >
+              {t("advanced.exportLogsBtn")}
+            </button>
+          </div>
         </section>
       )}
 

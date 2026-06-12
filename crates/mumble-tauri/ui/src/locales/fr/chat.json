@@ -32,7 +32,13 @@
     "kindImage": "Image",
     "kindFile": "Fichier",
     "remove": "Supprimer la pièce jointe",
-    "send": "Envoyer"
+    "send": "Envoyer",
+    "qualityLabel": "Qualité d’image",
+    "qualityFull": "Pleine qualité",
+    "qualityFullHint": "Chaque image est envoyée en pleine qualité dans son propre message.",
+    "qualityCompressed": "Compressé",
+    "qualityCompressedHint": "Envoyer des images plus légères pour économiser la bande passante.",
+    "preview": "Cliquer pour agrandir"
   },
   "header": {
     "directMessage": "Message direct",
@@ -346,9 +352,14 @@
     "reconnect": {
       "titleDisconnected": "Déconnecté",
       "titleLost": "Connexion perdue",
+      "titleReconnecting": "Reconnexion…",
+      "attemptCount": "Tentative {{n}}",
+      "sinceLastConnection": "Dernière connexion il y a {{time}}",
       "reasonLabel": "Raison",
       "reconnectingBtn": "Reconnexion en cours...",
-      "reconnectBtn": "Reconnecter"
+      "nextRetry": "Prochaine tentative dans {{time}}",
+      "reconnectBtn": "Reconnecter",
+      "reconnectNowBtn": "Reconnecter maintenant"
     },
     "openChannelsAriaLabel": "Ouvrir les canaux",
     "closeChannelsAriaLabel": "Fermer les canaux"

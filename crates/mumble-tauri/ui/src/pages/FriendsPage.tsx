@@ -48,7 +48,7 @@ import {
   removeFriend,
   updateFriendAvatar,
 } from "../friendsStorage";
-import { textureToDataUrl } from "../profileFormat";
+import { bytesToAvatarUrl, revokeDisplayUrl } from "../utils/imageBlobs";
 import sidebarStyles from "../components/sidebar/channel/ChannelSidebar.module.css";
 import styles from "./FriendsPage.module.css";
 
@@ -322,14 +322,28 @@ interface FriendRowProps {
 
 function FriendRow({ friend, online, isActive, onClick, onRemove, removeTitle, offlineHint }: FriendRowProps) {
   const interactive = online;
-  const avatarUrl = useMemo(() => {
-    if (!friend.avatar) return null;
-    try {
-      const bytes = Array.from(base64ToBytes(friend.avatar));
-      return textureToDataUrl(bytes);
-    } catch {
-      return null;
+  // Blob object URL (downscaled when oversized) instead of a data: URL
+  // so a large saved avatar doesn't bloat the DOM (see utils/imageBlobs).
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!friend.avatar) {
+      setAvatarUrl(null);
+      return;
     }
+    let cancelled = false;
+    let url: string | null = null;
+    (async () => {
+      try {
+        url = await bytesToAvatarUrl(base64ToBytes(friend.avatar!));
+        if (!cancelled) setAvatarUrl(url || null);
+      } catch {
+        if (!cancelled) setAvatarUrl(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      revokeDisplayUrl(url);
+    };
   }, [friend.avatar]);
   return (
     <div

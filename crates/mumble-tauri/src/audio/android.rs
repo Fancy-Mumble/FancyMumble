@@ -130,8 +130,10 @@ impl AudioCapture for OboeCapture {
 
         let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
         self.overflow_warned.store(false, Ordering::Relaxed);
-        let samples: Vec<f32> = buf.drain(..self.frame_size).map(|s| s * vol).collect();
-        let data: Vec<u8> = samples.iter().flat_map(|s| s.to_ne_bytes()).collect();
+        let mut data = Vec::with_capacity(self.frame_size * 4);
+        for s in buf.drain(..self.frame_size) {
+            data.extend_from_slice(&(s * vol).to_ne_bytes());
+        }
 
         self.sequence += 1;
         Ok(AudioFrame {

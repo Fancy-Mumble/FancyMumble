@@ -32,7 +32,13 @@
     "kindImage": "图片",
     "kindFile": "文件",
     "remove": "移除附件",
-    "send": "发送"
+    "send": "发送",
+    "qualityLabel": "图片质量",
+    "qualityFull": "原画质",
+    "qualityFullHint": "每张图片以原画质作为单独消息发送。",
+    "qualityCompressed": "压缩",
+    "qualityCompressedHint": "发送更小更轻的图片以节省带宽。",
+    "preview": "点击预览"
   },
   "header": {
     "directMessage": "私信",
@@ -346,9 +352,14 @@
     "reconnect": {
       "titleDisconnected": "已断开连接",
       "titleLost": "连接丢失",
+      "titleReconnecting": "正在重新连接…",
+      "attemptCount": "第 {{n}} 次尝试",
+      "sinceLastConnection": "距上次连接 {{time}}",
       "reasonLabel": "原因",
       "reconnectingBtn": "正在重新连接…",
-      "reconnectBtn": "重新连接"
+      "nextRetry": "{{time}}后重试",
+      "reconnectBtn": "重新连接",
+      "reconnectNowBtn": "立即重新连接"
     },
     "openChannelsAriaLabel": "打开频道列表",
     "closeChannelsAriaLabel": "关闭频道列表"

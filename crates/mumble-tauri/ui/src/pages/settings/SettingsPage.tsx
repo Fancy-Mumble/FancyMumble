@@ -185,6 +185,9 @@ export default function SettingsPage() {
   const [persistDms, setPersistDms] = useState(false);
   const [showDisconnectWarning, setShowDisconnectWarning] = useState(true);
   const [logLevel, setLogLevel] = useState<string>("info");
+  const [logToFile, setLogToFile] = useState(false);
+  const [terminalLogging, setTerminalLogging] = useState(false);
+  const [autoZipLogs, setAutoZipLogs] = useState(false);
   const [useRodioBackend, setUseRodioBackend] = useState(true);
   const [timeFormat, setTimeFormat] = useState<TimeFormat>("auto");
   const [convertToLocalTime, setConvertToLocalTime] = useState(true);
@@ -258,6 +261,9 @@ export default function SettingsPage() {
         setPersistDms(prefs.persistDms ?? false);
         setShowDisconnectWarning(prefs.showDisconnectWarning ?? true);
         setLogLevel(prefs.logLevel ?? (prefs.debugLogging ? "debug" : "info"));
+        setLogToFile(prefs.logToFile ?? false);
+        setTerminalLogging(prefs.terminalLogging ?? false);
+        setAutoZipLogs(prefs.autoZipLogs ?? false);
         setTimeFormat(prefs.timeFormat);
         setConvertToLocalTime(prefs.convertToLocalTime);
         setDateFormat(prefs.dateFormat ?? "auto");
@@ -633,6 +639,39 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const handleToggleLogToFile = useCallback(async () => {
+    const next = !logToFile;
+    try {
+      await invoke("set_log_to_file", { enabled: next });
+      setLogToFile(next);
+      await updatePreferences({ logToFile: next });
+    } catch (e) {
+      console.error("Failed to toggle file logging:", e);
+    }
+  }, [logToFile]);
+
+  const handleToggleTerminalLogging = useCallback(async () => {
+    const next = !terminalLogging;
+    try {
+      await invoke("set_terminal_logging", { enabled: next });
+      setTerminalLogging(next);
+      await updatePreferences({ terminalLogging: next });
+    } catch (e) {
+      console.error("Failed to toggle terminal logging:", e);
+    }
+  }, [terminalLogging]);
+
+  const handleToggleAutoZipLogs = useCallback(async () => {
+    const next = !autoZipLogs;
+    try {
+      await invoke("set_auto_zip_logs", { enabled: next });
+      setAutoZipLogs(next);
+      await updatePreferences({ autoZipLogs: next });
+    } catch (e) {
+      console.error("Failed to toggle auto-zip logs:", e);
+    }
+  }, [autoZipLogs]);
+
   const handleToggleAudioBackend = useCallback(async () => {
     const next = !useRodioBackend;
     try {
@@ -835,6 +874,9 @@ export default function SettingsPage() {
               userMode={userMode}
               klipyApiKey={klipyApiKey}
               logLevel={logLevel}
+              logToFile={logToFile}
+              terminalLogging={terminalLogging}
+              autoZipLogs={autoZipLogs}
               autoReconnect={autoReconnect}
               autoUpdateOnStartup={autoUpdateOnStartup}
               persistDms={persistDms}
@@ -842,6 +884,9 @@ export default function SettingsPage() {
               onToggleMode={handleToggleMode}
               onKlipyApiKeyChange={handleKlipyApiKeyChange}
               onLogLevelChange={handleLogLevelChange}
+              onToggleLogToFile={handleToggleLogToFile}
+              onToggleTerminalLogging={handleToggleTerminalLogging}
+              onToggleAutoZipLogs={handleToggleAutoZipLogs}
               onToggleAutoReconnect={handleToggleAutoReconnect}
               onToggleAutoUpdate={handleToggleAutoUpdate}
               onTogglePersistDms={handleTogglePersistDms}

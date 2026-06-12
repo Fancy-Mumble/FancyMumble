@@ -205,6 +205,9 @@ interface MessageItemProps {
    *  timestamp on every message, just before the read-receipt indicator.
    *  Used by the "always show message actions" personalization option. */
   readonly inlineActions?: React.ReactNode;
+  /** When true this message is one tile of an image-gallery grid: its media is
+   *  rendered as a uniform square that fills the grid cell. */
+  readonly galleryTile?: boolean;
 }
 
 export default memo(function MessageItem({
@@ -223,6 +226,7 @@ export default memo(function MessageItem({
   children,
   readReceiptIndicator,
   inlineActions,
+  galleryTile = false,
 }: MessageItemProps) {
   const { t } = useTranslation("chat");
   const offloadInfo = extractOffloadInfo(msg.body);
@@ -279,6 +283,11 @@ export default memo(function MessageItem({
 
   const renderBody = () => {
     if (offloaded || isRestoring) {
+      // Gallery tiles keep a square skeleton so an offloaded image holds its
+      // grid slot (no reflow on offload/restore).
+      if (galleryTile) {
+        return <div className={styles.skeletonTile} aria-label={isRestoring ? t("dates.decrypting") : t("dates.contentOffloaded")} />;
+      }
       // Estimate skeleton height from the original content byte-length.
       // Images/videos encoded as data-URLs are ~1.37x larger than the
       // decoded pixels, so a rough heuristic of 1 byte ~= 0.003 px
@@ -392,7 +401,7 @@ export default memo(function MessageItem({
     return (
       <>
         {quoteBlocks}
-        <MediaPreview html={htmlBody} messageId={`${index}`} compact={pureMedia} timestamp={pureMedia ? displayTimestamp : undefined} timeFormat={timeFormat} convertToLocalTime={convertToLocalTime} systemUses24h={systemUses24h} senderName={msg.sender_name} messageTimestamp={displayTimestamp} onOpenLightbox={onOpenLightbox} />
+        <MediaPreview html={htmlBody} messageId={`${index}`} compact={pureMedia} tile={galleryTile} timestamp={pureMedia ? displayTimestamp : undefined} timeFormat={timeFormat} convertToLocalTime={convertToLocalTime} systemUses24h={systemUses24h} senderName={msg.sender_name} messageTimestamp={displayTimestamp} onOpenLightbox={onOpenLightbox} />
       </>
     );
   };

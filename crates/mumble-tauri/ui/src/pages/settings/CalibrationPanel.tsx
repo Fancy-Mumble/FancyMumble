@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AudioSettings } from "../../types";
+import { getPreferences, updatePreferences } from "../../preferencesStorage";
 import { SparklesIcon, SlidersIcon } from "../../icons";
 import { SliderField } from "./SharedControls";
 import { VuMeter, type VuMarker } from "./VuMeter";
@@ -22,7 +23,30 @@ type ReplayPhase =
   | { phase: "playing"; elapsed_ms: number; total_ms: number };
 
 const SPEECH_TARGET_MS = 5000;
-const CALIBRATION_DONE_KEY = "fancy_calibration_done";
+/**
+ * Fingerprint of the audio settings that a voice-activation calibration
+ * depends on.  Persisted in the preferences store (`preferences.json`,
+ * via `calibrationSignature`) so it survives window reopen and app
+ * restart.  The "calibration needed" hint reappears only when this
+ * fingerprint is missing (never calibrated) or differs from the current
+ * one (a relevant input setting changed) - NOT merely because the
+ * window was reopened.
+ *
+ * Only input-chain settings that change what the calibrator measures
+ * are included.  The values calibration itself produces
+ * (`vad_threshold`, `noise_gate_close_ratio`, `hold_frames`,
+ * `max_gain_db`) are deliberately excluded so a completed calibration
+ * does not invalidate itself, and the playback / encoding / PTT
+ * settings are excluded because they do not affect mic calibration.
+ */
+function calibrationSignature(s: AudioSettings): string {
+  return JSON.stringify({
+    device: s.selected_device,
+    autoGain: s.auto_gain,
+    noiseSuppression: s.noise_suppression,
+    denoiser: s.denoiser_algorithm,
+  });
+}
 
 /**
  * Returns the minimum RMS that counts as "speaking" for the speech-progress
@@ -359,12 +383,37 @@ export function CalibrationPanel({
   const [ampTick, setAmpTick] = useState(0);
   const rafHandle = useRef(0);
   const [replayPhase, setReplayPhase] = useState<ReplayPhase>({ phase: "idle" });
-  const [hasCalibrated, setHasCalibrated] = useState(
-    () => localStorage.getItem(CALIBRATION_DONE_KEY) === "true",
+  // Keep the latest settings reachable from the calibration event
+  // listener without re-subscribing on every settings change.
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  // `undefined` until the persisted signature is read from the
+  // preferences store; `null` once read with no prior calibration.
+  const [calibratedSig, setCalibratedSig] = useState<string | null | undefined>(
+    undefined,
   );
+  useEffect(() => {
+    let active = true;
+    getPreferences()
+      .then((p) => {
+        if (active) setCalibratedSig(p.calibrationSignature ?? null);
+      })
+      .catch(() => {
+        if (active) setCalibratedSig(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  // Derived so a relevant settings change or a fresh calibration is
+  // reflected immediately. While the signature is still loading
+  // (`undefined`), assume calibrated so the hint does not flash before
+  // the persisted value arrives.
+  const hasCalibrated =
+    calibratedSig === undefined ||
+    (calibratedSig !== null && calibratedSig === calibrationSignature(settings));
   const speechMsRef = useRef(0);
   const lastAmplitudeEventTime = useRef<number | null>(null);
-  const prevModeRef = useRef<CalibrationMode | null>(null);
   const speechThresholdRef = useRef(speechThreshold(settings.vad_threshold));
   speechThresholdRef.current = speechThreshold(settings.vad_threshold);
 
@@ -436,8 +485,11 @@ export function CalibrationPanel({
         hold_frames: event.payload.hold_frames,
         max_gain_db: event.payload.max_gain_db,
       });
-      setHasCalibrated(true);
-      localStorage.setItem(CALIBRATION_DONE_KEY, "true");
+      // Record the fingerprint of the settings this calibration was done
+      // under, so the hint stays hidden until a relevant setting changes.
+      const sig = calibrationSignature(settingsRef.current);
+      setCalibratedSig(sig);
+      void updatePreferences({ calibrationSignature: sig });
     });
     return () => {
       unlisten.then((f) => f());
@@ -462,21 +514,6 @@ export function CalibrationPanel({
       invoke("stop_voice_replay").catch(() => {});
     };
   }, []);
-
-  useEffect(() => {
-    const currentMode: CalibrationMode = settings.auto_input_sensitivity
-      ? "auto"
-      : "manual";
-    if (
-      prevModeRef.current !== null &&
-      prevModeRef.current !== "auto" &&
-      currentMode === "auto"
-    ) {
-      setHasCalibrated(false);
-      localStorage.removeItem(CALIBRATION_DONE_KEY);
-    }
-    prevModeRef.current = currentMode;
-  }, [settings.auto_input_sensitivity]);
 
   void ampTick;
   const { rms, peak } = amplitudeRef.current;

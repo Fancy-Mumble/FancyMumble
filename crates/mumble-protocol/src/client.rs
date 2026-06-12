@@ -149,45 +149,13 @@ pub async fn run<H: EventHandler>(
     config: ClientConfig,
     handler: H,
 ) -> Result<(ClientHandle, tokio::task::JoinHandle<()>)> {
-    // 1. Connect TCP - retry on transient connection-reset errors (e.g. the
-    //    server hasn't cleaned up a previous session yet, Windows error 10054).
-    const MAX_RETRIES: u32 = 3;
-    const RETRY_DELAY: Duration = Duration::from_secs(2);
-
-    let mut tcp = None;
-    let mut last_err = None;
-
-    for attempt in 1..=MAX_RETRIES {
-        match TcpTransport::connect(&config.tcp).await {
-            Ok(t) => {
-                tcp = Some(t);
-                break;
-            }
-            Err(e) => {
-                // Only retry on ConnectionRefused (server briefly down or
-                // still starting up).  ConnectionReset / ConnectionAborted
-                // at this early stage almost always means the server
-                // deliberately closed the connection (e.g. IP ban, version
-                // mismatch) - retrying would just spam the server.
-                let is_retryable = matches!(&e, Error::Io(io)
-                    if io.kind() == std::io::ErrorKind::ConnectionRefused
-                );
-                if is_retryable && attempt < MAX_RETRIES {
-                    warn!(
-                        "TCP connection attempt {attempt}/{MAX_RETRIES} failed ({e}), \
-                         retrying in {}s...",
-                        RETRY_DELAY.as_secs()
-                    );
-                    tokio::time::sleep(RETRY_DELAY).await;
-                    last_err = Some(e);
-                } else {
-                    return Err(e);
-                }
-            }
-        }
-    }
-
-    let mut tcp = tcp.ok_or_else(|| last_err.unwrap_or_else(|| Error::Other("connection loop exited without recording an error".into())))?;
+    // 1. Connect TCP - a single attempt.  Retry/backoff is owned by the
+    //    caller (the desktop app's auto-reconnect loop drives retries with a
+    //    growing Fibonacci delay).  Doing it here as well meant every caller
+    //    "attempt" silently fanned out into several fixed-delay TCP tries,
+    //    which slowed the visible reconnect cadence and contradicted the
+    //    caller's backoff schedule.  Fail fast and let the caller decide.
+    let mut tcp = TcpTransport::connect(&config.tcp).await?;
     info!("TCP connected to {}:{}", config.tcp.server_host, config.tcp.server_port);
 
     // 2. Send the Version message FIRST - before anything else touches the

@@ -38,6 +38,20 @@ pub trait AudioDecoder: Send + 'static {
     fn reset(&mut self);
 }
 
+/// Convert an f32 sample slice to native-endian bytes in a single
+/// sized allocation.  The chunked copy compiles down to a plain
+/// memcpy on little-endian targets, unlike a per-byte
+/// `flat_map(..).collect()` which iterates byte by byte - this runs
+/// once per decoded packet per speaker, so it is on the hot path.
+#[cfg(feature = "opus-codec")]
+fn f32_slice_to_ne_bytes(pcm: &[f32]) -> Vec<u8> {
+    let mut data = vec![0u8; pcm.len() * 4];
+    for (chunk, s) in data.chunks_exact_mut(4).zip(pcm) {
+        chunk.copy_from_slice(&s.to_ne_bytes());
+    }
+    data
+}
+
 // ---------------------------------------------------------------------------
 //  Real Opus decoder (requires the `opus-codec` feature)
 // ---------------------------------------------------------------------------
@@ -120,11 +134,8 @@ impl AudioDecoder for OpusDecoder {
         let total_samples = decoded_samples * self.format.channels as usize;
         let pcm = &self.out_buf[..total_samples];
 
-        // Convert f32 slice to raw bytes (native-endian)
-        let data: Vec<u8> = pcm.iter().flat_map(|s| s.to_ne_bytes()).collect();
-
         Ok(AudioFrame {
-            data,
+            data: f32_slice_to_ne_bytes(pcm),
             format: self.format,
             sequence: packet.sequence,
             is_silent: false,
@@ -151,10 +162,9 @@ impl AudioDecoder for OpusDecoder {
 
         let total_samples = decoded_samples * self.format.channels as usize;
         let pcm = &self.out_buf[..total_samples];
-        let data: Vec<u8> = pcm.iter().flat_map(|s| s.to_ne_bytes()).collect();
 
         Ok(AudioFrame {
-            data,
+            data: f32_slice_to_ne_bytes(pcm),
             format: self.format,
             sequence: 0,
             is_silent: false,

@@ -16,7 +16,7 @@
  * Reuses the FileShareDialog CSS module for visual consistency.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../../../store";
@@ -24,9 +24,14 @@ import {
   encodeFileAttachmentMarker,
   type FileAttachmentInfo,
 } from "../file/FileAttachmentCard";
-import FileShareDialog, { type FileShareChoice } from "../file/FileShareDialog";
+import type { FileShareChoice } from "../file/FileShareDialog";
 import { Modal } from "../../elements/Modal";
 import styles from "../file/FileShareDialog.module.css";
+
+// Lazy like ChatView's usage: FileShareDialog is also dynamically imported
+// there, and mixing static + dynamic imports of one module makes rolldown
+// emit a cyclic chunk that crashes at evaluation time in release builds.
+const FileShareDialog = lazy(() => import("../file/FileShareDialog"));
 
 interface LiveDocExportDialogProps {
   readonly open: boolean;
@@ -174,13 +179,15 @@ export default function LiveDocExportDialog({
 
   if (phase === "share-config") {
     return (
-      <FileShareDialog
-        open
-        filename={filename()}
-        canSharePublic={fileServerConfig?.canShareFilesPublic ?? true}
-        onSubmit={handleShareSubmit}
-        onCancel={handleShareCancel}
-      />
+      <Suspense fallback={null}>
+        <FileShareDialog
+          open
+          filename={filename()}
+          canSharePublic={fileServerConfig?.canShareFilesPublic ?? true}
+          onSubmit={handleShareSubmit}
+          onCancel={handleShareCancel}
+        />
+      </Suspense>
     );
   }
 

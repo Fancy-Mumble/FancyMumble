@@ -14,7 +14,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { textureToDataUrl } from "./profileFormat";
+import {
+  bytesToAvatarUrl,
+  bytesToObjectUrl,
+  revokeDisplayUrl,
+  TEXTURE_DOWNSCALE_THRESHOLD,
+} from "./utils/imageBlobs";
 
 interface CachedBlob<T> {
   size: number;
@@ -29,12 +34,20 @@ const avatarPending = new Map<number, Promise<string | null>>();
 const descriptionPending = new Map<number, Promise<string | null>>();
 const commentPending = new Map<number, Promise<string | null>>();
 
-function lruTouch<T>(cache: Map<number, CachedBlob<T>>, key: number, entry: CachedBlob<T>): void {
+function lruTouch(cache: Map<number, CachedBlob<string>>, key: number, entry: CachedBlob<string>): void {
+  // Avatars are blob object URLs - release the handle of a replaced or
+  // evicted entry so the underlying bytes can be collected.  No-op for
+  // the text caches (descriptions / comments).
+  const replaced = cache.get(key);
+  if (replaced && replaced.value !== entry.value) revokeDisplayUrl(replaced.value);
   cache.delete(key);
   cache.set(key, entry);
   if (cache.size > CACHE_MAX) {
     const oldestKey = cache.keys().next().value;
-    if (oldestKey !== undefined) cache.delete(oldestKey);
+    if (oldestKey !== undefined) {
+      revokeDisplayUrl(cache.get(oldestKey)?.value);
+      cache.delete(oldestKey);
+    }
   }
 }
 
@@ -66,7 +79,10 @@ async function fetchUserAvatar(session: number, expectedSize: number): Promise<s
           ? await invoke<number[] | null>("get_registered_user_texture", { userId: -session - 1 })
           : await invoke<number[] | null>("get_user_texture", { session });
       if (!bytes || bytes.length === 0) return null;
-      const url = textureToDataUrl(bytes);
+      // Blob object URL (downscaled if oversized) instead of a data:
+      // URL - a data: URL would put the full base64 image into every
+      // <img> attribute and the JS heap (see utils/imageBlobs.ts).
+      const url = await bytesToAvatarUrl(bytes);
       lruTouch(avatarCache, session, { size: expectedSize, value: url });
       return url;
     } catch (e) {
@@ -246,15 +262,22 @@ export function prefetchUserAvatar(session: number, textureSize: number | null):
  * `useUserAvatar(session, bytes.length)` resolves without an IPC call.
  *
  * If the cache already holds an entry of the same size for this session
- * the call is a no-op so we don't redo the (relatively expensive)
- * base64 encoding on every re-render.
+ * the call is a no-op so we don't redo the blob conversion on every
+ * re-render.  Oversized textures skip the synchronous path and are
+ * installed once their downscaled version is ready.
  */
 export function setUserAvatarBytes(session: number, bytes: number[] | null): void {
   if (!bytes || bytes.length === 0) return;
   const cached = avatarCache.get(session);
   if (cached && cached.size === bytes.length) return;
-  const url = textureToDataUrl(bytes);
-  lruTouch(avatarCache, session, { size: bytes.length, value: url });
+  const size = bytes.length;
+  if (size <= TEXTURE_DOWNSCALE_THRESHOLD) {
+    lruTouch(avatarCache, session, { size, value: bytesToObjectUrl(bytes) });
+    return;
+  }
+  void bytesToAvatarUrl(bytes).then((url) => {
+    if (url) lruTouch(avatarCache, session, { size, value: url });
+  });
 }
 
 /**
@@ -302,6 +325,7 @@ export function prefetchChannelDescription(channelId: number, descriptionSize: n
 
 /** Test helper: clear all caches. */
 export function _clearLazyBlobsForTests(): void {
+  for (const entry of avatarCache.values()) revokeDisplayUrl(entry.value);
   avatarCache.clear();
   descriptionCache.clear();
   commentCache.clear();

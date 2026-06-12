@@ -11,15 +11,19 @@ import PanelCloseButton from "../PanelCloseButton";
  * - Drag-and-drop reordering of both the drawer strip and grid panes.
  *   Dropping onto the primary pane switches the focused stream.
  */
-import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
+import { lazy, Suspense, useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { useTranslation } from "react-i18next";
-import ScreenShareViewer from "../stream/ScreenShareViewer";
 import { useRemoteStream } from "../stream/useScreenShare";
 import { useStreamThumbnail } from "./useStreamPreview";
 import { useAppStore } from "../../../store";
 import styles from "./StreamFocusView.module.css";
 import { useBroadcasterOrder, useDragStream } from "./useStreamDrag";
 import type { Broadcaster, PointerDragItemProps, PointerDragHandlers } from "./useStreamDrag";
+
+// Lazy like ChatView's usage: ScreenShareViewer is also dynamically imported
+// there, and mixing static + dynamic imports of one module makes rolldown
+// emit a cyclic chunk that crashes at evaluation time in release builds.
+const ScreenShareViewer = lazy(() => import("../stream/ScreenShareViewer"));
 
 // ---------------------------------------------------------------------------
 // Layout types
@@ -232,7 +236,9 @@ function PrimaryPane({ isOwnBroadcast, localStream, session, hasOthers, isPrimar
       aria-label={t("streamFocus.primaryStream")}
       data-drop-zone={hasOthers ? "primary" : undefined}
     >
-      <ScreenShareViewer isOwnBroadcast={isOwnBroadcast} localStream={localStream} session={session} channelId={channelId} ownSession={ownSession} />
+      <Suspense fallback={null}>
+        <ScreenShareViewer isOwnBroadcast={isOwnBroadcast} localStream={localStream} session={session} channelId={channelId} ownSession={ownSession} />
+      </Suspense>
       {hasOthers && (
         <div
           className={`${styles.primaryDropZone} ${isPrimaryDragOver ? styles.primaryDropZoneActive : ""}`}

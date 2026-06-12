@@ -18,7 +18,8 @@ interface ChatComposerProps {
   readonly onChange: (value: string) => void;
   readonly onSend: () => void;
   readonly onPaste: (e: ClipboardEvent) => void;
-  readonly onFileSelected: (file: File) => Promise<void>;
+  /** Stage one or more picked image/video files into the attachment tray. */
+  readonly onFilesSelected: (files: File[]) => void;
   readonly onGifSelect: (url: string, alt: string) => Promise<void>;
   /** Open the native file picker and upload via the file-server plugin.
    *  When omitted, the file-server attach button is hidden. */
@@ -37,7 +38,7 @@ export default function ChatComposer({
   onChange,
   onSend,
   onPaste,
-  onFileSelected,
+  onFilesSelected,
   onGifSelect,
   onAttachFile,
   onOpenLiveDoc,
@@ -139,13 +140,12 @@ export default function ChatComposer({
   }, [onOpenLiveDoc]);
 
   const handleFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files ? Array.from(e.target.files) : [];
       e.target.value = "";
-      await onFileSelected(file);
+      if (files.length > 0) onFilesSelected(files);
     },
-    [onFileSelected],
+    [onFilesSelected],
   );
 
   const handleSelectionChange = useCallback(
@@ -292,6 +292,7 @@ export default function ChatComposer({
           ref={fileInputRef}
           type="file"
           accept="image/*,video/*"
+          multiple
           className={styles.hiddenFileInput}
           onChange={handleFileChange}
         />

@@ -10,11 +10,14 @@ import AddServerPopover from "./AddServerPopover";
 import { UsersGroupIcon } from "../../icons";
 import styles from "./ServerTabsBar.module.css";
 
-const TAB_ORDER_STORAGE_KEY = "fancy-mumble:server-tab-order";
+// Pre-store location of the tab order. Read once on first run to migrate
+// the value into the preferences store, then removed.
+const TAB_ORDER_LEGACY_KEY = "fancy-mumble:server-tab-order";
 
-function loadStoredOrder(): ServerId[] {
+/** One-time read of the old localStorage tab order, for migration. */
+function readLegacyOrder(): ServerId[] {
   try {
-    const raw = localStorage.getItem(TAB_ORDER_STORAGE_KEY);
+    const raw = localStorage.getItem(TAB_ORDER_LEGACY_KEY);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.every((v) => typeof v === "string")) {
@@ -24,14 +27,6 @@ function loadStoredOrder(): ServerId[] {
     // Ignore corrupt entries.
   }
   return [];
-}
-
-function saveStoredOrder(order: ServerId[]): void {
-  try {
-    localStorage.setItem(TAB_ORDER_STORAGE_KEY, JSON.stringify(order));
-  } catch {
-    // Quota exceeded / private mode - ignore.
-  }
 }
 
 /** Sort `sessions` according to the persisted user order; new sessions
@@ -110,7 +105,10 @@ export default function ServerTabsBar() {
   // drag-region attribute can swallow events).  The dragged tab is
   // rendered as a portal-mounted floating clone with `position: fixed`
   // so it can travel outside the bar's `overflow: auto` clip box.
-  const [tabOrder, setTabOrder] = useState<ServerId[]>(() => loadStoredOrder());
+  const [tabOrder, setTabOrder] = useState<ServerId[]>([]);
+  // Gate the persist-on-change effect until the stored order has loaded,
+  // so we don't overwrite it with the backend order during async load.
+  const orderLoadedRef = useRef(false);
   const tabRefs = useRef<Map<ServerId, HTMLDivElement>>(new Map());
   const setTabRef = (id: ServerId) => (el: HTMLDivElement | null) => {
     if (el) tabRefs.current.set(id, el);
@@ -143,14 +141,47 @@ export default function ServerTabsBar() {
 
   const orderedSessions = useMemo(() => applyOrder(sessions, tabOrder), [sessions, tabOrder]);
 
+  // Load the persisted tab order from the preferences store, migrating a
+  // pre-store localStorage value on first run.
+  useEffect(() => {
+    let active = true;
+    getPreferences()
+      .then((p) => {
+        if (!active) return;
+        const stored = p.serverTabOrder ?? [];
+        if (stored.length > 0) {
+          setTabOrder(stored);
+        } else {
+          const legacy = readLegacyOrder();
+          if (legacy.length > 0) {
+            setTabOrder(legacy);
+            void updatePreferences({ serverTabOrder: legacy });
+          }
+        }
+        try {
+          localStorage.removeItem(TAB_ORDER_LEGACY_KEY);
+        } catch {
+          // ignore
+        }
+        orderLoadedRef.current = true;
+      })
+      .catch(() => {
+        orderLoadedRef.current = true;
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Keep the persisted order in sync whenever sessions appear/disappear so
   // the saved list stays compact and reflects any append-on-connect order.
   useEffect(() => {
+    if (!orderLoadedRef.current) return;
     if (sessions.length === 0) return;
     const ids = orderedSessions.map((s) => s.id);
     if (ids.length !== tabOrder.length || ids.some((id, i) => id !== tabOrder[i])) {
       setTabOrder(ids);
-      saveStoredOrder(ids);
+      void updatePreferences({ serverTabOrder: ids });
     }
   }, [sessions, orderedSessions, tabOrder]);
 
@@ -268,7 +299,7 @@ export default function ServerTabsBar() {
           if (!dropAt.before) insertIdx += 1;
           next.splice(insertIdx, 0, st.id);
           setTabOrder(next);
-          saveStoredOrder(next);
+          void updatePreferences({ serverTabOrder: next });
         }
       }
     }

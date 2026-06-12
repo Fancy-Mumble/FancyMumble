@@ -3228,6 +3228,7 @@ dependencies = [
  "uuid",
  "webpki-roots",
  "x25519-dalek",
+ "zeroize",
 ]
 
 [[package]]
@@ -3278,6 +3279,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "webview2-com",
+ "windows-core",
  "windows-sys 0.61.2",
  "zstd",
 ]

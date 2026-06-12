@@ -12,18 +12,22 @@ use serde::Serialize;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
-use crate::state::types::PluginRegistryEntryPayload;
+use crate::state::types::{serialize_bytes_base64, PluginRegistryEntryPayload};
 
 /// Tauri event payload for an inbound `PluginMessage`.
 ///
-/// The `payload` field is the raw bytes the sending plugin chose; the
-/// frontend decodes them based on `plugin_name` + `payload_type`.
+/// The `payload` field is the raw bytes the sending plugin chose,
+/// serialized as base64 (a `Vec<u8>` would serialize as a JSON number
+/// array - ~32 heap bytes per payload byte in the intermediate
+/// `serde_json::Value`, see `PluginDataPayload::data`); the frontend
+/// decodes them based on `plugin_name` + `payload_type`.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct PluginMessagePayload {
     plugin_name: String,
     plugin_slot: Option<u32>,
     payload_type: String,
+    #[serde(serialize_with = "serialize_bytes_base64")]
     payload: Vec<u8>,
     target_sessions: Vec<u32>,
     channel_id: Option<u32>,

@@ -231,8 +231,28 @@ impl AudioMixer {
         drop(self.speakers.remove(&session));
     }
 
-    /// Remove speakers that have not sent audio recently to free
-    /// decoder resources and buffer memory.
+    /// Remove all state for a speaker (decoder and sample buffer).
+    ///
+    /// Called when the user leaves the server.  Unlike
+    /// [`reset_speaker`](Self::reset_speaker) this also drops the
+    /// sample buffer - there is no further stream to drain.
+    pub fn remove_speaker(&mut self, session: u32) {
+        drop(self.speakers.remove(&session));
+        if let Ok(mut bufs) = self.buffers.lock() {
+            let _ = bufs.remove(&session);
+        }
+    }
+
+    /// Free per-speaker memory that is no longer needed:
+    ///
+    /// * decoders idle longer than [`SPEAKER_TIMEOUT_SECS`] (their
+    ///   terminator packet was lost), including their buffers, and
+    /// * drained buffers whose decoder is already gone (stream ended
+    ///   via terminator and playback finished draining).
+    ///
+    /// Each retained buffer holds its full
+    /// [`MAX_SPEAKER_BUFFER_SAMPLES`] capacity (~77 KB), so this keeps
+    /// long sessions from accumulating one per user who ever spoke.
     pub fn remove_inactive_speakers(&mut self) {
         let timeout = std::time::Duration::from_secs(SPEAKER_TIMEOUT_SECS);
         let now = Instant::now();
@@ -244,9 +264,14 @@ impl AudioMixer {
             .collect();
         for id in &stale {
             let _ = self.speakers.remove(id);
-            if let Ok(mut bufs) = self.buffers.lock() {
+        }
+        if let Ok(mut bufs) = self.buffers.lock() {
+            for id in &stale {
                 let _ = bufs.remove(id);
             }
+            // Drop drained buffers of ended streams.  Non-empty buffers
+            // are still being drained by the playback callback and stay.
+            bufs.retain(|id, buf| !buf.is_empty() || self.speakers.contains_key(id));
         }
     }
 
@@ -324,9 +349,7 @@ fn insert_silence(
             .or_insert_with(|| VecDeque::with_capacity(MAX_SPEAKER_BUFFER_SAMPLES));
         let remaining = MAX_SPEAKER_BUFFER_SAMPLES.saturating_sub(buf.len());
         let to_insert = requested.min(remaining);
-        for _ in 0..to_insert {
-            buf.push_back(0.0);
-        }
+        buf.resize(buf.len() + to_insert, 0.0);
         if to_insert < requested {
             tracing::debug!(
                 "insert_silence: clamped {requested} samples to {to_insert} for session {session} (buffer near cap, refusing to evict real audio)"
@@ -507,6 +530,91 @@ mod tests {
         let locked = bufs.lock().unwrap();
         assert!(locked.contains_key(&10));
         assert!(locked.contains_key(&20));
+    }
+
+    #[cfg(feature = "opus-codec")]
+    #[test]
+    fn remove_speaker_drops_decoder_and_buffer() {
+        let bufs = make_buffers();
+        let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
+
+        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
+        let config = OpusEncoderConfig::default();
+        let frame_size = config.frame_size;
+        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
+        let silent = crate::audio::sample::AudioFrame {
+            data: vec![0u8; frame_size * 4],
+            format: AudioFormat::MONO_48KHZ_F32,
+            sequence: 0,
+            is_silent: false,
+        };
+        let pkt = enc.encode(&silent).unwrap();
+        mixer.feed(42, &pkt).unwrap();
+        assert!(bufs.lock().unwrap().contains_key(&42));
+
+        mixer.remove_speaker(42);
+        assert_eq!(mixer.speakers.len(), 0);
+        assert!(
+            !bufs.lock().unwrap().contains_key(&42),
+            "buffer must be freed with the speaker"
+        );
+    }
+
+    #[test]
+    fn remove_inactive_speakers_prunes_drained_orphan_buffers() {
+        // A buffer whose decoder is gone (terminator received) and that
+        // playback has fully drained must be removed; a still-draining
+        // buffer must be kept.
+        let bufs = make_buffers();
+        let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
+
+        {
+            let mut locked = bufs.lock().unwrap();
+            // Drained orphan: stream ended, playback consumed everything.
+            let _ = locked.insert(7, VecDeque::new());
+            // Still-draining orphan: terminator received but samples remain.
+            let mut draining = VecDeque::new();
+            draining.push_back(0.5);
+            let _ = locked.insert(8, draining);
+        }
+
+        mixer.remove_inactive_speakers();
+
+        let locked = bufs.lock().unwrap();
+        assert!(!locked.contains_key(&7), "drained orphan buffer must be pruned");
+        assert!(locked.contains_key(&8), "non-empty buffer must keep draining");
+    }
+
+    #[cfg(feature = "opus-codec")]
+    #[test]
+    fn remove_inactive_speakers_keeps_active_speaker_buffers() {
+        let bufs = make_buffers();
+        let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
+
+        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
+        let config = OpusEncoderConfig::default();
+        let frame_size = config.frame_size;
+        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
+        let silent = crate::audio::sample::AudioFrame {
+            data: vec![0u8; frame_size * 4],
+            format: AudioFormat::MONO_48KHZ_F32,
+            sequence: 0,
+            is_silent: false,
+        };
+        let pkt = enc.encode(&silent).unwrap();
+        mixer.feed(42, &pkt).unwrap();
+
+        // Drain the buffer: even empty, it must survive while the
+        // speaker's decoder is live (mid-utterance).
+        bufs.lock().unwrap().get_mut(&42).unwrap().clear();
+
+        mixer.remove_inactive_speakers();
+
+        assert_eq!(mixer.speakers.len(), 1, "recently active decoder kept");
+        assert!(
+            bufs.lock().unwrap().contains_key(&42),
+            "active speaker's buffer must not be pruned"
+        );
     }
 
     #[cfg(feature = "opus-codec")]

@@ -78,6 +78,12 @@ impl AppState {
     ///
     /// `volume` is a multiplier (0.0 = muted, 1.0 = normal, 2.0 = 200%).
     pub fn set_user_volume(&self, session: u32, volume: f32) {
+        // Guard against NaN: `f32::clamp` propagates NaN, which would poison the
+        // mixer (every `sample * NaN` becomes NaN) and silently break this
+        // user's audio. Drop the update instead.
+        if volume.is_nan() {
+            return;
+        }
         if let Ok(state) = self.inner.snapshot().lock() {
             if let Ok(mut sv) = state.audio.speaker_volumes.lock() {
                 if (volume - 1.0).abs() < f32::EPSILON {
@@ -336,27 +342,48 @@ mod voice_pipeline {
             client_handle: &Option<ClientHandle>,
         ) -> Result<(), String> {
             // Re-use existing input volume handle or create a new one.
-            let (input_vol, app, own_session) = {
+            let (input_vol, app, own_session, max_bandwidth) = {
                 let __session = self.inner.snapshot();
                 let state = __session.lock().map_err(|e| e.to_string())?;
                 (
                     state.audio.input_volume_handle.clone(),
                     state.conn.tauri_app_handle.clone(),
                     state.conn.own_session,
+                    state.server.max_bandwidth,
                 )
             };
             let input_vol =
                 input_vol.unwrap_or_else(|| Arc::new(AtomicU32::new(audio_settings.input_volume.to_bits())));
 
+            let (bitrate_bps, frame_size_ms) = adjust_to_server_bandwidth(
+                audio_settings.bitrate_bps,
+                audio_settings.frame_size_ms,
+                max_bandwidth,
+            );
+            if (bitrate_bps, frame_size_ms)
+                != (audio_settings.bitrate_bps, audio_settings.frame_size_ms)
+            {
+                info!(
+                    "outbound audio clamped to server bandwidth limit {:?} bps: \
+                     {} bps @ {} ms (configured: {} bps @ {} ms)",
+                    max_bandwidth,
+                    bitrate_bps,
+                    frame_size_ms,
+                    audio_settings.bitrate_bps,
+                    audio_settings.frame_size_ms,
+                );
+            }
+            let frame_size_samples = AudioSettings::frame_ms_to_samples(frame_size_ms);
+
             let capture = PlatformAudioFactory::create_capture(
                 audio_settings.selected_device.as_deref(),
-                audio_settings.frame_size_samples(),
+                frame_size_samples,
                 input_vol.clone(),
             )?;
 
             let encoder_config = OpusEncoderConfig {
-                bitrate: audio_settings.bitrate_bps,
-                frame_size: audio_settings.frame_size_samples(),
+                bitrate: bitrate_bps,
+                frame_size: frame_size_samples,
                 ..OpusEncoderConfig::default()
             };
             let encoder = OpusEncoder::new(encoder_config, AudioFormat::MONO_48KHZ_F32)
@@ -874,6 +901,56 @@ mod voice_pipeline {
         }
     }
 
+    /// Clamp the configured encoder settings to the server's per-user
+    /// bandwidth budget (`ServerSync.max_bandwidth`), mirroring the
+    /// official client's `AudioInput::adjustBandwidth`.
+    ///
+    /// The budget covers the full network cost: Opus payload plus
+    /// per-packet IP/UDP/OCB2/header overhead.  Servers *silently drop*
+    /// voice packets from clients that exceed it (legacy servers default
+    /// to 72 kbit/s), so sending more only causes bursts of lost audio.
+    /// Keeps the configured packet duration when a reduced bitrate still
+    /// fits; otherwise falls back to longer packets to shrink the
+    /// per-packet overhead before giving up quality entirely.
+    fn adjust_to_server_bandwidth(
+        bitrate_bps: i32,
+        frame_size_ms: u32,
+        max_bandwidth: Option<u32>,
+    ) -> (i32, u32) {
+        /// Quality floor below which longer packets beat lower bitrate.
+        const MIN_BITRATE: i32 = 8_000;
+        /// Valid Opus packet durations in ms, shortest first.
+        const FRAME_STEPS: [u32; 4] = [10, 20, 40, 60];
+        /// Per-packet overhead: IP (20) + UDP (8) + OCB2 tag (4) +
+        /// audio header byte and sequence/length varints (~6).
+        const OVERHEAD_BYTES: i32 = 20 + 8 + 4 + 6;
+
+        let Some(max_bw) = max_bandwidth else {
+            return (bitrate_bps, frame_size_ms);
+        };
+        let max_bw = max_bw as i32;
+
+        let mut frame_ms = if FRAME_STEPS.contains(&frame_size_ms) {
+            frame_size_ms
+        } else {
+            20
+        };
+        loop {
+            let packets_per_sec = 1000_u32.div_ceil(frame_ms) as i32;
+            let allowed_bitrate = max_bw - packets_per_sec * OVERHEAD_BYTES * 8;
+            if bitrate_bps <= allowed_bitrate {
+                return (bitrate_bps, frame_ms);
+            }
+            if allowed_bitrate >= MIN_BITRATE {
+                return (allowed_bitrate, frame_ms);
+            }
+            match FRAME_STEPS.iter().find(|&&f| f > frame_ms) {
+                Some(&next) => frame_ms = next,
+                None => return (MIN_BITRATE, frame_ms),
+            }
+        }
+    }
+
     /// Build the full outbound filter chain used by the live voice
     /// pipeline.  Shared by `start_outbound_pipeline` and the voice
     /// replay task so users hear *exactly* what is sent over the wire,
@@ -929,6 +1006,49 @@ mod voice_pipeline {
     mod tests {
         use super::*;
         use mumble_protocol::audio::sample::AudioFormat;
+
+        #[test]
+        fn bandwidth_unknown_keeps_settings() {
+            assert_eq!(
+                adjust_to_server_bandwidth(128_000, 10, None),
+                (128_000, 10)
+            );
+        }
+
+        #[test]
+        fn bandwidth_generous_budget_keeps_settings() {
+            // Mumble 1.5+ default budget of 558 kbit/s fits everything.
+            assert_eq!(
+                adjust_to_server_bandwidth(128_000, 10, Some(558_000)),
+                (128_000, 10)
+            );
+        }
+
+        #[test]
+        fn bandwidth_legacy_default_clamps_bitrate() {
+            // Legacy 72 kbit/s budget at 10 ms packets: 100 packets/s
+            // of 38-byte overhead leaves 41.6 kbit/s for Opus.
+            let (bitrate, frame_ms) = adjust_to_server_bandwidth(128_000, 10, Some(72_000));
+            assert_eq!(frame_ms, 10, "frame size kept when clamped bitrate fits");
+            assert!(bitrate <= 41_600 && bitrate >= 8_000, "got {bitrate}");
+            // The result must actually fit the budget.
+            assert!(bitrate + 100 * 38 * 8 <= 72_000);
+        }
+
+        #[test]
+        fn bandwidth_tight_budget_grows_frame_size() {
+            // 16 kbit/s leaves no room at 10/20 ms, so packets get longer.
+            let (bitrate, frame_ms) = adjust_to_server_bandwidth(72_000, 10, Some(16_000));
+            assert!(frame_ms > 20, "expected longer packets, got {frame_ms} ms");
+            assert!(bitrate >= 8_000);
+        }
+
+        #[test]
+        fn bandwidth_absurd_budget_floors_at_min_bitrate() {
+            let (bitrate, frame_ms) = adjust_to_server_bandwidth(72_000, 20, Some(1_000));
+            assert_eq!(bitrate, 8_000);
+            assert_eq!(frame_ms, 60);
+        }
 
         #[test]
         #[ignore = "requires audio hardware - run with --ignored"]

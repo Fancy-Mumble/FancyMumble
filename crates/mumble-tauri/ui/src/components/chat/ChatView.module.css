@@ -716,6 +716,69 @@
   word-break: break-word;
 }
 
+/* --- Image gallery grid (multi-message galleries) --------------- */
+/* Each tile is a normal, individually-offloadable message; these rules lay a
+   run of same-group image messages out as one tiled grid. */
+.galleryGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  width: min(420px, 70vw);
+  max-width: 100%;
+  /* `visible` (not `hidden`) so a tile's hover action bar / reaction picker can
+     overflow the grid instead of being clipped. Tiles are rounded individually
+     below rather than clipped as one block. */
+  overflow: visible;
+}
+
+/* Lift the hovered tile so its floating action bar sits above its neighbours. */
+.galleryTileWrap:hover {
+  z-index: 5;
+}
+
+/* Odd total: the first image spans the full width so the rest tile evenly. */
+.galleryGridOdd > .galleryTileWrap:first-child,
+.galleryGridOdd > .galleryTilePlaceholder:first-child {
+  grid-column: 1 / -1;
+}
+
+.galleryTileWrap {
+  position: relative;
+  min-width: 0;
+}
+
+/* Suppress the message row's full-width hover hitbox inside the grid. */
+.galleryTileWrap::after {
+  content: none;
+}
+
+/* Make the message bubble chain fill its square grid cell. */
+.galleryTileWrap .messageRow {
+  width: 100%;
+  max-width: 100%;
+  align-items: stretch;
+}
+
+.galleryTileWrap .bubble {
+  width: 100%;
+  padding: 0;
+}
+
+/* Placeholder tiles for images still uploading - keep the grid from
+   reflowing as each image of the batch arrives. */
+.galleryTilePlaceholder,
+.skeletonTile {
+  aspect-ratio: 1;
+  width: 100%;
+  background: var(--color-glass-hover);
+  animation: galleryTileShimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes galleryTileShimmer {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.75; }
+}
+
 .pluginComponents {
   display: flex;
   flex-direction: column;
@@ -1544,20 +1607,34 @@
   padding: 4px 4px 4px 6px;
   background: var(--color-glass-border);
   border-radius: 6px;
-  max-width: 260px;
+  max-width: 300px;
 }
 
-.pendingAttachThumb {
+.pendingAttachThumb,
+.pendingAttachThumbBtn {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 4px;
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
   background: var(--color-bg-elevated, rgba(0, 0, 0, 0.3));
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   color: var(--color-text-secondary);
+}
+
+/* Clickable image thumbnail (resets <button> chrome). */
+.pendingAttachThumbBtn {
+  padding: 0;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+
+.pendingAttachThumbBtn:hover {
+  transform: scale(1.04);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
 
 .pendingAttachImg {
@@ -1630,6 +1707,40 @@
 .pendingAttachSend:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.pendingAttachActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Full-quality / Compressed segmented toggle for image galleries. */
+.pendingAttachQuality {
+  display: inline-flex;
+  border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.pendingAttachQualityBtn {
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.pendingAttachQualityBtn:hover {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+}
+
+.pendingAttachQualityActive {
+  background: var(--color-accent, rgba(100, 150, 255, 0.2));
+  color: var(--color-text-primary);
 }
 
 /* --- Drag-drop chat overlay (when dragging a file over chat) ----- */

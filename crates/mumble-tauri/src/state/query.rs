@@ -59,6 +59,15 @@ impl AppState {
             .and_then(|s| s.registered_user_textures.get(&user_id).cloned())
     }
 
+    /// Drop all cached registered-user avatar bytes.  Called when the last
+    /// frontend view consuming the user list closes; the next
+    /// `request_user_list` re-populates the cache.
+    pub fn release_registered_user_textures(&self) {
+        if let Ok(mut s) = self.inner.snapshot().lock() {
+            s.registered_user_textures = std::collections::HashMap::new();
+        }
+    }
+
     /// Like [`Self::user_texture`], but when the user HAS an avatar whose bytes
     /// are not yet loaded, lazily requests the blob from the server and waits
     /// (bounded) for it to arrive.  This is what lets the backend avoid holding

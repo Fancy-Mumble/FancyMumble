@@ -39,6 +39,17 @@ pub(crate) fn get_registered_user_texture(
     state.registered_user_texture(user_id)
 }
 
+/// Drop the cached registered-user avatar bytes.  Called by the frontend
+/// when the last view that consumes the user list closes: every
+/// `request_user_list` response re-populates the cache, so without this
+/// the avatars of all registered users stay in memory for the rest of
+/// the session.  Re-opening such a view re-requests the list, which
+/// re-populates the cache.
+#[tauri::command]
+pub(crate) fn release_registered_user_textures(state: tauri::State<'_, AppState>) {
+    state.release_registered_user_textures();
+}
+
 /// Return the comment/bio text for a single user.  Like `get_user_texture`,
 /// the bio is fetched (and held) only when first viewed rather than eagerly for
 /// every connected user.  The frontend calls this after `get_users` (which

@@ -32,7 +32,13 @@
     "kindImage": "Bild",
     "kindFile": "Datei",
     "remove": "Anhang entfernen",
-    "send": "Senden"
+    "send": "Senden",
+    "qualityLabel": "Bildqualität",
+    "qualityFull": "Volle Qualität",
+    "qualityFullHint": "Jedes Bild wird in voller Qualität als eigene Nachricht gesendet.",
+    "qualityCompressed": "Komprimiert",
+    "qualityCompressedHint": "Kleinere, leichtere Bilder senden, um Bandbreite zu sparen.",
+    "preview": "Zum Vergrößern klicken"
   },
   "header": {
     "directMessage": "Direktnachricht",
@@ -346,9 +352,14 @@
     "reconnect": {
       "titleDisconnected": "Getrennt",
       "titleLost": "Verbindung verloren",
+      "titleReconnecting": "Verbindung wird wiederhergestellt…",
+      "attemptCount": "Versuch {{n}}",
+      "sinceLastConnection": "Zuletzt verbunden vor {{time}}",
       "reasonLabel": "Grund",
       "reconnectingBtn": "Verbindung wird hergestellt...",
-      "reconnectBtn": "Erneut verbinden"
+      "nextRetry": "Nächster Versuch in {{time}}",
+      "reconnectBtn": "Erneut verbinden",
+      "reconnectNowBtn": "Jetzt verbinden"
     },
     "openChannelsAriaLabel": "Kanäle öffnen",
     "closeChannelsAriaLabel": "Kanäle schließen"

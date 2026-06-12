@@ -64,6 +64,7 @@ impl HandleMessage for mumble_tcp::UserRemove {
                 .ok()
                 .and_then(|s| s.users.get(&self.session).map(|u| u.name.clone()));
 
+            let mut was_talking = false;
             let deferred_share_events: Vec<(u32, Vec<PendingKeyShare>)> =
                 if let Ok(mut state) = ctx.shared.lock() {
                     // Look up the departing user's cert hash before removing them.
@@ -73,6 +74,20 @@ impl HandleMessage for mumble_tcp::UserRemove {
                         .and_then(|u| u.hash.clone());
 
                     let _ = state.users.remove(&self.session);
+
+                    // Free the departing user's audio state: decoder +
+                    // sample buffer (~100 KB per speaker) and the
+                    // per-session volume override.  Session IDs are
+                    // reused by the server, so a stale volume override
+                    // would otherwise apply to the next user assigned
+                    // this session.
+                    if let Some(ref mut mixer) = state.audio.mixer {
+                        mixer.remove_speaker(self.session);
+                    }
+                    if let Ok(mut volumes) = state.audio.speaker_volumes.lock() {
+                        let _ = volumes.remove(&self.session);
+                    }
+                    was_talking = state.audio.talking_sessions.remove(&self.session);
 
                     // Remove any pending key-share requests from the departing user.
                     if let Some(ref hash) = cert_hash {
@@ -95,6 +110,9 @@ impl HandleMessage for mumble_tcp::UserRemove {
                 };
 
             // Emit outside the lock to avoid deadlock with Tauri IPC.
+            if was_talking {
+                ctx.emit("user-talking", (self.session, false));
+            }
             for (ch_id, remaining) in deferred_share_events {
                 ctx.emit(
                     "pchat-key-share-requests-changed",

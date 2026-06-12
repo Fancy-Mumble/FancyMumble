@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import type { AclGroup, ChannelEntry, RegisteredUser, UserCommentPayload, UserEntry } from "../../types";
 import { useAclGroups } from "../../hooks/useAclGroups";
 import { useAppStore } from "../../store";
+import { acquireRegisteredTextures, releaseRegisteredTextures } from "../../registeredTextureLease";
 import {
   getCachedRegisteredUsers,
   saveCachedRegisteredUsers,
@@ -440,6 +441,7 @@ function MembersTabImpl({
     const unlistenPermDenied = listen("permission-denied", () => {
       flush();
     });
+    acquireRegisteredTextures();
     invoke("request_user_list").catch(() => {
       scheduleFlush();
     });
@@ -449,6 +451,7 @@ function MembersTabImpl({
       unlistenList.then((f) => f());
       unlistenComment.then((f) => f());
       unlistenPermDenied.then((f) => f());
+      releaseRegisteredTextures();
     };
   }, [serverKey]);
 

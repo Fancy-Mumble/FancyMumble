@@ -94,6 +94,11 @@ windows-sys = { version = "0.61", features = [
     "Win32_Graphics_Gdi",
     "Win32_System_Threading",
 ] }
+# WebView2 COM bindings for ICoreWebView2_19::SetMemoryUsageTargetLevel
+# (trim browser memory while minimized).  Versions must match the ones
+# tauri/wry pull in so the COM interface types are identical.
+webview2-com = "0.38"
+windows-core = "0.61"
 
 # macOS-only: NSWindow.setContentAspectRatio: for native aspect-ratio
 # constraints (see crates/mumble-tauri/src/platform/window/macos.rs).

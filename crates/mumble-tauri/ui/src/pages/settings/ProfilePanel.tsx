@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { lazy, Suspense, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { FancyProfile } from "../../types";
 import { updatePreferences } from "../../preferencesStorage";
@@ -8,7 +8,6 @@ import {
   EFFECTS,
   AVATAR_BORDERS,
 } from "./profileData";
-import { BioEditor } from "./BioEditor";
 import { NameStyleSection } from "./NameStyleSection";
 import { BannerEditorModal } from "./BannerEditorModal";
 import { AvatarEditorModal } from "./AvatarEditorModal";
@@ -16,6 +15,12 @@ import { CardColorPicker } from "../../components/elements/CardColorPicker";
 import styles from "./SettingsPage.module.css";
 import panelStyles from "./ProfilePanel.module.css";
 import { registerSettings } from "./settingsSearchRegistry";
+
+// Lazy like ChannelEditorDialog/ChannelInfoPanel: BioEditor (Tiptap) is also
+// dynamically imported there, and mixing static + dynamic imports of one
+// module makes rolldown emit a cyclic chunk that crashes at evaluation time
+// in release builds.  Keeping it lazy also keeps Tiptap out of this chunk.
+const BioEditor = lazy(() => import("./BioEditor").then((m) => ({ default: m.BioEditor })));
 
 registerSettings("profile")
   .add("profile.sectionUsername", ["name", "nickname"])
@@ -190,12 +195,14 @@ export function ProfilePanel({
         <p className={styles.fieldHint}>
           {t("profile.bioHint")}
         </p>
-        <BioEditor
-          value={bio}
-          onChange={onBioChange}
-          maxLength={2000}
-          placeholder={t("profile.bioPlaceholder")}
-        />
+        <Suspense fallback={null}>
+          <BioEditor
+            value={bio}
+            onChange={onBioChange}
+            maxLength={2000}
+            placeholder={t("profile.bioPlaceholder")}
+          />
+        </Suspense>
       </section>
 
       {/* -- Custom Status -------------------------------------- */}

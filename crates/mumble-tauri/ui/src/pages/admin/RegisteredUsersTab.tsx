@@ -2,6 +2,7 @@ import { SearchIcon } from "../../icons";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
+import { acquireRegisteredTextures, releaseRegisteredTextures } from "../../registeredTextureLease";
 import { listen } from "@tauri-apps/api/event";
 import { useNavigate } from "react-router-dom";
 import type { AclData, AclGroup, RegisteredUser, RegisteredUserUpdate, UserEntry } from "../../types";
@@ -117,10 +118,15 @@ export function RegisteredUsersTab() {
     };
   }, []);
 
-  // Request the user list on mount.
+  // Request the user list on mount; release the backend avatar cache on
+  // unmount (the response makes Rust cache every registered avatar).
   useEffect(() => {
     setLoading(true);
+    acquireRegisteredTextures();
     invoke("request_user_list").catch(() => setLoading(false));
+    return () => {
+      releaseRegisteredTextures();
+    };
   }, []);
 
   // Subscribe to root-channel ACL so we can show role chips per user.

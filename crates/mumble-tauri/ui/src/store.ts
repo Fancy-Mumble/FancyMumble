@@ -8,6 +8,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { reconnectDelayMs } from "./utils/reconnectBackoff";
 import {
   isPermissionGranted,
   requestPermission,
@@ -72,6 +73,7 @@ import {
   saveDmHistory,
 } from "./dmStorage";
 import { loadProfileData } from "./pages/settings/profileData";
+import { base64ToBytes } from "./utils/base64";
 import { serializeProfile, dataUrlToBytes } from "./profileFormat";
 import { sanitiseWsUrl } from "./components/chat/livedoc/sanitiseWsUrl";
 import { TauriEvent } from "./constants/tauriEvents";
@@ -168,7 +170,25 @@ interface ReactionFetchResponseEvent {
 /** Sessions that have already had their stored volume applied this connection. */
 const volumeAppliedSessions = new Set<number>();
 
-const AUTO_RECONNECT_DELAY_MS = 3000;
+/** Cached `autoReconnect` preference. The disconnect handler runs
+ *  synchronously and must decide whether to schedule a retry without an
+ *  async store read, so we mirror the persisted flag here and keep it in
+ *  sync via the `preferences-changed` event. */
+let autoReconnectEnabled = false;
+if (typeof window !== "undefined") {
+  void import("./preferencesStorage")
+    .then(({ getPreferences }) => getPreferences())
+    .then((p) => {
+      autoReconnectEnabled = p.autoReconnect ?? false;
+    })
+    .catch(() => {});
+  window.addEventListener("preferences-changed", (e) => {
+    const detail = (e as CustomEvent).detail as { autoReconnect?: boolean } | undefined;
+    if (detail && typeof detail.autoReconnect === "boolean") {
+      autoReconnectEnabled = detail.autoReconnect;
+    }
+  });
+}
 
 // File-server URL helpers moved to `store/fileServer.ts`; re-exported
 // below so callers continue to `import { rebaseFileServerUrl } from "./store"`.
@@ -191,39 +211,47 @@ function clearAutoReconnectTimer(): void {
     clearTimeout(autoReconnectTimer);
     autoReconnectTimer = null;
   }
+  useAppStore.setState({ reconnectScheduled: false, nextReconnectAt: null });
 }
 
 async function attemptAutoReconnect(
   fallbackTarget: { host: string; port: number; username: string; certLabel: string | null },
 ): Promise<void> {
-  if (manualDisconnectRequested) return;
-
-  const { getPreferences } = await import("./preferencesStorage");
-  const prefs = await getPreferences().catch(() => null);
-  if (!prefs?.autoReconnect) return;
+  autoReconnectTimer = null;
+  if (manualDisconnectRequested || !autoReconnectEnabled) {
+    useAppStore.setState({ reconnectScheduled: false, nextReconnectAt: null });
+    return;
+  }
 
   const state = useAppStore.getState();
-  if (state.status === "connected" || state.passwordRequired) return;
-
-  // A connect attempt is already in flight.  The backend can only re-bind the
-  // *same* tab when the prior session has settled to `Disconnected`; a session
-  // still `Connecting` is skipped by `take_reusable_for`, so starting a second
-  // connect now would allocate a fresh ServerId and spawn a duplicate tab on
-  // every retry (a TCP connect to an unreachable host outlives the 3s retry
-  // delay).  Wait for the in-flight attempt to resolve, then retry.
-  if (state.status === "connecting") {
-    scheduleAutoReconnect(fallbackTarget);
+  // Only start a fresh attempt from a settled `disconnected` state. If a
+  // connect is already in flight (`connecting`), or we are connected /
+  // blocked on a password, do nothing now: the connection result events
+  // (ServerConnected / server-disconnected) drive the next step. This keeps
+  // the loop event-driven and avoids racing the backend's own retry loop.
+  if (state.status !== "disconnected" || state.passwordRequired) {
     return;
   }
 
   const target = state.pendingConnect ?? fallbackTarget;
+  // Count this attempt and ensure the downtime clock is running (normally
+  // set by the disconnect handler, but guard for safety).
+  useAppStore.setState((p) => ({
+    reconnectAttempts: p.reconnectAttempts + 1,
+    connectionLostAt: p.connectionLostAt ?? Date.now(),
+  }));
   await state.connect(target.host, target.port, target.username, target.certLabel ?? null);
 
+  // `connect()` returns immediately while the backend connects in the
+  // background. On a synchronous failure it leaves status `disconnected`
+  // (no result event will arrive), so reschedule here; otherwise wait for
+  // the ServerConnected / server-disconnected event to drive the next step.
   const after = useAppStore.getState();
   if (
-    after.status !== "connected"
+    after.status === "disconnected"
     && !after.passwordRequired
     && !manualDisconnectRequested
+    && autoReconnectEnabled
   ) {
     scheduleAutoReconnect(target);
   }
@@ -233,9 +261,12 @@ function scheduleAutoReconnect(
   fallbackTarget: { host: string; port: number; username: string; certLabel: string | null },
 ): void {
   clearAutoReconnectTimer();
+  if (!autoReconnectEnabled || manualDisconnectRequested) return;
+  const delay = reconnectDelayMs(useAppStore.getState().reconnectAttempts);
+  useAppStore.setState({ reconnectScheduled: true, nextReconnectAt: Date.now() + delay });
   autoReconnectTimer = setTimeout(() => {
     void attemptAutoReconnect(fallbackTarget);
-  }, AUTO_RECONNECT_DELAY_MS);
+  }, delay);
 }
 
 /**
@@ -543,6 +574,20 @@ export interface AppState {
    *  loading bar stays visible until this clears, so the chat view is
    *  only revealed once it actually has data.  `null` when idle. */
   bootstrapStage: string | null;
+  /** Number of reconnect attempts made since the active session's
+   *  connection was lost. Reset to 0 once a connection is re-established. */
+  reconnectAttempts: number;
+  /** Epoch ms when the active session's connection was lost (and an
+   *  auto-reconnect sequence began), or `null` when connected / idle.
+   *  Drives the "time since last connection" counter in the reconnect view. */
+  connectionLostAt: number | null;
+  /** True while an auto-reconnect attempt is queued (waiting out the
+   *  backoff) or in flight. Keeps the reconnect view visible between
+   *  attempts instead of flashing the "Disconnected" card. */
+  reconnectScheduled: boolean;
+  /** Epoch ms when the next queued auto-reconnect attempt will fire, for
+   *  the "next retry in Ns" countdown, or `null` when none is queued. */
+  nextReconnectAt: number | null;
 
   // Actions
   connect: (host: string, port: number, username: string, certLabel?: string | null, password?: string | null) => Promise<void>;
@@ -879,6 +924,10 @@ const INITIAL: Pick<
   | "pendingConnect"
   | "connectedCertLabel"
   | "bootstrapStage"
+  | "reconnectAttempts"
+  | "connectionLostAt"
+  | "reconnectScheduled"
+  | "nextReconnectAt"
 > = {
   status: "disconnected",
   channels: [],
@@ -967,6 +1016,10 @@ const INITIAL: Pick<
   pendingConnect: null,
   connectedCertLabel: null,
   bootstrapStage: null,
+  reconnectAttempts: 0,
+  connectionLostAt: null,
+  reconnectScheduled: false,
+  nextReconnectAt: null,
 };
 
 // --- Store --------------------------------------------------------
@@ -2386,12 +2439,14 @@ function dispatchLiveDocAnnounce(p: LiveDocAnnounceEvent): void {
 
 // --- Generic plugin envelope helpers -------------------------------
 
-/** Raw `plugin-message` event payload emitted by the Tauri backend. */
+/** Raw `plugin-message` event payload emitted by the Tauri backend.
+ *  `payload` carries the plugin bytes as base64 (see PluginMessagePayload
+ *  in the Rust backend). */
 interface PluginMessageEvent {
   pluginName: string;
   pluginSlot: number | null;
   payloadType: string;
-  payload: number[];
+  payload: string;
   targetSessions: number[];
   channelId: number | null;
   senderSession: number | null;
@@ -2401,10 +2456,10 @@ interface PluginMessageEvent {
 // PluginRegistryEntry / PluginRegistryEvent moved to `store/plugins.ts`
 // (re-exported below so existing `import { PluginRegistryEntry } from "./store"` works).
 
-/** Decode a `plugin-message` byte array as a UTF-8 JSON object. */
-function decodePluginPayload<T>(bytes: number[]): T | null {
+/** Decode a base64 `plugin-message` payload as a UTF-8 JSON object. */
+function decodePluginPayload<T>(b64: string): T | null {
   try {
-    return JSON.parse(new TextDecoder().decode(new Uint8Array(bytes))) as T;
+    return JSON.parse(new TextDecoder().decode(base64ToBytes(b64))) as T;
   } catch (e) {
     console.error("[store] plugin-message payload is not valid JSON:", e);
     return null;
@@ -2677,10 +2732,13 @@ export async function requestLinkPreview(urls: string[], requestId: string): Pro
  * this same code to re-hydrate the store without a full reconnect.
  */
 function processPluginDataEvent(
-  payload: { sender_session: number | null; data: number[]; data_id: string },
+  payload: { sender_session: number | null; data: string; data_id: string },
 ): void {
   const { data_id, data, sender_session } = payload;
-  const bytes = new Uint8Array(data);
+  // `data` is base64: a number[] would inflate the IPC JSON (and the
+  // backend-side serde_json::Value) by more than an order of magnitude
+  // for multi-MB broadcasts like server emotes.
+  const bytes = base64ToBytes(data);
 
   if (data_id === PluginDataId.FileServerConfig) {
     try {
@@ -2865,7 +2923,7 @@ export async function initEventListeners(
       // same processing path so the store re-hydrates in place.
       try {
         const broadcasts = await invoke<
-          { sender_session: number | null; data: number[]; data_id: string }[]
+          { sender_session: number | null; data: string; data_id: string }[]
         >("get_plugin_broadcasts");
         for (const payload of broadcasts) {
           processPluginDataEvent(payload);
@@ -2954,6 +3012,11 @@ export async function initEventListeners(
         mutedPushChannels: mutedPush,
         userVolumes: storedVolumes,
         bootstrapStage: "Fetching channels and users...",
+        // Connection re-established: clear the reconnect counters/schedule.
+        reconnectAttempts: 0,
+        connectionLostAt: null,
+        reconnectScheduled: false,
+        nextReconnectAt: null,
       });
 
       // Signal the welcome-message modal that a server join just completed.
@@ -3182,7 +3245,24 @@ export async function initEventListeners(
         // If a password prompt is already pending, keep the rejection error
         // instead of overwriting it with a generic disconnect message.
         const reason = pwRequired ? currentError : (eventReason ?? currentError);
-        useAppStore.setState({ ...INITIAL, error: reason, passwordRequired: pwRequired, pendingConnect: pending });
+        // Will we auto-reconnect? Only when enabled and this wasn't a
+        // user-initiated disconnect or a password rejection.
+        const willReconnect =
+          !manualDisconnectRequested && !pwRequired && !!pending && autoReconnectEnabled;
+        // Preserve the downtime clock and attempt count across a reconnect
+        // *sequence* (multiple failures) so they accumulate rather than
+        // resetting on every failed attempt; a fresh loss starts the clock.
+        const prevReconnect = useAppStore.getState();
+        useAppStore.setState({
+          ...INITIAL,
+          error: reason,
+          passwordRequired: pwRequired,
+          pendingConnect: pending,
+          connectionLostAt: willReconnect
+            ? (prevReconnect.connectionLostAt ?? Date.now())
+            : null,
+          reconnectAttempts: willReconnect ? prevReconnect.reconnectAttempts : 0,
+        });
         invoke("update_badge_count", { count: null }).catch(() => {});
 
         const { sessions } = useAppStore.getState();
@@ -3192,7 +3272,7 @@ export async function initEventListeners(
           navigate("/chat");
         }
 
-        if (!manualDisconnectRequested && !pwRequired && pending) {
+        if (willReconnect) {
           scheduleAutoReconnect(pending);
         }
       },
@@ -3389,7 +3469,11 @@ export async function initEventListeners(
       useAppStore.setState({
         status: "disconnected",
         error: event.payload.reason,
-        pendingConnect: null,
+        // Keep `pendingConnect` so the auto-reconnect loop (driven by the
+        // matching `server-disconnected` event) still has a target and its
+        // attempt counter / backoff are not reset. A user-initiated
+        // disconnect suppresses reconnect via `manualDisconnectRequested`,
+        // and the next `connect()` overwrites this value.
         bootstrapStage: null,
       });
       // Stay on /chat when other tabs remain so the reconnect overlay
@@ -3505,7 +3589,7 @@ export async function initEventListeners(
   // Zustand store even across Vite HMR reloads and React StrictMode
   // double-mounts where the old handler-array dispatch could fail.
   unlisteners.push(
-    await listen<{ sender_session: number | null; data: number[]; data_id: string }>(
+    await listen<{ sender_session: number | null; data: string; data_id: string }>(
       TauriEvent.PluginData,
       (event) => processPluginDataEvent(event.payload),
     ),

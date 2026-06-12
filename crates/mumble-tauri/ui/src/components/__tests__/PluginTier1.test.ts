@@ -186,8 +186,9 @@ describe("slash line parser", () => {
 });
 
 describe("decodeInteractionResponse + applyInteractionResponse", () => {
-  function encode(obj: unknown): number[] {
-    return Array.from(new TextEncoder().encode(JSON.stringify(obj)));
+  /** Encode like the backend: plugin payload bytes arrive as base64. */
+  function encode(obj: unknown): string {
+    return btoa(JSON.stringify(obj));
   }
 
   it("ignores non-tier1 payload types", () => {

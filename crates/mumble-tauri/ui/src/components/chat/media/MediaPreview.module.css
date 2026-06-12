@@ -14,6 +14,76 @@
   gap: 6px;
 }
 
+/* --- Single-image gallery tile ---------------------------------- */
+/* One image rendered to fill a square gallery grid cell (the grid lives in
+   the message list; each tile is its own offloadable message). */
+.tileSingle {
+  width: 100%;
+}
+
+.tileSingle .thumbWrap {
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  display: block;
+  border: none;
+  border-radius: 0;
+}
+
+.tileSingle .thumb,
+.tileSingle .thumbPlaceholder {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  max-width: none;
+  max-height: none;
+  object-fit: cover;
+  border-radius: 0;
+  display: block;
+}
+
+/* --- Multi-image gallery (2+ media) ----------------------------- */
+/* A fixed-width tiled grid so the images form one rounded block that
+   aligns to the bubble side instead of wrapping/centering as loose
+   flex thumbnails. Overrides the flex `.mediaGrid*` display above. */
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  width: min(420px, 70vw);
+  max-width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Three images: the last one spans the full width as a wide banner. */
+.galleryCount3 .thumbWrap:last-child {
+  grid-column: 1 / -1;
+  aspect-ratio: 16 / 9;
+}
+
+/* In gallery mode tiles fill their grid cell uniformly (square), with no
+   per-tile border/radius since the grid container is the rounded frame. */
+.gallery .thumbWrap {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  aspect-ratio: 1;
+  border: none;
+  border-radius: 0;
+}
+
+.gallery .thumb,
+.gallery .thumbPlaceholder {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: cover;
+  border-radius: 0;
+}
+
 .thumbWrap {
   position: relative;
   cursor: pointer;

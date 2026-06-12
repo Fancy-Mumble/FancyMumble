@@ -17,15 +17,35 @@ import {
 } from "./settings/shortcutHelpers";
 import ChannelSidebar from "../components/sidebar/channel/ChannelSidebar";
 import ChatView from "../components/chat/ChatView";
+// MobileBottomSheet must be imported statically: MobileProfileSheet and
+// ServerEditSheet already import it statically, and a module that is BOTH
+// statically and dynamically imported makes rolldown emit it as a separate
+// chunk that the entry chunk imports cyclically - the chunk then evaluates
+// before the entry's CommonJS interop is initialised and the whole bundle
+// dies with "TypeError: <minified> is not a function" (blank window in
+// release builds; dev mode is unaffected because it doesn't chunk).
+// The component is ~2 kB minified, so there is nothing to win by splitting.
+import MobileBottomSheet from "../components/elements/MobileBottomSheet";
 import PasswordDialog from "../components/server/PasswordDialog";
 import { SuperSearch } from "../components/layout/SuperSearch";
 import styles from "./ChatPage.module.css";
+
+/** Format a millisecond duration as a compact "1h 02m 05s" / "2m 05s" / "12s". */
+function formatElapsed(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  if (h > 0) return `${h}h ${pad(m)}m ${pad(s)}s`;
+  if (m > 0) return `${m}m ${pad(s)}s`;
+  return `${s}s`;
+}
 
 const ServerInfoPanel = lazy(() => import("../components/server/ServerInfoPanel"));
 const ChannelInfoPanel = lazy(() => import("../components/sidebar/channel/ChannelInfoPanel"));
 const UserProfileView = lazy(() => import("../components/user/UserProfileView"));
 const MobileProfileSheet = lazy(() => import("../components/user/MobileProfileSheet"));
-const MobileBottomSheet = lazy(() => import("../components/elements/MobileBottomSheet"));
 
 export default function ChatPage() {
   const { t } = useTranslation("chat");
@@ -39,16 +59,39 @@ export default function ChatPage() {
   const sessions = useAppStore((s) => s.sessions);
   const activeServerId = useAppStore((s) => s.activeServerId);
   const error = useAppStore((s) => s.error);
+  const bootstrapStage = useAppStore((s) => s.bootstrapStage);
+  const reconnectAttempts = useAppStore((s) => s.reconnectAttempts);
+  const connectionLostAt = useAppStore((s) => s.connectionLostAt);
+  const reconnectScheduled = useAppStore((s) => s.reconnectScheduled);
+  const nextReconnectAt = useAppStore((s) => s.nextReconnectAt);
   const passwordRequired = useAppStore((s) => s.passwordRequired);
   const pendingConnect = useAppStore((s) => s.pendingConnect);
   const dismissPasswordPrompt = useAppStore((s) => s.dismissPasswordPrompt);
   const connect = useAppStore((s) => s.connect);
-  const refreshSessions = useAppStore((s) => s.refreshSessions);
   const navigate = useNavigate();
 
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [shortcuts, setShortcuts] = useState<ShortcutBindings>(DEFAULT_SHORTCUTS);
   const [superSearchOpen, setSuperSearchOpen] = useState(false);
+
+  // Whether a connection attempt is actively running right now.
+  const activelyConnecting =
+    status === "connecting" || bootstrapStage !== null || isReconnecting;
+  // Whether the active session is mid-(re)connect - actively connecting OR
+  // waiting out the backoff before the next auto-reconnect attempt. Drives
+  // the reconnect overlay so it stays visible between attempts instead of
+  // flashing the "Disconnected" card.
+  const reconnecting = activelyConnecting || reconnectScheduled;
+
+  // Tick once a second while reconnecting so the "time since last
+  // connection" counter stays live without re-rendering the chat.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!reconnecting || connectionLostAt === null) return;
+    setNowTick(Date.now());
+    const id = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [reconnecting, connectionLostAt]);
 
   const { handleSubmit: handlePasswordSubmit, handleChangeUsername, showSaveOption } =
     usePasswordPrompt();
@@ -245,39 +288,112 @@ export default function ChatPage() {
     if (!meta) return;
     setIsReconnecting(true);
     try {
-      // Remove the dead session first so reconnect creates a fresh one.
-      await invoke("disconnect_server", { serverId: meta.id });
-      await refreshSessions();
+      // Count this manual attempt alongside the auto-reconnect attempts.
+      useAppStore.setState((p) => ({
+        reconnectAttempts: p.reconnectAttempts + 1,
+        connectionLostAt: p.connectionLostAt ?? Date.now(),
+      }));
+      // Reconnect through the existing Disconnected session so the backend
+      // re-binds the *same* tab (take_reusable_for) and keeps it in the
+      // foreground. Removing the session first (disconnect_server) would
+      // leave no reusable slot, forcing a brand-new ServerId and a
+      // background tab.
       await connect(meta.host, meta.port, meta.username, meta.certLabel);
     } finally {
       setIsReconnecting(false);
     }
-  }, [sessions, activeServerId, connect, refreshSessions]);
+  }, [sessions, activeServerId, connect]);
 
-  if (status === "disconnected" && sessions.length > 0) {
+  // Show the reconnect / connecting overlay whenever the active session is
+  // not fully bootstrapped (still connecting, or `connected` but its channel
+  // list has not arrived yet - the backend flips to `connected` before the
+  // ServerSync completes). Rendering the chat in that window shows an empty
+  // channel viewer and a "select a channel" placeholder, which looks broken.
+  // `bootstrapStage` mirrors the ConnectPage gate so we stay on the overlay
+  // until the very same point ConnectPage would hand off to the chat.
+  const notReady = status !== "connected" || bootstrapStage !== null;
+  if (notReady && sessions.length > 0) {
     const meta = sessions.find((s) => s.id === activeServerId);
     const serverLabel = meta?.label || meta?.host || "Server";
-    const title = error ? t("page.reconnect.titleDisconnected") : t("page.reconnect.titleLost");
+    const title = reconnecting
+      ? t("page.reconnect.titleReconnecting")
+      : error
+        ? t("page.reconnect.titleDisconnected")
+        : t("page.reconnect.titleLost");
+    const elapsed =
+      connectionLostAt !== null ? formatElapsed(nowTick - connectionLostAt) : null;
+    // Seconds until the next queued auto-reconnect attempt (backoff window).
+    const nextRetrySec =
+      !activelyConnecting && reconnectScheduled && nextReconnectAt !== null
+        ? Math.max(0, Math.ceil((nextReconnectAt - nowTick) / 1000))
+        : null;
     return (
       <div className={styles.reconnectPage}>
         <div className={styles.reconnectCard}>
-          <div className={styles.reconnectIcon}>!</div>
+          {reconnecting ? (
+            <div className={styles.reconnectSpinner} aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+          ) : (
+            <div className={styles.reconnectIcon}>!</div>
+          )}
           <h2 className={styles.reconnectTitle}>{title}</h2>
           <p className={styles.reconnectServer}>{serverLabel}</p>
-          {error && (
-            <div className={styles.reconnectReasonBox}>
-              <span className={styles.reconnectReasonLabel}>{t("page.reconnect.reasonLabel")}</span>
-              <p className={styles.reconnectError}>{error}</p>
-            </div>
+          {reconnecting ? (
+            <>
+              <p className={styles.reconnectStatus}>
+                {activelyConnecting
+                  ? (bootstrapStage ?? t("page.reconnect.reconnectingBtn"))
+                  : nextRetrySec !== null
+                    ? t("page.reconnect.nextRetry", {
+                        time: formatElapsed(nextRetrySec * 1000),
+                      })
+                    : t("page.reconnect.reconnectingBtn")}
+              </p>
+              <div className={styles.reconnectStats}>
+                {reconnectAttempts > 0 && (
+                  <span className={styles.reconnectStat}>
+                    {t("page.reconnect.attemptCount", { n: reconnectAttempts })}
+                  </span>
+                )}
+                {elapsed !== null && (
+                  <span className={styles.reconnectStat}>
+                    {t("page.reconnect.sinceLastConnection", { time: elapsed })}
+                  </span>
+                )}
+              </div>
+              {/* During the backoff wait, let the user skip ahead. */}
+              {!activelyConnecting && (
+                <button
+                  type="button"
+                  className={styles.reconnectBtn}
+                  onClick={() => void handleReconnect()}
+                  disabled={isReconnecting}
+                >
+                  {t("page.reconnect.reconnectNowBtn")}
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              {error && (
+                <div className={styles.reconnectReasonBox}>
+                  <span className={styles.reconnectReasonLabel}>{t("page.reconnect.reasonLabel")}</span>
+                  <p className={styles.reconnectError}>{error}</p>
+                </div>
+              )}
+              <button
+                type="button"
+                className={styles.reconnectBtn}
+                onClick={() => void handleReconnect()}
+                disabled={isReconnecting}
+              >
+                {t("page.reconnect.reconnectBtn")}
+              </button>
+            </>
           )}
-          <button
-            type="button"
-            className={styles.reconnectBtn}
-            onClick={() => void handleReconnect()}
-            disabled={isReconnecting}
-          >
-            {isReconnecting ? t("page.reconnect.reconnectingBtn") : t("page.reconnect.reconnectBtn")}
-          </button>
         </div>
         <PasswordDialog
           open={passwordRequired}

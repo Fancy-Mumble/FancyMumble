@@ -26,6 +26,7 @@ import {
   type PendingTrustPrompt,
   type TrustRecord,
 } from "./trust";
+import { base64ToBytes } from "../../utils/base64";
 
 /** An active plugin-rendered message card.  Created when a plugin
  *  sends a `Message` InteractionResponse; dismissed when the user
@@ -438,17 +439,17 @@ export async function sendInteraction(
   return correlationId;
 }
 
-/** Decode an inbound `plugin-message` payload as an
- *  `InteractionResponse`.  Returns null when the bytes do not look
- *  like a Tier-1 response envelope. */
+/** Decode an inbound `plugin-message` payload (base64-encoded bytes)
+ *  as an `InteractionResponse`.  Returns null when the bytes do not
+ *  look like a Tier-1 response envelope. */
 export function decodeInteractionResponse(
   payloadType: string,
-  payload: number[],
+  payload: string,
 ): InteractionResponse | null {
   if (payloadType !== INTERACTION_RESPONSE_PAYLOAD_TYPE) return null;
   try {
     const parsed = JSON.parse(
-      new TextDecoder().decode(new Uint8Array(payload)),
+      new TextDecoder().decode(base64ToBytes(payload)),
     ) as InteractionResponse;
     return normaliseInboundResponse(parsed);
   } catch (e) {

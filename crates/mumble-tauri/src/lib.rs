@@ -44,21 +44,14 @@ use mimalloc as _;
 
 mod audio;
 pub(crate) mod commands;
+pub(crate) mod logging;
 pub mod platform;
 mod state;
 #[cfg(not(target_os = "android"))]
 mod updater;
 
 use state::AppState;
-use std::sync::OnceLock;
 use tauri::Manager;
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::prelude::*;
-use tracing_subscriber::reload;
-
-/// Global handle for reloading the tracing filter at runtime.
-pub(crate) static LOG_RELOAD_HANDLE: OnceLock<reload::Handle<EnvFilter, tracing_subscriber::Registry>> =
-    OnceLock::new();
 
 /// Manages the Vite dev server when the app is run via plain `cargo run`.
 ///
@@ -156,6 +149,89 @@ mod dev_server {
 /// Entry point for the Tauri application.
 ///
 /// Initialises the TLS crypto provider, sets up logging, registers all
+/// Window-event hook: trim `WebView2` memory while the main window is
+/// minimized; restore normal behaviour when it is shown/focused again.
+#[cfg(target_os = "windows")]
+fn update_webview_memory_target(window: &tauri::Window, event: &tauri::WindowEvent) {
+    if window.label() != updater::MAIN_WINDOW_LABEL {
+        return;
+    }
+    match event {
+        tauri::WindowEvent::Resized(_) => {
+            let minimized = window.is_minimized().unwrap_or(false);
+            set_webview_memory_target(window, minimized);
+        }
+        tauri::WindowEvent::Focused(true) => {
+            set_webview_memory_target(window, false);
+        }
+        _ => {}
+    }
+}
+
+/// Ask `WebView2` to trim its memory usage while the main window is
+/// minimized (`low = true`) and return to normal when shown again.
+///
+/// The browser process tree dwarfs the Rust backend's heap, and by
+/// default it holds its working set while the app idles minimized or in
+/// the tray.  `COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW` makes the
+/// renderer release caches and unused pages back to the OS.
+#[cfg(target_os = "windows")]
+#[allow(unsafe_code, reason = "WebView2 COM calls on the controller's own event-loop thread, as required by the API")]
+fn set_webview_memory_target(window: &tauri::Window, low: bool) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    // `Resized` fires for every step of an interactive resize; only
+    // forward actual level changes to the COM layer.
+    static MEMORY_TARGET_LOW: AtomicBool = AtomicBool::new(false);
+    if MEMORY_TARGET_LOW.swap(low, Ordering::Relaxed) == low {
+        return;
+    }
+
+    let Some(webview) = window
+        .app_handle()
+        .get_webview_window(updater::MAIN_WINDOW_LABEL)
+    else {
+        return;
+    };
+    let result = webview.with_webview(move |platform_webview| {
+        use webview2_com::Microsoft::Web::WebView2::Win32::{
+            ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+        };
+        use windows_core::Interface;
+
+        let level = if low {
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
+        } else {
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
+        };
+        // SAFETY: the closure runs on the event-loop thread that owns the
+        // controller, which is the thread WebView2 COM objects require.
+        unsafe {
+            let webview2 = match platform_webview.controller().CoreWebView2() {
+                Ok(wv) => wv,
+                Err(e) => {
+                    tracing::debug!("CoreWebView2 unavailable for memory target: {e}");
+                    return;
+                }
+            };
+            // Requires WebView2 runtime >= 114 (ICoreWebView2_19); older
+            // runtimes simply keep default memory behaviour.
+            let Ok(webview19) = webview2.cast::<ICoreWebView2_19>() else {
+                return;
+            };
+            if let Err(e) = webview19.SetMemoryUsageTargetLevel(level) {
+                tracing::debug!("SetMemoryUsageTargetLevel failed: {e}");
+            } else {
+                tracing::debug!(low, "webview memory usage target updated");
+            }
+        }
+    });
+    if let Err(e) = result {
+        tracing::debug!("with_webview failed for memory target: {e}");
+    }
+}
+
 /// Tauri commands, and starts the application event loop.
 #[allow(clippy::expect_used, reason = "Tauri builder failure during startup is unrecoverable")]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -177,7 +253,7 @@ pub fn run() {
     }
 
     platform::init();
-    init_logging();
+    logging::init();
     platform::check_dependencies();
 
     // When run via plain `cargo run` (not `cargo tauri dev`), start the Vite
@@ -217,6 +293,8 @@ pub fn run() {
                     }
                 }
             }
+            #[cfg(target_os = "windows")]
+            update_webview_memory_target(window, event);
             #[cfg(not(target_os = "android"))]
             if matches!(event, tauri::WindowEvent::Destroyed)
                 && window.label() == updater::UPDATER_WINDOW_LABEL
@@ -313,17 +391,6 @@ fn set_env_if_unset(key: &str, value: &str) {
     }
 }
 
-fn init_logging() {
-    let default_filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into());
-    let filter = EnvFilter::try_new(&default_filter).unwrap_or_else(|_| EnvFilter::new("info"));
-    let (filter_layer, reload_handle) = reload::Layer::new(filter);
-    tracing_subscriber::registry()
-        .with(filter_layer)
-        .with(tracing_subscriber::fmt::layer())
-        .init();
-    let _ = LOG_RELOAD_HANDLE.set(reload_handle);
-}
-
 fn init_app_state(app: &mut tauri::App) {
     let state = app.state::<AppState>();
     state.set_app_handle(app.handle().clone());
@@ -343,6 +410,13 @@ fn init_app_state(app: &mut tauri::App) {
 /// audio (wrong VAD threshold, wrong device, wrong denoiser, etc.) for
 /// the first call after launch.
 fn hydrate_persisted_prefs(app: &tauri::AppHandle, state: &AppState) {
+    // Record the log directory now that the app handle exists, so the
+    // developer log tooling (file logging, export, "view folder") has a
+    // target even before the user touches a setting.
+    if let Ok(log_dir) = app.path().app_log_dir() {
+        logging::set_log_dir(log_dir);
+    }
+
     let Ok(config_dir) = app.path().app_config_dir() else {
         return;
     };
@@ -399,11 +473,23 @@ fn hydrate_persisted_prefs(app: &tauri::AppHandle, state: &AppState) {
                 .map(|b| if b { "debug".to_string() } else { "info".to_string() })
         });
     if let Some(level) = log_level {
-        if let Some(handle) = LOG_RELOAD_HANDLE.get() {
-            if let Ok(filter) = EnvFilter::try_new(&level) {
-                let _ = handle.reload(filter);
-                tracing::info!("hydrate_persisted_prefs: log level = {level}");
-            }
+        if logging::set_log_level(&level).is_ok() {
+            tracing::info!("hydrate_persisted_prefs: log level = {level}");
+        }
+    }
+
+    // Developer log tooling settings. Apply terminal/auto-zip flags
+    // before enabling file logging so the first rotation honours them.
+    let bool_pref = |key: &str| prefs.get(key).and_then(serde_json::Value::as_bool);
+    if let Some(terminal) = bool_pref("terminalLogging") {
+        logging::set_terminal_logging(terminal);
+    }
+    if let Some(auto_zip) = bool_pref("autoZipLogs") {
+        logging::set_auto_zip(auto_zip);
+    }
+    if bool_pref("logToFile").unwrap_or(false) {
+        if let Err(e) = logging::set_file_logging(true) {
+            tracing::warn!("hydrate_persisted_prefs: enable file logging failed: {e}");
         }
     }
 }
@@ -531,6 +617,7 @@ macro_rules! all_command_handlers {
             commands::channels::get_users,
             commands::channels::get_user_texture,
             commands::channels::get_registered_user_texture,
+            commands::channels::release_registered_user_textures,
             commands::channels::get_user_comment,
             commands::channels::get_channel_description,
             commands::messaging::get_messages,
@@ -631,6 +718,11 @@ macro_rules! all_command_handlers {
             commands::dm::mark_dm_read,
             commands::system::reset_app_data,
             commands::system::set_log_level,
+            commands::system::set_log_to_file,
+            commands::system::set_terminal_logging,
+            commands::system::set_auto_zip_logs,
+            commands::system::get_log_directory,
+            commands::system::export_logs,
             commands::system::set_notifications_enabled,
             commands::system::set_disable_dual_path,
             commands::system::update_badge_count,

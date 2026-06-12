@@ -12,6 +12,13 @@ interface UseMessageSelectionOptions {
   channel: ChannelEntry | undefined;
   messagesContainerRef: React.RefObject<HTMLDivElement | null>;
   setPendingQuotes: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  /**
+   * Grows the chat render window so the given message mounts (the list
+   * only renders a tail-anchored window of the thread).  The target
+   * element appears one render later, hence the retry loop in
+   * `handleScrollToMessage`.
+   */
+  ensureMessageRendered?: (messageId: string) => void;
 }
 
 export function useMessageSelection({
@@ -20,6 +27,7 @@ export function useMessageSelection({
   channel,
   messagesContainerRef,
   setPendingQuotes,
+  ensureMessageRendered,
 }: UseMessageSelectionOptions) {
   const deletePchatMessages = useAppStore((s) => s.deletePchatMessages);
 
@@ -157,14 +165,27 @@ export function useMessageSelection({
   const handleScrollToMessage = useCallback((messageId: string) => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    const el = container.querySelector<HTMLElement>(
-      `[data-msg-id="${CSS.escape(messageId)}"]`,
-    );
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-    el.classList.add(styles.quoteHighlight);
-    setTimeout(() => el.classList.remove(styles.quoteHighlight), 1500);
-  }, [messagesContainerRef]);
+    // The target may be outside the tail-anchored render window; grow
+    // the window and retry over the next frames until the row mounts.
+    ensureMessageRendered?.(messageId);
+    let attempts = 0;
+    const tryScroll = () => {
+      const el = container.querySelector<HTMLElement>(
+        `[data-msg-id="${CSS.escape(messageId)}"]`,
+      );
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add(styles.quoteHighlight);
+        setTimeout(() => el.classList.remove(styles.quoteHighlight), 1500);
+        return;
+      }
+      if (attempts < 5) {
+        attempts += 1;
+        requestAnimationFrame(tryScroll);
+      }
+    };
+    tryScroll();
+  }, [messagesContainerRef, ensureMessageRendered]);
 
   /** Remove a pending quote by message ID. */
   const removePendingQuote = useCallback((msgId: string) => {

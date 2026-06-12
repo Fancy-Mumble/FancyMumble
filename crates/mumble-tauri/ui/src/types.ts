@@ -604,6 +604,19 @@ export interface UserPreferences {
   debugLogging?: boolean;
   /** Backend log level. One of: error, warn, info, debug, trace. */
   logLevel?: string;
+  /** Write logs to a date-stamped file in the OS log directory. */
+  logToFile?: boolean;
+  /** Enable stdout/terminal logging in release builds (always on in dev). */
+  terminalLogging?: boolean;
+  /** Auto-compress (zstd) log files older than a day when file logging is on. */
+  autoZipLogs?: boolean;
+  /** Fingerprint of the audio input settings the last voice-activation
+   *  calibration was performed under. The "calibration needed" hint is shown
+   *  only when this is absent or differs from the current settings.
+   *  `null` = never calibrated. */
+  calibrationSignature?: string | null;
+  /** User's preferred ordering of the server tabs (by server id). */
+  serverTabOrder?: ServerId[];
   /** Collapsed/expanded state of sidebar sections. */
   sidebarSections?: SidebarSections;
   /** When true, the channel viewer hides channels that have no members. */

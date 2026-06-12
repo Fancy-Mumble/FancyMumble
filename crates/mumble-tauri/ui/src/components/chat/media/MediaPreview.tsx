@@ -53,6 +53,9 @@ interface Props {
   messageTimestamp?: number | null;
   /** When provided, thumbnail clicks call this instead of opening the internal lightbox. */
   onOpenLightbox?: (src: string) => void;
+  /** When true, render the media as a uniform square tile that fills its grid
+   *  cell (used for image-gallery tiles in the message list). */
+  tile?: boolean;
 }
 
 // --- Global GIF-played tracker ------------------------------------
@@ -513,7 +516,7 @@ export function MediaLightbox({
 
 // --- Main component -----------------------------------------------
 
-export default function MediaPreview({ html, messageId, compact = false, timestamp, timeFormat = "auto", convertToLocalTime = true, systemUses24h, senderName, messageTimestamp, onOpenLightbox }: Readonly<Props>): ReactNode {
+export default function MediaPreview({ html, messageId, compact = false, timestamp, timeFormat = "auto", convertToLocalTime = true, systemUses24h, senderName, messageTimestamp, onOpenLightbox, tile = false }: Readonly<Props>): ReactNode {
   // Memoised: extractMedia parses + sanitises the HTML, so re-running it on
   // every render (e.g. hover/timestamp state changes) wasted CPU per message.
   const { cleaned, media } = useMemo(() => extractMedia(html), [html]);
@@ -547,11 +550,21 @@ export default function MediaPreview({ html, messageId, compact = false, timesta
         </ExternalLinkGuard>
       )}
 
-      {/* Media thumbnails */}
+      {/* Media thumbnails. Two or more become a tiled gallery grid. */}
       {media.length > 0 && (
-        <div className={compact ? styles.mediaGridCompact : styles.mediaGrid}>
+        <div
+          className={[
+            compact ? styles.mediaGridCompact : styles.mediaGrid,
+            tile ? styles.tileSingle : "",
+            !tile && media.length >= 2 ? styles.gallery : "",
+            !tile && media.length === 3 ? styles.galleryCount3 : "",
+          ].filter(Boolean).join(" ")}
+        >
           {media.map((item, i) => {
             const key = `${messageId}-${i}`;
+            // Show the timestamp chip only once per message: on the last tile
+            // of a gallery (or the sole tile of a single-media message).
+            const itemTimeLabel = i === media.length - 1 ? timeLabel : undefined;
             switch (item.kind) {
               case "gif":
                 return (
@@ -559,7 +572,7 @@ export default function MediaPreview({ html, messageId, compact = false, timesta
                     key={key}
                     item={item}
                     id={key}
-                    timeLabel={timeLabel}
+                    timeLabel={itemTimeLabel}
                   />
                 );
               case "image":
@@ -568,7 +581,7 @@ export default function MediaPreview({ html, messageId, compact = false, timesta
                     key={key}
                     item={item}
                     onOpen={() => openLightbox(i)}
-                    timeLabel={timeLabel}
+                    timeLabel={itemTimeLabel}
                   />
                 );
               case "video":
@@ -577,7 +590,7 @@ export default function MediaPreview({ html, messageId, compact = false, timesta
                     key={key}
                     item={item}
                     onOpen={() => openLightbox(i)}
-                    timeLabel={timeLabel}
+                    timeLabel={itemTimeLabel}
                   />
                 );
             }

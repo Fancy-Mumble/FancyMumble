@@ -453,8 +453,24 @@ pub(crate) struct PluginRegistryEntryPayload {
 #[derive(Clone, Serialize)]
 pub(crate) struct PluginDataPayload {
     pub sender_session: Option<u32>,
+    /// Raw payload bytes, serialized as a base64 string.  A plain
+    /// `Vec<u8>` would serialize as a JSON array of numbers, which
+    /// serde_json represents at ~32 heap bytes per payload byte - a
+    /// 1.6 MB server-emotes broadcast measured 51 MB as a `Value` plus
+    /// ~19 MB more in the Tauri event script.  Base64 keeps it at
+    /// ~1.3x the byte size end to end.
+    #[serde(serialize_with = "serialize_bytes_base64")]
     pub data: Vec<u8>,
     pub data_id: String,
+}
+
+/// Serialize a byte slice as a base64 string (see [`PluginDataPayload::data`]).
+pub(crate) fn serialize_bytes_base64<S: Serializer>(
+    bytes: &[u8],
+    ser: S,
+) -> Result<S::Ok, S::Error> {
+    use base64::Engine as _;
+    ser.serialize_str(&base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
 #[derive(Clone, Serialize)]
@@ -1049,11 +1065,10 @@ impl AudioSettings {
         1.0
     }
 
-    /// Convert `frame_size_ms` to samples-per-channel at 48 kHz.
-    ///
-    /// Clamps to valid Opus frame sizes (10, 20, 40, 60 ms).
-    pub fn frame_size_samples(&self) -> usize {
-        match self.frame_size_ms {
+    /// Convert an Opus packet duration in ms to samples-per-channel at
+    /// 48 kHz.  Clamps to valid Opus frame sizes (10, 20, 40, 60 ms).
+    pub fn frame_ms_to_samples(frame_size_ms: u32) -> usize {
+        match frame_size_ms {
             10 => 480,
             40 => 1920,
             60 => 2880,

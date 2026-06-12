@@ -37,6 +37,7 @@ import type { PendingAttachment } from "./pending/PendingAttachmentsStrip";
 import { useDragDropAttachments } from "./useDragDropAttachments";
 import MentionPopover from "./mention/MentionPopover";
 import { useChatSend } from "./useChatSend";
+import type { GalleryQuality } from "../../utils/media";
 import { useChatScroll } from "./useChatScroll";
 import { useMessageSelection } from "./message/useMessageSelection";
 import { useReadReceipts } from "./readreceipt/useReadReceipts";
@@ -332,6 +333,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   const {
     messagesContainerRef, bottomSentinelRef, messagesInnerRef,
     newMsgCount, lastReadIdx, restoringKeys, handleScrollToBottom,
+    visibleMessages, windowStart, ensureMessageRendered,
   } = useChatScroll({ allMessages, selectedChannel, selectedDmUser, currentScope });
 
   const lightboxRef = useRef<LightboxHandle>(null);
@@ -441,6 +443,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   } = useMessageSelection({
     selectedChannel, selectedDmUser,
     channel, messagesContainerRef, setPendingQuotes,
+    ensureMessageRendered,
   });
 
   // Scroll to and highlight a message when navigating from search results.
@@ -450,6 +453,9 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     const tryScroll = () => {
       const container = messagesContainerRef.current;
       if (!container) return;
+      // Grow the render window to cover the target; it mounts on the
+      // next render, which a retry below picks up.
+      ensureMessageRendered(scrollToMessageId);
       const el = container.querySelector<HTMLElement>(
         `[data-msg-id="${CSS.escape(scrollToMessageId)}"]`,
       );
@@ -466,9 +472,19 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       }
     };
     requestAnimationFrame(tryScroll);
-  }, [scrollToMessageId, messages, handleScrollToMessage, messagesContainerRef, onScrollConsumed]);
+  }, [scrollToMessageId, messages, handleScrollToMessage, messagesContainerRef, onScrollConsumed, ensureMessageRendered]);
 
-  const { sending, handleSend, sendMediaFile, handlePaste, handleGifSelect } = useChatSend({
+  // Forwards staged images (from paste/clipboard) into the drag-drop
+  // attachment tray. A ref breaks the init-order cycle: useChatSend is created
+  // before useDragDropAttachments, which owns `addFromFile`.
+  const stageImageRef = useRef<(file: File) => void>(() => {});
+  const stageImage = useCallback((file: File) => stageImageRef.current(file), []);
+
+  // Image-message quality: "full" caps the count and warns; "compressed"
+  // shrinks every image so the whole gallery fits the server's size limit.
+  const [galleryQuality, setGalleryQuality] = useState<GalleryQuality>("compressed");
+
+  const { sending, handleSend, sendMediaGallery, handlePaste, handleGifSelect } = useChatSend({
     pendingQuotes,
     clearQuotes: () => setPendingQuotes([]),
     draft,
@@ -476,6 +492,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     editingMessage,
     onEditComplete: cancelEdit,
     showToast,
+    stageImage,
   });
 
   const fileServerConfig = useAppStore((s) => s.fileServerConfig);
@@ -797,6 +814,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     attachments: pendingAttachments,
     setAttachments: setPendingAttachments,
     dragTarget,
+    addFromFile,
     removeAttachment,
   } = useDragDropAttachments({
     enabled: canDropAttachments,
@@ -804,50 +822,73 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     onLiveDocFiles: handleLiveDocFiles,
   });
 
+  // Wire the paste/clipboard staging callback to the attachment tray now that
+  // `addFromFile` exists (see `stageImageRef` above).
+  useEffect(() => {
+    stageImageRef.current = addFromFile;
+  }, [addFromFile]);
+
   useEffect(() => {
     useLiveDocDropStore.getState().setDragOver(dragTarget === "livedoc");
   }, [dragTarget]);
 
-  const sendPendingAttachments = useCallback(async () => {
-    if (pendingAttachments.length === 0) return;
+  // Send all staged attachments. Images go out as ONE gallery message,
+  // captioned by the current draft (unified across paste/drop/file-picker).
+  // Returns true when the draft was consumed as the caption so the caller
+  // skips the separate text send.
+  const sendPendingAttachments = useCallback(async (): Promise<boolean> => {
+    if (pendingAttachments.length === 0) return false;
     const remaining = [...pendingAttachments];
+    const images = remaining.filter((a) => a.isImage);
+    const files = remaining.filter((a) => !a.isImage);
     setPendingAttachments([]);
-    for (const att of remaining) {
-      if (att.isImage) {
-        try {
+
+    let captionConsumed = false;
+    if (images.length > 0) {
+      try {
+        const resolved: File[] = [];
+        for (const att of images) {
           let file = att.file;
           if (!file && att.path) {
             const res = await fetch(convertFileSrc(att.path));
             const blob = await res.blob();
             file = new File([blob], att.name, { type: blob.type || "image/png" });
           }
-          if (file) await sendMediaFile(file);
-        } catch (e) {
-          console.error("send image attachment failed:", e);
-          showToast({
-            message: t("sendAttachmentFailed", {
-              name: att.name,
-              error: e instanceof Error ? e.message : String(e),
-            }),
-            variant: "error",
-          });
+          if (file) resolved.push(file);
         }
-      } else if (att.path) {
-        setShareDialog({ filePath: att.path, filename: att.name });
-        return;
-      } else {
+        if (resolved.length > 0) {
+          await sendMediaGallery(resolved, draft, galleryQuality);
+          setDraft("");
+          captionConsumed = true;
+        }
+      } catch (e) {
+        console.error("send image gallery failed:", e);
         showToast({
-          message: `Cannot share ${att.name}: missing file path.`,
+          message: t("sendAttachmentFailed", {
+            name: images[0]?.name ?? "images",
+            error: e instanceof Error ? e.message : String(e),
+          }),
           variant: "error",
         });
       }
     }
-  }, [pendingAttachments, setPendingAttachments, sendMediaFile, showToast, t]);
+
+    // Non-image files keep the existing file-server share flow (one at a time).
+    const fileToShare = files.find((a) => a.path);
+    if (fileToShare?.path) {
+      setShareDialog({ filePath: fileToShare.path, filename: fileToShare.name });
+    } else if (files.length > 0) {
+      showToast({ message: `Cannot share ${files[0].name}: missing file path.`, variant: "error" });
+    }
+
+    return captionConsumed;
+  }, [pendingAttachments, setPendingAttachments, sendMediaGallery, draft, galleryQuality, setDraft, showToast, t]);
 
   const handleSendAndResetTyping = useCallback(async () => {
-    // Send any pending drag-dropped attachments first, then the text message.
-    await sendPendingAttachments();
-    await handleSend();
+    // Images (with the draft as caption) go out as one gallery message; only
+    // send the draft as a standalone text message when it wasn't consumed.
+    const captionConsumed = await sendPendingAttachments();
+    if (!captionConsumed) await handleSend();
     resetTyping();
   }, [handleSend, resetTyping, sendPendingAttachments]);
 
@@ -1238,7 +1279,9 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
             </div>
           ) : (
             <ChatMessageList
-              allMessages={allMessages}
+              allMessages={visibleMessages}
+              indexOffset={windowStart}
+              fullMessageIds={allMessageIds}
               userBySession={userBySession}
               avatarBySession={avatarBySession}
               userByHash={userByHash}
@@ -1303,7 +1346,10 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       <PendingAttachmentsStrip
         attachments={pendingAttachments}
         onRemove={removeAttachment}
-        onSend={() => void sendPendingAttachments()}
+        onSend={() => void handleSendAndResetTyping()}
+        quality={galleryQuality}
+        onQualityChange={setGalleryQuality}
+        onPreview={(src) => lightboxRef.current?.open(src)}
         disabled={sending || isUploading}
       />
 
@@ -1324,12 +1370,12 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           onChange={handleDraftChange}
           onSend={handleSendAndResetTyping}
           onPaste={handlePaste}
-          onFileSelected={sendMediaFile}
+          onFilesSelected={(files) => { for (const f of files) addFromFile(f); }}
           onGifSelect={handleGifSelect}
           onAttachFile={handleAttachFile}
           onOpenLiveDoc={liveDocActive && selectedChannel !== null && !isDmMode ? handleOpenLiveDoc : undefined}
           disabled={sending || persistent.sendBlocked}
-          hasPendingQuotes={pendingQuotes.length > 0}
+          hasPendingQuotes={pendingQuotes.length > 0 || pendingAttachments.length > 0}
           isEditing={editingMessage !== null}
           onCancelEdit={cancelEdit}
         />

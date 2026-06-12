@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
+import { acquireRegisteredTextures, releaseRegisteredTextures } from "../../registeredTextureLease";
 import { listen } from "@tauri-apps/api/event";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAppStore } from "../../store";
@@ -28,9 +29,11 @@ export default function RoleEditorPage() {
 
   useEffect(() => {
     const unlisten = listen<RegisteredUser[]>("user-list", (e) => setRegisteredUsers(e.payload));
+    acquireRegisteredTextures();
     invoke("request_user_list").catch(() => {});
     return () => {
       unlisten.then((f) => f());
+      releaseRegisteredTextures();
     };
   }, []);
 

@@ -9,12 +9,26 @@ import ReadReceiptIndicator from "./readreceipt/ReadReceiptIndicator";
 import type { ReactionSummary } from "./reaction/reactionStore";
 import { dateKey, formatDateChip } from "../../utils/format";
 import { isHeavyContent } from "../../messageOffload";
+import { rememberGalleryRefs, getGalleryRef, stripGalleryMarker } from "../../utils/gallery";
 import type { PollPayload } from "./poll/PollCreator";
 import { isMobile } from "../../utils/platform";
 import styles from "./ChatView.module.css";
 
 interface ChatMessageListProps {
+  /** The messages to mount - the tail-anchored render window, not
+   *  necessarily the whole thread (see chatWindowing.ts). */
   readonly allMessages: ChatMessage[];
+  /**
+   * Global index of `allMessages[0]` within the full thread.  All
+   * index-based logic (unread divider, message keys) works in global
+   * index space so it is stable while the window grows.
+   */
+  readonly indexOffset?: number;
+  /**
+   * Ordered message IDs of the FULL thread for read-receipt watermark
+   * comparison.  Falls back to the rendered slice when omitted.
+   */
+  readonly fullMessageIds?: string[];
   readonly userBySession: Map<number, UserEntry>;
   readonly avatarBySession: Map<number, string>;
   readonly userByHash: Map<string, UserEntry>;
@@ -62,6 +76,8 @@ interface MsgGroup {
 
 export default function ChatMessageList({
   allMessages,
+  indexOffset = 0,
+  fullMessageIds,
   userBySession,
   avatarBySession,
   userByHash,
@@ -100,16 +116,25 @@ export default function ChatMessageList({
   const ownHash = ownSession !== null ? userBySession.get(ownSession)?.hash : undefined;
 
   // Ordered list of all message IDs for read-receipt watermark comparison.
-  const allMessageIds = useMemo(
+  // Prefer the full-thread list from the parent: the rendered window may
+  // start after the watermark message.
+  const slicedMessageIds = useMemo(
     () => allMessages.map((m) => m.message_id).filter((id): id is string => id != null),
     [allMessages],
   );
+  const allMessageIds = fullMessageIds ?? slicedMessageIds;
 
   // Channel ID for read receipt queries (all messages belong to the same channel).
   const channelId = allMessages[0]?.channel_id;
 
+  // Refresh the gallery-membership map so each message's group survives even
+  // after offload strips the marker from its body (see utils/gallery.ts).
+  rememberGalleryRefs(allMessages);
+
   // Group consecutive messages from the same sender,
   // also breaking on date boundaries so date chips render between groups.
+  // `startIdx` is in global (full-thread) index space so the unread
+  // divider position stays valid while the render window grows.
   const groups: MsgGroup[] = [];
   for (const [i, msg] of allMessages.entries()) {
     const msgDay = msg.timestamp ? dateKey(msg.timestamp, convertToLocalTime) : "";
@@ -118,18 +143,21 @@ export default function ChatMessageList({
     if (prev?.senderId === msg.sender_session && prev.isOwn === msg.is_own && prev.day === msgDay) {
       prev.messages.push(msg);
     } else {
-      groups.push({ senderId: msg.sender_session, senderHash: msgHash, isOwn: msg.is_own, startIdx: i, messages: [msg], day: msgDay });
+      groups.push({ senderId: msg.sender_session, senderHash: msgHash, isOwn: msg.is_own, startIdx: i + indexOffset, messages: [msg], day: msgDay });
     }
   }
 
-  const renderMessage = (msg: ChatMessage, globalIdx: number, j: number, group: MsgGroup, senderUser: UserEntry | undefined, senderAvatar: string | undefined) => {
+  const renderMessage = (msg: ChatMessage, globalIdx: number, j: number, group: MsgGroup, senderUser: UserEntry | undefined, senderAvatar: string | undefined, galleryTile = false) => {
     const hasMsgId = !!msg.message_id;
     const isSelected = hasMsgId && selectedMsgIds.has(msg.message_id!);
+    // Inside a gallery grid the marker is stripped so the tile is pure media.
+    const itemMsg = galleryTile ? { ...msg, body: stripGalleryMarker(msg.body) } : msg;
     return (
       <React.Fragment key={msg.message_id ?? `${msg.channel_id}-${msg.sender_session ?? "s"}-${msg.body.slice(0, 32)}-${globalIdx}`}>
         <div
           className={[
             styles.actionBarWrapper,
+            galleryTile ? styles.galleryTileWrap : "",
             selectionMode && canDelete && hasMsgId ? styles.messageRowSelectable : "",
             selectionMode && canDelete && hasMsgId ? styles.selectableRow : "",
             isSelected ? styles.selectedRow : "",
@@ -156,7 +184,8 @@ export default function ChatMessageList({
             />
           )}
           <MessageItem
-            msg={msg}
+            msg={itemMsg}
+            galleryTile={galleryTile}
             index={globalIdx}
             avatarUrl={senderAvatar}
             user={senderUser}
@@ -245,7 +274,56 @@ export default function ChatMessageList({
           </div>
         )}
         <div className={styles.bubbleColumn}>
-          {msgs.map((msg, j) => renderMessage(msg, startIdx + j, j, group, senderUser, senderAvatar))}
+          {(() => {
+            const nodes: React.ReactNode[] = [];
+            let j = 0;
+            while (j < msgs.length) {
+              const ref = getGalleryRef(msgs[j].message_id);
+              // Collect a run of consecutive messages sharing this gallery id.
+              const runStart = j;
+              const run: ChatMessage[] = [];
+              if (ref) {
+                while (j < msgs.length && getGalleryRef(msgs[j].message_id)?.groupId === ref.groupId) {
+                  run.push(msgs[j]);
+                  j += 1;
+                }
+              }
+              if (!ref || run.length < 2) {
+                // Not a gallery (or a lone image not yet joined by its peers).
+                nodes.push(renderMessage(msgs[runStart], startIdx + runStart, runStart, group, senderUser, senderAvatar));
+                if (!ref) j += 1;
+                continue;
+              }
+              // Render the gallery as a tile grid: one tile per index up to
+              // `total`, with placeholders for images that haven't arrived yet
+              // (prevents layout shift as the batch uploads). Odd totals give
+              // the first image a full-width banner so the grid stays balanced.
+              const { total } = getGalleryRef(run[0].message_id)!;
+              const byIndex = new Map<number, ChatMessage>();
+              for (const m of run) {
+                const r = getGalleryRef(m.message_id);
+                if (r) byIndex.set(r.index, m);
+              }
+              const tiles: React.ReactNode[] = [];
+              for (let i = 0; i < total; i += 1) {
+                const m = byIndex.get(i);
+                tiles.push(
+                  m
+                    ? renderMessage(m, startIdx + runStart + i, runStart + i, group, senderUser, senderAvatar, true)
+                    : <div key={`ph-${ref.groupId}-${i}`} className={styles.galleryTilePlaceholder} aria-hidden="true" />,
+                );
+              }
+              nodes.push(
+                <div
+                  key={`gal-${ref.groupId}-${runStart}`}
+                  className={`${styles.galleryGrid} ${total % 2 === 1 ? styles.galleryGridOdd : ""}`}
+                >
+                  {tiles}
+                </div>,
+              );
+            }
+            return nodes;
+          })()}
         </div>
       </div>
     );
