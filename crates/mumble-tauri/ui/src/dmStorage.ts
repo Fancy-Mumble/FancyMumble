@@ -15,7 +15,7 @@
  * must check {@link isDmPersistenceEnabled} first).
  */
 
-import { load } from "@tauri-apps/plugin-store";
+import { load } from "./utils/store";
 import type { ChatMessage } from "./types";
 import { getPreferences } from "./preferencesStorage";
 import { bytesToBase64, base64ToBytes } from "./utils/base64";

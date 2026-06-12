@@ -12,7 +12,7 @@
  * they show up in the list, but cannot be auto-resolved across servers.
  */
 
-import { load } from "@tauri-apps/plugin-store";
+import { load } from "./utils/store";
 import { bytesToBase64, base64ToBytes } from "./utils/base64";
 
 // Re-exported for backwards compatibility with prior consumers.

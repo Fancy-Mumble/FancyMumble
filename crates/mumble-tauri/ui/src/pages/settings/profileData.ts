@@ -1,4 +1,4 @@
-﻿import { load } from "@tauri-apps/plugin-store";
+﻿import { load } from "../../utils/store";
 import type React from "react";
 import type { FancyProfile } from "../../types";
 

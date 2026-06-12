@@ -11,7 +11,7 @@
  * required to resolve the user.
  */
 
-import { load } from "@tauri-apps/plugin-store";
+import { load } from "../../utils/store";
 import {
   register,
   unregister,

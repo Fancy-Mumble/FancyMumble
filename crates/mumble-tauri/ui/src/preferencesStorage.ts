@@ -3,7 +3,7 @@
  * using `@tauri-apps/plugin-store` (Tauri Store v2).
  */
 
-import { load } from "@tauri-apps/plugin-store";
+import { load } from "./utils/store";
 import type {
   AudioSettings,
   NotificationSoundSettings,
