@@ -11,6 +11,7 @@ import {
   saveCachedRegisteredUsers,
 } from "../../preferencesStorage";
 import { UserListItem } from "./user/UserListItem";
+import { TID } from "../../testids";
 import styles from "./channel/ChannelSidebar.module.css";
 
 /**
@@ -536,7 +537,7 @@ function MembersTabImpl({
   }
 
   return (
-    <div className={styles.membersTab}>
+    <div className={styles.membersTab} data-testid={TID.memberList}>
       {groups.map((group) => (
         <section key={group.key} className={styles.memberGroup}>
           <div

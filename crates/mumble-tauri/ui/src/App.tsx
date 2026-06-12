@@ -25,6 +25,7 @@ import LoadingSplash from "./components/elements/LoadingSplash";
 import { isUpdaterWindow } from "./updater";
 import UpdaterWindow from "./updater/UpdaterWindow";
 import i18n, { registerLanguage, type LocaleBundle } from "./i18n";
+import { isE2E } from "./utils/e2e";
 
 const ChatPage = lazy(() => import("./pages/ChatPage"));
 const SettingsPage = lazy(() => import("./pages/settings"));
@@ -164,7 +165,10 @@ function MainApp() {
   // Also apply saved audio settings and shortcuts to the backend so
   // they take effect without the user visiting the settings page.
   useEffect(() => {
-    isFirstRun().then(setFirstRun);
+    // Under e2e automation, skip the first-run welcome flow so tests land
+    // straight on the connect page with a deterministic DOM.
+    if (isE2E()) setFirstRun(false);
+    else isFirstRun().then(setFirstRun);
     getPreferences().then((prefs) => {
       setKlipyApiKey(prefs.klipyApiKey);
       useAppStore.setState({ disableLinkPreviews: prefs.disableLinkPreviews ?? false });
