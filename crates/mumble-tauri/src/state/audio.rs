@@ -177,6 +177,7 @@ mod voice_pipeline {
 
             info!("enable_voice: pipelines started, sending unmute");
 
+            // SetSelfMute{false} already carries self_deaf=false (undeafen).
             if let Some(handle) = handle {
                 handle
                     .send(command::SetSelfMute { muted: false })
@@ -199,6 +200,7 @@ mod voice_pipeline {
                 state.conn.client_handle.clone()
             };
 
+            // SetSelfDeaf{true} already carries self_mute=true (deaf implies mute).
             if let Some(handle) = handle {
                 handle
                     .send(command::SetSelfDeaf { deafened: true })

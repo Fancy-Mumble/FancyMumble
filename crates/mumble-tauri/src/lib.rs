@@ -650,6 +650,7 @@ macro_rules! all_command_handlers {
             commands::audio::get_audio_backend,
             commands::audio::get_voice_state,
             commands::audio::enable_voice,
+            commands::audio::enable_voice_muted,
             commands::audio::disable_voice,
             commands::audio::toggle_mute,
             commands::audio::toggle_deafen,

@@ -420,6 +420,7 @@ async fn handle_connect_result(
 
             // Start deaf+muted so the user does not transmit or
             // hear audio until they explicitly enable voice calling.
+            // (SetSelfDeaf already carries self_mute=true.)
             if let Err(e) = handle
                 .send(command::SetSelfDeaf { deafened: true })
                 .await

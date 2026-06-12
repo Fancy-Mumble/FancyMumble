@@ -127,6 +127,12 @@ fn apply_user_state_fields(user: &mut UserEntry, proto: &mumble_tcp::UserState) 
     if let Some(suppress) = proto.suppress { user.suppress = suppress; }
     if let Some(self_mute) = proto.self_mute { user.self_mute = self_mute; }
     if let Some(self_deaf) = proto.self_deaf { user.self_deaf = self_deaf; }
+    // Deafened implies muted: a deafened user cannot transmit. The server may
+    // broadcast self_deaf to peers without (re)sending self_mute - e.g. the
+    // connect-time deafen - which would otherwise leave peers showing an
+    // invalid "deafened-but-not-muted" state out of sync with the local UI.
+    // Enforce the invariant from whichever flag is currently set.
+    if user.self_deaf { user.self_mute = true; }
     if let Some(priority) = proto.priority_speaker { user.priority_speaker = priority; }
     if let Some(ref hash) = proto.hash { user.hash = Some(hash.clone()); }
     if !proto.client_features.is_empty() { user.client_features = proto.client_features.clone(); }
