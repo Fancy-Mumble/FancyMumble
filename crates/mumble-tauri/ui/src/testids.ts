@@ -35,10 +35,18 @@ export const TID = {
   chatSend: "chat-send",
 
   // -- Member / user list ---------------------------------------------------
-  /** A user row in the members panel; carries `data-user-name`. */
+  /**
+   * A user row (anywhere it renders: channel list, members panel, self
+   * section). Carries `data-user-name`, plus `data-talking` / `data-muted` /
+   * `data-deaf` / `data-offline` reflecting that user's live state.
+   */
   memberItem: "member-item",
   /** The scrollable members panel container. */
   memberList: "member-list",
+
+  // -- Self voice controls (ChannelSidebar) ---------------------------------
+  toggleMute: "toggle-mute",
+  toggleDeafen: "toggle-deafen",
 } as const;
 
 export type TestId = (typeof TID)[keyof typeof TID];
