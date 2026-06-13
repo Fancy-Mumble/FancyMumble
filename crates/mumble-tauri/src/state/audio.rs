@@ -1032,7 +1032,7 @@ mod voice_pipeline {
             // of 38-byte overhead leaves 41.6 kbit/s for Opus.
             let (bitrate, frame_ms) = adjust_to_server_bandwidth(128_000, 10, Some(72_000));
             assert_eq!(frame_ms, 10, "frame size kept when clamped bitrate fits");
-            assert!(bitrate <= 41_600 && bitrate >= 8_000, "got {bitrate}");
+            assert!((8_000..=41_600).contains(&bitrate), "got {bitrate}");
             // The result must actually fit the budget.
             assert!(bitrate + 100 * 38 * 8 <= 72_000);
         }
