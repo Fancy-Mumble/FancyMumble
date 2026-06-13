@@ -243,6 +243,7 @@ impl AppState {
 
     #[cfg(target_os = "android")]
     fn stop_android_foreground_service(&self) {
+        use tauri::Manager; // brings `try_state` into scope (android-only path)
         let Some(app_handle) = self.app_handle() else { return };
         let Some(handle) = app_handle.try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>() else { return };
         crate::platform::android::connection_service::stop_service(&handle);
