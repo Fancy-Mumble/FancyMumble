@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { CloseIcon } from "../../../icons";
 import styles from "./UploadProgressItem.module.css";
 
 export interface UploadPlaceholder {
@@ -76,7 +77,7 @@ export default function UploadProgressItem({ placeholder, onDismiss, onCancel }:
                 title={t("upload.cancel")}
                 aria-label={t("upload.cancel")}
               >
-                &#x2715;
+                <CloseIcon width={14} height={14} />
               </button>
             </>
           )}
@@ -88,7 +89,7 @@ export default function UploadProgressItem({ placeholder, onDismiss, onCancel }:
               title={t("common:actions.dismiss")}
               aria-label={t("upload.dismissFailed")}
             >
-              &#x2715;
+              <CloseIcon width={14} height={14} />
             </button>
           )}
         </div>

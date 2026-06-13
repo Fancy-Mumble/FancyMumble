@@ -1,4 +1,4 @@
-import { PauseIcon, SearchIcon, UserFilledIcon } from "../../icons";
+import { CloseIcon, PauseIcon, SearchIcon, UserFilledIcon } from "../../icons";
 import { useMemo, useRef, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SavedServer, ServerPingResult } from "../../types";
@@ -264,7 +264,7 @@ function ServerCardItem({
             }}
             type="button"
           >
-            &#x2715;
+            <CloseIcon width={12} height={12} />
           </button>
 
           {!isThisConnecting && (
