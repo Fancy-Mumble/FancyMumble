@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use tracing::info;
 
 use mumble_protocol::client::ClientConfig;
@@ -66,9 +66,7 @@ impl AppState {
         let connect_task = tokio::spawn(async move {
             // Load client certificate from the per-identity folder.
             let (client_cert_pem, client_key_pem) = if let Some(ref label) = cert_label {
-                app_handle
-                    .path()
-                    .app_data_dir()
+                crate::e2e_data_dir(&app_handle)
                     .ok()
                     .map(|d| super::pchat::IdentityStore::new(d).load_cert(label))
                     .unwrap_or((None, None))
@@ -322,7 +320,7 @@ fn init_identity(
     cert_label: &Option<String>,
 ) {
     // Cert-hash-to-username resolver (persisted across sessions).
-    if let Ok(data_dir) = app_handle.path().app_data_dir() {
+    if let Ok(data_dir) = crate::e2e_data_dir(app_handle) {
         let hash_names_path = data_dir.join("hash_names.json");
         let resolver = super::hash_names::DefaultHashNameResolver::new(hash_names_path);
         if let Ok(mut state) = inner.lock() {
@@ -332,13 +330,13 @@ fn init_identity(
 
     // Migrate legacy storage layout (certs/ + pchat/) to per-identity
     // folders on first connect after the update.  Idempotent.
-    if let Ok(data_dir) = app_handle.path().app_data_dir() {
+    if let Ok(data_dir) = crate::e2e_data_dir(app_handle) {
         super::pchat::IdentityStore::new(data_dir).migrate_legacy_storage();
     }
 
     // Load (or generate) the persistent chat identity seed.
     let identity_label = cert_label.as_deref().unwrap_or("default");
-    if let Ok(data_dir) = app_handle.path().app_data_dir() {
+    if let Ok(data_dir) = crate::e2e_data_dir(app_handle) {
         let store = super::pchat::IdentityStore::new(data_dir);
         match store.load_or_generate_seed(identity_label) {
             Ok(seed) => {

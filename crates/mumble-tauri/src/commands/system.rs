@@ -4,7 +4,6 @@
 use crate::logging;
 use crate::platform;
 use crate::state::AppState;
-use tauri::Manager;
 
 /// Returns the OS-detected clock format for the "auto" time setting.
 #[tauri::command]
@@ -89,7 +88,7 @@ pub(crate) fn export_logs(dest_path: String) -> Result<(), String> {
 /// Reset all app data to factory defaults (preferences, saved servers, certs).
 #[tauri::command]
 pub(crate) async fn reset_app_data(app: tauri::AppHandle) -> Result<(), String> {
-    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let data_dir = crate::e2e_data_dir(&app)?;
     // Remove known data files.
     for name in &["preferences.json", "servers.json", "passwords.json"] {
         let path = data_dir.join(name);
