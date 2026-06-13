@@ -34,6 +34,14 @@ export const TID = {
   chatComposerInput: "chat-composer-input",
   chatSend: "chat-send",
 
+  // -- Channel list ---------------------------------------------------------
+  /**
+   * A channel row in the sidebar list. Carries `data-channel-id` and
+   * `data-channel-name`. Right-click opens the channel context menu
+   * (create/edit/delete); double-click joins.
+   */
+  channelItem: "channel-item",
+
   // -- Member / user list ---------------------------------------------------
   /**
    * A user row (anywhere it renders: channel list, members panel, self
