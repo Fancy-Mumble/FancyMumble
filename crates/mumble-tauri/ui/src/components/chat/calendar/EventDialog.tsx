@@ -70,10 +70,12 @@ export default function EventDialog() {
 
   // Invitee suggestion pool: every registered user we can see (online list +
   // anyone already on the event). MemberPicker keys on a stable user_id.
+  // Registered ids are >= 0 (SuperUser is 0); guests carry -1, so gate on >= 0
+  // rather than > 0 or SuperUser could never be invited.
   const candidates = useMemo(() => {
     const map = new Map<number, string>();
     for (const u of users) {
-      if (u.user_id != null && u.user_id > 0) map.set(u.user_id, u.name);
+      if (u.user_id != null && u.user_id >= 0) map.set(u.user_id, u.name);
     }
     for (const p of existing?.participants ?? []) map.set(p.userId, p.name);
     return [...map.entries()].map(([user_id, name]) => ({ user_id, name }));
