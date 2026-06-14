@@ -73,6 +73,30 @@ export function adminListDocuments(creds: AdminCreds): Promise<AdminDocumentsRes
   );
 }
 
+/** One user's stored calendar blob in the private store. */
+export interface CalendarUsageEntry {
+  /** Durable `"<server_id>:<user_id>"` namespace. */
+  readonly scope: string;
+  readonly key: string;
+  readonly size_bytes: number;
+  readonly updated_at: number;
+}
+
+export interface CalendarUsageResponse {
+  readonly entries: CalendarUsageEntry[];
+}
+
+/** List each user's stored calendar blob and its size (admin dashboard). */
+export function adminListCalendars(creds: AdminCreds): Promise<CalendarUsageResponse> {
+  return withTimeout(
+    invoke<CalendarUsageResponse>("fileserver_admin_list_calendars", {
+      request: { baseUrl: creds.baseUrl, sessionJwt: creds.sessionJwt },
+    }),
+    15000,
+    "Listing calendars",
+  );
+}
+
 /** Delete one stored file (blob + metadata). */
 export function adminDeleteFile(creds: AdminCreds, fileId: string): Promise<void> {
   return invoke("fileserver_admin_delete_file", {

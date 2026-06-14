@@ -222,6 +222,7 @@
   "plugins": {
     "fileServer": "文件服务器",
     "liveDoc": "实时文档",
+    "calendar": "日历",
     "disabledLog": "插件“{{name}}”已被服务器停用",
     "disabledTitle": "{{name}} 已被停用",
     "disabledBody": "服务器已停用此插件。所有已打开的 {{name}} 视图都将关闭。",

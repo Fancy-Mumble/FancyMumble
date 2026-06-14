@@ -48,6 +48,7 @@ export enum PluginPayloadType {
  *  the `fancy-plugin-info` registry. */
 export const PLUGIN_NAME_FILE_SERVER = "fancy-file-server";
 export const PLUGIN_NAME_LIVE_DOC = "fancy-live-doc";
+export const PLUGIN_NAME_CALENDAR = "fancy-calendar";
 
 /** Human-friendly display name for a known plugin id (falls back to the id). */
 export function friendlyPluginName(name: string): string {
@@ -56,6 +57,8 @@ export function friendlyPluginName(name: string): string {
       return i18next.t("common:plugins.fileServer", { defaultValue: "File server" });
     case PLUGIN_NAME_LIVE_DOC:
       return i18next.t("common:plugins.liveDoc", { defaultValue: "Live documents" });
+    case PLUGIN_NAME_CALENDAR:
+      return i18next.t("common:plugins.calendar", { defaultValue: "Calendar" });
     default:
       return name;
   }

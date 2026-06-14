@@ -19,6 +19,8 @@ export interface MemberPickerProps {
   readonly placeholder?: string;
   readonly disabled?: boolean;
   readonly emptyLabel?: string;
+  /** Optional `data-testid` for the autocomplete text input (e2e hook). */
+  readonly inputTestId?: string;
 }
 
 const MAX_SUGGESTIONS = 8;
@@ -36,6 +38,7 @@ export function MemberPicker({
   placeholder = "Add user by name or ID",
   disabled,
   emptyLabel = "No members",
+  inputTestId,
 }: MemberPickerProps) {
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
@@ -146,6 +149,7 @@ export function MemberPicker({
             type="text"
             className={styles.input}
             placeholder={placeholder}
+            data-testid={inputTestId}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);

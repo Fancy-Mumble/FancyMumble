@@ -57,6 +57,7 @@
     "closeStream": "Fermer le flux",
     "pinnedMessages": "Messages épinglés",
     "downloads": "Téléchargements",
+    "calendar": "Calendrier",
     "mySharedFiles": "Mes fichiers partagés",
     "createPoll": "Créer un sondage",
     "browseDocuments": "Parcourir les documents",
@@ -66,6 +67,88 @@
     "join": "Rejoindre",
     "joinChannel": "Rejoindre le canal",
     "popOutDm": "Détacher la conversation"
+  },
+  "calendar": {
+    "title": "Calendrier",
+    "close": "Fermer le calendrier",
+    "prev": "Précédent",
+    "next": "Suivant",
+    "today": "Aujourd'hui",
+    "newMeeting": "Nouvelle réunion",
+    "editMeeting": "Modifier la réunion",
+    "you": "Vous",
+    "untitled": "(sans titre)",
+    "organizer": "Organisateur",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "recolor": "Recolorer",
+    "response": {
+      "title": "Réponse",
+      "accept": "Accepter",
+      "tentative": "Provisoire",
+      "decline": "Refuser",
+      "proposeNewTime": "Proposer une nouvelle heure"
+    },
+    "showAs": {
+      "title": "Afficher comme",
+      "free": "Libre",
+      "tentative": "Provisoire",
+      "busy": "Occupé",
+      "away": "Absent",
+      "workingElsewhere": "Travail ailleurs",
+      "oof": "Absent du bureau"
+    },
+    "workHours": {
+      "title": "Définir vos heures de travail",
+      "short": "Heures de travail",
+      "enable": "Afficher les heures de travail",
+      "from": "De",
+      "to": "À"
+    },
+    "views": {
+      "day": "Jour",
+      "workweek": "Semaine de travail",
+      "week": "Semaine",
+      "month": "Mois"
+    },
+    "fields": {
+      "title": "Titre",
+      "invitees": "Invités",
+      "inviteesPlaceholder": "Ajouter des utilisateurs enregistrés ou en ligne",
+      "allDay": "Toute la journée",
+      "location": "Lieu",
+      "description": "Description",
+      "descriptionPlaceholder": "Ajouter des détails, un ordre du jour, des liens…",
+      "color": "Couleur",
+      "customColor": "Couleur personnalisée",
+      "reminder": "Rappel",
+      "timezone": "Fuseau horaire"
+    },
+    "repeat": {
+      "none": "Ne se répète pas",
+      "weekdays": "Chaque jour ouvré (lun–ven)",
+      "daily": "Tous les jours",
+      "weekly": "Toutes les semaines",
+      "monthly": "Tous les mois",
+      "yearly": "Tous les ans",
+      "custom": "Personnalisé",
+      "every": "tous les",
+      "units": {
+        "day": "jour(s)",
+        "week": "semaine(s)",
+        "month": "mois",
+        "year": "an(s)"
+      }
+    },
+    "reminders": {
+      "none": "Aucun rappel",
+      "atStart": "À l'heure de début",
+      "minutes": "{{count}} minutes avant",
+      "hours": "{{count}} heures avant",
+      "days": "{{count}} jours avant"
+    }
   },
   "contextMenu": {
     "moreReactions": "Plus de réactions",

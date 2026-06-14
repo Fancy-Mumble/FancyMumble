@@ -83,6 +83,16 @@ pub(crate) async fn fileserver_admin_list_documents(
     state.admin_list_documents(request).await
 }
 
+/// Admin dashboard: list each user's stored calendar blob and its size.
+/// Gated server-side on the caller's session JWT granting admin rights.
+#[tauri::command]
+pub(crate) async fn fileserver_admin_list_calendars(
+    state: tauri::State<'_, AppState>,
+    request: AdminListRequest,
+) -> Result<serde_json::Value, String> {
+    state.admin_list_calendars(request).await
+}
+
 /// Admin dashboard: delete a single stored file (blob + metadata).
 #[tauri::command]
 pub(crate) async fn fileserver_admin_delete_file(

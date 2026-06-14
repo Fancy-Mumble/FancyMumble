@@ -1,0 +1,760 @@
+/* ---------------------------------------------------------------------------
+   Calendar panel + Day/Week/Work-week/Month grids.
+   Uses the app's shared CSS custom properties (--color-*) for theming.
+   --------------------------------------------------------------------------- */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* -- Toolbar ---------------------------------------------------------------- */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  /* Extra right padding reserves room for the panel's absolute close (×) button
+     (top:8/right:8, 28px) so the "New meeting" button sits to its left, not under it. */
+  padding: 10px 48px 10px 14px;
+  border-bottom: 1px solid var(--color-glass-border);
+  flex-shrink: 0;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-right: 4px;
+}
+
+.rangeLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  min-width: 9ch;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.navGroup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.navBtn,
+.todayBtn,
+.viewBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--color-glass-border);
+  border-radius: 6px;
+  background: var(--color-glass);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.navBtn {
+  width: 30px;
+  padding: 0;
+}
+
+.navBtn:hover,
+.todayBtn:hover,
+.viewBtn:hover {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+}
+
+.viewSwitch {
+  display: inline-flex;
+  border: 1px solid var(--color-glass-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.viewSwitch .viewBtn {
+  border: none;
+  border-radius: 0;
+  border-right: 1px solid var(--color-glass-border);
+}
+
+.viewSwitch .viewBtn:last-child {
+  border-right: none;
+}
+
+.viewBtnActive {
+  background: var(--color-accent-fill, rgba(42, 171, 238, 0.18));
+  color: var(--color-text-primary);
+}
+
+.newBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 6px;
+  background: var(--color-accent, #2aabee);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.newBtn:hover {
+  opacity: 0.9;
+}
+
+/* -- Scrollable body -------------------------------------------------------- */
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* -- Month grid ------------------------------------------------------------- */
+.monthGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-auto-rows: minmax(86px, 1fr);
+  height: 100%;
+}
+
+.weekdayHead {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-bg-elevated, rgba(20, 22, 28, 0.95));
+}
+
+.weekdayCell {
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-glass-border);
+  text-align: right;
+}
+
+.dayCell {
+  border-right: 1px solid var(--color-glass-border);
+  border-bottom: 1px solid var(--color-glass-border);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+/* Highlight the day under the cursor so the user can see where they are. */
+.dayCell:hover {
+  background: var(--color-glass-hover, rgba(255, 255, 255, 0.07));
+}
+
+.dayCell:nth-child(7n) {
+  border-right: none;
+}
+
+.dayCellOutside {
+  background: var(--color-overlay-soft, rgba(255, 255, 255, 0.02));
+}
+
+.dayCellOutside .dayNum {
+  color: var(--color-text-tertiary, rgba(255, 255, 255, 0.35));
+}
+
+.dayNum {
+  align-self: flex-end;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.dayNumToday {
+  background: var(--color-accent, #2aabee);
+  color: #fff;
+  font-weight: 700;
+}
+
+/* -- Event chips ------------------------------------------------------------ */
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #fff;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border-left: 3px solid rgba(0, 0, 0, 0.25);
+  /* Don't let a drag turn into a text selection inside the chip. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.chip:hover {
+  filter: brightness(1.08);
+}
+
+.chipTime {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+.chipTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.moreLink {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding-left: 4px;
+}
+
+/* -- Time grid (day / week / work-week) ------------------------------------- */
+.timeGrid {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  min-height: 100%;
+}
+
+.timeGutterHead,
+.timeColHead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-bg-elevated, rgba(20, 22, 28, 0.95));
+  border-bottom: 1px solid var(--color-glass-border);
+}
+
+.dayColsHead {
+  display: grid;
+}
+
+.colHead {
+  padding: 6px 8px;
+  text-align: center;
+  border-left: 1px solid var(--color-glass-border);
+}
+
+.colHeadName {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+}
+
+.colHeadNum {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  margin: 2px auto 0;
+  border-radius: 50%;
+}
+
+.colHeadNumToday {
+  background: var(--color-accent, #2aabee);
+  color: #fff;
+}
+
+.gutter {
+  display: flex;
+  flex-direction: column;
+}
+
+.hourLabel {
+  height: 48px;
+  font-size: 11px;
+  color: var(--color-text-tertiary, rgba(255, 255, 255, 0.4));
+  text-align: right;
+  padding-right: 6px;
+  transform: translateY(-6px);
+}
+
+.dayCols {
+  display: grid;
+  position: relative;
+}
+
+.dayCol {
+  position: relative;
+  border-left: 1px solid var(--color-glass-border);
+}
+
+.hourLine {
+  height: 48px;
+  border-top: 1px solid var(--color-glass-border-soft, rgba(255, 255, 255, 0.05));
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+/* Highlight the time slot under the cursor. */
+.hourLine:hover {
+  background: var(--color-glass-hover, rgba(255, 255, 255, 0.07));
+}
+
+.timedEvent {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  border-radius: 5px;
+  padding: 3px 6px;
+  font-size: 12px;
+  color: #fff;
+  /* No `overflow: hidden` here: the top/bottom resize handles intentionally
+     extend a few px beyond the block (they'd render as half-circles otherwise).
+     Long text is clipped by `.timedTitle` / `.timedMeta` instead. */
+  border-left: 3px solid rgba(0, 0, 0, 0.25);
+  box-shadow: 0 1px 3px var(--color-overlay-medium);
+}
+
+.timedEvent:hover {
+  filter: brightness(1.08);
+}
+
+.timedTitle {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timedMeta {
+  opacity: 0.85;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* -- Empty / misc ----------------------------------------------------------- */
+.empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+/* -- Work-hours shading (time grid) ---------------------------------------- */
+.workBand {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: var(--color-glass-hover, rgba(255, 255, 255, 0.06));
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* -- Drag / resize on timed events ----------------------------------------- */
+.timedEvent {
+  cursor: grab;
+  touch-action: none;
+  /* Don't let a drag turn into a text selection inside the appointment. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.timedEventDragging {
+  cursor: grabbing;
+  opacity: 0.85;
+  box-shadow: 0 4px 14px var(--color-overlay-strong);
+  z-index: 5;
+}
+
+/* Resize hit zones span the whole top/bottom edge (drag anywhere on the edge,
+   not only on the circle). */
+.resizeEdgeTop,
+.resizeEdgeBottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ns-resize;
+  z-index: 3;
+}
+
+/* Kept INSIDE the event box so back-to-back events' edges never overlap: the
+   hit-zones meet exactly at the shared border, giving a hard cut (cursor above
+   the border = upper event, below = lower event) with no hover z-fighting. */
+.resizeEdgeTop {
+  top: 0;
+}
+
+.resizeEdgeBottom {
+  bottom: 0;
+}
+
+/* The circle is a purely visual affordance centred on the edge. */
+.resizeHandle {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transition: opacity 0.1s;
+  pointer-events: none;
+}
+
+.timedEvent:hover .resizeHandle,
+.timedEventDragging .resizeHandle {
+  opacity: 1;
+}
+
+/* Current-time indicator. */
+.nowLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 2px solid #ff3b30;
+  z-index: 12;
+  pointer-events: none;
+}
+
+.nowDot {
+  position: absolute;
+  left: -5px;
+  top: -6px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #ff3b30;
+  box-shadow: 0 0 0 2px var(--color-bg-elevated, #1b1d23);
+}
+
+/* -- Shared popover backdrop ----------------------------------------------- */
+.detailBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10010;
+}
+
+/* -- Event detail card ----------------------------------------------------- */
+.detailCard {
+  position: fixed;
+  z-index: 10011;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--color-bg-elevated, #1b1d23);
+  border: 1px solid var(--color-glass-border);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px var(--color-overlay-strong);
+}
+
+.detailHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detailColorDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.detailTitle {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.iconBtnSmall {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.iconBtnSmall:hover {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+}
+
+.detailRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.detailOrganizer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.detailAvatar,
+.detailAvatarFallback {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.detailAvatarFallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.detailOrganizerText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.detailOrganizerName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detailOrganizerRole {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.detailDescription {
+  font-size: 13px;
+  color: var(--color-text-primary);
+  max-height: 140px;
+  overflow: auto;
+  border-top: 1px solid var(--color-glass-border);
+  padding-top: 8px;
+}
+
+.detailFooter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.detailDeleteBtn,
+.detailEditBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--color-glass-border);
+}
+
+.detailDeleteBtn {
+  background: transparent;
+  color: var(--color-danger-alt, #ff6b6b);
+  border-color: var(--color-danger-alt-border, rgba(255, 107, 107, 0.4));
+}
+
+.detailEditBtn {
+  margin-left: auto;
+  background: var(--color-accent, #2aabee);
+  color: #fff;
+  border-color: transparent;
+}
+
+/* -- Context menu ---------------------------------------------------------- */
+.contextMenu {
+  position: fixed;
+  z-index: 10011;
+  padding: 4px;
+  background: var(--color-bg-elevated, #1b1d23);
+  border: 1px solid var(--color-glass-border-hover, var(--color-glass-border));
+  border-radius: 8px;
+  box-shadow: 0 8px 28px var(--color-overlay-strong);
+}
+
+.contextItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.contextItem:hover {
+  background: var(--color-glass-hover);
+}
+
+.contextDanger {
+  color: var(--color-danger-alt, #ff6b6b);
+}
+
+.contextCheck {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex-shrink: 0;
+  color: var(--color-accent, #2aabee);
+}
+
+.contextSep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--color-glass-border);
+}
+
+.contextRecolorLabel {
+  padding: 2px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+}
+
+.contextSwatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px 8px;
+}
+
+.swatchSmall {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.swatchActive {
+  border-color: var(--color-text-primary);
+}
+
+/* -- Work-hours popover ---------------------------------------------------- */
+.workPopover {
+  position: fixed;
+  z-index: 10011;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--color-bg-elevated, #1b1d23);
+  border: 1px solid var(--color-glass-border);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px var(--color-overlay-strong);
+}
+
+.workRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fieldLabelInline {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.workDays {
+  display: flex;
+  gap: 4px;
+}
+
+.dayPill {
+  flex: 1;
+  height: 28px;
+  border: 1px solid var(--color-glass-border);
+  border-radius: 6px;
+  background: var(--color-glass);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dayPillOn {
+  background: var(--color-accent-fill, rgba(42, 171, 238, 0.18));
+  color: var(--color-text-primary);
+  border-color: var(--color-accent, #2aabee);
+}
+
+/* Inputs used inside the work-hours popover (mirror the dialog inputs). */
+.input {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--color-glass-border);
+  border-radius: 6px;
+  background: var(--color-bg-elevated, #1b1d23);
+  color: var(--color-text-primary);
+  font-size: 13px;
+  color-scheme: dark;
+}
+
+.input option {
+  background: var(--color-bg-elevated, #1b1d23);
+  color: var(--color-text-primary);
+}

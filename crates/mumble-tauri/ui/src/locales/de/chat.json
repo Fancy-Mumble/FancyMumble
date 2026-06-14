@@ -57,6 +57,7 @@
     "closeStream": "Stream schließen",
     "pinnedMessages": "Angeheftete Nachrichten",
     "downloads": "Downloads",
+    "calendar": "Kalender",
     "mySharedFiles": "Meine geteilten Dateien",
     "createPoll": "Umfrage erstellen",
     "browseDocuments": "Dokumente durchsuchen",
@@ -66,6 +67,88 @@
     "join": "Beitreten",
     "joinChannel": "Kanal beitreten",
     "popOutDm": "Direktnachricht ausklinken"
+  },
+  "calendar": {
+    "title": "Kalender",
+    "close": "Kalender schließen",
+    "prev": "Zurück",
+    "next": "Weiter",
+    "today": "Heute",
+    "newMeeting": "Neuer Termin",
+    "editMeeting": "Termin bearbeiten",
+    "you": "Du",
+    "untitled": "(ohne Titel)",
+    "organizer": "Organisator",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "recolor": "Umfärben",
+    "response": {
+      "title": "Antwort",
+      "accept": "Annehmen",
+      "tentative": "Mit Vorbehalt",
+      "decline": "Ablehnen",
+      "proposeNewTime": "Neue Zeit vorschlagen"
+    },
+    "showAs": {
+      "title": "Anzeigen als",
+      "free": "Frei",
+      "tentative": "Mit Vorbehalt",
+      "busy": "Beschäftigt",
+      "away": "Abwesend",
+      "workingElsewhere": "Woanders tätig",
+      "oof": "Außer Haus"
+    },
+    "workHours": {
+      "title": "Arbeitszeiten festlegen",
+      "short": "Arbeitszeiten",
+      "enable": "Arbeitszeiten anzeigen",
+      "from": "Von",
+      "to": "Bis"
+    },
+    "views": {
+      "day": "Tag",
+      "workweek": "Arbeitswoche",
+      "week": "Woche",
+      "month": "Monat"
+    },
+    "fields": {
+      "title": "Titel",
+      "invitees": "Eingeladene",
+      "inviteesPlaceholder": "Registrierte oder online Benutzer hinzufügen",
+      "allDay": "Ganztägig",
+      "location": "Ort",
+      "description": "Beschreibung",
+      "descriptionPlaceholder": "Details, Agenda, Links hinzufügen…",
+      "color": "Farbe",
+      "customColor": "Eigene Farbe",
+      "reminder": "Erinnerung",
+      "timezone": "Zeitzone"
+    },
+    "repeat": {
+      "none": "Wiederholt sich nicht",
+      "weekdays": "Jeden Wochentag (Mo–Fr)",
+      "daily": "Täglich",
+      "weekly": "Wöchentlich",
+      "monthly": "Monatlich",
+      "yearly": "Jährlich",
+      "custom": "Benutzerdefiniert",
+      "every": "alle",
+      "units": {
+        "day": "Tag(e)",
+        "week": "Woche(n)",
+        "month": "Monat(e)",
+        "year": "Jahr(e)"
+      }
+    },
+    "reminders": {
+      "none": "Keine Erinnerung",
+      "atStart": "Zur Startzeit",
+      "minutes": "{{count}} Minuten vorher",
+      "hours": "{{count}} Stunden vorher",
+      "days": "{{count}} Tage vorher"
+    }
   },
   "contextMenu": {
     "moreReactions": "Weitere Reaktionen",

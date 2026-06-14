@@ -14,6 +14,7 @@ import {
 } from "./pages/settings/userShortcuts";
 import { useVisualViewport } from "./hooks/useVisualViewport";
 import { useNotificationSounds } from "./hooks/useNotificationSounds";
+import { useCalendarReminders } from "./components/chat/calendar/useCalendarReminders";
 import { useSpoilerReveal } from "./hooks/useSpoilerReveal";
 import { useCodeHighlight } from "./hooks/useCodeHighlight";
 import { useWatchLifecycle } from "./components/chat/watch/useWatchLifecycle";
@@ -150,6 +151,9 @@ function MainApp() {
 
   // Notification sounds - plays audio for events based on user config.
   useNotificationSounds(notifSounds);
+
+  // Calendar: load saved meetings, re-publish own meetings, and fire reminders.
+  useCalendarReminders();
 
   // Click-to-reveal for spoiler tags rendered anywhere in the app.
   useSpoilerReveal();
