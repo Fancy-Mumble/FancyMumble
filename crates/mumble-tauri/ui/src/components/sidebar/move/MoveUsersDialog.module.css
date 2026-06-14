@@ -1,0 +1,66 @@
+.dialog {
+  background: var(--bg-secondary, #2b2d31);
+  border: 1px solid var(--border-color, #3a3c43);
+  border-radius: 8px;
+  padding: 24px;
+  min-width: 320px;
+  max-width: 480px;
+  width: 90vw;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.body {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #aaa);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.cancelBtn {
+  padding: 7px 16px;
+  border-radius: 4px;
+  border: none;
+  background: var(--bg-tertiary, #3a3c43);
+  color: var(--text-secondary, #aaa);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.cancelBtn:hover {
+  background: var(--bg-hover, #4a4c54);
+}
+
+.confirmBtn {
+  padding: 7px 16px;
+  border-radius: 4px;
+  border: none;
+  background: var(--accent-color, #5865f2);
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.confirmBtn:hover:not(:disabled) {
+  background: var(--accent-hover, #4752c4);
+}
+
+.confirmBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

@@ -1,0 +1,130 @@
+.stack {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.stack > * + * {
+  margin-left: -8px;
+}
+
+.avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--color-accent, #2aabee);
+  background: var(--color-surface-elevated, #262a32);
+  color: var(--color-text-primary, #f5f6f8);
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px var(--color-surface-elevated, #262a32);
+  z-index: 1;
+}
+
+.avatar:hover {
+  z-index: 4;
+}
+
+.avatarImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.avatarFallback {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+.localDot {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6cce6c;
+  border: 1.5px solid var(--color-surface-elevated, #262a32);
+}
+
+.overflowWrap {
+  position: relative;
+  display: inline-flex;
+  margin-left: -8px;
+}
+
+.overflowChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border, rgba(255, 255, 255, 0.18));
+  background: var(--color-surface-elevated, #262a32);
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px var(--color-surface-elevated, #262a32);
+}
+
+.overflowChip:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.overflowMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  min-width: 180px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--color-surface, #1e2128);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.overflowRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+}
+
+.overflowAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--color-accent, #2aabee);
+  background: var(--color-surface-elevated, #262a32);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.overflowName {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

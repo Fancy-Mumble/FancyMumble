@@ -33,7 +33,7 @@ class FcmService : FirebaseMessagingService() {
 
         /**
          * Ensures the "messages" notification channel exists.
-         * Safe to call multiple times — Android no-ops if it already exists.
+         * Safe to call multiple times - Android no-ops if it already exists.
          */
         fun ensureChannel(context: android.content.Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
    Guardbase Theme - Fancy Mumble
    AI security dark palette: deep navy, steel blue, near-white.
    Palette: (#0E1826 #012340 #2E4959 #687E8C #F2F2F2)
@@ -100,15 +100,15 @@
   /* -- Link ------------------------------------------------------ */
   --color-link: #687E8C;
 
-  /* -- Discord-style palette (reactions / emoji picker) ----------- */
-  --color-discord-purple: #687E8C;
-  --color-discord-dark: #0E1826;
-  --color-discord-bg: #012340;
-  --color-discord-border: #2E4959;
-  --color-discord-hover: #2E4959;
-  --color-discord-muted: #687E8C;
-  --color-discord-text: #F2F2F2;
-  --color-discord-active: #2E4959;
+  /* -- Picker palette (reactions / emoji picker) ----------- */
+  --color-picker-accent: #687E8C;
+  --color-picker-dark: #0E1826;
+  --color-picker-bg: #012340;
+  --color-picker-border: #2E4959;
+  --color-picker-hover: #2E4959;
+  --color-picker-muted: #687E8C;
+  --color-picker-text: #F2F2F2;
+  --color-picker-active: #2E4959;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.22);

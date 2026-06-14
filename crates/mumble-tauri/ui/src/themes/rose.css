@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
    Rose Theme - Fancy Mumble
    Warm rose/blush dark theme with pink accent tones.
    ================================================================ */
@@ -99,15 +99,15 @@
   /* -- Link ------------------------------------------------------ */
   --color-link: #f9a8d4;
 
-  /* -- Discord-style palette (reactions / emoji picker) ----------- */
-  --color-discord-purple: #e879f9;
-  --color-discord-dark: #1a0f14;
-  --color-discord-bg: #241620;
-  --color-discord-border: #3a2530;
-  --color-discord-hover: #2d1c26;
-  --color-discord-muted: #a0808e;
-  --color-discord-text: #f0dce4;
-  --color-discord-active: #3a2530;
+  /* -- Picker palette (reactions / emoji picker) ----------- */
+  --color-picker-accent: #e879f9;
+  --color-picker-dark: #1a0f14;
+  --color-picker-bg: #241620;
+  --color-picker-border: #3a2530;
+  --color-picker-hover: #2d1c26;
+  --color-picker-muted: #a0808e;
+  --color-picker-text: #f0dce4;
+  --color-picker-active: #3a2530;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.2);

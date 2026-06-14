@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
    Ply Theme - Fancy Mumble
    Light theme: steel blue, deep forest green, vivid red, near-white.
    Palette: (#93ABBF #024029 #F20505 #F2F2F2 #0D0D0D)
@@ -100,15 +100,15 @@
   /* -- Link (vivid blue) ----------------------------------------- */
   --color-link: #2e7fc2;
 
-  /* -- Discord-style palette (reactions / emoji picker) ----------- */
-  --color-discord-purple: #2e7fc2;
-  --color-discord-dark: #F2F2F2;
-  --color-discord-bg: #ffffff;
-  --color-discord-border: #CCCCCC;
-  --color-discord-hover: #E8E8E8;
-  --color-discord-muted: rgba(13, 13, 13, 0.50);
-  --color-discord-text: #0D0D0D;
-  --color-discord-active: #CCCCCC;
+  /* -- Picker palette (reactions / emoji picker) ----------- */
+  --color-picker-accent: #2e7fc2;
+  --color-picker-dark: #F2F2F2;
+  --color-picker-bg: #ffffff;
+  --color-picker-border: #CCCCCC;
+  --color-picker-hover: #E8E8E8;
+  --color-picker-muted: rgba(13, 13, 13, 0.50);
+  --color-picker-text: #0D0D0D;
+  --color-picker-active: #CCCCCC;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.07);

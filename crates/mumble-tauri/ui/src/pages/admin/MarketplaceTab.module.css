@@ -1,0 +1,294 @@
+.devSelect {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+  border: 1px dashed rgba(220, 160, 0, 0.5);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  outline: none;
+}
+
+.devSelect:focus {
+  border-color: rgba(220, 160, 0, 0.85);
+}
+
+.errorBanner {
+  margin: 12px 0;
+  padding: 10px 12px;
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-danger);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.warnBanner {
+  margin: 12px 0;
+  padding: 10px 12px;
+  background: rgba(220, 160, 0, 0.12);
+  border: 1px solid rgba(220, 160, 0, 0.35);
+  color: rgb(220, 170, 40);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.successBanner {
+  margin: 12px 0;
+  padding: 10px 12px;
+  background: rgba(80, 200, 120, 0.12);
+  border: 1px solid rgba(80, 200, 120, 0.35);
+  color: rgb(120, 220, 150);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.empty {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--color-text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-md, 8px);
+  padding: 14px;
+  gap: 10px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.cardIcon,
+.cardIconFallback {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  object-fit: cover;
+}
+
+.cardIconFallback {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.cardTitleCol {
+  flex: 1;
+  min-width: 0;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.officialBadge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent-glow);
+}
+
+.cardSubtitle {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.abiBadge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-glass-border);
+  font-family: var(--font-mono, monospace);
+}
+
+.abiBadgeBad {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger-border);
+  font-family: var(--font-mono, monospace);
+}
+
+.incompatNote {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-danger);
+  line-height: 1.4;
+}
+
+.cardDesc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.capRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.capBadge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono, monospace);
+}
+
+.cardFooter {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+}
+
+.installBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--color-accent-glow);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+  transition: all 0.15s;
+}
+.installBtn:hover:not(:disabled) {
+  background: var(--color-accent-medium);
+}
+.installBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.installedBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: not-allowed;
+  border: 1px solid rgba(80, 200, 120, 0.35);
+  background: rgba(80, 200, 120, 0.1);
+  color: rgb(120, 220, 150);
+  opacity: 0.8;
+}
+
+.installedBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(80, 200, 120, 0.12);
+  color: rgb(120, 220, 150);
+  border: 1px solid rgba(80, 200, 120, 0.3);
+}
+
+.downloads {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.detailsBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--color-glass-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  transition: all 0.15s;
+}
+.detailsBtn:hover {
+  background: var(--color-glass);
+  color: var(--color-text-primary);
+}
+
+.cardTitleBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.12s;
+}
+.cardTitleBtn:hover {
+  color: var(--color-accent);
+  text-decoration: underline;
+}

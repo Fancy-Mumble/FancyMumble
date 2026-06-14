@@ -1,0 +1,249 @@
+/* LiveDocInsertWidgets - dropdown pickers + forms for the Insert ribbon tab. */
+
+.menuWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.menu {
+  background: var(--color-surface-elevated, #262a32);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  padding: 8px;
+  max-height: 60vh;
+  overflow: auto;
+}
+
+/* Shape / icon grids */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.gridCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  cursor: pointer;
+}
+
+.gridCell:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+  border-color: var(--color-border, rgba(255, 255, 255, 0.14));
+}
+
+.gridCell img {
+  display: block;
+}
+
+/* Symbol grid */
+.symbolGrid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+
+.symbolCell {
+  width: 30px;
+  height: 30px;
+  font-size: 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--color-text-primary, #f5f6f8);
+  cursor: pointer;
+}
+
+.symbolCell:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+  border-color: var(--color-border, rgba(255, 255, 255, 0.14));
+}
+
+/* Lists (date/time, quick parts) */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.listItem {
+  text-align: left;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.listItem:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.listItemActive {
+  color: var(--color-accent, #2aabee);
+  background: var(--color-accent-subtle, rgba(42, 171, 238, 0.12));
+}
+
+.listSep {
+  margin: 4px 0;
+  border: 0;
+  border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+}
+
+/* Chart form */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chartTypes {
+  display: flex;
+  gap: 4px;
+}
+
+.chartType {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.14));
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.75));
+  font-size: 12px;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.chartTypeActive {
+  background: var(--color-accent-subtle, rgba(42, 171, 238, 0.18));
+  border-color: var(--color-accent, #2aabee);
+  color: var(--color-accent, #2aabee);
+}
+
+.formLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.75));
+}
+
+.input {
+  padding: 6px 8px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.16));
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-surface, #1e2128);
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 13px;
+}
+
+.primaryBtn {
+  padding: 7px 12px;
+  border: 0;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-accent, #2aabee);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primaryBtn:hover {
+  filter: brightness(1.08);
+}
+
+.primaryBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Icon picker (search + scrolling grid) */
+.iconPicker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.16));
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-surface, #1e2128);
+  color: var(--color-text-muted, #aab0b8);
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 13px;
+  outline: none;
+}
+
+.iconGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.noResults {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 16px;
+  color: var(--color-text-muted, #aab0b8);
+  font-size: 12px;
+}
+
+/* Online-video preview + frame styles */
+.videoPreview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.videoPreview iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.previewEmpty {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+}
+
+.frame_rounded {
+  border-radius: 10px;
+}
+
+.frame_shadow {
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+}
+
+.frame_bordered {
+  border: 3px solid var(--color-accent, #2aabee);
+  border-radius: 4px;
+}

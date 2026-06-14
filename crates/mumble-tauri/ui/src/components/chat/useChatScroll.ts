@@ -1,10 +1,18 @@
-import { useRef, useEffect, useCallback, useState } from "react";
+import { useRef, useEffect, useLayoutEffect, useCallback, useState, useMemo } from "react";
 import { useAppStore } from "../../store";
 import type { ChatMessage } from "../../types";
 import {
   offloadManager,
   type MessageScope,
 } from "../../messageOffload";
+import {
+  BASE_WINDOW,
+  GROW_THRESHOLD_PX,
+  grownTailCount,
+  initialTailCount,
+  tailCountAfterAppend,
+  tailCountToInclude,
+} from "./chatWindowing";
 
 /** Pixel threshold: user counts as "at the bottom" when within this. */
 const NEAR_BOTTOM_PX = 120;
@@ -83,6 +91,96 @@ export function useChatScroll({
    */
   const pendingUnreadRef = useRef(0);
 
+  // --- Tail-anchored render window (see chatWindowing.ts) -----------
+  // Only the last `tailCount` messages are mounted as DOM; the window
+  // grows as the user scrolls toward the top of the rendered content
+  // and snaps back to the base size at the bottom.
+
+  /** Number of trailing messages currently rendered. */
+  const [tailCount, setTailCount] = useState(BASE_WINDOW);
+
+  /** Render-time mirrors so event handlers see current values without
+   *  re-subscribing. */
+  const allMessagesRef = useRef(allMessages);
+  allMessagesRef.current = allMessages;
+  const tailCountRef = useRef(tailCount);
+  tailCountRef.current = tailCount;
+
+  /**
+   * Scroll height captured just before the window grows at the top.
+   * The layout effect below restores the scroll position by the height
+   * of the newly mounted rows, so the viewport keeps showing the same
+   * content (mirrors the history-prepend correction).
+   */
+  const growPendingRef = useRef<{ scrollHeight: number } | null>(null);
+
+  /** Mount one more chunk of older messages above the current window. */
+  const growWindow = useCallback((el: HTMLElement) => {
+    if (growPendingRef.current) return;
+    const total = allMessagesRef.current.length;
+    if (tailCountRef.current >= total) return;
+    growPendingRef.current = { scrollHeight: el.scrollHeight };
+    setTailCount(grownTailCount(tailCountRef.current, total));
+  }, []);
+
+  // Anchor the viewport after a growth step: newly mounted rows add
+  // height above the current content, so shift scrollTop by exactly
+  // that height before paint.  If the user is still within the growth
+  // threshold afterwards (fast drag to the very top), grow again.
+  useLayoutEffect(() => {
+    const pending = growPendingRef.current;
+    if (!pending) return;
+    growPendingRef.current = null;
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const diff = el.scrollHeight - pending.scrollHeight;
+    if (diff > 0) el.scrollTop += diff;
+    if (el.scrollTop < GROW_THRESHOLD_PX && !stickToBottomRef.current) {
+      growWindow(el);
+    }
+  }, [tailCount, growWindow]);
+
+  /**
+   * Preserve the viewport when `delta` older messages were prepended
+   * to the in-memory list (history fetch).  When the render window does
+   * not cover the whole list yet, the new rows are not mounted in this
+   * commit - grow the window by the prepend size and let the growth
+   * layout-effect anchor the scroll position.  Otherwise the rows are
+   * already in this commit and the viewport is shifted directly.
+   */
+  const handleHistoryPrepend = useCallback((count: number, delta: number) => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    if (tailCountRef.current < count) {
+      growPendingRef.current ??= { scrollHeight: el.scrollHeight };
+      setTailCount((prev) => prev + delta);
+    } else {
+      const prevScrollHeight = el.scrollHeight;
+      requestAnimationFrame(() => {
+        el.scrollTop += el.scrollHeight - prevScrollHeight;
+      });
+    }
+  }, []);
+
+  /**
+   * Make sure the message with `messageId` is inside the render window
+   * (jump-to-quote, search, pinned-message navigation).  The caller
+   * still has to wait a frame for React to mount the row.
+   */
+  const ensureMessageRendered = useCallback((messageId: string) => {
+    const msgs = allMessagesRef.current;
+    const idx = msgs.findIndex((m) => m.message_id === messageId);
+    if (idx === -1) return;
+    setTailCount((prev) => tailCountToInclude(prev, idx, msgs.length));
+  }, []);
+
+  /** The slice of messages that is actually mounted. */
+  const windowStart = Math.max(0, allMessages.length - tailCount);
+  const visibleMessages = useMemo(
+    () => (windowStart === 0 ? allMessages : allMessages.slice(windowStart)),
+    [allMessages, windowStart],
+  );
+
   /** Instant scroll-to-bottom, updating the programmatic-scroll timestamp. */
   const scrollToBottom = useCallback((el: HTMLElement) => {
     stickToBottomRef.current = true;
@@ -111,6 +209,11 @@ export function useChatScroll({
       } else if (Date.now() - lastProgrammaticScrollRef.current > 150) {
         stickToBottomRef.current = false;
       }
+      // Approaching the top of the rendered window while reading
+      // history: mount the next chunk of older messages.
+      if (!stickToBottomRef.current && el.scrollTop < GROW_THRESHOLD_PX) {
+        growWindow(el);
+      }
     };
 
     const onWheel = (e: WheelEvent) => {
@@ -137,7 +240,7 @@ export function useChatScroll({
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
     };
-  }, [newMsgCount]);
+  }, [newMsgCount, growWindow]);
 
   // React to message-count changes.
   useEffect(() => {
@@ -153,13 +256,7 @@ export function useChatScroll({
 
     // Detect if older messages were prepended.
     if (prevFirstId !== null && curFirstId !== prevFirstId) {
-      const el = messagesContainerRef.current;
-      if (el) {
-        const prevScrollHeight = el.scrollHeight;
-        requestAnimationFrame(() => {
-          el.scrollTop += el.scrollHeight - prevScrollHeight;
-        });
-      }
+      handleHistoryPrepend(count, delta);
       return;
     }
 
@@ -198,15 +295,22 @@ export function useChatScroll({
 
     if (atBottom) {
       stickToBottomRef.current = true;
+      // Reading at the bottom: snap the render window back to its base
+      // size so a long scroll-up session doesn't keep its DOM forever.
+      setTailCount((prev) => tailCountAfterAppend(prev, delta, true));
       requestAnimationFrame(() => {
         if (el) scrollToBottom(el);
       });
     } else {
       stickToBottomRef.current = false;
+      // Scrolled up: grow the window with the appended messages so it
+      // keeps starting at the same message and the content above the
+      // viewport doesn't shift.
+      setTailCount((prev) => tailCountAfterAppend(prev, delta, false));
       setLastReadIdx((prev) => prev ?? count - delta);
       setNewMsgCount((prev) => prev + delta);
     }
-  }, [allMessages, scrollToBottom]);
+  }, [allMessages, scrollToBottom, handleHistoryPrepend]);
 
   // Re-pin after images / media load.
   useEffect(() => {
@@ -283,7 +387,10 @@ export function useChatScroll({
     prevMsgCountRef.current = 0;
     prevFirstMsgIdRef.current = null;
     stickToBottomRef.current = pendingUnreadRef.current === 0;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Fresh render window: base size, or large enough to show the
+    // "new messages" divider with context above it.
+    growPendingRef.current = null;
+    setTailCount(initialTailCount(pendingUnreadRef.current));
   }, [selectedChannel, selectedDmUser]);
 
   // Offload IntersectionObserver.
@@ -376,6 +483,8 @@ export function useChatScroll({
     if (el) scrollToBottom(el);
     setNewMsgCount(0);
     setLastReadIdx(null);
+    // Leaving history behind - snap the render window back to base size.
+    setTailCount(BASE_WINDOW);
   }, [scrollToBottom]);
 
   return {
@@ -386,5 +495,10 @@ export function useChatScroll({
     lastReadIdx,
     restoringKeys,
     handleScrollToBottom,
+    /** Mounted slice of `allMessages` (tail-anchored render window). */
+    visibleMessages,
+    /** Global index of `visibleMessages[0]` within `allMessages`. */
+    windowStart,
+    ensureMessageRendered,
   };
 }

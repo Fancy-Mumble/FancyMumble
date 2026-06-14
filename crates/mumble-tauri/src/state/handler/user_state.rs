@@ -8,7 +8,7 @@ use tracing::info;
 
 use super::{HandleMessage, HandlerContext};
 use crate::state::{pchat, SharedState};
-use crate::state::types::{CurrentChannelPayload, ServerLogEntry, UserEntry};
+use crate::state::types::{blob_marker, CurrentChannelPayload, ServerLogEntry, UserEntry, VoiceState};
 
 impl HandleMessage for mumble_tcp::UserState {
     fn handle(&self, ctx: &HandlerContext) {
@@ -24,8 +24,23 @@ impl HandleMessage for mumble_tcp::UserState {
                     mute: u.mute, deaf: u.deaf, self_mute: u.self_mute, self_deaf: u.self_deaf,
                 });
 
+                // Captured before the mutable `users` borrow so we can reconcile
+                // our own self-mute against the authoritative local voice state.
+                let own_session = state.conn.own_session;
+                let own_voice_state = state.audio.voice_state;
+
                 let user = state.users.entry(session).or_insert_with(|| UserEntry::new(session));
                 apply_user_state_fields(user, self);
+
+                // The server resets session self-mute to false on a fresh
+                // (re)connect, so a stale initial UserState can arrive AFTER the
+                // client's reconnect mute-restore and wrongly clear it. The local
+                // voice_state is authoritative for our own mic: once we've
+                // (re)muted (voice_state == Muted), re-assert self_mute on our own
+                // user so a late/stale UserState can't flip us to "unmuted".
+                if Some(session) == own_session && own_voice_state == VoiceState::Muted {
+                    user.self_mute = true;
+                }
 
                 if let (Some(ref hash), name) = (&user.hash, &user.name) {
                     maybe_record_name(&resolver, hash, name);
@@ -75,7 +90,9 @@ impl HandleMessage for mumble_tcp::UserState {
         }
 
         if is_synced {
-            request_missing_blobs(ctx, self, session);
+            // Avatars and comments are both fetched lazily on first view
+            // (`get_user_texture` / `get_user_comment`), so a post-sync update
+            // just records the existence markers (above) and notifies the UI.
             ctx.emit_empty("state-changed");
         }
     }
@@ -83,13 +100,54 @@ impl HandleMessage for mumble_tcp::UserState {
 
 fn apply_user_state_fields(user: &mut UserEntry, proto: &mumble_tcp::UserState) {
     if let Some(ref name) = proto.name { user.name = name.clone(); }
-    if let Some(ref texture) = proto.texture { user.texture = (!texture.is_empty()).then(|| texture.clone()); }
-    if let Some(ref comment) = proto.comment { user.comment = (!comment.is_empty()).then(|| comment.clone()); }
+    // Avatar: the existence/version marker comes from the server's
+    // `texture_hash` (advertised on sync, before any bytes are fetched); the
+    // bytes are stored only when actually delivered (post `RequestBlob`).  This
+    // keeps idle avatars off the heap - the backend holds a blob only for users
+    // a client has lazily fetched via `get_user_texture`.
+    if let Some(ref hash) = proto.texture_hash {
+        user.texture_marker = (!hash.is_empty()).then(|| blob_marker(hash));
+        if hash.is_empty() { user.texture = None; }
+    }
+    if let Some(ref texture) = proto.texture {
+        if texture.is_empty() {
+            user.texture = None;
+            if proto.texture_hash.is_none() { user.texture_marker = None; }
+        } else {
+            user.texture = Some(texture.clone());
+            if user.texture_marker.is_none() {
+                user.texture_marker = Some(blob_marker(texture));
+            }
+        }
+    }
+    // Comment/bio: same lazy treatment as the avatar - record existence via the
+    // marker (from `comment_hash`), store the text only when delivered.
+    if let Some(ref hash) = proto.comment_hash {
+        user.comment_marker = (!hash.is_empty()).then(|| blob_marker(hash));
+        if hash.is_empty() { user.comment = None; }
+    }
+    if let Some(ref comment) = proto.comment {
+        if comment.is_empty() {
+            user.comment = None;
+            if proto.comment_hash.is_none() { user.comment_marker = None; }
+        } else {
+            user.comment = Some(comment.clone());
+            if user.comment_marker.is_none() {
+                user.comment_marker = Some(blob_marker(comment.as_bytes()));
+            }
+        }
+    }
     if let Some(mute) = proto.mute { user.mute = mute; }
     if let Some(deaf) = proto.deaf { user.deaf = deaf; }
     if let Some(suppress) = proto.suppress { user.suppress = suppress; }
     if let Some(self_mute) = proto.self_mute { user.self_mute = self_mute; }
     if let Some(self_deaf) = proto.self_deaf { user.self_deaf = self_deaf; }
+    // Deafened implies muted: a deafened user cannot transmit. The server may
+    // broadcast self_deaf to peers without (re)sending self_mute - e.g. the
+    // connect-time deafen - which would otherwise leave peers showing an
+    // invalid "deafened-but-not-muted" state out of sync with the local UI.
+    // Enforce the invariant from whichever flag is currently set.
+    if user.self_deaf { user.self_mute = true; }
     if let Some(priority) = proto.priority_speaker { user.priority_speaker = priority; }
     if let Some(ref hash) = proto.hash { user.hash = Some(hash.clone()); }
     if !proto.client_features.is_empty() { user.client_features = proto.client_features.clone(); }
@@ -166,15 +224,6 @@ fn handle_own_channel_change(ctx: &HandlerContext, ch: u32) {
         mark_channel_fetched(&ctx.shared, ch);
         let shared = Arc::clone(&ctx.shared);
         let _pchat_init_task = tokio::spawn(pchat_init_task(shared, ch));
-    }
-}
-
-fn request_missing_blobs(ctx: &HandlerContext, proto: &mumble_tcp::UserState, session: u32) {
-    let need_texture = proto.texture_hash.is_some() && proto.texture.is_none();
-    let need_comment = proto.comment_hash.is_some() && proto.comment.is_none();
-    if need_texture || need_comment {
-        let shared = Arc::clone(&ctx.shared);
-        let _blob_task = tokio::spawn(request_user_blob(shared, session, need_texture, need_comment));
     }
 }
 
@@ -403,19 +452,3 @@ async fn pchat_init_task(shared: Arc<Mutex<SharedState>>, ch: u32) {
     }
 }
 
-async fn request_user_blob(
-    shared: Arc<Mutex<SharedState>>,
-    sess: u32,
-    need_texture: bool,
-    need_comment: bool,
-) {
-    let Some(handle) = shared.lock().ok().and_then(|s| s.conn.client_handle.clone()) else { return };
-    let _ = handle
-        .send(command::RequestBlob {
-            session_texture: if need_texture { vec![sess] } else { Vec::new() },
-            session_comment: if need_comment { vec![sess] } else { Vec::new() },
-            channel_description: Vec::new(),
-            user_id_comment: Vec::new(),
-        })
-        .await;
-}

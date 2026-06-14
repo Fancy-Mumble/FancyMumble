@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
    Tokyo Night Theme - Fancy Mumble
    Vibrant neon syntax colours on a cool indigo-ink base.
    ================================================================ */
@@ -99,15 +99,15 @@
   /* -- Link ------------------------------------------------------ */
   --color-link: #7dcfff;
 
-  /* -- Discord-style palette (reactions / emoji picker) ----------- */
-  --color-discord-purple: #bb9af7;
-  --color-discord-dark: #1a1b26;
-  --color-discord-bg: #24283b;
-  --color-discord-border: #414868;
-  --color-discord-hover: #2f334d;
-  --color-discord-muted: #565f89;
-  --color-discord-text: #a9b1d6;
-  --color-discord-active: #414868;
+  /* -- Picker palette (reactions / emoji picker) ----------- */
+  --color-picker-accent: #bb9af7;
+  --color-picker-dark: #1a1b26;
+  --color-picker-bg: #24283b;
+  --color-picker-border: #414868;
+  --color-picker-hover: #2f334d;
+  --color-picker-muted: #565f89;
+  --color-picker-text: #a9b1d6;
+  --color-picker-active: #414868;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.18);

@@ -215,6 +215,24 @@ pub struct ConnectionInfo {
     /// `None` means the server is a standard Mumble server without
     /// Fancy Mumble extensions.
     pub server_fancy_version: Option<u64>,
+    /// The Mumble protocol version announced by the server, in v2
+    /// encoding (`major << 48 | minor << 32 | patch << 16`).
+    /// `None` until the handshake `Version` message is received.
+    pub server_version_v2: Option<u64>,
+}
+
+impl ConnectionInfo {
+    /// Whether the server understands the protobuf UDP audio protocol
+    /// introduced in Mumble 1.5.  Older servers require the legacy
+    /// varint-framed packet format for everything we *send*; inbound
+    /// packets are format-detected, so only the send paths consult this.
+    ///
+    /// Defaults to `true` while the version is still unknown - the
+    /// server announces its version before audio can flow.
+    pub fn supports_protobuf_audio(&self) -> bool {
+        const V1_5_0: u64 = (1 << 48) | (5 << 32);
+        self.server_version_v2.is_none_or(|v| v >= V1_5_0)
+    }
 }
 
 use crate::transport::ocb2::SharedPacketStats;
@@ -348,6 +366,15 @@ impl ServerState {
     /// extensions (`message_id`, `timestamp`, etc.).
     pub fn apply_version(&mut self, version: &crate::proto::mumble_tcp::Version) {
         self.connection.server_fancy_version = version.fancy_version;
+        // Servers < 1.5 only send the legacy v1 encoding; widen it to v2
+        // so a single field can be compared everywhere.
+        self.connection.server_version_v2 = version.version_v2.or_else(|| {
+            version.version_v1.map(|v1| {
+                ((v1 as u64 >> 16) << 48)
+                    | (((v1 as u64 >> 8) & 0xFF) << 32)
+                    | ((v1 as u64 & 0xFF) << 16)
+            })
+        });
     }
 
     /// Apply `ServerSync` to record our session and connection metadata.
@@ -392,6 +419,52 @@ mod tests {
         assert!(state.channels.is_empty());
         assert!(state.own_session().is_none());
         assert!(state.connection.welcome_text.is_none());
+    }
+
+    #[test]
+    fn unknown_server_version_assumes_protobuf_audio() {
+        let state = ServerState::new();
+        assert!(state.connection.supports_protobuf_audio());
+    }
+
+    #[test]
+    fn apply_version_legacy_v1_only_disables_protobuf_audio() {
+        let mut state = ServerState::new();
+        // Mumble 1.3.0 only sends the v1 encoding.
+        let version = mumble_tcp::Version {
+            version_v1: Some((1 << 16) | (3 << 8)),
+            ..Default::default()
+        };
+        state.apply_version(&version);
+        assert!(!state.connection.supports_protobuf_audio());
+        assert_eq!(
+            state.connection.server_version_v2,
+            Some((1 << 48) | (3 << 32))
+        );
+    }
+
+    #[test]
+    fn apply_version_v2_enables_protobuf_audio() {
+        let mut state = ServerState::new();
+        let version = mumble_tcp::Version {
+            version_v1: Some((1 << 16) | (5 << 8)),
+            version_v2: Some((1 << 48) | (5 << 32)),
+            ..Default::default()
+        };
+        state.apply_version(&version);
+        assert!(state.connection.supports_protobuf_audio());
+    }
+
+    #[test]
+    fn apply_version_v1_only_1_5_enables_protobuf_audio() {
+        let mut state = ServerState::new();
+        // A 1.5 server announced only via the widened v1 encoding.
+        let version = mumble_tcp::Version {
+            version_v1: Some((1 << 16) | (5 << 8)),
+            ..Default::default()
+        };
+        state.apply_version(&version);
+        assert!(state.connection.supports_protobuf_audio());
     }
 
     #[test]

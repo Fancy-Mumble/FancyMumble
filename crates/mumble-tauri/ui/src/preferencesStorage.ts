@@ -3,7 +3,7 @@
  * using `@tauri-apps/plugin-store` (Tauri Store v2).
  */
 
-import { load } from "@tauri-apps/plugin-store";
+import { load } from "./utils/store";
 import type {
   AudioSettings,
   NotificationSoundSettings,
@@ -23,10 +23,17 @@ const DEFAULTS: UserPreferences = {
   klipyApiKey: "",
   timeFormat: "auto",
   convertToLocalTime: true,
+  dateFormat: "auto",
+  numberFormat: "auto",
   enableNotifications: true,
   enableDualPath: false,
   debugLogging: false,
   logLevel: "info",
+  logToFile: false,
+  terminalLogging: false,
+  autoZipLogs: false,
+  calibrationSignature: null,
+  serverTabOrder: [],
   disableTypingIndicators: false,
   disableOsmMaps: false,
   disableLinkPreviews: false,
@@ -35,6 +42,10 @@ const DEFAULTS: UserPreferences = {
   autoReconnect: false,
   autoUpdateOnStartup: false,
   skippedUpdateVersion: null,
+  persistDms: false,
+  hideEmptyChannels: false,
+  welcomeMessageDisplay: "once",
+  showDisconnectWarning: true,
 };
 
 async function getStore() {
@@ -68,16 +79,39 @@ export async function setPreferences(
   const store = await getStore();
   await store.set(KEY, prefs);
   cachedPrefs = Promise.resolve(prefs);
+  // Signal listeners (e.g. the server tab bar) so they can react to a pref
+  // change without remounting.
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("preferences-changed", { detail: prefs }));
+  }
 }
 
-/** Update specific preference fields. */
+// Serializes preference writes. Each updatePreferences() does a read-modify-
+// write of the shared `preferences` object; without serialization two
+// overlapping calls both read the same `current` and the later-completing one
+// silently drops the other's fields. The callers are mostly fire-and-forget
+// (`.catch(() => {})`), so overlap is common - e.g. rapid mute toggles racing
+// an unrelated pref write during (re)connect intermittently lost
+// `voiceMutedOnReconnect`, breaking the muted reconnect-restore.
+let prefWriteChain: Promise<unknown> = Promise.resolve();
+
+/** Update specific preference fields.
+ *
+ * Patches are applied strictly in call order and never interleave, so
+ * concurrent updates cannot clobber each other. */
 export async function updatePreferences(
   patch: Partial<UserPreferences>,
 ): Promise<UserPreferences> {
-  const current = await getPreferences();
-  const updated = { ...current, ...patch };
-  await setPreferences(updated);
-  return updated;
+  const apply = async (): Promise<UserPreferences> => {
+    const current = await getPreferences();
+    const updated = { ...current, ...patch };
+    await setPreferences(updated);
+    return updated;
+  };
+  const result = prefWriteChain.then(apply, apply);
+  // Keep the chain alive even when a write rejects, so later writes still run.
+  prefWriteChain = result.catch(() => {});
+  return result;
 }
 
 /** Check whether this is the user's first run (setup not completed). */
@@ -258,6 +292,30 @@ export async function setMutedPushChannel(
   return updated;
 }
 
+// -- Welcome-message "shown once" tracking (per-server) ------------
+
+/**
+ * Server keys ("host:port") whose welcome message has already been shown
+ * under the "Show once" preference, so it isn't shown again on reconnect.
+ */
+const WELCOME_SHOWN_KEY = "welcomeShownServers";
+
+/** Whether the welcome message has already been shown for a server. */
+export async function hasShownWelcome(serverKey: string): Promise<boolean> {
+  const store = await getStore();
+  const seen = (await store.get<string[]>(WELCOME_SHOWN_KEY)) ?? [];
+  return seen.includes(serverKey);
+}
+
+/** Record that a server's welcome message has been shown. */
+export async function markWelcomeShown(serverKey: string): Promise<void> {
+  const store = await getStore();
+  const seen = (await store.get<string[]>(WELCOME_SHOWN_KEY)) ?? [];
+  if (!seen.includes(serverKey)) {
+    await store.set(WELCOME_SHOWN_KEY, [...seen, serverKey]);
+  }
+}
+
 // -- Notification sound settings -----------------------------------
 
 const NOTIFICATION_SOUNDS_KEY = "notificationSounds";
@@ -306,7 +364,15 @@ export async function getCachedRegisteredUsers(
   return map[serverKey] ?? null;
 }
 
-/** Persist the registered-user list for a server. */
+/** Persist the registered-user list for a server.
+ *
+ * Only lightweight identity fields are persisted. Inline comments are
+ * dropped (only the `comment_hash` marker is kept); avatars never reach
+ * this cache because the backend now ships `texture_size` (a marker) rather
+ * than the bytes. This keeps the store tiny - it previously grew to ~129 MB
+ * on disk / ~250 MB resident when avatar bytes were persisted as `number[]`.
+ * Avatars and long comments are fetched on demand and refreshed by the
+ * background request. */
 export async function saveCachedRegisteredUsers(
   serverKey: string,
   users: readonly RegisteredUser[],
@@ -314,6 +380,15 @@ export async function saveCachedRegisteredUsers(
   const store = await getStore();
   const map =
     (await store.get<RegisteredUsersCacheMap>(REGISTERED_USERS_KEY)) ?? {};
-  map[serverKey] = { users, cachedAt: Date.now() };
+  const lean: RegisteredUser[] = users.map((u) => ({
+    user_id: u.user_id,
+    name: u.name,
+    last_seen: u.last_seen,
+    last_channel: u.last_channel,
+    // Small markers only: avatar presence and "a comment exists".
+    texture_size: u.texture_size ?? null,
+    comment_hash: u.comment_hash ? u.comment_hash : null,
+  }));
+  map[serverKey] = { users: lean, cachedAt: Date.now() };
   await store.set(REGISTERED_USERS_KEY, map);
 }

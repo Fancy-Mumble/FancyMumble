@@ -83,7 +83,7 @@ pub trait ImageTransform {
 ///
 /// `sigma` controls the blur radius (clamped to `[0.0, 50.0]`).  A value of
 /// `0.0` returns the image unchanged.  Typical range for UI backgrounds is
-/// `4.0` – `20.0`.
+/// `4.0` - `20.0`.
 #[derive(Debug, Clone, Copy)]
 pub struct BlurFilter {
     sigma: f32,

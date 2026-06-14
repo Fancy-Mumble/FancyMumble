@@ -26,8 +26,13 @@ import {
   _clearLazyBlobsForTests,
 } from "../../lazyBlobs";
 
+// jsdom does not implement object URLs; avatars are blob object URLs now.
+let objectUrlCounter = 0;
 beforeEach(() => {
   invokeMock.mockReset();
+  objectUrlCounter = 0;
+  globalThis.URL.createObjectURL = vi.fn(() => `blob:test/${++objectUrlCounter}`);
+  globalThis.URL.revokeObjectURL = vi.fn();
   _clearLazyBlobsForTests();
 });
 
@@ -45,7 +50,7 @@ describe("lazyBlobs avatar cache", () => {
     setUserAvatarBytes(42, [1, 2, 3, 4]);
     const url = getCachedUserAvatar(42, 4);
     expect(url).not.toBeNull();
-    expect(url!.startsWith("data:")).toBe(true);
+    expect(url!.startsWith("blob:")).toBe(true);
   });
 
   it("returns null when the cached size does not match (stale -> refetch)", () => {

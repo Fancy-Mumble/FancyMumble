@@ -15,6 +15,7 @@
 
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../../store";
 import { createPlayerAdapter } from "./createPlayerAdapter";
 import type { PlayerAdapter } from "./PlayerAdapter";
@@ -37,6 +38,7 @@ interface Props {
 }
 
 function WatchTogetherCardImpl({ sessionId, mountKey }: Props) {
+  const { t } = useTranslation("chat");
   const session = useAppStore((s) => s.watchSessions.get(sessionId));
   const ownSession = useAppStore((s) => s.ownSession);
   const enableExternalEmbeds = useAppStore((s) => s.enableExternalEmbeds);
@@ -216,12 +218,12 @@ function WatchTogetherCardImpl({ sessionId, mountKey }: Props) {
           <span className={styles.title}>{session.title ?? session.sourceUrl}</span>
           <span className={styles.badges}>
             <span className={styles.participants}>
-              {session.participants.size} watching{hostName ? ` \u00B7 host: ${hostName}` : ""}
+              {hostName ? t("watch.card.watchingWithHost", { count: session.participants.size, hostName }) : t("watch.watching", { count: session.participants.size })}
             </span>
           </span>
         </div>
         <div className={styles.warning}>
-          Watch session is open elsewhere on this page.
+          {t("watch.card.openElsewhere")}
         </div>
       </div>
     );
@@ -234,12 +236,12 @@ function WatchTogetherCardImpl({ sessionId, mountKey }: Props) {
           <span className={styles.title}>{session.title ?? session.sourceUrl}</span>
           <span className={styles.badges}>
             <span className={styles.participants}>
-              {session.participants.size} watching{hostName ? ` \u00B7 host: ${hostName}` : ""}
+              {hostName ? t("watch.card.watchingWithHost", { count: session.participants.size, hostName }) : t("watch.watching", { count: session.participants.size })}
             </span>
           </span>
         </div>
         <div className={styles.actions}>
-          <button type="button" onClick={handleRejoin}>Rejoin</button>
+          <button type="button" onClick={handleRejoin}>{t("watch.card.rejoin")}</button>
         </div>
       </div>
     );
@@ -250,9 +252,9 @@ function WatchTogetherCardImpl({ sessionId, mountKey }: Props) {
       <div className={styles.header}>
         <span className={styles.title}>{session.title ?? session.sourceUrl}</span>
         <span className={styles.badges}>
-          {isHost && <span className={styles.hostBadge}>HOST</span>}
+          {isHost && <span className={styles.hostBadge}>{t("watch.card.hostBadge")}</span>}
           <span className={styles.participants}>
-            {session.participants.size} watching{hostName ? ` \u00B7 host: ${hostName}` : ""}
+            {hostName ? t("watch.card.watchingWithHost", { count: session.participants.size, hostName }) : t("watch.watching", { count: session.participants.size })}
           </span>
         </span>
       </div>
@@ -262,15 +264,15 @@ function WatchTogetherCardImpl({ sessionId, mountKey }: Props) {
       {adapterError && <div className={styles.error}>{adapterError}</div>}
       {outOfSync && (
         <div className={styles.warning}>
-          Out of sync with host. <button type="button" onClick={() => void requestState()}>Resync</button>
+          {t("watch.card.outOfSync")} <button type="button" onClick={() => void requestState()}>{t("watch.card.resync")}</button>
         </div>
       )}
 
       <div className={styles.actions}>
-        <button type="button" onClick={() => void requestState()}>Request state</button>
-        <button type="button" className={styles.danger} onClick={() => void handleLeave()}>Leave</button>
+        <button type="button" onClick={() => void requestState()}>{t("watch.card.requestState")}</button>
+        <button type="button" className={styles.danger} onClick={() => void handleLeave()}>{t("watch.card.leave")}</button>
         {isHost && (
-          <button type="button" className={styles.danger} onClick={() => void handleEnd()}>End for everyone</button>
+          <button type="button" className={styles.danger} onClick={() => void handleEnd()}>{t("watch.card.endForEveryone")}</button>
         )}
       </div>
     </div>

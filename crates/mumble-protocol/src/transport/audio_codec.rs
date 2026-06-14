@@ -330,6 +330,16 @@ impl AudioPacketCodec for ProtobufAudioCodec {
 
 // -- Public API -----------------------------------------------------
 
+/// Encode `audio` for a `UdpTunnel`, choosing the format the server
+/// understands: protobuf v2 for Mumble >= 1.5, legacy Opus otherwise.
+pub fn encode_tunnel_audio(audio: &mumble_udp::Audio, protobuf: bool) -> Vec<u8> {
+    if protobuf {
+        ProtobufAudioCodec::encode(audio)
+    } else {
+        LegacyAudioCodec::encode(audio)
+    }
+}
+
 /// Try to decode a `UdpTunnel` payload as audio.
 ///
 /// Both legacy and protobuf v2 formats share the same header byte

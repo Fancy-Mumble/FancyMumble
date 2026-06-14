@@ -1,0 +1,432 @@
+import { CloseIcon, EditIcon, FolderIcon, KeyIcon, RefreshIcon, WarningFilledIcon } from "../../../icons";
+
+import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
+import { useAppStore } from "../../../store";
+import type { ChannelEntry } from "../../../types";
+import { getPreferences } from "../../../preferencesStorage";
+import { canDeleteMessages, hasPermission } from "./ChannelEditorDialog";
+const BioEditor = lazy(() => import("../../../pages/settings/BioEditor").then((m) => ({ default: m.BioEditor })));
+import { SafeHtml } from "../../elements/SafeHtml";
+import { UserListItem, colorFor } from "../user/UserListItem";
+import { UserContextMenu } from "../user/UserContextMenu";
+import type { UserContextMenuState } from "../user/UserContextMenu";
+import { useChannelDescription } from "../../../lazyBlobs";
+import styles from "./ChannelInfoPanel.module.css";
+import { PERMISSIONS, PERM_KEY_OWNER, PERM_WRITE } from "../../../utils/permissions";
+
+interface ChannelInfoPanelProps {
+  readonly onClose: () => void;
+}
+
+export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
+  const { t } = useTranslation(["sidebar", "common"]);
+  const selectedChannel = useAppStore((s) => s.selectedChannel);
+  const channels = useAppStore((s) => s.channels);
+
+  const channel: ChannelEntry | undefined = channels.find(
+    (c) => c.id === selectedChannel,
+  );
+  const channelDescription = useChannelDescription(channel?.id, channel?.description_size);
+
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const users = useAppStore((s) => s.users);
+  const selectDmUser = useAppStore((s) => s.selectDmUser);
+  const selectedDmUser = useAppStore((s) => s.selectedDmUser);
+
+  // Key holder state
+  const keyHolders = useAppStore((s) => s.keyHolders);
+  const queryKeyHolders = useAppStore((s) => s.queryKeyHolders);
+  const getPersistenceMode = useAppStore((s) => s.getPersistenceMode);
+
+  useEffect(() => {
+    if (selectedChannel != null) {
+      queryKeyHolders(selectedChannel);
+    }
+  }, [selectedChannel, queryKeyHolders]);
+
+  const currentHolders = selectedChannel != null ? keyHolders[selectedChannel] ?? [] : [];
+
+  // Build a set of cert hashes that are key holders for fast lookups.
+  const holderHashes = useMemo(
+    () => new Set(currentHolders.map((h) => h.cert_hash)),
+    [currentHolders],
+  );
+
+  // Derive online status from the live users list.
+  const onlineUserHashes = useMemo(
+    () => new Set(users.map((u) => u.hash).filter(Boolean)),
+    [users],
+  );
+
+  // Offline key holders: holders not currently connected to the server.
+  const offlineHolders = useMemo(
+    () => currentHolders.filter((h) => !onlineUserHashes.has(h.cert_hash)),
+    [currentHolders, onlineUserHashes],
+  );
+
+  const channelUsers = useMemo(
+    () => users.filter((u) => u.channel_id === selectedChannel),
+    [users, selectedChannel],
+  );
+
+  const isPersisted =
+    selectedChannel != null && getPersistenceMode(selectedChannel) !== "NONE";
+
+  const [devMode, setDevMode] = useState(false);
+
+  useEffect(() => {
+    getPreferences()
+      .then((prefs) => setDevMode(prefs.userMode === "developer"))
+      .catch(() => {});
+  }, []);
+
+  const [userCtxMenu, setUserCtxMenu] = useState<UserContextMenuState | null>(
+    null,
+  );
+
+  const openUserCtxMenu = useCallback(
+    (e: React.MouseEvent, session: number) => {
+      e.preventDefault();
+      const u = users.find((u) => u.session === session);
+      if (!u) return;
+      setUserCtxMenu({ x: e.clientX, y: e.clientY, user: u });
+    },
+    [users],
+  );
+
+  const canWrite =
+    channel?.permissions != null && (channel.permissions & PERM_WRITE) !== 0;
+
+  const canKeyOwner = hasPermission(channel, PERM_KEY_OWNER) && isPersisted;
+
+  const [confirmTakeover, setConfirmTakeover] = useState<"full_wipe" | "key_only" | null>(null);
+
+  const handleKeyTakeover = useCallback(async () => {
+    if (!channel || !confirmTakeover) return;
+    try {
+      await invoke("key_takeover", { channelId: channel.id, mode: confirmTakeover });
+    } finally {
+      setConfirmTakeover(null);
+    }
+  }, [channel, confirmTakeover]);
+
+  // Sync edit fields when channel changes or editing starts.
+  useEffect(() => {
+    if (channel) {
+      setEditName(channel.name);
+      setEditDescription(channelDescription ?? "");
+    }
+  }, [channel, editing, channelDescription]);
+
+  const startEditing = useCallback(() => setEditing(true), []);
+  const cancelEditing = useCallback(() => setEditing(false), []);
+
+  const saveChanges = useCallback(async () => {
+    if (!channel) return;
+    setSaving(true);
+    try {
+      const nameChanged = editName !== channel.name ? editName : undefined;
+      const descChanged =
+        editDescription !== (channelDescription ?? "") ? editDescription : undefined;
+      if (nameChanged !== undefined || descChanged !== undefined) {
+        await invoke("update_channel", {
+          channelId: channel.id,
+          name: nameChanged ?? null,
+          description: descChanged ?? null,
+        });
+      }
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }, [channel, editName, editDescription]);
+
+  if (!channel) {
+    return (
+      <div className={styles.panel}>
+        <button className={styles.closeBtn} onClick={onClose} aria-label={t("common:actions.close")}>
+          <CloseIcon width={14} height={14} />
+        </button>
+        <div className={styles.header}>
+          <div className={styles.channelIcon}>
+            <FolderIcon width={24} height={24} />
+          </div>
+          <h2 className={styles.title}>{t("channelInfoPanel.noChannel")}</h2>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.panel}>
+      <button className={styles.closeBtn} onClick={onClose} aria-label={t("common:actions.close")}>
+        <CloseIcon width={14} height={14} />
+      </button>
+
+      {/* Header */}
+      <div className={styles.header}>
+        <div className={styles.channelIcon}>
+          <FolderIcon width={24} height={24} />
+        </div>
+        <div>
+          <h2 className={styles.title}># {channel.name}</h2>
+          <span className={styles.subtitle}>
+            {t("channelInfoPanel.member", { count: channel.user_count })}
+          </span>
+        </div>
+      </div>
+
+      {/* Channel info section */}
+      <div className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <h3 className={styles.sectionTitle}>{t("channelInfoPanel.sectionChannel")}</h3>
+          {canWrite && !editing && (
+            <button
+              className={styles.editBtn}
+              onClick={startEditing}
+              title={t("channelInfoPanel.editChannelTitle")}
+            >
+              <EditIcon width={14} height={14} />
+            </button>
+          )}
+        </div>
+
+        {editing ? (
+          <div className={styles.editForm}>
+            <label className={styles.editLabel}>
+              {t("channelInfoPanel.editLabelName")}
+              <input
+                className={styles.editInput}
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+            </label>
+            <label className={styles.editLabel}>
+              {t("channelInfoPanel.editLabelDescription")}
+              <Suspense fallback={<div className={styles.editInput}>{t("channelInfoPanel.loadingEditor")}</div>}>
+                <BioEditor
+                  value={editDescription}
+                  onChange={setEditDescription}
+                  placeholder={t("channelInfoPanel.descriptionPlaceholder")}
+                />
+              </Suspense>
+            </label>
+            <div className={styles.editActions}>
+              <button
+                className={styles.cancelBtn}
+                onClick={cancelEditing}
+                disabled={saving}
+              >
+                {t("common:actions.cancel")}
+              </button>
+              <button
+                className={styles.saveBtn}
+                onClick={saveChanges}
+                disabled={saving}
+              >
+                {saving ? t("channelInfoPanel.saving") : t("channelInfoPanel.saveBtn")}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className={styles.infoGrid}>
+              <span className={styles.infoLabel}>{t("channelInfoPanel.editLabelName")}</span>
+              <span className={styles.infoValue}>{channel.name}</span>
+            </div>
+            <div className={styles.descriptionSection}>
+              <span className={styles.infoLabel}>{t("channelInfoPanel.editLabelDescription")}</span>
+              <SafeHtml
+                html={channelDescription ?? ""}
+                className={styles.descriptionContent}
+                fallback={<em>{t("channelInfoPanel.noDescription")}</em>}
+              />
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Members section: online users + offline key holders */}
+      <div className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <h3 className={styles.sectionTitle}>
+            {t("channelInfoPanel.sectionMembers", { count: channelUsers.length + offlineHolders.length })}
+          </h3>
+        </div>
+
+        {/* Online: users currently in the channel */}
+        {channelUsers.length > 0 && (
+          <>
+            <span className={styles.subsectionLabel}>{t("channelInfoPanel.onlineLabel", { count: channelUsers.length })}</span>
+            <div className={styles.membersList}>
+              {channelUsers.map((u) => (
+                <div key={u.session} className={styles.memberRow}>
+                  <UserListItem
+                    user={u}
+                    active={selectedDmUser === u.session}
+                    onClick={() => selectDmUser(u.session)}
+                    onContextMenu={(e) => openUserCtxMenu(e, u.session)}
+                  />
+                  {u.hash && holderHashes.has(u.hash) && (
+                    <KeyIcon className={styles.memberKeyIcon} width={12} height={12} aria-label={t("channelInfoPanel.keyIconAriaLabel")} />
+                  )}
+                  {isPersisted && (!u.hash || !holderHashes.has(u.hash)) && (
+                    <WarningFilledIcon className={styles.memberWarningIcon} width={12} height={12} aria-label={t("channelInfoPanel.legacyClientAriaLabel")}>
+                      <title>{t("channelInfoPanel.legacyClientAriaLabel")}</title>
+                    </WarningFilledIcon>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Offline: key holders not currently connected */}
+        {offlineHolders.length > 0 && (
+          <>
+            <span className={styles.subsectionLabel}>{t("channelInfoPanel.offlineLabel", { count: offlineHolders.length })}</span>
+            <div className={styles.holdersList}>
+              {offlineHolders.map((holder) => (
+                <div key={holder.cert_hash} className={`${styles.holderItem} ${styles.holderOffline}`}>
+                  <div className={styles.holderAvatarWrap}>
+                    <div
+                      className={styles.holderAvatar}
+                      style={{ background: colorFor(holder.name) }}
+                    >
+                      {holder.name.charAt(0).toUpperCase()}
+                    </div>
+                  </div>
+                  <span className={styles.holderName}>{holder.name}</span>
+                  <KeyIcon className={styles.memberKeyIcon} width={12} height={12} aria-label={t("channelInfoPanel.keyIconAriaLabel")} />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {channelUsers.length === 0 && offlineHolders.length === 0 && (
+          <span className={styles.emptyMembers}>{t("channelInfoPanel.noUsers")}</span>
+        )}
+
+        {/* Key ownership takeover (requires KeyOwner permission) */}
+        {canKeyOwner && (
+          <div className={styles.keyTakeoverSection}>
+            {confirmTakeover == null ? (
+              <button
+                className={styles.dangerBtn}
+                onClick={() => setConfirmTakeover("full_wipe")}
+              >
+                <KeyIcon width={14} height={14} />
+                {t("channelInfoPanel.resetKeyOwnership")}
+              </button>
+            ) : (
+              <div className={styles.keyTakeoverConfirm}>
+                <span className={styles.keyTakeoverLabel}>{t("channelInfoPanel.takeoverModeLabel")}</span>
+                <div className={styles.keyTakeoverOptions}>
+                  <label className={styles.keyTakeoverOption}>
+                    <input
+                      type="radio"
+                      name="takeoverMode"
+                      checked={confirmTakeover === "full_wipe"}
+                      onChange={() => setConfirmTakeover("full_wipe")}
+                    />
+                    <span>{t("channelInfoPanel.takeoverFullWipe")}</span>
+                    <span className={styles.keyTakeoverHint}>{t("channelInfoPanel.takeoverFullWipeHint")}</span>
+                  </label>
+                  <label className={styles.keyTakeoverOption}>
+                    <input
+                      type="radio"
+                      name="takeoverMode"
+                      checked={confirmTakeover === "key_only"}
+                      onChange={() => setConfirmTakeover("key_only")}
+                    />
+                    <span>{t("channelInfoPanel.takeoverKeyOnly")}</span>
+                    <span className={styles.keyTakeoverHint}>{t("channelInfoPanel.takeoverKeyOnlyHint")}</span>
+                  </label>
+                </div>
+                <div className={styles.editActions}>
+                  <button className={styles.cancelBtn} onClick={() => setConfirmTakeover(null)}>
+                    {t("common:actions.cancel")}
+                  </button>
+                  <button className={styles.dangerBtn} onClick={handleKeyTakeover}>
+                    {t("channelInfoPanel.confirmBtn")}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {userCtxMenu && (
+        <UserContextMenu
+          menu={userCtxMenu}
+          onClose={() => setUserCtxMenu(null)}
+        />
+      )}
+
+      {/* Developer permissions debug section */}
+      {devMode && (
+        <div className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <h3 className={styles.sectionTitle}>{t("channelInfoPanel.permissionsDevTitle")}</h3>
+            <button
+              className={styles.editBtn}
+              onClick={() => {
+              useAppStore.getState().refreshState();
+              }}
+              title={t("channelInfoPanel.refreshTitle")}
+              aria-label={t("channelInfoPanel.refreshAriaLabel")}
+            >
+              <RefreshIcon width={14} height={14} />
+            </button>
+          </div>
+          <div className={styles.infoGrid}>
+            <span className={styles.infoLabel}>{t("channelInfoPanel.labelChannelId")}</span>
+            <span className={styles.infoValue} style={{ fontFamily: "monospace" }}>
+              {channel.id}
+            </span>
+            <span className={styles.infoLabel}>{t("channelInfoPanel.labelRaw")}</span>
+            <span className={styles.infoValue} style={{ fontFamily: "monospace" }}>
+              {channel.permissions != null
+                ? `0x${channel.permissions.toString(16).toUpperCase().padStart(8, "0")} (${channel.permissions})`
+                : "null (not queried)"}
+            </span>
+            <span className={styles.infoLabel}>{t("channelInfoPanel.labelCanDelete")}</span>
+            <span className={styles.infoValue} style={{ fontFamily: "monospace" }}>
+              {String(canDeleteMessages(channel))}
+            </span>
+            <span className={styles.infoLabel}>{t("channelInfoPanel.labelAllChannels")}</span>
+            <span className={styles.infoValue} style={{ fontFamily: "monospace", fontSize: "11px", whiteSpace: "pre-wrap", maxHeight: "150px", overflowY: "auto", display: "block" }}>
+              {channels.map((c) =>
+                `#${c.id} ${c.name}: ${c.permissions != null ? `0x${c.permissions.toString(16).toUpperCase()}` : "null"}`
+              ).join("\n")}
+            </span>
+          </div>
+          {channel.permissions != null && (
+            <div className={styles.permBits}>
+              {PERMISSIONS.map(({ bit, label }) => {
+                const has = (channel.permissions! & bit) !== 0;
+                return (
+                  <span
+                    key={bit}
+                    className={has ? styles.permBitOn : styles.permBitOff}
+                    title={`0x${bit.toString(16).toUpperCase()}`}
+                  >
+                    {label}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

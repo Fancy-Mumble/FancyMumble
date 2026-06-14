@@ -29,7 +29,7 @@ interface InfoBarData {
 interface PopoutShellProps {
   readonly mediaRef: RefObject<HTMLImageElement | HTMLVideoElement | null>;
   readonly mediaReady: boolean;
-  readonly mediaLabel: "Image" | "Stream";
+  readonly mediaLabel: string;
   readonly aspectStorageKey?: string;
   readonly error?: string | null;
   readonly placeholder?: ReactNode;

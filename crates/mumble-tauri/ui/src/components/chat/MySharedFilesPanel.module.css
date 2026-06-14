@@ -1,0 +1,138 @@
+/* "My shared files" bar - a user's own uploaded files, styled like the admin
+   file table but scoped to a chat-splitting panel (fills the resizable
+   wrapper, scrolls internally). */
+
+.panel {
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-glass-border);
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 44px 10px 14px; /* room for the shared close (×) overlay */
+  border-bottom: 1px solid var(--color-glass-border);
+  flex-shrink: 0;
+}
+
+.title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary, #f5f6f8);
+}
+
+.count {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 9px;
+  background: var(--color-surface-elevated, #262a33);
+  color: var(--color-text-secondary, #9aa3ad);
+}
+
+.headerActions { margin-left: auto; display: inline-flex; gap: 6px; }
+
+.refreshBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border, #2c313a);
+  border-radius: 7px;
+  background: var(--color-surface-elevated, #262a33);
+  color: var(--color-text-secondary, #9aa3ad);
+  cursor: pointer;
+}
+.refreshBtn:hover:not(:disabled) { color: var(--color-text-primary, #f5f6f8); background: var(--color-surface-hover, #2f343d); }
+.refreshBtn:disabled { opacity: 0.5; cursor: default; }
+
+.body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+
+.empty {
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-text-secondary, #9aa3ad);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary, #9aa3ad);
+  background: var(--color-bg-secondary);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border, #2c313a);
+}
+.table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border, #2c313a);
+  vertical-align: middle;
+  color: var(--color-text-primary, #f5f6f8);
+}
+.table tr:hover td { background: var(--color-surface-hover, rgba(255, 255, 255, 0.03)); }
+
+.nameCell { max-width: 260px; }
+.fileName {
+  display: inline-block;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.typeCell { white-space: nowrap; color: var(--color-text-secondary, #9aa3ad); }
+.typeCell span { vertical-align: middle; }
+.num { text-align: right; white-space: nowrap; color: var(--color-text-secondary, #9aa3ad); }
+.dateCell { white-space: nowrap; color: var(--color-text-secondary, #9aa3ad); }
+.noExpiry { color: var(--color-text-secondary, #9aa3ad); opacity: 0.7; }
+
+.accessBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.access_public { background: rgba(56, 178, 122, 0.18); color: #4cc78d; }
+.access_password { background: rgba(224, 137, 47, 0.18); color: #e0a85f; }
+.access_session { background: rgba(138, 92, 246, 0.18); color: #a585f5; }
+
+.actionsCell { text-align: right; white-space: nowrap; }
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border, #2c313a);
+  border-radius: 7px;
+  background: var(--color-surface-elevated, #262a33);
+  color: var(--color-text-secondary, #9aa3ad);
+  cursor: pointer;
+  margin-left: 6px;
+}
+.iconBtn:hover:not(:disabled) { color: var(--color-text-primary, #f5f6f8); background: var(--color-surface-hover, #2f343d); }
+.iconBtn:disabled { opacity: 0.4; cursor: default; }
+.deleteBtn:hover:not(:disabled) { color: #f0746a; border-color: rgba(224, 83, 60, 0.5); }

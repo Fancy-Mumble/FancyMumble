@@ -1,5 +1,6 @@
-import { ShieldIcon } from "../../icons";
+﻿import { ShieldIcon } from "../../icons";
 import { useCallback, useRef, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../store";
 import type { PersistenceMode } from "../../types";
 import { getDismissedBanners, dismissBanner } from "../../preferencesStorage";
@@ -10,21 +11,21 @@ interface PersistenceBannerProps {
   readonly channelId: number;
 }
 
-function modeDescription(mode: PersistenceMode): string {
+function modeDescription(mode: PersistenceMode, t: (key: string) => string): string {
   switch (mode) {
     case "FANCY_V1_FULL_ARCHIVE":
-      return "All stored messages are visible to channel members.";
+      return t("persistence.modeFullArchive");
     case "SIGNAL_V1":
-      return "Messages are end-to-end encrypted using the Signal Protocol.";
+      return t("persistence.modeSignal");
     default:
       return "";
   }
 }
 
-function formatRetention(days: number): string {
-  if (days <= 0) return "No limit";
-  if (days === 1) return "1 day";
-  return `${days} days`;
+function formatRetention(days: number, t: (key: string, opts?: Record<string, unknown>) => string): string {
+  if (days <= 0) return t("persistence.retentionNoLimit");
+  if (days === 1) return t("persistence.retention1Day");
+  return t("persistence.retentionDays", { count: days });
 }
 
 function formatCount(count: number): string {
@@ -33,6 +34,8 @@ function formatCount(count: number): string {
 }
 
 export default function PersistenceBanner({ channelId }: PersistenceBannerProps) {
+  const { t } = useTranslation("sidebar");
+  const tStr = t as (key: string, opts?: Record<string, unknown>) => string;
   const persistence = useAppStore((s) => s.channelPersistence[channelId]);
   const fetchHistory = useAppStore((s) => s.fetchHistory);
   const isLoadingKeys = useAppStore((s) => s.pchatHistoryLoading.has(channelId));
@@ -82,8 +85,8 @@ export default function PersistenceBanner({ channelId }: PersistenceBannerProps)
   if (isLoadingKeys && (!persistence || persistence.mode === "NONE")) {
     return (
       <div className={styles.loadMore}>
-        <div className={styles.loadingSpinner} aria-label="Loading message history" />
-        <span className={styles.loadingText}>Loading message history...</span>
+        <div className={styles.loadingSpinner} aria-label={t("persistence.loadingAriaLabel")} />
+        <span className={styles.loadingText}>{t("persistence.loadingHistory")}</span>
       </div>
     );
   }
@@ -95,17 +98,17 @@ export default function PersistenceBanner({ channelId }: PersistenceBannerProps)
       {!dismissed && (
         <InfoBanner icon={shieldIcon} onDismiss={handleDismiss}>
           <p className={styles.description}>
-            {modeDescription(persistence.mode)}
+            {modeDescription(persistence.mode, tStr as (key: string) => string)}
           </p>
           <div className={styles.meta}>
             {persistence.retentionDays > 0 && (
               <span className={styles.metaItem}>
-                Retention: {formatRetention(persistence.retentionDays)}
+                {t("persistence.retentionLabel", { value: formatRetention(persistence.retentionDays, tStr) })}
               </span>
             )}
             {persistence.totalStored > 0 && (
               <span className={styles.metaItem}>
-                Stored: {formatCount(persistence.totalStored)} messages
+                {t("persistence.storedLabel", { total: formatCount(persistence.totalStored) })}
               </span>
             )}
           </div>
@@ -115,8 +118,8 @@ export default function PersistenceBanner({ channelId }: PersistenceBannerProps)
       {/* Key exchange / initial loading indicator */}
       {isLoadingKeys && (
         <div className={styles.loadMore}>
-          <div className={styles.loadingSpinner} aria-label="Loading message history" />
-          <span className={styles.loadingText}>Loading message history...</span>
+          <div className={styles.loadingSpinner} aria-label={t("persistence.loadingAriaLabel")} />
+          <span className={styles.loadingText}>{t("persistence.loadingHistory")}</span>
         </div>
       )}
 
@@ -124,7 +127,7 @@ export default function PersistenceBanner({ channelId }: PersistenceBannerProps)
       {persistence.hasMore && (
         <div ref={loadMoreRef} className={styles.loadMore}>
           {persistence.isFetching && (
-            <div className={styles.loadingSpinner} aria-label="Loading older messages" />
+          <div className={styles.loadingSpinner} aria-label={t("persistence.loadingOlderAriaLabel")} />
           )}
         </div>
       )}

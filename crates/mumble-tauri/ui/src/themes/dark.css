@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
    Dark Theme - Fancy Mumble
    ================================================================ */
 
@@ -98,15 +98,15 @@
   /* -- Link ------------------------------------------------------ */
   --color-link: #60a5fa;
 
-  /* -- Discord-style palette (reactions / emoji picker) ----------- */
-  --color-discord-purple: #5865f2;
-  --color-discord-dark: #1e1f22;
-  --color-discord-bg: #2b2d31;
-  --color-discord-border: #3f4147;
-  --color-discord-hover: #35373c;
-  --color-discord-muted: #949ba4;
-  --color-discord-text: #dbdee1;
-  --color-discord-active: #404249;
+  /* -- Picker palette (reactions / emoji picker) ----------- */
+  --color-picker-accent: #5865f2;
+  --color-picker-dark: #1e1f22;
+  --color-picker-bg: #2b2d31;
+  --color-picker-border: #3f4147;
+  --color-picker-hover: #35373c;
+  --color-picker-muted: #949ba4;
+  --color-picker-text: #dbdee1;
+  --color-picker-active: #404249;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.2);

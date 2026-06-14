@@ -37,7 +37,7 @@ jobs:
           echo "ui/package.json:           $UI"
           echo "mumble-protocol Cargo.toml: $PROTOCOL"
           if [ "$TAURI" != "$UI" ] || [ "$TAURI" != "$PROTOCOL" ]; then
-            echo "::error::Version mismatch — tauri.conf.json/ui/package.json/mumble-protocol Cargo.toml must all agree."
+            echo "::error::Version mismatch - tauri.conf.json/ui/package.json/mumble-protocol Cargo.toml must all agree."
             exit 1
           fi
 

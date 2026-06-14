@@ -1,5 +1,6 @@
 import { KebabMenuIcon } from "../../icons";
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import styles from "./KebabMenu.module.css";
 
@@ -23,7 +24,9 @@ interface KebabMenuProps {
   readonly badge?: boolean;
 }
 
-export default function KebabMenu({ items, ariaLabel = "More options", badge }: KebabMenuProps) {
+export default function KebabMenu({ items, ariaLabel, badge }: KebabMenuProps) {
+  const { t } = useTranslation("common");
+  const resolvedLabel = ariaLabel ?? t("kebabMenu.ariaLabel");
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
@@ -58,8 +61,8 @@ export default function KebabMenu({ items, ariaLabel = "More options", badge }: 
         ref={triggerRef}
         className={`${styles.trigger} ${open ? styles.triggerOpen : ""}`}
         onClick={handleToggle}
-        aria-label={ariaLabel}
-        title={ariaLabel}
+        aria-label={resolvedLabel}
+        title={resolvedLabel}
       >
         <KebabMenuIcon width={18} height={18} />
         {badge && <span className={styles.badgeDot} />}
@@ -71,7 +74,7 @@ export default function KebabMenu({ items, ariaLabel = "More options", badge }: 
             type="button"
             className={styles.backdrop}
             onClick={close}
-            aria-label="Close menu"
+            aria-label={t("kebabMenu.closeMenu")}
           />
           <div
             className={styles.menu}

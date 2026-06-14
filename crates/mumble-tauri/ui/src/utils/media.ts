@@ -220,6 +220,13 @@ export function mediaToHtml(
   }
 }
 
+/** Per-image quality for a gallery: `"full"` uses the whole image-size limit
+ *  per image; `"compressed"` targets a smaller per-image budget. */
+export type GalleryQuality = "full" | "compressed";
+
+/** Hard cap on images per gallery (each is sent as its own message). */
+export const MAX_GALLERY_IMAGES = 10;
+
 /**
  * Compress a video to fit within `maxBytes`.
  *

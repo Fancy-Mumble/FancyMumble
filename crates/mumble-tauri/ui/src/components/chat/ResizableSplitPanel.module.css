@@ -1,0 +1,50 @@
+/* Reusable resizable split panel: a content area stacked above the chat with a
+   draggable handle.  Extracted from the Live Doc split so every chat-splitting
+   panel shares the same look and behaviour. */
+
+.panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Fill the remaining space until the user first drags the handle. */
+.fill {
+  flex: 1 1 0;
+}
+
+/* Drag handle between the panel and the chat column below it. */
+.handle {
+  flex: 0 0 6px;
+  width: 100%;
+  cursor: ns-resize;
+  background: var(--color-glass-border);
+  position: relative;
+  z-index: 5;
+  transition: background 0.15s;
+}
+
+.handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--color-text-muted);
+  opacity: 0.5;
+  transition: opacity 0.15s, width 0.15s;
+}
+
+.handle:hover {
+  background: var(--color-accent, #2aabee);
+}
+
+.handle:hover::after {
+  opacity: 0.9;
+  width: 48px;
+}

@@ -1,5 +1,6 @@
-import { MoonIcon, ShieldCheckIcon } from "../../icons";
+import { MoonIcon, ShieldCheckIcon, UserFilledIcon } from "../../icons";
 import type { FancyProfile } from "../../types";
+import { useTranslation } from "react-i18next";
 import { SafeHtml } from "../../components/elements/SafeHtml";
 import { formatDuration } from "../../utils/format";
 import { resolveThemePalette } from "../../utils/colorUtils";
@@ -10,7 +11,7 @@ import {
   FONTS,
   AVATAR_BORDERS,
 } from "./profileData";
-import styles from "./SettingsPage.module.css";
+import styles from "./ProfilePreviewCard.module.css";
 
 interface ProfilePreviewCardProps {
   profile: FancyProfile;
@@ -95,6 +96,7 @@ export function ProfilePreviewCard({
   isRegistered,
   groups,
 }: Readonly<ProfilePreviewCardProps>) {
+  const { t } = useTranslation("settings");
   const nameStyle = profile.nameStyle ?? {};
   const decoration = DECORATIONS.find((d) => d.id === (profile.decoration ?? "none"));
   const nameplate = NAMEPLATES.find((n) => n.id === (profile.nameplate ?? "none"));
@@ -145,11 +147,11 @@ export function ProfilePreviewCard({
           {avatar ? (
             <img
               src={avatar}
-              alt="Avatar"
+              alt={t("profilePreview.avatarAlt")}
               className={styles.previewAvatarImg}
             />
           ) : (
-            <span className={styles.previewAvatarPlaceholder}>👤</span>
+            <span className={styles.previewAvatarPlaceholder}><UserFilledIcon width={48} height={48} /></span>
           )}
           {decoration && decoration.id !== "none" && (
             <span className={styles.previewDecoration}>
@@ -191,7 +193,7 @@ export function ProfilePreviewCard({
               {displayName || "Your Name"}
             </span>
             {isRegistered && (
-              <span className={styles.previewRegisteredBadge} title="Registered">
+              <span className={styles.previewRegisteredBadge} title={t("profilePreview.registeredTitle")}>
                 <ShieldCheckIcon width={12} height={12} strokeWidth={2.5} />
               </span>
             )}

@@ -1,4 +1,4 @@
-/* Neon replaced by Inversa. This file is intentionally empty. */
+﻿/* Neon replaced by Inversa. This file is intentionally empty. */
 
 [data-theme="neon"] {
   /* -- Background ------------------------------------------------ */
@@ -96,15 +96,15 @@
   /* -- Link ------------------------------------------------------ */
   --color-link: #8696fd;
 
-  /* -- Discord-style palette (reactions / emoji picker) ----------- */
-  --color-discord-purple: #7586f5;
-  --color-discord-dark: #292c3d;
-  --color-discord-bg: #333752;
-  --color-discord-border: #5b6080;
-  --color-discord-hover: #444864;
-  --color-discord-muted: #878ba6;
-  --color-discord-text: #d2d8fe;
-  --color-discord-active: #5b6080;
+  /* -- Picker palette (reactions / emoji picker) ----------- */
+  --color-picker-accent: #7586f5;
+  --color-picker-dark: #292c3d;
+  --color-picker-bg: #333752;
+  --color-picker-border: #5b6080;
+  --color-picker-hover: #444864;
+  --color-picker-muted: #878ba6;
+  --color-picker-text: #d2d8fe;
+  --color-picker-active: #5b6080;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.2);

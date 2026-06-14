@@ -1,0 +1,42 @@
+/* --- AudioPanel - Device columns and statistics ---------------- */
+
+.deviceColumns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 600px) {
+  .deviceColumns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.deviceColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* --- Audio statistics ------------------------------------------ */
+
+.statsRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.statsLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  min-width: 160px;
+  flex-shrink: 0;
+}
+
+.statsValues {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}

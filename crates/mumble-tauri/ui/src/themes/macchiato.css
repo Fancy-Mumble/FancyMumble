@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
    Macchiato Theme - Fancy Mumble
    Catppuccin Macchiato - pastel tones on a cool dark base.
    ================================================================ */
@@ -99,15 +99,15 @@
   /* -- Link ------------------------------------------------------ */
   --color-link: #8aadf4;
 
-  /* -- Discord-style palette (reactions / emoji picker) ----------- */
-  --color-discord-purple: #c6a0f6;
-  --color-discord-dark: #1e2030;
-  --color-discord-bg: #24273a;
-  --color-discord-border: #494d64;
-  --color-discord-hover: #363a4f;
-  --color-discord-muted: #6e738d;
-  --color-discord-text: #b8c0e0;
-  --color-discord-active: #494d64;
+  /* -- Picker palette (reactions / emoji picker) ----------- */
+  --color-picker-accent: #c6a0f6;
+  --color-picker-dark: #1e2030;
+  --color-picker-bg: #24273a;
+  --color-picker-border: #494d64;
+  --color-picker-hover: #363a4f;
+  --color-picker-muted: #6e738d;
+  --color-picker-text: #b8c0e0;
+  --color-picker-active: #494d64;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.18);

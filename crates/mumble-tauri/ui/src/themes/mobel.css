@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
    Mobel Theme - Fancy Mumble
    Clean light palette: dark teal, golden yellow, vivid red, crimson.
    Palette: (#293940 #F2CB57 #F21905 #730202 #F2F2F2)
@@ -100,15 +100,15 @@
   /* -- Link ------------------------------------------------------ */
   --color-link: #0e7490;
 
-  /* -- Discord-style palette (reactions / emoji picker) ----------- */
-  --color-discord-purple: #0e7490;
-  --color-discord-dark: #F2F2F2;
-  --color-discord-bg: #ffffff;
-  --color-discord-border: #cccccc;
-  --color-discord-hover: #E8E8E8;
-  --color-discord-muted: rgba(40, 57, 63, 0.50);
-  --color-discord-text: #293940;
-  --color-discord-active: #cccccc;
+  /* -- Picker palette (reactions / emoji picker) ----------- */
+  --color-picker-accent: #0e7490;
+  --color-picker-dark: #F2F2F2;
+  --color-picker-bg: #ffffff;
+  --color-picker-border: #cccccc;
+  --color-picker-hover: #E8E8E8;
+  --color-picker-muted: rgba(40, 57, 63, 0.50);
+  --color-picker-text: #293940;
+  --color-picker-active: #cccccc;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.08);

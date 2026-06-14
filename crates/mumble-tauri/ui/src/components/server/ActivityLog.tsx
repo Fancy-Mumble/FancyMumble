@@ -1,4 +1,5 @@
 import { useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../store";
 import styles from "./ActivityLog.module.css";
 
@@ -8,6 +9,7 @@ function formatTime(timestampMs: number): string {
 }
 
 export default function ActivityLog() {
+  const { t } = useTranslation("server");
   const serverLog = useAppStore((s) => s.serverLog);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -19,7 +21,7 @@ export default function ActivityLog() {
   }, [serverLog]);
 
   if (serverLog.length === 0) {
-    return <p className={styles.empty}>No activity yet</p>;
+    return <p className={styles.empty}>{t("activityLog.empty")}</p>;
   }
 
   return (

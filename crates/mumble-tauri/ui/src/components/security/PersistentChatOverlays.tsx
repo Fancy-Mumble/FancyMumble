@@ -1,5 +1,6 @@
-import { KeyIcon, WarningIcon } from "../../icons";
+﻿import { KeyIcon, WarningIcon } from "../../icons";
 import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../store";
 import type { KeyTrustLevel, PendingKeyShareRequest, PersistenceMode, UserMode } from "../../types";
 import { getPreferences } from "../../preferencesStorage";
@@ -33,6 +34,7 @@ function buildKeyShareBanner(
   requests: PendingKeyShareRequest[],
   onShareClick: (peerCertHash: string, peerName: string) => void,
   onDismiss: (channelId: number, hash: string) => void,
+  t: (key: string) => string,
 ): ReactNode {
   if (channelId === null || requests.length === 0) return null;
   return (
@@ -47,13 +49,13 @@ function buildKeyShareBanner(
               className={infoBannerStyles.approveButton}
               onClick={() => onShareClick(req.peer_cert_hash, req.peer_name)}
             >
-              Share Key
+              {t("overlays.shareKey")}
             </button>
           }
           onDismiss={() => onDismiss(channelId, req.peer_cert_hash)}
         >
           <p className={infoBannerStyles.description}>
-            <strong>{req.peer_name}</strong> joined and needs the encryption key.
+            <strong>{req.peer_name}</strong> {t("overlays.joinedNeedsKey")}
           </p>
         </InfoBanner>
       ))}
@@ -63,6 +65,7 @@ function buildKeyShareBanner(
 
 function buildDisputeBanner(
   onCompareClick: () => void,
+  t: (key: string) => string,
 ): ReactNode {
   return (
     <InfoBanner
@@ -70,12 +73,12 @@ function buildDisputeBanner(
       icon={warningIcon}
       actions={
         <button className={infoBannerStyles.dangerAction} onClick={onCompareClick}>
-          Compare fingerprints
+          {t("overlays.compareFingerprints")}
         </button>
       }
     >
       <p className={infoBannerStyles.description}>
-        Conflicting encryption keys detected.
+        {t("overlays.conflictingKeys")}
       </p>
     </InfoBanner>
   );
@@ -108,6 +111,8 @@ export function usePersistentChat(
   const [showCustodianPrompt, setShowCustodianPrompt] = useState(false);
   const [keyShareConfirm, setKeyShareConfirm] = useState<{ hash: string; name: string } | null>(null);
   const [userMode, setUserMode] = useState<UserMode>("normal");
+  const { t } = useTranslation("sidebar");
+  const tStr = t as (k: string) => string;
 
   useEffect(() => {
     getPreferences().then((p) => setUserMode(p.userMode));
@@ -154,26 +159,24 @@ export function usePersistentChat(
       <PersistenceBanner channelId={channelId} />
     ) : null,
     disputeBanner: dispute
-      ? buildDisputeBanner(() => setShowVerifyDialog(true))
+      ? buildDisputeBanner(() => setShowVerifyDialog(true), tStr)
       : null,
     keyShareBanner: keyRevoked
       ? null
-      : buildKeyShareBanner(channelId, keyShareRequests, handleShareClick, dismissKeyShare),
+      : buildKeyShareBanner(channelId, keyShareRequests, handleShareClick, dismissKeyShare, tStr),
     revokedBanner: keyRevoked ? (
       <InfoBanner variant="danger" icon={warningIcon}>
         {userMode === "normal" ? (
           <p className={infoBannerStyles.description}>
-            You can't read or send messages in this channel yet.
-            Someone who already has access needs to let you in first.
+            {t("overlays.revokedNormal")}
           </p>
         ) : (
           <>
             <p className={infoBannerStyles.description}>
-              <strong>Key challenge failed</strong> — your encryption key was rejected by the server.
+              <strong>{t("overlays.keyChallengeFailed")}</strong> - {t("overlays.keyRejected")}
             </p>
             <p className={infoBannerStyles.description}>
-              All local keying material for this channel has been purged.
-              You cannot send or read messages until a verified key holder shares the correct key with you.
+              {t("overlays.keyMaterialPurged")}
             </p>
           </>
         )}
@@ -184,10 +187,10 @@ export function usePersistentChat(
     signalBridgeErrorBanner: (persistenceMode === "SIGNAL_V1" && signalBridgeError) ? (
       <InfoBanner variant="danger" icon={warningIcon}>
         <p className={infoBannerStyles.description}>
-          <strong>Encryption unavailable</strong> — {signalBridgeError}
+          <strong>{t("overlays.encryptionUnavailable")}</strong> - {signalBridgeError}
         </p>
         <p className={infoBannerStyles.description}>
-          You will not be able to send or read encrypted messages in this channel.
+          {t("overlays.encryptionUnavailableDetail")}
         </p>
       </InfoBanner>
     ) : null,

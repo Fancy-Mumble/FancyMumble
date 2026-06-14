@@ -209,7 +209,7 @@ crates/
 6. **Base122 encoding** - binary data inside the profile comment (which must
    be valid UTF-8) is encoded with a custom base122 codec
    (`profileFormat.ts`: `b122Encode` / `b122Decode`).  The alphabet is
-   ASCII 0–127 minus 6 illegal chars (NUL, LF, CR, `"`, `&`, `\`).  ~14 %
+   ASCII 0-127 minus 6 illegal chars (NUL, LF, CR, `"`, `&`, `\`).  ~14 %
    smaller than base64.  Data URLs use `;base122,` as the encoding tag.
    `dataUrlToBytes` reads both `;base122` and legacy `;base64` for backwards
    compatibility.

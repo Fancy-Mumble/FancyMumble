@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use x25519_dalek::PublicKey as X25519PublicKey;
+use zeroize::ZeroizeOnDrop;
 
 use crate::persistent::encryption::epoch_fingerprint;
 use crate::persistent::PchatProtocol;
@@ -28,14 +29,28 @@ pub(super) const KEY_EXCHANGE_FRESHNESS_MS: u64 = 5 * 60 * 1000; // 5 minutes
 // ---- Supporting types -----------------------------------------------
 
 /// An epoch key with its chain ratchet state.
-#[derive(Debug, Clone)]
+///
+/// The key material is wiped from memory on drop and is redacted from
+/// `Debug` output so it never leaks into logs.
+#[derive(Clone, ZeroizeOnDrop)]
 pub struct EpochKey {
     /// The raw 32-byte epoch key.
     pub key: [u8; 32],
     /// Current chain index (how far the ratchet has advanced).
+    #[zeroize(skip)]
     pub chain_index: u32,
     /// Current chain key (ratcheted from epoch key).
     pub current_chain_key: [u8; 32],
+}
+
+impl std::fmt::Debug for EpochKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EpochKey")
+            .field("key", &"<redacted>")
+            .field("chain_index", &self.chain_index)
+            .field("current_chain_key", &"<redacted>")
+            .finish()
+    }
 }
 
 impl EpochKey {
@@ -55,10 +70,21 @@ impl EpochKey {
 }
 
 /// A static channel key (`FULL_ARCHIVE` mode).
-#[derive(Debug, Clone)]
+///
+/// The key material is wiped from memory on drop and is redacted from
+/// `Debug` output so it never leaks into logs.
+#[derive(Clone, ZeroizeOnDrop)]
 pub struct ChannelKey {
     /// The raw 32-byte channel key.
     pub key: [u8; 32],
+}
+
+impl std::fmt::Debug for ChannelKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ChannelKey")
+            .field("key", &"<redacted>")
+            .finish()
+    }
 }
 
 impl ChannelKey {

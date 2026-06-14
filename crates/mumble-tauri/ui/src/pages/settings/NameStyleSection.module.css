@@ -1,0 +1,12 @@
+/* --- NameStyleSection - Name preview ----------------------------- */
+
+.namePreview {
+  padding: 12px 18px;
+  border-radius: var(--radius-sm, 6px);
+  background: linear-gradient(135deg, #0f0f1a 0%, #1a1028 100%);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50px;
+}

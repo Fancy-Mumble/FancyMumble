@@ -1,4 +1,4 @@
-/* Juroku-cha replaced by Guardbase. This file is intentionally empty. */
+﻿/* Juroku-cha replaced by Guardbase. This file is intentionally empty. */
 
 [data-theme="juroku-cha"] {
   /* -- Background ------------------------------------------------ */
@@ -96,15 +96,15 @@
   /* -- Link ------------------------------------------------------ */
   --color-link: #3791a6;
 
-  /* -- Discord-style palette (reactions / emoji picker) ----------- */
-  --color-discord-purple: #3791a6;
-  --color-discord-dark: #f2f2f2;
-  --color-discord-bg: #ffffff;
-  --color-discord-border: #8ec98a;
-  --color-discord-hover: #d0edcc;
-  --color-discord-muted: #2e6e38;
-  --color-discord-text: #022e0e;
-  --color-discord-active: #8ec98a;
+  /* -- Picker palette (reactions / emoji picker) ----------- */
+  --color-picker-accent: #3791a6;
+  --color-picker-dark: #f2f2f2;
+  --color-picker-bg: #ffffff;
+  --color-picker-border: #8ec98a;
+  --color-picker-hover: #d0edcc;
+  --color-picker-muted: #2e6e38;
+  --color-picker-text: #022e0e;
+  --color-picker-active: #8ec98a;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.08);

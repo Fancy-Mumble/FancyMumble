@@ -9,6 +9,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
 import BrandLogo from "../components/elements/BrandLogo";
 import {
   isAutoInstall,
@@ -26,44 +27,10 @@ enum Phase {
   Error = "error",
 }
 
-const APP_NAME = "Fancy Mumble";
-
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function getSubtitle(
-  phase: Phase,
-  info: UpdateInfo | null,
-  autoInstall: boolean,
-): string {
-  if (phase !== Phase.Idle) {
-    return `${APP_NAME} will restart automatically when finished.`;
-  }
-  if (!info) return "Checking for updates...";
-  if (autoInstall) return `Preparing to install the latest version of ${APP_NAME}...`;
-  return `A new version of ${APP_NAME} is ready to install.`;
-}
-
-function getProgressText(
-  phase: Phase,
-  percent: number | null,
-): string {
-  if (phase === Phase.Installing) return "Verifying & installing...";
-  if (percent == null) return "Starting download...";
-  return `${percent}%`;
-}
-
-function getHeading(phase: Phase): string {
-  switch (phase) {
-    case Phase.Downloading: return "Downloading update";
-    case Phase.Installing:  return "Installing update";
-    case Phase.Done:        return "Restarting...";
-    case Phase.Error:       return "Update failed";
-    default:                return "Update available";
-  }
 }
 
 export default function UpdaterWindow() {
@@ -76,6 +43,7 @@ export default function UpdaterWindow() {
   const autoInstall = useMemo(() => isAutoInstall(), []);
   const autoStartedRef = useRef(false);
   const [skipVersion, setSkipVersion] = useState(false);
+  const { t } = useTranslation("common");
 
   const handleProgress = useCallback((event: ProgressEvent) => {
     if (event.kind === "started") {
@@ -131,7 +99,7 @@ export default function UpdaterWindow() {
     };
   }, [handleProgress]);
 
-  // Discord-style auto-install: as soon as we know an update is pending,
+  // Auto-install: as soon as we know an update is pending,
   // start the download/install without waiting for a click.
   useEffect(() => {
     if (autoInstall && info && !autoStartedRef.current && phase === Phase.Idle) {
@@ -155,15 +123,26 @@ export default function UpdaterWindow() {
   }, [downloaded, total]);
 
   const busy = phase === Phase.Downloading || phase === Phase.Installing;
-  const heading = useMemo(() => getHeading(phase), [phase]);
-  const subtitle = useMemo(
-    () => getSubtitle(phase, info, autoInstall),
-    [phase, info, autoInstall],
-  );
-  const progressText = useMemo(
-    () => getProgressText(phase, percent),
-    [phase, percent],
-  );
+  const heading = useMemo((): string => {
+    switch (phase) {
+      case Phase.Downloading: return t("updater.heading.downloading");
+      case Phase.Installing:  return t("updater.heading.installing");
+      case Phase.Done:        return t("updater.heading.restarting");
+      case Phase.Error:       return t("updater.heading.failed");
+      default:                return t("updater.heading.available");
+    }
+  }, [phase, t]);
+  const subtitle = useMemo((): string => {
+    if (phase !== Phase.Idle) return t("updater.subtitle.restarting");
+    if (!info) return t("updater.subtitle.checking");
+    if (autoInstall) return t("updater.subtitle.autoInstall");
+    return t("updater.subtitle.ready");
+  }, [phase, info, autoInstall, t]);
+  const progressText = useMemo((): string => {
+    if (phase === Phase.Installing) return t("updater.progress.installing");
+    if (percent == null) return t("updater.progress.starting");
+    return `${percent}%`;
+  }, [phase, percent, t]);
   const progressFillStyle = percent == null ? undefined : { width: `${percent}%` };
 
   return (
@@ -172,9 +151,9 @@ export default function UpdaterWindow() {
         type="button"
         className={styles.closeBtn}
         onClick={onLater}
-        aria-label="Close"
+        aria-label={t("updater.closeAriaLabel")}
         disabled={busy}
-        title={busy ? "Update in progress..." : "Close"}
+        title={busy ? t("updater.busyTitle") : t("updater.closeAriaLabel")}
       >
         <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
           <path
@@ -235,8 +214,8 @@ export default function UpdaterWindow() {
               aria-pressed={skipVersion}
             >
               {skipVersion
-                ? `\u2713 Skipping v${info.version} \u2014 click to undo`
-                : `Skip v${info.version}`}
+                ? t("updater.skipActive", { version: info.version })
+                : t("updater.skipInactive", { version: info.version })}
             </button>
           )}
           <div className={styles.actions}>
@@ -246,7 +225,7 @@ export default function UpdaterWindow() {
               onClick={onLater}
               disabled={busy}
             >
-              {phase === Phase.Error ? "Close" : "Later"}
+              {phase === Phase.Error ? t("updater.closeBtn") : t("updater.laterBtn")}
             </button>
             <button
               type="button"
@@ -254,7 +233,7 @@ export default function UpdaterWindow() {
               onClick={onInstall}
               disabled={!info || busy || phase === Phase.Done}
             >
-              {phase === Phase.Error ? "Retry" : "Update now"}
+              {phase === Phase.Error ? t("updater.retryBtn") : t("updater.updateNowBtn")}
             </button>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import styles from "./SettingsPage.module.css";
+import styles from "./VuMeter.module.css";
 
 /** Peak-hold decay: percentage-points per second (along the dB axis). */
 const PEAK_DECAY_PER_SEC = 60;

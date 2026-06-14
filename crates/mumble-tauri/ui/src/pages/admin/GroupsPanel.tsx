@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react";
+﻿import { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import type { AclGroup } from "../../types";
 import styles from "./AdminPanel.module.css";
 
@@ -23,16 +24,17 @@ export function GroupsPanel({
   onRemove: (idx: number) => void;
   onPatch: (idx: number, patch: Partial<AclGroup>) => void;
 }>) {
+  const { t } = useTranslation("settings");
   return (
     <>
       <div className={styles.aclSectionHeader}>
-        <span className={styles.aclSectionTitle}>Groups</span>
+        <span className={styles.aclSectionTitle}>{t("groups.sectionTitle")}</span>
         <button type="button" className={styles.addBtn} onClick={onAdd}>
-          + Add Group
+          {t("groups.addGroup")}
         </button>
       </div>
       {groups.length === 0 ? (
-        <div className={styles.dimText}>No groups defined</div>
+        <div className={styles.dimText}>{t("groups.noGroups")}</div>
       ) : (
         groups.map((g, i) => (
           <GroupCard
@@ -67,6 +69,7 @@ function GroupCard({
 }>) {
   const [addInput, setAddInput] = useState("");
   const [removeInput, setRemoveInput] = useState("");
+  const { t } = useTranslation("settings");
 
   const resolveUserId = useCallback(
     (input: string): number | null => {
@@ -133,7 +136,7 @@ function GroupCard({
           disabled={group.inherited}
           onChange={(e) => onPatch(index, { name: e.target.value })}
         />
-        {group.inherited && <span className={styles.inheritBadge}>Inherited</span>}
+        {group.inherited && <span className={styles.inheritBadge}>{t("groups.labelInherit")}</span>}
         {!group.inherited && (
           <button type="button" className={styles.removeSmallBtn} onClick={() => onRemove(index)}>
             &times;
@@ -145,17 +148,17 @@ function GroupCard({
         <div className={styles.aclRuleOptions}>
           <label className={styles.checkboxLabel}>
             <input type="checkbox" checked={group.inherit} disabled={group.inherited} onChange={(e) => onPatch(index, { inherit: e.target.checked })} />
-            Inherit
+            {t("groups.labelInherit")}
           </label>
           <label className={styles.checkboxLabel}>
             <input type="checkbox" checked={group.inheritable} disabled={group.inherited} onChange={(e) => onPatch(index, { inheritable: e.target.checked })} />
-            Inheritable
+            {t("groups.labelInheritable")}
           </label>
         </div>
 
         {group.inherited_members.length > 0 && (
           <div className={styles.memberSection}>
-            <span className={styles.memberSectionTitle}>Inherited members</span>
+            <span className={styles.memberSectionTitle}>{t("groups.inheritedMembers")}</span>
             <div className={styles.memberChips}>
               {group.inherited_members.map((uid) => (
                 <span key={uid} className={styles.memberChip}>
@@ -167,7 +170,7 @@ function GroupCard({
         )}
 
         <div className={styles.memberSection}>
-          <span className={styles.memberSectionTitle}>Members to add</span>
+          <span className={styles.memberSectionTitle}>{t("groups.membersToAdd")}</span>
           <div className={styles.memberChips}>
             {group.add.map((uid) => (
               <span key={uid} className={styles.memberChipRemovable}>
@@ -185,20 +188,20 @@ function GroupCard({
               <input
                 className={styles.inputSmall}
                 type="text"
-                placeholder="User ID or name"
+                placeholder={t("groups.userIdPlaceholder")}
                 value={addInput}
                 onChange={(e) => setAddInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleAddMember(); }}
               />
               <button type="button" className={styles.addBtn} onClick={handleAddMember}>
-                Add
+                {t("groups.addButton")}
               </button>
             </div>
           )}
         </div>
 
         <div className={styles.memberSection}>
-          <span className={styles.memberSectionTitle}>Members to remove</span>
+          <span className={styles.memberSectionTitle}>{t("groups.membersToRemove")}</span>
           <div className={styles.memberChips}>
             {group.remove.map((uid) => (
               <span key={uid} className={styles.memberChipRemovable}>
@@ -216,13 +219,13 @@ function GroupCard({
               <input
                 className={styles.inputSmall}
                 type="text"
-                placeholder="User ID or name"
+                placeholder={t("groups.userIdPlaceholder")}
                 value={removeInput}
                 onChange={(e) => setRemoveInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleRemoveMember(); }}
               />
               <button type="button" className={styles.addBtn} onClick={handleRemoveMember}>
-                Exclude
+                {t("groups.excludeButton")}
               </button>
             </div>
           )}

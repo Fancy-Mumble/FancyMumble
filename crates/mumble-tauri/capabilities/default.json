@@ -1,13 +1,17 @@
 {
   "identifier": "default",
   "description": "Default permissions for the main window",
-  "windows": ["main"],
+  "windows": ["main", "popout-dm-*", "popout-stream-*", "popout-translation"],
   "permissions": [
     "core:default",
     "opener:default",
     {
       "identifier": "opener:allow-open-path",
       "allow": [{ "path": "**" }]
+    },
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://*" }, { "url": "http://*" }]
     },
     {
       "identifier": "opener:allow-reveal-item-in-dir",
@@ -34,6 +38,7 @@
     "notification:allow-delete-channel",
     "dialog:default",
     "dialog:allow-open",
-    "dialog:allow-save"
+    "dialog:allow-save",
+    "deep-link:default"
   ]
 }

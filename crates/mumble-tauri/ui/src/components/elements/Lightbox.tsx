@@ -3,9 +3,11 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
+import { CloseIcon, ChevronLeftIcon, ChevronRightIcon } from "../../icons";
 import type { ChatMessage, TimeFormat } from "../../types";
 import { extractOffloadInfo, offloadManager, type MessageScope } from "../../messageOffload";
-import { extractMedia } from "../chat/MediaPreview";
+import { extractMedia } from "../chat/media/MediaPreview";
 import { formatTimestamp } from "../../utils/format";
 import styles from "./Lightbox.module.css";
 
@@ -61,6 +63,7 @@ function LightboxOverlay({
   items, activeIndex, onClose, onNavigate, onLoadOffloaded,
   timeFormat, convertToLocalTime, systemUses24h,
 }: OverlayProps): ReactNode {
+  const { t } = useTranslation("common");
   const item = items[activeIndex];
   const hasPrev = activeIndex > 0;
   const hasNext = activeIndex < items.length - 1;
@@ -386,7 +389,7 @@ function LightboxOverlay({
       ref={overlayRef}
       className={styles.overlay}
       role="dialog"
-      aria-label="Media viewer"
+      aria-label={t("lightbox.ariaLabel")}
       style={overlayStyle}
       onClick={(e) => {
         const t = e.target as HTMLElement;
@@ -395,8 +398,8 @@ function LightboxOverlay({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      <button type="button" className={styles.close} onClick={onClose}>
-        &#x2715;
+      <button type="button" className={styles.close} onClick={onClose} aria-label={t("lightbox.closeAriaLabel")}>
+        <CloseIcon width={18} height={18} />
       </button>
 
       <div className={styles.carousel} style={dismissStyle}>
@@ -414,7 +417,7 @@ function LightboxOverlay({
               {(isLoading || (isOffloaded && !displaySrc)) ? (
                 <div className={styles.loadingPlaceholder}>
                   <div className={styles.spinner} />
-                  <span className={styles.loadingLabel}>Loading image&#x2026;</span>
+                  <span className={styles.loadingLabel}>{t("lightbox.loading")}</span>
                 </div>
               ) : item.kind === "video" ? (
                 <video className={styles.media} src={displaySrc} controls autoPlay>
@@ -441,9 +444,9 @@ function LightboxOverlay({
           type="button"
           className={`${styles.arrow} ${styles.arrowPrev}`}
           onClick={goPrev}
-          aria-label="Previous image"
+          aria-label={t("lightbox.prevAriaLabel")}
         >
-          &#x2039;
+          <ChevronLeftIcon width={28} height={28} />
         </button>
       )}
       {hasNext && (
@@ -451,16 +454,16 @@ function LightboxOverlay({
           type="button"
           className={`${styles.arrow} ${styles.arrowNext}`}
           onClick={goNext}
-          aria-label="Next image"
+          aria-label={t("lightbox.nextAriaLabel")}
         >
-          &#x203A;
+          <ChevronRightIcon width={28} height={28} />
         </button>
       )}
 
       <div className={styles.caption} style={dismissStyle}>
         {items.length > 1 && (
           <span className={styles.counter}>
-            Photo {activeIndex + 1} / {items.length}
+            {t("lightbox.counter", { n: activeIndex + 1, total: items.length })}
           </span>
         )}
         <div className={styles.senderRow}>

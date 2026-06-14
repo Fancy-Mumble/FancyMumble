@@ -85,6 +85,8 @@ pub(crate) fn handle_proto_msg_deliver(
         pinned: false,
         pinned_by: None,
         pinned_at: None,
+        plugin_name: None,
+        plugin_components: None,
     };
 
     insert_or_replace_message(&mut state, channel_id, &message_id, replaces_id.as_deref(), chat_msg);
@@ -310,6 +312,8 @@ fn decrypt_fetched_messages(
             pinned: false,
             pinned_by: None,
             pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
         });
     }
 
@@ -591,6 +595,8 @@ fn insert_offline_messages(
             pinned: false,
             pinned_by: None,
             pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
         };
 
         let bucket = state.msgs.by_channel.entry(channel_id).or_default();

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import type { PersonalizationData, BubbleStyle, FontSize, BgFit, ChannelViewerStyle } from "../../personalizationStorage";
 import {
@@ -19,6 +20,17 @@ import { SliderField, Toggle } from "./SharedControls";
 import { FONT_FAMILIES, applyFont } from "../../utils/fonts";
 import { FileDropZone } from "../../components/elements/FileDropZone";
 import styles from "./SettingsPage.module.css";
+import panelStyles from "./PersonalizationPanel.module.css";
+import { registerSettings } from "./settingsSearchRegistry";
+
+registerSettings("personalize")
+  .add("personalize.theme", ["dark", "light", "colors"])
+  .add("personalize.chatBackground", ["wallpaper"])
+  .add("personalize.bgEffects")
+  .add("personalize.messageStyle")
+  .add("personalize.font", ["typeface", "text size"])
+  .add("personalize.messageList")
+  .add("personalize.channelViewer", ["hide empty channels"]);
 
 interface PersonalizationPanelProps {
   readonly data: PersonalizationData;
@@ -30,28 +42,38 @@ interface PersonalizationPanelProps {
 const MAX_BG_WIDTH = 1920;
 const MAX_BG_HEIGHT = 1080;
 
-const BUBBLE_STYLES: { id: BubbleStyle; label: string; icon: ReactNode }[] = [
-  { id: "bubbles", label: "Bubbles", icon: <MessageCircleIcon size={20} /> },
-  { id: "flat", label: "Flat", icon: <AlignLeftIcon size={20} /> },
-  { id: "compact", label: "Compact", icon: <AlignJustifyIcon size={20} /> },
-];
+type TFn = (key: string) => string;
 
-const BG_FIT_OPTIONS: { id: BgFit; label: string; icon: ReactNode }[] = [
-  { id: "cover", label: "Cover", icon: <FullscreenIcon size={20} /> },
-  { id: "tile", label: "Tile", icon: <Grid2x2Icon size={20} /> },
-];
+function buildBubbleStyles(t: TFn): { id: BubbleStyle; label: string; icon: ReactNode }[] {
+  return [
+    { id: "bubbles", label: t("personalize.bubbleStyleBubbles"), icon: <MessageCircleIcon size={20} /> },
+    { id: "flat", label: t("personalize.bubbleStyleFlat"), icon: <AlignLeftIcon size={20} /> },
+    { id: "compact", label: t("personalize.bubbleStyleCompact"), icon: <AlignJustifyIcon size={20} /> },
+  ];
+}
 
-const CHANNEL_VIEWER_STYLES: { id: ChannelViewerStyle; label: string; icon: ReactNode }[] = [
-  { id: "classic", label: "Classic", icon: <FolderIcon size={20} /> },
-  { id: "flat", label: "Flat", icon: <ListIcon size={20} /> },
-  { id: "modern", label: "Modern", icon: <SparklesIcon size={20} /> },
-];
+function buildBgFitOptions(t: TFn): { id: BgFit; label: string; icon: ReactNode }[] {
+  return [
+    { id: "cover", label: t("personalize.bgFitCover"), icon: <FullscreenIcon size={20} /> },
+    { id: "tile", label: t("personalize.bgFitTile"), icon: <Grid2x2Icon size={20} /> },
+  ];
+}
 
-const FONT_SIZES: { id: FontSize; label: string }[] = [
-  { id: "small", label: "Small" },
-  { id: "medium", label: "Medium" },
-  { id: "large", label: "Large" },
-];
+function buildChannelViewerStyles(t: TFn): { id: ChannelViewerStyle; label: string; icon: ReactNode }[] {
+  return [
+    { id: "classic", label: t("personalize.channelViewerClassic"), icon: <FolderIcon size={20} /> },
+    { id: "flat", label: t("personalize.channelViewerFlat"), icon: <ListIcon size={20} /> },
+    { id: "modern", label: t("personalize.channelViewerModern"), icon: <SparklesIcon size={20} /> },
+  ];
+}
+
+function buildFontSizes(t: TFn): { id: FontSize; label: string }[] {
+  return [
+    { id: "small", label: t("personalize.fontSizeSmall") },
+    { id: "medium", label: t("personalize.fontSizeMedium") },
+    { id: "large", label: t("personalize.fontSizeLarge") },
+  ];
+}
 
 /**
  * Extract the raw base64 string from a data-URL.
@@ -70,6 +92,13 @@ function base64ToDataUrl(base64: string): string {
 const BLUR_DEBOUNCE_MS = 500;
 
 export function PersonalizationPanel({ data, onChange, isExpert }: PersonalizationPanelProps) {
+  const { t } = useTranslation("settings");
+  const tStr = t as TFn;
+  const bubbleStyles = buildBubbleStyles(tStr);
+  const bgFitOptions = buildBgFitOptions(tStr);
+  const channelViewerStyles = buildChannelViewerStyles(tStr);
+  const fontSizes = buildFontSizes(tStr);
+
   const [editorImage, setEditorImage] = useState<string | null>(null);
   const [blurring, setBlurring] = useState(false);
 
@@ -231,32 +260,30 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
 
   return (
     <>
-      <h2 className={styles.panelTitle}>Personalize</h2>
+      <h2 className={styles.panelTitle}>{t("personalize.panelTitle")}</h2>
 
       {/* -- Theme ------------------------------------------------- */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Theme</h3>
-        <p className={styles.fieldHint}>
-          Choose the visual style for the entire app.
-        </p>
+        <h3 className={styles.sectionTitle}>{t("personalize.theme")}</h3>
+        <p className={styles.fieldHint}>{t("personalize.themeHint")}</p>
         <div className={styles.optionGrid}>
-          {THEMES.map((t) => (
+          {THEMES.map((theme) => (
             <button
-              key={t.id}
+              key={theme.id}
               type="button"
-              className={`${styles.optionCard} ${data.theme === t.id ? styles.optionCardSelected : ""}`}
-              onClick={() => handleThemeChange(t.id)}
+              className={`${styles.optionCard} ${data.theme === theme.id ? styles.optionCardSelected : ""}`}
+              onClick={() => handleThemeChange(theme.id)}
             >
-              <span className={styles.swatchGrid}>
-                {t.swatches.map((color) => (
+              <span className={panelStyles.swatchGrid}>
+                {theme.swatches.map((color) => (
                   <span
                     key={color}
-                    className={styles.swatch}
+                    className={panelStyles.swatch}
                     style={{ backgroundColor: color }}
                   />
                 ))}
               </span>
-              <span className={styles.optionLabel}>{t.label}</span>
+              <span className={styles.optionLabel}>{theme.label}</span>
             </button>
           ))}
         </div>
@@ -264,21 +291,19 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
 
       {/* -- Chat Background --------------------------------------- */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Chat Background</h3>
-        <p className={styles.fieldHint}>
-          Set a custom background image for your chat view.
-        </p>
+        <h3 className={styles.sectionTitle}>{t("personalize.chatBackground")}</h3>
+        <p className={styles.fieldHint}>{t("personalize.chatBgHint")}</p>
 
         {/* Upload / Remove */}
         <FileDropZone
           accept="image/png,image/jpeg,image/webp"
           onFile={handleFileChange}
-          label="Drop a background image here or click to browse"
+          label={t("personalize.bgDropLabel")}
           preview={
             hasBackground && previewImage ? (
               <img
                 src={previewImage}
-                alt="Chat background preview"
+                alt={t("personalize.bgPreviewAlt")}
                 style={{ opacity: data.chatBgOpacity }}
               />
             ) : undefined
@@ -290,20 +315,18 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
       {/* Blur & Appearance */}
       {hasBackground && (
         <section className={styles.section}>
-          <h3 className={styles.sectionTitle}>Background Effects</h3>
+          <h3 className={styles.sectionTitle}>{t("personalize.bgEffects")}</h3>
 
-          {/* Blur toggle -- always visible */}
           <div className={styles.fieldRow}>
-            <label className={styles.fieldLabel}>Blur Background</label>
+            <label className={styles.fieldLabel}>{t("personalize.blurBackground")}</label>
             <Toggle checked={blurEnabled} onChange={handleToggleBlur} disabled={blurring} />
           </div>
 
-          {/* Fit mode selector -- always visible */}
           <div className={styles.fieldRow}>
-            <label className={styles.fieldLabel}>Image Fit</label>
+            <label className={styles.fieldLabel}>{t("personalize.imageFit")}</label>
           </div>
           <div className={styles.optionGrid}>
-            {BG_FIT_OPTIONS.map((opt) => (
+            {bgFitOptions.map((opt) => (
               <button
                 key={opt.id}
                 type="button"
@@ -316,14 +339,13 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
             ))}
           </div>
 
-          {/* Advanced options — only shown in expert/developer mode */}
+          {/* Advanced options - only shown in expert/developer mode */}
           {isExpert && (
             <>
-              {/* Blur strength slider */}
               {blurEnabled && (
                 <SliderField
-                  label="Blur Strength"
-                  hint="Higher values produce a stronger blur."
+                  label={t("personalize.blurStrength")}
+                  hint={t("personalize.blurStrengthHint")}
                   min={1}
                   max={30}
                   step={1}
@@ -333,10 +355,9 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
                 />
               )}
 
-              {/* Opacity slider */}
               <SliderField
-                label="Image Opacity"
-                hint="How visible the background image is."
+                label={t("personalize.imageOpacity")}
+                hint={t("personalize.imageOpacityHint")}
                 min={0.05}
                 max={1}
                 step={0.05}
@@ -345,10 +366,9 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
                 format={(v) => `${Math.round(v * 100)}%`}
               />
 
-              {/* Dim overlay slider */}
               <SliderField
-                label="Dim Overlay"
-                hint="Darkens the background to improve text readability."
+                label={t("personalize.dimOverlay")}
+                hint={t("personalize.dimOverlayHint")}
                 min={0}
                 max={0.9}
                 step={0.05}
@@ -363,12 +383,10 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
 
       {/* -- Message Style ----------------------------------------- */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Message Style</h3>
-        <p className={styles.fieldHint}>
-          Choose how chat messages are displayed.
-        </p>
+        <h3 className={styles.sectionTitle}>{t("personalize.messageStyle")}</h3>
+        <p className={styles.fieldHint}>{t("personalize.messageStyleHint")}</p>
         <div className={styles.optionGrid}>
-          {BUBBLE_STYLES.map((s) => (
+          {bubbleStyles.map((s) => (
             <button
               key={s.id}
               type="button"
@@ -384,13 +402,12 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
 
       {/* -- Font -------------------------------------------------- */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Font</h3>
+        <h3 className={styles.sectionTitle}>{t("personalize.font")}</h3>
 
-        {/* Font size */}
         <div className={styles.field}>
-          <label className={styles.fieldLabel}>Font Size</label>
+          <label className={styles.fieldLabel}>{t("personalize.fontSize")}</label>
           <div className={styles.optionGrid}>
-            {FONT_SIZES.map((fs) => (
+            {fontSizes.map((fs) => (
               <button
                 key={fs.id}
                 type="button"
@@ -403,11 +420,10 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
           </div>
         </div>
 
-        {/* Custom px (expert only) */}
         {isExpert && (
           <SliderField
-            label="Custom Font Size"
-            hint="Override font size with an exact pixel value."
+            label={t("personalize.customFontSize")}
+            hint={t("personalize.customFontSizeHint")}
             min={10}
             max={24}
             step={1}
@@ -417,9 +433,8 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
           />
         )}
 
-        {/* Font family */}
         <div className={styles.field}>
-          <label className={styles.fieldLabel}>Font Family</label>
+          <label className={styles.fieldLabel}>{t("personalize.fontFamily")}</label>
           <div className={styles.optionGrid}>
             {FONT_FAMILIES.map((f) => (
               <button
@@ -438,29 +453,35 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
 
       {/* -- Message List ------------------------------------------ */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Message List</h3>
+        <h3 className={styles.sectionTitle}>{t("personalize.messageList")}</h3>
         <div className={styles.fieldRow}>
           <div>
-            <label className={styles.fieldLabel}>Compact Mode</label>
-            <p className={styles.fieldHint}>
-              Hide avatars and tighten spacing for higher density.
-            </p>
+            <label className={styles.fieldLabel}>{t("personalize.compactMode")}</label>
+            <p className={styles.fieldHint}>{t("personalize.compactModeHint")}</p>
           </div>
           <Toggle
             checked={data.compactMode}
             onChange={() => onChange({ compactMode: !data.compactMode })}
           />
         </div>
+        <div className={styles.fieldRow}>
+          <div>
+            <label className={styles.fieldLabel}>{t("personalize.alwaysShowMessageActions")}</label>
+            <p className={styles.fieldHint}>{t("personalize.alwaysShowMessageActionsHint")}</p>
+          </div>
+          <Toggle
+            checked={data.alwaysShowMessageActions}
+            onChange={() => onChange({ alwaysShowMessageActions: !data.alwaysShowMessageActions })}
+          />
+        </div>
       </section>
 
       {/* -- Channel Viewer ---------------------------------------- */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Channel Viewer</h3>
-        <p className={styles.fieldHint}>
-          Choose how the channel list is displayed in the sidebar.
-        </p>
+        <h3 className={styles.sectionTitle}>{t("personalize.channelViewer")}</h3>
+        <p className={styles.fieldHint}>{t("personalize.channelViewerHint")}</p>
         <div className={styles.optionGrid}>
-          {CHANNEL_VIEWER_STYLES.map((s) => (
+          {channelViewerStyles.map((s) => (
             <button
               key={s.id}
               type="button"
@@ -489,3 +510,4 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
     </>
   );
 }
+

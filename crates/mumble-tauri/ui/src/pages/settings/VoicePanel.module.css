@@ -1,0 +1,7 @@
+/* --- VoicePanel - PTT key row ---------------------------------- */
+
+.pttKeyRow {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-glass-border);
+}

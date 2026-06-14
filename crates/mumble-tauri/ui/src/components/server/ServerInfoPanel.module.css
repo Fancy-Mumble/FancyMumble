@@ -195,6 +195,12 @@
   border-top: 1px solid var(--color-glass-border);
 }
 
+.pluginAccordionTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* -- Welcome text ------------------------------------------------ */
 
 .welcomeText {

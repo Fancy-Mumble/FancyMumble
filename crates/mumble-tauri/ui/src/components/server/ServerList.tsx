@@ -1,8 +1,10 @@
-import { PauseIcon, SearchIcon, UserFilledIcon } from "../../icons";
+import { CloseIcon, PauseIcon, SearchIcon, UserFilledIcon } from "../../icons";
 import { useMemo, useRef, useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { SavedServer, ServerPingResult } from "../../types";
 import { isMobile } from "../../utils/platform";
 import SwipeableCard from "../elements/SwipeableCard";
+import { TID } from "../../testids";
 import styles from "./ServerList.module.css";
 
 interface Props {
@@ -34,14 +36,15 @@ function latencyTier(ms: number): "great" | "okay" | "poor" {
 }
 
 function PingDot({ ping }: Readonly<{ ping?: ServerPingResult }>) {
+  const { t } = useTranslation("server");
   if (!ping) {
     return (
-      <span className={`${styles.pingDot} ${styles.dotProbing}`} title="Checking..." />
+      <span className={`${styles.pingDot} ${styles.dotProbing}`} title={t("list.checking")} />
     );
   }
   if (!ping.online) {
     return (
-      <span className={`${styles.pingDot} ${styles.dotOffline}`} title="Offline" />
+      <span className={`${styles.pingDot} ${styles.dotOffline}`} title={t("list.offline")} />
     );
   }
   const ms = ping.latency_ms ?? 0;
@@ -53,9 +56,9 @@ function PingDot({ ping }: Readonly<{ ping?: ServerPingResult }>) {
     poor: styles.dotPoor,
   };
   const tierLabelMap = {
-    great: `${ms} ms · Excellent`,
-    okay: `${ms} ms · Fair`,
-    poor: `${ms} ms · High latency`,
+    great: t("list.latencyExcellent", { ms }),
+    okay: t("list.latencyFair", { ms }),
+    poor: t("list.latencyPoor", { ms }),
   };
 
   return (
@@ -90,6 +93,7 @@ function ServerAvatar({
   ping?: ServerPingResult;
   onCancelConnect?: (id: string) => void;
 }>) {
+  const { t } = useTranslation("server");
   return (
     <div className={styles.avatarWrap}>
       <div className={styles.avatar}>
@@ -97,8 +101,8 @@ function ServerAvatar({
           <button
             type="button"
             className={styles.cancelBtn}
-            title="Cancel connection"
-            aria-label="Cancel connection"
+            title={t("list.cancelConnection")}
+            aria-label={t("list.cancelConnection")}
             onClick={(e) => {
               e.stopPropagation();
               onCancelConnect?.(server.id);
@@ -143,6 +147,7 @@ function ServerCardItem({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firedRef = useRef(false);
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
+  const { t } = useTranslation("server");
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (!isMobile || !onEdit || disabled || isThisConnecting) return;
@@ -183,13 +188,13 @@ function ServerCardItem({
   return (
     <SwipeableCard
       leftSwipeAction={!isThisConnecting ? {
-        label: "Delete",
+        label: t("list.delete"),
         icon: "\u2715",
         color: "var(--color-danger, #ef4444)",
         onTrigger: () => onDelete(s.id),
       } : undefined}
       rightSwipeAction={!isThisConnecting ? {
-        label: s.favorite ? "Unfavorite" : "Favorite",
+        label: s.favorite ? t("list.unfavorite") : t("list.favorite"),
         icon: s.favorite ? "\u2606" : "\u2605",
         color: "#f59e0b",
         onTrigger: () => onToggleFavorite(s.id),
@@ -198,6 +203,8 @@ function ServerCardItem({
     >
       <div
         className={cardClasses}
+        data-testid={TID.serverCard}
+        data-server-id={s.id}
         onClick={() => { if (!disabled && !firedRef.current) onConnect(s); }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -224,7 +231,7 @@ function ServerCardItem({
         <div className={styles.info}>
           <div className={styles.label}>{s.label || s.host}</div>
           <div className={styles.meta}>
-            {isThisConnecting ? (connectingMessage ?? "Connecting...") : s.username}
+            {isThisConnecting ? (connectingMessage ?? t("list.connecting")) : s.username}
           </div>
         </div>
 
@@ -238,7 +245,7 @@ function ServerCardItem({
           {onEdit && (
             <button
               className={styles.editBtn}
-              title="Edit server"
+              title={t("list.editServer")}
               onClick={(e) => {
                 e.stopPropagation();
                 if (!disabled) onEdit(s);
@@ -250,21 +257,21 @@ function ServerCardItem({
           )}
           <button
             className={styles.deleteBtn}
-            title="Remove server"
+            title={t("list.removeServer")}
             onClick={(e) => {
               e.stopPropagation();
               if (!disabled) onDelete(s.id);
             }}
             type="button"
           >
-            &#x2715;
+            <CloseIcon width={12} height={12} />
           </button>
 
           {!isThisConnecting && (
             <button
               className={styles.favoriteBtn}
-              title={s.favorite ? "Remove from favourites" : "Add to favourites"}
-              aria-label={s.favorite ? "Remove from favourites" : "Add to favourites"}
+              title={s.favorite ? t("list.removeFromFavorites") : t("list.addToFavorites")}
+              aria-label={s.favorite ? t("list.removeFromFavorites") : t("list.addToFavorites")}
               aria-pressed={s.favorite ?? false}
               onClick={(e) => {
                 e.stopPropagation();
@@ -296,6 +303,7 @@ export default function ServerList({
   connectingId,
   connectingMessage,
 }: Readonly<Props>) {
+  const { t } = useTranslation("server");
   const [searchQuery, setSearchQuery] = useState("");
 
   // Favourites first, then filter by search query.
@@ -312,14 +320,14 @@ export default function ServerList({
     <div>
       {/* Header row */}
       <div className={styles.header}>
-        <span className={styles.heading}>Saved Servers</span>
+        <span className={styles.heading}>{t("list.heading")}</span>
         <button
           className={styles.addLink}
           onClick={onAddNew}
           disabled={disabled}
           type="button"
         >
-          + Add Server
+          {t("list.addServer")}
         </button>
       </div>
 
@@ -330,23 +338,21 @@ export default function ServerList({
           <input
             className={styles.searchInput}
             type="text"
-            placeholder="Search servers..."
+            placeholder={t("list.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             disabled={disabled}
-            aria-label="Search saved servers"
+            aria-label={t("list.searchAriaLabel")}
           />
         </div>
       )}
 
       {servers.length === 0 ? (
         <div className={styles.empty}>
-          No saved servers yet.
-          <br />
-          Add one to get started!
+          {t("list.emptyState")}
         </div>
       ) : displayed.length === 0 ? (
-        <div className={styles.noResults}>No servers match &ldquo;{searchQuery}&rdquo;</div>
+        <div className={styles.noResults}>{t("list.noMatch", { query: searchQuery })}</div>
       ) : (
         <div className={styles.scrollList}>
         <div className={styles.list}>

@@ -19,7 +19,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 import {
   clearAllStrokesInChannel,
   clearStrokesFromSender,
-} from "../chat/DrawingOverlay";
+} from "../chat/drawing/DrawingOverlay";
 
 // Module-private store helpers aren't exported, so we exercise them
 // indirectly through the global `draw-stroke` event.  Re-implement the

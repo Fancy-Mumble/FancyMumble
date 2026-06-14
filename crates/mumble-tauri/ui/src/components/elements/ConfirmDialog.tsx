@@ -1,5 +1,5 @@
-import { useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
+import { Modal } from "./Modal";
 import styles from "./ConfirmDialog.module.css";
 
 interface ConfirmDialogProps {
@@ -11,36 +11,32 @@ interface ConfirmDialogProps {
   isConfirming?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /** When provided, an opt-out checkbox is shown above the actions (e.g.
+   *  "Don't show this again").  Controlled via {@link checkboxChecked} /
+   *  {@link onCheckboxChange}. */
+  checkboxLabel?: string;
+  checkboxChecked?: boolean;
+  onCheckboxChange?: (checked: boolean) => void;
 }
 
 export default function ConfirmDialog({
   title,
   body,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  confirmLabel,
+  cancelLabel,
   danger = false,
   isConfirming = false,
   onConfirm,
   onCancel,
+  checkboxLabel,
+  checkboxChecked = false,
+  onCheckboxChange,
 }: ConfirmDialogProps) {
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    },
-    [onCancel],
-  );
-
-  useEffect(() => {
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
-
-  const handleOverlayClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) onCancel();
-  };
-
-  return createPortal(
-    <div className={styles.overlay} onMouseDown={handleOverlayClick}>
+  const { t } = useTranslation("common");
+  const resolvedConfirm = confirmLabel ?? t("confirmDialog.confirmLabel");
+  const resolvedCancel = cancelLabel ?? t("confirmDialog.cancelLabel");
+  return (
+    <Modal onClose={onCancel} zIndex={9999}>
       <div className={styles.dialog} role="alertdialog" aria-labelledby="confirm-title" aria-describedby="confirm-body">
         <h3 id="confirm-title" className={`${styles.title} ${danger ? styles.titleDanger : ""}`}>
           {title}
@@ -48,20 +44,29 @@ export default function ConfirmDialog({
         <p id="confirm-body" className={styles.body}>
           {body}
         </p>
+        {checkboxLabel && (
+          <label className={styles.checkboxRow}>
+            <input
+              type="checkbox"
+              checked={checkboxChecked}
+              onChange={(e) => onCheckboxChange?.(e.target.checked)}
+            />
+            <span>{checkboxLabel}</span>
+          </label>
+        )}
         <div className={styles.actions}>
           <button className={styles.cancelBtn} onClick={onCancel}>
-            {cancelLabel}
+            {resolvedCancel}
           </button>
           <button
             className={`${styles.confirmBtn} ${danger ? styles.confirmBtnDanger : ""}`}
             onClick={onConfirm}
             disabled={isConfirming}
           >
-            {confirmLabel}
+            {resolvedConfirm}
           </button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }

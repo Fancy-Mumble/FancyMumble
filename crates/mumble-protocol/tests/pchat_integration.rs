@@ -1195,7 +1195,7 @@ async fn test_reconnect_decrypt_with_derived_key() {
 // =============================================================================
 
 /// Test that when Bob fetches a message sent by Alice, the `sender_hash` in
-/// the fetch response equals Alice's cert hash — NOT Bob's.  This is the
+/// the fetch response equals Alice's cert hash - NOT Bob's.  This is the
 /// server-side invariant that the client's `is_own` logic relies on.
 ///
 /// Scenario:
@@ -1423,7 +1423,7 @@ async fn test_sender_hash_matches_own_for_self_fetch() {
         "sender_hash must equal our own cert_hash for self-sent messages"
     );
 
-    // Simulate is_own logic — must be true.
+    // Simulate is_own logic - must be true.
     let is_own = !sender_hash.is_empty()
         && !cert_hash.is_empty()
         && sender_hash == cert_hash;

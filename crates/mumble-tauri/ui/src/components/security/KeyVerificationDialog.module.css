@@ -1,22 +1,9 @@
 /* --- Key Verification Dialog ------------------------------------- */
 
-.overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-overlay-heavy);
+/* Additive backdrop blur layered onto the shared Modal overlay. */
+.overlayBlur {
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
-  border: none;
-  padding: 0;
-  margin: 0;
-  width: 100vw;
-  height: 100vh;
-  max-width: 100vw;
-  max-height: 100vh;
 }
 
 .dialog {

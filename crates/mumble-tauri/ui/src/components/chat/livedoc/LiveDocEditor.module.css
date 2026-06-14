@@ -1,0 +1,1130 @@
+/* LiveDocEditor: word-processor look + collaborative-cursor styling. */
+
+.editorRoot {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--color-bg, #14161b);
+  /* Top corners stay square so the editor sits flush against the
+     LiveDocPanel header bar above it; only the bottom is rounded
+     to match the panel's outer radius. */
+  border-radius: 0 0 var(--radius-md, 8px) var(--radius-md, 8px);
+  overflow: hidden;
+}
+
+/* Row below the toolbar: optional outline pane + the scrolling page
+   area.  Fills the remaining editor height. */
+.editorBody {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+/* Side-by-side markdown view: rendered page surface (left) + editable
+   markdown source (right), with a draggable divider between them. */
+.splitView {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.splitPane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The rendered pane takes whatever width the markdown pane leaves. */
+.splitPaneGrow {
+  flex: 1 1 0;
+}
+
+.splitHandle {
+  flex: 0 0 6px;
+  cursor: col-resize;
+  background: var(--color-surface-elevated, #262a32);
+  touch-action: none;
+  transition: background 0.15s ease;
+}
+
+.splitHandle:hover {
+  background: var(--color-accent, #2aabee);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 6px 12px;
+  width: 100%;
+  background: var(--color-surface-elevated, #262a32);
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.06));
+  scrollbar-width: thin;
+}
+
+.toolbarGroup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.toolbarDivider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--color-border, rgba(255, 255, 255, 0.12));
+  margin: 4px 2px;
+  flex-shrink: 0;
+}
+
+.toolBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.toolBtn:hover:not(:disabled) {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
+}
+
+.toolBtnActive {
+  background: var(--color-accent-subtle, rgba(42, 171, 238, 0.15));
+  border-color: var(--color-accent, #2aabee);
+  color: var(--color-accent, #2aabee);
+}
+
+.toolBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Themed dropdown (replaces native <select> so the menu honours the
+   app theme on every OS).  Triggered from a toolbar button; pops a
+   floating menu of clickable items beneath it. */
+.dropdownWrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.dropdownTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+}
+
+.dropdownTriggerText {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dropdownMenu {
+  min-width: 140px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--color-surface, #1e2128);
+  color: var(--color-text-primary, #f5f6f8);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.dropdownItem {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--color-text-primary, #f5f6f8);
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dropdownItem:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.dropdownItemActive {
+  background: var(--color-accent-subtle, rgba(42, 171, 238, 0.18));
+  color: var(--color-accent, #2aabee);
+}
+
+.dropdownSep {
+  border: none;
+  border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  margin: 3px 4px;
+}
+
+/* Font-size widget: [-] [number input] [+] [▾] */
+.fontSizeWidget {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 1px;
+  height: 32px;
+}
+
+.fontSizeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  cursor: pointer;
+}
+
+.fontSizeBtn:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
+}
+
+.fontSizeInput {
+  width: 42px;
+  height: 32px;
+  padding: 0 4px;
+  background: var(--color-surface, #1e2128);
+  color: var(--color-text-primary, #f5f6f8);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.10));
+  border-radius: var(--radius-sm, 4px);
+  text-align: center;
+  font-size: 13px;
+  -moz-appearance: textfield;
+}
+
+/* Hide native number spinners; we provide our own ± buttons. */
+.fontSizeInput::-webkit-inner-spin-button,
+.fontSizeInput::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.fontSizeInput:focus-visible {
+  outline: 2px solid var(--color-accent, #2aabee);
+  outline-offset: 1px;
+}
+
+.colorTrigger {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+}
+
+.colorIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-bottom: 3px solid currentColor;
+  padding-bottom: 1px;
+}
+
+.colorInputHidden {
+  position: absolute;
+  width: 0;
+  height: 0;
+  padding: 0;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.colorClearBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 32px;
+  margin-left: -2px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted, #aab0b8);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.colorClearBtn:hover {
+  color: var(--color-text-primary, #f5f6f8);
+}
+
+/* Table grid picker popup */
+.tablePickerPopup {
+  background: var(--color-surface, #1e2128);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  user-select: none;
+}
+
+.tablePickerLabel {
+  font-size: 11px;
+  color: var(--color-text-muted, #aab0b8);
+  text-align: center;
+  min-width: 60px;
+}
+
+.tablePickerGrid {
+  display: grid;
+  grid-template-columns: repeat(8, 18px);
+  gap: 2px;
+}
+
+.tablePickerCell {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.18));
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.08s, border-color 0.08s;
+}
+
+.tablePickerCell:hover,
+.tablePickerCellActive {
+  background: rgba(42, 171, 238, 0.25);
+  border-color: var(--color-accent, #2aabee);
+}
+
+.editorScroll {
+  /* Shared ruler/page geometry. Defined here (the common ancestor of both
+     the sticky horizontal ruler and the page grid) so every descendant
+     stays in sync.  --ld-major (96px) is one "inch" at 96dpi between major
+     tick marks; --ld-page-w is the centred page width. */
+  --ld-page-w: 850px;
+  --ld-pad-x: 84px;
+  --ld-pad-y: 72px;
+  --ld-major: 96px;
+  --ld-minor: 12px;
+  --ld-ruler-size: 24px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0;
+  background: var(--color-bg, #14161b);
+  cursor: text;
+  position: relative;
+}
+
+/* Non-destructive page-count indicator pinned to the bottom-right of the
+   scroll viewport (Google Docs style).  Purely informational. */
+.pageCountBadge {
+  position: sticky;
+  bottom: 10px;
+  margin-left: auto;
+  margin-right: 12px;
+  width: fit-content;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.7));
+  background: var(--color-surface, rgba(30, 33, 40, 0.92));
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Word-style page grid: a vertical ruler column hugging the left edge and
+   the centred page column.  The horizontal ruler is a sibling above this
+   grid (sticky to the top edge), not a grid row. */
+.pageGrid {
+  display: grid;
+  grid-template-columns: var(--ld-ruler-size) 1fr;
+  width: 100%;
+}
+
+/* Centres the page within its column, matching the horizontal ruler's
+   inner alignment, and adds bottom breathing room below the page. */
+.pageArea {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0 64px;
+}
+
+/* Google-Docs-style centered "page" surface.  Clicking anywhere on
+   the page (or the gray scroll area, via .editorScroll) focuses the
+   editor - the JSX wires onClick on the scroll wrapper.
+   Height is keyed to A4 aspect (210:297) so the page looks like
+   portrait paper even before the user has typed anything. */
+.editorPage {
+  position: relative;
+  isolation: isolate;
+  width: var(--ld-page-w, 850px);
+  min-height: var(--ld-page-h, 1100px);
+  background: var(--color-surface, #1e2128);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.30), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  padding: var(--ld-pad-y, 72px) var(--ld-pad-x, 84px);
+  cursor: text;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+/* White-paper preview mode: override the dark surface so the document
+   looks like real paper.  The toolbar above keeps its theme colours
+   (only the page swaps). */
+/* Manual page break: a labelled dashed divider on screen; in print /
+   PDF it forces a real page break (see liveDocPdf.ts).  The label text
+   comes from the `--ld-pagebreak-label` / `--ld-sectionbreak-label`
+   custom properties set (translated) on `.editorRoot`. */
+:global(.livedoc-page-break),
+:global(.livedoc-section-break) {
+  display: block;
+  height: 0;
+  margin: 22px 0;
+  border-top: 2px dashed var(--color-border, rgba(255, 255, 255, 0.28));
+  position: relative;
+}
+
+/* A section break reads as a heavier, double divider to distinguish it
+   from an ordinary page break. */
+:global(.livedoc-section-break) {
+  border-top-style: double;
+  border-top-width: 3px;
+}
+
+:global(.livedoc-page-break)::after,
+:global(.livedoc-section-break)::after {
+  position: absolute;
+  top: -0.72em;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 8px;
+  background: var(--color-bg, #14161b);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.5));
+  white-space: nowrap;
+}
+
+:global(.livedoc-page-break)::after {
+  content: var(--ld-pagebreak-label, "Page break");
+}
+
+:global(.livedoc-section-break)::after {
+  content: var(--ld-sectionbreak-label, "Section break");
+}
+
+/* On the white-paper surface the labels sit on the page colour. */
+.editorPagePaper :global(.livedoc-page-break)::after,
+.editorPagePaper :global(.livedoc-section-break)::after {
+  background: #ffffff;
+  color: #6b6b70;
+}
+
+/* Automatic page break (decoration widget): the previous page's leftover
+   space + a grey inter-sheet gutter that spans the full page width, so
+   content visibly continues on a fresh sheet.  View-only; see
+   liveDocPaginationDecorations.ts. */
+:global(.livedoc-page-gap) {
+  display: block;
+  position: relative;
+  width: 100%;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Trailing spacer that pads the final page out to a full sheet height. */
+:global(.livedoc-page-tail) {
+  display: block;
+  width: 100%;
+  user-select: none;
+  pointer-events: none;
+}
+
+:global(.livedoc-page-gap-band) {
+  position: absolute;
+  /* Break out of the page's left/right margins to cut clean across the
+     sheet (a couple px past the 1px page border). */
+  left: calc(-1 * var(--ld-pad-x, 84px) - 2px);
+  right: calc(-1 * var(--ld-pad-x, 84px) - 2px);
+  background: var(--color-bg, #14161b);
+  box-shadow:
+    inset 0 9px 9px -9px rgba(0, 0, 0, 0.55),
+    inset 0 -9px 9px -9px rgba(0, 0, 0, 0.55);
+}
+
+/* Page border: drawn just inside the page margins, like Word's page
+   border.  Purely decorative overlay; never intercepts clicks. */
+.pageBorder {
+  position: absolute;
+  inset: calc(var(--ld-pad-y, 72px) / 2) calc(var(--ld-pad-x, 84px) / 2);
+  border-style: solid;
+  border-color: var(--color-text-secondary, rgba(255, 255, 255, 0.45));
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Ruler drag guide line: a thin accent-coloured line that spans the full
+   page while a margin handle is being dragged, so you can see exactly
+   where the margin lands on the document content. */
+.rulerGuide {
+  position: absolute;
+  background: var(--color-accent, #2aabee);
+  opacity: 0.75;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.editorPagePaper .pageBorder {
+  border-color: rgba(0, 0, 0, 0.55);
+}
+
+/* Diagonal watermark sitting behind the document content. */
+.watermark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+}
+
+.watermarkText {
+  transform: rotate(-32deg);
+  font-size: clamp(40px, 12vw, 120px);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--color-text-primary, #ffffff);
+  opacity: 0.07;
+}
+
+.editorPagePaper .watermarkText {
+  color: #000000;
+  opacity: 0.08;
+}
+
+.editorPagePaper {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  color: #1c1c1f;
+}
+
+.editorPagePaper .editorContent,
+.editorPagePaper .editorContent * {
+  color: #1c1c1f;
+}
+
+.editorPagePaper .editorContent blockquote {
+  border-left-color: #888;
+  color: #555;
+}
+
+.editorPagePaper .editorContent pre,
+.editorPagePaper .editorContent code {
+  background: #f1f1f3;
+  color: #1c1c1f;
+}
+
+.editorPagePaper .editorContent a {
+  color: #1a4dbe;
+}
+
+.editorContent {
+  outline: none;
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 15px;
+  line-height: 1.6;
+  column-count: var(--ld-columns, 1);
+  column-gap: calc(var(--ld-pad-x, 84px) * 0.5);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  /* Keep the editable content above the decorative border / watermark. */
+  position: relative;
+  z-index: 1;
+}
+
+.editorContent h1 {
+  font-size: 1.8em;
+  margin: 0.6em 0 0.3em;
+}
+
+.editorContent h2 {
+  font-size: 1.4em;
+  margin: 0.6em 0 0.3em;
+}
+
+.editorContent h3 {
+  font-size: 1.2em;
+  margin: 0.6em 0 0.3em;
+}
+
+.editorContent blockquote {
+  border-left: 3px solid var(--color-accent, #2aabee);
+  padding-left: 12px;
+  color: var(--color-text-muted, #aab0b8);
+  margin: 0.6em 0;
+}
+
+.editorContent pre {
+  background: var(--color-surface-elevated, #262a32);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm, 4px);
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+
+.editorContent img,
+.editorContent video {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.editorContent table {
+  max-width: 100%;
+  table-layout: fixed;
+}
+
+.editorContent code {
+  background: var(--color-surface-elevated, #262a32);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+
+.editorContent ul,
+.editorContent ol {
+  padding-left: 24px;
+}
+
+.editorContent a {
+  color: var(--color-accent, #2aabee);
+  text-decoration: underline;
+}
+
+/* Table styling */
+.editorContent :global(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+  table-layout: fixed;
+}
+
+.editorContent :global(th),
+.editorContent :global(td) {
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.18));
+  padding: 6px 10px;
+  vertical-align: top;
+  min-width: 60px;
+  position: relative;
+}
+
+.editorContent :global(th) {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
+  font-weight: 600;
+}
+
+.editorContent :global(.selectedCell)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(42, 171, 238, 0.15);
+  pointer-events: none;
+}
+
+/* Mention chips - mirror the chat-message rendering so the same
+   MentionPopover delegation works inside the Live Doc. */
+.editorContent :global(.mention) {
+  display: inline-block;
+  padding: 0 4px;
+  margin: 0 1px;
+  border-radius: 4px;
+  font-weight: 500;
+  background: color-mix(in srgb, var(--color-accent, #2aabee) 20%, transparent);
+  color: var(--color-accent, #2aabee);
+  cursor: pointer;
+}
+
+.editorContent :global(.mention:hover) {
+  background: color-mix(in srgb, var(--color-accent, #2aabee) 35%, transparent);
+}
+
+.editorContent :global(.mention-everyone),
+.editorContent :global(.mention-here) {
+  background: color-mix(in srgb, var(--color-warning, #f0b232) 22%, transparent);
+  color: var(--color-warning, #f0b232);
+}
+
+/* Task list (checkbox list) - styles the TaskItem checkbox + content
+   layout produced by @tiptap/extension-task-item. */
+.editorContent :global(ul[data-type="taskList"]) {
+  list-style: none;
+  padding-left: 4px;
+  margin: 0.4em 0;
+}
+
+.editorContent :global(ul[data-type="taskList"] li) {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0.15em 0;
+}
+
+.editorContent :global(ul[data-type="taskList"] li > label) {
+  flex-shrink: 0;
+  margin-top: 4px;
+  user-select: none;
+}
+
+.editorContent :global(ul[data-type="taskList"] li > label > input[type="checkbox"]) {
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--color-accent, #2aabee);
+}
+
+.editorContent :global(ul[data-type="taskList"] li > div) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.editorContent :global(ul[data-type="taskList"] li > div > p) {
+  margin: 0;
+}
+
+.editorContent :global(ul[data-type="taskList"] li[data-checked="true"] > div) {
+  color: var(--color-text-muted, #aab0b8);
+  text-decoration: line-through;
+}
+
+/* Floating add-row/add-col controls pinned just above the table the
+   caret currently sits in.  Positioned absolutely relative to the
+   editorPage container (which is `position: relative`). */
+.tableControls {
+  position: absolute;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--color-surface-elevated, #262a32);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+}
+
+.tableControlBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 26px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.tableControlBtn:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+  border-color: var(--color-border, rgba(255, 255, 255, 0.18));
+}
+
+/* Remote-cursor styling from @tiptap/extension-collaboration-cursor.
+   The extension injects span.collaboration-cursor__caret + label. */
+.editorContent :global(.collaboration-cursor__caret) {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 1px solid currentColor;
+  border-right: 1px solid currentColor;
+  word-break: normal;
+  pointer-events: none;
+}
+
+.editorContent :global(.collaboration-cursor__label) {
+  position: absolute;
+  top: -1.4em;
+  left: -1px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 1px 5px;
+  border-radius: 3px 3px 3px 0;
+  white-space: nowrap;
+  user-select: none;
+  /* background-color is set inline by buildCollabCursor */
+}
+
+.editorContent :global(.collaboration-cursor__label)::before {
+  content: attr(data-name);
+  color: rgba(0, 0, 0, 0.85);
+}
+
+.loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-text-muted, #aab0b8);
+}
+
+/* Mobile-friendly toolbar: collapse to a single horizontal scroll row
+   on narrow viewports so the user can swipe to find any button. */
+@media (max-width: 640px) {
+  .toolbar {
+    padding: 4px 6px;
+    gap: 2px 6px;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .toolBtn {
+    min-width: 36px;
+    height: 36px;
+  }
+  .editorScroll {
+    padding: 0;
+  }
+  .pageGrid {
+    grid-template-columns: 1fr;
+  }
+  .pageArea {
+    padding: 12px 8px 32px;
+  }
+  .editorPage {
+    width: 100%;
+    padding: 24px 18px;
+    border-radius: var(--radius-sm, 4px);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Insert-tab content: text box, word art, embeds, comments, drop cap *
+ * (global because the nodes render plain class names, not CSS module  *
+ * scoped names).                                                      *
+ * ------------------------------------------------------------------ */
+
+:global(.ld-box) {
+  margin: 10px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.2));
+  border-radius: 6px;
+}
+
+:global(.ld-box-textbox) {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+:global(.ld-box-wordart) {
+  border: none;
+  padding: 6px 0;
+  text-align: center;
+}
+
+:global(.ld-box-wordart) > * {
+  font-size: 2.4em;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  background: linear-gradient(92deg, #2aabee, #8a5cf6 55%, #f0428a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+
+/* Drop cap - enlarge the first letter of the paragraph / heading. */
+:global([data-dropcap="true"])::first-letter {
+  float: left;
+  font-size: 3.2em;
+  line-height: 0.8;
+  font-weight: 700;
+  padding: 4px 8px 0 0;
+  color: var(--color-accent, #2aabee);
+}
+
+/* Inline comment annotation. */
+:global(.ld-comment) {
+  background: rgba(255, 196, 0, 0.22);
+  border-bottom: 2px dotted #e0a400;
+  border-radius: 2px;
+  cursor: help;
+}
+
+/* Embeds (signature / object / video / 3D model). */
+:global(.ld-embed) {
+  margin: 12px 0;
+}
+
+:global(.ld-embed-video) {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  aspect-ratio: 16 / 9;
+}
+
+:global(.ld-embed-video) iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 6px;
+}
+
+:global(.ld-embed-frame-rounded) iframe {
+  border-radius: 14px;
+}
+
+:global(.ld-embed-frame-shadow) {
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  border-radius: 6px;
+}
+
+:global(.ld-embed-frame-bordered) iframe {
+  border: 3px solid var(--color-accent, #2aabee);
+  border-radius: 4px;
+}
+
+:global(.ld-embed-card) {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.18));
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.03);
+  max-width: 360px;
+}
+
+:global(.ld-embed-icon) {
+  font-size: 26px;
+  line-height: 1;
+}
+
+:global(.ld-embed-meta) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+:global(.ld-embed-title) {
+  font-weight: 600;
+}
+
+:global(.ld-embed-link) {
+  font-size: 12px;
+  color: var(--color-accent, #2aabee);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Interactive 3D model embed (three.js canvas + a small title bar). */
+:global(.ld-embed-model-viewer) {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 640px;
+  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.18));
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--color-surface, #1e2128);
+}
+
+:global(.ld-embed-model-bar) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  font-size: 13px;
+}
+
+:global(.ld-embed-model-canvas) {
+  width: 100%;
+  height: 320px;
+  /* A subtle checker-ish backdrop so transparent models stay visible. */
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.06), transparent 70%),
+    var(--color-bg, #14161b);
+  touch-action: none;
+}
+
+:global(.ld-embed-model-loading),
+:global(.ld-embed-model-error) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 320px;
+  padding: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-text-muted, #aab0b8);
+}
+
+:global(.ld-embed-model-error) {
+  color: var(--color-warning, #ff9933);
+}
+
+/* Signature line + fields. */
+:global(.ld-sig-line) {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 320px;
+  margin: 18px 0 6px;
+}
+
+:global(.ld-sig-x) {
+  font-size: 18px;
+  line-height: 1;
+}
+
+:global(.ld-sig-rule) {
+  flex: 1;
+  border-bottom: 1.5px solid currentColor;
+  height: 0;
+  min-width: 120px;
+}
+
+:global(.ld-sig-caption) {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+:global(.ld-sig-line) :global(.ld-sig-caption) {
+  align-self: flex-start;
+}
+
+:global(.ld-sig-fields) {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin: 18px 0;
+}
+
+:global(.ld-sig-field) {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
+:global(.ld-sig-field) :global(.ld-sig-rule) {
+  width: 100%;
+}
+
+/* Digital (cryptographic) signature card. */
+:global(.ld-sig-digital) {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 12px 16px;
+  max-width: 460px;
+  border: 1px solid rgba(60, 180, 110, 0.5);
+  border-left: 4px solid #38b27a;
+  border-radius: 8px;
+  background: rgba(60, 180, 110, 0.08);
+}
+
+:global(.ld-sig-digital-seal) {
+  font-size: 28px;
+  line-height: 1;
+}
+
+:global(.ld-sig-digital-body) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+:global(.ld-sig-digital-name) {
+  font-weight: 600;
+}
+
+:global(.ld-sig-digital-meta) {
+  font-size: 11.5px;
+  opacity: 0.75;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:global(.ld-sig-digital-badge) {
+  margin-left: auto;
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2f9e68;
+  white-space: nowrap;
+}
+
+/* Content edited after signing, or a bad signature: warn that it's stale. */
+:global(.ld-sig-status-modified),
+:global(.ld-sig-status-invalid) {
+  border-color: rgba(220, 130, 50, 0.55);
+  border-left-color: #e0892f;
+  background: rgba(220, 140, 60, 0.1);
+}
+
+:global(.ld-sig-status-modified) :global(.ld-sig-digital-badge) {
+  color: #d9822b;
+}
+
+:global(.ld-sig-status-invalid) {
+  border-left-color: #e0533c;
+}
+
+:global(.ld-sig-status-invalid) :global(.ld-sig-digital-badge) {
+  color: #d9442b;
+}
+
+:global(.ld-sig-status-checking) {
+  opacity: 0.75;
+}

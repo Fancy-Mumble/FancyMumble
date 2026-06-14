@@ -1,12 +1,15 @@
 import { SearchIcon } from "../../icons";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
+import { acquireRegisteredTextures, releaseRegisteredTextures } from "../../registeredTextureLease";
 import { listen } from "@tauri-apps/api/event";
 import { useNavigate } from "react-router-dom";
-import type { AclData, AclGroup, RegisteredUser, RegisteredUserUpdate } from "../../types";
+import type { AclData, AclGroup, RegisteredUser, RegisteredUserUpdate, UserEntry } from "../../types";
 import { formatRelativeDate } from "../../utils/format";
 import KebabMenu, { type KebabMenuItem } from "../../components/elements/KebabMenu";
-import { RoleChip } from "../../components/elements/RoleChip";
+import { RoleChip } from "../../components/elements/role/RoleChip";
+import UserHoverCard from "../../components/sidebar/user/UserHoverCard";
 import { useAppStore } from "../../store";
 import { rootChannelId } from "./rootChannel";
 import { UserRoleManagerDialog } from "./UserRoleManagerDialog";
@@ -29,31 +32,34 @@ function buildUserRoleMap(groups: readonly AclGroup[]): Map<number, AclGroup[]> 
   return result;
 }
 
+type TFn = (key: string, opts?: Record<string, unknown>) => string;
+
 interface UserActionsArgs {
   readonly user: RegisteredUser;
   readonly isEditing: boolean;
   readonly onRename: () => void;
   readonly onDelete: () => void;
   readonly onManageRoles: () => void;
+  readonly t: TFn;
 }
 
 /** Builds the kebab-menu items for a user row. */
-function buildUserActions({ user, isEditing, onRename, onDelete, onManageRoles }: UserActionsArgs): KebabMenuItem[] {
+function buildUserActions({ user, isEditing, onRename, onDelete, onManageRoles, t }: UserActionsArgs): KebabMenuItem[] {
   return [
     {
       id: "rename",
-      label: isEditing ? "Editing..." : "Rename",
+      label: isEditing ? t("registeredUsers.actionEditing") : t("registeredUsers.actionRename"),
       disabled: isEditing,
       onClick: onRename,
     },
     {
       id: "manage-roles",
-      label: "Manage roles",
+      label: t("registeredUsers.actionManageRoles"),
       onClick: onManageRoles,
     },
     {
       id: "delete",
-      label: `Delete ${user.name}`,
+      label: t("registeredUsers.actionDelete", { name: user.name }),
       danger: true,
       onClick: onDelete,
     },
@@ -65,8 +71,18 @@ type SortDir = "asc" | "desc";
 
 export function RegisteredUsersTab() {
   const navigate = useNavigate();
+  const { t } = useTranslation(["settings", "common"]);
+  const tFn = t as TFn;
   const channels = useAppStore((s) => s.channels);
   const rootId = useMemo(() => rootChannelId(channels), [channels]);
+  // Currently-connected users, keyed by registered id, so a registered user
+  // who is online shows the same live profile card on hover as elsewhere.
+  const onlineUsers = useAppStore((s) => s.users);
+  const connectedById = useMemo(() => {
+    const m = new Map<number, UserEntry>();
+    for (const u of onlineUsers) if (u.user_id != null) m.set(u.user_id, u);
+    return m;
+  }, [onlineUsers]);
 
   const [users, setUsers] = useState<RegisteredUser[]>([]);
   const [rootAcl, setRootAcl] = useState<AclData | null>(null);
@@ -102,10 +118,15 @@ export function RegisteredUsersTab() {
     };
   }, []);
 
-  // Request the user list on mount.
+  // Request the user list on mount; release the backend avatar cache on
+  // unmount (the response makes Rust cache every registered avatar).
   useEffect(() => {
     setLoading(true);
+    acquireRegisteredTextures();
     invoke("request_user_list").catch(() => setLoading(false));
+    return () => {
+      releaseRegisteredTextures();
+    };
   }, []);
 
   // Subscribe to root-channel ACL so we can show role chips per user.
@@ -218,13 +239,13 @@ export function RegisteredUsersTab() {
   };
 
   let emptyMessage: string;
-  if (loading) emptyMessage = "Loading...";
-  else if (users.length === 0) emptyMessage = "No registered users";
-  else emptyMessage = "No matching users";
+  if (loading) emptyMessage = t("registeredUsers.loading");
+  else if (users.length === 0) emptyMessage = t("registeredUsers.noUsers");
+  else emptyMessage = t("registeredUsers.noMatches");
 
   return (
     <>
-      <h2 className={styles.panelTitle}>Registered Users</h2>
+      <h2 className={styles.panelTitle}>{t("registeredUsers.title")}</h2>
 
       <div className={styles.toolbar}>
         <div className={styles.searchWrap}>
@@ -233,7 +254,7 @@ export function RegisteredUsersTab() {
             ref={searchRef}
             className={styles.searchInput}
             type="text"
-            placeholder="Search users..."
+            placeholder={t("registeredUsers.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -242,14 +263,14 @@ export function RegisteredUsersTab() {
               type="button"
               className={styles.clearBtn}
               onClick={() => { setSearch(""); searchRef.current?.focus(); }}
-              aria-label="Clear search"
+              aria-label={t("registeredUsers.clearSearch")}
             >
               &times;
             </button>
           )}
         </div>
         <button type="button" className={styles.refreshBtn} onClick={handleRefresh} disabled={loading}>
-          {loading ? "Loading..." : "Refresh"}
+          {loading ? t("registeredUsers.loading") : t("registeredUsers.refresh")}
         </button>
       </div>
 
@@ -258,16 +279,16 @@ export function RegisteredUsersTab() {
           <thead>
             <tr>
               <th className={styles.sortable} onClick={() => toggleSort("name")}>
-                Username{sortArrow("name")}
+                {t("registeredUsers.colUsername")}{sortArrow("name")}
               </th>
               <th className={styles.sortable} onClick={() => toggleSort("last_seen")}>
-                Last Seen{sortArrow("last_seen")}
+                {t("registeredUsers.colLastSeen")}{sortArrow("last_seen")}
               </th>
               <th className={styles.sortable} onClick={() => toggleSort("last_channel")}>
-                Last Channel{sortArrow("last_channel")}
+                {t("registeredUsers.colLastChannel")}{sortArrow("last_channel")}
               </th>
-              <th>Roles</th>
-              <th>Actions</th>
+              <th>{t("registeredUsers.colRoles")}</th>
+              <th>{t("registeredUsers.colActions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -294,17 +315,19 @@ export function RegisteredUsersTab() {
                             if (e.key === "Escape") cancelRename();
                           }}
                         />
-                        <button type="button" className={styles.saveBtn} onClick={submitRename}>Save</button>
-                        <button type="button" className={styles.removeBtn} onClick={cancelRename}>Cancel</button>
+                        <button type="button" className={styles.saveBtn} onClick={submitRename}>{t("registeredUsers.save")}</button>
+                        <button type="button" className={styles.removeBtn} onClick={cancelRename}>{t("common:actions.cancel")}</button>
                       </span>
+                    ) : connectedById.has(u.user_id) ? (
+                      <UserHoverCard user={connectedById.get(u.user_id)!}>{u.name}</UserHoverCard>
                     ) : (
                       u.name
                     )}
                   </td>
                   <td className={styles.dimText} title={u.last_seen ?? undefined}>
-                    {u.last_seen ? formatRelativeDate(u.last_seen) : "Never"}
+                    {u.last_seen ? formatRelativeDate(u.last_seen) : t("registeredUsers.never")}
                   </td>
-                  <td className={styles.dimText}>{u.last_channel ?? "Unknown"}</td>
+                  <td className={styles.dimText}>{u.last_channel ?? t("registeredUsers.unknown")}</td>
                   <td>
                     <span className={styles.userRoleChips}>
                       {(userRoleMap.get(u.user_id) ?? []).map((g) => (
@@ -322,13 +345,13 @@ export function RegisteredUsersTab() {
                   <td>
                     {deletingId === u.user_id ? (
                       <span className={styles.inlineEdit}>
-                        <span className={styles.confirmText}>Delete?</span>
-                        <button type="button" className={styles.removeBtn} onClick={submitDelete}>Yes</button>
-                        <button type="button" className={styles.refreshBtn} onClick={cancelDelete}>No</button>
+                        <span className={styles.confirmText}>{t("registeredUsers.deleteConfirmLabel")}</span>
+                        <button type="button" className={styles.removeBtn} onClick={submitDelete}>{t("registeredUsers.deleteConfirmYes")}</button>
+                        <button type="button" className={styles.refreshBtn} onClick={cancelDelete}>{t("registeredUsers.deleteConfirmNo")}</button>
                       </span>
                     ) : (
                       <KebabMenu
-                        ariaLabel={`Actions for ${u.name}`}
+                        ariaLabel={tFn("registeredUsers.actionsAriaLabel", { name: u.name })}
                         items={buildUserActions({
                           user: u,
                           isEditing: editingId === u.user_id,
@@ -336,9 +359,9 @@ export function RegisteredUsersTab() {
                           onDelete: () => confirmDelete(u.user_id),
                           onManageRoles: () => {
                             setRoleDialogUser(u);
-                            // Refresh ACL so the dialog has fresh group data.
                             refetchAcl();
                           },
+                          t: tFn,
                         })}
                       />
                     )}
@@ -351,7 +374,7 @@ export function RegisteredUsersTab() {
       </div>
 
       <div className={styles.statusBar}>
-        {filtered.length} of {users.length} user{users.length === 1 ? "" : "s"}
+        {t("registeredUsers.statusBar", { filtered: filtered.length, total: users.length, count: users.length })}
       </div>
 
       {roleDialogUser && (

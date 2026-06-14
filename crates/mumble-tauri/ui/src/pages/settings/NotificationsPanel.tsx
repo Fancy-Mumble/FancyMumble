@@ -1,11 +1,14 @@
 import { PlayIcon } from "../../icons";
 import { useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import type {
   NotificationSoundSettings,
   NotificationEvent,
   NotificationEventConfig,
+  WelcomeMessageDisplay,
 } from "../../types";
 import { Toggle } from "./SharedControls";
+import { registerSettings } from "./settingsSearchRegistry";
 import styles from "./SettingsPage.module.css";
 import ns from "./NotificationsPanel.module.css";
 
@@ -17,11 +20,27 @@ import sndUniv051 from "../../assets/audio/universfield-new-notification-051-494
 import sndUniv057 from "../../assets/audio/universfield-new-notification-057-494255.mp3";
 import sndUniv09 from "../../assets/audio/universfield-new-notification-09-352705.mp3";
 
+registerSettings("notifications")
+  .add("notifications.sounds", ["sound", "audio alert"])
+  .add("notifications.native", ["os notifications", "desktop"])
+  .add("notifications.welcomeMessage", ["welcome", "motd", "popup"]);
+
 export interface SoundOption {
   id: string;
   label: string;
   url: string;
 }
+
+const SOUND_URLS: Record<string, string> = {
+  "none": "",
+  "dragon-3": sndDragon3,
+  "univ-033": sndUniv033,
+  "univ-036": sndUniv036,
+  "univ-040": sndUniv040,
+  "univ-051": sndUniv051,
+  "univ-057": sndUniv057,
+  "univ-09": sndUniv09,
+};
 
 export const SOUND_OPTIONS: SoundOption[] = [
   { id: "none", label: "None", url: "" },
@@ -34,64 +53,46 @@ export const SOUND_OPTIONS: SoundOption[] = [
   { id: "univ-09", label: "Bell", url: sndUniv09 },
 ];
 
-interface EventDef {
-  key: NotificationEvent;
-  label: string;
-  description: string;
+const EVENT_KEYS: readonly NotificationEvent[] = [
+  "chatMessage",
+  "directMessage",
+  "mention",
+  "userJoin",
+  "userLeave",
+  "userJoinChannel",
+  "userLeaveChannel",
+  "streamStart",
+  "voiceActivity",
+  "selfMuted",
+];
+
+function buildEventDefs(t: (key: string) => string): Array<{ key: NotificationEvent; label: string; description: string }> {
+  return [
+    { key: "chatMessage", label: t("notifications.evtChatMessage"), description: t("notifications.evtChatMessageDesc") },
+    { key: "directMessage", label: t("notifications.evtDirectMessage"), description: t("notifications.evtDirectMessageDesc") },
+    { key: "mention", label: t("notifications.evtMention"), description: t("notifications.evtMentionDesc") },
+    { key: "userJoin", label: t("notifications.evtUserJoin"), description: t("notifications.evtUserJoinDesc") },
+    { key: "userLeave", label: t("notifications.evtUserLeave"), description: t("notifications.evtUserLeaveDesc") },
+    { key: "userJoinChannel", label: t("notifications.evtUserJoinChannel"), description: t("notifications.evtUserJoinChannelDesc") },
+    { key: "userLeaveChannel", label: t("notifications.evtUserLeaveChannel"), description: t("notifications.evtUserLeaveChannelDesc") },
+    { key: "streamStart", label: t("notifications.evtStreamStart"), description: t("notifications.evtStreamStartDesc") },
+    { key: "voiceActivity", label: t("notifications.evtVoiceActivity"), description: t("notifications.evtVoiceActivityDesc") },
+    { key: "selfMuted", label: t("notifications.evtSelfMuted"), description: t("notifications.evtSelfMutedDesc") },
+  ];
 }
 
-const EVENT_DEFS: EventDef[] = [
-  {
-    key: "chatMessage",
-    label: "Chat message",
-    description: "A new message in a channel you are viewing",
-  },
-  {
-    key: "directMessage",
-    label: "Direct message",
-    description: "A new private or group message",
-  },
-  {
-    key: "mention",
-    label: "Mention",
-    description: "Someone mentioned you with @, @everyone, @here, or your role",
-  },
-  {
-    key: "userJoin",
-    label: "User joined server",
-    description: "Someone connected to the server",
-  },
-  {
-    key: "userLeave",
-    label: "User left server",
-    description: "Someone disconnected from the server",
-  },
-  {
-    key: "userJoinChannel",
-    label: "User joined my channel",
-    description: "Someone moved into your current channel",
-  },
-  {
-    key: "userLeaveChannel",
-    label: "User left my channel",
-    description: "Someone moved out of your current channel",
-  },
-  {
-    key: "streamStart",
-    label: "Screen share started",
-    description: "A user started sharing their screen",
-  },
-  {
-    key: "voiceActivity",
-    label: "Voice activity",
-    description: "Someone started speaking in your channel",
-  },
-  {
-    key: "selfMuted",
-    label: "Self muted",
-    description: "You muted or unmuted your microphone",
-  },
-];
+function buildSoundOptions(t: (key: string) => string): Array<{ id: string; label: string }> {
+  return [
+    { id: "none", label: t("notifications.soundNone") },
+    { id: "dragon-3", label: t("notifications.soundChime") },
+    { id: "univ-033", label: t("notifications.soundBubble") },
+    { id: "univ-036", label: t("notifications.soundPop") },
+    { id: "univ-040", label: t("notifications.soundDing") },
+    { id: "univ-051", label: t("notifications.soundPing") },
+    { id: "univ-057", label: t("notifications.soundDrop") },
+    { id: "univ-09", label: t("notifications.soundBell") },
+  ];
+}
 
 export const DEFAULT_NOTIFICATION_SOUNDS: NotificationSoundSettings = {
   masterEnabled: false,
@@ -110,7 +111,7 @@ export const DEFAULT_NOTIFICATION_SOUNDS: NotificationSoundSettings = {
 };
 
 function findSoundUrl(id: string): string {
-  return SOUND_OPTIONS.find((s) => s.id === id)?.url ?? "";
+  return SOUND_URLS[id] ?? "";
 }
 
 export function NotificationsPanel({
@@ -118,15 +119,23 @@ export function NotificationsPanel({
   onChange,
   enableNativeNotifications,
   onToggleNativeNotifications,
+  welcomeMessageDisplay,
+  onWelcomeMessageDisplayChange,
   isExpert,
 }: {
   settings: NotificationSoundSettings;
   onChange: (patch: Partial<NotificationSoundSettings>) => void;
   enableNativeNotifications: boolean;
   onToggleNativeNotifications: () => void;
+  welcomeMessageDisplay: WelcomeMessageDisplay;
+  onWelcomeMessageDisplayChange: (value: WelcomeMessageDisplay) => void;
   isExpert: boolean;
 }) {
+  const { t } = useTranslation("settings");
+  const tStr = t as (key: string) => string;
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const eventDefs = buildEventDefs(tStr);
+  const soundOptions = buildSoundOptions(tStr);
 
   const patchEvent = useCallback(
     (key: NotificationEvent, patch: Partial<NotificationEventConfig>) => {
@@ -146,16 +155,16 @@ export function NotificationsPanel({
 
   const enableAll = useCallback(() => {
     const updated = { ...settings.events };
-    for (const def of EVENT_DEFS) {
-      updated[def.key] = { ...updated[def.key], enabled: true };
+    for (const key of EVENT_KEYS) {
+      updated[key] = { ...updated[key], enabled: true };
     }
     onChange({ events: updated });
   }, [settings.events, onChange]);
 
   const disableAll = useCallback(() => {
     const updated = { ...settings.events };
-    for (const def of EVENT_DEFS) {
-      updated[def.key] = { ...updated[def.key], enabled: false };
+    for (const key of EVENT_KEYS) {
+      updated[key] = { ...updated[key], enabled: false };
     }
     onChange({ events: updated });
   }, [settings.events, onChange]);
@@ -172,36 +181,28 @@ export function NotificationsPanel({
     audio.play().catch(() => {});
   }, []);
 
-  const allEnabled = EVENT_DEFS.every((d) => settings.events[d.key]?.enabled ?? DEFAULT_NOTIFICATION_SOUNDS.events[d.key].enabled);
-  const allDisabled = EVENT_DEFS.every((d) => !(settings.events[d.key]?.enabled ?? DEFAULT_NOTIFICATION_SOUNDS.events[d.key].enabled));
+  const allEnabled = EVENT_KEYS.every((key) => settings.events[key]?.enabled ?? DEFAULT_NOTIFICATION_SOUNDS.events[key].enabled);
+  const allDisabled = EVENT_KEYS.every((key) => !(settings.events[key]?.enabled ?? DEFAULT_NOTIFICATION_SOUNDS.events[key].enabled));
 
   return (
     <>
-      <h2 className={styles.panelTitle}>Notifications</h2>
+      <h2 className={styles.panelTitle}>{t("notifications.panelTitle")}</h2>
 
-      {/* Master sound toggle */}
       <section className={styles.section}>
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
-            <h3 className={styles.sectionTitle}>Notification sounds</h3>
-            <p className={styles.fieldHint}>
-              Play a sound when events occur. Individual events can be
-              configured below.
-            </p>
+            <h3 className={styles.sectionTitle}>{t("notifications.sounds")}</h3>
+            <p className={styles.fieldHint}>{t("notifications.soundsHint")}</p>
           </div>
           <Toggle checked={settings.masterEnabled} onChange={toggleMaster} />
         </div>
       </section>
 
-      {/* Native OS notifications toggle (moved from Advanced) */}
       <section className={styles.section}>
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
-            <h3 className={styles.sectionTitle}>Native notifications</h3>
-            <p className={styles.fieldHint}>
-              Show native OS notifications for new messages when the app is
-              in the background.
-            </p>
+            <h3 className={styles.sectionTitle}>{t("notifications.native")}</h3>
+            <p className={styles.fieldHint}>{t("notifications.nativeHint")}</p>
           </div>
           <Toggle
             checked={enableNativeNotifications}
@@ -210,7 +211,20 @@ export function NotificationsPanel({
         </div>
       </section>
 
-      {/* Bulk actions */}
+      <section className={styles.section}>
+        <h3 className={styles.sectionTitle}>{t("notifications.welcomeMessage", { defaultValue: "Welcome message" })}</h3>
+        <p className={styles.fieldHint}>{t("notifications.welcomeMessageHint", { defaultValue: "Show the server's welcome message in a popup after connecting." })}</p>
+        <select
+          className={styles.select}
+          value={welcomeMessageDisplay}
+          onChange={(e) => onWelcomeMessageDisplayChange(e.target.value as WelcomeMessageDisplay)}
+        >
+          <option value="hide">{t("notifications.welcomeHide", { defaultValue: "Hide" })}</option>
+          <option value="once">{t("notifications.welcomeOnce", { defaultValue: "Show once" })}</option>
+          <option value="always">{t("notifications.welcomeAlways", { defaultValue: "Always show" })}</option>
+        </select>
+      </section>
+
       {settings.masterEnabled && (
         <section className={styles.section}>
           <div className={ns.bulkActions}>
@@ -220,7 +234,7 @@ export function NotificationsPanel({
               onClick={enableAll}
               disabled={allEnabled}
             >
-              Enable all
+              {t("notifications.enableAll")}
             </button>
             <button
               type="button"
@@ -228,15 +242,14 @@ export function NotificationsPanel({
               onClick={disableAll}
               disabled={allDisabled}
             >
-              Disable all
+              {t("notifications.disableAll")}
             </button>
           </div>
         </section>
       )}
 
-      {/* Per-event configuration */}
       {settings.masterEnabled &&
-        EVENT_DEFS.map((def) => {
+        eventDefs.map((def) => {
           const cfg = settings.events[def.key] ?? DEFAULT_NOTIFICATION_SOUNDS.events[def.key];
           return (
             <section key={def.key} className={styles.section}>
@@ -261,7 +274,7 @@ export function NotificationsPanel({
                         patchEvent(def.key, { sound: e.target.value })
                       }
                     >
-                      {SOUND_OPTIONS.map((opt) => (
+                      {soundOptions.map((opt) => (
                         <option key={opt.id} value={opt.id}>
                           {opt.label}
                         </option>
@@ -272,14 +285,14 @@ export function NotificationsPanel({
                       className={ns.previewBtn}
                       onClick={() => preview(cfg.sound, cfg.volume)}
                       disabled={cfg.sound === "none"}
-                      title="Preview sound"
+                      title={t("notifications.previewTitle")}
                     >
                       <PlayIcon width={16} height={16} />
                     </button>
                   </div>
 
                   <div className={ns.volumeRow}>
-                    <span className={ns.volumeLabel}>Volume</span>
+                    <span className={ns.volumeLabel}>{t("notifications.volume")}</span>
                     <input
                       type="range"
                       className={styles.slider}

@@ -1,0 +1,247 @@
+/* LiveDocRuler: Word-style page rulers (tick marks + margin markers). */
+
+/* ---- Horizontal ruler (top edge, x-axis) ----------------------------- */
+/* Full-bleed strip pinned to the very top of the document view.  The left
+   padding reserves the corner where it meets the vertical ruler so the
+   inner tick element centres exactly like the page below it. */
+.rulerHWrap {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--ld-ruler-size, 24px);
+  padding-left: var(--ld-ruler-size, 24px);
+  background-color: var(--color-surface-elevated, #262a32);
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  overflow: hidden;
+  user-select: none;
+}
+
+.rulerH {
+  position: relative;
+  width: 100%;
+  max-width: var(--ld-page-w, 850px);
+  height: 100%;
+  margin: 0 auto;
+  /* Major (tall) + minor (short) tick marks, originating at the left
+     content margin so "0" sits at the start of the text column. */
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      var(--ld-tick-major, rgba(255, 255, 255, 0.38)) 0 1px,
+      transparent 1px var(--ld-major, 96px)
+    ),
+    repeating-linear-gradient(
+      90deg,
+      var(--ld-tick-minor, rgba(255, 255, 255, 0.18)) 0 1px,
+      transparent 1px var(--ld-minor, 12px)
+    );
+  background-size: 100% 11px, 100% 6px;
+  background-position: var(--ld-pad-x, 84px) bottom, var(--ld-pad-x, 84px) bottom;
+  background-repeat: repeat-x;
+}
+
+/* ---- Vertical ruler (left edge, y-axis) ------------------------------ */
+.rulerVWrap {
+  width: var(--ld-ruler-size, 24px);
+  background-color: var(--color-surface-elevated, #262a32);
+  border-right: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  overflow: hidden;
+  user-select: none;
+}
+
+.rulerV {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background-image:
+    repeating-linear-gradient(
+      180deg,
+      var(--ld-tick-major, rgba(255, 255, 255, 0.38)) 0 1px,
+      transparent 1px var(--ld-major, 96px)
+    ),
+    repeating-linear-gradient(
+      180deg,
+      var(--ld-tick-minor, rgba(255, 255, 255, 0.18)) 0 1px,
+      transparent 1px var(--ld-minor, 12px)
+    );
+  background-size: 11px 100%, 6px 100%;
+  background-position: right var(--ld-pad-y, 72px), right var(--ld-pad-y, 72px);
+  background-repeat: repeat-y;
+}
+
+/* ---- Margin bands (shaded margin zones) ------------------------------ */
+.marginBandH {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    var(--ld-margin-band, rgba(0, 0, 0, 0.30)) 0 var(--ld-pad-x, 84px),
+    transparent var(--ld-pad-x, 84px) calc(100% - var(--ld-pad-x, 84px)),
+    var(--ld-margin-band, rgba(0, 0, 0, 0.30)) calc(100% - var(--ld-pad-x, 84px)) 100%
+  );
+}
+
+.marginBandV {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    var(--ld-margin-band, rgba(0, 0, 0, 0.30)) 0 var(--ld-pad-y, 72px),
+    transparent var(--ld-pad-y, 72px) calc(100% - var(--ld-pad-y, 72px)),
+    var(--ld-margin-band, rgba(0, 0, 0, 0.30)) calc(100% - var(--ld-pad-y, 72px)) 100%
+  );
+}
+
+/* ---- Numeric labels -------------------------------------------------- */
+.labelH {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  font-size: 9px;
+  line-height: 1;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.5));
+  pointer-events: none;
+}
+
+.labelV {
+  position: absolute;
+  left: 3px;
+  transform: translateY(-50%);
+  font-size: 9px;
+  line-height: 1;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.5));
+  pointer-events: none;
+}
+
+/* ---- Margin boundary markers (draggable triangular handles) ---------- */
+/* The handle itself is an invisible, comfortably sized hit box; the visible
+   triangle is drawn with a pseudo-element so the grab target is far larger
+   than the 8px marker. */
+.handleH {
+  position: absolute;
+  bottom: 0;
+  top: 0;
+  width: 12px;
+  transform: translateX(-50%);
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.handleH::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 6px solid var(--color-accent, #2aabee);
+}
+
+.handleV {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 12px;
+  transform: translateY(-50%);
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.handleV::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-right: 6px solid var(--color-accent, #2aabee);
+}
+
+/* Brighten the marker while hovering / focusing so it reads as grabbable. */
+.handleH:hover::after,
+.handleV:hover::after,
+.handleH:focus-visible::after,
+.handleV:focus-visible::after {
+  filter: brightness(1.4);
+}
+
+.handleH:focus-visible,
+.handleV:focus-visible {
+  outline: 1px solid var(--color-accent, #2aabee);
+  outline-offset: -1px;
+}
+
+/* Read-only documents: keep the marker visible but non-interactive. */
+.handleStatic {
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Hide rulers on narrow / mobile layouts to reclaim space. */
+@media (max-width: 640px) {
+  .rulerHWrap,
+  .rulerVWrap {
+    display: none;
+  }
+}
+
+/* ---- Alt-key margin measurement overlay ------------------------------ */
+/* Three segments (left-margin / content / right-margin) shown as small
+   pill labels when the user holds Alt.  Positioned over the ruler body. */
+.measureOverlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.measureLabel {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 9px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 1px 3px;
+  border-radius: 3px;
+  background-color: var(--color-accent, #2aabee);
+  color: #fff;
+  pointer-events: none;
+}
+
+.measureOverlayV {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.measureLabelV {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 8px;
+  line-height: 1;
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 3px 1px;
+  border-radius: 3px;
+  background-color: var(--color-accent, #2aabee);
+  color: #fff;
+  pointer-events: none;
+}

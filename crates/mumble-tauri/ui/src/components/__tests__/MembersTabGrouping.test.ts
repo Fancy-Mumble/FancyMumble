@@ -125,14 +125,15 @@ describe("buildMemberGroups", () => {
     expect(groups[0].color).toBe("#ff00aa");
   });
 
-  it("uses texture from the server UserList response for offline users", () => {
-    const textureBytes = [1, 2, 3, 4];
-    const reg = { user_id: 10, name: "Bob", texture: textureBytes };
+  it("carries the avatar size marker from the server UserList response for offline users", () => {
+    // The server now ships only `texture_size`; the bytes are fetched on
+    // demand via `get_registered_user_texture`.
+    const reg = { user_id: 10, name: "Bob", texture_size: 4 };
     const groups = buildMemberGroups([], regsToOfflineEntries([reg]), null, []);
     expect(groups).toHaveLength(1);
     const row = groups[0].rows[0];
     expect(row.offline).toBe(true);
-    expect(row.entry.texture_size).toBe(textureBytes.length);
+    expect(row.entry.texture_size).toBe(4);
   });
 
   it("leaves texture null when the server UserList response has no texture", () => {

@@ -269,6 +269,8 @@ fn handle_direct_message(
         pinned: false,
         pinned_by: None,
         pinned_at: None,
+        plugin_name: None,
+        plugin_components: None,
     };
     msg.ensure_id();
     state
@@ -310,7 +312,7 @@ fn handle_channel_message(
 
     for &ch_id in &target_channels {
         // For pchat-enabled channels, check whether the sender supports E2EE.
-        // If they do, skip — the authoritative PchatMessageDeliver will arrive
+        // If they do, skip - the authoritative PchatMessageDeliver will arrive
         // separately.  If they don't (legacy client), accept the TextMessage
         // and mark it as legacy so the UI can style it differently.
         let has_pchat = state
@@ -325,7 +327,7 @@ fn handle_channel_message(
             .is_some_and(UserEntry::has_pchat_e2ee);
 
         if has_pchat && sender_has_e2ee {
-            // Fancy sender — PchatMessageDeliver is the authoritative source.
+            // Fancy sender - PchatMessageDeliver is the authoritative source.
             continue;
         }
 
@@ -346,6 +348,8 @@ fn handle_channel_message(
             pinned: false,
             pinned_by: None,
             pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
         };
         msg.ensure_id();
         let bucket = state.msgs.by_channel.entry(ch_id).or_default();
@@ -441,6 +445,8 @@ mod tests {
             pinned: false,
             pinned_by: None,
             pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
         }
     }
 

@@ -1,0 +1,145 @@
+/* --- BioEditor - WYSIWYG bio editor (Tiptap) ------------------- */
+
+.bioEditor {
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-secondary);
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.bioEditor:focus-within {
+  border-color: var(--color-accent);
+}
+
+.bioToolbar {
+  display: flex;
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--color-glass-border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.bioToolBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.bioToolBtn:hover {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+}
+
+.bioToolBtnActive {
+  background: rgba(42, 171, 238, 0.18);
+  color: var(--color-accent);
+}
+
+.bioEditorContent {
+  min-height: 72px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--color-text-primary);
+  outline: none;
+}
+
+.bioEditorContent p {
+  margin: 0 0 0.4em;
+}
+
+.bioEditorContent p:last-child {
+  margin-bottom: 0;
+}
+
+.bioEditorContent img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  display: block;
+  margin: 4px 0;
+}
+
+/* Empty-state placeholder (tiptap Placeholder extension) */
+.bioEditorContent :global(.is-editor-empty):first-child::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-muted);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+/* --- Colour picker --------------------------------------------- */
+
+.bioColourWrap {
+  position: relative;
+}
+
+.bioColourIcon {
+  display: inline-block;
+  border-bottom: 3px solid var(--color-text-primary);
+  line-height: 1;
+  font-weight: 700;
+}
+
+.bioColourDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  padding: 8px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px var(--color-overlay-strong);
+}
+
+.bioColourGrid {
+  display: grid;
+  grid-template-columns: repeat(6, 22px);
+  gap: 4px;
+}
+
+.bioColourSwatch {
+  width: 22px;
+  height: 22px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+}
+
+.bioColourSwatch:hover {
+  border-color: var(--color-text-primary);
+  transform: scale(1.15);
+}
+
+.bioColourReset {
+  width: 100%;
+  margin-top: 6px;
+  padding: 3px 0;
+  border: none;
+  border-radius: 4px;
+  background: var(--color-glass-border);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.bioColourReset:hover {
+  background: var(--color-glass-strong);
+  color: var(--color-text-primary);
+}

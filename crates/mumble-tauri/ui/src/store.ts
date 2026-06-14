@@ -8,6 +8,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { reconnectDelayMs } from "./utils/reconnectBackoff";
 import {
   isPermissionGranted,
   requestPermission,
@@ -36,24 +37,91 @@ import type {
   ReadReceiptDeliverPayload,
   FileServerConfig,
   FileServerCapabilities,
+  LiveDocPluginConfig,
   FileAccessMode,
   UploadResponse,
   DownloadEntry,
+  NewDownloadInput,
   CustomServerEmote,
+  PluginInfoRecord,
   PendingMessage,
 } from "./types";
-import type { PollPayload, PollVotePayload } from "./components/chat/PollCreator";
-import { registerPoll, registerVote } from "./components/chat/PollCard";
+import type { PollPayload, PollVotePayload } from "./components/chat/poll/PollCreator";
+import { registerPoll, registerVote } from "./components/chat/poll/PollCard";
 import type { WatchSession, WatchSyncPayload } from "./components/chat/watch/watchTypes";
 import { applyWatchSyncEvent } from "./components/chat/watch/watchStore";
-import { applyReaction, resetReactions, setServerCustomReactions, type ServerCustomReaction } from "./components/chat/reactionStore";
-import { applyReadStates, clearReadReceipts } from "./components/chat/readReceiptStore";
+import { applyReaction, resetReactions, setServerCustomReactions, type ServerCustomReaction } from "./components/chat/reaction/reactionStore";
+import {
+  applyInteractionResponse,
+  decodeInteractionResponse,
+  emptyPluginTier1Slice,
+  manifestPermitsResponse,
+  type PluginTier1Slice,
+} from "./plugins/tier1/store";
+import type { InteractionResponse } from "./plugins/tier1/types";
+import { parseClientManifest } from "./plugins/tier1/manifest";
+import { applyReadStates, clearReadReceipts } from "./components/chat/readreceipt/readReceiptStore";
 import { useOnboardingStore } from "./components/onboarding/onboardingStore";
 import type { OnboardingConfigEvent, OnboardingResponseEvent } from "./types";
 import { offloadManager } from "./messageOffload";
 import { getSilencedChannels, setSilencedChannel, getUserVolumes, saveUserVolume, getMutedPushChannels, setMutedPushChannel, getPreferences, updatePreferences } from "./preferencesStorage";
+import {
+  friendKeyFor as dmFriendKeyFor,
+  isDmPersistenceEnabled,
+  loadDmHistory,
+  mergeMessages as mergeDmMessages,
+  saveDmHistory,
+} from "./dmStorage";
 import { loadProfileData } from "./pages/settings/profileData";
+import { base64ToBytes } from "./utils/base64";
 import { serializeProfile, dataUrlToBytes } from "./profileFormat";
+import { sanitiseWsUrl } from "./components/chat/livedoc/sanitiseWsUrl";
+import { TauriEvent } from "./constants/tauriEvents";
+import {
+  PluginDataId,
+  PluginPayloadType,
+  PLUGIN_NAME_FILE_SERVER,
+  PLUGIN_NAME_LIVE_DOC,
+  friendlyPluginName,
+} from "./constants/pluginData";
+import i18next from "i18next";
+import {
+  probeFileServerCapabilities,
+  rebaseFileServerUrl,
+} from "./store/fileServer";
+export {
+  DEFAULT_FILE_SERVER_PORT,
+  fileServerBaseUrl,
+  probeFileServerCapabilities,
+  rebaseFileServerUrl,
+} from "./store/fileServer";
+import type {
+  PluginRegistryEntry,
+  PluginRegistryEvent,
+} from "./store/plugins";
+import {
+  reconcilePluginRegistry,
+  sendPluginMessage,
+  sliceFromState,
+  slicePatch,
+} from "./store/plugins";
+export type {
+  PluginRegistryEntry,
+  PluginRegistryEvent,
+} from "./store/plugins";
+export {
+  allowPlugin,
+  dismissPluginCard,
+  dismissPluginModal,
+  dismissPluginToast,
+  reconcilePluginRegistry,
+  resetPluginTrust,
+  resolvePluginTrust,
+  resolvePluginTrustBulk,
+  revokePluginTrust,
+  sendPluginInteraction,
+  sendPluginMessage,
+} from "./store/plugins";
 
 /** Event payload for a pin state change delivered by the server. */
 interface PinDeliverEvent {
@@ -102,76 +170,28 @@ interface ReactionFetchResponseEvent {
 /** Sessions that have already had their stored volume applied this connection. */
 const volumeAppliedSessions = new Set<number>();
 
-const AUTO_RECONNECT_DELAY_MS = 3000;
-
-/** Default port the mumble-file-server plugin binds to (see file-server config). */
-const DEFAULT_FILE_SERVER_PORT = 64739;
-
-/** Build the file-server REST base URL.
- *
- *  Preference order:
- *  1. `serverConfig.fancy_rest_api_url` (server-side override, used when the
- *     HTTP interface is fronted by a reverse proxy / ingress on a different
- *     hostname than the Mumble TCP port).
- *  2. `http://<connect host>:64739` - the plugin's default loopback bind on
- *     the same hostname the user connected to. */
-function fileServerBaseUrl(): string | null {
-  const state = useAppStore.getState();
-  const override = state.serverConfig.fancy_rest_api_url;
-  if (override && override.length > 0) return override.replace(/\/+$/, "");
-  const pending = state.pendingConnect;
-  if (!pending) return null;
-  // Normalize "localhost" to the IPv4 loopback. On Windows, "localhost"
-  // resolves to ::1 first, and Docker Desktop's IPv6 port forwarding is
-  // unreliable for published ports - the request times out even though
-  // `docker port` advertises both 0.0.0.0 and [::] mappings. Forcing
-  // IPv4 here avoids the misleading "request failed" probe error during
-  // local development.
-  const host = pending.host === "localhost" ? "127.0.0.1" : pending.host;
-  return `http://${host}:${DEFAULT_FILE_SERVER_PORT}`;
+/** Cached `autoReconnect` preference. The disconnect handler runs
+ *  synchronously and must decide whether to schedule a retry without an
+ *  async store read, so we mirror the persisted flag here and keep it in
+ *  sync via the `preferences-changed` event. */
+let autoReconnectEnabled = false;
+if (typeof window !== "undefined") {
+  void import("./preferencesStorage")
+    .then(({ getPreferences }) => getPreferences())
+    .then((p) => {
+      autoReconnectEnabled = p.autoReconnect ?? false;
+    })
+    .catch(() => {});
+  window.addEventListener("preferences-changed", (e) => {
+    const detail = (e as CustomEvent).detail as { autoReconnect?: boolean } | undefined;
+    if (detail && typeof detail.autoReconnect === "boolean") {
+      autoReconnectEnabled = detail.autoReconnect;
+    }
+  });
 }
 
-/** Rebase a URL returned by the file-server plugin so its origin matches
- *  the current server override URL (e.g. `https://files.mumble.magical.rocks`).
- *  The plugin embeds its own internal origin in download URLs; when the HTTP
- *  interface is fronted by a reverse proxy this origin is wrong for public
- *  access.  Only the scheme + host are replaced; path, query, and fragment
- *  are preserved unchanged.
- *
- *  Returns the original URL unchanged if no override is configured or
- *  parsing fails. */
-export function rebaseFileServerUrl(rawUrl: string): string {
-  const override = fileServerBaseUrl();
-  if (!override) return rawUrl;
-  try {
-    const u = new URL(rawUrl);
-    const o = new URL(override);
-    u.protocol = o.protocol;
-    u.hostname = o.hostname;
-    u.port = o.port;
-    return u.toString();
-  } catch {
-    return rawUrl;
-  }
-}
-
-/** Probe `GET {baseUrl}/capabilities` and store the result in the Zustand
- *  store.  Called whenever `serverConfig` changes so the Capabilities tab
- *  and Custom-Emotes admin tab populate even when no `fancy-file-server-config`
- *  plugin-data arrives (e.g. when the file-server plugin is loaded but the
- *  user has no upload permissions, or the capabilities endpoint is reachable
- *  via reverse proxy while the per-session config message is suppressed). */
-async function probeFileServerCapabilities(): Promise<void> {
-  const baseUrl = fileServerBaseUrl();
-  if (!baseUrl) return;
-  try {
-    const body = await invoke<string>("fetch_file_server_capabilities", { baseUrl });
-    const caps = JSON.parse(body) as FileServerCapabilities;
-    useAppStore.setState({ fileServerCapabilities: caps });
-  } catch (e) {
-    console.warn("file-server capabilities probe failed:", e);
-  }
-}
+// File-server URL helpers moved to `store/fileServer.ts`; re-exported
+// below so callers continue to `import { rebaseFileServerUrl } from "./store"`.
 
 let autoReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let manualDisconnectRequested = false;
@@ -191,28 +211,47 @@ function clearAutoReconnectTimer(): void {
     clearTimeout(autoReconnectTimer);
     autoReconnectTimer = null;
   }
+  useAppStore.setState({ reconnectScheduled: false, nextReconnectAt: null });
 }
 
 async function attemptAutoReconnect(
   fallbackTarget: { host: string; port: number; username: string; certLabel: string | null },
 ): Promise<void> {
-  if (manualDisconnectRequested) return;
-
-  const { getPreferences } = await import("./preferencesStorage");
-  const prefs = await getPreferences().catch(() => null);
-  if (!prefs?.autoReconnect) return;
+  autoReconnectTimer = null;
+  if (manualDisconnectRequested || !autoReconnectEnabled) {
+    useAppStore.setState({ reconnectScheduled: false, nextReconnectAt: null });
+    return;
+  }
 
   const state = useAppStore.getState();
-  if (state.status === "connected" || state.passwordRequired) return;
+  // Only start a fresh attempt from a settled `disconnected` state. If a
+  // connect is already in flight (`connecting`), or we are connected /
+  // blocked on a password, do nothing now: the connection result events
+  // (ServerConnected / server-disconnected) drive the next step. This keeps
+  // the loop event-driven and avoids racing the backend's own retry loop.
+  if (state.status !== "disconnected" || state.passwordRequired) {
+    return;
+  }
 
   const target = state.pendingConnect ?? fallbackTarget;
+  // Count this attempt and ensure the downtime clock is running (normally
+  // set by the disconnect handler, but guard for safety).
+  useAppStore.setState((p) => ({
+    reconnectAttempts: p.reconnectAttempts + 1,
+    connectionLostAt: p.connectionLostAt ?? Date.now(),
+  }));
   await state.connect(target.host, target.port, target.username, target.certLabel ?? null);
 
+  // `connect()` returns immediately while the backend connects in the
+  // background. On a synchronous failure it leaves status `disconnected`
+  // (no result event will arrive), so reschedule here; otherwise wait for
+  // the ServerConnected / server-disconnected event to drive the next step.
   const after = useAppStore.getState();
   if (
-    after.status !== "connected"
+    after.status === "disconnected"
     && !after.passwordRequired
     && !manualDisconnectRequested
+    && autoReconnectEnabled
   ) {
     scheduleAutoReconnect(target);
   }
@@ -222,9 +261,12 @@ function scheduleAutoReconnect(
   fallbackTarget: { host: string; port: number; username: string; certLabel: string | null },
 ): void {
   clearAutoReconnectTimer();
+  if (!autoReconnectEnabled || manualDisconnectRequested) return;
+  const delay = reconnectDelayMs(useAppStore.getState().reconnectAttempts);
+  useAppStore.setState({ reconnectScheduled: true, nextReconnectAt: Date.now() + delay });
   autoReconnectTimer = setTimeout(() => {
     void attemptAutoReconnect(fallbackTarget);
-  }, AUTO_RECONNECT_DELAY_MS);
+  }, delay);
 }
 
 /**
@@ -243,9 +285,51 @@ function applyStoredVolumesToNewUsers(): void {
   }
 }
 
+// --- Live Doc types -----------------------------------------------
+// Defined inline (rather than imported from `components/chat/useLiveDoc.ts`)
+// to keep the store dependency-free of UI components.  The shape is
+// re-exported from this module so consumers can reference one type.
+
+/** All the data needed to connect to and render a Live Doc session. */
+export interface LiveDocSessionInfo {
+  readonly serverId: number;
+  /** App-side server tab id this session belongs to.  Used to scope
+   *  the live-doc maps so two server tabs do not collide on the same
+   *  numeric channel id (channel 0 = root on every Mumble server). */
+  readonly appServerId: import("./types").ServerId | null;
+  readonly channelId: number;
+  readonly slug: string;
+  readonly title: string;
+  readonly wsUrl: string;
+  readonly token: string;
+  readonly ownSession: number;
+  readonly ownName: string;
+  readonly ownColor: string;
+  /** True when this client created the session (non-silent opener).
+   *  Gates owner-only controls such as manual "save now". */
+  readonly isOwner?: boolean;
+}
+
+/** Pending announce shown as a chat banner. */
+export interface LiveDocAnnounceInfo {
+  readonly openerName: string;
+  readonly title: string;
+  readonly appServerId: import("./types").ServerId | null;
+  readonly channelId: number;
+  readonly slug: string;
+}
+
+/** Composite map key for live-doc state, scoped to a server tab. */
+export function liveDocKey(
+  appServerId: import("./types").ServerId | null,
+  channelId: number,
+): string {
+  return `${appServerId ?? ""}|${channelId}`;
+}
+
 // --- Store shape --------------------------------------------------
 
-interface AppState {
+export interface AppState {
   // Reactive state
   status: ConnectionStatus;
   channels: ChannelEntry[];
@@ -268,8 +352,50 @@ interface AppState {
   /** Capabilities fetched from `GET {baseUrl}/capabilities` after receiving
    *  the file-server config. `null` when not yet fetched or no file-server. */
   fileServerCapabilities: FileServerCapabilities | null;
+  /** Configuration advertised by the live-doc plugin on connect via
+   *  `fancy-live-doc-config`. `null` when the server has no live-doc plugin. */
+  liveDocPluginConfig: LiveDocPluginConfig | null;
+  /** Plugin registry broadcast by the server right after `ServerSync` via
+   *  the `plugin-registry` Tauri event.  Lists every plugin the server's
+   *  plugin host loaded.  Cleared on disconnect. */
+  pluginRegistry: PluginRegistryEntry[];
+  /** Decoded Tier-1 client manifests keyed by plugin name.  Only
+   *  trusted plugins appear here; pending/denied plugins are
+   *  filtered out. */
+  pluginManifests: PluginTier1Slice["pluginManifests"];
+  /** Per-server trust decisions keyed by plugin name.  Loaded from
+   *  `pluginTrust.json` whenever the active server changes. */
+  pluginTrust: PluginTier1Slice["pluginTrust"];
+  /** Plugins whose manifest is pending the user's trust decision.
+   *  Drained one-at-a-time by `PluginTrustPrompt`. */
+  pluginTrustQueue: PluginTier1Slice["pluginTrustQueue"];
+  /** Settings panels declared by trusted plugins, plus live updates
+   *  pushed via `ResponseKind.UpdatePanel`. */
+  pluginPanels: PluginTier1Slice["pluginPanels"];
+  /** Currently-visible plugin-rendered message cards (buttons / select
+   *  menus attached to a plugin response). */
+  pluginCards: PluginTier1Slice["pluginCards"];
+  /** Active plugin-rendered modal dialog, or null. */
+  pluginModal: PluginTier1Slice["pluginModal"];
+  /** Pending plugin-pushed toasts. */
+  pluginToasts: PluginTier1Slice["pluginToasts"];
+  /** Plugin names allowed \"once\" for this session; cleared on disconnect. */
+  pluginSessionTrust: PluginTier1Slice["pluginSessionTrust"];
   /** Custom server emotes pushed via `fancy-server-emotes`. Cleared on disconnect. */
   customServerEmotes: CustomServerEmote[];
+  /** Plugin info records broadcast by the server via `fancy-plugin-info`
+   *  shortly after connect. Keyed by plugin name. Cleared on disconnect.
+   *  This is the canonical "which plugins are active on this server" registry:
+   *  UI gated on a plugin's presence here disappears the moment the host
+   *  broadcasts that the plugin was disabled (see `recordPluginDisabled`). */
+  pluginInfos: Map<string, PluginInfoRecord>;
+  /** Set when a server plugin was disabled at runtime *and* the local user has
+   *  a view for it open, so a dialog can prompt (and, for live-doc, offer a
+   *  local save) before the view is torn down. `null` otherwise. */
+  pluginDisabledNotice: { name: string } | null;
+  /** Whether the admin File Server dashboard is currently mounted, so a runtime
+   *  disable of the file-server plugin can prompt the open admin. */
+  fileServerAdminOpen: boolean;
   /** Locally-saved downloads completed during the current session. Most
    *  recent first. Cleared on disconnect / reset. */
   downloads: DownloadEntry[];
@@ -278,6 +404,10 @@ interface AppState {
   unseenDownloadCount: number;
   /** Fancy Mumble version of the connected server (v2-encoded), null if not a fancy server. */
   serverFancyVersion: number | null;
+  /** Plugin ABI version the connected server's plugin host was compiled
+   *  against (from FancyPluginAdminList.host_abi_version). null until an
+   *  admin plugin list is received, or on a non-fancy server. */
+  serverHostAbiVersion: number | null;
   voiceState: VoiceState;
   /** True when audio is transported over UDP (false = TCP tunnel). */
   udpActive: boolean;
@@ -355,6 +485,19 @@ interface AppState {
    *  - which unmounts the preview component - does not implicitly close
    *  the overlay.  Cleared automatically when broadcasting stops. */
   desktopDrawingOverlayOpen: boolean;
+  /** Active Live Doc sessions, keyed by channel id.  Set when the
+   *  local user opens or accepts a Live Doc invite; cleared on close.
+   *  Defined inline (rather than a separate import) to avoid a circular
+   *  dependency between the store and the chat components that consume
+   *  the session object. */
+  activeLiveDocs: Map<string, LiveDocSessionInfo>;
+  /** Pending Live Doc announces shown as banners in chat.  Keyed by
+   *  `liveDocKey(activeServerId, channelId)`; the most recent announce wins. */
+  pendingLiveDocAnnounces: Map<string, LiveDocAnnounceInfo>;
+  /** Pending markdown seed content the editor should insert into a
+   *  freshly-opened doc.  Consumed once on first WS-connected mount
+   *  by `LiveDocPanel`.  Keyed by `liveDocKey(activeServerId, channelId)`. */
+  pendingLiveDocSeeds: Map<string, string>;
   /** Channel IDs where the screen-share drawing tools (color picker,
    *  width slider, clear button) are currently active.  Stored in the
    *  global store so the toggle button in `StreamControls` and the
@@ -431,6 +574,20 @@ interface AppState {
    *  loading bar stays visible until this clears, so the chat view is
    *  only revealed once it actually has data.  `null` when idle. */
   bootstrapStage: string | null;
+  /** Number of reconnect attempts made since the active session's
+   *  connection was lost. Reset to 0 once a connection is re-established. */
+  reconnectAttempts: number;
+  /** Epoch ms when the active session's connection was lost (and an
+   *  auto-reconnect sequence began), or `null` when connected / idle.
+   *  Drives the "time since last connection" counter in the reconnect view. */
+  connectionLostAt: number | null;
+  /** True while an auto-reconnect attempt is queued (waiting out the
+   *  backoff) or in flight. Keeps the reconnect view visible between
+   *  attempts instead of flashing the "Disconnected" card. */
+  reconnectScheduled: boolean;
+  /** Epoch ms when the next queued auto-reconnect attempt will fire, for
+   *  the "next retry in Ns" countdown, or `null` when none is queued. */
+  nextReconnectAt: number | null;
 
   // Actions
   connect: (host: string, port: number, username: string, certLabel?: string | null, password?: string | null) => Promise<void>;
@@ -525,6 +682,8 @@ interface AppState {
     channelId: number;
     mode: FileAccessMode;
     password?: string;
+    /** Requested lifetime in seconds (undefined = server default, 0 = never). */
+    ttlSeconds?: number;
     filename?: string;
     mimeType?: string;
     uploadId?: string;
@@ -547,7 +706,7 @@ interface AppState {
   clearUnseenPins: (channelId: number) => void;
   /** Append a completed download to the in-memory list and bump the
    *  unseen badge count. */
-  addDownload: (entry: Omit<DownloadEntry, "id" | "downloadedAt">) => void;
+  addDownload: (entry: NewDownloadInput) => void;
   /** Reset the unseen-downloads badge. Called when the panel opens. */
   markDownloadsSeen: () => void;
   /** Remove a single download from the list (does not delete the file). */
@@ -575,6 +734,74 @@ interface AppState {
 
   /** Set a per-user volume override by cert hash (0-200). Persists to disk. */
   setUserVolume: (hash: string, volume: number) => void;
+
+  // Plugin lifecycle
+  /** Handle a host broadcast that a server plugin was disabled at runtime:
+   *  drop it from the registry, clear its feature state, log an activity entry,
+   *  and (when the user has a view for it open) raise `pluginDisabledNotice`. */
+  recordPluginDisabled: (name: string) => void;
+  /** Dismiss the plugin-disabled dialog and tear down the affected view. */
+  dismissPluginDisabledNotice: () => void;
+  /** Track whether the admin File Server dashboard is mounted. */
+  setFileServerAdminOpen: (open: boolean) => void;
+
+  // Live Doc
+  /** Open (or re-attach to) a Live Doc session and surface its panel. */
+  openLiveDoc: (session: LiveDocSessionInfo) => void;
+  /** Close the active Live Doc panel for a channel.  Idempotent.
+   *  Pass `appServerId` to target a specific server tab instead of the
+   *  currently active one (essential when the panel session belongs to
+   *  a tab that may not be the foreground tab at click time). */
+  closeActiveLiveDoc: (
+    channelId: number,
+    appServerId?: import("./types").ServerId | null,
+  ) => void;
+  /** Record a pending Live Doc announce so the chat banner can render. */
+  setLiveDocAnnounce: (announce: LiveDocAnnounceInfo) => void;
+  /** Dismiss a pending Live Doc announce for a channel.  Pass
+   *  `appServerId` to target a specific server tab. */
+  clearLiveDocAnnounce: (
+    channelId: number,
+    appServerId?: import("./types").ServerId | null,
+  ) => void;
+  /** Ask the server to open a Live Doc by slug.  Server validates and
+   *  replies with a `fancy-live-doc/invite` PluginDataTransmission that
+   *  the plugin-data dispatcher turns into an `openLiveDoc` call. */
+  /** Open or join a Live Doc.  Pass `silent: true` when joining via an
+   *  existing invite card so the client does NOT post a second invite
+   *  card to the channel (the original one is still valid). */
+  requestOpenLiveDoc: (
+    channelId: number,
+    slug: string,
+    title: string,
+    options?: { silent?: boolean; mode?: "private" | "publish" },
+  ) => Promise<void>;
+  /** Publish an already-open document to a channel (owner only). */
+  publishLiveDoc: (channelId: number, slug: string) => Promise<void>;
+  /** Rename the active Live Doc: update the local session title and send
+   *  a best-effort `Rename` plugin message so the server can persist the
+   *  new name.  Live propagation to peers is handled separately via the
+   *  shared Yjs document. */
+  renameActiveLiveDoc: (
+    channelId: number,
+    slug: string,
+    title: string,
+    appServerId?: import("./types").ServerId | null,
+  ) => void;
+  /** Ask the live-doc server to flush/snapshot the document now
+   *  (owner-initiated manual save).  Best-effort plugin message. */
+  saveLiveDoc: (channelId: number, slug: string) => Promise<void>;
+  /** Stash markdown text for the editor to consume on next mount. */
+  setPendingLiveDocSeed: (
+    channelId: number,
+    markdown: string,
+    appServerId?: import("./types").ServerId | null,
+  ) => void;
+  /** Atomic take-and-clear of the pending seed for a channel. */
+  consumePendingLiveDocSeed: (
+    channelId: number,
+    appServerId?: import("./types").ServerId | null,
+  ) => string | undefined;
 
   // Silenced channels
   /** Toggle silence for a channel (local-only, persisted per server). */
@@ -630,10 +857,24 @@ const INITIAL: Pick<
   | "serverConfig"
   | "fileServerConfig"
   | "fileServerCapabilities"
+  | "liveDocPluginConfig"
+  | "pluginRegistry"
+  | "pluginManifests"
+  | "pluginTrust"
+  | "pluginTrustQueue"
+  | "pluginPanels"
+  | "pluginCards"
+  | "pluginModal"
+  | "pluginToasts"
+  | "pluginSessionTrust"
   | "customServerEmotes"
+  | "pluginInfos"
+  | "pluginDisabledNotice"
+  | "fileServerAdminOpen"
   | "downloads"
   | "unseenDownloadCount"
   | "serverFancyVersion"
+  | "serverHostAbiVersion"
   | "voiceState"
   | "udpActive"
   | "inCall"
@@ -656,6 +897,9 @@ const INITIAL: Pick<
   | "webrtcConnecting"
   | "webrtcError"
   | "desktopDrawingOverlayOpen"
+  | "activeLiveDocs"
+  | "pendingLiveDocAnnounces"
+  | "pendingLiveDocSeeds"
   | "drawingActiveChannels"
   | "broadcastingSessions"
   | "poppedOutStreamSessions"
@@ -680,6 +924,10 @@ const INITIAL: Pick<
   | "pendingConnect"
   | "connectedCertLabel"
   | "bootstrapStage"
+  | "reconnectAttempts"
+  | "connectionLostAt"
+  | "reconnectScheduled"
+  | "nextReconnectAt"
 > = {
   status: "disconnected",
   channels: [],
@@ -701,10 +949,24 @@ const INITIAL: Pick<
   },
   fileServerConfig: null,
   fileServerCapabilities: null,
+  liveDocPluginConfig: null,
+  pluginRegistry: [],
+  pluginManifests: emptyPluginTier1Slice.pluginManifests,
+  pluginTrust: emptyPluginTier1Slice.pluginTrust,
+  pluginTrustQueue: emptyPluginTier1Slice.pluginTrustQueue,
+  pluginPanels: emptyPluginTier1Slice.pluginPanels,
+  pluginCards: emptyPluginTier1Slice.pluginCards,
+  pluginModal: emptyPluginTier1Slice.pluginModal,
+  pluginToasts: emptyPluginTier1Slice.pluginToasts,
+  pluginSessionTrust: emptyPluginTier1Slice.pluginSessionTrust,
   customServerEmotes: [],
+  pluginInfos: new Map(),
+  pluginDisabledNotice: null,
+  fileServerAdminOpen: false,
   downloads: [],
   unseenDownloadCount: 0,
   serverFancyVersion: null,
+  serverHostAbiVersion: null,
   voiceState: "inactive" as VoiceState,
   udpActive: false,
   inCall: false,
@@ -727,6 +989,9 @@ const INITIAL: Pick<
   webrtcConnecting: false,
   webrtcError: null,
   desktopDrawingOverlayOpen: false,
+  activeLiveDocs: new Map(),
+  pendingLiveDocAnnounces: new Map(),
+  pendingLiveDocSeeds: new Map(),
   drawingActiveChannels: new Set(),
   broadcastingSessions: new Set(),
   poppedOutStreamSessions: new Set(),
@@ -751,6 +1016,10 @@ const INITIAL: Pick<
   pendingConnect: null,
   connectedCertLabel: null,
   bootstrapStage: null,
+  reconnectAttempts: 0,
+  connectionLostAt: null,
+  reconnectScheduled: false,
+  nextReconnectAt: null,
 };
 
 // --- Store --------------------------------------------------------
@@ -798,6 +1067,27 @@ function updateBadgeCount(): void {
   });
 }
 
+/**
+ * Merges newly-fetched remote DM messages with the encrypted on-device
+ * history (when the user has enabled DM persistence) and writes the
+ * merged log back.  When persistence is disabled the remote messages
+ * are returned unchanged.
+ */
+async function applyDmPersistence(
+  state: { users: UserEntry[]; activeServerId: string | null },
+  session: number,
+  remote: ChatMessage[],
+): Promise<ChatMessage[]> {
+  if (!(await isDmPersistenceEnabled())) return remote;
+  const user = state.users.find((u) => u.session === session);
+  if (!user) return remote;
+  const key = dmFriendKeyFor({ hash: user.hash, name: user.name }, state.activeServerId);
+  const persisted = await loadDmHistory(key);
+  const merged = mergeDmMessages(persisted, remote);
+  void saveDmHistory(key, merged);
+  return merged;
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   ...INITIAL,
   disableLinkPreviews: false,
@@ -829,7 +1119,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         for (const [k, v] of Object.entries(prev.sessionErrors)) {
           if (ids.has(k)) nextErrors[k] = v;
         }
-        return { sessions, activeServerId, sessionUnreadTotals: next, sessionErrors: nextErrors };
+        const activeMeta = activeServerId ? sessions.find((s) => s.id === activeServerId) : undefined;
+        const status = activeMeta?.status ?? prev.status;
+        const error = activeMeta?.status === "connected" ? null : (nextErrors[activeServerId ?? ""] ?? prev.error);
+        return { sessions, activeServerId, sessionUnreadTotals: next, sessionErrors: nextErrors, status, error };
       });
     } catch (e) {
       console.error("refreshSessions error:", e);
@@ -901,6 +1194,27 @@ export const useAppStore = create<AppState>((set, get) => ({
       const next = { ...prev.sessionErrors };
       delete next[id];
       return { sessionErrors: next };
+    });
+    // Drop live-doc state scoped to the closed server tab so it cannot
+    // bleed into another tab on the same channel id.
+    set((prev) => {
+      const prefix = `${id}|`;
+      const filter = <V,>(m: Map<string, V>): Map<string, V> => {
+        let changed = false;
+        const next = new Map(m);
+        for (const k of m.keys()) {
+          if (k.startsWith(prefix)) {
+            next.delete(k);
+            changed = true;
+          }
+        }
+        return changed ? next : m;
+      };
+      return {
+        activeLiveDocs: filter(prev.activeLiveDocs),
+        pendingLiveDocAnnounces: filter(prev.pendingLiveDocAnnounces),
+        pendingLiveDocSeeds: filter(prev.pendingLiveDocSeeds),
+      };
     });
     // Refresh the sessions list and learn which session (if any) the
     // backend made active in place of the one we just closed.
@@ -1237,7 +1551,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           // store and the chat-only DrawingOverlay module.
           const dropped = [...broadcastingSessions].filter((s) => !currentSessions.has(s));
           if (dropped.length > 0) {
-            void import("./components/chat/DrawingOverlay").then((m) => {
+            void import("./components/chat/drawing/DrawingOverlay").then((m) => {
               for (const s of dropped) m.clearStrokesFromSender(s);
             }).catch(() => {});
           }
@@ -1302,7 +1616,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   toggleMute: async () => {
     // Capture state BEFORE the await so pref write is deterministic and
     // ordered relative to the user action, not the async Rust IPC delivery.
-    // "active" → will be muted; "muted" or "inactive" → will be active.
+    // "active" ? will be muted; "muted" or "inactive" ? will be active.
     const willBeMuted = useAppStore.getState().voiceState === "active";
     try {
       await invoke("toggle_mute");
@@ -1340,7 +1654,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ selectedDmUser: session, selectedChannel: null, messages: [], selectedUser: session });
     try {
       await invoke("select_dm_user", { session });
-      const dmMessages = await invoke<ChatMessage[]>("get_dm_messages", { session });
+      const remote = await invoke<ChatMessage[]>("get_dm_messages", { session });
+      const dmMessages = await applyDmPersistence(get(), session, remote);
       set({ dmMessages });
     } catch (e) {
       console.error("select_dm_user error:", e);
@@ -1367,7 +1682,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     try {
       await invoke("send_dm", { targetSession, body });
-      const dmMessages = await invoke<ChatMessage[]>("get_dm_messages", { session: targetSession });
+      const remote = await invoke<ChatMessage[]>("get_dm_messages", { session: targetSession });
+      const dmMessages = await applyDmPersistence(get(), targetSession, remote);
       if (showPlaceholder) {
         set((s) => ({
           dmMessages,
@@ -1393,26 +1709,31 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   refreshDmMessages: async (session) => {
     try {
-      const dmMessages = await invoke<ChatMessage[]>("get_dm_messages", { session });
+      const remote = await invoke<ChatMessage[]>("get_dm_messages", { session });
+      const dmMessages = await applyDmPersistence(get(), session, remote);
       set({ dmMessages });
     } catch (e) {
       console.error("refresh dm messages error:", e);
     }
   },
 
-  sendPluginData: async (receiverSessions, data, dataId) => {
-    try {
-      await invoke("send_plugin_data", {
-        receiverSessions,
-        data: Array.from(data),
-        dataId,
-      });
-    } catch (e) {
-      console.error("send_plugin_data error:", e);
-    }
+  sendPluginData: async (_receiverSessions, _data, dataId) => {
+    // PluginDataTransmission is permanently forbidden in Fancy Mumble.
+    // The legacy generic carriage hid "silent drop" bugs whenever a
+    // server-side plugin handler was missing; use a typed protobuf
+    // message instead (see Mumble.proto IDs 141+ and the corresponding
+    // `send_fancy_*` Tauri commands).
+    const err = new Error(
+      `PluginDataTransmission is forbidden in Fancy Mumble (dataId=${dataId}). ` +
+      `Use a typed protobuf message instead: see proto/Mumble.proto IDs 141-145 ` +
+      `and the send_fancy_* Tauri commands.  Add a new message (>= 146) if you ` +
+      `need a new payload.`,
+    );
+    console.error("sendPluginData is BRICKED:", err);
+    throw err;
   },
 
-  uploadFile: async ({ filePath, channelId, mode, password, filename, mimeType, uploadId }) => {
+  uploadFile: async ({ filePath, channelId, mode, password, ttlSeconds, filename, mimeType, uploadId }) => {
     const cfg = get().fileServerConfig;
     if (!cfg) {
       throw new Error("file-server is not configured for this server");
@@ -1431,6 +1752,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         mimeType,
         mode,
         password,
+        ttlSeconds,
         uploadId: uploadId ?? "",
       },
     });
@@ -1577,6 +1899,208 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   dismissPasswordPrompt: () => {
     set({ passwordRequired: false, passwordAttempted: false, pendingConnect: null, connectedCertLabel: null });
+  },
+
+  // -- Plugin lifecycle -------------------------------------------
+
+  recordPluginDisabled: (name) => {
+    set((s) => {
+      const patch: Partial<AppState> = {};
+      // Drop from the canonical registry so every UI gated on plugin presence
+      // (Server Info list, LiveDoc entries, ...) disappears at once.
+      if (s.pluginInfos.has(name)) {
+        const infos = new Map(s.pluginInfos);
+        infos.delete(name);
+        patch.pluginInfos = infos;
+      }
+      // Clear the plugin's feature state so stale creds/config can't linger,
+      // and note whether the user currently has a view for it open.
+      let viewOpen = false;
+      if (name === PLUGIN_NAME_FILE_SERVER) {
+        patch.fileServerConfig = null;
+        patch.fileServerCapabilities = null;
+        patch.customServerEmotes = [];
+        viewOpen = s.fileServerAdminOpen;
+      } else if (name === PLUGIN_NAME_LIVE_DOC) {
+        patch.liveDocPluginConfig = null;
+        viewOpen = s.activeLiveDocs.size > 0;
+      }
+      patch.serverLog = [
+        ...s.serverLog,
+        {
+          timestamp_ms: Date.now(),
+          message: i18next.t("common:plugins.disabledLog", {
+            defaultValue: "Plugin “{{name}}” was disabled by the server",
+            name: friendlyPluginName(name),
+          }),
+        },
+      ];
+      // Only the file-server contributes server-custom reactions; clear them.
+      if (name === PLUGIN_NAME_FILE_SERVER) setServerCustomReactions([]);
+      if (viewOpen) patch.pluginDisabledNotice = { name };
+      return patch;
+    });
+  },
+
+  dismissPluginDisabledNotice: () => {
+    set((s) => {
+      const notice = s.pluginDisabledNotice;
+      if (!notice) return s;
+      const patch: Partial<AppState> = { pluginDisabledNotice: null };
+      // Tear down any open view for the now-disabled plugin.
+      if (notice.name === PLUGIN_NAME_LIVE_DOC && s.activeLiveDocs.size > 0) {
+        patch.activeLiveDocs = new Map();
+      }
+      return patch;
+    });
+  },
+
+  setFileServerAdminOpen: (open) => set({ fileServerAdminOpen: open }),
+
+  // -- Live Doc ---------------------------------------------------
+
+  openLiveDoc: (session) => {
+    set((state) => {
+      const k = liveDocKey(session.appServerId, session.channelId);
+      const next = new Map(state.activeLiveDocs);
+      next.set(k, session);
+      const announces = new Map(state.pendingLiveDocAnnounces);
+      announces.delete(k);
+      return { activeLiveDocs: next, pendingLiveDocAnnounces: announces };
+    });
+  },
+
+  closeActiveLiveDoc: (channelId, appServerId) => {
+    set((state) => {
+      const targetServer = appServerId !== undefined ? appServerId : state.activeServerId;
+      const k = liveDocKey(targetServer, channelId);
+      if (!state.activeLiveDocs.has(k)) return state;
+      const next = new Map(state.activeLiveDocs);
+      next.delete(k);
+      return { activeLiveDocs: next };
+    });
+  },
+
+  setLiveDocAnnounce: (announce) => {
+    set((state) => {
+      const next = new Map(state.pendingLiveDocAnnounces);
+      next.set(liveDocKey(announce.appServerId, announce.channelId), announce);
+      return { pendingLiveDocAnnounces: next };
+    });
+  },
+
+  clearLiveDocAnnounce: (channelId, appServerId) => {
+    set((state) => {
+      const targetServer = appServerId !== undefined ? appServerId : state.activeServerId;
+      const k = liveDocKey(targetServer, channelId);
+      if (!state.pendingLiveDocAnnounces.has(k)) return state;
+      const next = new Map(state.pendingLiveDocAnnounces);
+      next.delete(k);
+      return { pendingLiveDocAnnounces: next };
+    });
+  },
+
+  setPendingLiveDocSeed: (channelId, markdown, appServerId) => {
+    set((state) => {
+      const targetServer = appServerId !== undefined ? appServerId : state.activeServerId;
+      const next = new Map(state.pendingLiveDocSeeds);
+      next.set(liveDocKey(targetServer, channelId), markdown);
+      return { pendingLiveDocSeeds: next };
+    });
+  },
+
+  consumePendingLiveDocSeed: (channelId, appServerId) => {
+    const state = get();
+    const targetServer = appServerId !== undefined ? appServerId : state.activeServerId;
+    const k = liveDocKey(targetServer, channelId);
+    const current = state.pendingLiveDocSeeds.get(k);
+    if (current === undefined) return undefined;
+    set((s) => {
+      const next = new Map(s.pendingLiveDocSeeds);
+      next.delete(k);
+      return { pendingLiveDocSeeds: next };
+    });
+    return current;
+  },
+
+  requestOpenLiveDoc: async (channelId, slug, title, options) => {
+    const silent = options?.silent === true;
+    const sanitised = slug
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9_-]+/g, "-")
+      .replaceAll(/^-+|-+$/g, "")
+      .slice(0, 64);
+    console.log("[store] requestOpenLiveDoc:", { channelId, slug, sanitised, title });
+    if (!sanitised) {
+      console.warn("[store] requestOpenLiveDoc aborted: slug sanitised to empty string", { slug });
+      throw new Error("Document name produces empty slug; pick a different title.");
+    }
+    const trimmedTitle = title.trim().slice(0, 200);
+    const mode = options?.mode ?? "publish";
+    const key = `${channelId}|${sanitised}`;
+    // De-dupe concurrent opens: if a request for this doc is already awaiting
+    // its invite, don't fire another OpenRequest (rapid clicks would otherwise
+    // spam the server with duplicate envelopes while the first is in flight).
+    if (pendingLiveDocOpens.has(key)) {
+      console.log("[store] requestOpenLiveDoc: open already in flight; skipping duplicate", { key });
+      return;
+    }
+    const activeServerId = get().activeServerId;
+    if (get().activeLiveDocs.has(liveDocKey(activeServerId, channelId))) {
+      console.log("[store] requestOpenLiveDoc: channel already has active doc; skipping wait");
+      await sendPluginMessage("fancy-live-doc", "OpenRequest", { channelId, slug: sanitised, title: trimmedTitle, mode });
+      return;
+    }
+    const waitForInvite = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pendingLiveDocOpens.delete(key);
+        console.warn("[store] requestOpenLiveDoc: timed out waiting for invite", { key });
+        reject(new Error(
+          "Server did not reply with a document invite within 8s. " +
+          "The live-doc plugin may be disabled on this server " +
+          "(set plugin.live-doc.enabled=true and plugin.live-doc.state_path in mumble-server.ini), " +
+          "or you may lack permission in this channel.",
+        ));
+      }, 8000);
+      pendingLiveDocOpens.set(key, {
+        silent,
+        mode,
+        resolve: () => {
+          clearTimeout(timer);
+          pendingLiveDocOpens.delete(key);
+          resolve();
+        },
+      });
+    });
+    await sendPluginMessage("fancy-live-doc", "OpenRequest", { channelId, slug: sanitised, title: trimmedTitle, mode });
+    console.log("[store] requestOpenLiveDoc: open dispatched, awaiting invite");
+    await waitForInvite;
+    console.log("[store] requestOpenLiveDoc: invite received");
+  },
+
+  publishLiveDoc: async (channelId, slug) => {
+    await sendPluginMessage("fancy-live-doc", "Publish", { channelId, slug });
+  },
+
+  renameActiveLiveDoc: (channelId, slug, title, appServerId) => {
+    const trimmed = title.trim().slice(0, 200);
+    if (!trimmed) return;
+    set((state) => {
+      const targetServer = appServerId !== undefined ? appServerId : state.activeServerId;
+      const k = liveDocKey(targetServer, channelId);
+      const current = state.activeLiveDocs.get(k);
+      if (!current || current.title === trimmed) return state;
+      const next = new Map(state.activeLiveDocs);
+      next.set(k, { ...current, title: trimmed });
+      return { activeLiveDocs: next };
+    });
+    sendPluginMessage("fancy-live-doc", "Rename", { channelId, slug, title: trimmed }).catch((e) =>
+      console.warn("plugin-message Rename failed:", e),
+    );
+  },
+
+  saveLiveDoc: async (channelId, slug) => {
+    await sendPluginMessage("fancy-live-doc", "Persist", { channelId, slug });
   },
 
   // -- Silenced channels ------------------------------------------
@@ -1827,6 +2351,322 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 // --- Tauri event bridge -------------------------------------------
 
+// --- Live Doc native-event dispatcher -----------------------------
+
+/** Native `fancy-live-doc-invite` event payload (server -> client). */
+interface LiveDocInviteEvent {
+  channelId: number;
+  slug: string;
+  title: string;
+  wsUrl: string;
+  token: string | null;
+  serverId: string | null;
+}
+
+/** Native `fancy-live-doc-announce` event payload (peer -> peer via server relay). */
+interface LiveDocAnnounceEvent {
+  channelId: number;
+  slug: string;
+  title: string;
+  openerSession: number;
+  openerName: string;
+}
+
+function dispatchLiveDocInvite(p: LiveDocInviteEvent): void {
+  const state = useAppStore.getState();
+  const ownSession = state.ownSession;
+  if (ownSession === null) return;
+  const pendingKey = `${p.channelId}|${p.slug}`;
+  const pending = pendingLiveDocOpens.get(pendingKey);
+  // Announce to the channel (banner + persistent chat invite card) only
+  // when WE initiated a *new, non-silent* open of a *published* document.
+  // A private document is exactly that - private - so it must never leak
+  // an "X opened a shared document" banner/message to the channel.  Silent
+  // opens (joining an existing invite) also never re-announce.
+  // We own the document whenever we initiated a non-silent open, whether
+  // it is private or published (gates owner-only controls like "save now").
+  const isOwner = pending !== undefined && !pending.silent;
+  const shouldPublish = isOwner && pending?.mode === "publish";
+  if (pending) pending.resolve();
+  const ownUser = state.users.find((u) => u.session === ownSession);
+  // Convert serverId string -> numeric session-id-like value (legacy field).
+  // The new proto carries the string verbatim; downstream `openLiveDoc`
+  // accepts the numeric server id used previously.  When the new field is
+  // numeric-looking, parse it; otherwise fall back to 0 to keep the call
+  // shape stable.
+  const serverIdNum = p.serverId !== null ? Number.parseInt(p.serverId, 10) || 0 : 0;
+  state.openLiveDoc({
+    serverId: serverIdNum,
+    appServerId: state.activeServerId,
+    channelId: p.channelId,
+    slug: p.slug,
+    title: p.title,
+    wsUrl: p.wsUrl,
+    token: p.token ?? "",
+    ownSession,
+    ownName: ownUser?.name ?? "You",
+    ownColor: pickLiveDocCursorColor(ownSession),
+    isOwner,
+  });
+  // Only a *published* open fans out to the channel.  Private documents
+  // stay private: no banner announce and no persistent chat invite card.
+  if (shouldPublish) {
+    // Tell everyone else in the channel that a doc was opened.
+    sendPluginMessage("fancy-live-doc", "Announce", {
+      channelId: p.channelId,
+      slug: p.slug,
+      title: p.title,
+    }).catch((e) => console.warn("plugin-message Announce failed:", e));
+    // Post a persistent chat invite so users who were not in the channel
+    // when the announce flew can still join.
+    const payload = encodeLiveDocInviteMarker(p.slug, p.title);
+    void state.sendMessage(p.channelId, payload).catch((e) =>
+      console.warn("live-doc auto-invite message failed:", e),
+    );
+  }
+}
+
+function dispatchLiveDocAnnounce(p: LiveDocAnnounceEvent): void {
+  const state = useAppStore.getState();
+  state.setLiveDocAnnounce({
+    openerName: p.openerName || "Someone",
+    title: p.title,
+    appServerId: state.activeServerId,
+    channelId: p.channelId,
+    slug: p.slug,
+  });
+}
+
+// --- Generic plugin envelope helpers -------------------------------
+
+/** Raw `plugin-message` event payload emitted by the Tauri backend.
+ *  `payload` carries the plugin bytes as base64 (see PluginMessagePayload
+ *  in the Rust backend). */
+interface PluginMessageEvent {
+  pluginName: string;
+  pluginSlot: number | null;
+  payloadType: string;
+  payload: string;
+  targetSessions: number[];
+  channelId: number | null;
+  senderSession: number | null;
+  senderName: string | null;
+}
+
+// PluginRegistryEntry / PluginRegistryEvent moved to `store/plugins.ts`
+// (re-exported below so existing `import { PluginRegistryEntry } from "./store"` works).
+
+/** Decode a base64 `plugin-message` payload as a UTF-8 JSON object. */
+function decodePluginPayload<T>(b64: string): T | null {
+  try {
+    return JSON.parse(new TextDecoder().decode(base64ToBytes(b64))) as T;
+  } catch (e) {
+    console.error("[store] plugin-message payload is not valid JSON:", e);
+    return null;
+  }
+}
+
+/** Policy gate for an inbound plugin `InteractionResponse`.
+ *
+ *  - A plugin that ships a Tier-1 client manifest must be *trusted*
+ *    (present in `pluginManifests` - i.e. allowed or prompt-exempt) AND
+ *    must have declared the capability backing the response kind.  This
+ *    refuses plugins that are pending a trust decision, explicitly
+ *    denied, or reaching for a capability they never declared.
+ *  - A plugin that ships no client manifest at all keeps its historical
+ *    bypass for non-injecting responses (legacy transports), but may
+ *    never inject chat history.
+ *
+ *  Evaluated before any side effect so a blocked / under-declared plugin
+ *  cannot inject or rewrite local chat. */
+function pluginResponseAllowed(
+  s: AppState,
+  pluginName: string,
+  kind: InteractionResponse["kind"],
+): boolean {
+  const manifest = s.pluginManifests.get(pluginName);
+  if (manifest) {
+    return manifestPermitsResponse(manifest, kind);
+  }
+  const entry = s.pluginRegistry.find((e) => e.pluginName === pluginName);
+  const hasManifest = entry ? parseClientManifest(entry.infoJson) !== null : false;
+  // A manifest-bearing plugin not in `pluginManifests` is pending or
+  // denied -> refuse.  A manifest-less plugin is a legacy transport;
+  // allow everything except chat injection.
+  if (hasManifest) return false;
+  return kind !== "chat-message";
+}
+
+/** Route an inbound plugin envelope to the appropriate in-store handler. */
+function dispatchPluginMessage(p: PluginMessageEvent): void {
+  // Host-broadcast plugin lifecycle (any plugin).  Deactivation clears the
+  // plugin's UI/state; activation is a no-op client-side (the host re-announces
+  // the plugin's `fancy-plugin-info` + config, which repopulate the registry).
+  if (p.payloadType === PluginPayloadType.PluginDeactivated) {
+    useAppStore.getState().recordPluginDisabled(p.pluginName);
+    return;
+  }
+  if (p.payloadType === PluginPayloadType.PluginActivated) {
+    return;
+  }
+
+  if (p.pluginName === "fancy-live-doc") {
+    if (p.payloadType === PluginPayloadType.Invite) {
+      const data = decodePluginPayload<{
+        channelId: number;
+        slug: string;
+        title: string;
+        wsUrl: string;
+        token?: string | null;
+        serverId?: string | null;
+      }>(p.payload);
+      if (!data) return;
+      const fallbackHost =
+        useAppStore.getState().sessions.find(
+          (s) => s.id === useAppStore.getState().activeServerId,
+        )?.host ?? useAppStore.getState().pendingConnect?.host ?? null;
+      dispatchLiveDocInvite({
+        channelId: data.channelId,
+        slug: data.slug,
+        title: data.title,
+        wsUrl: sanitiseWsUrl(data.wsUrl, fallbackHost),
+        token: data.token ?? null,
+        serverId: data.serverId ?? null,
+      });
+      return;
+    }
+    if (p.payloadType === PluginPayloadType.Announce) {
+      const data = decodePluginPayload<{
+        channelId: number;
+        slug: string;
+        title: string;
+        openerSession: number;
+        openerName?: string | null;
+      }>(p.payload);
+      if (!data) return;
+      dispatchLiveDocAnnounce({
+        channelId: data.channelId,
+        slug: data.slug,
+        title: data.title,
+        openerSession: data.openerSession,
+        openerName: data.openerName ?? "",
+      });
+      return;
+    }
+    if (p.payloadType === "SharedWith") {
+      const data = decodePluginPayload<{
+        slug: string;
+        sharedWith?: import("./types").LiveDocSharedMember[];
+      }>(p.payload);
+      if (!data) return;
+      void import("./components/chat/livedoc/sharedWithStore").then(
+        ({ useLiveDocSharedWithStore }) => {
+          useLiveDocSharedWithStore.getState().setSharedWith(data.slug, data.sharedWith ?? []);
+        },
+      );
+      return;
+    }
+  }
+  const response = decodeInteractionResponse(p.payloadType, p.payload);
+  if (response) {
+    // Trust + capability gate.  Evaluated against current state BEFORE
+    // any side effect, so a pending / denied / under-declared plugin
+    // cannot inject or rewrite chat history (the side effects below run
+    // outside the `setState` reducer).
+    if (!pluginResponseAllowed(useAppStore.getState(), p.pluginName, response.kind)) {
+      return;
+    }
+    // Side effect for chat-message: ask the rust state to inject the
+    // bubble into local channel history.  The tier1 reducer itself
+    // is a no-op for this kind, so the side effect is the entire
+    // delivery mechanism.
+    if (response.kind === "chat-message") {
+      invoke("plugin_inject_chat_message", {
+        pluginName: p.pluginName,
+        channelIds: response.channel_ids ?? [],
+        messageId: response.message_id,
+        content: response.content ?? "",
+        components: response.components ?? null,
+      }).catch((e) =>
+        console.warn("[store] plugin_inject_chat_message failed:", e),
+      );
+    }
+    // Side effect for update-message: also try to update any
+    // matching plugin-authored chat bubble.  The tier1 reducer in
+    // parallel updates floating cards; the bubble path is restricted
+    // to messages whose `plugin_name` matches `p.pluginName`.
+    if (response.kind === "update-message") {
+      invoke("plugin_update_chat_message", {
+        pluginName: p.pluginName,
+        messageId: response.message_id,
+        content: response.content ?? null,
+        components:
+          response.components === null
+            ? null
+            : (response.components ?? null),
+        clearComponents: response.components === null,
+      }).catch((e) =>
+        console.warn("[store] plugin_update_chat_message failed:", e),
+      );
+    }
+    useAppStore.setState((s) => {
+      const next = applyInteractionResponse(
+        sliceFromState(s),
+        p.pluginName,
+        response,
+        p.channelId,
+      );
+      return slicePatch(next);
+    });
+    return;
+  }
+  console.debug("[store] unhandled plugin-message:", p.pluginName, p.payloadType);
+}
+
+
+/** Deterministic palette mirror of `pickCursorColor` in ChatView.tsx. */
+const LIVE_DOC_COLORS = [
+  "#2aabee", "#ff6f61", "#7cd66c", "#ffb74d",
+  "#b388ff", "#ff66cc", "#00bfa5", "#ffd54f",
+  "#90caf9", "#f48fb1", "#80deea", "#ce93d8",
+] as const;
+function pickLiveDocCursorColor(session: number): string {
+  return LIVE_DOC_COLORS[Math.abs(session) % LIVE_DOC_COLORS.length];}
+
+/** Encode a live-doc invite marker for use in a chat message body.
+ *  Recognised by `MessageItem` and rendered as a `LiveDocInviteCard`
+ *  with a Join button.  The format is opaque to legacy clients (HTML
+ *  comment); they will simply see an empty message body. */
+export function encodeLiveDocInviteMarker(slug: string, title: string): string {
+  const t = title.replaceAll("\n", " ").slice(0, 200);
+  // Encode via URI percent-encoding to keep `btoa` ASCII-safe for
+  // non-ASCII characters in slug/title.
+  const payload = btoa(encodeURIComponent(JSON.stringify({ slug, title: t })));
+  return `<!-- FANCY_LIVEDOC:${payload} -->`;
+}
+
+/** Decoded payload for the `FANCY_LIVEDOC` marker. */
+export interface LiveDocInviteMarker {
+  readonly slug: string;
+  readonly title: string;
+}
+
+/** Decode the payload from a `FANCY_LIVEDOC:<base64>` marker.  Returns
+ *  null when the payload is malformed. */
+export function decodeLiveDocInviteMarker(payload: string): LiveDocInviteMarker | null {
+  try {
+    const json = decodeURIComponent(atob(payload));
+    const raw = JSON.parse(json) as Partial<LiveDocInviteMarker>;
+    if (typeof raw.slug !== "string" || typeof raw.title !== "string") return null;
+    return { slug: raw.slug, title: raw.title };
+  } catch {
+    return null;
+  }
+}
+
+/** Regex used by `MessageItem` to extract the invite payload. */
+export const FANCY_LIVEDOC_MARKER_RE = /<!-- FANCY_LIVEDOC:([A-Za-z0-9+/=]+) -->/;
+
 // --- Plugin data handler registry ---------------------------------
 
 type PluginDataHandler = (dataId: string, data: Uint8Array, senderSession: number | null) => void;
@@ -1858,6 +2698,14 @@ export function onWebRtcSignal(handler: WebRtcSignalHandler): () => void {
 /** Set of request_ids already sent to avoid duplicate requests. */
 const pendingPreviewRequests = new Set<string>();
 
+/** In-flight `requestOpenLiveDoc` invocations keyed by `${channelId}|${slug}`.
+ *  Resolved when the matching `fancy-live-doc/invite` PluginDataTransmission
+ *  arrives; rejected by the request's own timeout if the server never replies. */
+const pendingLiveDocOpens = new Map<
+  string,
+  { resolve: () => void; silent: boolean; mode: "private" | "publish" }
+>();
+
 /** Request link previews from the server for the given URLs. */
 export async function requestLinkPreview(urls: string[], requestId: string): Promise<void> {
   if (pendingPreviewRequests.has(requestId)) return;
@@ -1874,6 +2722,142 @@ export async function requestLinkPreview(urls: string[], requestId: string): Pro
  * Subscribe to backend events and translate them into store updates.
  * Call once from the root `<App>` component; returns cleanup functions.
  */
+/**
+ * Process a single `plugin-data` envelope.
+ *
+ * Shared by the live `TauriEvent.PluginData` listener and the HMR
+ * restore path: the server broadcasts connect-time configs (file-server,
+ * live-doc, plugin-info, server-emotes) exactly once, so after a Vite
+ * HMR full reload they must be replayed from the backend cache through
+ * this same code to re-hydrate the store without a full reconnect.
+ */
+function processPluginDataEvent(
+  payload: { sender_session: number | null; data: string; data_id: string },
+): void {
+  const { data_id, data, sender_session } = payload;
+  // `data` is base64: a number[] would inflate the IPC JSON (and the
+  // backend-side serde_json::Value) by more than an order of magnitude
+  // for multi-MB broadcasts like server emotes.
+  const bytes = base64ToBytes(data);
+
+  if (data_id === PluginDataId.FileServerConfig) {
+    try {
+      const json = new TextDecoder().decode(bytes);
+      const raw = JSON.parse(json);
+      // The server-wide override (advertised in `ServerConfig`)
+      // takes precedence over the per-plugin `base_url`. This
+      // matters when the HTTP interface is hosted behind a
+      // reverse proxy or ingress and reachable at a different
+      // hostname than the Mumble TCP port.
+      const override = useAppStore.getState().serverConfig.fancy_rest_api_url;
+      const internalBaseUrl = String(raw.base_url).replace(/\/+$/, "");
+      const baseUrl = (override && override.length > 0)
+        ? override.replace(/\/+$/, "")
+        : internalBaseUrl;
+      const cfg: FileServerConfig = {
+        baseUrl,
+        internalBaseUrl,
+        sessionId: raw.session_id,
+        uploadToken: raw.upload_token,
+        sessionJwt: raw.session_jwt,
+        maxFileSizeBytes: raw.max_file_size_bytes,
+        deleteOnTtl: !!raw.delete_on_ttl,
+        ttlSeconds: raw.ttl_seconds ?? 0,
+        maxTtlSeconds: raw.max_ttl_seconds ?? 0,
+        deleteOnDownload: !!raw.delete_on_download,
+        deleteOnDisconnect: !!raw.delete_on_disconnect,
+        canManageEmotes: !!raw.can_manage_emotes,
+        canShareFiles: raw.can_share_files !== false,
+        canShareFilesPublic: raw.can_share_files_public !== false,
+        registered: !!raw.registered,
+      };
+      useAppStore.setState({ fileServerConfig: cfg });
+    } catch (e) {
+      console.error("plugin-data file-server-config processing error:", e);
+    }
+  }
+
+  if (data_id === PluginDataId.LiveDocConfig) {
+    try {
+      const json = new TextDecoder().decode(bytes);
+      const raw = JSON.parse(json) as { version: string; ws_base_url: string };
+      const fallbackHost =
+        useAppStore.getState().sessions.find(
+          (s) => s.id === useAppStore.getState().activeServerId,
+        )?.host ?? useAppStore.getState().pendingConnect?.host ?? null;
+      useAppStore.setState({
+        liveDocPluginConfig: {
+          version: raw.version,
+          wsBaseUrl: sanitiseWsUrl(raw.ws_base_url, fallbackHost),
+        },
+      });
+    } catch (e) {
+      console.error("plugin-data live-doc-config processing error:", e);
+    }
+  }
+
+  if (data_id === PluginDataId.PluginInfo) {
+    (async () => {
+      try {
+        const rec = await invoke<PluginInfoRecord>("decode_plugin_info", {
+          envelope: Array.from(bytes),
+        });
+        useAppStore.setState((s) => {
+          const next = new Map(s.pluginInfos);
+          next.set(rec.name, rec);
+          return { pluginInfos: next };
+        });
+      } catch (e) {
+        console.error("plugin-data plugin-info decode error:", e);
+      }
+    })();
+  }
+
+  if (data_id === PluginDataId.ServerEmotes) {
+    try {
+      const json = new TextDecoder().decode(bytes);
+      const raw = JSON.parse(json) as { emotes: Array<{
+        shortcode: string;
+        alias_emoji: string;
+        description?: string;
+        image_data_url: string;
+      }> };
+      const emotes: CustomServerEmote[] = (raw.emotes ?? []).map((e) => ({
+        shortcode: e.shortcode,
+        aliasEmoji: e.alias_emoji,
+        description: e.description,
+        imageDataUrl: e.image_data_url,
+      }));
+      useAppStore.setState({ customServerEmotes: emotes });
+      const reactions: ServerCustomReaction[] = emotes.map((e) => ({
+        shortcode: `:${e.shortcode}:`,
+        display: e.imageDataUrl,
+        label: e.description ?? e.aliasEmoji,
+      }));
+      setServerCustomReactions(reactions);
+    } catch (e) {
+      console.error("plugin-data server-emotes processing error:", e);
+    }
+  }
+
+  if (data_id === PluginDataId.Poll || data_id === PluginDataId.PollVote) {
+    // Legacy: ignored.  Polls now travel through native protobuf
+    // messages (FancyPoll, FancyPollVote) and are routed via the
+    // "fancy-poll" / "fancy-poll-vote" Tauri events below.
+  }
+
+  if (data_id === PluginDataId.LiveDocInvite || data_id === PluginDataId.LiveDocAnnounce) {
+    // Legacy: ignored.  Live-doc invites/announces now travel through
+    // the generic `PluginMessage` envelope (wire ID 200) and are
+    // delivered as `plugin-message` Tauri events below.
+  }
+
+  // Also dispatch to legacy registered handlers for extensibility.
+  for (const handler of pluginDataHandlers) {
+    handler(data_id, bytes, sender_session);
+  }
+}
+
 export async function initEventListeners(
   navigate: (path: string) => void,
 ): Promise<UnlistenFn[]> {
@@ -1881,28 +2865,100 @@ export async function initEventListeners(
   const unlisteners: UnlistenFn[] = [];
 
   // Bootstrap the multi-server session list once at startup so the
-  // sessions slice reflects whatever the backend already has.
-  useAppStore.getState().refreshSessions().catch(() => {});
+  // sessions slice reflects whatever the backend already has.  When the
+  // backend is already in a connected session (e.g. after a Vite HMR
+  // remount), also pull channels/users/current-channel/messages/ownSession
+  // so the UI restores the chat view instead of showing the empty/
+  // disconnected fallback.
+  useAppStore.getState().refreshSessions()
+    .then(async () => {
+      const { activeServerId, sessions, refreshState } = useAppStore.getState();
+      const active = sessions.find((s) => s.id === activeServerId);
+      if (active?.status !== "connected") return;
+      await refreshState();
+      try {
+        const currentCh = await invoke<number | null>("get_current_channel");
+        useAppStore.setState({ currentChannel: currentCh, selectedChannel: currentCh });
+        if (currentCh !== null) {
+          const messages = await invoke<ChatMessage[]>("get_messages", { channelId: currentCh });
+          useAppStore.setState({ messages });
+        }
+      } catch (e) {
+        console.error("HMR state restore (channel/messages) failed:", e);
+      }
+      try {
+        const ownSession = await invoke<number | null>("get_own_session");
+        useAppStore.setState({ ownSession });
+      } catch {
+        // not connected; leave as-is.
+      }
+      // Restore the server's Fancy version.  The `server-version` event
+      // is emitted when the Version protobuf message arrives, which
+      // already happened before HMR, so re-registering the listener
+      // doesn't help -- we have to pull the cached value from the backend.
+      try {
+        const info = await invoke<ServerInfo>("get_server_info");
+        useAppStore.setState({ serverFancyVersion: info.fancy_version });
+      } catch {
+        // Standard server or not connected; leave as-is.
+      }
+      // The `plugin-registry` Tauri event is a one-shot fired right
+      // after ServerSync, so an HMR reload that re-registers the
+      // listener misses it entirely and the Plugins settings tab
+      // stays hidden until reconnect.  Pull the cached snapshot from
+      // the backend and replay it through the same reconcile path.
+      try {
+        const entries = await invoke<PluginRegistryEntry[]>("get_plugin_registry");
+        if (entries.length > 0) {
+          await reconcilePluginRegistry(entries);
+        }
+      } catch (e) {
+        console.error("HMR state restore (plugin registry) failed:", e);
+      }
+      // The server's connect-time plugin-data broadcasts (file-server
+      // config, live-doc config, plugin info, server emotes) are sent
+      // once after ServerSync and never resent, so an HMR full reload
+      // loses them and e.g. the document library goes blank until a
+      // real reconnect.  Replay the backend-cached payloads through the
+      // same processing path so the store re-hydrates in place.
+      try {
+        const broadcasts = await invoke<
+          { sender_session: number | null; data: string; data_id: string }[]
+        >("get_plugin_broadcasts");
+        for (const payload of broadcasts) {
+          processPluginDataEvent(payload);
+        }
+      } catch (e) {
+        console.error("HMR state restore (plugin broadcasts) failed:", e);
+      }
+    })
+    .catch(() => {});
 
   // Ensure notification permissions and channel are set up (Android 8+ / 13+).
-  try {
-    let granted = await isPermissionGranted();
-    if (!granted) {
-      const result = await requestPermission();
-      granted = result === "granted";
+  // Deferred to the next macrotask so the Tauri webview URL settles to
+  // http://tauri.localhost/ before the IPC capability check runs; calling
+  // isPermissionGranted() synchronously during init sees URL: about:blank
+  // on Android, causing the permission check to fail.
+  setTimeout(async () => {
+    try {
+      let granted = await isPermissionGranted();
+      if (!granted) {
+        const result = await requestPermission();
+        granted = result === "granted";
+      }
+      if (granted) {
+        await createChannel({
+          id: "messages",
+          name: "Messages",
+          description: "Chat message notifications",
+          importance: Importance.High,
+          visibility: Visibility.Public,
+        });
+      }
+    } catch {
+      // Notification API may not be available on all platforms.
     }
-    if (granted) {
-      await createChannel({
-        id: "messages",
-        name: "Messages",
-        description: "Chat message notifications",
-        importance: Importance.High,
-        visibility: Visibility.Public,
-      });
-    }
-  } catch {
-    // Notification API may not be available on all platforms.
-  }
+  }, 0);
 
   // Sync the notification preference to the Rust backend.
   try {
@@ -1924,7 +2980,7 @@ export async function initEventListeners(
 
   // Server fully connected (ServerSync received).
   unlisteners.push(
-    await listen("server-connected", async () => {
+    await listen(TauriEvent.ServerConnected, async () => {
       manualDisconnectRequested = false;
       clearAutoReconnectTimer();
       // Load silenced channels for this server (pendingConnect still available).
@@ -1956,7 +3012,18 @@ export async function initEventListeners(
         mutedPushChannels: mutedPush,
         userVolumes: storedVolumes,
         bootstrapStage: "Fetching channels and users...",
+        // Connection re-established: clear the reconnect counters/schedule.
+        reconnectAttempts: 0,
+        connectionLostAt: null,
+        reconnectScheduled: false,
+        nextReconnectAt: null,
       });
+
+      // Signal the welcome-message modal that a server join just completed.
+      if (typeof window !== "undefined") {
+        const serverKey = pending ? `${pending.host}:${pending.port}` : undefined;
+        window.dispatchEvent(new CustomEvent("server-connected", { detail: { serverKey } }));
+      }
 
       // Refresh the multi-server session list so any newly-connected
       // server appears in the sessions slice immediately.
@@ -1999,7 +3066,7 @@ export async function initEventListeners(
           // Fetch the server's Fancy Mumble version (null for standard servers).
           try {
             const info = await invoke<ServerInfo>("get_server_info");
-            useAppStore.setState({ serverFancyVersion: info.fancy_version });
+            useAppStore.setState({ serverFancyVersion: info.fancy_version, serverHostAbiVersion: null });
           } catch {
             // Server info unavailable - leave as null.
           }
@@ -2062,9 +3129,16 @@ export async function initEventListeners(
             if (prefs.voiceOnReconnect) {
               isRestoringVoice = true;
               try {
-                await useAppStore.getState().enableVoice();
                 if (prefs.voiceMutedOnReconnect) {
-                  await useAppStore.getState().toggleMute();
+                  // Establish the muted state in ONE atomic backend call.
+                  // The previous enableVoice() + toggleMute() two-step could
+                  // race on a reconnect (the unmute from enableVoice landing
+                  // after the mute) and leave the user unmuted.
+                  await invoke("enable_voice_muted");
+                  useAppStore.setState({ voiceState: "muted", inCall: true });
+                  updatePreferences({ voiceOnReconnect: true, voiceMutedOnReconnect: true }).catch(() => {});
+                } else {
+                  await useAppStore.getState().enableVoice();
                 }
               } finally {
                 isRestoringVoice = false;
@@ -2072,6 +3146,18 @@ export async function initEventListeners(
             }
           } catch {
             // Voice restore is best-effort.
+          }
+
+          // Authoritatively sync the self mute/deaf indicator to the backend's
+          // actual voice state.  `voiceState` is otherwise only set optimistically
+          // and via the `voice-state-changed` event, which can fire during connect
+          // before the listener is ready (or diverge after a reconnect) - leaving
+          // the self indicator stale, e.g. showing muted while voice is active.
+          try {
+            const vs = await invoke<VoiceState>("get_voice_state");
+            useAppStore.setState({ voiceState: vs, inCall: vs !== "inactive" });
+          } catch {
+            // best-effort sync
           }
         })
         .catch((err) => {
@@ -2087,7 +3173,7 @@ export async function initEventListeners(
   // Connection dropped.
   unlisteners.push(
     await listen<{ serverId?: string | null; reason: string | null } | string | null>(
-      "server-disconnected",
+      TauriEvent.ServerDisconnected,
       async (event) => {
         // Normalise: backend now always sends an object payload, but tolerate
         // a bare reason string for forwards/backwards compatibility.
@@ -2156,7 +3242,7 @@ export async function initEventListeners(
           return;
         }
 
-        // Active session was the one that disconnected — proceed with
+        // Active session was the one that disconnected - proceed with
         // the full local cleanup.
         offloadManager.dispose().catch(() => {});
         volumeAppliedSessions.clear();
@@ -2166,7 +3252,24 @@ export async function initEventListeners(
         // If a password prompt is already pending, keep the rejection error
         // instead of overwriting it with a generic disconnect message.
         const reason = pwRequired ? currentError : (eventReason ?? currentError);
-        useAppStore.setState({ ...INITIAL, error: reason, passwordRequired: pwRequired, pendingConnect: pending });
+        // Will we auto-reconnect? Only when enabled and this wasn't a
+        // user-initiated disconnect or a password rejection.
+        const willReconnect =
+          !manualDisconnectRequested && !pwRequired && !!pending && autoReconnectEnabled;
+        // Preserve the downtime clock and attempt count across a reconnect
+        // *sequence* (multiple failures) so they accumulate rather than
+        // resetting on every failed attempt; a fresh loss starts the clock.
+        const prevReconnect = useAppStore.getState();
+        useAppStore.setState({
+          ...INITIAL,
+          error: reason,
+          passwordRequired: pwRequired,
+          pendingConnect: pending,
+          connectionLostAt: willReconnect
+            ? (prevReconnect.connectionLostAt ?? Date.now())
+            : null,
+          reconnectAttempts: willReconnect ? prevReconnect.reconnectAttempts : 0,
+        });
         invoke("update_badge_count", { count: null }).catch(() => {});
 
         const { sessions } = useAppStore.getState();
@@ -2176,7 +3279,7 @@ export async function initEventListeners(
           navigate("/chat");
         }
 
-        if (!manualDisconnectRequested && !pwRequired && pending) {
+        if (willReconnect) {
           scheduleAutoReconnect(pending);
         }
       },
@@ -2186,7 +3289,7 @@ export async function initEventListeners(
   // Channel / user list changed - debounce rapid-fire updates.
   let stateChangeTimer: ReturnType<typeof setTimeout> | undefined;
   unlisteners.push(
-    await listen("state-changed", () => {
+    await listen(TauriEvent.StateChanged, () => {
       clearTimeout(stateChangeTimer);
       stateChangeTimer = setTimeout(() => {
         useAppStore
@@ -2200,7 +3303,7 @@ export async function initEventListeners(
   // Messages, unreads, groups, connection events.
   unlisteners.push(
     // Server activity log entry.
-    await listen<ServerLogEntry>("server-log", (event) => {
+    await listen<ServerLogEntry>(TauriEvent.ServerLog, (event) => {
       const MAX_LOG_ENTRIES = 200;
       useAppStore.setState((prev) => {
         const log = [...prev.serverLog, event.payload];
@@ -2212,7 +3315,7 @@ export async function initEventListeners(
     }),
 
     // New text message arrived.
-    await listen<{ channel_id: number; sender_session: number | null }>("new-message", async (event) => {
+    await listen<{ channel_id: number; sender_session: number | null }>(TauriEvent.NewMessage, async (event) => {
       const { channel_id, sender_session } = event.payload;
 
       // Clear the sender's typing indicator immediately.
@@ -2239,7 +3342,7 @@ export async function initEventListeners(
     }),
 
     // New direct message arrived.
-    await listen<{ session: number }>("new-dm", async (event) => {
+    await listen<{ session: number }>(TauriEvent.NewDm, async (event) => {
       const { selectedDmUser } = useAppStore.getState();
       if (selectedDmUser === event.payload.session) {
         await useAppStore
@@ -2298,7 +3401,7 @@ export async function initEventListeners(
     ),
 
     // Server rejected the connection.
-    await listen<{ serverId?: string | null; reason: string; reject_type: number | null }>("connection-rejected", async (event) => {
+    await listen<{ serverId?: string | null; reason: string; reject_type: number | null }>(TauriEvent.ConnectionRejected, async (event) => {
       // Always remember the rejection reason for this session so the
       // user sees it when they switch to its tab.
       const eventServerId = event.payload.serverId ?? null;
@@ -2329,8 +3432,16 @@ export async function initEventListeners(
         return;
       }
       const rt = event.payload.reject_type;
-      // WrongUserPW = 3, WrongServerPW = 4
-      const isPasswordError = rt === 3 || rt === 4;
+      // WrongUserPW = 3, WrongServerPW = 4.  Some server implementations
+      // (notably older Fancy Mumble servers) reject auth without setting
+      // the `type` field - fall back to a reason-string heuristic so the
+      // password prompt still appears instead of silently retrying with
+      // the wrong credentials.
+      const reasonText = event.payload.reason ?? "";
+      const reasonLooksLikePwError =
+        /password|wrong\s+(?:user|server)|certificate/i.test(reasonText);
+      const isPasswordError =
+        rt === 3 || rt === 4 || (rt == null && reasonLooksLikePwError);
       if (isPasswordError) {
         const { passwordAttempted } = useAppStore.getState();
         useAppStore.setState({
@@ -2365,7 +3476,11 @@ export async function initEventListeners(
       useAppStore.setState({
         status: "disconnected",
         error: event.payload.reason,
-        pendingConnect: null,
+        // Keep `pendingConnect` so the auto-reconnect loop (driven by the
+        // matching `server-disconnected` event) still has a target and its
+        // attempt counter / backoff are not reset. A user-initiated
+        // disconnect suppresses reconnect via `manualDisconnectRequested`,
+        // and the next `connect()` overwrites this value.
         bootstrapStage: null,
       });
       // Stay on /chat when other tabs remain so the reconnect overlay
@@ -2377,7 +3492,7 @@ export async function initEventListeners(
     }),
 
     // Listen request was denied by the server - revert the UI.
-    await listen<{ channel_id: number }>("listen-denied", (event) => {
+    await listen<{ channel_id: number }>(TauriEvent.ListenDenied, (event) => {
       useAppStore.setState((prev) => {
         const next = new Set(prev.listenedChannels);
         next.delete(event.payload.channel_id);
@@ -2386,12 +3501,12 @@ export async function initEventListeners(
     }),
 
     // Our own user moved to a different channel.
-    await listen<{ channel_id: number }>("current-channel-changed", (event) => {
+    await listen<{ channel_id: number }>(TauriEvent.CurrentChannelChanged, (event) => {
       useAppStore.setState({ currentChannel: event.payload.channel_id });
     }),
 
     // User tapped a chat notification - navigate to the target channel.
-    await listen<{ channel_id: number }>("navigate-to-channel", (event) => {
+    await listen<{ channel_id: number }>(TauriEvent.NavigateToChannel, (event) => {
       const channelId = event.payload.channel_id;
       navigate("/chat");
       useAppStore.getState().selectChannel(channelId);
@@ -2403,7 +3518,7 @@ export async function initEventListeners(
     // voiceMutedOnReconnect. Prefs are written by the explicit action
     // handlers (enableVoice, disableVoice, toggleMute) where ordering is
     // deterministic relative to the user's intent.
-    await listen<VoiceState>("voice-state-changed", (event) => {
+    await listen<VoiceState>(TauriEvent.VoiceStateChanged, (event) => {
       const updates: Partial<ReturnType<typeof useAppStore.getState>> = { voiceState: event.payload };
       if (event.payload === "inactive") {
         updates.talkingSessions = new Set();
@@ -2412,14 +3527,14 @@ export async function initEventListeners(
     }),
 
     // Audio transport mode changed (UDP vs TCP tunnel).
-    await listen<boolean>("audio-transport-changed", (event) => {
+    await listen<boolean>(TauriEvent.AudioTransportChanged, (event) => {
       useAppStore.setState({ udpActive: event.payload });
     }),
 
     // Stream popout windows broadcast their open/close state so the main
     // window can hide its "is sharing" banner for sessions whose stream
     // is already being viewed in a detached window.
-    await listen<{ session: number; opened: boolean }>("stream-popout-state", (event) => {
+    await listen<{ session: number; opened: boolean }>(TauriEvent.StreamPopoutState, (event) => {
       const { session, opened } = event.payload;
       const prev = useAppStore.getState().poppedOutStreamSessions;
       const next = new Set(prev);
@@ -2428,7 +3543,7 @@ export async function initEventListeners(
     }),
 
     // User talking state changed (audio transmission start/stop).
-    await listen<[number, boolean]>("user-talking", (event) => {
+    await listen<[number, boolean]>(TauriEvent.UserTalking, (event) => {
       const [session, talking] = event.payload;
       const prev = useAppStore.getState().talkingSessions;
       const next = new Set(prev);
@@ -2440,8 +3555,25 @@ export async function initEventListeners(
       useAppStore.setState({ talkingSessions: next });
     }),
 
+    // Server announced its (Fancy) version. Keep the cached
+    // `serverFancyVersion` in sync reactively: a Fancy server may send the
+    // extension version in a `Version` message that arrives after the
+    // initial `get_server_info` bootstrap read, which would otherwise leave
+    // the UI gating Fancy-only features off until the next reconnect.
+    await listen<{ serverId?: string | null; fancy_version: number | null }>(
+      TauriEvent.ServerVersion,
+      (event) => {
+        const { activeServerId } = useAppStore.getState();
+        const eventServerId = event.payload.serverId ?? null;
+        if (eventServerId !== null && eventServerId !== activeServerId) {
+          return;
+        }
+        useAppStore.setState({ serverFancyVersion: event.payload.fancy_version });
+      },
+    ),
+
     // Server config received (limits, allow_html, etc.).
-    await listen("server-config", async () => {
+    await listen(TauriEvent.ServerConfig, async () => {
       try {
         const cfg = await invoke<MumbleServerConfig>("get_server_config");
         useAppStore.setState((state) => {
@@ -2464,111 +3596,87 @@ export async function initEventListeners(
   // Zustand store even across Vite HMR reloads and React StrictMode
   // double-mounts where the old handler-array dispatch could fail.
   unlisteners.push(
-    await listen<{ sender_session: number | null; data: number[]; data_id: string }>(
-      "plugin-data",
-      (event) => {
-        const { data_id, data, sender_session } = event.payload;
-        const bytes = new Uint8Array(data);
-
-        if (data_id === "fancy-file-server-config") {
-          try {
-            const json = new TextDecoder().decode(bytes);
-            const raw = JSON.parse(json);
-            // The server-wide override (advertised in `ServerConfig`)
-            // takes precedence over the per-plugin `base_url`. This
-            // matters when the HTTP interface is hosted behind a
-            // reverse proxy or ingress and reachable at a different
-            // hostname than the Mumble TCP port.
-            const override = useAppStore.getState().serverConfig.fancy_rest_api_url;
-            const baseUrl = (override && override.length > 0) ? override : raw.base_url;
-            const cfg: FileServerConfig = {
-              baseUrl,
-              sessionId: raw.session_id,
-              uploadToken: raw.upload_token,
-              sessionJwt: raw.session_jwt,
-              maxFileSizeBytes: raw.max_file_size_bytes,
-              deleteOnTtl: !!raw.delete_on_ttl,
-              ttlSeconds: raw.ttl_seconds ?? 0,
-              deleteOnDownload: !!raw.delete_on_download,
-              deleteOnDisconnect: !!raw.delete_on_disconnect,
-              canManageEmotes: !!raw.can_manage_emotes,
-              canShareFiles: raw.can_share_files !== false,
-              canShareFilesPublic: raw.can_share_files_public !== false,
-            };
-            useAppStore.setState({ fileServerConfig: cfg });
-          } catch (e) {
-            console.error("plugin-data file-server-config processing error:", e);
-          }
-        }
-
-        if (data_id === "fancy-server-emotes") {
-          try {
-            const json = new TextDecoder().decode(bytes);
-            const raw = JSON.parse(json) as { emotes: Array<{
-              shortcode: string;
-              alias_emoji: string;
-              description?: string;
-              image_data_url: string;
-            }> };
-            const emotes: CustomServerEmote[] = (raw.emotes ?? []).map((e) => ({
-              shortcode: e.shortcode,
-              aliasEmoji: e.alias_emoji,
-              description: e.description,
-              imageDataUrl: e.image_data_url,
-            }));
-            useAppStore.setState({ customServerEmotes: emotes });
-            const reactions: ServerCustomReaction[] = emotes.map((e) => ({
-              shortcode: `:${e.shortcode}:`,
-              display: e.imageDataUrl,
-              label: e.description ?? e.aliasEmoji,
-            }));
-            setServerCustomReactions(reactions);
-          } catch (e) {
-            console.error("plugin-data server-emotes processing error:", e);
-          }
-        }
-
-        if (data_id === "fancy-poll" || data_id === "fancy-poll-vote") {
-          try {
-            const json = new TextDecoder().decode(bytes);
-            const payload = JSON.parse(json);
-
-            if (data_id === "fancy-poll" && payload.type === "poll") {
-              const poll = payload as PollPayload;
-              poll.creator = sender_session ?? poll.creator;
-              // Resolve creator name from current users.
-              const users = useAppStore.getState().users;
-              const user = users.find((u) => u.session === poll.creator);
-              if (user) poll.creatorName = user.name;
-              useAppStore.getState().addPoll(poll, false);
-            } else if (data_id === "fancy-poll-vote" && payload.type === "poll_vote") {
-              const vote = payload as PollVotePayload;
-              vote.voter = sender_session ?? vote.voter;
-              const users = useAppStore.getState().users;
-              const user = users.find((u) => u.session === vote.voter);
-              if (user) vote.voterName = user.name;
-              registerVote(vote);
-              // Trigger re-render for any component reading polls.
-              useAppStore.setState({});
-            }
-          } catch (e) {
-            console.error("plugin-data poll processing error:", e);
-          }
-        }
-
-        // Also dispatch to legacy registered handlers for extensibility.
-        for (const handler of pluginDataHandlers) {
-          handler(data_id, bytes, sender_session);
-        }
-      },
+    await listen<{ sender_session: number | null; data: string; data_id: string }>(
+      TauriEvent.PluginData,
+      (event) => processPluginDataEvent(event.payload),
     ),
+  );
+
+  // -- Generic plugin envelope dispatcher --------------------------
+
+  unlisteners.push(
+    await listen<PluginMessageEvent>(TauriEvent.PluginMessage, (event) => {
+      dispatchPluginMessage(event.payload);
+    }),
+  );
+  unlisteners.push(
+    await listen<PluginRegistryEvent>(TauriEvent.PluginRegistry, (event) => {
+      void reconcilePluginRegistry(event.payload.plugins);
+    }),
+  );
+
+  // -- Native poll events ------------------------------------------
+
+  unlisteners.push(
+    await listen<{
+      channelId: number;
+      pollId: string;
+      question: string;
+      options: string[];
+      multiple: boolean;
+      creatorSession: number;
+      creatorName: string;
+      createdAt: string;
+    }>(TauriEvent.FancyPoll, (event) => {
+      const e = event.payload;
+      const users = useAppStore.getState().users;
+      const resolvedName = e.creatorName
+        || users.find((u) => u.session === e.creatorSession)?.name
+        || "";
+      const poll: PollPayload = {
+        type: "poll",
+        id: e.pollId,
+        question: e.question,
+        options: e.options,
+        multiple: e.multiple,
+        creator: e.creatorSession,
+        creatorName: resolvedName,
+        createdAt: e.createdAt,
+        channelId: e.channelId,
+      };
+      useAppStore.getState().addPoll(poll, false);
+    }),
+  );
+  unlisteners.push(
+    await listen<{
+      channelId: number;
+      pollId: string;
+      selected: number[];
+      voterSession: number;
+      voterName: string;
+    }>(TauriEvent.FancyPollVote, (event) => {
+      const e = event.payload;
+      const users = useAppStore.getState().users;
+      const resolvedName = e.voterName
+        || users.find((u) => u.session === e.voterSession)?.name
+        || "";
+      const vote: PollVotePayload = {
+        type: "poll_vote",
+        pollId: e.pollId,
+        selected: e.selected,
+        voter: e.voterSession,
+        voterName: resolvedName,
+      };
+      registerVote(vote);
+      useAppStore.setState({});
+    }),
   );
 
   // -- WebRTC signal events ----------------------------------------
 
   unlisteners.push(
     await listen<{ sender_session: number | null; target_session: number | null; signal_type: number; payload: string; serverId?: string | null }>(
-      "webrtc-signal",
+      TauriEvent.WebrtcSignal,
       (event) => {
         const { sender_session, target_session, signal_type, payload } = event.payload;
         const serverId = event.payload.serverId ?? null;
@@ -2599,7 +3707,7 @@ export async function initEventListeners(
 
   unlisteners.push(
     await listen<ServerCustomReaction[]>(
-      "custom-reactions-config",
+      TauriEvent.CustomReactionsConfig,
       (event) => {
         const reactions = event.payload;
         if (Array.isArray(reactions)) {
@@ -2613,7 +3721,7 @@ export async function initEventListeners(
 
   unlisteners.push(
     await listen<ReadReceiptDeliverPayload>(
-      "read-receipt-deliver",
+      TauriEvent.ReadReceiptDeliver,
       (event) => {
         const { channel_id, read_states } = event.payload;
         applyReadStates(channel_id, read_states);
@@ -2627,7 +3735,7 @@ export async function initEventListeners(
   // -- Onboarding workflow events ---------------------------------
 
   unlisteners.push(
-    await listen<OnboardingConfigEvent>("onboarding-config", (event) => {
+    await listen<OnboardingConfigEvent>(TauriEvent.OnboardingConfig, (event) => {
       const { config } = event.payload;
       const onboarding = useOnboardingStore.getState();
       onboarding.setConfig(config);
@@ -2651,7 +3759,7 @@ export async function initEventListeners(
   );
 
   unlisteners.push(
-    await listen<OnboardingResponseEvent>("onboarding-response", (event) => {
+    await listen<OnboardingResponseEvent>(TauriEvent.OnboardingResponse, (event) => {
       useOnboardingStore.getState().setResponse(event.payload.response ?? null);
     }),
   );
@@ -2660,7 +3768,7 @@ export async function initEventListeners(
 
   unlisteners.push(
     await listen<{ session: number; channel_id: number }>(
-      "typing-indicator",
+      TauriEvent.TypingIndicator,
       (event) => {
         const { session, channel_id } = event.payload;
         useAppStore.setState((prev) => {
@@ -2694,7 +3802,7 @@ export async function initEventListeners(
   // -- Watch-together (FancyWatchSync) events ---------------------
 
   unlisteners.push(
-    await listen<WatchSyncPayload>("watch-sync", (event) => {
+    await listen<WatchSyncPayload>(TauriEvent.WatchSync, (event) => {
       applyWatchSyncEvent(event.payload);
     }),
   );
@@ -2704,7 +3812,7 @@ export async function initEventListeners(
   unlisteners.push(
     // Channel persistence config changed (from ChannelState updates).
     await listen<{ channel_id: number; config: ChannelPersistConfig }>(
-      "persistence-config-changed",
+      TauriEvent.PersistenceConfigChanged,
       (event) => {
         const { channel_id, config } = event.payload;
         useAppStore.getState().updateChannelPersistenceConfig(channel_id, config);
@@ -2713,7 +3821,7 @@ export async function initEventListeners(
 
     // Key trust level changed for a channel.
     await listen<{ channel_id: number; trust: KeyTrustState }>(
-      "key-trust-changed",
+      TauriEvent.KeyTrustChanged,
       (event) => {
         const { channel_id, trust } = event.payload;
         useAppStore.setState((prev) => {
@@ -2730,7 +3838,7 @@ export async function initEventListeners(
 
     // Custodian list changed (TOFU change detection).
     await listen<{ channel_id: number; pin: CustodianPinState }>(
-      "custodian-pin-changed",
+      TauriEvent.CustodianPinChanged,
       (event) => {
         const { channel_id, pin } = event.payload;
         useAppStore.setState((prev) => ({
@@ -2741,7 +3849,7 @@ export async function initEventListeners(
 
     // Key dispute detected.
     await listen<{ channel_id: number; dispute: PendingDispute }>(
-      "key-dispute-detected",
+      TauriEvent.KeyDisputeDetected,
       (event) => {
         const { channel_id, dispute } = event.payload;
         useAppStore.setState((prev) => ({
@@ -2752,7 +3860,7 @@ export async function initEventListeners(
 
     // Key dispute resolved (by custodian shortcut or timeout).
     await listen<{ channel_id: number }>(
-      "key-dispute-resolved",
+      TauriEvent.KeyDisputeResolved,
       (event) => {
         const { channel_id } = event.payload;
         useAppStore.setState((prev) => {
@@ -2764,7 +3872,7 @@ export async function initEventListeners(
 
     // Pchat history loading state (waiting for key exchange).
     await listen<{ channel_id: number; loading: boolean }>(
-      "pchat-history-loading",
+      TauriEvent.PchatHistoryLoading,
       (event) => {
         const { channel_id, loading } = event.payload;
         const next = new Set(useAppStore.getState().pchatHistoryLoading);
@@ -2789,7 +3897,7 @@ export async function initEventListeners(
     // forces a get_messages via sendMessage). Refreshing here closes
     // that race for the bootstrap case.
     await listen<{ channel_id: number; has_more: boolean; total_stored: number }>(
-      "pchat-fetch-complete",
+      TauriEvent.PchatFetchComplete,
       async (event) => {
         const { channel_id, has_more, total_stored } = event.payload;
         useAppStore.setState((prev) => ({
@@ -2812,7 +3920,7 @@ export async function initEventListeners(
 
     // A new key-share consent request from the backend.
     await listen<PendingKeyShareRequest>(
-      "pchat-key-share-request",
+      TauriEvent.PchatKeyShareRequest,
       (event) => {
         const req = event.payload;
         useAppStore.setState((prev) => {
@@ -2833,7 +3941,7 @@ export async function initEventListeners(
 
     // Key-share requests changed (after approve/dismiss).
     await listen<{ channel_id: number; pending: PendingKeyShareRequest[] }>(
-      "pchat-key-share-requests-changed",
+      TauriEvent.PchatKeyShareRequestsChanged,
       (event) => {
         const { channel_id, pending } = event.payload;
         useAppStore.setState((prev) => {
@@ -2853,7 +3961,7 @@ export async function initEventListeners(
 
     // Key holders list updated by the server.
     await listen<{ channel_id: number; holders: KeyHolderEntry[] }>(
-      "pchat-key-holders-changed",
+      TauriEvent.PchatKeyHoldersChanged,
       (event) => {
         const { channel_id, holders } = event.payload;
         useAppStore.setState((prev) => ({
@@ -2867,7 +3975,7 @@ export async function initEventListeners(
 
     // Key restored: a new key was received after a previous revocation.
     await listen<{ channel_id: number }>(
-      "pchat-key-restored",
+      TauriEvent.PchatKeyRestored,
       (event) => {
         const { channel_id } = event.payload;
         useAppStore.setState((prev) => {
@@ -2880,7 +3988,7 @@ export async function initEventListeners(
 
     // Key-possession challenge failed: our key was wrong/outdated.
     await listen<{ channel_id: number }>(
-      "pchat-key-revoked",
+      TauriEvent.PchatKeyRevoked,
       (event) => {
         const { channel_id } = event.payload;
         useAppStore.setState((prev) => {
@@ -2891,7 +3999,7 @@ export async function initEventListeners(
           // Clear any messages that were decrypted before the challenge
           // result arrived (prevents flash of unauthorized content).
           const clearMessages = prev.selectedChannel === channel_id;
-          // Stop the loading spinner — no fetch response will arrive.
+          // Stop the loading spinner - no fetch response will arrive.
           const nextLoading = new Set(prev.pchatHistoryLoading);
           nextLoading.delete(channel_id);
           const { [channel_id]: prevPersist, ...restPersist } = prev.channelPersistence;
@@ -2911,7 +4019,7 @@ export async function initEventListeners(
 
     // Reaction add/remove delivered by the server (persistent channels).
     await listen<ReactionDeliverEvent>(
-      "pchat-reaction-deliver",
+      TauriEvent.PchatReactionDeliver,
       (event) => {
         const { message_id, emoji, action, sender_hash, sender_name } = event.payload;
         const resolvedName = useAppStore.getState().users.find((u) => u.hash === sender_hash)?.name ?? sender_name;
@@ -2922,7 +4030,7 @@ export async function initEventListeners(
 
     // Batch reaction fetch response (historical reactions for persistent channels).
     await listen<ReactionFetchResponseEvent>(
-      "pchat-reaction-fetch-response",
+      TauriEvent.PchatReactionFetchResponse,
       (event) => {
         const { users } = useAppStore.getState();
         for (const r of event.payload.reactions) {
@@ -2935,7 +4043,7 @@ export async function initEventListeners(
 
     // Pin/unpin delivered by the server (persistent channels).
     await listen<PinDeliverEvent>(
-      "pchat-pin-deliver",
+      TauriEvent.PchatPinDeliver,
       (event) => {
         const { channel_id, message_id, pinned, pinner_hash, pinner_name, timestamp } = event.payload;
         const resolvedName = useAppStore.getState().users.find((u) => u.hash === pinner_hash)?.name ?? pinner_name;
@@ -2964,7 +4072,7 @@ export async function initEventListeners(
 
     // Batch pin fetch response (historical pins for persistent channels).
     await listen<PinFetchResponseEvent>(
-      "pchat-pin-fetch-response",
+      TauriEvent.PchatPinFetchResponse,
       (event) => {
         const { users } = useAppStore.getState();
         const pinnedIds = new Map(event.payload.pins.map((p) => {
@@ -2982,7 +4090,7 @@ export async function initEventListeners(
 
     // Signal bridge load failure: show error banner in the UI.
     await listen<{ message: string }>(
-      "pchat-signal-bridge-error",
+      TauriEvent.PchatSignalBridgeError,
       (event) => {
         useAppStore.setState({ signalBridgeError: event.payload.message });
       },

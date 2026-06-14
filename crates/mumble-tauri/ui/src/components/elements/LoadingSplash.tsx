@@ -1,59 +1,41 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./LoadingSplash.module.css";
+import enCommon from "../../locales/en/common.json";
 
-/** Pool of light-hearted loading messages.  Rotates while the app
- *  initialises so the screen never looks frozen.  Add more here
- *  freely - the splash picks them at random. */
-const FUNNY_MESSAGES: readonly string[] = [
-  "Reticulating splines...",
-  "Warming up the microphones...",
-  "Tuning the squelch knob...",
-  "Convincing packets to arrive in order...",
-  "Asking Opus very nicely...",
-  "Negotiating with TLS handshakes...",
-  "Polishing your avatar...",
-  "Looking for the mute button...",
-  "Counting bits, then counting them again...",
-  "Brewing a fresh pot of UDP...",
-  "Translating from server to human...",
-  "Untangling the audio cables...",
-  "Checking under the rug for lost users...",
-  "Petting the denoiser...",
-  "Reminding the GPU it's not invited...",
-  "Loading suspiciously fast...",
-  "Almost there. Probably.",
-];
+export const __TEST_FUNNY_MESSAGES: readonly string[] = (enCommon as unknown as { loadingSplash: { messages: string[] } }).loadingSplash.messages;
 
 export interface LoadingSplashProps {
-  /** Override the headline.  Defaults to "Fancy Mumble". */
+  /** Override the headline.  Defaults to the brand name. */
   title?: string;
-  /** Pin a specific subtitle.  When omitted, rotates through
-   *  `FUNNY_MESSAGES` every ~1.8s. */
+  /** Pin a specific subtitle.  When omitted, rotates through the
+   *  localised funny messages every ~1.8s. */
   message?: string;
 }
 
 /** Centered loading splash with a spinner and a rotating funny line.
  *  Use as a Suspense fallback or while initial async setup runs. */
-export default function LoadingSplash({ title = "Fancy Mumble", message }: LoadingSplashProps) {
-  const [tick, setTick] = useState(() => Math.floor(Math.random() * FUNNY_MESSAGES.length));
+export default function LoadingSplash({ title, message }: LoadingSplashProps) {
+  const { t } = useTranslation("common");
+  const messages = t("loadingSplash.messages", { returnObjects: true }) as string[];
+  const [tick, setTick] = useState(() => Math.floor(Math.random() * messages.length));
 
   useEffect(() => {
     if (message !== undefined) return undefined;
     const id = window.setInterval(() => {
-      setTick((t) => (t + 1) % FUNNY_MESSAGES.length);
+      setTick((prev) => (prev + 1) % messages.length);
     }, 1800);
     return () => window.clearInterval(id);
-  }, [message]);
+  }, [message, messages.length]);
 
-  const subtitle = message ?? FUNNY_MESSAGES[tick];
+  const subtitle = message ?? messages[tick];
+  const heading = title ?? t("brand");
 
   return (
     <div className={styles.root} role="status" aria-live="polite">
       <div className={styles.spinner} aria-hidden="true" />
-      <div className={styles.title}>{title}</div>
+      <div className={styles.title}>{heading}</div>
       <div className={styles.subtitle}>{subtitle}</div>
     </div>
   );
 }
-
-export const __TEST_FUNNY_MESSAGES = FUNNY_MESSAGES;

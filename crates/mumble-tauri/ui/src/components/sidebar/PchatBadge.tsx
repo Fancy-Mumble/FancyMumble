@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { PchatProtocol } from "../../types";
 import styles from "./PchatBadge.module.css";
 
@@ -7,26 +8,29 @@ interface PchatBadgeInfo {
   title: string;
 }
 
-const BADGE_MAP: Record<string, PchatBadgeInfo> = {
-  fancy_v1_full_archive: {
-    label: "Fancy",
-    className: styles.fancy,
-    title: "Fancy E2EE (full archive)",
-  },
-  signal_v1: {
-    label: "Signal",
-    className: styles.signal,
-    title: "Signal Protocol encryption",
-  },
-};
-
 interface PchatBadgeProps {
   readonly protocol: PchatProtocol | undefined;
 }
 
 export function PchatBadge({ protocol }: PchatBadgeProps) {
+  const { t } = useTranslation("sidebar");
+
   if (!protocol || protocol === "none") return null;
-  const info = BADGE_MAP[protocol];
+
+  const badgeMap: Record<string, PchatBadgeInfo> = {
+    fancy_v1_full_archive: {
+      label: t("pchatBadge.labelFancy"),
+      className: styles.fancy,
+      title: t("pchatBadge.titleFancy"),
+    },
+    signal_v1: {
+      label: t("pchatBadge.labelSignal"),
+      className: styles.signal,
+      title: t("pchatBadge.titleSignal"),
+    },
+  };
+
+  const info = badgeMap[protocol];
   if (!info) return null;
 
   return (

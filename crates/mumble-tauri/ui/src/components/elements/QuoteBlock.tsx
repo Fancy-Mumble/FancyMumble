@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../store";
 import type { ChatMessage } from "../../types";
 import { colorFor, formatTimestamp } from "../../utils/format";
@@ -52,6 +53,7 @@ function findMessage(
 }
 
 export default function QuoteBlock({ messageId, onScrollTo }: QuoteBlockProps) {
+  const { t } = useTranslation("common");
   const messages = useAppStore((s) => s.messages);
   const dmMessages = useAppStore((s) => s.dmMessages);
 
@@ -69,7 +71,7 @@ export default function QuoteBlock({ messageId, onScrollTo }: QuoteBlockProps) {
       <div className={styles.quoteBlock}>
         <div className={styles.quoteBar} />
         <div className={styles.quoteContent}>
-          <span className={styles.quoteUnavailable}>Message unavailable</span>
+          <span className={styles.quoteUnavailable}>{t("quoteBlock.unavailable")}</span>
         </div>
       </div>
     );
@@ -84,7 +86,7 @@ export default function QuoteBlock({ messageId, onScrollTo }: QuoteBlockProps) {
       type="button"
       className={styles.quoteBlock}
       onClick={handleClick}
-      title="Click to scroll to message"
+      title={t("quoteBlock.scrollTitle")}
     >
       <div
         className={styles.quoteBar}
@@ -106,7 +108,7 @@ export default function QuoteBlock({ messageId, onScrollTo }: QuoteBlockProps) {
           )}
         </span>
         <span className={styles.quoteText}>
-          {preview || (hasMedia ? "Photo" : "Empty message")}
+          {preview || (hasMedia ? t("quoteBlock.photoFallback") : t("quoteBlock.emptyFallback"))}
         </span>
       </div>
       {thumbnailSrc && (

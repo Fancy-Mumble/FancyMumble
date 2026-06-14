@@ -1,6 +1,8 @@
+import { useTranslation } from "react-i18next";
 import type { AudioSettings } from "../../types";
 import { Toggle, SliderField, ShortcutRecorder } from "./SharedControls";
 import styles from "./SettingsPage.module.css";
+import panelStyles from "./VoicePanel.module.css";
 
 export function VoicePanel({
   settings,
@@ -11,14 +13,15 @@ export function VoicePanel({
   onChange: (patch: Partial<AudioSettings>) => void;
   isExpert: boolean;
 }) {
+  const { t } = useTranslation("settings");
   return (
     <>
-      <h2 className={styles.panelTitle}>Voice</h2>
+      <h2 className={styles.panelTitle}>{t("voice.panelTitle")}</h2>
 
       <section className={styles.section}>
         <SliderField
-          label="Voice Activation Threshold"
-          hint="Audio below this level is suppressed to filter background noise."
+          label={t("voice.vadThreshold")}
+          hint={t("voice.vadThresholdHint")}
           min={0}
           max={1}
           step={0.01}
@@ -32,8 +35,8 @@ export function VoicePanel({
         <>
           <section className={styles.section}>
             <SliderField
-              label="Noise Gate Close Ratio"
-              hint="Close threshold as a fraction of the open threshold. Lower = more aggressive gating."
+              label={t("voice.noiseGateClose")}
+              hint={t("voice.noiseGateCloseHint")}
               min={0.1}
               max={1}
               step={0.05}
@@ -45,8 +48,8 @@ export function VoicePanel({
 
           <section className={styles.section}>
             <SliderField
-              label="Hold Frames"
-              hint="Frames to keep the gate open after voice drops below threshold."
+              label={t("voice.holdFrames")}
+              hint={t("voice.holdFramesHint")}
               min={1}
               max={50}
               step={1}
@@ -58,9 +61,9 @@ export function VoicePanel({
           <section className={styles.section}>
             <div className={styles.toggleRow}>
               <div className={styles.toggleInfo}>
-                <h3 className={styles.sectionTitle}>Push-to-Talk</h3>
+                <h3 className={styles.sectionTitle}>{t("voice.pushToTalk")}</h3>
                 <p className={styles.fieldHint}>
-                  Hold a key to transmit instead of voice activation.
+                  {t("voice.pushToTalkHint")}
                 </p>
               </div>
               <Toggle
@@ -71,9 +74,9 @@ export function VoicePanel({
               />
             </div>
             {settings.push_to_talk && (
-              <div className={styles.pttKeyRow}>
+              <div className={panelStyles.pttKeyRow}>
                 <ShortcutRecorder
-                  label="PTT Key"
+                  label={t("voice.pttKey")}
                   value={settings.push_to_talk_key ?? ""}
                   onChange={(key) =>
                     onChange({ push_to_talk_key: key || null })
@@ -87,3 +90,4 @@ export function VoicePanel({
     </>
   );
 }
+

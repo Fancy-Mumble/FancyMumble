@@ -139,6 +139,17 @@ a {
   visibility: visible;
 }
 
+/* While a textarea drag-selection is in progress, prevent contenteditable
+   elements (e.g. the Tiptap live-doc editor) from receiving pointer events.
+   Without this, Chromium's selection mechanism transfers the active selection
+   to the contenteditable when the pointer drifts over it, cancelling the
+   textarea selection.  The MarkdownInput component sets and removes this
+   attribute via onPointerDown / pointerup. */
+body[data-textarea-dragging] [contenteditable] {
+  pointer-events: none;
+  user-select: none;
+}
+
 /* --- Fenced code blocks ----------------------------------------- */
 /* Highlighted by useCodeHighlight via highlight.js + github-dark
    theme.  The pre element provides scroll + padding while the inner

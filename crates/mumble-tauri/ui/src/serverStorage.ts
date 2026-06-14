@@ -6,7 +6,7 @@
  * Passwords are stored separately in `passwords.json` keyed by server id.
  */
 
-import { load } from "@tauri-apps/plugin-store";
+import { load } from "./utils/store";
 import type { SavedServer } from "./types";
 
 const STORE_FILE = "servers.json";

@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use tracing::info;
 
 use mumble_protocol::client::ClientConfig;
@@ -26,30 +26,20 @@ impl AppState {
     ) -> Result<(), String> {
         let app_handle = self.app_handle().ok_or("App not initialized")?;
 
-        // Drop any stale, fully-disconnected session that targets the
-        // exact same `(host, port, username)`.  Without this prune the
-        // automatic reconnect path would leak one extra tab per retry
-        // (each `connect` allocates a fresh `ServerId`) and rapidly
-        // spam the tab strip when the server is briefly unreachable.
-        let pruned = self
-            .registry
-            .prune_disconnected_for(&host, port, &username);
-        if !pruned.is_empty() {
-            info!(
-                count = pruned.len(),
-                host = %host,
-                port,
-                username = %username,
-                "pruned stale disconnected sessions before reconnect"
-            );
-        }
-
-        // Allocate a fresh `SharedState` for this session and register
-        // it.  Existing sessions stay alive on their own `Arc`s; we
-        // simply swap the `inner` handle to point at the new one so it
-        // becomes the active session.
-        let server_id = ServerId::new();
-        let inner = self.fresh_session_state();
+        // Reuse the existing session slot for this exact `(host, port,
+        // username)` target so an automatic reconnect re-binds the *same*
+        // tab instead of spawning a new one on every retry (which spammed
+        // the tab strip when the server was unreachable).  A first connect
+        // - or a connect to a target with no disconnected session - falls
+        // back to allocating a fresh `ServerId` with clean state.  Either
+        // way we make the session active and point `inner` at it.
+        let (server_id, inner) = match self.registry.take_reusable_for(&host, port, &username) {
+            Some((id, arc)) => {
+                info!(host = %host, port, username = %username, server_id = %id, "reusing session slot for reconnect");
+                (id, arc)
+            }
+            None => (ServerId::new(), self.fresh_session_state()),
+        };
         let _ = self
             .registry
             .register_active(server_id, std::sync::Arc::clone(&inner));
@@ -76,9 +66,7 @@ impl AppState {
         let connect_task = tokio::spawn(async move {
             // Load client certificate from the per-identity folder.
             let (client_cert_pem, client_key_pem) = if let Some(ref label) = cert_label {
-                app_handle
-                    .path()
-                    .app_data_dir()
+                crate::e2e_data_dir(&app_handle)
                     .ok()
                     .map(|d| super::pchat::IdentityStore::new(d).load_cert(label))
                     .unwrap_or((None, None))
@@ -167,15 +155,7 @@ impl AppState {
 
             // Stop Android foreground service for the active connection.
             #[cfg(target_os = "android")]
-            {
-                if let Some(app_handle) = self.app_handle() {
-                    if let Some(handle) = app_handle
-                        .try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>()
-                    {
-                        crate::platform::android::connection_service::stop_service(&handle);
-                    }
-                }
-            }
+            self.stop_android_foreground_service();
         }
 
         let (handle, join, connect_task) = {
@@ -260,6 +240,14 @@ impl AppState {
 
         Ok(())
     }
+
+    #[cfg(target_os = "android")]
+    fn stop_android_foreground_service(&self) {
+        use tauri::Manager; // brings `try_state` into scope (android-only path)
+        let Some(app_handle) = self.app_handle() else { return };
+        let Some(handle) = app_handle.try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>() else { return };
+        crate::platform::android::connection_service::stop_service(&handle);
+    }
 }
 
 // -- Helpers ----------------------------------------------------------
@@ -333,7 +321,7 @@ fn init_identity(
     cert_label: &Option<String>,
 ) {
     // Cert-hash-to-username resolver (persisted across sessions).
-    if let Ok(data_dir) = app_handle.path().app_data_dir() {
+    if let Ok(data_dir) = crate::e2e_data_dir(app_handle) {
         let hash_names_path = data_dir.join("hash_names.json");
         let resolver = super::hash_names::DefaultHashNameResolver::new(hash_names_path);
         if let Ok(mut state) = inner.lock() {
@@ -343,13 +331,13 @@ fn init_identity(
 
     // Migrate legacy storage layout (certs/ + pchat/) to per-identity
     // folders on first connect after the update.  Idempotent.
-    if let Ok(data_dir) = app_handle.path().app_data_dir() {
+    if let Ok(data_dir) = crate::e2e_data_dir(app_handle) {
         super::pchat::IdentityStore::new(data_dir).migrate_legacy_storage();
     }
 
     // Load (or generate) the persistent chat identity seed.
     let identity_label = cert_label.as_deref().unwrap_or("default");
-    if let Ok(data_dir) = app_handle.path().app_data_dir() {
+    if let Ok(data_dir) = crate::e2e_data_dir(app_handle) {
         let store = super::pchat::IdentityStore::new(data_dir);
         match store.load_or_generate_seed(identity_label) {
             Ok(seed) => {
@@ -414,8 +402,14 @@ async fn handle_connect_result(
             {
                 tracing::error!("Failed to send auth: {e}");
                 mark_disconnected(inner);
-                let _ = registry.remove(server_id);
-                rebind_active(active_handle, registry);
+                // Keep the session in the registry (now `Disconnected`),
+                // exactly like a dropped established connection, so its tab
+                // persists and the next reconnect reuses it instead of
+                // spawning a fresh tab.  Only switch the active session away
+                // when another live session exists.
+                if registry.activate_fallback(server_id) {
+                    rebind_active(active_handle, registry);
+                }
                 let reason = format!("Failed to authenticate: {e}");
                 emit_session_rejected(app_handle, server_id, reason);
                 return;
@@ -425,6 +419,7 @@ async fn handle_connect_result(
 
             // Start deaf+muted so the user does not transmit or
             // hear audio until they explicitly enable voice calling.
+            // (SetSelfDeaf already carries self_mute=true.)
             if let Err(e) = handle
                 .send(command::SetSelfDeaf { deafened: true })
                 .await
@@ -435,8 +430,12 @@ async fn handle_connect_result(
         Err(e) => {
             tracing::error!("Connection failed: {e}");
             mark_disconnected(inner);
-            let _ = registry.remove(server_id);
-            rebind_active(active_handle, registry);
+            // Keep the session as `Disconnected` (see auth-failure branch
+            // above) so its tab survives the retry loop and the next
+            // reconnect reuses the same slot rather than opening a new tab.
+            if registry.activate_fallback(server_id) {
+                rebind_active(active_handle, registry);
+            }
             let reason = format!("Connection failed: {e}");
             emit_session_rejected(app_handle, server_id, reason);
         }

@@ -21,14 +21,16 @@ fn serialize_pchat_protocol<S: Serializer>(protocol: &Option<PchatProtocol>, s: 
     }
 }
 
-/// Emit only the byte length of an `Option<Vec<u8>>` (used for `texture`)
-/// so large avatar blobs do not bloat the IPC payload.  The frontend
-/// fetches the actual bytes on demand via `get_user_texture`.
-fn serialize_blob_len_owned<S: Serializer>(bytes: &Option<Vec<u8>>, s: S) -> Result<S::Ok, S::Error> {
-    match bytes {
-        Some(b) if !b.is_empty() => s.serialize_some(&(b.len() as u32)),
-        _ => s.serialize_none(),
+/// Derive a stable, non-zero `u32` "marker" from a blob hash (or the blob
+/// itself).  Used as the serialised `texture_size`: it is non-zero whenever an
+/// avatar exists (so the frontend knows to fetch it) and changes when the
+/// avatar changes (so caches invalidate), without ever shipping the bytes.
+pub(super) fn blob_marker(bytes: &[u8]) -> u32 {
+    let mut buf = [0u8; 4];
+    for (i, b) in bytes.iter().take(4).enumerate() {
+        buf[i] = *b;
     }
+    u32::from_le_bytes(buf) | 1
 }
 
 /// Emit only the byte length of a `String` (used for channel
@@ -94,13 +96,31 @@ pub struct UserEntry {
     /// Registered user ID. `None` means the user is not registered.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_id: Option<u32>,
-    /// Avatar blob.  Serialised to the frontend as
-    /// `texture_size: u32 | null` (byte length only) to keep
-    /// `get_users` payloads small; fetched lazily via
-    /// `get_user_texture`.
-    #[serde(rename = "texture_size", serialize_with = "serialize_blob_len_owned")]
+    /// Loaded avatar bytes.  Internal only: never serialised (the frontend
+    /// fetches them on demand via `get_user_texture`).  `None` until the blob
+    /// has actually been requested + received, so the backend does NOT hold an
+    /// avatar for every connected user - only for those a client has viewed.
+    #[serde(skip)]
     pub texture: Option<Vec<u8>>,
+    /// Avatar existence/version marker, serialised to the frontend as
+    /// `texture_size: u32 | null`.  Non-zero whenever the user HAS an avatar -
+    /// even before its bytes are loaded - so the UI knows to fetch it; its
+    /// value changes when the avatar changes so caches invalidate.  Derived
+    /// from the server's `texture_hash` (or the inline blob length).
+    #[serde(rename = "texture_size")]
+    pub texture_marker: Option<u32>,
+    /// Loaded comment/bio text.  Internal only: never serialised (the frontend
+    /// fetches it on demand via `get_user_comment`).  `None` until requested,
+    /// so the backend does not hold every user's (potentially banner-laden) bio
+    /// - only those a client has viewed.
+    #[serde(skip)]
     pub comment: Option<String>,
+    /// Comment existence/version marker, serialised as `comment_size: u32 | null`
+    /// (mirrors `texture_size`).  Non-zero whenever the user HAS a comment - even
+    /// before its text is loaded - so the UI knows to fetch it; changes when the
+    /// comment changes so caches invalidate.
+    #[serde(rename = "comment_size")]
+    pub comment_marker: Option<u32>,
     /// Server-side admin mute.
     pub mute: bool,
     /// Server-side admin deafen.
@@ -130,6 +150,8 @@ impl UserEntry {
             channel_id: 0,
             user_id: None,
             texture: None,
+            texture_marker: None,
+            comment_marker: None,
             comment: None,
             mute: false,
             deaf: false,
@@ -190,6 +212,22 @@ pub struct ChatMessage {
     /// Unix epoch milliseconds when the message was pinned.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pinned_at: Option<u64>,
+    /// Plugin-authored origin: the `plugin_name` of the plugin that
+    /// injected this message via a `chat-message` interaction
+    /// response.  `None` for ordinary user/server messages.
+    ///
+    /// Component interactions on this message route back to this
+    /// plugin so the originating handler can react.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_name: Option<String>,
+    /// Plugin-authored UI components attached to this message,
+    /// rendered inline in the chat bubble below the body.  Stored
+    /// as opaque JSON (mirroring the
+    /// [`mumble_plugin_api::ActionRow`] wire format) so this crate
+    /// does not have to depend on the plugin API.  `None` (or an
+    /// empty array) means no interactive components.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_components: Option<serde_json::Value>,
 }
 
 impl ChatMessage {
@@ -348,6 +386,12 @@ pub(crate) struct NewDmPayload {
 
 #[derive(Clone, Serialize)]
 pub(crate) struct RejectedPayload {
+    /// Id of the session that was rejected.  Allows the frontend to
+    /// route the rejection to the correct tab and avoid clobbering
+    /// other sessions' state.  May be `None` for early connect-time
+    /// failures before a session was registered.
+    #[serde(rename = "serverId")]
+    pub server_id: Option<String>,
     pub reason: String,
     /// Protobuf `Reject.RejectType` value, if available.
     /// `3` = `WrongUserPW`, `4` = `WrongServerPW`.
@@ -393,11 +437,40 @@ pub(crate) struct PermissionDeniedPayload {
     pub reason: Option<String>,
 }
 
+/// Cached snapshot of the server's `PluginRegistry`.  Also forms the
+/// `plugin-registry` Tauri event payload (frontend field names match
+/// `PluginRegistryEntry` in `ui/src/store.ts`).  We cache it so the UI
+/// can resync after an HMR reload, which loses the one-shot event.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PluginRegistryEntryPayload {
+    pub plugin_name: String,
+    pub version: String,
+    pub plugin_slot: Option<u32>,
+    pub info_json: Option<String>,
+}
+
 #[derive(Clone, Serialize)]
 pub(crate) struct PluginDataPayload {
     pub sender_session: Option<u32>,
+    /// Raw payload bytes, serialized as a base64 string.  A plain
+    /// `Vec<u8>` would serialize as a JSON array of numbers, which
+    /// `serde_json` represents at ~32 heap bytes per payload byte - a
+    /// 1.6 MB server-emotes broadcast measured 51 MB as a `Value` plus
+    /// ~19 MB more in the Tauri event script.  Base64 keeps it at
+    /// ~1.3x the byte size end to end.
+    #[serde(serialize_with = "serialize_bytes_base64")]
     pub data: Vec<u8>,
     pub data_id: String,
+}
+
+/// Serialize a byte slice as a base64 string (see [`PluginDataPayload::data`]).
+pub(crate) fn serialize_bytes_base64<S: Serializer>(
+    bytes: &[u8],
+    ser: S,
+) -> Result<S::Ok, S::Error> {
+    use base64::Engine as _;
+    ser.serialize_str(&base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
 #[derive(Clone, Serialize)]
@@ -675,8 +748,13 @@ pub struct RegisteredUserPayload {
     pub last_seen: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_channel: Option<u32>,
+    /// Avatar byte length, so the frontend knows an avatar exists without
+    /// shipping the bytes in the bulk list. The bytes are cached backend-side
+    /// and fetched on demand via `get_registered_user_texture` (mirrors how
+    /// online users use `UserEntry::texture_size`). Shipping the bytes inline
+    /// previously spiked the heap to >1 GB while emitting the `user-list` event.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub texture: Option<Vec<u8>>,
+    pub texture_size: Option<u32>,
     /// Full comment when len < 128 (included inline by the server).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
@@ -987,11 +1065,10 @@ impl AudioSettings {
         1.0
     }
 
-    /// Convert `frame_size_ms` to samples-per-channel at 48 kHz.
-    ///
-    /// Clamps to valid Opus frame sizes (10, 20, 40, 60 ms).
-    pub fn frame_size_samples(&self) -> usize {
-        match self.frame_size_ms {
+    /// Convert an Opus packet duration in ms to samples-per-channel at
+    /// 48 kHz.  Clamps to valid Opus frame sizes (10, 20, 40, 60 ms).
+    pub fn frame_ms_to_samples(frame_size_ms: u32) -> usize {
+        match frame_size_ms {
             10 => 480,
             40 => 1920,
             60 => 2880,
@@ -1052,7 +1129,6 @@ impl Default for AudioSettings {
 /// Current voice state.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
-#[cfg_attr(target_os = "android", allow(dead_code))]
 pub enum VoiceState {
     /// User is deaf + muted (default on connect / before enabling voice).
     #[default]
@@ -1112,6 +1188,44 @@ pub struct OnboardingConfig {
     pub updated_by: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<u64>,
+}
+
+/// One editable server setting (schema + current value), cached from a
+/// `FancyServerSettings` broadcast and surfaced to the admin "Server Settings"
+/// panel.  `type` drives the client's form-control factory.
+#[derive(Debug, Clone, Default, Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct ServerSetting {
+    /// Config key (core keys, or `plugin.<name>.<key>` for plugin settings).
+    pub key: String,
+    /// Input type: `string` | `text` | `bool` | `int` | `enum` | `country` |
+    /// `password`.
+    #[serde(rename = "type")]
+    pub r#type: String,
+    /// Group/section the setting belongs to.
+    pub group: String,
+    /// Human-readable label.
+    pub label: String,
+    /// Current value (string-encoded).  Omitted for secret settings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    /// Allowed values for `enum` types.
+    #[serde(default)]
+    pub options: Vec<String>,
+    /// Whether the value is a secret (masked, write-only).
+    #[serde(default)]
+    pub secret: bool,
+    /// Optional one-line help text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub help: Option<String>,
+}
+
+/// Editable server-settings snapshot advertised by the server to admins.
+#[derive(Debug, Clone, Default, Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct ServerSettingsSnapshot {
+    /// All editable settings (core + currently-loaded plugins).
+    pub settings: Vec<ServerSetting>,
+    /// Monotonic revision so stale broadcasts can be dropped.
+    pub revision: u64,
 }
 
 /// Selected answer ids for one question.

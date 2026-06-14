@@ -1,5 +1,6 @@
-import { ChevronRightIcon } from "../../icons";
+﻿import { ChevronRightIcon } from "../../icons";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { AclEntry } from "../../types";
 import styles from "./AdminPanel.module.css";
 import { PERMISSIONS } from "../../utils/permissions";
@@ -18,17 +19,18 @@ export function AclRulesPanel({
   onToggleBit: (idx: number, field: "grant" | "deny", bit: number) => void;
 }>) {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const { t } = useTranslation("settings");
 
   return (
     <>
       <div className={styles.aclSectionHeader}>
-        <span className={styles.aclSectionTitle}>ACL Rules</span>
+        <span className={styles.aclSectionTitle}>{t("aclRules.sectionTitle")}</span>
         <button type="button" className={styles.addBtn} onClick={onAdd}>
-          + Add Rule
+          {t("aclRules.addRule")}
         </button>
       </div>
       {acls.length === 0 ? (
-        <div className={styles.dimText}>No ACL rules defined</div>
+        <div className={styles.dimText}>{t("aclRules.noRules")}</div>
       ) : (
         acls.map((entry, i) => (
           <AclRuleCard
@@ -64,11 +66,12 @@ function AclRuleCard({
   onRemove: (idx: number) => void;
   onToggleBit: (idx: number, field: "grant" | "deny", bit: number) => void;
 }>) {
+  const { t } = useTranslation("settings");
   const label = entry.group
     ? `@${entry.group}`
     : entry.user_id != null
       ? `User #${entry.user_id}`
-      : "Unknown";
+      : t("aclRules.unknownEntry");
 
   return (
     <div className={styles.aclCard}>
@@ -80,7 +83,7 @@ function AclRuleCard({
           style={{ transform: isOpen ? "rotate(90deg)" : "rotate(0deg)" }}
         />
         <span className={styles.aclRuleLabel}>{label}</span>
-        {entry.inherited && <span className={styles.inheritBadge}>Inherited</span>}
+        {entry.inherited && <span className={styles.inheritBadge}>{t("aclRules.inherited")}</span>}
         {!entry.inherited && (
           <span
             className={styles.removeSmallBtn}
@@ -99,18 +102,18 @@ function AclRuleCard({
           <div className={styles.aclRuleOptions}>
             <label className={styles.checkboxLabel}>
               <input type="checkbox" checked={entry.apply_here} disabled={entry.inherited} onChange={(e) => onPatch(index, { apply_here: e.target.checked })} />
-              Apply here
+              {t("aclRules.applyHere")}
             </label>
             <label className={styles.checkboxLabel}>
               <input type="checkbox" checked={entry.apply_subs} disabled={entry.inherited} onChange={(e) => onPatch(index, { apply_subs: e.target.checked })} />
-              Apply to sub-channels
+              {t("aclRules.applySubChannels")}
             </label>
           </div>
 
           {!entry.inherited && (
             <div className={styles.aclRuleOptions}>
               <label className={styles.fieldLabel}>
-                Group
+                {t("aclRules.labelGroup")}
                 <input
                   className={styles.inputSmall}
                   type="text"
@@ -119,7 +122,7 @@ function AclRuleCard({
                 />
               </label>
               <label className={styles.fieldLabel}>
-                User ID
+                {t("aclRules.labelUserId")}
                 <input
                   className={styles.inputSmall}
                   type="number"
@@ -135,9 +138,9 @@ function AclRuleCard({
 
           <div className={styles.permGrid}>
             <div className={styles.permHeader}>
-              <span>Permission</span>
-              <span>Allow</span>
-              <span>Deny</span>
+              <span>{t("aclRules.colPermission")}</span>
+              <span>{t("aclRules.colAllow")}</span>
+              <span>{t("aclRules.colDeny")}</span>
             </div>
             {PERMISSIONS.map(({ bit, label: permLabel }) => (
               <div key={bit} className={styles.permRow}>

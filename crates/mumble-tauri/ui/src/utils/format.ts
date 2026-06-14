@@ -30,6 +30,25 @@ export function formatBandwidth(bitsPerSec: number): string {
   return `${bitsPerSec} bit/s`;
 }
 
+// -- Byte sizes ----------------------------------------------------
+
+/** Human-readable byte count using binary (IEC) units, e.g. `512 MiB`.
+ *  `null`/`undefined` (an unknown size) formats as an empty string; `0` and
+ *  invalid values format as `0 B`. */
+export function formatBytes(n: number | null | undefined): string {
+  if (n == null) return "";
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  if (n < 1024) return `${Math.round(n)} B`;
+  const units = ["KiB", "MiB", "GiB", "TiB", "PiB"];
+  let v = n / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v >= 10 || Number.isInteger(v) ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
+}
+
 // -- Timestamp -----------------------------------------------------
 
 /**

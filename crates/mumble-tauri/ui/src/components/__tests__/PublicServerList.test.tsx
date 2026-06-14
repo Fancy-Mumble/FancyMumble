@@ -147,7 +147,7 @@ describe("Server rendering", () => {
     renderList();
     await consentAndWait();
     await waitFor(() => {
-      expect(screen.getByText("No public servers found.")).toBeTruthy();
+      expect(screen.getByText("No servers found.")).toBeTruthy();
     });
   });
 });

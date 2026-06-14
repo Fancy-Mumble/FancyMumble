@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
    Hearth Theme - Fancy Mumble
    Warm vintage palette with amber, crimson, and earthy tones.
    ================================================================ */
@@ -99,15 +99,15 @@
   /* -- Link ------------------------------------------------------ */
   --color-link: #426a79;
 
-  /* -- Discord-style palette (reactions / emoji picker) ----------- */
-  --color-discord-purple: #97522c;
-  --color-discord-dark: #20111b;
-  --color-discord-bg: #2b1c25;
-  --color-discord-border: #48323c;
-  --color-discord-hover: #382830;
-  --color-discord-muted: #968c83;
-  --color-discord-text: #d5ccba;
-  --color-discord-active: #48323c;
+  /* -- Picker palette (reactions / emoji picker) ----------- */
+  --color-picker-accent: #97522c;
+  --color-picker-dark: #20111b;
+  --color-picker-bg: #2b1c25;
+  --color-picker-border: #48323c;
+  --color-picker-hover: #382830;
+  --color-picker-muted: #968c83;
+  --color-picker-text: #d5ccba;
+  --color-picker-active: #48323c;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.2);

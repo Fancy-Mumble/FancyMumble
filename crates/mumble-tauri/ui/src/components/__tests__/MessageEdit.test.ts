@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { markdownToHtml, htmlToMarkdown } from "../chat/MarkdownInput";
+import { markdownToHtml, htmlToMarkdown } from "../chat/markdown/MarkdownInput";
 
 describe("htmlToMarkdown", () => {
   it("converts <b> tags to **bold**", () => {

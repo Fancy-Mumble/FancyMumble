@@ -1,5 +1,16 @@
+import { useTranslation } from "react-i18next";
 import { Toggle } from "./SharedControls";
 import styles from "./SettingsPage.module.css";
+import { registerSettings } from "./settingsSearchRegistry";
+
+registerSettings("privacy")
+  .add("privacy.dualPath", ["encryption"])
+  .add("privacy.readReceipts")
+  .add("privacy.typingIndicators", ["typing"])
+  .add("privacy.osmMaps", ["maps", "geolocation", "openstreetmap"])
+  .add("privacy.linkPreviews", ["embeds", "previews"])
+  .add("privacy.externalEmbeds", ["youtube", "watch together"])
+  .add("privacy.streamerMode", ["stream", "hide ip"]);
 
 export function PrivacyPanel({
   enableDualPath,
@@ -32,58 +43,38 @@ export function PrivacyPanel({
   onToggleExternalEmbeds: () => void;
   onToggleStreamerMode: () => void;
 }) {
+  const { t } = useTranslation("settings");
+
   return (
     <>
-      <h2 className={styles.panelTitle}>Privacy</h2>
+      <h2 className={styles.panelTitle}>{t("privacy.panelTitle")}</h2>
 
       <section className={styles.section}>
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
-            <h3 className={styles.sectionTitle}>
-              Enable dual-path sending
-            </h3>
-            <p className={styles.fieldHint}>
-              When enabled, encrypted channels also send a plain-text
-              placeholder over the normal message path so legacy clients
-              without E2EE support see &quot;[Encrypted message]&quot; instead
-              of nothing. Disable this to keep the ciphertext off the
-              unencrypted path entirely.
-            </p>
+            <h3 className={styles.sectionTitle}>{t("privacy.dualPath")}</h3>
+            <p className={styles.fieldHint}>{t("privacy.dualPathHint")}</p>
           </div>
           <Toggle checked={enableDualPath} onChange={onToggleDualPath} />
         </div>
         <div className={enableDualPath ? styles.warningBannerDanger : styles.warningBannerMuted}>
-          <span>{enableDualPath ? "E2EE partially bypassed" : "Security risk if enabled"}</span>
-          <p>
-            A plaintext placeholder is sent over the unencrypted message
-            path. Anyone monitoring TCP traffic can see when an encrypted
-            message was sent, even if they cannot read its contents. Only
-            enable this for compatibility with legacy clients that lack E2EE
-            support.
-          </p>
+          <span>{enableDualPath ? t("privacy.dualPathWarningActive") : t("privacy.dualPathWarningMuted")}</span>
+          <p>{t("privacy.dualPathWarningActivePara")}</p>
         </div>
       </section>
 
       <section className={styles.section}>
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
-            <h3 className={styles.sectionTitle}>
-              Disable read receipts
-            </h3>
-            <p className={styles.fieldHint}>
-              When enabled, other users will not see that you have read their
-              messages. You will also not see read receipts from others.
-            </p>
+            <h3 className={styles.sectionTitle}>{t("privacy.readReceipts")}</h3>
+            <p className={styles.fieldHint}>{t("privacy.readReceiptsHint")}</p>
           </div>
           <Toggle checked={disableReadReceipts} onChange={onToggleReadReceipts} />
         </div>
         {!disableReadReceipts && (
           <div className={styles.warningBanner}>
-            <span>Read times are visible to others</span>
-            <p>
-              Other users can see exactly when you opened a message.
-              Enable this toggle to stop broadcasting your read times.
-            </p>
+            <span>{t("privacy.readReceiptsWarning")}</span>
+            <p>{t("privacy.readReceiptsWarningPara")}</p>
           </div>
         )}
       </section>
@@ -91,13 +82,8 @@ export function PrivacyPanel({
       <section className={styles.section}>
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
-            <h3 className={styles.sectionTitle}>
-              Disable typing indicators
-            </h3>
-            <p className={styles.fieldHint}>
-              When enabled, you will not send typing indicators to others
-              and you will not see when others are typing.
-            </p>
+            <h3 className={styles.sectionTitle}>{t("privacy.typingIndicators")}</h3>
+            <p className={styles.fieldHint}>{t("privacy.typingIndicatorsHint")}</p>
           </div>
           <Toggle checked={disableTypingIndicators} onChange={onToggleTypingIndicators} />
         </div>
@@ -106,24 +92,15 @@ export function PrivacyPanel({
       <section className={styles.section}>
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
-            <h3 className={styles.sectionTitle}>
-              Disable OpenStreetMap maps
-            </h3>
-            <p className={styles.fieldHint}>
-              When enabled, no map tiles are loaded and no IP geolocation
-              requests are sent to external services.
-            </p>
+            <h3 className={styles.sectionTitle}>{t("privacy.osmMaps")}</h3>
+            <p className={styles.fieldHint}>{t("privacy.osmMapsHint")}</p>
           </div>
           <Toggle checked={disableOsmMaps} onChange={onToggleOsmMaps} />
         </div>
         {!disableOsmMaps && (
           <div className={styles.warningBanner}>
-            <span>External tile requests are active</span>
-            <p>
-              Map tiles are fetched from tile.openstreetmap.org. Your IP
-              address is visible to OpenStreetMap servers on every map
-              interaction. Enable this toggle to prevent those requests.
-            </p>
+            <span>{t("privacy.osmMapsWarning")}</span>
+            <p>{t("privacy.osmMapsWarningPara")}</p>
           </div>
         )}
       </section>
@@ -131,26 +108,15 @@ export function PrivacyPanel({
       <section className={styles.section}>
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
-            <h3 className={styles.sectionTitle}>
-              Disable link previews
-            </h3>
-            <p className={styles.fieldHint}>
-              When enabled, the app will not request link metadata from the
-              server. This prevents the server from learning which URLs you
-              share in chat.
-            </p>
+            <h3 className={styles.sectionTitle}>{t("privacy.linkPreviews")}</h3>
+            <p className={styles.fieldHint}>{t("privacy.linkPreviewsHint")}</p>
           </div>
           <Toggle checked={disableLinkPreviews} onChange={onToggleLinkPreviews} />
         </div>
         {!disableLinkPreviews && (
           <div className={styles.warningBanner}>
-            <span>URLs are sent to the server for preview generation</span>
-            <p>
-              Every link you paste in chat is fetched by the server to
-              generate a preview. This lets the server log all URLs you
-              share and may hint at encrypted message content if a URL
-              carries context. Enable this toggle to prevent it.
-            </p>
+            <span>{t("privacy.linkPreviewsWarning")}</span>
+            <p>{t("privacy.linkPreviewsWarningPara")}</p>
           </div>
         )}
       </section>
@@ -158,26 +124,15 @@ export function PrivacyPanel({
       <section className={styles.section}>
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
-            <h3 className={styles.sectionTitle}>
-              Allow external embeds
-            </h3>
-            <p className={styles.fieldHint}>
-              Required for the YouTube watch-together adapter. When
-              enabled, the YouTube IFrame API is loaded from
-              youtube.com on demand. Disable to keep all watch-together
-              sessions on direct media URLs only.
-            </p>
+            <h3 className={styles.sectionTitle}>{t("privacy.externalEmbeds")}</h3>
+            <p className={styles.fieldHint}>{t("privacy.externalEmbedsHint")}</p>
           </div>
           <Toggle checked={enableExternalEmbeds} onChange={onToggleExternalEmbeds} />
         </div>
         {enableExternalEmbeds && (
           <div className={styles.warningBanner}>
-            <span>Third-party code loaded on demand</span>
-            <p>
-              YouTube&apos;s IFrame API is fetched from youtube.com during
-              watch-together sessions. Google can observe these requests
-              and associate them with your IP address.
-            </p>
+            <span>{t("privacy.externalEmbedsWarning")}</span>
+            <p>{t("privacy.externalEmbedsWarningPara")}</p>
           </div>
         )}
       </section>
@@ -185,14 +140,8 @@ export function PrivacyPanel({
       <section className={styles.section}>
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
-            <h3 className={styles.sectionTitle}>
-              Streamer mode
-            </h3>
-            <p className={styles.fieldHint}>
-              Hides identifying information (server host, ports, IP
-              addresses, geolocation) and suppresses native notifications
-              so they cannot leak personal data into a screen recording.
-            </p>
+            <h3 className={styles.sectionTitle}>{t("privacy.streamerMode")}</h3>
+            <p className={styles.fieldHint}>{t("privacy.streamerModeHint")}</p>
           </div>
           <Toggle checked={streamerMode} onChange={onToggleStreamerMode} />
         </div>

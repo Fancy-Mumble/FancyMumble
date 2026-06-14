@@ -123,6 +123,14 @@ pub(super) struct TauriEventHandler {
 
 impl EventHandler for TauriEventHandler {
     fn on_control_message(&mut self, msg: &ControlMessage) {
+        // Drop messages from an orphaned/aborted event loop whose session has
+        // since been reclaimed by a newer `connect()` (epoch bump). Without
+        // this, in-flight messages from a dying TCP stream could mutate the
+        // reused `SharedState` and emit events stamped with the new server's
+        // id. Mirrors the guard in `on_disconnected`.
+        if self.shared.lock().map(|s| s.conn.epoch != self.epoch).unwrap_or(true) {
+            return;
+        }
         let ctx = HandlerContext {
             shared: Arc::clone(&self.shared),
             emitter: Box::new(TauriEmitter {
@@ -170,6 +178,12 @@ impl EventHandler for TauriEventHandler {
                 let Ok(mut state) = self.shared.lock() else {
                     break 'action None;
                 };
+                // Ignore audio from an orphaned event loop whose session a newer
+                // connect() has reclaimed - otherwise stale packets get mixed
+                // into (and attributed on) the new session. See on_disconnected.
+                if state.conn.epoch != self.epoch {
+                    break 'action None;
+                }
                 let Some(ref mut mixer) = state.audio.mixer else {
                     break 'action None;
                 };
@@ -186,6 +200,10 @@ impl EventHandler for TauriEventHandler {
 
                 if is_terminator {
                     mixer.reset_speaker(session);
+                    // End of an utterance is a natural, low-frequency
+                    // moment to free decoders with lost terminators and
+                    // drained buffers of past streams (~77 KB each).
+                    mixer.remove_inactive_speakers();
                     state.audio.talking_sessions.remove(&session).then_some(false)
                 } else {
                     state.audio.talking_sessions.insert(session).then_some(true)
@@ -269,7 +287,7 @@ impl EventHandler for TauriEventHandler {
 
             // Keep FCM topic subscriptions active after disconnect so the
             // device continues to receive push notifications while offline.
-            // Subscriptions are idempotent — re-subscribing on the next
+            // Subscriptions are idempotent - re-subscribing on the next
             // connect is harmless.
         }
     }

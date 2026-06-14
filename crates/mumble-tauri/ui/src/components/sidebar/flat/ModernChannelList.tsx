@@ -14,12 +14,13 @@ import { ChevronRightIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MicOffS
  */
 
 import { useState, useMemo, useCallback, useContext, useRef, useLayoutEffect, memo } from "react";
+import { useTranslation } from "react-i18next";
 import type { ChannelEntry, UserEntry } from "../../../types";
-import { colorFor, useHoverCardPosition, UserHoverCardPortal, RoleColorsContext } from "../UserListItem";
-import { useUserAvatar } from "../../../lazyBlobs";
+import { colorFor, useHoverCardPosition, UserHoverCardPortal, RoleColorsContext } from "../user/UserListItem";
+import { useUserAvatar, useUserComment } from "../../../lazyBlobs";
 import { parseComment } from "../../../profileFormat";
 import { useUserStats } from "../../../hooks/useUserStats";
-import { useStreamThumbnail } from "../../chat/useStreamPreview";
+import { useStreamThumbnail } from "../../chat/stream/useStreamPreview";
 import SwipeableCard from "../../elements/SwipeableCard";
 import { isMobile } from "../../../utils/platform";
 import { PERM_MOVE, PERM_ENTER } from "../../../utils/permissions";
@@ -29,7 +30,8 @@ import { PchatBadge } from "../PchatBadge";
 import {
   ChannelReorderWrapper,
   useChannelReorderHandler,
-} from "../channelReorder";
+} from "../channel/channelReorder";
+import { TID } from "../../../testids";
 import styles from "./ModernChannelList.module.css";
 
 const MAX_STACKED = 3;
@@ -79,6 +81,7 @@ interface MemberItemProps {
 }
 
 function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMenu, onClick }: MemberItemProps) {
+  const { t } = useTranslation(["sidebar", "common"]);
   const ownSession = useAppStore((s) => s.ownSession);
   const selectedDmUser = useAppStore((s) => s.selectedDmUser);
   const dmUnread = useAppStore((s) => s.dmUnreadCounts[user.session] ?? 0);
@@ -95,9 +98,14 @@ function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMe
   // Defer FancyProfile parsing until the hover card is actually shown.
   // The result is consumed only inside the portal below, and parsing
   // adds measurable mount cost when many members are visible.
+  const liveComment = useUserComment(user.session, user.comment_size, showCard);
   const parsed = useMemo(
-    () => (showCard && user.comment ? parseComment(user.comment) : null),
-    [showCard, user.comment],
+    () => {
+      if (!showCard) return null;
+      const c = user.comment ?? liveComment;
+      return c ? parseComment(c) : null;
+    },
+    [showCard, user.comment, liveComment],
   );
   const stats = useUserStats(user.session, showCard);
   const streamThumbnail = useStreamThumbnail(user.session, showCard && isBroadcasting);
@@ -159,13 +167,13 @@ function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMe
           <HeadphonesOffIcon className={styles.statusIcon} width={12} height={12} />
         )}
         {isBroadcasting && (
-          <span className={styles.liveBadge} title="Sharing screen">
+          <span className={styles.liveBadge} title={t("channelList.sharingScreen")}>
             <ScreenShareIcon width={10} height={10} />
-            Live
+            {t("channelList.liveBadge")}
           </span>
         )}
         {dmUnread > 0 && (
-          <span className={styles.dmUnreadBadge} title={`${dmUnread} unread direct message${dmUnread === 1 ? "" : "s"}`}>
+          <span className={styles.dmUnreadBadge} title={t("channelList.dmUnread", { count: dmUnread })}>
             {dmUnread > 99 ? "99+" : dmUnread}
           </span>
         )}
@@ -258,6 +266,8 @@ function ModernChannelListImpl({
     });
   }, []);
 
+  const { t } = useTranslation(["sidebar", "common"]);
+
   // Build a map of users per channel.
   const usersByChannel = useMemo(() => {
     const map = new Map<number, UserEntry[]>();
@@ -271,12 +281,11 @@ function ModernChannelListImpl({
 
   // Depth-first flattening of the channel tree, so each parent is
   // immediately followed by its (recursively expanded) children, in
-  // server `position` order at every level.  An empty root channel is
-  // omitted (it would otherwise show up as an unhelpful "Root" header).
+  // server `position` order at every level.  The root channel is always
+  // shown (matching the classic tree viewer) so it stays selectable and
+  // right-clickable even when empty.
   const flatChannels = useMemo(() => {
     const childrenOf = new Map<number, typeof channels>();
-    const isRoot = (ch: ChannelEntry) =>
-      ch.parent_id === null || ch.parent_id === ch.id;
     for (const ch of channels) {
       const parent = ch.parent_id === ch.id ? -1 : ch.parent_id ?? -1;
       const list = childrenOf.get(parent) ?? [];
@@ -291,8 +300,7 @@ function ModernChannelListImpl({
     const result: typeof channels = [];
     const visit = (parentId: number) => {
       for (const ch of sortLevel(childrenOf.get(parentId) ?? [])) {
-        const skip = isRoot(ch) && (usersByChannel.get(ch.id)?.length ?? 0) === 0;
-        if (!skip) result.push(ch);
+        result.push(ch);
         visit(ch.id);
       }
     };
@@ -301,7 +309,7 @@ function ModernChannelListImpl({
     visit(-1);
 
     return result;
-  }, [channels, usersByChannel]);
+  }, [channels]);
 
   // Find the current channel entry for the sticky clone.
   const currentChannelEntry = useMemo(
@@ -376,7 +384,7 @@ function ModernChannelListImpl({
               type="button"
               className={styles.expandBtn}
               onClick={() => toggleCollapsed(channel.id)}
-              aria-label={isCollapsed ? "Expand" : "Collapse"}
+              aria-label={isCollapsed ? t("channelList.expand") : t("common:actions.collapse")}
             >
               <ChevronRightIcon
                 className={`${styles.chevron} ${isCollapsed ? "" : styles.chevronOpen}`}
@@ -389,19 +397,22 @@ function ModernChannelListImpl({
           <button
             type="button"
             className={styles.channelBtn}
+            data-testid={TID.channelItem}
+            data-channel-id={channel.id}
+            data-channel-name={channel.name || t("channelList.root")}
             onClick={() => onSelectChannel(channel.id)}
             onDoubleClick={() => onJoinChannel(channel.id)}
             onContextMenu={(e) => onContextMenu(e, channel.id)}
           >
             <span className={styles.channelName}>
-              {channel.name || "Root"}
+              {channel.name || t("channelList.root")}
               {isLocked && (
-                <span className={styles.lockBadge} title="No permission to join">
+                <span className={styles.lockBadge} title={t("channelList.noPermissionToJoin")}>
                   <LockIcon width={11} height={11} />
                 </span>
               )}
               {isListened && (
-                <span className={styles.listenBadge} title="Listening">
+                <span className={styles.listenBadge} title={t("channelList.listening")}>
                   <ListenBadgeIcon width={12} height={12} />
                 </span>
               )}
@@ -455,9 +466,9 @@ function ModernChannelListImpl({
     <div ref={listRef} className={styles.list}>
       {/* Sticky clone at top: shown when the current channel has scrolled above the viewport */}
       {currentChannelEntry && stickyState === "top" && (
-        <button type="button" className={styles.stickyTop} onClick={scrollCurrentIntoView}>
+        <div className={styles.stickyTop} onClick={scrollCurrentIntoView}>
           {renderChannel(currentChannelEntry)}
-        </button>
+        </div>
       )}
 
       {/* All channels in server order */}
@@ -475,7 +486,7 @@ function ModernChannelListImpl({
             <div key={channel.id} ref={setRef}>
               <SwipeableCard
                 rightSwipeAction={{
-                  label: "Join",
+                  label: t("channelIconList.swipeJoinLabel"),
                   color: "var(--color-accent, #2aabee)",
                   onTrigger: () => onJoinChannel(channel.id),
                 }}
@@ -500,9 +511,9 @@ function ModernChannelListImpl({
 
       {/* Sticky clone at bottom: shown when the current channel is below the viewport */}
       {currentChannelEntry && stickyState === "bottom" && (
-        <button type="button" className={styles.stickyBottom} onClick={scrollCurrentIntoView}>
+        <div className={styles.stickyBottom} onClick={scrollCurrentIntoView}>
           {renderChannel(currentChannelEntry)}
-        </button>
+        </div>
       )}
     </div>
   );

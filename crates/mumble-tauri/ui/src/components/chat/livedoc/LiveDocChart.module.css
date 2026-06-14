@@ -1,0 +1,167 @@
+/* LiveDocChartView - Chart.js chart + Excel-like editable data grid. */
+
+.wrap {
+  margin: 14px 0;
+  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.16));
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--color-surface, #1e2128);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+}
+
+.types {
+  display: flex;
+  gap: 4px;
+}
+
+.typeBtn {
+  padding: 4px 10px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.16));
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.75));
+  font-size: 12px;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.typeActive {
+  background: var(--color-accent-subtle, rgba(42, 171, 238, 0.18));
+  border-color: var(--color-accent, #2aabee);
+  color: var(--color-accent, #2aabee);
+}
+
+.editBtn {
+  margin-left: auto;
+  padding: 4px 12px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.16));
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.canvasBox {
+  position: relative;
+  height: 260px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+/* Image-style corner resize grip. */
+.resizeHandle {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: linear-gradient(
+    135deg,
+    transparent 0 50%,
+    var(--color-text-muted, #aab0b8) 50% 60%,
+    transparent 60% 70%,
+    var(--color-text-muted, #aab0b8) 70% 80%,
+    transparent 80%
+  );
+  opacity: 0.5;
+  border-bottom-right-radius: 6px;
+}
+
+.resizeHandle:hover {
+  opacity: 1;
+}
+
+/* Excel-like grid */
+.grid {
+  border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  padding: 8px;
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table th,
+.table td {
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  padding: 0;
+}
+
+.table input {
+  width: 88px;
+  padding: 4px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 12px;
+  outline: none;
+}
+
+.table input[type="number"] {
+  width: 64px;
+  text-align: right;
+}
+
+.corner {
+  background: var(--color-surface-elevated, #262a32);
+  min-width: 24px;
+}
+
+.seriesHead,
+.rowHead {
+  background: var(--color-surface-elevated, #262a32);
+  position: relative;
+}
+
+.seriesHead input {
+  font-weight: 600;
+}
+
+.removeBtn {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 16px;
+  height: 16px;
+  line-height: 14px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--color-text-muted, #aab0b8);
+  cursor: pointer;
+}
+
+.removeBtn:hover {
+  background: var(--color-danger-subtle, rgba(224, 83, 60, 0.2));
+  color: #e0533c;
+}
+
+.addCol button,
+.addRow button {
+  width: 100%;
+  height: 100%;
+  min-width: 26px;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--color-accent, #2aabee);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.addCol button:hover,
+.addRow button:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
+}

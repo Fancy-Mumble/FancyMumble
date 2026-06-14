@@ -13,7 +13,7 @@ import {
   hasUserReadMessage,
   getReadersForMessage,
   allActiveUsersRead,
-} from "../chat/readReceiptStore";
+} from "../chat/readreceipt/readReceiptStore";
 import type { ReadState } from "../../types";
 
 const CHANNEL = 1;

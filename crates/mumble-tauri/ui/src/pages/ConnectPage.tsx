@@ -1,4 +1,5 @@
-﻿import { useCallback, useEffect, useState, type FormEvent } from "react";
+﻿import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../store";
 import {
@@ -16,6 +17,7 @@ import ServerEditSheet from "../components/server/ServerEditSheet";
 import PublicServerList from "../components/server/PublicServerList";
 import BrandLogo from "../components/elements/BrandLogo";
 import PasswordDialog from "../components/server/PasswordDialog";
+import { TID } from "../testids";
 import styles from "./ConnectPage.module.css";
 
 type View = "loading" | "servers" | "wizard" | "public";
@@ -29,40 +31,8 @@ interface StepDef {
   readonly hint: string;
 }
 
-/** Wizard steps for **expert** mode - full control. */
-const STEPS_EXPERT: StepDef[] = [
-  {
-    title: "Server address",
-    subtitle: "Where is your Mumble server?",
-    hint: "Enter the hostname or IP address your server admin gave you. The default port is 64738. Select a client certificate for TLS auth, or leave it as 'None' for anonymous connections.",
-  },
-  {
-    title: "Your identity",
-    subtitle: "How should others see you?",
-    hint: "Pick a username that will be shown to other users on the server. You can change it later in most servers.",
-  },
-  {
-    title: "Give it a name",
-    subtitle: "Almost there!",
-    hint: "Choose a friendly label so you can recognise this server later. Leave it blank to use the server address.",
-  },
-];
-
-/** Wizard steps for **normal** mode - streamlined, no port or label. */
-const STEPS_NORMAL: StepDef[] = [
-  {
-    title: "Server address",
-    subtitle: "Where is your Mumble server?",
-    hint: "Enter the server address your admin gave you - we'll take care of the rest.",
-  },
-  {
-    title: "Your identity",
-    subtitle: "How should others see you?",
-    hint: "Pick a username that will be shown to other users on the server.",
-  },
-];
-
 export default function ConnectPage() {
+  const { t } = useTranslation(["server", "common"]);
   const {
     connect, disconnect, status, error, passwordRequired, pendingConnect,
     retryWithPassword, dismissPasswordPrompt, bootstrapStage,
@@ -83,7 +53,16 @@ export default function ConnectPage() {
   /* -- user mode ------------------------------------------------- */
   const [userMode, setUserMode] = useState<UserMode>("normal");
   const [defaultUsername, setDefaultUsername] = useState("");
-  const STEPS = userMode === "normal" ? STEPS_NORMAL : STEPS_EXPERT;
+  const tStr = t as (key: string) => string;
+  const STEPS = useMemo<StepDef[]>(() => {
+    const mode = userMode === "normal" ? "normal" : "expert";
+    const count = userMode === "normal" ? 2 : 3;
+    return Array.from({ length: count }, (_, i) => ({
+      title: tStr(`wizard.${mode}.step${i}.title`),
+      subtitle: tStr(`wizard.${mode}.step${i}.subtitle`),
+      hint: tStr(`wizard.${mode}.step${i}.hint`),
+    }));
+  }, [userMode, tStr]);
 
   /* -- saved servers --------------------------------------------- */
   const [savedServers, setSavedServers] = useState<SavedServer[]>([]);
@@ -369,7 +348,7 @@ export default function ConnectPage() {
           <h1 className={styles.title}>Fancy Mumble</h1>
           <p className={styles.subtitle}>
             {view === "servers" || view === "public"
-              ? "Choose a server to connect"
+              ? t("chooseServer")
               : currentStep.subtitle}
           </p>
         </div>
@@ -404,7 +383,7 @@ export default function ConnectPage() {
               disabled={isConnecting}
               type="button"
             >
-              Browse public servers
+              {t("publicServersLink")}
             </button>
 
             {editingServer && (
@@ -437,7 +416,7 @@ export default function ConnectPage() {
                 disabled={isConnecting}
                 type="button"
               >
-                ← {step > 0 ? "Back" : "Saved servers"}
+                ? {step > 0 ? t("back") : t("backToSavedServers")}
               </button>
             )}
 
@@ -450,7 +429,7 @@ export default function ConnectPage() {
                 />
               ))}
               <span className={styles.stepLabel}>
-                Step {step + 1} of {STEPS.length}
+                {t("stepCount", { current: step + 1, total: STEPS.length })}
               </span>
             </div>
 
@@ -462,11 +441,12 @@ export default function ConnectPage() {
               {step === 0 && (
                 <>
                   <div className={styles.field}>
-                    <label className={styles.label}>Server address</label>
+                    <label className={styles.label}>{t("fields.host")}</label>
                     <input
                       className={styles.input}
+                      data-testid={TID.connectHostInput}
                       type="text"
-                      placeholder="mumble.example.com"
+                      placeholder={t("fields.hostPlaceholder")}
                       value={host}
                       onChange={(e) => setHost(e.target.value)}
                       disabled={isConnecting}
@@ -476,18 +456,19 @@ export default function ConnectPage() {
                   {userMode !== "normal" && (
                     <>
                       <div className={styles.field}>
-                        <label className={styles.label}>Port</label>
+                        <label className={styles.label}>{t("fields.port")}</label>
                         <input
                           className={styles.input}
+                          data-testid={TID.connectPortInput}
                           type="text"
-                          placeholder="64738"
+                          placeholder={t("fields.portPlaceholder")}
                           value={port}
                           onChange={(e) => setPort(e.target.value)}
                           disabled={isConnecting}
                         />
                       </div>
                       <div className={styles.field}>
-                        <label className={styles.label}>Client certificate</label>
+                        <label className={styles.label}>{t("fields.certificate")}</label>
                         <select
                           className={styles.input}
                           value={creatingCert ? "__new__" : certLabel}
@@ -501,20 +482,20 @@ export default function ConnectPage() {
                           }}
                           disabled={isConnecting}
                         >
-                          <option value="">None (anonymous)</option>
+                          <option value="">{t("fields.certNone")}</option>
                           {availableCerts.map((c) => (
                             <option key={c} value={c}>
-                              {c === "default" ? `${c} (auto-generated)` : c}
+                              {c === "default" ? t("fields.certAutoGenerated", { name: c }) : c}
                             </option>
                           ))}
-                          <option value="__new__">+ Create new identity…</option>
+                          <option value="__new__">{t("fields.certCreateNew")}</option>
                         </select>
                         {creatingCert && (
                           <div className={styles.newCertRow}>
                             <input
                               className={styles.input}
                               type="text"
-                              placeholder="Identity name"
+                              placeholder={t("fields.identityName")}
                               value={newCertName}
                               onChange={(e) => setNewCertName(e.target.value)}
                               onKeyDown={(e) => {
@@ -531,7 +512,7 @@ export default function ConnectPage() {
                               onClick={handleCreateCert}
                               disabled={!newCertName.trim()}
                             >
-                              Create
+                              {t("actions.create")}
                             </button>
                             <button
                               type="button"
@@ -541,7 +522,7 @@ export default function ConnectPage() {
                                 setNewCertName("");
                               }}
                             >
-                              Cancel
+                              {t("common:actions.cancel")}
                             </button>
                           </div>
                         )}
@@ -558,7 +539,7 @@ export default function ConnectPage() {
                   {userMode === "normal" && defaultUsername && usingDefaultName ? (
                     <div className={styles.usernameSummary}>
                       <div className={styles.usernameConfirm}>
-                        <span className={styles.usernameCheckmark}>✓</span>
+                        <span className={styles.usernameCheckmark}>?</span>
                         <span className={styles.usernameValue}>{defaultUsername}</span>
                       </div>
                       <button
@@ -570,16 +551,17 @@ export default function ConnectPage() {
                         }}
                         disabled={isConnecting}
                       >
-                        Use a different name for this server
+                        {t("actions.useDifferentName")}
                       </button>
                     </div>
                   ) : (
                     <div className={styles.field}>
-                      <label className={styles.label}>Username</label>
+                      <label className={styles.label}>{t("fields.username")}</label>
                       <input
                         className={styles.input}
+                        data-testid={TID.connectUsernameInput}
                         type="text"
-                        placeholder="Your name"
+                        placeholder={t("fields.usernamePlaceholder")}
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         disabled={isConnecting}
@@ -595,7 +577,7 @@ export default function ConnectPage() {
                           }}
                           disabled={isConnecting}
                         >
-                          ← Use my default name ({defaultUsername})
+                          {t("actions.useDefaultName", { name: defaultUsername })}
                         </button>
                       )}
                     </div>
@@ -606,11 +588,11 @@ export default function ConnectPage() {
               {/* -- Step 2: Label (expert only) ---------- */}
               {step === 2 && userMode !== "normal" && (
                 <div className={styles.field}>
-                  <label className={styles.label}>Server label (optional)</label>
+                  <label className={styles.label}>{t("fields.label")}</label>
                   <input
                     className={styles.input}
                     type="text"
-                    placeholder={host || "My Mumble Server"}
+                    placeholder={host || t("fields.labelPlaceholderFallback")}
                     value={label}
                     onChange={(e) => setLabel(e.target.value)}
                     disabled={isConnecting}
@@ -621,7 +603,7 @@ export default function ConnectPage() {
 
               {/* Hint card */}
               <div className={styles.hint}>
-                <span className={styles.hintIcon}>💡</span>
+                <span className={styles.hintIcon}>??</span>
                 <span>{currentStep.hint}</span>
               </div>
 
@@ -630,34 +612,37 @@ export default function ConnectPage() {
                 <div className={styles.buttonRow}>
                   <button
                     className={styles.buttonGhost}
+                    data-testid={TID.quickConnect}
                     type="button"
                     onClick={handleQuickConnectForm}
                     disabled={isConnecting || !host || !username}
                   >
-                    Quick Connect
+                    {t("actions.quickConnect")}
                   </button>
                   <button
                     className={styles.button}
+                    data-testid={TID.connectAndSave}
                     type="submit"
                     disabled={isConnecting || !host || !username}
                   >
                     {isConnecting ? (
                       <>
                         <span className={styles.spinner} />
-                        Connecting...
+                        {t("actions.connecting")}
                       </>
                     ) : (
-                      "Connect & Save"
+                      t("actions.connectAndSave")
                     )}
                   </button>
                 </div>
               ) : (
                 <button
                   className={styles.button}
+                  data-testid={TID.wizardContinue}
                   type="submit"
                   disabled={!canAdvance()}
                 >
-                  Continue
+                  {t("actions.continue")}
                 </button>
               )}
             </form>

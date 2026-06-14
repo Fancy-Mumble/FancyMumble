@@ -1,0 +1,109 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+}
+
+.popover {
+  position: fixed;
+  z-index: 1000;
+  min-width: 280px;
+  max-width: 420px;
+  background: var(--color-surface-elevated, #262a32);
+  color: var(--color-text-primary, #f5f6f8);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--font-sans, system-ui);
+}
+
+.header {
+  font-size: 11px;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.55));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 32px;
+  resize: none;
+  background: var(--color-surface, #1e2128);
+  color: var(--color-text-primary, #f5f6f8);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  padding: 6px 8px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", Consolas, monospace);
+  font-size: 13px;
+  line-height: 1.4;
+  outline: none;
+}
+
+.textarea:focus {
+  border-color: var(--color-accent, #2aabee);
+}
+
+.preview {
+  background: var(--color-surface, #1e2128);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-sm, 4px);
+  padding: 8px;
+  min-height: 32px;
+  max-height: 120px;
+  overflow: auto;
+  font-size: 14px;
+  color: var(--color-text-primary, #f5f6f8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview.block {
+  text-align: center;
+}
+
+.error {
+  color: var(--color-danger, #f04747);
+  font-size: 12px;
+  white-space: pre-wrap;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", Consolas, monospace);
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.btn {
+  background: var(--color-surface, #1e2128);
+  color: var(--color-text-primary, #f5f6f8);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
+}
+
+.primary {
+  background: var(--color-accent, #2aabee);
+  color: #fff;
+  border-color: var(--color-accent, #2aabee);
+}
+
+.primary:hover {
+  background: var(--color-accent-hover, #1f99d7);
+}
+
+.danger {
+  margin-right: auto;
+  color: var(--color-danger, #f04747);
+}

@@ -1,4 +1,4 @@
-/* Storm replaced by Mobel. This file is intentionally empty. */
+﻿/* Storm replaced by Mobel. This file is intentionally empty. */
 
 
 [data-theme="storm"] {
@@ -97,15 +97,15 @@
   /* -- Link ------------------------------------------------------ */
   --color-link: #4a6fa5;
 
-  /* -- Discord-style palette (reactions / emoji picker) ----------- */
-  --color-discord-purple: #5a4a78;
-  --color-discord-dark: #0f0f14;
-  --color-discord-bg: #1a1b26;
-  --color-discord-border: #343b58;
-  --color-discord-hover: #24283b;
-  --color-discord-muted: #565a6e;
-  --color-discord-text: #9699a3;
-  --color-discord-active: #343b58;
+  /* -- Picker palette (reactions / emoji picker) ----------- */
+  --color-picker-accent: #5a4a78;
+  --color-picker-dark: #0f0f14;
+  --color-picker-bg: #1a1b26;
+  --color-picker-border: #343b58;
+  --color-picker-hover: #24283b;
+  --color-picker-muted: #565a6e;
+  --color-picker-text: #9699a3;
+  --color-picker-active: #343b58;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.2);

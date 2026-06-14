@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAppStore } from "../../store";
 import type { AclGroup } from "../../types";
-import { RoleChip } from "../../components/elements/RoleChip";
+import { RoleChip } from "../../components/elements/role/RoleChip";
 import { useChannelAcl } from "./useChannelAcl";
 import { rootChannelId } from "./rootChannel";
 import styles from "./AdminPanel.module.css";
@@ -10,6 +11,7 @@ import styles from "./AdminPanel.module.css";
 export function RolesListPanel() {
   const channels = useAppStore((s) => s.channels);
   const navigate = useNavigate();
+  const { t } = useTranslation("settings");
   const rootId = useMemo(() => rootChannelId(channels), [channels]);
   const { acl, loading, dirty, saving, setAcl, save } = useChannelAcl(rootId);
   const [search, setSearch] = useState("");
@@ -53,30 +55,29 @@ export function RolesListPanel() {
 
   return (
     <div className={styles.rolesPanel}>
-      <h2 className={styles.panelTitle}>Server Roles</h2>
+      <h2 className={styles.panelTitle}>{t("roles.title")}</h2>
       <p className={styles.dimText}>
-        Server-wide roles live on the root channel and are inherited everywhere. Use the
-        Channel ACL tab to add per-channel overrides.
+        {t("roles.description")}
       </p>
 
       <div className={styles.rolesToolbar}>
         <input
           type="text"
           className={styles.searchInput}
-          placeholder="Search roles..."
+          placeholder={t("roles.searchPlaceholder")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
         <button type="button" className={styles.addBtn} onClick={handleCreate} disabled={!acl || saving}>
-          + Create role
+          {t("roles.createRole")}
         </button>
       </div>
 
-      {loading && !acl && <div className={styles.dimText}>Loading roles...</div>}
-      {dirty && <div className={styles.dimText}>Saving...</div>}
+      {loading && !acl && <div className={styles.dimText}>{t("roles.loadingRoles")}</div>}
+      {dirty && <div className={styles.dimText}>{t("roles.saving")}</div>}
 
       {acl && visibleRoles.length === 0 && (
-        <div className={styles.dimText}>No roles match your search.</div>
+        <div className={styles.dimText}>{t("roles.noMatch")}</div>
       )}
 
       <ul className={styles.rolesList}>
@@ -94,10 +95,10 @@ export function RolesListPanel() {
                 size="medium"
               />
               <span className={styles.roleMeta}>
-                {memberCount(group)} member{memberCount(group) === 1 ? "" : "s"}
+                {t("roles.member", { count: memberCount(group) })}
               </span>
               {group.style_preset && (
-                <span className={styles.rolePreset}>preset: {group.style_preset}</span>
+                <span className={styles.rolePreset}>{t("roles.preset", { name: group.style_preset })}</span>
               )}
             </button>
           </li>

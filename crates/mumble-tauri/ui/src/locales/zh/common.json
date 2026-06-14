@@ -1,0 +1,232 @@
+{
+  "brand": "Fancy Mumble",
+  "actions": {
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "close": "关闭",
+    "cancel": "取消",
+    "dismiss": "忽略",
+    "retry": "重试",
+    "hide": "隐藏",
+    "open": "打开",
+    "collapse": "折叠",
+    "optional": "（可选）"
+  },
+  "confirmDialog": {
+    "confirmLabel": "确认",
+    "cancelLabel": "取消"
+  },
+  "externalLinkGuard": {
+    "title": "外部链接",
+    "body": "你即将离开 Fancy Mumble，前往外部网站：",
+    "disclaimer": "该网站与 Fancy Mumble 没有任何关联，也未获得 Fancy Mumble 的认可。外部链接可能指向包含有害、误导或不良内容的网站。请仅在信任来源时继续。",
+    "cancelBtn": "取消",
+    "openBtn": "打开链接"
+  },
+  "fileDropZone": {
+    "defaultLabel": "将文件拖到此处或点击浏览",
+    "draggingOverlay": "将文件拖到此处放下",
+    "removeBtn": "移除"
+  },
+  "kebabMenu": {
+    "ariaLabel": "更多选项",
+    "closeMenu": "关闭菜单"
+  },
+  "lightbox": {
+    "ariaLabel": "媒体查看器",
+    "prevAriaLabel": "上一张图片",
+    "nextAriaLabel": "下一张图片",
+    "closeAriaLabel": "关闭",
+    "counter": "图片 {{n}} / {{total}}",
+    "loading": "正在加载图片..."
+  },
+  "loadingSplash": {
+    "messages": [
+      "正在编织样条曲线……",
+      "正在预热麦克风……",
+      "正在调校静噪旋钮……",
+      "正在说服数据包按序到达……",
+      "正在礼貌地请求 Opus 配合……",
+      "正在与 TLS 握手协商……",
+      "正在打磨你的头像……",
+      "正在寻找静音按钮……",
+      "正在数比特，再数一遍……",
+      "正在冲泡一壶新鲜的 UDP……",
+      "正在把服务器语言翻译成人话……",
+      "正在整理缠绕的音频线……",
+      "正在地毯下寻找走失的用户……",
+      "正在抚摸降噪器……",
+      "正在提醒 GPU 这次没邀请它……",
+      "加载速度快得可疑……",
+      "快好了。应该。"
+    ]
+  },
+  "memberPicker": {
+    "placeholder": "按名称或 ID 添加用户",
+    "emptyLabel": "暂无成员",
+    "removeChipAriaLabel": "移除 {{name}}",
+    "userFallbackName": "用户 #{{userId}}"
+  },
+  "messageActionBar": {
+    "moreReactions": "更多表情回应",
+    "quote": "引用",
+    "quoteAriaLabel": "引用消息",
+    "copy": "复制文本",
+    "copyAriaLabel": "复制消息文本",
+    "moreOptions": "更多选项",
+    "watchTogether": "一起看",
+    "watchTogetherStarting": "正在启动…",
+    "delete": "删除"
+  },
+  "mobileBottomSheet": {
+    "closeAriaLabel": "关闭"
+  },
+  "quoteBlock": {
+    "unavailable": "消息不可用",
+    "scrollTitle": "点击跳转到消息",
+    "photoFallback": "图片",
+    "emptyFallback": "空消息"
+  },
+  "toast": {
+    "dismissAriaLabel": "忽略"
+  },
+  "autocomplete": {
+    "placeholder": "搜索...",
+    "noOptions": "无匹配项",
+    "removeChipAriaLabel": "移除 {{name}}",
+    "clearSelectionAriaLabel": "清除选择"
+  },
+  "officialBadge": {
+    "label": "官方",
+    "title": "FancyMumble 官方插件"
+  },
+  "cardColorPicker": {
+    "randomTitle": "随机颜色",
+    "roleBg": "背景",
+    "roleBorder": "边框",
+    "roleAccent": "强调色",
+    "removeTitle": "移除颜色",
+    "addTitle": "添加颜色",
+    "glassLabel": "毛玻璃效果",
+    "accentTitle": "强调色"
+  },
+  "splitButton": {
+    "moreOptionsAriaLabel": "更多选项"
+  },
+  "pluginTrust": {
+    "bulkAllowServer": "全部允许（本服务器）",
+    "bulkAllowOnce": "全部允许（仅本次）",
+    "bulkAllowAlways": "全部始终允许",
+    "scopeServer": "在本服务器上允许",
+    "scopeOnce": "仅本次允许",
+    "scopeAlways": "始终允许",
+    "scopeServerHint": "为本服务器记住",
+    "scopeOnceHint": "仅本次会话",
+    "scopeGlobalHint": "在所有服务器上都受信任",
+    "singleTitle": "服务器希望启用插件",
+    "multiTitle": "服务器希望启用 {{count}} 个插件",
+    "singleSubtitle": "查看插件信息并决定是否允许。",
+    "multiSubtitle": "展开一个插件以查看其能力，可以逐个决定，或使用下方的按钮对所有插件应用同一选择。",
+    "blockAll": "全部阻止",
+    "capNone": "无任何权限",
+    "capCount_one": "{{count}} 项权限",
+    "capCount_other": "{{count}} 项权限",
+    "updatedBadge": "已更新",
+    "repromptWarning": "自你上次检查以来，此插件的版本或权限集合已发生变化，请重新确认后再启用。",
+    "capabilitiesHeading": "此插件将可以：",
+    "capEmpty": "无（清单未声明任何权限）",
+    "advancedSummary": "高级",
+    "fieldPlugin": "插件",
+    "fieldVersion": "版本",
+    "fieldAuthor": "作者",
+    "fieldHomepage": "主页",
+    "fieldCapabilities": "权限",
+    "fieldTags": "标签",
+    "fieldLastReviewed": "上次检查",
+    "fieldSchema": "架构",
+    "fieldFingerprint": "指纹",
+    "block": "阻止"
+  },
+  "pluginModalForm": {
+    "addFiles": "添加文件",
+    "chooseFile": "选择文件",
+    "filesAttached_one": "已附加 {{count}} 个文件",
+    "filesAttached_other": "已附加 {{count}} 个文件"
+  },
+  "klipyFooter": "由 Klipy 提供",
+  "emojiPicker": {
+    "searchPlaceholder": "搜索表情…",
+    "empty": "未找到表情",
+    "catPeople": "表情与人物",
+    "catNature": "动物与自然",
+    "catFood": "美食与饮品",
+    "catActivity": "活动",
+    "catObjects": "物品",
+    "catSymbols": "符号",
+    "catFlags": "旗帜",
+    "catCustom": "自定义"
+  },
+  "infoBanner": {
+    "dismissAriaLabel": "关闭横幅"
+  },
+  "tabbedPage": {
+    "backAriaLabel": "返回",
+    "back": "返回"
+  },
+  "pages": {
+    "drawOverlay": {
+      "contextUnavailable": "绘图浮层不可用"
+    },
+    "popout": {
+      "imageUnavailable": "图片资源不可用",
+      "missingId": "缺少弹窗 ID",
+      "mediaLabel": "图片"
+    },
+    "streamPopout": {
+      "connectionLost": "直播连接已断开",
+      "contextUnavailable": "直播上下文不可用",
+      "missingId": "缺少弹窗 ID",
+      "connecting": "正在连接直播……",
+      "screenshare": "屏幕共享",
+      "caption": "实时屏幕共享",
+      "mediaLabel": "直播"
+    }
+  },
+  "updater": {
+    "heading": {
+      "available": "有可用更新",
+      "downloading": "正在下载更新",
+      "installing": "正在安装更新",
+      "restarting": "正在重启…",
+      "failed": "更新失败"
+    },
+    "subtitle": {
+      "restarting": "Fancy Mumble 将在安装完成后自动重启。",
+      "checking": "正在检查更新…",
+      "autoInstall": "正在准备安装最新版本的 Fancy Mumble…",
+      "ready": "Fancy Mumble 的新版本已就绪，可以安装。"
+    },
+    "progress": {
+      "installing": "正在校验与安装…",
+      "starting": "正在开始下载…"
+    },
+    "closeAriaLabel": "关闭",
+    "busyTitle": "正在更新…",
+    "skipActive": "✓ 已跳过 v{{version}}，点击撤销",
+    "skipInactive": "跳过 v{{version}}",
+    "closeBtn": "关闭",
+    "laterBtn": "稍后",
+    "retryBtn": "重试",
+    "updateNowBtn": "立即更新"
+  },
+  "plugins": {
+    "fileServer": "文件服务器",
+    "liveDoc": "实时文档",
+    "disabledLog": "插件“{{name}}”已被服务器停用",
+    "disabledTitle": "{{name}} 已被停用",
+    "disabledBody": "服务器已停用此插件。所有已打开的 {{name}} 视图都将关闭。",
+    "disabledSave": "保存本地副本",
+    "disabledSaving": "正在保存…",
+    "disabledClose": "关闭"
+  }
+}

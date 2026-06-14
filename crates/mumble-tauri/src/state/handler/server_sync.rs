@@ -17,7 +17,7 @@ use crate::state::SharedState;
 
 impl HandleMessage for mumble_tcp::ServerSync {
     fn handle(&self, ctx: &HandlerContext) {
-        let Some((sessions, initial_channel)) = ctx.apply_sync_state(self) else {
+        let Some((_sessions, initial_channel)) = ctx.apply_sync_state(self) else {
             return;
         };
         ctx.emit_empty("server-connected");
@@ -32,7 +32,6 @@ impl HandleMessage for mumble_tcp::ServerSync {
             );
         }
 
-        ctx.request_user_blobs(&sessions);
         ctx.request_channel_descriptions();
         ctx.request_channel_permissions();
         ctx.register_push_subscribe();
@@ -156,27 +155,12 @@ impl HandlerContext {
         });
     }
 
-    /// Request full texture and comment blobs for every connected user.
-    fn request_user_blobs(&self, sessions: &[u32]) {
-        if sessions.is_empty() {
-            return;
-        }
-        let shared = Arc::clone(&self.shared);
-        let sessions = sessions.to_vec();
-        let _blob_request_task = tokio::spawn(async move {
-            let handle = shared.lock().ok().and_then(|s| s.conn.client_handle.clone());
-            if let Some(handle) = handle {
-                let _ = handle
-                    .send(command::RequestBlob {
-                        session_texture: sessions.clone(),
-                        session_comment: sessions,
-                        channel_description: Vec::new(),
-                        user_id_comment: Vec::new(),
-                    })
-                    .await;
-            }
-        });
-    }
+    // NOTE: user texture + comment blobs are deliberately NOT bulk-fetched on
+    // sync.  Both are large and rarely displayed, so they are fetched lazily
+    // per-user on first view (`get_user_texture` / `get_user_comment`); the
+    // serialised `texture_size` / `comment_size` markers tell the frontend which
+    // users have one.  This keeps the backend from holding a blob for every
+    // connected user.
 
     /// Request description blobs for channels whose descriptions were
     /// omitted during the initial sync (only a hash was sent).

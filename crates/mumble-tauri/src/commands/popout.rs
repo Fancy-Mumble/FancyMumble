@@ -181,3 +181,120 @@ pub(crate) fn take_popout_stream(
         .ok()
         .and_then(|mut m| m.remove(&id))
 }
+
+/// Metadata sent to a direct-message popout window so it can subscribe to
+/// the existing DM stream for a specific peer in its own webview.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(crate) struct PopoutDmPayload {
+    /// Saved-server id the target user belongs to.
+    pub server_id: String,
+    /// Best-effort display label for that server (used for the window title).
+    #[serde(default)]
+    pub server_label: Option<String>,
+    /// Mumble session of the DM partner at the time the popout was opened.
+    pub user_session: u32,
+    /// Display name of the DM partner.
+    pub user_name: String,
+    /// TLS certificate hash of the DM partner (stable across reconnects).
+    #[serde(default)]
+    pub user_hash: Option<String>,
+}
+
+/// Open a borderless, always-on-top window dedicated to a single direct
+/// message conversation.  Mirrors `open_image_popout` / `open_stream_popout`
+/// but uses the label prefix `popout-dm-` so the frontend can dispatch to
+/// the DM popout page.
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+pub(crate) async fn open_dm_popout(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    payload: PopoutDmPayload,
+) -> Result<(), String> {
+    let id = uuid::Uuid::new_v4().simple().to_string();
+    let title = format!("DM - {}", payload.user_name);
+    if let Ok(mut map) = state.popout_dms.lock() {
+        let _ = map.insert(id.clone(), payload);
+    }
+    let label = format!("popout-dm-{id}");
+    let _window = tauri::WebviewWindowBuilder::new(
+        &app,
+        &label,
+        tauri::WebviewUrl::App(std::path::PathBuf::from("index.html")),
+    )
+    .title(title)
+    .decorations(false)
+    .shadow(false)
+    .transparent(false)
+    .always_on_top(true)
+    .inner_size(420.0, 600.0)
+    .resizable(true)
+    .skip_taskbar(false)
+    .build()
+    .map_err(|e: tauri::Error| e.to_string())?;
+    Ok(())
+}
+
+/// Android stub: popout windows are a desktop-only feature.
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub(crate) async fn open_dm_popout(
+    _app: tauri::AppHandle,
+    _state: tauri::State<'_, AppState>,
+    _payload: PopoutDmPayload,
+) -> Result<(), String> {
+    Err("DM popout windows are not supported on Android".to_string())
+}
+
+/// Consume and return the DM payload registered for a popout window id.
+#[tauri::command]
+pub(crate) fn take_popout_dm(
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Option<PopoutDmPayload> {
+    state
+        .popout_dms
+        .lock()
+        .ok()
+        .and_then(|mut m| m.remove(&id))
+}
+
+/// Open the translation helper popout window.
+///
+/// Single-instance: if a window with label `popout-translation` already
+/// exists it is focused instead of spawning a duplicate.  The window is
+/// always-on-top so contributors can inspect strings in the main window
+/// while editing translations.
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+pub(crate) async fn open_translation_popout(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    let label = "popout-translation";
+    if let Some(win) = app.get_webview_window(label) {
+        let _ = win.set_focus();
+        return Ok(());
+    }
+    let _window = tauri::WebviewWindowBuilder::new(
+        &app,
+        label,
+        tauri::WebviewUrl::App(std::path::PathBuf::from("index.html")),
+    )
+    .title("Translation helper")
+    .decorations(false)
+    .shadow(false)
+    .transparent(false)
+    .always_on_top(true)
+    .inner_size(820.0, 720.0)
+    .min_inner_size(520.0, 480.0)
+    .resizable(true)
+    .skip_taskbar(false)
+    .build()
+    .map_err(|e: tauri::Error| e.to_string())?;
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub(crate) async fn open_translation_popout(_app: tauri::AppHandle) -> Result<(), String> {
+    Err("Translation popout is not supported on Android".to_string())
+}

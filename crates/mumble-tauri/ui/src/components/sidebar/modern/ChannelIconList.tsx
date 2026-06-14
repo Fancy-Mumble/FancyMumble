@@ -12,12 +12,13 @@ import { HashIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MicOffSmallIcon
  */
 
 import { useState, useMemo, useCallback, useContext, useRef, useLayoutEffect, memo } from "react";
+import { useTranslation } from "react-i18next";
 import type { ChannelEntry, UserEntry } from "../../../types";
-import { colorFor, useHoverCardPosition, UserHoverCardPortal, RoleColorsContext } from "../UserListItem";
-import { useUserAvatar, useChannelDescription } from "../../../lazyBlobs";
+import { colorFor, useHoverCardPosition, UserHoverCardPortal, RoleColorsContext } from "../user/UserListItem";
+import { useUserAvatar, useUserComment, useChannelDescription } from "../../../lazyBlobs";
 import { parseComment } from "../../../profileFormat";
 import { useUserStats } from "../../../hooks/useUserStats";
-import { useStreamThumbnail } from "../../chat/useStreamPreview";
+import { useStreamThumbnail } from "../../chat/stream/useStreamPreview";
 import SwipeableCard from "../../elements/SwipeableCard";
 import { isMobile } from "../../../utils/platform";
 import { useUserDrag, useChannelDropTarget } from "../../../utils/userMoveDnd";
@@ -27,7 +28,7 @@ import { PchatBadge } from "../PchatBadge";
 import {
   ChannelReorderWrapper,
   useChannelReorderHandler,
-} from "../channelReorder";
+} from "../channel/channelReorder";
 import styles from "./ChannelIconList.module.css";
 
 /** Extract the src of the first <img> tag in an HTML string. */
@@ -106,6 +107,7 @@ interface MemberRowProps {
 }
 
 function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMenu, onClick }: MemberRowProps) {
+  const { t } = useTranslation("sidebar");
   const ownSession = useAppStore((s) => s.ownSession);
   const selectedDmUser = useAppStore((s) => s.selectedDmUser);
   const dmUnread = useAppStore((s) => s.dmUnreadCounts[user.session] ?? 0);
@@ -119,10 +121,15 @@ function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMen
   const roleColor = user.user_id != null ? (roleColors.get(user.user_id) ?? null) : null;
   const url = useUserAvatar(user.session, user.texture_size);
   const { showCard, cardPos, itemRef, handleEnter, handleLeave } = useHoverCardPosition(isBroadcasting);
-  // Defer FancyProfile parsing until the hover card is actually shown.
+  // Defer FancyProfile parsing (and the bio fetch) until the card is shown.
+  const liveComment = useUserComment(user.session, user.comment_size, showCard);
   const parsed = useMemo(
-    () => (showCard && user.comment ? parseComment(user.comment) : null),
-    [showCard, user.comment],
+    () => {
+      if (!showCard) return null;
+      const c = user.comment ?? liveComment;
+      return c ? parseComment(c) : null;
+    },
+    [showCard, user.comment, liveComment],
   );
   const stats = useUserStats(user.session, showCard);
   const streamThumbnail = useStreamThumbnail(user.session, showCard && isBroadcasting);
@@ -183,9 +190,9 @@ function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMen
           <HeadphonesOffIcon className={styles.statusIcon} width={12} height={12} />
         )}
         {isBroadcasting && (
-          <span className={styles.liveBadge} title="Sharing screen">
+          <span className={styles.liveBadge} title={t("channelIconList.liveBadgeTitle")}>
             <ScreenShareIcon width={10} height={10} />
-            Live
+            {t("channelIconList.liveBadgeLabel")}
           </span>
         )}
         {dmUnread > 0 && (
@@ -246,6 +253,7 @@ function ChannelIconListImpl({
   onUserContextMenu,
   onUserClick,
 }: ChannelIconListProps) {
+  const { t } = useTranslation("sidebar");
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const handleChannelReorder = useChannelReorderHandler(channels);
 
@@ -270,13 +278,11 @@ function ChannelIconListImpl({
 
   // Depth-first flattening of the channel tree, preserving server
   // `position` order at every level so each parent is immediately
-  // followed by its (recursively expanded) children.  An empty root
-  // channel is omitted (it would otherwise show up as an unhelpful
-  // "Root" header).
+  // followed by its (recursively expanded) children.  The root channel is
+  // always shown (matching the classic tree viewer) so it stays selectable
+  // and right-clickable even when empty.
   const flatChannels = useMemo(() => {
     const childrenOf = new Map<number, typeof channels>();
-    const isRoot = (ch: ChannelEntry) =>
-      ch.parent_id === null || ch.parent_id === ch.id;
     for (const ch of channels) {
       const parent = ch.parent_id === ch.id ? -1 : ch.parent_id ?? -1;
       const list = childrenOf.get(parent) ?? [];
@@ -291,15 +297,14 @@ function ChannelIconListImpl({
     const result: typeof channels = [];
     const visit = (parentId: number) => {
       for (const ch of sortLevel(childrenOf.get(parentId) ?? [])) {
-        const skip = isRoot(ch) && (usersByChannel.get(ch.id)?.length ?? 0) === 0;
-        if (!skip) result.push(ch);
+        result.push(ch);
         visit(ch.id);
       }
     };
     visit(-1);
 
     return result;
-  }, [channels, usersByChannel]);
+  }, [channels]);
 
   const currentEntry = useMemo(
     () => (currentChannel == null ? undefined : flatChannels.find((c) => c.id === currentChannel)),
@@ -379,14 +384,14 @@ function ChannelIconListImpl({
             onContextMenu={(e) => onContextMenu(e, channel.id)}
           >
             <span className={styles.channelName}>
-              {channel.name || "Root"}
+              {channel.name || t("channelIconList.rootFallback")}
               {isLocked && (
-                <span className={styles.lockBadge} title="No permission to join">
+                <span className={styles.lockBadge} title={t("channelIconList.lockBadgeTitle")}>
                   <LockIcon width={11} height={11} />
                 </span>
               )}
               {isListened && (
-                <span className={styles.listenBadge} title="Listening">
+                <span className={styles.listenBadge} title={t("channelIconList.listenBadgeTitle")}>
                   <ListenBadgeIcon width={11} height={11} />
                 </span>
               )}
@@ -440,9 +445,9 @@ function ChannelIconListImpl({
   return (
     <div ref={listRef} className={styles.list}>
       {currentEntry && stickyState === "top" && (
-        <button type="button" className={styles.stickyTop} onClick={scrollCurrentIntoView}>
+        <div className={styles.stickyTop} onClick={scrollCurrentIntoView}>
           {renderChannel(currentEntry)}
-        </button>
+        </div>
       )}
 
       {flatChannels.map((channel) => {
@@ -459,7 +464,7 @@ function ChannelIconListImpl({
             <div key={channel.id} ref={setRef}>
               <SwipeableCard
                 rightSwipeAction={{
-                  label: "Join",
+                  label: t("channelIconList.swipeJoinLabel"),
                   color: "var(--color-accent, #2aabee)",
                   onTrigger: () => onJoinChannel(channel.id),
                 }}
@@ -483,9 +488,9 @@ function ChannelIconListImpl({
       })}
 
       {currentEntry && stickyState === "bottom" && (
-        <button type="button" className={styles.stickyBottom} onClick={scrollCurrentIntoView}>
+        <div className={styles.stickyBottom} onClick={scrollCurrentIntoView}>
           {renderChannel(currentEntry)}
-        </button>
+        </div>
       )}
     </div>
   );

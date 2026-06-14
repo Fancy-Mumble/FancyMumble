@@ -33,6 +33,7 @@ mod win_tracker;
 
 /// Stable label used for the (single) drawing-overlay window.
 /// Picked up by the frontend's `App.tsx` window-kind dispatcher.
+#[cfg(not(target_os = "android"))]
 pub(crate) const DRAW_OVERLAY_LABEL: &str = "draw-overlay";
 
 /// Payload picked up by the freshly-opened drawing-overlay window.

@@ -1,8 +1,14 @@
 import { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { deleteProfileData } from "./profileData";
 import styles from "./SettingsPage.module.css";
+import panelStyles from "./IdentitiesPanel.module.css";
+import { registerSettings } from "./settingsSearchRegistry";
+
+registerSettings("identities")
+  .add("identities.createNew", ["certificate", "key", "identity"]);
 
 export function IdentitiesPanel({
   identities,
@@ -20,6 +26,7 @@ export function IdentitiesPanel({
   const [newLabel, setNewLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const { t } = useTranslation(["settings", "common"]);
 
   const handleCreate = useCallback(async () => {
     const label = newLabel.trim();
@@ -80,43 +87,39 @@ export function IdentitiesPanel({
 
   return (
     <>
-      <h2 className={styles.panelTitle}>Identities</h2>
+      <h2 className={styles.panelTitle}>{t("identities.panelTitle")}</h2>
 
       <section className={styles.section}>
-        <p className={styles.fieldHint}>
-          Identities are TLS client certificates used to authenticate with
-          Mumble servers. Each identity is unique to you and persists across
-          sessions.
-        </p>
+        <p className={styles.fieldHint}>{t("identities.description")}</p>
 
         {error && <p className={styles.error}>{error}</p>}
 
         {identities.length === 0 ? (
           <p className={styles.fieldHint} style={{ fontStyle: "italic" }}>
-            No identities yet. Create or import one below.
+            {t("identities.noIdentities")}
           </p>
         ) : (
-          <ul className={styles.identityList}>
+          <ul className={panelStyles.identityList}>
             {identities.map((label) => (
               <li
                 key={label}
-                className={`${styles.identityItem}${label === connectedCertLabel ? ` ${styles.identityItemActive}` : ""}`}
+                className={`${panelStyles.identityItem}${label === connectedCertLabel ? ` ${panelStyles.identityItemActive}` : ""}`}
               >
-                <span className={styles.identityLabel}>
+                <span className={panelStyles.identityLabel}>
                   {label}
                   {label === connectedCertLabel && (
-                    <span className={styles.identityActiveBadge}>connected</span>
+                    <span className={panelStyles.identityActiveBadge}>{t("identities.connectedBadge")}</span>
                   )}
                 </span>
 
-                <div className={styles.identityActions}>
+                <div className={panelStyles.identityActions}>
                   {isExpert && (
                     <button
                       type="button"
-                      className={styles.identityEditBtn}
+                      className={panelStyles.identityEditBtn}
                       onClick={() => onEditProfile(label)}
                     >
-                      Edit Profile
+                      {t("identities.editProfile")}
                     </button>
                   )}
                   <button
@@ -124,7 +127,7 @@ export function IdentitiesPanel({
                     className={styles.ghostBtn}
                     onClick={() => handleExport(label)}
                   >
-                    Export
+                    {t("identities.export")}
                   </button>
 
                   {confirmDelete === label ? (
@@ -134,14 +137,14 @@ export function IdentitiesPanel({
                         className={styles.dangerBtn}
                         onClick={() => handleDelete(label)}
                       >
-                        Confirm
+                        {t("identities.confirmDelete")}
                       </button>
                       <button
                         type="button"
                         className={styles.ghostBtn}
                         onClick={() => setConfirmDelete(null)}
                       >
-                        Cancel
+                        {t("common:actions.cancel")}
                       </button>
                     </div>
                   ) : (
@@ -150,7 +153,7 @@ export function IdentitiesPanel({
                       className={styles.dangerBtn}
                       onClick={() => setConfirmDelete(label)}
                     >
-                      Delete
+                      {t("identities.delete")}
                     </button>
                   )}
                 </div>
@@ -161,14 +164,14 @@ export function IdentitiesPanel({
       </section>
 
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Create new identity</h3>
-        <div className={styles.identityCreateRow}>
+        <h3 className={styles.sectionTitle}>{t("identities.createNew")}</h3>
+        <div className={panelStyles.identityCreateRow}>
           <input
             type="text"
-            className={styles.input}
+            className={`${styles.input} ${panelStyles.identityCreateRowInput}`}
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="Identity name..."
+            placeholder={t("identities.createPlaceholder")}
             onKeyDown={(e) => {
               if (e.key === "Enter") handleCreate();
             }}
@@ -179,7 +182,7 @@ export function IdentitiesPanel({
             onClick={handleCreate}
             disabled={!newLabel.trim()}
           >
-            Create
+            {t("identities.createBtn")}
           </button>
         </div>
       </section>
@@ -190,9 +193,10 @@ export function IdentitiesPanel({
           className={styles.ghostBtn}
           onClick={handleImport}
         >
-          Import identity...
+          {t("identities.importBtn")}
         </button>
       </section>
     </>
   );
 }
+

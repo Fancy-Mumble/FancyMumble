@@ -1,4 +1,4 @@
-/* Clarimol replaced by Ply. This file is intentionally empty. */
+﻿/* Clarimol replaced by Ply. This file is intentionally empty. */
 
 [data-theme="clarimol"] {
   /* -- Background ------------------------------------------------ */
@@ -96,15 +96,15 @@
   /* -- Link ------------------------------------------------------ */
   --color-link: #22B7F2;
 
-  /* -- Discord-style palette (reactions / emoji picker) ----------- */
-  --color-discord-purple: #22B7F2;
-  --color-discord-dark: #F2EBDC;
-  --color-discord-bg: #FAF5EE;
-  --color-discord-border: #c8b896;
-  --color-discord-hover: #EDE2CF;
-  --color-discord-muted: #8a7050;
-  --color-discord-text: #1a1208;
-  --color-discord-active: #c8b896;
+  /* -- Picker palette (reactions / emoji picker) ----------- */
+  --color-picker-accent: #22B7F2;
+  --color-picker-dark: #F2EBDC;
+  --color-picker-bg: #FAF5EE;
+  --color-picker-border: #c8b896;
+  --color-picker-hover: #EDE2CF;
+  --color-picker-muted: #8a7050;
+  --color-picker-text: #1a1208;
+  --color-picker-active: #c8b896;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.08);

@@ -180,12 +180,16 @@ fn build_signal_bridge() {
             panic!("OUT_DIR must be set in build scripts");
         });
     let out_path = std::path::Path::new(&out_dir);
-    // target/{profile}/build/crate-hash/out -> target/{profile}
+    // OUT_DIR is target/<profile>/build/<crate-hash>/out. The profile dir is
+    // the parent of the `build/` component. Resolving it this way (rather than
+    // matching the literal names "debug"/"release") supports custom profiles
+    // such as `release-debug`, whose dir is `target/release-debug/`.
     let target_profile_dir = out_path
         .ancestors()
-        .find(|p| p.file_name().map(|n| n == "debug" || n == "release").unwrap_or(false))
+        .find(|p| p.file_name().is_some_and(|n| n == "build"))
+        .and_then(std::path::Path::parent)
         .unwrap_or_else(|| {
-            panic!("could not locate target/{profile} from OUT_DIR={out_dir}");
+            panic!("could not locate the profile dir from OUT_DIR={out_dir}");
         });
 
     let dest = target_profile_dir.join(lib_name);

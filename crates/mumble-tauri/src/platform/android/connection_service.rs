@@ -23,13 +23,13 @@ pub struct ConnectionServiceHandle(pub PluginHandle<Wry>);
 pub fn register_disconnect_listener(handle: &ConnectionServiceHandle, app: tauri::AppHandle) {
     let channel: tauri::ipc::Channel<tauri::ipc::InvokeBody> = tauri::ipc::Channel::new(move |_body| {
         let app = app.clone();
-        let _ = tauri::async_runtime::spawn(async move {
+        drop(tauri::async_runtime::spawn(async move {
             if let Some(state) = app.try_state::<AppState>() {
                 if let Err(e) = state.disconnect().await {
                     tracing::warn!("notification disconnect failed: {e}");
                 }
             }
-        });
+        }));
         Ok(())
     });
 
@@ -53,7 +53,7 @@ pub fn register_navigate_listener(handle: &ConnectionServiceHandle, app: tauri::
         tauri::ipc::Channel::new(move |body| {
             if let tauri::ipc::InvokeResponseBody::Json(ref json_str) = body {
                 if let Ok(val) = serde_json::from_str::<serde_json::Value>(json_str) {
-                    if let Some(channel_id) = val.get("channelId").and_then(|v| v.as_u64()) {
+                    if let Some(channel_id) = val.get("channelId").and_then(serde_json::Value::as_u64) {
                         let _ = app.emit(
                             "navigate-to-channel",
                             serde_json::json!({ "channel_id": channel_id }),
@@ -74,7 +74,7 @@ pub fn register_navigate_listener(handle: &ConnectionServiceHandle, app: tauri::
 }
 
 /// Start the foreground service, showing a persistent notification
-/// saying "Connected to <server_name>".
+/// saying "Connected to `<server_name>`".
 pub fn start_service(handle: &ConnectionServiceHandle, server_name: &str) {
     tracing::info!(server_name, "starting connection service");
     let payload = serde_json::json!({ "serverName": server_name });
