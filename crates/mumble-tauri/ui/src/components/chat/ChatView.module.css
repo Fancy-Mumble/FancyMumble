@@ -533,6 +533,26 @@
    */
   content-visibility: auto;
   contain-intrinsic-size: auto 120px;
+  /*
+   * `content-visibility: auto` implies `contain: paint`, which clips every
+   * descendant to this group's box - including the hover MessageActionBar that
+   * deliberately floats 30px ABOVE its message (`top: -30px`).  Without this it
+   * gets cut off and becomes unclickable, so reactions can't be triggered.
+   *
+   * Reserve those 30px inside the paint box with `padding-top` and cancel it
+   * again with an equal negative `margin-top`, so inter-group spacing, scroll
+   * height and `contain-intrinsic-size` are all unchanged (padding + margin sum
+   * to 0).  The reserved strip overlaps the group above, so mark the group
+   * click-through and re-enable pointer events on its real children - otherwise
+   * the transparent strip would swallow clicks meant for the message above.
+   */
+  padding-top: 32px;
+  margin-top: -32px;
+  pointer-events: none;
+}
+
+.messageGroup > * {
+  pointer-events: auto;
 }
 
 .messageGroupOwn {

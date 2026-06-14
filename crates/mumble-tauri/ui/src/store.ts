@@ -3129,9 +3129,16 @@ export async function initEventListeners(
             if (prefs.voiceOnReconnect) {
               isRestoringVoice = true;
               try {
-                await useAppStore.getState().enableVoice();
                 if (prefs.voiceMutedOnReconnect) {
-                  await useAppStore.getState().toggleMute();
+                  // Establish the muted state in ONE atomic backend call.
+                  // The previous enableVoice() + toggleMute() two-step could
+                  // race on a reconnect (the unmute from enableVoice landing
+                  // after the mute) and leave the user unmuted.
+                  await invoke("enable_voice_muted");
+                  useAppStore.setState({ voiceState: "muted", inCall: true });
+                  updatePreferences({ voiceOnReconnect: true, voiceMutedOnReconnect: true }).catch(() => {});
+                } else {
+                  await useAppStore.getState().enableVoice();
                 }
               } finally {
                 isRestoringVoice = false;

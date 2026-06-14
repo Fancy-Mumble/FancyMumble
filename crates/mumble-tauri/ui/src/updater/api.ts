@@ -7,7 +7,7 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { load } from "@tauri-apps/plugin-store";
+import { load } from "../utils/store";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export type UpdateInfo = {

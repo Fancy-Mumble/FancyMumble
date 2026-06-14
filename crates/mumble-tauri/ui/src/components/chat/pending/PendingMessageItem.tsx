@@ -11,6 +11,7 @@
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../../store";
 import { SafeHtml } from "../../elements/SafeHtml";
+import { CloseIcon } from "../../../icons";
 import type { PendingMessage } from "../../../types";
 import styles from "./PendingMessageItem.module.css";
 
@@ -68,7 +69,7 @@ export default function PendingMessageItem({ pending }: PendingMessageItemProps)
               aria-label={isFailed ? t("pendingMessage.dismissFailed") : t("pendingMessage.hidePending")}
               title={isFailed ? t("common:actions.dismiss") : t("pendingMessage.hide")}
             >
-              &#x2715;
+              <CloseIcon width={13} height={13} />
             </button>
           </span>
         </div>

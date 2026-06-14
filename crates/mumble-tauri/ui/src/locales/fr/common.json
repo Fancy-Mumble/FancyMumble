@@ -36,6 +36,7 @@
     "ariaLabel": "Visionneuse de médias",
     "prevAriaLabel": "Image précédente",
     "nextAriaLabel": "Image suivante",
+    "closeAriaLabel": "Fermer",
     "counter": "Photo {{n}} / {{total}}",
     "loading": "Chargement de l'image..."
   },

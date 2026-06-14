@@ -53,6 +53,23 @@ mod updater;
 use state::AppState;
 use tauri::Manager;
 
+/// Resolve the application data directory used for certificates, identities,
+/// pchat seeds and signal state.
+///
+/// Honours the `FANCY_E2E_DATA_DIR` env override so each e2e test client gets an
+/// isolated identity root. Tauri's `app_data_dir()` resolves via the OS
+/// known-folder API (which ignores env overrides on Windows), so per-instance
+/// isolation for the e2e suite requires this explicit hook. Production runs
+/// (no env var set) behave exactly as before.
+pub(crate) fn e2e_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    if let Ok(dir) = std::env::var("FANCY_E2E_DATA_DIR") {
+        if !dir.trim().is_empty() {
+            return Ok(std::path::PathBuf::from(dir));
+        }
+    }
+    app.path().app_data_dir().map_err(|e| e.to_string())
+}
+
 /// Manages the Vite dev server when the app is run via plain `cargo run`.
 ///
 /// `cargo tauri dev` starts the dev server (its `beforeDevCommand`) and kills
@@ -650,6 +667,7 @@ macro_rules! all_command_handlers {
             commands::audio::get_audio_backend,
             commands::audio::get_voice_state,
             commands::audio::enable_voice,
+            commands::audio::enable_voice_muted,
             commands::audio::disable_voice,
             commands::audio::toggle_mute,
             commands::audio::toggle_deafen,

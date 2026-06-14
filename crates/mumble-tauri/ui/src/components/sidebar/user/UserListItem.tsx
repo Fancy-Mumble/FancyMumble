@@ -13,6 +13,7 @@ import { isMobile } from "../../../utils/platform";
 import { PERM_MOVE as PERM_MOVE_BIT } from "../../../utils/permissions";
 import { useUserDrag } from "../../../utils/userMoveDnd";
 import { useStreamThumbnail } from "../../chat/stream/useStreamPreview";
+import { TID } from "../../../testids";
 import styles from "./UserListItem.module.css";
 
 // Re-export so existing consumers (e.g. ChannelSidebar) keep working.
@@ -342,6 +343,12 @@ export const UserListItem = memo(function UserListItem({
       ref={itemRef}
       type="button"
       className={`${styles.userItem} ${active ? styles.userItemActive : ""} ${isSelf ? styles.selfUser : ""} ${isSelf && isTalking ? styles.selfTalking : ""} ${offline ? styles.userItemOffline : ""}`}
+      data-testid={TID.memberItem}
+      data-user-name={user.name}
+      data-offline={offline ? "true" : undefined}
+      data-talking={isTalking ? "true" : undefined}
+      data-muted={isMuted ? "true" : undefined}
+      data-deaf={isDeafened ? "true" : undefined}
       data-clickable={isSelf && onClick ? "true" : undefined}
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}

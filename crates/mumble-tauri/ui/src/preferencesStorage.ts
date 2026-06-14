@@ -3,7 +3,7 @@
  * using `@tauri-apps/plugin-store` (Tauri Store v2).
  */
 
-import { load } from "@tauri-apps/plugin-store";
+import { load } from "./utils/store";
 import type {
   AudioSettings,
   NotificationSoundSettings,
@@ -86,14 +86,32 @@ export async function setPreferences(
   }
 }
 
-/** Update specific preference fields. */
+// Serializes preference writes. Each updatePreferences() does a read-modify-
+// write of the shared `preferences` object; without serialization two
+// overlapping calls both read the same `current` and the later-completing one
+// silently drops the other's fields. The callers are mostly fire-and-forget
+// (`.catch(() => {})`), so overlap is common - e.g. rapid mute toggles racing
+// an unrelated pref write during (re)connect intermittently lost
+// `voiceMutedOnReconnect`, breaking the muted reconnect-restore.
+let prefWriteChain: Promise<unknown> = Promise.resolve();
+
+/** Update specific preference fields.
+ *
+ * Patches are applied strictly in call order and never interleave, so
+ * concurrent updates cannot clobber each other. */
 export async function updatePreferences(
   patch: Partial<UserPreferences>,
 ): Promise<UserPreferences> {
-  const current = await getPreferences();
-  const updated = { ...current, ...patch };
-  await setPreferences(updated);
-  return updated;
+  const apply = async (): Promise<UserPreferences> => {
+    const current = await getPreferences();
+    const updated = { ...current, ...patch };
+    await setPreferences(updated);
+    return updated;
+  };
+  const result = prefWriteChain.then(apply, apply);
+  // Keep the chain alive even when a write rejects, so later writes still run.
+  prefWriteChain = result.catch(() => {});
+  return result;
 }
 
 /** Check whether this is the user's first run (setup not completed). */

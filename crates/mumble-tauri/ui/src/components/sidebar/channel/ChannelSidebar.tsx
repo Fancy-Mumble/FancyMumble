@@ -27,6 +27,7 @@ const RecordingModal = lazy(() => import("../RecordingModal"));
 import { SidebarTabs } from "../SidebarTabs";
 import { PERM_LISTEN, PERM_WRITE } from "../../../utils/permissions";
 import { filterVisibleChannels } from "../../../utils/channelVisibility";
+import { TID } from "../../../testids";
 
 /** Check whether a channel's cached permissions include the Listen bit. */
 function canListen(channel: ChannelEntry | undefined): boolean {
@@ -60,6 +61,7 @@ function SelfVoiceControls({ voiceState, inCall, toggleMute, toggleDeafen, enabl
     <div className={`${styles.selfVoiceActions} ${styles.desktopOnly}`}>
       <button
         className={`${styles.voiceToggle} ${isActive ? styles.voiceActive : styles.voiceMuted}`}
+        data-testid={TID.toggleMute}
         onClick={toggleMute}
         title={muteTitle}
       >
@@ -71,6 +73,7 @@ function SelfVoiceControls({ voiceState, inCall, toggleMute, toggleDeafen, enabl
       </button>
       <button
         className={`${styles.voiceToggle} ${isInactive ? styles.voiceMuted : styles.voiceActive}`}
+        data-testid={TID.toggleDeafen}
         onClick={toggleDeafen}
         title={isInactive ? t("channelSidebar.enableVoice") : t("channelSidebar.disableVoice")}
       >

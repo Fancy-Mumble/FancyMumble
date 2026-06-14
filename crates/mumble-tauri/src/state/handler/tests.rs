@@ -1412,7 +1412,13 @@ fn plugin_data_payload_content() {
     let plugin = events.iter().find(|(n, _)| n == "plugin-data").unwrap();
     assert_eq!(plugin.1["sender_session"].as_u64().unwrap(), 7);
     assert_eq!(plugin.1["data_id"].as_str().unwrap(), "test-id");
-    assert_eq!(plugin.1["data"].as_array().unwrap().len(), 3);
+    // `data` is serialised as a base64 string (PluginDataPayload uses
+    // `serialize_bytes_base64`), not a JSON number array.
+    use base64::Engine as _;
+    let data = base64::engine::general_purpose::STANDARD
+        .decode(plugin.1["data"].as_str().unwrap())
+        .unwrap();
+    assert_eq!(data, vec![1, 2, 3]);
 }
 
 #[test]
@@ -1424,7 +1430,8 @@ fn plugin_data_no_data_emits_empty_defaults() {
     let events = emitter.events();
     let plugin = events.iter().find(|(n, _)| n == "plugin-data").unwrap();
     assert_eq!(plugin.1["data_id"].as_str().unwrap(), "");
-    assert!(plugin.1["data"].as_array().unwrap().is_empty());
+    // No data -> empty byte slice -> base64 encoding of "" is "".
+    assert_eq!(plugin.1["data"].as_str().unwrap(), "");
 }
 
 // -- PermissionQuery -----------------------------------------------
