@@ -36,6 +36,7 @@
     "ariaLabel": "Media viewer",
     "prevAriaLabel": "Previous image",
     "nextAriaLabel": "Next image",
+    "closeAriaLabel": "Close",
     "counter": "Photo {{n}} / {{total}}",
     "loading": "Loading image..."
   },

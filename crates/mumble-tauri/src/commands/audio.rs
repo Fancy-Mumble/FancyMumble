@@ -171,6 +171,15 @@ pub(crate) async fn enable_voice(state: tauri::State<'_, AppState>) -> Result<()
     state.enable_voice().await
 }
 
+/// Enable voice calling directly in the muted state (undeaf + mute, inbound
+/// only). Used by the reconnect voice-restore so the muted state is established
+/// in one atomic step instead of `enable_voice` then `toggle_mute`, which can
+/// race on a reconnect and leave the user unmuted.
+#[tauri::command]
+pub(crate) async fn enable_voice_muted(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.enable_voice_muted().await
+}
+
 /// Disable voice calling (go back to deaf+muted).
 #[tauri::command]
 pub(crate) async fn disable_voice(state: tauri::State<'_, AppState>) -> Result<(), String> {

@@ -3,7 +3,7 @@
 // no server is selected fall back to a sentinel "<no-server>" key so
 // they at least survive the session.
 
-import { load } from "@tauri-apps/plugin-store";
+import { load } from "../../utils/store";
 import type { TrustRecord } from "./trust";
 
 const STORE_FILE = "pluginTrust.json";

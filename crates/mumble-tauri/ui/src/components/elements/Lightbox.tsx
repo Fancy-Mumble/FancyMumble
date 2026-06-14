@@ -4,6 +4,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { CloseIcon, ChevronLeftIcon, ChevronRightIcon } from "../../icons";
 import type { ChatMessage, TimeFormat } from "../../types";
 import { extractOffloadInfo, offloadManager, type MessageScope } from "../../messageOffload";
 import { extractMedia } from "../chat/media/MediaPreview";
@@ -397,8 +398,8 @@ function LightboxOverlay({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      <button type="button" className={styles.close} onClick={onClose}>
-        &#x2715;
+      <button type="button" className={styles.close} onClick={onClose} aria-label={t("lightbox.closeAriaLabel")}>
+        <CloseIcon width={18} height={18} />
       </button>
 
       <div className={styles.carousel} style={dismissStyle}>
@@ -445,7 +446,7 @@ function LightboxOverlay({
           onClick={goPrev}
           aria-label={t("lightbox.prevAriaLabel")}
         >
-          &#x2039;
+          <ChevronLeftIcon width={28} height={28} />
         </button>
       )}
       {hasNext && (
@@ -455,7 +456,7 @@ function LightboxOverlay({
           onClick={goNext}
           aria-label={t("lightbox.nextAriaLabel")}
         >
-          &#x203A;
+          <ChevronRightIcon width={28} height={28} />
         </button>
       )}
 

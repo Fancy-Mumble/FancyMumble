@@ -31,6 +31,7 @@ import {
   ChannelReorderWrapper,
   useChannelReorderHandler,
 } from "../channel/channelReorder";
+import { TID } from "../../../testids";
 import styles from "./ModernChannelList.module.css";
 
 const MAX_STACKED = 3;
@@ -280,12 +281,11 @@ function ModernChannelListImpl({
 
   // Depth-first flattening of the channel tree, so each parent is
   // immediately followed by its (recursively expanded) children, in
-  // server `position` order at every level.  An empty root channel is
-  // omitted (it would otherwise show up as an unhelpful "Root" header).
+  // server `position` order at every level.  The root channel is always
+  // shown (matching the classic tree viewer) so it stays selectable and
+  // right-clickable even when empty.
   const flatChannels = useMemo(() => {
     const childrenOf = new Map<number, typeof channels>();
-    const isRoot = (ch: ChannelEntry) =>
-      ch.parent_id === null || ch.parent_id === ch.id;
     for (const ch of channels) {
       const parent = ch.parent_id === ch.id ? -1 : ch.parent_id ?? -1;
       const list = childrenOf.get(parent) ?? [];
@@ -300,8 +300,7 @@ function ModernChannelListImpl({
     const result: typeof channels = [];
     const visit = (parentId: number) => {
       for (const ch of sortLevel(childrenOf.get(parentId) ?? [])) {
-        const skip = isRoot(ch) && (usersByChannel.get(ch.id)?.length ?? 0) === 0;
-        if (!skip) result.push(ch);
+        result.push(ch);
         visit(ch.id);
       }
     };
@@ -310,7 +309,7 @@ function ModernChannelListImpl({
     visit(-1);
 
     return result;
-  }, [channels, usersByChannel]);
+  }, [channels]);
 
   // Find the current channel entry for the sticky clone.
   const currentChannelEntry = useMemo(
@@ -398,6 +397,9 @@ function ModernChannelListImpl({
           <button
             type="button"
             className={styles.channelBtn}
+            data-testid={TID.channelItem}
+            data-channel-id={channel.id}
+            data-channel-name={channel.name || t("channelList.root")}
             onClick={() => onSelectChannel(channel.id)}
             onDoubleClick={() => onJoinChannel(channel.id)}
             onContextMenu={(e) => onContextMenu(e, channel.id)}

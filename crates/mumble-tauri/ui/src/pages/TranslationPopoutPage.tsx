@@ -108,7 +108,7 @@ export default function TranslationPopoutPage() {
   // can compare against as many existing translations as they want.
   const [refLangs, setRefLangs] = useState<readonly string[]>(["de"]);
   const [status, setStatus] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
-  const statusTimer = useRef<number | null>(null);
+  const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Initial load of saved bundles.

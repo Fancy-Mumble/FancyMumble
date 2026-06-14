@@ -4,7 +4,7 @@ import {
   isRegistered,
 } from "@tauri-apps/plugin-global-shortcut";
 import { invoke } from "@tauri-apps/api/core";
-import { load } from "@tauri-apps/plugin-store";
+import { load } from "../../utils/store";
 
 export interface ShortcutBindings {
   // Voice - global

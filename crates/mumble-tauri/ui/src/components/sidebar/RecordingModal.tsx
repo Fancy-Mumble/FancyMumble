@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Modal } from "../elements/Modal";
+import { CloseIcon } from "../../icons";
 import styles from "./RecordingModal.module.css";
 
 type RecordingFormat = "wav";
@@ -123,8 +124,8 @@ export default function RecordingModal({
       <div className={styles.modal} role="dialog" aria-modal="true">
         <div className={styles.header}>
           <h3 className={styles.title}>{t("recordingModal.title")}</h3>
-          <button className={styles.closeBtn} onClick={onClose}>
-            &#x2715;
+          <button className={styles.closeBtn} onClick={onClose} aria-label={t("common:actions.close")}>
+            <CloseIcon width={16} height={16} />
           </button>
         </div>
 

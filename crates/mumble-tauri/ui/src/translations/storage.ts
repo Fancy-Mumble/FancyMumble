@@ -8,7 +8,7 @@
  * available to switch into.
  */
 
-import { load } from "@tauri-apps/plugin-store";
+import { load } from "../utils/store";
 import {
   I18N_NAMESPACES,
   registerLanguage,

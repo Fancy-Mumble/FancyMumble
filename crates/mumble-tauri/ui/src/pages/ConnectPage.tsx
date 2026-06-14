@@ -17,6 +17,7 @@ import ServerEditSheet from "../components/server/ServerEditSheet";
 import PublicServerList from "../components/server/PublicServerList";
 import BrandLogo from "../components/elements/BrandLogo";
 import PasswordDialog from "../components/server/PasswordDialog";
+import { TID } from "../testids";
 import styles from "./ConnectPage.module.css";
 
 type View = "loading" | "servers" | "wizard" | "public";
@@ -443,6 +444,7 @@ export default function ConnectPage() {
                     <label className={styles.label}>{t("fields.host")}</label>
                     <input
                       className={styles.input}
+                      data-testid={TID.connectHostInput}
                       type="text"
                       placeholder={t("fields.hostPlaceholder")}
                       value={host}
@@ -457,6 +459,7 @@ export default function ConnectPage() {
                         <label className={styles.label}>{t("fields.port")}</label>
                         <input
                           className={styles.input}
+                          data-testid={TID.connectPortInput}
                           type="text"
                           placeholder={t("fields.portPlaceholder")}
                           value={port}
@@ -556,6 +559,7 @@ export default function ConnectPage() {
                       <label className={styles.label}>{t("fields.username")}</label>
                       <input
                         className={styles.input}
+                        data-testid={TID.connectUsernameInput}
                         type="text"
                         placeholder={t("fields.usernamePlaceholder")}
                         value={username}
@@ -608,6 +612,7 @@ export default function ConnectPage() {
                 <div className={styles.buttonRow}>
                   <button
                     className={styles.buttonGhost}
+                    data-testid={TID.quickConnect}
                     type="button"
                     onClick={handleQuickConnectForm}
                     disabled={isConnecting || !host || !username}
@@ -616,6 +621,7 @@ export default function ConnectPage() {
                   </button>
                   <button
                     className={styles.button}
+                    data-testid={TID.connectAndSave}
                     type="submit"
                     disabled={isConnecting || !host || !username}
                   >
@@ -632,6 +638,7 @@ export default function ConnectPage() {
               ) : (
                 <button
                   className={styles.button}
+                  data-testid={TID.wizardContinue}
                   type="submit"
                   disabled={!canAdvance()}
                 >

@@ -12,6 +12,7 @@ import { parseMentionTrigger, type MentionTrigger } from "../../utils/mentions";
 import SlashCommandMenu, { handleSlashKey } from "../plugin/SlashCommandMenu";
 import { collectSlashCommands, filterSlashCommands } from "../../plugins/tier1/manifest";
 import { extractSlashQuery, parseSlashLine } from "../../plugins/tier1/slashParser";
+import { TID } from "../../testids";
 
 interface ChatComposerProps {
   readonly draft: string;
@@ -345,7 +346,7 @@ export default function ChatComposer({
           <GifIcon width={20} height={20} />
         </button>
 
-        <div className={styles.composerInputWrap}>
+        <div className={styles.composerInputWrap} data-testid={TID.chatComposerInput}>
           {slashOpen && (
             <SlashCommandMenu
               entries={slashEntries}
@@ -379,6 +380,7 @@ export default function ChatComposer({
 
         <button
           className={styles.sendBtn}
+          data-testid={TID.chatSend}
           onClick={handleSendIntercept}
           disabled={(!draft.trim() && !hasPendingQuotes) || disabled}
         >

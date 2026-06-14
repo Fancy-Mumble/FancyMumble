@@ -455,7 +455,7 @@ pub(crate) struct PluginDataPayload {
     pub sender_session: Option<u32>,
     /// Raw payload bytes, serialized as a base64 string.  A plain
     /// `Vec<u8>` would serialize as a JSON array of numbers, which
-    /// serde_json represents at ~32 heap bytes per payload byte - a
+    /// `serde_json` represents at ~32 heap bytes per payload byte - a
     /// 1.6 MB server-emotes broadcast measured 51 MB as a `Value` plus
     /// ~19 MB more in the Tauri event script.  Base64 keeps it at
     /// ~1.3x the byte size end to end.

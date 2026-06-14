@@ -177,6 +177,7 @@ mod voice_pipeline {
 
             info!("enable_voice: pipelines started, sending unmute");
 
+            // SetSelfMute{false} already carries self_deaf=false (undeafen).
             if let Some(handle) = handle {
                 handle
                     .send(command::SetSelfMute { muted: false })
@@ -199,6 +200,7 @@ mod voice_pipeline {
                 state.conn.client_handle.clone()
             };
 
+            // SetSelfDeaf{true} already carries self_mute=true (deaf implies mute).
             if let Some(handle) = handle {
                 handle
                     .send(command::SetSelfDeaf { deafened: true })
@@ -1030,7 +1032,7 @@ mod voice_pipeline {
             // of 38-byte overhead leaves 41.6 kbit/s for Opus.
             let (bitrate, frame_ms) = adjust_to_server_bandwidth(128_000, 10, Some(72_000));
             assert_eq!(frame_ms, 10, "frame size kept when clamped bitrate fits");
-            assert!(bitrate <= 41_600 && bitrate >= 8_000, "got {bitrate}");
+            assert!((8_000..=41_600).contains(&bitrate), "got {bitrate}");
             // The result must actually fit the budget.
             assert!(bitrate + 100 * 38 * 8 <= 72_000);
         }
