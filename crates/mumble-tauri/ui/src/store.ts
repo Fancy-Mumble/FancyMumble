@@ -122,6 +122,7 @@ export {
   sendPluginInteraction,
   sendPluginMessage,
 } from "./store/plugins";
+import { applyCalendarInbound } from "./components/chat/calendar/calendarStore";
 
 /** Event payload for a pin state change delivered by the server. */
 interface PinDeliverEvent {
@@ -2507,6 +2508,12 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
     return;
   }
   if (p.payloadType === PluginPayloadType.PluginActivated) {
+    return;
+  }
+
+  if (p.pluginName === "fancy-calendar") {
+    const data = decodePluginPayload<Record<string, unknown>>(p.payload);
+    if (data) applyCalendarInbound(p.payloadType, data);
     return;
   }
 

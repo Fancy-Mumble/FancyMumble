@@ -55,6 +55,29 @@ export const TID = {
   // -- Self voice controls (ChannelSidebar) ---------------------------------
   toggleMute: "toggle-mute",
   toggleDeafen: "toggle-deafen",
+
+  // -- Calendar (fancy-calendar plugin) -------------------------------------
+  /** Header action that opens the calendar split-view. Only rendered when the
+   *  server has the `fancy-calendar` plugin loaded, so its presence is the
+   *  end-to-end signal that the plugin is available + gating works. */
+  calendarHeaderButton: "header-calendar-button",
+  /** Root of the calendar split-view panel (readiness marker). */
+  calendarPanel: "calendar-panel",
+  /** Toolbar "New meeting" button. */
+  calendarNewMeeting: "calendar-new-meeting",
+  /** A view-switch button; carries `data-view` (day|workweek|week|month). */
+  calendarViewButton: "calendar-view-button",
+  /** Root of the create/edit meeting dialog. */
+  calendarDialog: "calendar-dialog",
+  /** Meeting title text input in the dialog. */
+  calendarTitleInput: "calendar-title-input",
+  /** The invitee MemberPicker text input in the dialog (accepts a numeric
+   *  user id + Enter, so a participant can be added deterministically). */
+  calendarInviteeInput: "calendar-invitee-input",
+  /** Save button in the meeting dialog. */
+  calendarSave: "calendar-save",
+  /** A rendered meeting chip in any view; carries `data-event-title`. */
+  calendarEvent: "calendar-event",
 } as const;
 
 export type TestId = (typeof TID)[keyof typeof TID];
@@ -63,3 +86,7 @@ export type TestId = (typeof TID)[keyof typeof TID];
 export const MEMBER_NAME_ATTR = "data-user-name";
 /** Data attribute key used alongside {@link TID.serverCard}. */
 export const SERVER_ID_ATTR = "data-server-id";
+/** Data attribute key used alongside {@link TID.calendarEvent}. */
+export const CALENDAR_EVENT_TITLE_ATTR = "data-event-title";
+/** Data attribute key used alongside {@link TID.calendarViewButton}. */
+export const CALENDAR_VIEW_ATTR = "data-view";

@@ -3,7 +3,7 @@ import React, { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRe
 import { useTranslation } from "react-i18next";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { useAppStore, liveDocKey } from "../../store";
-import { PLUGIN_NAME_LIVE_DOC } from "../../constants/pluginData";
+import { PLUGIN_NAME_CALENDAR, PLUGIN_NAME_LIVE_DOC } from "../../constants/pluginData";
 import type { ChatMessage, TimeFormat, LiveDocDocLink } from "../../types";
 import { getPreferences } from "../../preferencesStorage";
 import { loadPersonalization, type PersonalizationData } from "../../personalizationStorage";
@@ -57,6 +57,7 @@ const WebRtcErrorBanner = lazy(() =>
 const LiveDocPanel = lazy(() => import("./livedoc/LiveDocPanel"));
 const LiveDocLaunchDialog = lazy(() => import("./livedoc/LiveDocLaunchDialog"));
 const LiveDocLibraryPanel = lazy(() => import("./livedoc/LiveDocLibraryPanel"));
+const CalendarPanel = lazy(() => import("./calendar/CalendarPanel"));
 const LiveDocBanner = lazy(() => import("./livedoc/LiveDocBanner"));
 import type { LiveDocLaunchChoice } from "./livedoc/LiveDocLaunchDialog";
 import {
@@ -170,6 +171,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   const [showPinnedPanel, setShowPinnedPanel] = useState(false);
   const [showDownloadsPanel, setShowDownloadsPanel] = useState(false);
   const [showMySharedFilesPanel, setShowMySharedFilesPanel] = useState(false);
+  const [showCalendarPanel, setShowCalendarPanel] = useState(false);
   const {
     polls, pollMessages, showPollCreator, openPollCreator, closePollCreator,
     handlePollCreate, handlePollVote,
@@ -414,6 +416,12 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   const handleCloseMySharedFiles = useCallback(() => {
     setShowMySharedFilesPanel(false);
   }, []);
+  const handleOpenCalendar = useCallback(() => {
+    setShowCalendarPanel(true);
+  }, []);
+  const handleCloseCalendar = useCallback(() => {
+    setShowCalendarPanel(false);
+  }, []);
 
   const cancelEdit = useCallback(() => {
     setEditingMessage(null);
@@ -511,6 +519,13 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   // The live-doc plugin is present only while its `fancy-plugin-info` is in the
   // registry; entries are gated on this so they vanish when it's disabled.
   const liveDocActive = useAppStore((s) => s.pluginInfos.has(PLUGIN_NAME_LIVE_DOC));
+
+  // Calendar entry points (header button + panel) are gated on the server having
+  // the `fancy-calendar` plugin loaded - same registry signal as live-doc above.
+  const calendarActive = useAppStore((s) => s.pluginInfos.has(PLUGIN_NAME_CALENDAR));
+  useEffect(() => {
+    if (!calendarActive) setShowCalendarPanel(false);
+  }, [calendarActive]);
 
   const liveDocLookupKey =
     selectedChannel != null ? liveDocKey(activeServerId, selectedChannel) : null;
@@ -1056,6 +1071,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           onPinnedMessages={handleOpenPinnedPanel}
           hasNewDownloads={unseenDownloadCount > 0}
           onDownloads={handleOpenDownloadsPanel}
+          onOpenCalendar={calendarActive ? handleOpenCalendar : undefined}
           onMySharedFiles={fileServerConfig ? handleOpenMySharedFiles : undefined}
           onOpenDocLibrary={liveDocActive ? handleOpenDocLibrary : undefined}
           onPopOutDm={inPopout ? undefined : handlePopOutDm}
@@ -1091,6 +1107,19 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
         >
           <Suspense fallback={null}>
             <DownloadsPanel />
+          </Suspense>
+        </ResizableSplitPanel>
+      )}
+
+      {showCalendarPanel && (
+        <ResizableSplitPanel
+          fillByDefault
+          minPx={260}
+          onClose={handleCloseCalendar}
+          closeLabel={t("calendar.close", { ns: "chat" })}
+        >
+          <Suspense fallback={null}>
+            <CalendarPanel />
           </Suspense>
         </ResizableSplitPanel>
       )}

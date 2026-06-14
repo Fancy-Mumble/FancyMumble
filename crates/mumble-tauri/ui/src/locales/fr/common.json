@@ -222,6 +222,7 @@
   "plugins": {
     "fileServer": "Serveur de fichiers",
     "liveDoc": "Documents collaboratifs",
+    "calendar": "Calendrier",
     "disabledLog": "Le plugin « {{name}} » a été désactivé par le serveur",
     "disabledTitle": "{{name}} a été désactivé",
     "disabledBody": "Le serveur a désactivé ce plugin. Toutes les vues {{name}} ouvertes seront fermées.",

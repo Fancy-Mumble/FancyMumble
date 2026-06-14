@@ -70,8 +70,16 @@ export function useNotificationSounds(
     };
     globalThis.addEventListener("fancy:self-mention", onSelfMention);
 
+    // Calendar reminder (dispatched by useCalendarReminders when a meeting is
+    // about to start); reuses the mention sound as the notification cue.
+    const onCalendarReminder = () => {
+      playSoundForEvent(settingsRef.current, "mention");
+    };
+    globalThis.addEventListener("fancy:calendar-reminder", onCalendarReminder);
+
     return () => {
       globalThis.removeEventListener("fancy:self-mention", onSelfMention);
+      globalThis.removeEventListener("fancy:calendar-reminder", onCalendarReminder);
       for (const p of unlisteners) {
         p.then((f) => f());
       }

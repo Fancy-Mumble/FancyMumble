@@ -701,6 +701,7 @@ macro_rules! all_command_handlers {
             commands::files::download_to_base64,
             commands::files::fileserver_admin_list_files,
             commands::files::fileserver_admin_list_documents,
+            commands::files::fileserver_admin_list_calendars,
             commands::files::fileserver_admin_delete_file,
             commands::files::fileserver_admin_delete_document,
             commands::files::fileserver_admin_file_base64,

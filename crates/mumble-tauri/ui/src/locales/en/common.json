@@ -222,6 +222,7 @@
   "plugins": {
     "fileServer": "File server",
     "liveDoc": "Live documents",
+    "calendar": "Calendar",
     "disabledLog": "Plugin “{{name}}” was disabled by the server",
     "disabledTitle": "{{name}} was disabled",
     "disabledBody": "The server disabled this plugin. Any open {{name}} views will be closed.",

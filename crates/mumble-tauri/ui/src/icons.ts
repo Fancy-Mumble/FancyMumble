@@ -138,4 +138,12 @@ export {
   Square as SquareIcon,
   Link2 as Link2Icon,
   Columns2 as Columns2Icon,
+  Calendar as CalendarIcon,
+  CalendarPlus as CalendarPlusIcon,
+  CalendarClock as CalendarClockIcon,
+  Clock as ClockIcon,
+  MapPin as MapPinIcon,
+  Repeat as RepeatIcon,
+  Bold as BoldIcon,
+  Italic as ItalicIcon,
 } from "lucide-react";

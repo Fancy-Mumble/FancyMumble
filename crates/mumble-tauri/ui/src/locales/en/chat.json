@@ -57,6 +57,7 @@
     "closeStream": "Close stream",
     "pinnedMessages": "Pinned messages",
     "downloads": "Downloads",
+    "calendar": "Calendar",
     "mySharedFiles": "My shared files",
     "createPoll": "Create poll",
     "browseDocuments": "Browse documents",
@@ -66,6 +67,88 @@
     "join": "Join",
     "joinChannel": "Join Channel",
     "popOutDm": "Pop out direct message"
+  },
+  "calendar": {
+    "title": "Calendar",
+    "close": "Close calendar",
+    "prev": "Previous",
+    "next": "Next",
+    "today": "Today",
+    "newMeeting": "New meeting",
+    "editMeeting": "Edit meeting",
+    "you": "You",
+    "untitled": "(untitled)",
+    "organizer": "Organizer",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "recolor": "Recolor",
+    "response": {
+      "title": "Response",
+      "accept": "Accept",
+      "tentative": "Tentative",
+      "decline": "Decline",
+      "proposeNewTime": "Propose new time"
+    },
+    "showAs": {
+      "title": "Show as",
+      "free": "Free",
+      "tentative": "Tentative",
+      "busy": "Busy",
+      "away": "Away",
+      "workingElsewhere": "Working elsewhere",
+      "oof": "Out of office"
+    },
+    "workHours": {
+      "title": "Set your work hours",
+      "short": "Work hours",
+      "enable": "Show work hours",
+      "from": "From",
+      "to": "To"
+    },
+    "views": {
+      "day": "Day",
+      "workweek": "Work week",
+      "week": "Week",
+      "month": "Month"
+    },
+    "fields": {
+      "title": "Title",
+      "invitees": "Invitees",
+      "inviteesPlaceholder": "Add registered or online users",
+      "allDay": "All day",
+      "location": "Location",
+      "description": "Description",
+      "descriptionPlaceholder": "Add details, agenda, links…",
+      "color": "Color",
+      "customColor": "Custom color",
+      "reminder": "Reminder",
+      "timezone": "Time zone"
+    },
+    "repeat": {
+      "none": "Does not repeat",
+      "weekdays": "Every weekday (Mon–Fri)",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "yearly": "Yearly",
+      "custom": "Custom",
+      "every": "every",
+      "units": {
+        "day": "day(s)",
+        "week": "week(s)",
+        "month": "month(s)",
+        "year": "year(s)"
+      }
+    },
+    "reminders": {
+      "none": "No reminder",
+      "atStart": "At start time",
+      "minutes": "{{count}} minutes before",
+      "hours": "{{count}} hours before",
+      "days": "{{count}} days before"
+    }
   },
   "contextMenu": {
     "moreReactions": "More reactions",

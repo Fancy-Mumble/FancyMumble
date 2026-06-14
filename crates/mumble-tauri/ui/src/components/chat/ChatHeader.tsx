@@ -1,4 +1,4 @@
-import { ArrowRightIcon, BellIcon, BellOffIcon, DatabaseIcon, FileTextIcon, FolderIcon, PinIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, UsersGroupIcon } from "../../icons";
+import { ArrowRightIcon, BellIcon, BellOffIcon, CalendarIcon, DatabaseIcon, FileTextIcon, FolderIcon, PinIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, UsersGroupIcon } from "../../icons";
 import { useTranslation } from "react-i18next";
 import { isMobile } from "../../utils/platform";
 import type { KeyTrustLevel } from "../../types";
@@ -6,6 +6,7 @@ import KeyTrustIndicator from "../security/KeyTrustIndicator";
 import KebabMenu, { type KebabMenuItem } from "../elements/KebabMenu";
 import styles from "./ChatView.module.css";
 import { colorFor } from "../sidebar/user/UserListItem";
+import { TID } from "../../testids";
 
 /** Info about the active broadcast, passed in when streaming is active. */
 export interface BroadcastInfo {
@@ -57,6 +58,8 @@ interface ChatHeaderProps {
   readonly onMySharedFiles?: () => void;
   /** Called when the user opens the saved document library. */
   readonly onOpenDocLibrary?: () => void;
+  /** Called when the user opens the calendar panel. */
+  readonly onOpenCalendar?: () => void;
   /** Called when the user clicks "Pop out DM" (only meaningful when isDm). */
   readonly onPopOutDm?: () => void;
 }
@@ -173,6 +176,7 @@ export default function ChatHeader({
   onDownloads,
   onMySharedFiles,
   onOpenDocLibrary,
+  onOpenCalendar,
   onPopOutDm,
 }: ChatHeaderProps) {
   const { t } = useTranslation("chat");
@@ -280,6 +284,17 @@ export default function ChatHeader({
             title={t("header.channelInfo")}
           >
             <FolderIcon width={18} height={18} />
+          </button>
+        )}
+        {onOpenCalendar && !isMobile && (
+          <button
+            className={styles.serverInfoBtn}
+            onClick={onOpenCalendar}
+            aria-label={t("header.calendar")}
+            title={t("header.calendar")}
+            data-testid={TID.calendarHeaderButton}
+          >
+            <CalendarIcon width={18} height={18} />
           </button>
         )}
         {onToggleScreenShare && !privateBadge && !broadcastInfo?.isOwnBroadcast && (

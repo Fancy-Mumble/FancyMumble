@@ -787,6 +787,35 @@ impl AppState {
             .map_err(|e| format!("admin documents parse: {e}"))
     }
 
+    /// List per-user private-storage usage filtered to calendars (each user's
+    /// `calendar` blob and its size). Admin-only (`GET /admin/private-storage`,
+    /// gated by the session JWT). Returned verbatim as JSON.
+    pub async fn admin_list_calendars(
+        &self,
+        req: AdminListRequest,
+    ) -> Result<serde_json::Value, String> {
+        let endpoint = format!(
+            "{}/admin/private-storage?prefix=calendar",
+            req.base_url.trim_end_matches('/')
+        );
+        let resp = self
+            .http_client
+            .get(endpoint)
+            .bearer_auth(req.session_jwt)
+            .send()
+            .await
+            .map_err(|e| format!("admin calendars request failed: {e}"))?;
+        if !resp.status().is_success() {
+            return Err(format!(
+                "admin calendars failed: {}",
+                read_error_body(resp).await
+            ));
+        }
+        resp.json::<serde_json::Value>()
+            .await
+            .map_err(|e| format!("admin calendars parse: {e}"))
+    }
+
     /// Delete one persisted live-doc document and all its revisions (blobs +
     /// metadata rows).  Admin-only (`DELETE /admin/documents/{name}`).
     pub async fn admin_delete_document(

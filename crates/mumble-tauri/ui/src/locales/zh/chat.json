@@ -57,6 +57,7 @@
     "closeStream": "关闭直播",
     "pinnedMessages": "已置顶的消息",
     "downloads": "下载",
+    "calendar": "日历",
     "mySharedFiles": "我分享的文件",
     "createPoll": "创建投票",
     "browseDocuments": "浏览文档",
@@ -66,6 +67,88 @@
     "join": "加入",
     "joinChannel": "加入频道",
     "popOutDm": "弹出私信"
+  },
+  "calendar": {
+    "title": "日历",
+    "close": "关闭日历",
+    "prev": "上一个",
+    "next": "下一个",
+    "today": "今天",
+    "newMeeting": "新建会议",
+    "editMeeting": "编辑会议",
+    "you": "你",
+    "untitled": "（无标题）",
+    "organizer": "组织者",
+    "cancel": "取消",
+    "save": "保存",
+    "delete": "删除",
+    "edit": "编辑",
+    "recolor": "重新着色",
+    "response": {
+      "title": "回复",
+      "accept": "接受",
+      "tentative": "暂定",
+      "decline": "拒绝",
+      "proposeNewTime": "建议新时间"
+    },
+    "showAs": {
+      "title": "显示为",
+      "free": "空闲",
+      "tentative": "暂定",
+      "busy": "忙碌",
+      "away": "离开",
+      "workingElsewhere": "在其他地方工作",
+      "oof": "外出"
+    },
+    "workHours": {
+      "title": "设置你的工作时间",
+      "short": "工作时间",
+      "enable": "显示工作时间",
+      "from": "从",
+      "to": "到"
+    },
+    "views": {
+      "day": "日",
+      "workweek": "工作周",
+      "week": "周",
+      "month": "月"
+    },
+    "fields": {
+      "title": "标题",
+      "invitees": "受邀者",
+      "inviteesPlaceholder": "添加已注册或在线用户",
+      "allDay": "全天",
+      "location": "地点",
+      "description": "描述",
+      "descriptionPlaceholder": "添加详情、议程、链接……",
+      "color": "颜色",
+      "customColor": "自定义颜色",
+      "reminder": "提醒",
+      "timezone": "时区"
+    },
+    "repeat": {
+      "none": "不重复",
+      "weekdays": "每个工作日（周一至周五）",
+      "daily": "每天",
+      "weekly": "每周",
+      "monthly": "每月",
+      "yearly": "每年",
+      "custom": "自定义",
+      "every": "每",
+      "units": {
+        "day": "天",
+        "week": "周",
+        "month": "个月",
+        "year": "年"
+      }
+    },
+    "reminders": {
+      "none": "不提醒",
+      "atStart": "开始时",
+      "minutes": "{{count}} 分钟前",
+      "hours": "{{count}} 小时前",
+      "days": "{{count}} 天前"
+    }
   },
   "contextMenu": {
     "moreReactions": "更多表情回应",

@@ -20,9 +20,10 @@ import {
 } from "../../icons";
 import {
   adminListFiles, adminDeleteFile, adminListDocuments, adminDeleteDocument,
+  adminListCalendars,
   categorize, isPreviewable, makeAdminFilesSource,
   dropPreview, checkFileServerHealth,
-  type AdminCreds, type FileCategory, type FileServerHealth,
+  type AdminCreds, type CalendarUsageEntry, type FileCategory, type FileServerHealth,
 } from "./fileServerAdmin";
 import { CategoryIcon, FileThumb, PreviewModal, ExpiryBadge } from "../../components/fileserver/FilePreview";
 import DashboardChart from "./DashboardChart";
@@ -129,6 +130,7 @@ export function FileServerTab() {
 
   const [files, setFiles] = useState<AdminFileEntry[]>([]);
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
+  const [calendars, setCalendars] = useState<CalendarUsageEntry[]>([]);
   const [stats, setStats] = useState<FileServerStorageStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -159,9 +161,10 @@ export function FileServerTab() {
     try {
       // Fetch files and documents together; a failure in the (optional)
       // documents list must not blank the whole dashboard, so it is tolerated.
-      const [filesRes, docsRes] = await Promise.allSettled([
+      const [filesRes, docsRes, calsRes] = await Promise.allSettled([
         adminListFiles(creds),
         adminListDocuments(creds),
+        adminListCalendars(creds),
       ]);
       if (filesRes.status === "fulfilled") {
         setFiles(filesRes.value.files);
@@ -170,6 +173,7 @@ export function FileServerTab() {
         throw filesRes.reason instanceof Error ? filesRes.reason : new Error(String(filesRes.reason));
       }
       setDocuments(docsRes.status === "fulfilled" ? docsRes.value.documents : []);
+      setCalendars(calsRes.status === "fulfilled" ? calsRes.value.entries : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -486,6 +490,41 @@ export function FileServerTab() {
       </div>
       <div className={styles.usageBar} title={`${formatBytes(used)} / ${formatBytes(cap)}`}>
         <div className={styles.usageFill} style={{ width: `${usagePct}%`, background: usagePct > 90 ? "#e0533c" : "#2aabee" }} />
+      </div>
+
+      {/* Active calendars: per-user calendar blobs in the private store. */}
+      <div style={{ marginTop: 16 }}>
+        <h4 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, margin: "0 0 8px" }}>
+          <DatabaseIcon width={15} height={15} />
+          {t("fileServer.calendars.title", { defaultValue: "Active calendars" })}
+          <span style={{ opacity: 0.6, fontWeight: 400 }}>({calendars.length})</span>
+        </h4>
+        {calendars.length === 0 ? (
+          <div style={{ opacity: 0.6, fontSize: 13 }}>
+            {t("fileServer.calendars.empty", { defaultValue: "No user calendars stored yet." })}
+          </div>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ textAlign: "left", opacity: 0.7 }}>
+                <th style={{ padding: "4px 8px" }}>{t("fileServer.calendars.user", { defaultValue: "User (server:id)" })}</th>
+                <th style={{ padding: "4px 8px", textAlign: "right" }}>{t("fileServer.calendars.size", { defaultValue: "Size" })}</th>
+                <th style={{ padding: "4px 8px", textAlign: "right" }}>{t("fileServer.calendars.updated", { defaultValue: "Updated" })}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {calendars.map((c) => (
+                <tr key={`${c.scope}:${c.key}`} style={{ borderTop: "1px solid var(--color-glass-border)" }}>
+                  <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono, monospace)" }}>{c.scope}</td>
+                  <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatBytes(c.size_bytes)}</td>
+                  <td style={{ padding: "4px 8px", textAlign: "right", opacity: 0.8 }}>
+                    {new Date(c.updated_at).toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Charts */}
