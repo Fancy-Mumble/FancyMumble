@@ -1,5 +1,6 @@
 import { CheckIcon, CloseIcon, ErrorCircleIcon } from "../../icons";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import styles from "./Toast.module.css";
 
@@ -17,6 +18,7 @@ interface ToastProps extends ToastData {
 }
 
 export default function Toast({ message, variant, duration = 4000, dismissible, onDismiss }: ToastProps) {
+  const { t } = useTranslation("common");
   const [fadeOut, setFadeOut] = useState(false);
 
   useEffect(() => {
@@ -50,7 +52,7 @@ export default function Toast({ message, variant, duration = 4000, dismissible, 
           type="button"
           className={styles.dismissBtn}
           onClick={onDismiss}
-          aria-label="Dismiss"
+          aria-label={t("toast.dismissAriaLabel")}
         >
           <CloseIcon width={14} height={14} />
         </button>

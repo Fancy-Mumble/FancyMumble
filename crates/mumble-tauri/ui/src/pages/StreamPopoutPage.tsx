@@ -18,12 +18,13 @@
  *    we are already showing here.
  */
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import styles from "./PopoutPage.module.css";
 import PopoutShell from "./PopoutShell";
-import DrawingOverlay from "../components/chat/DrawingOverlay";
+import DrawingOverlay from "../components/chat/drawing/DrawingOverlay";
 
 // SignalType enum values from Mumble.proto WebRtcSignal.
 const SIGNAL_SDP_OFFER = 2;
@@ -97,6 +98,7 @@ async function setupViewerPeer(
   payload: StreamPayload,
   onStream: (s: MediaStream) => void,
   onError: (msg: string) => void,
+  connectionLostMsg: string,
 ): Promise<RTCPeerConnection> {
   const pc = new RTCPeerConnection(RTC_CONFIG);
   pc.addTransceiver("video", { direction: "recvonly" });
@@ -118,7 +120,7 @@ async function setupViewerPeer(
   };
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-      onError("Stream connection lost");
+      onError(connectionLostMsg);
     }
   };
 
@@ -138,6 +140,7 @@ export default function StreamPopoutPage() {
   const [error, setError] = useState<string | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [videoReady, setVideoReady] = useState(false);
+  const { t } = useTranslation("common");
   const videoRef = useRef<HTMLVideoElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const pendingIceRef = useRef<RTCIceCandidateInit[]>([]);
@@ -148,11 +151,11 @@ export default function StreamPopoutPage() {
     startedRef.current = true;
     (async () => {
       const id = popoutIdFromLabel();
-      if (!id) { setError("Missing popout id"); return; }
+      if (!id) { setError(t("pages.streamPopout.missingId")); return; }
       const p = await invoke<StreamPayload | null>("take_popout_stream", { id });
-      if (!p) { setError("Stream context unavailable"); return; }
+      if (!p) { setError(t("pages.streamPopout.contextUnavailable")); return; }
       setPayload(p);
-      pcRef.current = await setupViewerPeer(p, setStream, setError);
+      pcRef.current = await setupViewerPeer(p, setStream, setError, t("pages.streamPopout.connectionLost"));
     })().catch((e) => setError(String(e)));
 
     return () => {
@@ -221,18 +224,18 @@ export default function StreamPopoutPage() {
     <PopoutShell
       mediaRef={videoRef}
       mediaReady={videoReady}
-      mediaLabel="Stream"
+      mediaLabel={t("pages.streamPopout.mediaLabel")}
       aspectStorageKey="popout-stream.aspectLocked"
       error={error}
       placeholder={stream ? null : (
         <div className={styles.error} style={{ color: "rgba(255,255,255,0.7)" }}>
-          Connecting to stream...
+          {t("pages.streamPopout.connecting")}
         </div>
       )}
       infoBar={payload ? {
-        name: payload.broadcaster_name ?? "Screen share",
+        name: payload.broadcaster_name ?? t("pages.streamPopout.screenshare"),
         avatar: payload.broadcaster_avatar,
-        caption: "Live screen share",
+        caption: t("pages.streamPopout.caption"),
       } : null}
     >
       <video
@@ -244,7 +247,6 @@ export default function StreamPopoutPage() {
         onLoadedMetadata={() => setVideoReady(true)}
         style={{ display: stream ? "block" : "none" }}
       >
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <track kind="captions" />
       </video>
       {payload && (

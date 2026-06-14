@@ -153,14 +153,10 @@ impl AudioCapture for CpalCapture {
         self.overflow_warned.store(false, Ordering::Relaxed);
 
         let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
-        let samples: Vec<f32> = buf
-            .drain(..self.frame_size)
-            .map(|s| s * vol)
-            .collect();
-        let data: Vec<u8> = samples
-            .iter()
-            .flat_map(|s| s.to_ne_bytes())
-            .collect();
+        let mut data = Vec::with_capacity(self.frame_size * 4);
+        for s in buf.drain(..self.frame_size) {
+            data.extend_from_slice(&(s * vol).to_ne_bytes());
+        }
 
         self.sequence += 1;
         Ok(AudioFrame {
@@ -334,8 +330,12 @@ fn try_drain_speakers_checked(
     }
     // try_lock avoids blocking the real-time audio thread on a second
     // mutex; on contention we fall back to default volumes (1.0).
-    let sv = speaker_volumes.try_lock().map(|g| g.clone()).unwrap_or_default();
-    Some(batch_drain_speakers(&mut bufs, &sv, mixed_buf, mono_needed))
+    // Borrow the guard instead of cloning the HashMap - this runs on
+    // every output callback and a clone would allocate each time.
+    let sv_guard = speaker_volumes.try_lock().ok();
+    let empty = HashMap::new();
+    let sv = sv_guard.as_deref().unwrap_or(&empty);
+    Some(batch_drain_speakers(&mut bufs, sv, mixed_buf, mono_needed))
 }
 
 /// Apply a short anti-pop ramp when exiting an underrun, then return

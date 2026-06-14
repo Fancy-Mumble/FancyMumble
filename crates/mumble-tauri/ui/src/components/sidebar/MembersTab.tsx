@@ -1,16 +1,18 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { useTranslation } from "react-i18next";
 import type { AclGroup, ChannelEntry, RegisteredUser, UserCommentPayload, UserEntry } from "../../types";
 import { useAclGroups } from "../../hooks/useAclGroups";
 import { useAppStore } from "../../store";
+import { acquireRegisteredTextures, releaseRegisteredTextures } from "../../registeredTextureLease";
 import {
   getCachedRegisteredUsers,
   saveCachedRegisteredUsers,
 } from "../../preferencesStorage";
-import { UserListItem } from "./UserListItem";
-import { setUserAvatarBytes } from "../../lazyBlobs";
-import styles from "./ChannelSidebar.module.css";
+import { UserListItem } from "./user/UserListItem";
+import { TID } from "../../testids";
+import styles from "./channel/ChannelSidebar.module.css";
 
 /**
  * Process-wide cache of the registered-user list per server.  Persists
@@ -34,7 +36,7 @@ function fingerprintRegistered(users: readonly RegisteredUser[]): string {
       hash = ((hash * 33) ^ name.charCodeAt(i)) | 0;
     }
     hash = ((hash * 33) ^ (u.last_channel ?? 0)) | 0;
-    hash = ((hash * 33) ^ (u.texture?.length ?? 0)) | 0;
+    hash = ((hash * 33) ^ (u.texture_size ?? 0)) | 0;
     const ch = u.comment_hash;
     if (ch && ch.length > 0) {
       hash = ((hash * 33) ^ ch.length) | 0;
@@ -77,8 +79,9 @@ const KEY_GUESTS = "__guests__";
  *
  * The session id is set to a negative number derived from the user_id
  * to keep it unique and to ensure no DM/talking lookups ever match.
- * Avatar bytes are NOT installed here so callers can do that once per
- * `registered` payload instead of on every render.
+ * The avatar itself is fetched lazily by `useUserAvatar` for this negative
+ * session (which routes to `get_registered_user_texture`); only the
+ * `texture_size` marker travels in the bulk payload.
  */
 export function synthesiseOfflineEntry(
   reg: RegisteredUser,
@@ -86,13 +89,12 @@ export function synthesiseOfflineEntry(
 ): UserEntry {
   const comment = fetchedComments.get(reg.user_id) ?? reg.comment ?? null;
   const session = -(reg.user_id + 1);
-  const textureBytes = reg.texture && reg.texture.length > 0 ? reg.texture : null;
   return {
     session,
     name: reg.name,
     channel_id: reg.last_channel ?? 0,
     user_id: reg.user_id,
-    texture_size: textureBytes ? textureBytes.length : null,
+    texture_size: reg.texture_size && reg.texture_size > 0 ? reg.texture_size : null,
     comment,
     mute: false,
     deaf: false,
@@ -194,6 +196,8 @@ export function buildMemberGroups(
   offlineEntries: readonly UserEntry[],
   ownSession: number | null,
   aclGroups: readonly AclGroup[],
+  membersLabel = "Members",
+  guestsLabel = "Guests",
 ): readonly MemberGroup[] {
   const onlineUserIds = new Set<number>();
   const onlineRows: MemberRow[] = [];
@@ -226,12 +230,12 @@ export function buildMemberGroups(
   const noGroupRows = buckets.get(KEY_NO_GROUP);
   if (noGroupRows && noGroupRows.length > 0) {
     noGroupRows.sort(compareRows);
-    result.push({ key: KEY_NO_GROUP, label: "Members", color: null, rows: noGroupRows });
+    result.push({ key: KEY_NO_GROUP, label: membersLabel, color: null, rows: noGroupRows });
   }
   const guestRows = buckets.get(KEY_GUESTS);
   if (guestRows && guestRows.length > 0) {
     guestRows.sort(compareRows);
-    result.push({ key: KEY_GUESTS, label: "Guests", color: null, rows: guestRows });
+    result.push({ key: KEY_GUESTS, label: guestsLabel, color: null, rows: guestRows });
   }
   return result;
 }
@@ -330,6 +334,7 @@ function MembersTabImpl({
   onSelectDm,
   onUserContextMenu,
 }: MembersTabProps) {
+  const { t } = useTranslation("sidebar");
   const pendingConnect = useAppStore((s) => s.pendingConnect);
   const serverKey = pendingConnect ? `${pendingConnect.host}:${pendingConnect.port}` : null;
   const initialCache = serverKey ? registeredMemCache.get(serverKey) : undefined;
@@ -437,6 +442,7 @@ function MembersTabImpl({
     const unlistenPermDenied = listen("permission-denied", () => {
       flush();
     });
+    acquireRegisteredTextures();
     invoke("request_user_list").catch(() => {
       scheduleFlush();
     });
@@ -446,6 +452,7 @@ function MembersTabImpl({
       unlistenList.then((f) => f());
       unlistenComment.then((f) => f());
       unlistenPermDenied.then((f) => f());
+      releaseRegisteredTextures();
     };
   }, [serverKey]);
 
@@ -465,17 +472,6 @@ function MembersTabImpl({
     (channelId: number): string => channelNameById.get(channelId) ?? "Root",
     [channelNameById],
   );
-
-  // Install registered-user avatar bytes into the LRU cache once per
-  // payload.  setUserAvatarBytes is a no-op when the cache already holds
-  // an entry of the same size, so this is cheap on repeat renders.
-  useEffect(() => {
-    for (const reg of registered) {
-      if (reg.texture && reg.texture.length > 0) {
-        setUserAvatarBytes(-(reg.user_id + 1), reg.texture);
-      }
-    }
-  }, [registered]);
 
   // Build offline `UserEntry` objects with stable per-user_id references
   // so the `memo`-wrapped `UserListItem` skips re-renders when nothing
@@ -509,8 +505,8 @@ function MembersTabImpl({
   }, [registered, fetchedComments]);
 
   const groups = useMemo(
-    () => buildMemberGroups(users, offlineEntries, ownSession, aclGroups),
-    [users, offlineEntries, ownSession, aclGroups],
+    () => buildMemberGroups(users, offlineEntries, ownSession, aclGroups, t("membersTab.groupMembers"), t("membersTab.groupGuests")),
+    [users, offlineEntries, ownSession, aclGroups, t],
   );
 
   const totalMembers = useMemo(
@@ -525,7 +521,7 @@ function MembersTabImpl({
         role="status"
         aria-live="polite"
         aria-busy="true"
-        aria-label="Loading members"
+        aria-label={t("membersTab.loading")}
       >
         <MembersSkeleton />
       </div>
@@ -535,13 +531,13 @@ function MembersTabImpl({
   if (totalMembers === 0) {
     return (
       <div className={styles.membersTab}>
-        <div className={styles.membersEmpty}>No other members</div>
+        <div className={styles.membersEmpty}>{t("membersTab.empty")}</div>
       </div>
     );
   }
 
   return (
-    <div className={styles.membersTab}>
+    <div className={styles.membersTab} data-testid={TID.memberList}>
       {groups.map((group) => (
         <section key={group.key} className={styles.memberGroup}>
           <div
@@ -573,7 +569,7 @@ function MembersTabImpl({
           role="status"
           aria-live="polite"
           aria-busy="true"
-          aria-label="Loading offline members"
+          aria-label={t("membersTab.loadingOffline")}
         >
           <div className={styles.membersGroupTitle}>
             <span

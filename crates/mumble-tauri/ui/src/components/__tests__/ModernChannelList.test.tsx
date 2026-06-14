@@ -226,7 +226,7 @@ describe("ModernChannelList", () => {
     expect(svgs.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("excludes root channel when it has no users", () => {
+  it("always shows the root channel even when it has no users", () => {
     const channels = [
       makeChannel({ id: 0, parent_id: null, name: "Root" }),
       makeChannel({ id: 1, parent_id: 0, name: "Lobby" }),
@@ -238,8 +238,9 @@ describe("ModernChannelList", () => {
         users={[]}
       />,
     );
-    // Root should not appear when it has no users
-    expect(screen.queryByText("Root")).toBeNull();
+    // Root is always shown (matching the classic tree viewer) so it stays
+    // selectable, even with no users in it.
+    expect(screen.getByText("Root")).toBeTruthy();
     expect(screen.getByText("Lobby")).toBeTruthy();
   });
 

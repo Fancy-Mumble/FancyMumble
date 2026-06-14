@@ -104,10 +104,10 @@ describe("message write sequencing (regression)", () => {
     const stale = [makeMsg("m1", "old")];
     const fresh = [makeMsg("m1", "old"), makeMsg("m2", "new")];
 
-    // 1. Fire selectChannel — it immediately sets selectedChannel, then
+    // 1. Fire selectChannel - it immediately sets selectedChannel, then
     //    awaits invoke("select_channel").
     const p1 = useAppStore.getState().selectChannel(1);
-    // p1 is floating — we won't await it until the end.
+    // p1 is floating - we won't await it until the end.
 
     // select_channel should be pending.
     expect(deferred.some((d) => d.cmd === "select_channel")).toBe(true);

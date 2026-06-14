@@ -129,6 +129,18 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
         FancyOnboardingResponse(m) => m.encode_to_vec(),
         FancyOnboardingResponseQuery(m) => m.encode_to_vec(),
         FancyOnboardingResponseDeliver(m) => m.encode_to_vec(),
+        FancyPoll(m) => m.encode_to_vec(),
+        FancyPollVote(m) => m.encode_to_vec(),
+        FancyPluginAdminListRequest(m) => m.encode_to_vec(),
+        FancyPluginAdminList(m) => m.encode_to_vec(),
+        FancyPluginAdminSetEnabled(m) => m.encode_to_vec(),
+        FancyPluginAdminInstall(m) => m.encode_to_vec(),
+        FancyPluginAdminUninstall(m) => m.encode_to_vec(),
+        FancyPluginAdminAck(m) => m.encode_to_vec(),
+        FancyServerSettings(m) => m.encode_to_vec(),
+        FancyServerSettingsUpdate(m) => m.encode_to_vec(),
+        PluginMessage(m) => m.encode_to_vec(),
+        PluginRegistry(m) => m.encode_to_vec(),
         UdpTunnel(data) => data.clone(),
     };
 
@@ -208,6 +220,18 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
         FancyOnboardingResponse => ControlMessage::FancyOnboardingResponse(mumble_tcp::FancyOnboardingResponse::decode(payload)?),
         FancyOnboardingResponseQuery => ControlMessage::FancyOnboardingResponseQuery(mumble_tcp::FancyOnboardingResponseQuery::decode(payload)?),
         FancyOnboardingResponseDeliver => ControlMessage::FancyOnboardingResponseDeliver(mumble_tcp::FancyOnboardingResponseDeliver::decode(payload)?),
+        FancyPoll => ControlMessage::FancyPoll(mumble_tcp::FancyPoll::decode(payload)?),
+        FancyPollVote => ControlMessage::FancyPollVote(mumble_tcp::FancyPollVote::decode(payload)?),
+        FancyPluginAdminListRequest => ControlMessage::FancyPluginAdminListRequest(mumble_tcp::FancyPluginAdminListRequest::decode(payload)?),
+        FancyPluginAdminList => ControlMessage::FancyPluginAdminList(mumble_tcp::FancyPluginAdminList::decode(payload)?),
+        FancyPluginAdminSetEnabled => ControlMessage::FancyPluginAdminSetEnabled(mumble_tcp::FancyPluginAdminSetEnabled::decode(payload)?),
+        FancyPluginAdminInstall => ControlMessage::FancyPluginAdminInstall(mumble_tcp::FancyPluginAdminInstall::decode(payload)?),
+        FancyPluginAdminUninstall => ControlMessage::FancyPluginAdminUninstall(mumble_tcp::FancyPluginAdminUninstall::decode(payload)?),
+        FancyPluginAdminAck => ControlMessage::FancyPluginAdminAck(mumble_tcp::FancyPluginAdminAck::decode(payload)?),
+        FancyServerSettings => ControlMessage::FancyServerSettings(mumble_tcp::FancyServerSettings::decode(payload)?),
+        FancyServerSettingsUpdate => ControlMessage::FancyServerSettingsUpdate(mumble_tcp::FancyServerSettingsUpdate::decode(payload)?),
+        PluginMessage => ControlMessage::PluginMessage(mumble_tcp::PluginMessage::decode(payload)?),
+        PluginRegistry => ControlMessage::PluginRegistry(mumble_tcp::PluginRegistry::decode(payload)?),
     };
     Ok(msg)
 }
@@ -215,6 +239,7 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
+    #![allow(deprecated, reason = "tests exercise the legacy PluginDataTransmission wire fields")]
     use super::*;
 
     #[test]

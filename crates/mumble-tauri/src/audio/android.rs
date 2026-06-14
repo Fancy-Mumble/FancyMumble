@@ -130,8 +130,10 @@ impl AudioCapture for OboeCapture {
 
         let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
         self.overflow_warned.store(false, Ordering::Relaxed);
-        let samples: Vec<f32> = buf.drain(..self.frame_size).map(|s| s * vol).collect();
-        let data: Vec<u8> = samples.iter().flat_map(|s| s.to_ne_bytes()).collect();
+        let mut data = Vec::with_capacity(self.frame_size * 4);
+        for s in buf.drain(..self.frame_size) {
+            data.extend_from_slice(&(s * vol).to_ne_bytes());
+        }
 
         self.sequence += 1;
         Ok(AudioFrame {
@@ -218,6 +220,37 @@ struct MixingPlaybackCallback {
     last_sample: f32,
 }
 
+impl MixingPlaybackCallback {
+    fn mix_buffers(map: &mut std::collections::HashMap<u32, VecDeque<f32>>) -> Option<f32> {
+        let mut sum = 0.0f32;
+        let mut count = 0u32;
+        for buf in map.values_mut() {
+            if let Some(s) = buf.pop_front() {
+                sum += s;
+                count += 1;
+            }
+        }
+        (count > 0).then_some(sum)
+    }
+
+    fn next_sample(last_sample: &mut f32, mixed: Option<f32>, vol: f32) -> f32 {
+        match mixed {
+            Some(m) => {
+                let out = m.tanh();
+                *last_sample = out;
+                out * vol
+            }
+            None => {
+                *last_sample *= 0.99;
+                if last_sample.abs() < 1e-6 {
+                    *last_sample = 0.0;
+                }
+                *last_sample * vol
+            }
+        }
+    }
+}
+
 impl AudioOutputCallback for MixingPlaybackCallback {
     type FrameType = (f32, Mono);
 
@@ -230,26 +263,7 @@ impl AudioOutputCallback for MixingPlaybackCallback {
 
         if let Ok(mut bufs) = self.buffers.lock() {
             for sample in frames.iter_mut() {
-                let mut mixed: f32 = 0.0;
-                let mut had_sample = false;
-                for buf in bufs.values_mut() {
-                    if let Some(s) = buf.pop_front() {
-                        mixed += s;
-                        had_sample = true;
-                    }
-                }
-
-                if had_sample {
-                    let out = mixed.tanh();
-                    self.last_sample = out;
-                    *sample = out * vol;
-                } else {
-                    self.last_sample *= 0.99;
-                    if self.last_sample.abs() < 1e-6 {
-                        self.last_sample = 0.0;
-                    }
-                    *sample = self.last_sample * vol;
-                }
+                *sample = Self::next_sample(&mut self.last_sample, Self::mix_buffers(&mut bufs), vol);
             }
             bufs.retain(|_, b| !b.is_empty());
         } else {

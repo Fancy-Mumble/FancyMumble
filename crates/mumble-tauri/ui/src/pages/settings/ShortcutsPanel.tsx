@@ -1,6 +1,13 @@
+import { useTranslation } from "react-i18next";
 import type { ShortcutBindings } from "./shortcutHelpers";
 import { ShortcutRecorder } from "./SharedControls";
+import UserShortcutsSection from "./UserShortcutsSection";
 import styles from "./SettingsPage.module.css";
+import panelStyles from "./ShortcutsPanel.module.css";
+import { registerSettings } from "./settingsSearchRegistry";
+
+registerSettings("shortcuts")
+  .add("shortcuts.builtinTitle", ["keybinds", "hotkeys", "keyboard", "push to talk"]);
 
 interface Props {
   shortcuts: ShortcutBindings;
@@ -24,122 +31,125 @@ function ShortcutGroup({
 }
 
 export function ShortcutsPanel({ shortcuts, onChangeShortcut, isExpert }: Props) {
+  const { t } = useTranslation("settings");
+
   return (
     <>
-      <h2 className={styles.panelTitle}>Shortcuts</h2>
-      <p className={styles.fieldHint}>
-        Shortcuts marked <strong>global</strong> work even when the app is in
-        the background. In-app shortcuts only fire while the window is focused.
-      </p>
+      <h2 className={styles.panelTitle}>{t("shortcuts.panelTitle")}</h2>
+      <p
+        className={styles.fieldHint}
+        dangerouslySetInnerHTML={{ __html: t("shortcuts.globalHint") }}
+      />
 
-      <ShortcutGroup title="Voice — global">
+      <ShortcutGroup title={t("shortcuts.groupVoiceGlobal")}>
         <ShortcutRecorder
-          label="Push to talk"
+          label={t("shortcuts.pushToTalk")}
           value={shortcuts.pushToTalk}
           onChange={(v) => onChangeShortcut("pushToTalk", v)}
         />
         <ShortcutRecorder
-          label="Toggle mute"
+          label={t("shortcuts.toggleMute")}
           value={shortcuts.toggleMute}
           onChange={(v) => onChangeShortcut("toggleMute", v)}
         />
         <ShortcutRecorder
-          label="Toggle deafen"
+          label={t("shortcuts.toggleDeafen")}
           value={shortcuts.toggleDeafen}
           onChange={(v) => onChangeShortcut("toggleDeafen", v)}
         />
         <ShortcutRecorder
-          label="Voice priority (hold to override)"
+          label={t("shortcuts.voicePriority")}
           value={shortcuts.voicePriority}
           onChange={(v) => onChangeShortcut("voicePriority", v)}
         />
       </ShortcutGroup>
 
-      <ShortcutGroup title="Voice — in-app">
+      <ShortcutGroup title={t("shortcuts.groupVoiceApp")}>
         <ShortcutRecorder
-          label="Toggle activation mode"
+          label={t("shortcuts.toggleActivationMode")}
           value={shortcuts.toggleActivationMode}
           onChange={(v) => onChangeShortcut("toggleActivationMode", v)}
         />
       </ShortcutGroup>
 
-      <ShortcutGroup title="Channel and navigation">
+      <ShortcutGroup title={t("shortcuts.groupNavigation")}>
         <ShortcutRecorder
-          label="Move to channel above"
+          label={t("shortcuts.moveChannelUp")}
           value={shortcuts.moveChannelUp}
           onChange={(v) => onChangeShortcut("moveChannelUp", v)}
         />
         <ShortcutRecorder
-          label="Move to channel below"
+          label={t("shortcuts.moveChannelDown")}
           value={shortcuts.moveChannelDown}
           onChange={(v) => onChangeShortcut("moveChannelDown", v)}
         />
         <ShortcutRecorder
-          label="Jump to root channel"
+          label={t("shortcuts.jumpToRootChannel")}
           value={shortcuts.jumpToRootChannel}
           onChange={(v) => onChangeShortcut("jumpToRootChannel", v)}
         />
         <ShortcutRecorder
-          label="Toggle channel sidebar"
+          label={t("shortcuts.toggleChannelSidebar")}
           value={shortcuts.toggleChannelSidebar}
           onChange={(v) => onChangeShortcut("toggleChannelSidebar", v)}
         />
         <ShortcutRecorder
-          label="Toggle member panel"
+          label={t("shortcuts.toggleMemberPanel")}
           value={shortcuts.toggleMemberPanel}
           onChange={(v) => onChangeShortcut("toggleMemberPanel", v)}
         />
         <ShortcutRecorder
-          label="Quick Channel Search"
+          label={t("shortcuts.quickChannelSearch")}
           value={shortcuts.openQuickSearch}
           onChange={(v) => onChangeShortcut("openQuickSearch", v)}
         />
         <ShortcutRecorder
-          label="Open Quick Switcher"
+          label={t("shortcuts.openQuickSwitcher")}
           value={shortcuts.openQuickSwitcher}
           onChange={(v) => onChangeShortcut("openQuickSwitcher", v)}
         />
       </ShortcutGroup>
 
-      <ShortcutGroup title="Window">
+      <ShortcutGroup title={t("shortcuts.groupWindow")}>
         <ShortcutRecorder
-          label="Open Settings"
+          label={t("shortcuts.openSettings")}
           value={shortcuts.openSettings}
           onChange={(v) => onChangeShortcut("openSettings", v)}
         />
         <ShortcutRecorder
-          label="Toggle fullscreen"
+          label={t("shortcuts.toggleFullscreen")}
           value={shortcuts.toggleFullscreen}
           onChange={(v) => onChangeShortcut("toggleFullscreen", v)}
         />
         {isExpert && (
           <ShortcutRecorder
-            label="Toggle developer overlay"
+            label={t("shortcuts.toggleDevOverlay")}
             value={shortcuts.toggleDevOverlay}
             onChange={(v) => onChangeShortcut("toggleDevOverlay", v)}
           />
         )}
       </ShortcutGroup>
 
+      <UserShortcutsSection />
+
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Chat — built-in (not configurable)</h3>
-        <p className={styles.fieldHint}>
-          These shortcuts are always active inside the message composer.
-        </p>
-        <table className={styles.builtinTable}>
+        <h3 className={styles.sectionTitle}>{t("shortcuts.builtinTitle")}</h3>
+        <p className={styles.fieldHint}>{t("shortcuts.builtinHint")}</p>
+        <table className={panelStyles.builtinTable}>
           <tbody>
-            <tr><td>Focus composer</td><td><kbd>Tab</kbd></td></tr>
-            <tr><td>Send message</td><td><kbd>Enter</kbd></td></tr>
-            <tr><td>New line</td><td><kbd>Shift+Enter</kbd></td></tr>
-            <tr><td>Edit last message</td><td><kbd>ArrowUp</kbd> (empty composer)</td></tr>
-            <tr><td>Bold</td><td><kbd>Ctrl+B</kbd></td></tr>
-            <tr><td>Italic</td><td><kbd>Ctrl+I</kbd></td></tr>
-            <tr><td>Inline code</td><td><kbd>Ctrl+E</kbd></td></tr>
-            <tr><td>Emoji picker</td><td>Type <kbd>:</kbd> then search</td></tr>
-            <tr><td>Mention picker</td><td>Type <kbd>@</kbd> then search</td></tr>
+            <tr><td>{t("shortcuts.builtinFocusComposer")}</td><td><kbd>Tab</kbd></td></tr>
+            <tr><td>{t("shortcuts.builtinSendMessage")}</td><td><kbd>Enter</kbd></td></tr>
+            <tr><td>{t("shortcuts.builtinNewLine")}</td><td><kbd>Shift+Enter</kbd></td></tr>
+            <tr><td>{t("shortcuts.builtinEditLast")}</td><td><kbd>ArrowUp</kbd> {t("shortcuts.builtinEditLastHint")}</td></tr>
+            <tr><td>{t("shortcuts.builtinBold")}</td><td><kbd>Ctrl+B</kbd></td></tr>
+            <tr><td>{t("shortcuts.builtinItalic")}</td><td><kbd>Ctrl+I</kbd></td></tr>
+            <tr><td>{t("shortcuts.builtinInlineCode")}</td><td><kbd>Ctrl+E</kbd></td></tr>
+            <tr><td>{t("shortcuts.builtinEmojiPicker")}</td><td>Type <kbd>:</kbd> {t("shortcuts.builtinEmojiHint")}</td></tr>
+            <tr><td>{t("shortcuts.builtinMentionPicker")}</td><td>Type <kbd>@</kbd> {t("shortcuts.builtinMentionHint")}</td></tr>
           </tbody>
         </table>
       </section>
     </>
   );
 }
+

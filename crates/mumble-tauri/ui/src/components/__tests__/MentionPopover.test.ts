@@ -4,7 +4,7 @@ import {
   membersForRole,
   membersForChannelMention,
   MAX_DISPLAYED_MEMBERS,
-} from "../chat/MentionPopover";
+} from "../chat/mention/MentionPopover";
 
 function user(session: number, channel_id: number, user_id: number | null = null): UserEntry {
   return {

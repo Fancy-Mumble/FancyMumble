@@ -8,8 +8,8 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import ReactionBar from "../chat/ReactionBar";
-import type { ReactionSummary } from "../chat/reactionStore";
+import ReactionBar from "../chat/reaction/ReactionBar";
+import type { ReactionSummary } from "../chat/reaction/reactionStore";
 
 // Mock platform module so isMobile is false (desktop tooltips enabled).
 vi.mock("../../utils/platform", () => ({ isMobile: false }));

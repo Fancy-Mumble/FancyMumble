@@ -1,7 +1,5 @@
 //! Identity (TLS client certificate) management commands.
 
-use tauri::Manager;
-
 use crate::state;
 
 /// Generate a self-signed TLS client certificate for an identity label.
@@ -13,20 +11,14 @@ pub(crate) async fn generate_certificate(
     app: tauri::AppHandle,
     label: String,
 ) -> Result<(), String> {
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let data_dir = crate::e2e_data_dir(&app)?;
     state::pchat::IdentityStore::new(data_dir).generate_cert(&label)
 }
 
 /// List the labels of all identities stored in `{app_data_dir}/identities/`.
 #[tauri::command]
 pub(crate) async fn list_certificates(app: tauri::AppHandle) -> Result<Vec<String>, String> {
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let data_dir = crate::e2e_data_dir(&app)?;
     Ok(state::pchat::IdentityStore::new(data_dir).list_labels())
 }
 
@@ -36,10 +28,7 @@ pub(crate) async fn delete_certificate(
     app: tauri::AppHandle,
     label: String,
 ) -> Result<(), String> {
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let data_dir = crate::e2e_data_dir(&app)?;
     state::pchat::IdentityStore::new(data_dir).delete(&label)
 }
 
@@ -50,10 +39,7 @@ pub(crate) async fn export_certificate(
     label: String,
     dest_path: String,
 ) -> Result<(), String> {
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let data_dir = crate::e2e_data_dir(&app)?;
     state::pchat::IdentityStore::new(data_dir).export(&label, std::path::Path::new(&dest_path))
 }
 
@@ -64,9 +50,36 @@ pub(crate) async fn import_certificate(
     app: tauri::AppHandle,
     src_path: String,
 ) -> Result<String, String> {
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let data_dir = crate::e2e_data_dir(&app)?;
     state::pchat::IdentityStore::new(data_dir).import(std::path::Path::new(&src_path))
+}
+
+/// Detached signature produced with an identity's real Mumble client key.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SignatureDto {
+    /// Base64 fixed-length ECDSA signature (`r || s`).
+    signature: String,
+    /// Base64 raw uncompressed public-key point.
+    public_key: String,
+    algorithm: String,
+}
+
+/// Sign `payload` with the given identity's TLS client private key so the Live
+/// Doc editor can embed a verifiable digital signature tied to the user's real
+/// Mumble identity (not a throwaway browser key).
+#[tauri::command]
+pub(crate) async fn sign_document(
+    app: tauri::AppHandle,
+    label: String,
+    payload: String,
+) -> Result<SignatureDto, String> {
+    let data_dir = crate::e2e_data_dir(&app)?;
+    let (signature, public_key) =
+        state::pchat::IdentityStore::new(data_dir).sign_payload(&label, payload.as_bytes())?;
+    Ok(SignatureDto {
+        signature,
+        public_key,
+        algorithm: "ECDSA-P256-SHA256".to_string(),
+    })
 }

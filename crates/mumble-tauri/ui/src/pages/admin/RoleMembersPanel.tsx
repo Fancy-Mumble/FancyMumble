@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+﻿import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { AclGroup } from "../../types";
 import { MemberPicker } from "../../components/elements/MemberPicker";
 import { useAppStore } from "../../store";
@@ -14,6 +15,7 @@ export interface RoleMembersPanelProps {
 
 /** Members sub-tab: edit `add` and `remove` lists with autocomplete pickers. */
 export function RoleMembersPanel({ role, onPatch, registeredUsers, disabled }: RoleMembersPanelProps) {
+  const { t } = useTranslation("settings");
   const onlineUsers = useAppStore((s) => s.users);
 
   const candidates = useMemo(
@@ -35,7 +37,7 @@ export function RoleMembersPanel({ role, onPatch, registeredUsers, disabled }: R
   return (
     <div className={styles.editorMain}>
       <fieldset className={styles.fieldset}>
-        <legend>Members</legend>
+        <legend>{t("roleMembers.legendMembers")}</legend>
         <MemberPicker
           value={role.add}
           candidates={candidates}
@@ -43,14 +45,15 @@ export function RoleMembersPanel({ role, onPatch, registeredUsers, disabled }: R
           getAvatar={getAvatar}
           onChange={(add) => onPatch({ add })}
           disabled={disabled || role.inherited}
-          emptyLabel="No explicit members"
+          emptyLabel={t("roleMembers.emptyMembers")}
+          placeholder={t("roleMembers.addUserPlaceholder")}
         />
       </fieldset>
 
       <fieldset className={styles.fieldset}>
-        <legend>Excluded members</legend>
+        <legend>{t("roleMembers.legendExcluded")}</legend>
         <p className={styles.dimText}>
-          Users who should be removed from the inherited member set.
+          {t("roleMembers.excludedDesc")}
         </p>
         <MemberPicker
           value={role.remove}
@@ -59,13 +62,14 @@ export function RoleMembersPanel({ role, onPatch, registeredUsers, disabled }: R
           getAvatar={getAvatar}
           onChange={(remove) => onPatch({ remove })}
           disabled={disabled || role.inherited}
-          emptyLabel="No exclusions"
+          emptyLabel={t("roleMembers.emptyExclusions")}
+          placeholder={t("roleMembers.addUserPlaceholder")}
         />
       </fieldset>
 
       {role.inherited_members.length > 0 && (
         <fieldset className={styles.fieldset}>
-          <legend>Inherited members ({role.inherited_members.length})</legend>
+          <legend>{t("roleMembers.legendInherited", { count: role.inherited_members.length })}</legend>
           <div className={styles.inheritedChips}>
             {inheritedNames.map((name, i) => (
               <span key={`${role.inherited_members[i]}-${name}`} className={styles.inheritBadge}>
@@ -77,7 +81,7 @@ export function RoleMembersPanel({ role, onPatch, registeredUsers, disabled }: R
       )}
 
       <fieldset className={styles.fieldset}>
-        <legend>Inheritance</legend>
+        <legend>{t("roleMembers.legendInheritance")}</legend>
         <label className={styles.checkboxLabel}>
           <input
             type="checkbox"
@@ -85,7 +89,7 @@ export function RoleMembersPanel({ role, onPatch, registeredUsers, disabled }: R
             onChange={(e) => onPatch({ inherit: e.target.checked })}
             disabled={disabled || role.inherited}
           />
-          Inherit members from parent channels
+          {t("roleMembers.inheritFromParent")}
         </label>
         <label className={styles.checkboxLabel}>
           <input
@@ -94,7 +98,7 @@ export function RoleMembersPanel({ role, onPatch, registeredUsers, disabled }: R
             onChange={(e) => onPatch({ inheritable: e.target.checked })}
             disabled={disabled || role.inherited}
           />
-          Allow child channels to inherit from this role
+          {t("roleMembers.allowChildInherit")}
         </label>
       </fieldset>
     </div>

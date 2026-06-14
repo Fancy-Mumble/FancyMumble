@@ -1,4 +1,5 @@
 ﻿import { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { completeSetup } from "../preferencesStorage";
@@ -7,6 +8,7 @@ import type { UserMode } from "../types";
 import styles from "./WelcomePage.module.css";
 
 export default function WelcomePage({ onComplete }: Readonly<{ onComplete?: () => void }>) {
+  const { t } = useTranslation("server");
   const navigate = useNavigate();
   const [mode, setMode] = useState<UserMode>("normal");
   const [username, setUsername] = useState("");
@@ -36,20 +38,20 @@ export default function WelcomePage({ onComplete }: Readonly<{ onComplete?: () =
         {/* Logo */}
         <div className={styles.logo}>
           <BrandLogo size={52} className={styles.logoIcon} />
-          <h1 className={styles.title}>Welcome</h1>
+          <h1 className={styles.title}>{t("title")}</h1>
         </div>
 
         <form onSubmit={handleSubmit}>
           {/* Username */}
           <div className={styles.field}>
             <label htmlFor="welcome-username" className={styles.label}>
-              Username
+              {t("username")}
             </label>
             <input
               id="welcome-username"
               className={styles.input}
               type="text"
-              placeholder="Your name"
+              placeholder={t("usernamePlaceholder")}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoFocus
@@ -62,7 +64,7 @@ export default function WelcomePage({ onComplete }: Readonly<{ onComplete?: () =
 
           {/* Mode selection */}
           <div className={styles.field}>
-            <span className={styles.label}>Interface</span>
+            <span className={styles.label}>{t("interface")}</span>
             <div className={styles.modeToggle} role="radiogroup">
               <button
                 type="button"
@@ -70,8 +72,8 @@ export default function WelcomePage({ onComplete }: Readonly<{ onComplete?: () =
                 onClick={() => setMode("normal")}
                 aria-pressed={mode === "normal"}
               >
-                <span className={styles.modeTitle}>Simple</span>
-                <span className={styles.modeHint}>Just connect and talk</span>
+                <span className={styles.modeTitle}>{t("mode.simple")}</span>
+                <span className={styles.modeHint}>{t("mode.simpleHint")}</span>
               </button>
               <button
                 type="button"
@@ -79,8 +81,8 @@ export default function WelcomePage({ onComplete }: Readonly<{ onComplete?: () =
                 onClick={() => setMode("expert")}
                 aria-pressed={mode === "expert"}
               >
-                <span className={styles.modeTitle}>Advanced</span>
-                <span className={styles.modeHint}>Full control</span>
+                <span className={styles.modeTitle}>{t("mode.advanced")}</span>
+                <span className={styles.modeHint}>{t("mode.advancedHint")}</span>
               </button>
             </div>
           </div>
@@ -90,7 +92,7 @@ export default function WelcomePage({ onComplete }: Readonly<{ onComplete?: () =
             type="submit"
             disabled={!username.trim() || saving}
           >
-            {saving ? "Starting..." : "Get started"}
+            {saving ? t("submitting") : t("submit")}
           </button>
         </form>
       </div>

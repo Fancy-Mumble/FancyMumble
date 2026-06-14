@@ -11,31 +11,256 @@
 // intentional (proc-macro visibility, Tauri command system, internal APIs).
 #![allow(unreachable_pub, reason = "application crate: pub items in private modules are intentional for Tauri command system")]
 
+// --- Global allocator -------------------------------------------------
+//
+// The Windows system heap holds onto the startup high-water mark (~280 MB
+// of transient allocations from loading the embedded frontend, spinning up
+// WebView2, and building the TLS root store) for the whole process
+// lifetime, even at idle while disconnected. mimalloc returns freed pages
+// to the OS, which collapses idle RSS to the genuinely-live working set.
+//
+// When the `dhat-heap` profiling feature is on, dhat's allocator takes the
+// slot instead so we can attribute live/peak heap to allocation sites.
+#[cfg(all(not(target_os = "android"), not(feature = "dhat-heap")))]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
+// Holds the dhat profiler for the program's lifetime. Tauri's `.run()` never
+// returns (the platform event loop calls `std::process::exit`), so a local
+// guard in `run()` would never drop and dhat would never write its output.
+// We instead drop this explicitly in the `RunEvent::Exit` handler.
+#[cfg(feature = "dhat-heap")]
+static DHAT_PROFILER: std::sync::Mutex<Option<dhat::Profiler>> = std::sync::Mutex::new(None);
+
+// With `dhat-heap` on, dhat owns the allocator slot, so mimalloc is linked
+// but unused on desktop. Acknowledge it to keep `unused_crate_dependencies`
+// quiet without dropping the dependency declaration.
+#[cfg(all(not(target_os = "android"), feature = "dhat-heap"))]
+use mimalloc as _;
+
 mod audio;
 pub(crate) mod commands;
+pub(crate) mod logging;
 pub mod platform;
 mod state;
 #[cfg(not(target_os = "android"))]
 mod updater;
 
 use state::AppState;
-use std::sync::OnceLock;
 use tauri::Manager;
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::prelude::*;
-use tracing_subscriber::reload;
 
-/// Global handle for reloading the tracing filter at runtime.
-pub(crate) static LOG_RELOAD_HANDLE: OnceLock<reload::Handle<EnvFilter, tracing_subscriber::Registry>> =
-    OnceLock::new();
+/// Resolve the application data directory used for certificates, identities,
+/// pchat seeds and signal state.
+///
+/// Honours the `FANCY_E2E_DATA_DIR` env override so each e2e test client gets an
+/// isolated identity root. Tauri's `app_data_dir()` resolves via the OS
+/// known-folder API (which ignores env overrides on Windows), so per-instance
+/// isolation for the e2e suite requires this explicit hook. Production runs
+/// (no env var set) behave exactly as before.
+pub(crate) fn e2e_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    if let Ok(dir) = std::env::var("FANCY_E2E_DATA_DIR") {
+        if !dir.trim().is_empty() {
+            return Ok(std::path::PathBuf::from(dir));
+        }
+    }
+    app.path().app_data_dir().map_err(|e| e.to_string())
+}
+
+/// Manages the Vite dev server when the app is run via plain `cargo run`.
+///
+/// `cargo tauri dev` starts the dev server (its `beforeDevCommand`) and kills
+/// it when the app exits. A plain `cargo run` of a dev build (anything without
+/// the `custom-protocol` feature, e.g. profiling with `--features dhat-heap`)
+/// loads the same dev URL but does NOT manage the server, leaving a stray Vite
+/// holding the port. This module starts Vite on launch and tears it down on
+/// exit so the dev server's lifetime follows the app. It is compiled only into
+/// dev builds (`cfg(dev)`), so it is absent from production binaries.
+#[cfg(all(dev, not(target_os = "android")))]
+mod dev_server {
+    use std::net::{SocketAddr, TcpStream};
+    use std::process::Child;
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+
+    /// The dev-server port (must match `build.devUrl` in `tauri.conf.json`).
+    const DEV_PORT: u16 = 1420;
+
+    /// Holds the spawned Vite child so [`stop`] can terminate it on exit.
+    static DEV_SERVER: Mutex<Option<Child>> = Mutex::new(None);
+
+    /// Whether something is already serving the dev URL.
+    fn port_in_use() -> bool {
+        let addr = SocketAddr::from(([127, 0, 0, 1], DEV_PORT));
+        TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok()
+    }
+
+    /// Spawn the Vite dev server unless one is already running on the port
+    /// (e.g. under `cargo tauri dev`, which owns its own server).
+    pub(super) fn start() {
+        if port_in_use() {
+            tracing::info!("dev server already on :{DEV_PORT}; leaving it to its owner");
+            return;
+        }
+        let ui_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ui");
+        // `npm` is `npm.cmd` on Windows, which is only resolvable through the
+        // shell, so route the command through `cmd /C` there.
+        let mut cmd = if cfg!(windows) {
+            let mut c = std::process::Command::new("cmd");
+            let _ = c.args(["/C", "npm", "run", "dev"]);
+            c
+        } else {
+            let mut c = std::process::Command::new("npm");
+            let _ = c.args(["run", "dev"]);
+            c
+        };
+        let _ = cmd.current_dir(&ui_dir);
+        match cmd.spawn() {
+            Ok(child) => {
+                tracing::info!(pid = child.id(), "started Vite dev server");
+                if let Ok(mut guard) = DEV_SERVER.lock() {
+                    *guard = Some(child);
+                }
+                wait_until_ready();
+            }
+            Err(e) => tracing::warn!("failed to start Vite dev server: {e}"),
+        }
+    }
+
+    /// Block (briefly) until the dev server accepts connections so the webview
+    /// does not load before Vite is ready (which shows `ERR_CONNECTION_REFUSED`).
+    fn wait_until_ready() {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while Instant::now() < deadline {
+            if port_in_use() {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        }
+        tracing::warn!("Vite dev server did not come up within 30s");
+    }
+
+    /// Terminate the spawned dev server (and its `node` child) if we started it.
+    pub(super) fn stop() {
+        let child = DEV_SERVER.lock().ok().and_then(|mut g| g.take());
+        if let Some(mut child) = child {
+            let pid = child.id();
+            // `cmd /C npm run dev` spawns a `node` grandchild; kill the whole
+            // tree, otherwise Vite keeps holding the port after the app exits.
+            #[cfg(windows)]
+            {
+                let _ = std::process::Command::new("taskkill")
+                    .args(["/F", "/T", "/PID", &pid.to_string()])
+                    .output();
+            }
+            let _ = child.kill();
+            let _ = child.wait();
+            tracing::info!(pid, "stopped Vite dev server");
+        }
+    }
+}
 
 /// Entry point for the Tauri application.
 ///
 /// Initialises the TLS crypto provider, sets up logging, registers all
+/// Window-event hook: trim `WebView2` memory while the main window is
+/// minimized; restore normal behaviour when it is shown/focused again.
+#[cfg(target_os = "windows")]
+fn update_webview_memory_target(window: &tauri::Window, event: &tauri::WindowEvent) {
+    if window.label() != updater::MAIN_WINDOW_LABEL {
+        return;
+    }
+    match event {
+        tauri::WindowEvent::Resized(_) => {
+            let minimized = window.is_minimized().unwrap_or(false);
+            set_webview_memory_target(window, minimized);
+        }
+        tauri::WindowEvent::Focused(true) => {
+            set_webview_memory_target(window, false);
+        }
+        _ => {}
+    }
+}
+
+/// Ask `WebView2` to trim its memory usage while the main window is
+/// minimized (`low = true`) and return to normal when shown again.
+///
+/// The browser process tree dwarfs the Rust backend's heap, and by
+/// default it holds its working set while the app idles minimized or in
+/// the tray.  `COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW` makes the
+/// renderer release caches and unused pages back to the OS.
+#[cfg(target_os = "windows")]
+#[allow(unsafe_code, reason = "WebView2 COM calls on the controller's own event-loop thread, as required by the API")]
+fn set_webview_memory_target(window: &tauri::Window, low: bool) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    // `Resized` fires for every step of an interactive resize; only
+    // forward actual level changes to the COM layer.
+    static MEMORY_TARGET_LOW: AtomicBool = AtomicBool::new(false);
+    if MEMORY_TARGET_LOW.swap(low, Ordering::Relaxed) == low {
+        return;
+    }
+
+    let Some(webview) = window
+        .app_handle()
+        .get_webview_window(updater::MAIN_WINDOW_LABEL)
+    else {
+        return;
+    };
+    let result = webview.with_webview(move |platform_webview| {
+        use webview2_com::Microsoft::Web::WebView2::Win32::{
+            ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+        };
+        use windows_core::Interface;
+
+        let level = if low {
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
+        } else {
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
+        };
+        // SAFETY: the closure runs on the event-loop thread that owns the
+        // controller, which is the thread WebView2 COM objects require.
+        unsafe {
+            let webview2 = match platform_webview.controller().CoreWebView2() {
+                Ok(wv) => wv,
+                Err(e) => {
+                    tracing::debug!("CoreWebView2 unavailable for memory target: {e}");
+                    return;
+                }
+            };
+            // Requires WebView2 runtime >= 114 (ICoreWebView2_19); older
+            // runtimes simply keep default memory behaviour.
+            let Ok(webview19) = webview2.cast::<ICoreWebView2_19>() else {
+                return;
+            };
+            if let Err(e) = webview19.SetMemoryUsageTargetLevel(level) {
+                tracing::debug!("SetMemoryUsageTargetLevel failed: {e}");
+            } else {
+                tracing::debug!(low, "webview memory usage target updated");
+            }
+        }
+    });
+    if let Err(e) = result {
+        tracing::debug!("with_webview failed for memory target: {e}");
+    }
+}
+
 /// Tauri commands, and starts the application event loop.
 #[allow(clippy::expect_used, reason = "Tauri builder failure during startup is unrecoverable")]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Start heap profiling. Dropped in the `RunEvent::Exit` handler (see
+    // below), which writes `dhat-heap.json` to the working dir. View it at
+    // https://nnethercote.github.io/dh_view/dh_view.html.
+    #[cfg(feature = "dhat-heap")]
+    if let Ok(mut guard) = DHAT_PROFILER.lock() {
+        *guard = Some(dhat::Profiler::new_heap());
+    }
+
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     configure_runtime_env();
@@ -45,8 +270,13 @@ pub fn run() {
     }
 
     platform::init();
-    init_logging();
+    logging::init();
     platform::check_dependencies();
+
+    // When run via plain `cargo run` (not `cargo tauri dev`), start the Vite
+    // dev server so it is available for the webview and torn down on exit.
+    #[cfg(all(dev, not(target_os = "android")))]
+    dev_server::start();
 
     let builder = create_base_builder();
     let builder = register_commands(builder);
@@ -56,6 +286,7 @@ pub fn run() {
         .setup(move |app| {
             init_app_state(app);
             platform::setup(app.handle().clone());
+            setup_deep_link_handler(app.handle().clone());
             #[cfg(not(target_os = "android"))]
             if let Err(e) = platform::desktop::tray::setup_tray(app) {
                 tracing::warn!("Failed to create system tray icon: {e}");
@@ -79,6 +310,8 @@ pub fn run() {
                     }
                 }
             }
+            #[cfg(target_os = "windows")]
+            update_webview_memory_target(window, event);
             #[cfg(not(target_os = "android"))]
             if matches!(event, tauri::WindowEvent::Destroyed)
                 && window.label() == updater::UPDATER_WINDOW_LABEL
@@ -107,11 +340,31 @@ pub fn run() {
                     }
                 }
             }
+            // Translation popout cleanup: if the popout had the in-window
+            // element picker enabled when it was destroyed (Alt+F4, tray
+            // kill, ...) the main window never received a stop event and
+            // its outlines would stay on screen.  Emit one here so the
+            // overlay tears itself down.
+            #[cfg(not(target_os = "android"))]
+            if matches!(event, tauri::WindowEvent::Destroyed)
+                && window.label() == "popout-translation"
+            {
+                use tauri::Emitter;
+                let _ = window.app_handle().emit("translation-picker:stop", ());
+            }
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
+                // Flush the dhat heap profile before the process exits.
+                #[cfg(feature = "dhat-heap")]
+                if let Ok(mut guard) = DHAT_PROFILER.lock() {
+                    drop(guard.take());
+                }
+                // Tear down the Vite dev server if we started it.
+                #[cfg(all(dev, not(target_os = "android")))]
+                dev_server::stop();
                 if let Some(state) = app.try_state::<AppState>() {
                     state.shutdown_offload_store();
                 }
@@ -140,23 +393,19 @@ pub fn run() {
 /// the `WebView2` defaults turns out to be the better trade-off.
 fn configure_runtime_env() {
     set_env_if_unset("TOKIO_WORKER_THREADS", "4");
+    // mimalloc: return decommitted pages to the OS promptly (100 ms after
+    // they go idle) instead of holding the high-water mark. Cheap for our
+    // bursty allocation pattern (startup + occasional messages/audio).
+    #[cfg(all(not(target_os = "android"), not(feature = "dhat-heap")))]
+    {
+        set_env_if_unset("MIMALLOC_PURGE_DELAY", "100");
+    }
 }
 
 fn set_env_if_unset(key: &str, value: &str) {
     if std::env::var_os(key).is_none() {
         std::env::set_var(key, value);
     }
-}
-
-fn init_logging() {
-    let default_filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into());
-    let filter = EnvFilter::try_new(&default_filter).unwrap_or_else(|_| EnvFilter::new("info"));
-    let (filter_layer, reload_handle) = reload::Layer::new(filter);
-    tracing_subscriber::registry()
-        .with(filter_layer)
-        .with(tracing_subscriber::fmt::layer())
-        .init();
-    let _ = LOG_RELOAD_HANDLE.set(reload_handle);
 }
 
 fn init_app_state(app: &mut tauri::App) {
@@ -178,6 +427,13 @@ fn init_app_state(app: &mut tauri::App) {
 /// audio (wrong VAD threshold, wrong device, wrong denoiser, etc.) for
 /// the first call after launch.
 fn hydrate_persisted_prefs(app: &tauri::AppHandle, state: &AppState) {
+    // Record the log directory now that the app handle exists, so the
+    // developer log tooling (file logging, export, "view folder") has a
+    // target even before the user touches a setting.
+    if let Ok(log_dir) = app.path().app_log_dir() {
+        logging::set_log_dir(log_dir);
+    }
+
     let Ok(config_dir) = app.path().app_config_dir() else {
         return;
     };
@@ -234,13 +490,61 @@ fn hydrate_persisted_prefs(app: &tauri::AppHandle, state: &AppState) {
                 .map(|b| if b { "debug".to_string() } else { "info".to_string() })
         });
     if let Some(level) = log_level {
-        if let Some(handle) = LOG_RELOAD_HANDLE.get() {
-            if let Ok(filter) = EnvFilter::try_new(&level) {
-                let _ = handle.reload(filter);
-                tracing::info!("hydrate_persisted_prefs: log level = {level}");
-            }
+        if logging::set_log_level(&level).is_ok() {
+            tracing::info!("hydrate_persisted_prefs: log level = {level}");
         }
     }
+
+    // Developer log tooling settings. Apply terminal/auto-zip flags
+    // before enabling file logging so the first rotation honours them.
+    let bool_pref = |key: &str| prefs.get(key).and_then(serde_json::Value::as_bool);
+    if let Some(terminal) = bool_pref("terminalLogging") {
+        logging::set_terminal_logging(terminal);
+    }
+    if let Some(auto_zip) = bool_pref("autoZipLogs") {
+        logging::set_auto_zip(auto_zip);
+    }
+    if bool_pref("logToFile").unwrap_or(false) {
+        if let Err(e) = logging::set_file_logging(true) {
+            tracing::warn!("hydrate_persisted_prefs: enable file logging failed: {e}");
+        }
+    }
+}
+
+/// Forward incoming `fancy://` URLs to the frontend as a
+/// `deep-link-open` event.  The frontend parses the URL and routes
+/// accordingly (e.g. `fancy://marketplace/plugin/<id>` opens the
+/// plugin detail page in the marketplace).  Also focuses the main
+/// window so the user sees the result.
+fn setup_deep_link_handler(handle: tauri::AppHandle) {
+    #[cfg(not(target_os = "android"))]
+    use tauri::Manager;
+    use tauri_plugin_deep_link::DeepLinkExt;
+
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    match handle.deep_link().register("fancy") {
+        Ok(()) => tracing::info!("deep-link: registered fancy:// scheme"),
+        Err(e) => tracing::warn!("deep-link: failed to register fancy:// scheme: {e}"),
+    }
+
+    let dispatch_handle = handle.clone();
+    let _registration = handle.deep_link().on_open_url(move |event| {
+        let urls: Vec<String> = event.urls().iter().map(ToString::to_string).collect();
+        if urls.is_empty() {
+            return;
+        }
+        tracing::info!("deep-link: received {} url(s): {:?}", urls.len(), urls);
+        #[cfg(not(target_os = "android"))]
+        if let Some(win) = dispatch_handle.get_webview_window("main") {
+            let _ = win.show();
+            let _ = win.unminimize();
+            let _ = win.set_focus();
+        }
+        use tauri::Emitter;
+        for url in urls {
+            let _ = dispatch_handle.emit("deep-link-open", url);
+        }
+    });
 }
 
 fn create_base_builder() -> tauri::Builder<tauri::Wry> {
@@ -248,7 +552,8 @@ fn create_base_builder() -> tauri::Builder<tauri::Wry> {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_dialog::init());
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_deep_link::init());
 
     #[cfg(target_os = "android")]
     let builder = builder.plugin(
@@ -316,15 +621,21 @@ macro_rules! all_command_handlers {
             commands::certificates::delete_certificate,
             commands::certificates::export_certificate,
             commands::certificates::import_certificate,
+            commands::certificates::sign_document,
             commands::connection::disconnect,
             commands::connection::get_status,
             commands::servers::list_servers,
             commands::servers::get_active_server,
             commands::servers::set_active_server,
             commands::servers::disconnect_server,
+            commands::servers::find_user_by_hash,
+            commands::servers::find_user_in_server,
             commands::channels::get_channels,
             commands::channels::get_users,
             commands::channels::get_user_texture,
+            commands::channels::get_registered_user_texture,
+            commands::channels::release_registered_user_textures,
+            commands::channels::get_user_comment,
             commands::channels::get_channel_description,
             commands::messaging::get_messages,
             commands::messaging::send_message,
@@ -356,6 +667,7 @@ macro_rules! all_command_handlers {
             commands::audio::get_audio_backend,
             commands::audio::get_voice_state,
             commands::audio::enable_voice,
+            commands::audio::enable_voice_muted,
             commands::audio::disable_voice,
             commands::audio::toggle_mute,
             commands::audio::toggle_deafen,
@@ -378,11 +690,31 @@ macro_rules! all_command_handlers {
             commands::profile::set_user_texture,
             commands::profile::get_own_session,
             commands::profile::send_plugin_data,
+            commands::profile::send_plugin_message,
+            commands::profile::send_fancy_poll,
+            commands::profile::send_fancy_poll_vote,
             commands::files::upload_file,
+            commands::files::upload_bytes,
+            commands::files::upload_binary,
             commands::files::cancel_upload,
             commands::files::download_file,
+            commands::files::download_to_base64,
+            commands::files::fileserver_admin_list_files,
+            commands::files::fileserver_admin_list_documents,
+            commands::files::fileserver_admin_delete_file,
+            commands::files::fileserver_admin_delete_document,
+            commands::files::fileserver_admin_file_base64,
+            commands::files::fileserver_my_list_files,
+            commands::files::fileserver_my_delete_file,
+            commands::files::fileserver_my_file_base64,
+            commands::files::fileserver_my_file_link,
+            commands::files::fileserver_get_private,
+            commands::files::fileserver_put_private,
+            commands::files::save_markdown_file,
             commands::files::add_custom_emote,
             commands::files::remove_custom_emote,
+            commands::files::write_translation_files,
+            commands::files::check_files_exist,
             commands::realtime::send_push_update,
             commands::realtime::send_subscribe_push,
             commands::messaging::send_read_receipt,
@@ -395,6 +727,8 @@ macro_rules! all_command_handlers {
             commands::messaging::send_reaction,
             commands::messaging::pin_message,
             commands::messaging::delete_pchat_messages,
+            commands::messaging::plugin_inject_chat_message,
+            commands::messaging::plugin_update_chat_message,
             commands::dm::send_dm,
             commands::dm::get_dm_messages,
             commands::dm::select_dm_user,
@@ -402,6 +736,11 @@ macro_rules! all_command_handlers {
             commands::dm::mark_dm_read,
             commands::system::reset_app_data,
             commands::system::set_log_level,
+            commands::system::set_log_to_file,
+            commands::system::set_terminal_logging,
+            commands::system::set_auto_zip_logs,
+            commands::system::get_log_directory,
+            commands::system::export_logs,
             commands::system::set_notifications_enabled,
             commands::system::set_disable_dual_path,
             commands::system::update_badge_count,
@@ -437,6 +776,17 @@ macro_rules! all_command_handlers {
             commands::onboarding::save_onboarding_config,
             commands::onboarding::submit_onboarding_response,
             commands::onboarding::request_onboarding_response,
+            commands::server_settings::get_server_settings,
+            commands::server_settings::save_server_settings,
+            commands::plugin_admin::get_plugin_registry,
+            commands::plugin_admin::get_plugin_broadcasts,
+            commands::plugin_admin::request_server_plugins,
+            commands::plugin_admin::set_server_plugin_enabled,
+            commands::plugin_admin::install_server_plugin,
+            commands::plugin_admin::uninstall_server_plugin,
+            commands::plugin_admin::fetch_plugin_manifest_sha256,
+            commands::plugin_admin::fetch_marketplace_index,
+            commands::plugin_admin::fetch_marketplace_plugin,
             commands::keyshare::confirm_custodians,
             commands::keyshare::accept_custodian_changes,
             commands::keyshare::approve_key_share,
@@ -446,10 +796,14 @@ macro_rules! all_command_handlers {
             commands::keyshare::key_takeover,
             commands::image::blur_image,
             commands::image::process_background,
+            commands::plugin_info::decode_plugin_info,
             commands::popout::open_image_popout,
             commands::popout::take_popout_image,
             commands::popout::open_stream_popout,
             commands::popout::take_popout_stream,
+            commands::popout::open_dm_popout,
+            commands::popout::take_popout_dm,
+            commands::popout::open_translation_popout,
             commands::draw_overlay::open_drawing_overlay,
             commands::draw_overlay::close_drawing_overlay,
             commands::draw_overlay::take_drawing_overlay_context,

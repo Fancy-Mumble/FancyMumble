@@ -8,7 +8,7 @@ export interface ChannelEntry {
   parent_id: number | null;
   name: string;
   /** Byte length of the channel description, or null if empty.
-   *  The actual HTML must be fetched lazily via `get_channel_description` —
+   *  The actual HTML must be fetched lazily via `get_channel_description` -
    *  use `useChannelDescription(channelId, description_size)` from the store. */
   description_size: number | null;
   user_count: number;
@@ -37,11 +37,19 @@ export interface UserEntry {
   /** Registered user ID, or null/undefined if not registered. */
   user_id?: number | null;
   /** Byte length of the avatar image, or null if no avatar.
-   *  The actual bytes must be fetched lazily via `get_user_texture` —
+   *  The actual bytes must be fetched lazily via `get_user_texture` -
    *  use `useUserAvatar(session, texture_size)` from the store. */
   texture_size: number | null;
-  /** Mumble comment - may contain FancyMumble profile JSON marker. */
-  comment: string | null;
+  /** Existence/version marker for a live user's comment/bio, or null if none.
+   *  The text is fetched lazily via `get_user_comment` - use
+   *  `useUserComment(session, comment_size)`.  (Bios may carry a FancyMumble
+   *  profile JSON marker.)  Optional only so test/synthetic `UserEntry`
+   *  literals need not set it; live backend payloads always include it. */
+  comment_size?: number | null;
+  /** Inline comment text.  Only set on synthetic/offline member entries
+   *  (registered-members list); live users leave this undefined and resolve
+   *  the bio through `comment_size` + `useUserComment`. */
+  comment?: string | null;
   /** Server-side admin mute. */
   mute: boolean;
   /** Server-side admin deafen. */
@@ -82,6 +90,13 @@ export interface ChatMessage {
   pinned_by?: string | null;
   /** Unix epoch millis when the message was pinned. */
   pinned_at?: number | null;
+  /** When set, this bubble was authored by the named plugin via the
+   *  `chat_message!` macro rather than received from a user. */
+  plugin_name?: string | null;
+  /** Opaque ActionRow[] payload for plugin-authored bubbles.  The
+   *  shape mirrors `ResponseKind.chat-message.components`; rendered
+   *  by `RenderComponent` in `MessageItem`. */
+  plugin_components?: readonly unknown[] | null;
 }
 
 /**
@@ -239,8 +254,16 @@ export type FileAccessMode = "public" | "password" | "session";
 /** Configuration for the server-side file-server plugin, advertised to the
  *  client on connect via a `fancy-file-server-config` plugin-data message. */
 export interface FileServerConfig {
-  /** Base URL of the axum file server (no trailing slash). */
+  /** Base URL of the axum file server (no trailing slash).  Equal to
+   *  `internalBaseUrl` unless the server advertises a reverse-proxy
+   *  override (`serverConfig.fancy_rest_api_url`), in which case this
+   *  is the public/proxied URL used for outbound requests. */
   baseUrl: string;
+  /** Internal origin the file-server plugin actually embeds in its
+   *  download URLs.  Used by `rebaseFileServerUrl` to decide whether
+   *  a given URL is one of ours to rewrite (otherwise unrelated plugin
+   *  URLs such as `https://placehold.co/...` would get clobbered). */
+  internalBaseUrl: string;
   /** Caller's Mumble session id (echoed back from the server). */
   sessionId: number;
   /** Per-session upload token used as `?token=` on `POST /files`. */
@@ -252,8 +275,10 @@ export interface FileServerConfig {
   maxFileSizeBytes: number;
   /** When true, files are deleted after the TTL expires. */
   deleteOnTtl: boolean;
-  /** Time-to-live in seconds (only meaningful when `deleteOnTtl` is true). */
+  /** Default time-to-live in seconds (only meaningful when `deleteOnTtl`). */
   ttlSeconds: number;
+  /** Maximum lifetime in seconds an uploader may request (`0` = no maximum). */
+  maxTtlSeconds: number;
   /** When true, files are deleted after a single successful download. */
   deleteOnDownload: boolean;
   /** When true, all files uploaded by a session are deleted on disconnect. */
@@ -268,6 +293,10 @@ export interface FileServerConfig {
    *  publicly accessible links (`public` and `password` modes).  When
    *  false, only `session`-scoped uploads are permitted. */
   canShareFilesPublic: boolean;
+  /** True when the connected user is a registered (non-guest) Mumble
+   *  account.  Gates access to per-user private storage (`/me/storage`),
+   *  where the live-doc sidebar is persisted. */
+  registered: boolean;
 }
 
 /** Parsed semantic version triple as returned by `GET /capabilities`. */
@@ -293,6 +322,7 @@ export interface FileServerLimits {
   max_file_size_bytes: number;
   max_total_storage_bytes: number;
   ttl_seconds: number;
+  max_ttl_seconds: number;
 }
 
 /** Response from `GET {baseUrl}/capabilities`. Populated once per
@@ -303,6 +333,159 @@ export interface FileServerCapabilities {
   fancy_version: FileServerVersionInfo;
   features: FileServerFeatures;
   limits: FileServerLimits;
+}
+
+/** Access mode of a stored file (chosen by the uploader). */
+export type FileServerAccessMode = "public" | "password" | "session";
+
+/** One stored file as returned by the admin dashboard endpoint
+ *  `GET /admin/files` (proxied via `fileserver_admin_list_files`). */
+export interface AdminFileEntry {
+  id: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  access_mode: FileServerAccessMode;
+  channel_id: number;
+  server_id: number;
+  /** Unix-millis upload time. */
+  uploaded_at: number;
+  /** Unix-millis last download, or null. */
+  downloaded_at: number | null;
+  /** Unix-seconds TTL expiry, or null. */
+  expires_at: number | null;
+  /** Display name of the uploader captured at upload time (null for files
+   *  uploaded before this was recorded). */
+  uploader_name: string | null;
+  /** Stable cert hash of the uploader, used to match a connected user. */
+  uploader_cert_hash: string | null;
+  /** Stable registered user id of the uploader (>= 0), or null. Preferred over
+   *  the cert hash for matching a connected user, since it survives certificate
+   *  regeneration across sessions. */
+  uploader_user_id: number | null;
+  /** Whether the uploader's session is still connected. */
+  uploader_online: boolean;
+}
+
+/** Aggregate storage usage from the admin dashboard endpoint. */
+export interface FileServerStorageStats {
+  total_bytes_used: number;
+  max_total_storage_bytes: number;
+  max_file_size_bytes: number;
+  file_count: number;
+}
+
+/** `GET /admin/files` response body. */
+export interface AdminFilesResponse {
+  files: AdminFileEntry[];
+  stats: FileServerStorageStats;
+}
+
+/** `GET /me/files` response body - the caller's own uploaded files (no
+ *  server-wide storage stats, which are admin-only). */
+export interface MyFilesResponse {
+  files: AdminFileEntry[];
+}
+
+/** One persisted live-doc document from the admin dashboard endpoint. */
+export interface DocumentSummary {
+  /** Stable document name (the live-doc `DocKey` filename). */
+  name: string;
+  /** Sequence number of the most recent revision. */
+  latest_rev: number;
+  /** Total number of stored revisions. */
+  revision_count: number;
+  /** Size in bytes of the latest revision. */
+  size_bytes: number;
+  /** Unix-millis time the document was last written. */
+  updated_at: number;
+  /** Display name of the creator (first to persist it), or null for documents
+   *  stored before owner tracking existed. */
+  owner_name: string | null;
+  /** Stable cert hash of the creator, so the client can match a live user. */
+  owner_cert_hash: string | null;
+}
+
+/** `GET /admin/documents` response body. */
+export interface AdminDocumentsResponse {
+  documents: DocumentSummary[];
+}
+
+/** A saved reference to a live document in a user's personal sidebar.
+ *  References a server-scoped document by `slug`; `channel` is the
+ *  channel it was published to (or `null` for a private doc). */
+export interface LiveDocDocLink {
+  slug: string;
+  title: string;
+  channel: number | null;
+  /** True if this user created the document. */
+  owned: boolean;
+}
+
+/** A folder in the sidebar tree (nestable).  Sections and folders share
+ *  this shape; a section is simply a top-level folder. */
+export interface LiveDocFolder {
+  id: string;
+  name: string;
+  folders: LiveDocFolder[];
+  docs: LiveDocDocLink[];
+}
+
+/** A top-level user-defined section of the sidebar. */
+export type LiveDocSection = LiveDocFolder;
+
+/** The persisted per-user sidebar tree (stored in file-server private
+ *  storage under the `livedoc-sidebar` key). */
+export interface LiveDocIndex {
+  v: number;
+  sections: LiveDocSection[];
+}
+
+/** One member a document has been shared with, as pushed by the
+ *  live-doc plugin's `SharedWith` envelope. */
+export interface LiveDocSharedMember {
+  cert_hash: string;
+  user_id: number;
+  display_name: string;
+}
+
+/** Configuration advertised by the live-doc plugin to clients on connect
+ *  via a `fancy-live-doc-config` plugin-data message. */
+export interface LiveDocPluginConfig {
+  /** SemVer version string of the live-doc plugin (from its Cargo.toml). */
+  version: string;
+  /** Base WebSocket URL clients use for Yjs sync connections. */
+  wsBaseUrl: string;
+}
+
+/** A single key/value debug row advertised by a plugin's
+ *  `MumblePlugin::info_json` payload. Rendered verbatim in the
+ *  Server Info panel under the plugin's card. */
+export interface PluginInfoDebugRow {
+  label: string;
+  value: string | number | boolean;
+}
+
+/** Per-plugin metadata broadcast by the server via the
+ *  `fancy-plugin-info` envelope shortly after a client connects.
+ *  All fields except `name`/`version` are optional and rendered
+ *  generically. */
+export interface PluginInfoPayload {
+  description?: string;
+  author?: string;
+  homepage?: string;
+  capabilities?: string[];
+  debug_rows?: PluginInfoDebugRow[];
+  /** Allow plugins to carry forward-compatible extra fields. */
+  [extra: string]: unknown;
+}
+
+/** Decoded `fancy-plugin-info` envelope. Stored in the Zustand
+ *  `pluginInfos` map keyed by plugin name. */
+export interface PluginInfoRecord {
+  name: string;
+  version: string;
+  info: PluginInfoPayload;
 }
 
 /** A custom emote pushed by the server via the `fancy-server-emotes`
@@ -353,6 +536,12 @@ export interface DownloadEntry {
   downloadedAt: number;
 }
 
+/** Input shape for `addDownload`: everything in {@link DownloadEntry}
+ *  except the fields the store fills in (`id`, `downloadedAt`).  Lifted
+ *  out of the action signature so it can be referenced by name from
+ *  caller code instead of repeating the `Omit<...>` everywhere. */
+export type NewDownloadInput = Omit<DownloadEntry, "id" | "downloadedAt">;
+
 /** A link embed returned by the server after scraping Open Graph / oEmbed data. */
 export interface LinkEmbed {
   url: string;
@@ -376,6 +565,17 @@ export type UserMode = "normal" | "expert" | "developer";
 /** Preferred time display format. */
 export type TimeFormat = "12h" | "24h" | "auto";
 
+/** Preferred date display format.
+ *  - `auto`: follow the active UI language.
+ *  - `dmy`: Day/Month/Year (e.g. 17/05/2026) - most of the world.
+ *  - `mdy`: Month/Day/Year (e.g. 05/17/2026) - US, parts of Canada.
+ *  - `ymd`: Year-Month-Day / ISO 8601 (e.g. 2026-05-17). */
+export type DateFormat = "auto" | "dmy" | "mdy" | "ymd";
+
+/** Preferred number formatting. Named by the actual separators used so
+ *  no convention is privileged as "plain" or "default". */
+export type NumberFormat = "auto" | "comma-period" | "period-comma" | "space-comma";
+
 /** App-wide user preferences stored persistently. */
 export interface UserPreferences {
   /** Simplified or full-featured UI mode. */
@@ -390,6 +590,10 @@ export interface UserPreferences {
   timeFormat: TimeFormat;
   /** Convert UTC timestamps to the local timezone before displaying. */
   convertToLocalTime: boolean;
+  /** Preferred date format for message timestamps and other date displays. */
+  dateFormat?: DateFormat;
+  /** Preferred number formatting (thousands separator + decimal mark). */
+  numberFormat?: NumberFormat;
   /** Whether native OS notifications are enabled. */
   enableNotifications?: boolean;
   /** When true, encrypted channels send a placeholder instead of the real
@@ -400,8 +604,23 @@ export interface UserPreferences {
   debugLogging?: boolean;
   /** Backend log level. One of: error, warn, info, debug, trace. */
   logLevel?: string;
+  /** Write logs to a date-stamped file in the OS log directory. */
+  logToFile?: boolean;
+  /** Enable stdout/terminal logging in release builds (always on in dev). */
+  terminalLogging?: boolean;
+  /** Auto-compress (zstd) log files older than a day when file logging is on. */
+  autoZipLogs?: boolean;
+  /** Fingerprint of the audio input settings the last voice-activation
+   *  calibration was performed under. The "calibration needed" hint is shown
+   *  only when this is absent or differs from the current settings.
+   *  `null` = never calibrated. */
+  calibrationSignature?: string | null;
+  /** User's preferred ordering of the server tabs (by server id). */
+  serverTabOrder?: ServerId[];
   /** Collapsed/expanded state of sidebar sections. */
   sidebarSections?: SidebarSections;
+  /** When true, the channel viewer hides channels that have no members. */
+  hideEmptyChannels?: boolean;
   /** Per-event notification sound configuration. */
   notificationSounds?: NotificationSoundSettings;
   /** When true, the client does not send read receipts to the server. */
@@ -423,19 +642,36 @@ export interface UserPreferences {
   /** When true, automatically retry connecting after an unexpected disconnect. */
   autoReconnect?: boolean;
   /** When true, app updates are downloaded and installed automatically on
-   *  startup (Discord-style). When false, the user is prompted. */
+   *  startup automatically. When false, the user is prompted. */
   autoUpdateOnStartup?: boolean;
   /** Version string the user chose to skip in the updater bootstrapper.
    *  Updates matching this version are silently ignored on startup. */
   skippedUpdateVersion?: string | null;
-  /** Last active sidebar tab — restored after reconnect. */
+  /** Last active sidebar tab - restored after reconnect. */
   sidebarActiveTab?: "channels" | "members";
   /** Whether voice (mic on/can-hear) was enabled when last disconnected.
    *  On reconnect the call is re-enabled automatically when true. */
   voiceOnReconnect?: boolean;
   /** Whether the mic was muted (but still in-call) when last disconnected. */
   voiceMutedOnReconnect?: boolean;
+  /** When true, direct messages exchanged with friends are persisted to
+   *  the local device (encrypted with AES-GCM) so the conversation
+   *  history survives reconnects and app restarts.  Off by default. */
+  persistDms?: boolean;
+  /** Override marketplace API base URL used in developer mode.
+   *  When absent or undefined the production URL is used. */
+  marketplaceBaseUrl?: string;
+  /** How the server's welcome message is shown after connecting:
+   *  "hide" never shows it, "once" shows it once per server (until dismissed),
+   *  "always" shows it on every connect.  Defaults to "once". */
+  welcomeMessageDisplay?: WelcomeMessageDisplay;
+  /** When false, the disconnect confirmation dialog is skipped (the user chose
+   *  "never show again").  Defaults to true. */
+  showDisconnectWarning?: boolean;
 }
+
+/** Controls when the server welcome message modal appears on connect. */
+export type WelcomeMessageDisplay = "hide" | "once" | "always";
 
 /** Identifiers for events that can trigger a notification sound. */
 export type NotificationEvent =
@@ -801,8 +1037,10 @@ export interface RegisteredUser {
   name: string;
   last_seen?: string | null;
   last_channel?: number | null;
-  /** Avatar image bytes from the server's UserList response, if the user has one set. */
-  texture?: number[] | null;
+  /** Avatar byte length, present when the user has an avatar. The bytes are
+   * fetched on demand via `get_registered_user_texture` (the bulk `user-list`
+   * event ships only this marker, not the avatar bytes). */
+  texture_size?: number | null;
   /** Short comment (len < 128) included inline by the server. */
   comment?: string | null;
   /** SHA-1 hash bytes present when the comment is >= 128 chars.
@@ -950,4 +1188,40 @@ export interface OnboardingConfigEvent {
 export interface OnboardingResponseEvent {
   response: OnboardingResponse | null;
   serverId?: string | null;
+}
+
+/** Input type for a server setting, mapped to a form control by the factory. */
+export type ServerSettingType =
+  | "string" | "text" | "bool" | "int" | "enum" | "country" | "password";
+
+/** One editable server setting (schema + current value), advertised by the
+ *  server. The `type` drives the client's form-control factory. */
+export interface ServerSetting {
+  /** Config key (core key, or `plugin.<name>.<key>` for plugin settings). */
+  key: string;
+  /** Input type driving the form control. */
+  type: ServerSettingType | string;
+  /** Group/section the setting belongs to. */
+  group: string;
+  /** Human-readable label. */
+  label: string;
+  /** Current value (string-encoded). Omitted for secret settings. */
+  value?: string | null;
+  /** Allowed values for `enum` types. */
+  options: string[];
+  /** Whether the value is a secret (masked, write-only). */
+  secret: boolean;
+  /** Optional one-line help text. */
+  help?: string | null;
+}
+
+/** Editable server-settings snapshot advertised by the server to admins. */
+export interface ServerSettingsSnapshot {
+  settings: ServerSetting[];
+  revision: number;
+}
+
+/** Event payload emitted when a `FancyServerSettings` broadcast arrives. */
+export interface ServerSettingsEvent {
+  settings: ServerSettingsSnapshot;
 }

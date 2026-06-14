@@ -1,9 +1,19 @@
 //! Symmetric chain ratchet trait and HKDF-based implementation.
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 
 use super::key_deriver::{HkdfSha256Deriver, KeyDeriver};
 use super::{HKDF_INFO_CHAIN, HKDF_INFO_MSG, HKDF_SALT_IDENTITY, KEY_LEN};
+
+/// Upper bound on how far the symmetric ratchet may advance in a single
+/// [`derive_key_at_index`] call.
+///
+/// `chain_index` arrives over the wire as an attacker-controllable `u32`,
+/// so a malicious peer could otherwise request up to ~4 billion sequential
+/// HKDF derivations and pin a CPU core. No honest sender produces this many
+/// messages within one epoch (the epoch rotates long before then), so any
+/// index beyond this bound is treated as hostile.
+pub const MAX_RATCHET_ADVANCE: u32 = 100_000;
 
 // ---- Trait: ChainRatchet --------------------------------------------
 
@@ -26,6 +36,11 @@ pub trait ChainRatchet: Send + Sync {
         epoch_key: &[u8; KEY_LEN],
         target_index: u32,
     ) -> Result<[u8; KEY_LEN]> {
+        if target_index > MAX_RATCHET_ADVANCE {
+            return Err(Error::InvalidState(format!(
+                "chain index {target_index} exceeds maximum ratchet advance {MAX_RATCHET_ADVANCE}"
+            )));
+        }
         let mut chain_key = *epoch_key;
         for _ in 0..target_index {
             chain_key = self.derive_chain_key(&chain_key)?;
@@ -82,6 +97,11 @@ pub fn derive_key_at_index(
     epoch_key: &[u8; KEY_LEN],
     target_index: u32,
 ) -> Result<[u8; KEY_LEN]> {
+    if target_index > MAX_RATCHET_ADVANCE {
+        return Err(Error::InvalidState(format!(
+            "chain index {target_index} exceeds maximum ratchet advance {MAX_RATCHET_ADVANCE}"
+        )));
+    }
     let mut chain_key = *epoch_key;
     for _ in 0..target_index {
         chain_key = derive_chain_key(deriver, &chain_key)?;
@@ -122,5 +142,18 @@ mod tests {
         // Derive at index
         let at_index = derive_key_at_index(&deriver, &epoch_key, 5).unwrap();
         assert_eq!(at_index, expected);
+    }
+
+    #[test]
+    fn derive_key_at_index_rejects_excessive_index() {
+        let deriver = HkdfSha256Deriver;
+        let epoch_key = [0x33u8; KEY_LEN];
+
+        // At the bound is still allowed; just past it is rejected without
+        // attempting the (would-be multi-billion) iteration.
+        assert!(derive_key_at_index(&deriver, &epoch_key, MAX_RATCHET_ADVANCE + 1).is_err());
+        assert!(HkdfChainRatchet
+            .derive_key_at_index(&epoch_key, u32::MAX)
+            .is_err());
     }
 }

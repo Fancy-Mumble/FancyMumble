@@ -1,11 +1,12 @@
 import { ChevronLeftIcon } from "../../icons";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./TabbedPage.module.css";
 
 export interface TabDef<T extends string> {
   id: T;
   label: string;
-  icon: string;
+  icon: ReactNode;
 }
 
 interface TabbedPageProps<T extends string> {
@@ -16,6 +17,9 @@ interface TabbedPageProps<T extends string> {
   onBack: () => void;
   /** Extra CSS class applied to `.mainArea` (e.g. grid layout for preview pane). */
   mainAreaClassName?: string;
+  /** Optional content rendered in the sidebar between the heading and the tab
+   *  list (e.g. a settings search box). */
+  sidebarExtra?: ReactNode;
   children: ReactNode;
 }
 
@@ -28,8 +32,10 @@ export function TabbedPage<T extends string>({
   onTabChange,
   onBack,
   mainAreaClassName,
+  sidebarExtra,
   children,
 }: Readonly<TabbedPageProps<T>>) {
+  const { t } = useTranslation("common");
   const mainCls = mainAreaClassName
     ? `${styles.mainArea} ${mainAreaClassName}`
     : styles.mainArea;
@@ -40,13 +46,15 @@ export function TabbedPage<T extends string>({
         <button
           className={styles.backBtn}
           onClick={onBack}
-          aria-label="Go back"
+          aria-label={t("tabbedPage.backAriaLabel")}
         >
           {BackIcon}
-          <span>Back</span>
+          <span>{t("tabbedPage.back")}</span>
         </button>
 
         <h2 className={styles.sidebarHeading}>{heading}</h2>
+
+        {sidebarExtra}
 
         <ul className={styles.tabList}>
           {tabs.map((t) => (

@@ -1,4 +1,4 @@
-/* Sunflowers replaced by Clarimol. This file is intentionally empty. */
+﻿/* Sunflowers replaced by Clarimol. This file is intentionally empty. */
 
 
 [data-theme="sunflowers"] {
@@ -97,15 +97,15 @@
   /* -- Link ------------------------------------------------------ */
   --color-link: #4b83a6;
 
-  /* -- Discord-style palette (reactions / emoji picker) ----------- */
-  --color-discord-purple: #4b83a6;
-  --color-discord-dark: #f2f3f5;
-  --color-discord-bg: #ffffff;
-  --color-discord-border: #e8dfcc;
-  --color-discord-hover: #fdf5e0;
-  --color-discord-muted: #9a7a45;
-  --color-discord-text: #2a1f05;
-  --color-discord-active: #e8dfcc;
+  /* -- Picker palette (reactions / emoji picker) ----------- */
+  --color-picker-accent: #4b83a6;
+  --color-picker-dark: #f2f3f5;
+  --color-picker-bg: #ffffff;
+  --color-picker-border: #e8dfcc;
+  --color-picker-hover: #fdf5e0;
+  --color-picker-muted: #9a7a45;
+  --color-picker-text: #2a1f05;
+  --color-picker-active: #e8dfcc;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.08);

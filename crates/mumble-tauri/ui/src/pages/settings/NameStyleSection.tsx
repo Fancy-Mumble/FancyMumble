@@ -1,7 +1,9 @@
 import type { FancyProfile } from "../../types";
+import { useTranslation } from "react-i18next";
 import { Toggle, SliderField } from "./SharedControls";
 import { FONTS } from "./profileData";
 import styles from "./SettingsPage.module.css";
+import panelStyles from "./NameStyleSection.module.css";
 
 type NameStyle = NonNullable<FancyProfile["nameStyle"]>;
 
@@ -16,17 +18,18 @@ export function NameStyleSection({
 }>) {
   const fontCss =
     FONTS.find((f) => f.id === (nameStyle.font ?? "default"))?.css ?? "inherit";
+  const { t } = useTranslation("settings");
 
   return (
     <section className={styles.section}>
-      <h3 className={styles.sectionTitle}>Name Style</h3>
+      <h3 className={styles.sectionTitle}>{t("nameStyle.heading")}</h3>
       <p className={styles.fieldHint}>
-        Customise how your name is rendered for FancyMumble users.
+        {t("nameStyle.hint")}
       </p>
 
       {/* Live preview */}
       <div
-        className={styles.namePreview}
+        className={panelStyles.namePreview}
         style={{
           fontFamily: fontCss,
           color: nameStyle.gradient
@@ -44,12 +47,12 @@ export function NameStyleSection({
           WebkitTextFillColor: nameStyle.gradient ? "transparent" : undefined,
         }}
       >
-        {displayName || "Your Name"}
+        {displayName || t("nameStyle.previewFallback")}
       </div>
 
       {/* Font */}
       <div className={styles.field}>
-        <label className={styles.fieldLabel}>Font</label>
+        <label className={styles.fieldLabel}>{t("nameStyle.fontLabel")}</label>
         <div className={styles.optionGrid}>
           {FONTS.map((f) => (
             <button
@@ -72,7 +75,7 @@ export function NameStyleSection({
       {/* Color */}
       <div className={styles.field}>
         <div className={styles.fieldRow}>
-          <label className={styles.fieldLabel}>Text Colour</label>
+          <label className={styles.fieldLabel}>{t("nameStyle.colorLabel")}</label>
           <input
             type="color"
             className={styles.colorInput}
@@ -86,7 +89,7 @@ export function NameStyleSection({
       <div className={styles.field}>
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
-            <label className={styles.fieldLabel}>Gradient</label>
+            <label className={styles.fieldLabel}>{t("nameStyle.gradientLabel")}</label>
           </div>
           <Toggle
             checked={!!nameStyle.gradient}
@@ -130,7 +133,7 @@ export function NameStyleSection({
       <div className={styles.field}>
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
-            <label className={styles.fieldLabel}>Glow Effect</label>
+            <label className={styles.fieldLabel}>{t("nameStyle.glowLabel")}</label>
           </div>
           <Toggle
             checked={!!nameStyle.glow}
@@ -156,7 +159,7 @@ export function NameStyleSection({
               }
             />
             <SliderField
-              label="Size"
+              label={t("nameStyle.sizeLabel")}
               min={1}
               max={20}
               step={1}
@@ -175,7 +178,7 @@ export function NameStyleSection({
       {/* Bold / Italic */}
       <div className={styles.field}>
         <div className={styles.toggleRow}>
-          <label className={styles.fieldLabel}>Bold</label>
+          <label className={styles.fieldLabel}>{t("nameStyle.boldLabel")}</label>
           <Toggle
             checked={!!nameStyle.bold}
             onChange={() => onPatch({ bold: !nameStyle.bold })}
@@ -184,7 +187,7 @@ export function NameStyleSection({
       </div>
       <div className={styles.field}>
         <div className={styles.toggleRow}>
-          <label className={styles.fieldLabel}>Italic</label>
+          <label className={styles.fieldLabel}>{t("nameStyle.italicLabel")}</label>
           <Toggle
             checked={!!nameStyle.italic}
             onChange={() => onPatch({ italic: !nameStyle.italic })}
@@ -194,3 +197,4 @@ export function NameStyleSection({
     </section>
   );
 }
+

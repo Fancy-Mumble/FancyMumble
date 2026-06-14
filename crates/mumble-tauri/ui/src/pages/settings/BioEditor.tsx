@@ -7,6 +7,7 @@ import { ImageIcon } from "../../icons";
  */
 
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useEditor, EditorContent } from "@tiptap/react";
 import type { EditorView } from "@tiptap/pm/view";
 import type { Slice } from "@tiptap/pm/model";
@@ -16,7 +17,7 @@ import Color from "@tiptap/extension-color";
 import Placeholder from "@tiptap/extension-placeholder";
 import TiptapImage from "@tiptap/extension-image";
 import { resizeImage } from "./imageUtils";
-import styles from "./SettingsPage.module.css";
+import styles from "./BioEditor.module.css";
 
 // -- Colour palette for the quick-pick colour grid -----------------
 
@@ -48,8 +49,10 @@ export function BioEditor({
   value,
   onChange,
   maxLength = 2000,
-  placeholder = "Tell others about yourself...",
+  placeholder,
 }: BioEditorProps) {
+  const { t } = useTranslation("settings");
+  const resolvedPlaceholder = placeholder ?? t("bioEditor.placeholder");
   const [showColourPicker, setShowColourPicker] = useState(false);
   const colourPickerRef = useRef<HTMLDivElement>(null);
   const colourBtnRef = useRef<HTMLButtonElement>(null);
@@ -172,7 +175,7 @@ export function BioEditor({
       }),
       TextStyle,
       Color,
-      Placeholder.configure({ placeholder }),
+      Placeholder.configure({ placeholder: resolvedPlaceholder }),
       TiptapImage.configure({ inline: true, allowBase64: true }),
     ],
     content: value,
@@ -202,7 +205,7 @@ export function BioEditor({
   // Sync external `value` prop into the editor when it diverges
   // (e.g. on initial load from persisted data).
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     const current = editor.getHTML();
     const normCurrent = current === "<p></p>" ? "" : current;
     if (normCurrent !== value) {
@@ -267,8 +270,8 @@ export function BioEditor({
           type="button"
           className={`${styles.bioToolBtn} ${editor.isActive("bold") ? styles.bioToolBtnActive : ""}`}
           onClick={() => editor.chain().focus().toggleBold().run()}
-          title="Bold"
-          aria-label="Bold"
+          title={t("bioEditor.bold")}
+          aria-label={t("bioEditor.bold")}
         >
           <strong>B</strong>
         </button>
@@ -276,8 +279,8 @@ export function BioEditor({
           type="button"
           className={`${styles.bioToolBtn} ${editor.isActive("italic") ? styles.bioToolBtnActive : ""}`}
           onClick={() => editor.chain().focus().toggleItalic().run()}
-          title="Italic"
-          aria-label="Italic"
+          title={t("bioEditor.italic")}
+          aria-label={t("bioEditor.italic")}
         >
           <em>I</em>
         </button>
@@ -285,8 +288,8 @@ export function BioEditor({
           type="button"
           className={`${styles.bioToolBtn} ${editor.isActive("underline") ? styles.bioToolBtnActive : ""}`}
           onClick={() => editor.chain().focus().toggleUnderline().run()}
-          title="Underline"
-          aria-label="Underline"
+          title={t("bioEditor.underline")}
+          aria-label={t("bioEditor.underline")}
         >
           <u>U</u>
         </button>
@@ -309,8 +312,8 @@ export function BioEditor({
           type="button"
           className={styles.bioToolBtn}
           onClick={() => fileInputRef.current?.click()}
-          title="Insert image"
-          aria-label="Insert image"
+          title={t("bioEditor.insertImage")}
+          aria-label={t("bioEditor.insertImage")}
         >
           <ImageIcon width={14} height={14} aria-hidden="true" />
         </button>
@@ -322,8 +325,8 @@ export function BioEditor({
             type="button"
             className={`${styles.bioToolBtn} ${showColourPicker ? styles.bioToolBtnActive : ""}`}
             onClick={() => setShowColourPicker((v) => !v)}
-            title="Text colour"
-            aria-label="Text colour"
+            title={t("bioEditor.textColor")}
+            aria-label={t("bioEditor.textColor")}
           >
             <span
               className={styles.bioColourIcon}
@@ -347,7 +350,7 @@ export function BioEditor({
                     className={styles.bioColourSwatch}
                     style={{ background: c }}
                     onClick={() => applyColour(c)}
-                    aria-label={`Colour ${c}`}
+                    aria-label={t("bioEditor.colorSwatchAriaLabel", { hex: c })}
                   />
                 ))}
               </div>
@@ -356,7 +359,7 @@ export function BioEditor({
                 className={styles.bioColourReset}
                 onClick={clearColour}
               >
-                Reset colour
+                {t("bioEditor.resetColour")}
               </button>
             </div>
           )}

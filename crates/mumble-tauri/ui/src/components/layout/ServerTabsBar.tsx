@@ -1,17 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAppStore } from "../../store";
+import { getPreferences, updatePreferences } from "../../preferencesStorage";
 import type { ServerId, SessionMeta } from "../../types";
 import ConfirmDialog from "../elements/ConfirmDialog";
 import AddServerPopover from "./AddServerPopover";
+import { UsersGroupIcon } from "../../icons";
 import styles from "./ServerTabsBar.module.css";
 
-const TAB_ORDER_STORAGE_KEY = "fancy-mumble:server-tab-order";
+// Pre-store location of the tab order. Read once on first run to migrate
+// the value into the preferences store, then removed.
+const TAB_ORDER_LEGACY_KEY = "fancy-mumble:server-tab-order";
 
-function loadStoredOrder(): ServerId[] {
+/** One-time read of the old localStorage tab order, for migration. */
+function readLegacyOrder(): ServerId[] {
   try {
-    const raw = localStorage.getItem(TAB_ORDER_STORAGE_KEY);
+    const raw = localStorage.getItem(TAB_ORDER_LEGACY_KEY);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.every((v) => typeof v === "string")) {
@@ -21,14 +27,6 @@ function loadStoredOrder(): ServerId[] {
     // Ignore corrupt entries.
   }
   return [];
-}
-
-function saveStoredOrder(order: ServerId[]): void {
-  try {
-    localStorage.setItem(TAB_ORDER_STORAGE_KEY, JSON.stringify(order));
-  } catch {
-    // Quota exceeded / private mode - ignore.
-  }
 }
 
 /** Sort `sessions` according to the persisted user order; new sessions
@@ -70,6 +68,7 @@ export default function ServerTabsBar() {
   const refreshSessions = useAppStore((s) => s.refreshSessions);
   const disconnectSession = useAppStore((s) => s.disconnectSession);
   const sessionUnreadTotals = useAppStore((s) => s.sessionUnreadTotals);
+  const { t } = useTranslation(["server", "common"]);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -80,8 +79,25 @@ export default function ServerTabsBar() {
 
   const [pendingDisconnect, setPendingDisconnect] = useState<SessionMeta | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [neverShowAgain, setNeverShowAgain] = useState(false);
+  // Whether to show the disconnect confirmation. Loaded from preferences; the
+  // user can opt out via "never show again" (then re-enable in Advanced).
+  const [showDisconnectWarning, setShowDisconnectWarning] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const addBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    getPreferences()
+      .then((p) => setShowDisconnectWarning(p.showDisconnectWarning ?? true))
+      .catch(() => {});
+    const onPrefs = () => {
+      getPreferences()
+        .then((p) => setShowDisconnectWarning(p.showDisconnectWarning ?? true))
+        .catch(() => {});
+    };
+    window.addEventListener("preferences-changed", onPrefs);
+    return () => window.removeEventListener("preferences-changed", onPrefs);
+  }, []);
 
   // -- Drag-and-drop reordering (pointer-based) ----------------------
   // We use pointer events instead of HTML5 drag-and-drop because the
@@ -89,7 +105,10 @@ export default function ServerTabsBar() {
   // drag-region attribute can swallow events).  The dragged tab is
   // rendered as a portal-mounted floating clone with `position: fixed`
   // so it can travel outside the bar's `overflow: auto` clip box.
-  const [tabOrder, setTabOrder] = useState<ServerId[]>(() => loadStoredOrder());
+  const [tabOrder, setTabOrder] = useState<ServerId[]>([]);
+  // Gate the persist-on-change effect until the stored order has loaded,
+  // so we don't overwrite it with the backend order during async load.
+  const orderLoadedRef = useRef(false);
   const tabRefs = useRef<Map<ServerId, HTMLDivElement>>(new Map());
   const setTabRef = (id: ServerId) => (el: HTMLDivElement | null) => {
     if (el) tabRefs.current.set(id, el);
@@ -122,14 +141,47 @@ export default function ServerTabsBar() {
 
   const orderedSessions = useMemo(() => applyOrder(sessions, tabOrder), [sessions, tabOrder]);
 
+  // Load the persisted tab order from the preferences store, migrating a
+  // pre-store localStorage value on first run.
+  useEffect(() => {
+    let active = true;
+    getPreferences()
+      .then((p) => {
+        if (!active) return;
+        const stored = p.serverTabOrder ?? [];
+        if (stored.length > 0) {
+          setTabOrder(stored);
+        } else {
+          const legacy = readLegacyOrder();
+          if (legacy.length > 0) {
+            setTabOrder(legacy);
+            void updatePreferences({ serverTabOrder: legacy });
+          }
+        }
+        try {
+          localStorage.removeItem(TAB_ORDER_LEGACY_KEY);
+        } catch {
+          // ignore
+        }
+        orderLoadedRef.current = true;
+      })
+      .catch(() => {
+        orderLoadedRef.current = true;
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Keep the persisted order in sync whenever sessions appear/disappear so
   // the saved list stays compact and reflects any append-on-connect order.
   useEffect(() => {
+    if (!orderLoadedRef.current) return;
     if (sessions.length === 0) return;
     const ids = orderedSessions.map((s) => s.id);
     if (ids.length !== tabOrder.length || ids.some((id, i) => id !== tabOrder[i])) {
       setTabOrder(ids);
-      saveStoredOrder(ids);
+      void updatePreferences({ serverTabOrder: ids });
     }
   }, [sessions, orderedSessions, tabOrder]);
 
@@ -247,7 +299,7 @@ export default function ServerTabsBar() {
           if (!dropAt.before) insertIdx += 1;
           next.splice(insertIdx, 0, st.id);
           setTabOrder(next);
-          saveStoredOrder(next);
+          void updatePreferences({ serverTabOrder: next });
         }
       }
     }
@@ -297,9 +349,19 @@ export default function ServerTabsBar() {
     navigate("/chat");
   };
 
+  // Disconnect the session, either after confirmation or immediately when the
+  // user has opted out of the warning.
+  const requestDisconnect = (meta: SessionMeta) => {
+    if (showDisconnectWarning) {
+      setPendingDisconnect(meta);
+    } else {
+      void disconnectSession(meta.id).finally(() => void refreshSessions());
+    }
+  };
+
   const handleCloseClick = (e: React.MouseEvent, meta: SessionMeta) => {
     e.stopPropagation();
-    setPendingDisconnect(meta);
+    requestDisconnect(meta);
   };
 
   const handleConfirmDisconnect = async () => {
@@ -307,15 +369,21 @@ export default function ServerTabsBar() {
     setIsDisconnecting(true);
     try {
       await disconnectSession(pendingDisconnect.id);
+      if (neverShowAgain) {
+        await updatePreferences({ showDisconnectWarning: false });
+        setShowDisconnectWarning(false);
+      }
     } finally {
       setIsDisconnecting(false);
       setPendingDisconnect(null);
+      setNeverShowAgain(false);
       await refreshSessions();
     }
   };
 
   const handleCancelDisconnect = () => {
     setPendingDisconnect(null);
+    setNeverShowAgain(false);
   };
 
   const handleAddClick = () => {
@@ -334,12 +402,29 @@ export default function ServerTabsBar() {
       type="button"
       className={styles.addBtn}
       onClick={handleAddClick}
-      aria-label="Connect to a server"
+      aria-label={t("tabsBar.connectButton")}
       aria-expanded={addOpen}
       aria-haspopup="dialog"
-      title="Connect to a server"
+      title={t("tabsBar.connectButton")}
     >
       +
+    </button>
+  );
+
+  const friendsActive = location.pathname === "/friends";
+  const renderFriendsTab = () => (
+    <button
+      type="button"
+      className={`${styles.tab} ${friendsActive ? styles.tabActive : ""}`}
+      onClick={() => navigate("/friends")}
+      title={t("tabsBar.friends")}
+      aria-label={t("tabsBar.friends")}
+      aria-current={friendsActive ? "page" : undefined}
+    >
+      <span className={styles.statusDot}>
+        <UsersGroupIcon width={12} height={12} />
+      </span>
+      <span className={styles.label}>{t("tabsBar.friends")}</span>
     </button>
   );
 
@@ -351,6 +436,7 @@ export default function ServerTabsBar() {
     return (
       <>
         <div className={styles.bar} data-tauri-drag-region>
+          {renderFriendsTab()}
           {renderAddButton()}
         </div>
         {popover}
@@ -360,7 +446,8 @@ export default function ServerTabsBar() {
 
   return (
     <>
-      <div className={styles.bar} role="tablist" aria-label="Connected servers" data-tauri-drag-region>
+      <div className={styles.bar} role="tablist" aria-label={t("tabsBar.connectedServersAriaLabel")} data-tauri-drag-region>
+        {renderFriendsTab()}
         {orderedSessions.map((meta) => {
           const isActive = !newTabActive && meta.id === activeServerId;
           const unreadTotal = isActive ? 0 : (sessionUnreadTotals[meta.id] ?? 0);
@@ -397,7 +484,7 @@ export default function ServerTabsBar() {
                 if (e.button === 1) {
                   e.preventDefault();
                   e.stopPropagation();
-                  setPendingDisconnect(meta);
+                  requestDisconnect(meta);
                 }
               }}
               onKeyDown={(e) => {
@@ -411,7 +498,7 @@ export default function ServerTabsBar() {
               <span className={`${styles.statusDot} ${statusClass(meta.status)}`} />
               <span className={styles.label}>{tabLabel(meta)}</span>
               {unreadTotal > 0 && (
-                <span className={styles.unreadBadge} aria-label={`${unreadTotal} unread`}>
+                <span className={styles.unreadBadge} aria-label={t("tabsBar.unreadCount", { count: unreadTotal })}>
                   {unreadTotal > 99 ? "99+" : unreadTotal}
                 </span>
               )}
@@ -419,8 +506,8 @@ export default function ServerTabsBar() {
                 type="button"
                 className={styles.closeBtn}
                 onClick={(e) => handleCloseClick(e, meta)}
-                aria-label={`Disconnect from ${tabLabel(meta)}`}
-                title="Disconnect"
+                aria-label={t("tabsBar.disconnectFrom", { label: tabLabel(meta) })}
+                title={t("tabsBar.disconnectTitle")}
               >
                 x
               </button>
@@ -433,16 +520,16 @@ export default function ServerTabsBar() {
             aria-selected
             tabIndex={0}
             className={`${styles.tab} ${styles.tabActive} ${styles.newTab}`}
-            title="New connection"
+            title={t("tabsBar.newConnection")}
           >
             <span className={`${styles.statusDot} ${styles.statusNew}`} />
-            <span className={styles.label}>New connection</span>
+            <span className={styles.label}>{t("tabsBar.newConnection")}</span>
             <button
               type="button"
               className={styles.closeBtn}
               onClick={handleDismissNewTab}
-              aria-label="Dismiss new connection tab"
-              title="Dismiss"
+              aria-label={t("tabsBar.dismissNewTab")}
+              title={t("tabsBar.dismissTitle")}
             >
               x
             </button>
@@ -476,12 +563,15 @@ export default function ServerTabsBar() {
 
       {pendingDisconnect && (
         <ConfirmDialog
-          title="Disconnect from server"
-          body={`Disconnect from ${tabLabel(pendingDisconnect)}?`}
-          confirmLabel="Disconnect"
-          cancelLabel="Cancel"
+          title={t("tabsBar.disconnectDialogTitle")}
+          body={t("tabsBar.disconnectDialogBody", { label: tabLabel(pendingDisconnect) })}
+          confirmLabel={t("tabsBar.disconnectConfirm")}
+          cancelLabel={t("common:actions.cancel")}
           danger
           isConfirming={isDisconnecting}
+          checkboxLabel={t("tabsBar.disconnectNeverShow", { defaultValue: "Don't ask again" })}
+          checkboxChecked={neverShowAgain}
+          onCheckboxChange={setNeverShowAgain}
           onConfirm={() => void handleConfirmDisconnect()}
           onCancel={handleCancelDisconnect}
         />

@@ -3,7 +3,7 @@
  * using `@tauri-apps/plugin-store` (Tauri Store v2).
  */
 
-import { load } from "@tauri-apps/plugin-store";
+import { load } from "./utils/store";
 import type { ThemeId } from "./themes";
 
 export type BubbleStyle = "bubbles" | "flat" | "compact";
@@ -32,12 +32,15 @@ export interface PersonalizationData {
   fontSizeCustomPx: number;
   /** Font family for chat messages. */
   fontFamily: string;
-  /** Compact mode — hide avatars and tighten spacing. */
+  /** Compact mode - hide avatars and tighten spacing. */
   compactMode: boolean;
   /** Channel sidebar viewer style. */
   channelViewerStyle: ChannelViewerStyle;
   /** Active color theme. */
   theme: ThemeId;
+  /** Always render the copy/reply/reaction action bar at the bottom of every
+   *  text message instead of only showing it on hover. */
+  alwaysShowMessageActions: boolean;
 }
 
 const STORE_FILE = "personalization.json";
@@ -57,6 +60,7 @@ const DEFAULTS: PersonalizationData = {
   compactMode: false,
   channelViewerStyle: "flat",
   theme: "dark",
+  alwaysShowMessageActions: false,
 };
 
 async function getStore() {

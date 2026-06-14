@@ -13,6 +13,7 @@
 
 import { memo, useEffect, useMemo, useState } from "react";
 
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../../store";
 import WatchTogetherCard from "./WatchTogetherCard";
 import { claimWatchMount, releaseWatchMount } from "./watchMountClaim";
@@ -75,16 +76,17 @@ interface CollapsedProps {
 }
 
 function CollapsedSession({ title, participants, onOpen }: CollapsedProps) {
+  const { t } = useTranslation(["chat", "common"]);
   return (
     <div className={styles.card}>
       <div className={styles.header}>
         <span className={styles.title}>{title}</span>
         <span className={styles.badges}>
-          <span className={styles.participants}>{participants} watching</span>
+          <span className={styles.participants}>{t("watch.watching", { count: participants })}</span>
         </span>
       </div>
       <div className={styles.actions}>
-        <button type="button" onClick={onOpen}>Open</button>
+        <button type="button" onClick={onOpen}>{t("watch.open")}</button>
       </div>
     </div>
   );
@@ -96,6 +98,7 @@ interface ExpandedProps {
 }
 
 function ExpandedSession({ sessionId, onClose }: ExpandedProps) {
+  const { t } = useTranslation(["chat", "common"]);
   // Take the mount claim for the lifetime of this expanded view so
   // any concurrent chat-marker render falls back to a placeholder.
   useEffect(() => {
@@ -107,7 +110,7 @@ function ExpandedSession({ sessionId, onClose }: ExpandedProps) {
   return (
     <div>
       <div className={styles.actions} style={{ justifyContent: "flex-end" }}>
-        <button type="button" onClick={onClose}>Collapse</button>
+        <button type="button" onClick={onClose}>{t("common:actions.collapse")}</button>
       </div>
       <WatchTogetherCard sessionId={sessionId} mountKey={`${BANNER_OWNER_PREFIX}${sessionId}`} />
     </div>

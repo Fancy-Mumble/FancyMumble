@@ -1,0 +1,122 @@
+/* --- VuMeter - VU meter track and handles ---------------------- */
+
+.vuMeter {
+  flex: 1;
+  min-width: 0;
+  /* Reserve headroom for the draggable triangle handles that sit above
+     the track.  Harmless when no draggable markers are present. */
+  padding-top: 22px;
+}
+
+.vuTrack {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--color-glass-hover);
+  overflow: visible;
+  box-shadow: 0 0 0 0 transparent;
+  transition: box-shadow 0.12s ease;
+}
+
+.vuTrackActive {
+  box-shadow: 0 0 0 2px var(--color-online);
+}
+
+.vuFill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.06s linear;
+  background: linear-gradient(90deg, var(--color-online) 0%, var(--color-online) 50%, var(--color-warning) 75%, var(--color-danger) 100%);
+  position: relative;
+  z-index: 0;
+}
+
+.vuPeak {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.7);
+  transition: left 0.06s linear;
+  transform: translateX(-1px);
+  z-index: 1;
+}
+
+.vuThreshold {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: calc(100% + 8px);
+  transform: translateX(-1px);
+  border-radius: 1px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.vuThresholdOpen {
+  background: var(--color-accent, #6366f1);
+  opacity: 0.95;
+}
+
+.vuThresholdClose {
+  background: var(--color-warning, #f59e0b);
+  opacity: 0.85;
+}
+
+/* Draggable triangle handles that sit above the meter track.
+   Each handle is a div centered on its threshold value via translateX(-50%).
+   A single invisible drag layer on top handles all pointer events and picks
+   the closest handle on pointerdown, avoiding the "stacked inputs" problem. */
+.vuHandle {
+  position: absolute;
+  top: -22px;
+  width: 18px;
+  height: 22px;
+  transform: translateX(-50%);
+  clip-path: polygon(5% 0%, 95% 0%, 56% 68%, 56% 100%, 44% 100%, 44% 68%);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.vuHandleOpen {
+  background: var(--color-accent, #6366f1);
+}
+
+.vuHandleClose {
+  background: var(--color-warning, #f59e0b);
+}
+
+.vuRangeOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  z-index: 3;
+  cursor: ew-resize;
+  pointer-events: none;
+}
+
+.vuDragLayer {
+  position: absolute;
+  top: -22px;
+  left: 0;
+  right: 0;
+  height: calc(100% + 22px);
+  cursor: ew-resize;
+  z-index: 4;
+}
+
+.vuDragActive {
+  cursor: grabbing;
+}
+
+.vuLabels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--color-text-tertiary);
+  margin-top: 3px;
+  padding: 0 2px;
+}

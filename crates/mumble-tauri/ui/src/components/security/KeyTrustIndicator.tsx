@@ -1,5 +1,6 @@
-import { LockSvg, ShieldCheckSvg, WarningSvg } from "../../icons";
+﻿import { LockSvg, ShieldCheckSvg, WarningSvg } from "../../icons";
 import { useState, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import type { KeyTrustLevel } from "../../types";
 import styles from "./KeyTrustIndicator.module.css";
 
@@ -8,25 +9,21 @@ interface KeyTrustIndicatorProps {
   readonly onVerifyClick?: () => void;
 }
 
-function trustLabel(level: KeyTrustLevel): string {
+function trustLabelKey(level: KeyTrustLevel): string {
   switch (level) {
-    case "ManuallyVerified": return "Verified";
-    case "Verified": return "Verified";
-    case "Unverified": return "Unverified";
-    case "Disputed": return "Disputed";
+    case "ManuallyVerified": return "keyTrust.labelVerified";
+    case "Verified": return "keyTrust.labelVerified";
+    case "Unverified": return "keyTrust.labelUnverified";
+    case "Disputed": return "keyTrust.labelDisputed";
   }
 }
 
-function trustDescription(level: KeyTrustLevel): string {
+function trustDescKey(level: KeyTrustLevel): string {
   switch (level) {
-    case "ManuallyVerified":
-      return "This channel's encryption key has been manually verified via out-of-band comparison.";
-    case "Verified":
-      return "This channel's encryption key has been verified through multi-confirmation consensus or key custodian endorsement.";
-    case "Unverified":
-      return "This channel's encryption key has not been verified. You are protected against passive eavesdropping, but an active attacker could intercept your messages.";
-    case "Disputed":
-      return "Conflicting encryption keys detected. Verify with a trusted member to resolve.";
+    case "ManuallyVerified": return "keyTrust.descManuallyVerified";
+    case "Verified": return "keyTrust.descVerified";
+    case "Unverified": return "keyTrust.descUnverified";
+    case "Disputed": return "keyTrust.descDisputed";
   }
 }
 
@@ -61,6 +58,7 @@ function TrustIcon({ level }: Readonly<{ level: KeyTrustLevel }>) {
 }
 
 export default function KeyTrustIndicator({ trustLevel, onVerifyClick }: KeyTrustIndicatorProps) {
+  const { t } = useTranslation("sidebar");
   const [showTooltip, setShowTooltip] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -77,29 +75,29 @@ export default function KeyTrustIndicator({ trustLevel, onVerifyClick }: KeyTrus
   }, [showTooltip]);
 
   const colorClass = trustColorClass(trustLevel);
+  const tStr = t as (k: string) => string;
 
   return (
     <div className={styles.wrapper} ref={wrapperRef}>
       <button
         className={`${styles.indicator} ${colorClass}`}
         onClick={() => setShowTooltip((v) => !v)}
-        aria-label={`Encryption: ${trustLabel(trustLevel)}`}
-        title={`Encryption: ${trustLabel(trustLevel)}`}
-      >
+        aria-label={t("keyTrust.buttonAriaLabel", { label: tStr(trustLabelKey(trustLevel)) })}
+        title={t("keyTrust.buttonAriaLabel", { label: tStr(trustLabelKey(trustLevel)) })}>
         <TrustIcon level={trustLevel} />
-        <span className={styles.label}>{trustLabel(trustLevel)}</span>
+        <span className={styles.label}>{tStr(trustLabelKey(trustLevel))}</span>
       </button>
 
       {showTooltip && (
         <div className={styles.tooltip}>
-          <div className={styles.tooltipTitle}>Channel Encryption</div>
-          <p>{trustDescription(trustLevel)}</p>
+          <div className={styles.tooltipTitle}>{t("keyTrust.tooltipTitle")}</div>
+          <p>{tStr(trustDescKey(trustLevel))}</p>
           {(trustLevel === "Unverified" || trustLevel === "Disputed") && onVerifyClick && (
             <p>
               <button className={styles.tooltipAction} onClick={() => { setShowTooltip(false); onVerifyClick(); }}>
-                {trustLevel === "Disputed" ? "Compare fingerprints" : "Verify with a key custodian"}
+                {trustLevel === "Disputed" ? t("keyTrust.compareFingerprints") : t("keyTrust.verifyCustodian")}
               </button>
-              {" "}to turn this indicator green.
+              {" "}{t("keyTrust.turnGreenSuffix")}
             </p>
           )}
         </div>

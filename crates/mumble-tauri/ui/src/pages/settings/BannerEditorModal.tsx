@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import type { FancyProfile } from "../../types";
 import { KlipyGifBrowser } from "./KlipyGifBrowser";
 import { ImageEditor } from "./ImageEditor";
@@ -73,6 +74,8 @@ export function BannerEditorModal({
 
   useEffect(() => () => clearTimeout(flashTimerRef.current), []);
 
+  const { t } = useTranslation("settings");
+
   const handleFileSelect = useCallback((file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -109,7 +112,7 @@ export function BannerEditorModal({
         className={styles.modal}
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className={styles.title}>Edit Banner</h3>
+        <h3 className={styles.title}>{t("bannerEditor.title")}</h3>
 
         {/* Preview */}
         <div
@@ -129,21 +132,21 @@ export function BannerEditorModal({
             className={`${styles.tab} ${tab === "color" ? styles.tabActive : ""}`}
             onClick={() => setTab("color")}
           >
-            Solid Colour
+            {t("bannerEditor.tabColor")}
           </button>
           <button
             type="button"
             className={`${styles.tab} ${tab === "image" ? styles.tabActive : ""}`}
             onClick={() => setTab("image")}
           >
-            Image / GIF
+            {t("bannerEditor.tabImage")}
           </button>
           <button
             type="button"
             className={`${styles.tab} ${tab === "gif" ? styles.tabActive : ""}`}
             onClick={() => setTab("gif")}
           >
-            Klipy GIF
+            {t("bannerEditor.tabKlipy")}
           </button>
         </div>
 
@@ -151,7 +154,7 @@ export function BannerEditorModal({
         <div className={styles.tabContent}>
           {tab === "color" && (
             <div className={styles.colorSection}>
-              <label className={styles.label}>Banner colour</label>
+              <label className={styles.label}>{t("bannerEditor.colorLabel")}</label>
               <input
                 type="color"
                 className={settingsStyles.colorInput}
@@ -165,10 +168,10 @@ export function BannerEditorModal({
             <FileDropZone
               accept="image/png,image/jpeg,image/webp,image/gif"
               onFile={handleFileSelect}
-              label="Drop an image or GIF here, or click to browse"
+              label={t("bannerEditor.dropLabel")}
               preview={
                 localImage ? (
-                  <img src={localImage} alt="Banner" />
+                  <img src={localImage} alt={t("bannerEditor.imgAlt")} />
                 ) : undefined
               }
               onRemove={localImage ? handleRemoveImage : undefined}
@@ -187,12 +190,12 @@ export function BannerEditorModal({
             className={settingsStyles.ghostBtn}
             onClick={onCancel}
           >
-            Discard
+            {t("bannerEditor.discardBtn")}
           </button>
           <div className={styles.applyWrapper}>
             {showUnsavedHint && (
               <div className={styles.unsavedBubble}>
-                You have unsaved changes. Apply or discard them.
+                {t("bannerEditor.unsavedHint")}
               </div>
             )}
             <button
@@ -200,7 +203,7 @@ export function BannerEditorModal({
               className={`${settingsStyles.applyBtn} ${showUnsavedHint ? styles.applyFlash : ""}`}
               onClick={handleApply}
             >
-              Apply
+              {t("bannerEditor.applyBtn")}
             </button>
           </div>
         </div>

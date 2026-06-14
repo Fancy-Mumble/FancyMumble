@@ -1,0 +1,121 @@
+/* LiveDocCustomMarginsDialog - modal for entering custom left/right and top/bottom margins. */
+
+.dialog {
+  background: var(--color-bg-primary, #1a1d23);
+  border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-lg, 12px);
+  padding: 24px;
+  width: 320px;
+  max-width: 90vw;
+  animation: scaleIn 0.12s ease-out;
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.96); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.title {
+  margin: 0 0 20px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary, #f5f6f8);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fieldLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.55));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.inputWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.input {
+  flex: 1;
+  padding: 7px 10px;
+  background: var(--color-surface, #1e2128);
+  border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 13px;
+  outline: none;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.input::-webkit-outer-spin-button,
+.input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.input:focus {
+  border-color: var(--color-accent, #2aabee);
+}
+
+.fieldError .input {
+  border-color: var(--color-danger, #e53935);
+}
+
+.unitLabel {
+  font-size: 12px;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.45));
+  white-space: nowrap;
+  min-width: 18px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.cancelBtn {
+  appearance: none;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cancelBtn:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.applyBtn {
+  appearance: none;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm, 4px);
+  border: none;
+  background: var(--color-accent, #2aabee);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.applyBtn:hover {
+  filter: brightness(1.1);
+}

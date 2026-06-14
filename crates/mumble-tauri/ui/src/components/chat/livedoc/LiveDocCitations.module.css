@@ -1,0 +1,406 @@
+/* LiveDoc citations: in-text chips, bibliography, and management dialogs. */
+
+/* ---- Inline citation chips ------------------------------------------ */
+.citation {
+  cursor: default;
+}
+
+.citation :global(a) {
+  color: inherit;
+  text-decoration: none;
+}
+
+.citationPlaceholder {
+  display: inline;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--color-warning-subtle, rgba(255, 153, 51, 0.18));
+  color: var(--color-warning, #ff9933);
+  border: 1px dashed var(--color-warning, #ff9933);
+  font-size: 0.92em;
+  cursor: pointer;
+}
+
+.citationBroken {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(255, 80, 80, 0.16);
+  color: #ff8585;
+  font-size: 0.92em;
+}
+
+/* ---- Generated bibliography ----------------------------------------- */
+.bibliography {
+  margin: 16px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.14));
+}
+
+.bibliographyHeading {
+  font-size: 1.1em;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.bibliographyEntry {
+  margin: 0 0 8px;
+  padding-left: 28px;
+  text-indent: -28px;
+  line-height: 1.5;
+  font-size: 0.95em;
+}
+
+.bibliographyEntry :global(a) {
+  color: var(--color-accent, #2aabee);
+}
+
+.bibliographyEmpty {
+  color: var(--color-text-muted, #aab0b8);
+  font-style: italic;
+  font-size: 0.9em;
+}
+
+/* ---- Modal shell (shared by manager / editor / checker) ------------- */
+/* Additive backdrop blur layered onto the shared Modal overlay. */
+.overlayBlur {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(840px, 92vw);
+  max-height: 88vh;
+  padding: 16px;
+  background: var(--color-surface-elevated, #262a32);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  color: var(--color-text-primary, #f5f6f8);
+}
+
+.dialogNarrow {
+  width: min(560px, 92vw);
+}
+
+.dialogHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dialogTitle {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dialogClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.7));
+  cursor: pointer;
+}
+
+.dialogClose:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+/* ---- Source Manager two-pane --------------------------------------- */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.panes {
+  display: grid;
+  grid-template-columns: 1fr 44px 1fr;
+  gap: 8px;
+  min-height: 0;
+  flex: 1;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-sm, 4px);
+  overflow: hidden;
+}
+
+.paneTitle {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.75));
+  background: var(--color-surface, #1e2128);
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+}
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 160px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.item:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
+}
+
+.itemActive {
+  background: var(--color-accent-subtle, rgba(42, 171, 238, 0.18));
+}
+
+.itemLabel {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemActions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.7));
+  cursor: pointer;
+}
+
+.iconBtn:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.1));
+  color: var(--color-text-primary, #f5f6f8);
+}
+
+.paneMid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--color-text-muted, #aab0b8);
+  font-size: 12px;
+}
+
+/* ---- Buttons -------------------------------------------------------- */
+.btn {
+  padding: 6px 12px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.14));
+  background: transparent;
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.btnPrimary {
+  background: var(--color-accent, #2aabee);
+  border-color: var(--color-accent, #2aabee);
+  color: #fff;
+}
+
+.btnPrimary:hover {
+  filter: brightness(1.08);
+  background: var(--color-accent, #2aabee);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ---- Source editor form -------------------------------------------- */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.fieldLabel {
+  font-size: 11px;
+  color: var(--color-text-muted, #aab0b8);
+}
+
+.input,
+.select {
+  height: 30px;
+  padding: 0 8px;
+  background: var(--color-surface, #1e2128);
+  color: var(--color-text-primary, #f5f6f8);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.14));
+  border-radius: var(--radius-sm, 4px);
+  font-size: 13px;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.textarea {
+  min-height: 180px;
+  padding: 8px;
+  background: var(--color-surface, #1e2128);
+  color: var(--color-text-primary, #f5f6f8);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.14));
+  border-radius: var(--radius-sm, 4px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  resize: vertical;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+
+.hint {
+  font-size: 11px;
+  color: var(--color-text-muted, #aab0b8);
+}
+
+/* ---- Insert-citation picker menu ----------------------------------- */
+.pickerMenu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 280px;
+  max-width: 360px;
+  max-height: 360px;
+  overflow-y: auto;
+  background: var(--color-surface, #1e2128);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  padding: 4px;
+}
+
+.pickerItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickerItem:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.pickerSep {
+  height: 1px;
+  background: var(--color-border, rgba(255, 255, 255, 0.1));
+  margin: 4px 2px;
+}
+
+.pickerAdd {
+  color: var(--color-accent, #2aabee);
+  font-weight: 500;
+}
+
+.searchInput {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  margin-bottom: 4px;
+  background: var(--color-surface-elevated, #262a32);
+  color: var(--color-text-primary, #f5f6f8);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.14));
+  border-radius: var(--radius-sm, 4px);
+  font-size: 13px;
+}
+
+/* ---- Placeholder checker ------------------------------------------- */
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-sm, 4px);
+}
+
+.checkLabel {
+  flex: 1;
+  font-size: 13px;
+}
+
+.checkBadge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-warning-subtle, rgba(255, 153, 51, 0.18));
+  color: var(--color-warning, #ff9933);
+}
+
+.allGood {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  color: #6cce6c;
+  font-size: 13px;
+}

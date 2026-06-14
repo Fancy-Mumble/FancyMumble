@@ -1,0 +1,31 @@
+/* Canonical close button for chat-splitting panels.  Identical everywhere:
+   same size, same corner, same look.  Style it here once to restyle them all.
+   Fully theme-driven (no fixed background) so it adapts to every UI theme. */
+.closeBtn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 25;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.closeBtn:hover {
+  background: var(--color-glass-border);
+  color: var(--color-text-primary);
+}
+
+.closeBtn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}

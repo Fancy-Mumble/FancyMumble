@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Regression tests for poll processing in the Zustand store.
  *
  * These tests verify that the store's "plugin-data" event handler
@@ -14,8 +14,8 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { useAppStore } from "../../store";
-import type { PollPayload, PollVotePayload } from "../chat/PollCreator";
-import { getPoll, getVotes, registerVote } from "../chat/PollCard";
+import type { PollPayload, PollVotePayload } from "../chat/poll/PollCreator";
+import { getPoll, getVotes, registerVote } from "../chat/poll/PollCard";
 
 // --- Helpers ------------------------------------------------------
 
@@ -217,7 +217,7 @@ describe("simulated plugin-data event processing", () => {
     const original: PollPayload = {
       type: "poll",
       id: "roundtrip-reg",
-      question: "Does round-trip work? 🎯",
+      question: "Does round-trip work? ??",
       options: ["Definitely", "Maybe", "No way"],
       multiple: true,
       creator: 55,
@@ -230,7 +230,7 @@ describe("simulated plugin-data event processing", () => {
 
     const stored = useAppStore.getState().polls.get("roundtrip-reg");
     expect(stored).toBeDefined();
-    expect(stored!.question).toBe("Does round-trip work? 🎯");
+    expect(stored!.question).toBe("Does round-trip work? ??");
     expect(stored!.options).toEqual(["Definitely", "Maybe", "No way"]);
     expect(stored!.multiple).toBe(true);
     expect(stored!.channelId).toBe(7);

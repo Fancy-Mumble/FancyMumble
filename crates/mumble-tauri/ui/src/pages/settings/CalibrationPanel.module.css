@@ -1,0 +1,189 @@
+/* --- CalibrationPanel - Mic test, calibration, replay ---------- */
+
+.micTestRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.micTestBtn {
+  padding: 7px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-glass-border);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.micTestBtn:hover {
+  background: var(--color-glass-medium);
+}
+
+.micTestActive {
+  border-color: var(--color-accent);
+  background: rgba(var(--color-accent-rgb, 99, 102, 241), 0.15);
+  color: var(--color-accent);
+}
+
+.calibrationContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.calibrationView {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.calibrateActionRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.calibrationReadouts {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  background: var(--color-glass-hover);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+}
+
+.calibrationReadouts strong {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.calibrateBtn {
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.calibrateBtnPrimary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(var(--color-accent-rgb, 99, 102, 241), 0.25);
+}
+
+.calibrateBtnPrimary:hover {
+  background: color-mix(in srgb, var(--color-accent) 85%, #fff 15%);
+  box-shadow: 0 0 0 4px rgba(var(--color-accent-rgb, 99, 102, 241), 0.35);
+}
+
+@keyframes calibratePulse {
+  0%, 100% {
+    background: var(--color-accent, #6366f1);
+    box-shadow: 0 0 0 0 rgba(var(--color-accent-rgb, 99, 102, 241), 0.7);
+  }
+  50% {
+    background: color-mix(in srgb, var(--color-accent, #6366f1) 60%, #fff 40%);
+    box-shadow: 0 0 0 10px rgba(var(--color-accent-rgb, 99, 102, 241), 0);
+  }
+}
+
+.calibrateBtnPulse {
+  animation: calibratePulse 1.5s ease-in-out infinite;
+}
+
+.speechProgressBar {
+  position: relative;
+  height: 26px;
+  background: var(--color-glass-hover);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+
+.speechProgressFill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--color-accent, #6366f1);
+  opacity: 0.35;
+  transition: width 0.1s linear;
+}
+
+.speechProgressStatus {
+  position: relative;
+  z-index: 1;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.legendOpen {
+  color: var(--color-accent, #6366f1);
+  font-weight: 600;
+}
+
+.legendClose {
+  color: var(--color-warning, #f59e0b);
+  font-weight: 600;
+}
+
+.replaySection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--color-glass-hover);
+}
+
+.replayHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.replayBtn {
+  position: relative;
+  overflow: hidden;
+  min-width: 220px;
+}
+
+.replayBtnFill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  transition: width 0.15s linear;
+  pointer-events: none;
+}
+
+.replayBtnFillRecording {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.replayBtnFillPlaying {
+  background: rgba(var(--color-accent-rgb, 99, 102, 241), 0.35);
+}
+
+.replayBtnLabel {
+  position: relative;
+  z-index: 1;
+}

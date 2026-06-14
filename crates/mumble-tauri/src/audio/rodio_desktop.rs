@@ -33,14 +33,16 @@ use tracing::{debug, trace, warn};
 /// sample, which is incompatible with the outbound pipeline's drain
 /// loops (they expect `NotEnoughSamples` when no data is ready).
 /// A dedicated thread reads from the Microphone and sends mono `f32`
-/// samples through a bounded channel.  `read_frame()` drains the
-/// channel with `try_recv()` and returns `NotEnoughSamples` when fewer
-/// than `frame_size` samples are available.
+/// samples through a bounded channel in [`CAPTURE_CHUNK`]-sized
+/// batches (one channel operation per 10 ms instead of one per
+/// sample).  `read_frame()` drains the channel with `try_recv()` and
+/// returns `NotEnoughSamples` when fewer than `frame_size` samples
+/// are available.
 pub struct RodioCapture {
     format: AudioFormat,
     frame_size: usize,
     sequence: u64,
-    sample_rx: Option<mpsc::Receiver<f32>>,
+    sample_rx: Option<mpsc::Receiver<Vec<f32>>>,
     _capture_thread: Option<thread::JoinHandle<()>>,
     volume: Arc<AtomicU32>,
     pending: Vec<f32>,
@@ -88,7 +90,7 @@ impl AudioCapture for RodioCapture {
 
         loop {
             match rx.try_recv() {
-                Ok(sample) => self.pending.push(sample),
+                Ok(chunk) => self.pending.extend_from_slice(&chunk),
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
                     return Err(Error::InvalidState("Microphone stream ended".into()));
@@ -101,13 +103,10 @@ impl AudioCapture for RodioCapture {
         }
 
         let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
-        let samples: Vec<f32> = self
-            .pending
-            .drain(..self.frame_size)
-            .map(|s| s * vol)
-            .collect();
-
-        let data: Vec<u8> = samples.iter().flat_map(|s| s.to_ne_bytes()).collect();
+        let mut data = Vec::with_capacity(self.frame_size * 4);
+        for s in self.pending.drain(..self.frame_size) {
+            data.extend_from_slice(&(s * vol).to_ne_bytes());
+        }
         self.sequence += 1;
         Ok(AudioFrame {
             data,
@@ -160,7 +159,8 @@ impl AudioCapture for RodioCapture {
 
         let mic_channels = config.channel_count.get() as usize;
 
-        let (tx, rx) = mpsc::sync_channel::<f32>(48_000);
+        // ~1 s of audio in CAPTURE_CHUNK-sized batches.
+        let (tx, rx) = mpsc::sync_channel::<Vec<f32>>(48_000 / CAPTURE_CHUNK);
 
         let handle = thread::Builder::new()
             .name("rodio-mic-reader".into())
@@ -181,22 +181,39 @@ impl AudioCapture for RodioCapture {
     }
 }
 
+/// Mono samples per channel send from the capture thread (10 ms at
+/// 48 kHz).  Batching keeps the per-sample cost to a `Vec` push;
+/// the channel synchronization (lock + receiver wakeup) happens only
+/// 100 times per second instead of 48 000.
+const CAPTURE_CHUNK: usize = 480;
+
 fn capture_thread(
     mut mic: rodio::microphone::Microphone,
     channels: usize,
-    tx: SyncSender<f32>,
+    tx: SyncSender<Vec<f32>>,
 ) {
+    let mut chunk: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK);
     loop {
         let mut sum = 0.0f32;
         for _ in 0..channels {
             match mic.next() {
                 Some(s) => sum += s,
-                None => return,
+                None => {
+                    // Stream ended - flush what we have so the last
+                    // partial chunk is not lost.
+                    if !chunk.is_empty() {
+                        let _ = tx.send(chunk);
+                    }
+                    return;
+                }
             }
         }
-        let mono = sum / channels as f32;
-        if tx.send(mono).is_err() {
-            return;
+        chunk.push(sum / channels as f32);
+        if chunk.len() >= CAPTURE_CHUNK {
+            let full = std::mem::replace(&mut chunk, Vec::with_capacity(CAPTURE_CHUNK));
+            if tx.send(full).is_err() {
+                return;
+            }
         }
     }
 }
@@ -323,14 +340,17 @@ impl MumbleMixerSource {
             self.primed = true;
         }
 
-        let sv = self
-            .speaker_volumes
-            .try_lock()
-            .map(|g| g.clone())
-            .unwrap_or_default();
+        // try_lock avoids blocking the rodio output thread; on
+        // contention we fall back to default volumes (1.0).  Borrow
+        // the guard directly instead of cloning the HashMap - this
+        // runs ~50-200 times per second and a clone would allocate
+        // on every refill.
+        let sv_guard = self.speaker_volumes.try_lock().ok();
+        let empty = std::collections::HashMap::new();
+        let sv = sv_guard.as_deref().unwrap_or(&empty);
 
         let (drained, valid_count, buf_depth) =
-            super::desktop::batch_drain_speakers(&mut bufs, &sv, &mut self.mixed_chunk, MIX_CHUNK_SIZE);
+            super::desktop::batch_drain_speakers(&mut bufs, sv, &mut self.mixed_chunk, MIX_CHUNK_SIZE);
 
         self.diag.refills += 1;
         self.diag.max_buf_depth = self.diag.max_buf_depth.max(buf_depth);

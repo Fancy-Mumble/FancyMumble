@@ -4,9 +4,9 @@
  * Used by `MessageItem` to decide whether to surface the
  * "Watch together" action on a message.  Two source kinds are
  * supported:
- *   - `directMedia` — a direct media URL (anything with a recognised
+ *   - `directMedia` - a direct media URL (anything with a recognised
  *     video extension, or an existing `<video>` data-URL embed).
- *   - `youtube` — a YouTube watch / shorts / `youtu.be` link, only
+ *   - `youtube` - a YouTube watch / shorts / `youtu.be` link, only
  *     when the user has opted in to external embeds.
  *
  * Returns the highest-priority candidate found, or `null` when no

@@ -1,0 +1,286 @@
+import { ArrowUpRightIcon, CheckboxIcon, CopyIcon, EditIcon, EmojiPlusIcon, PinIcon, PlayIcon, QuoteIcon, TrashIcon } from "../../../icons";
+import { useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import type { ChatMessage } from "../../../types";
+import type { ReactionSummary } from "../reaction/reactionStore";
+import { getReadersForMessage } from "../readreceipt/readReceiptStore";
+import { useAppStore } from "../../../store";
+import { QUICK_REACTIONS } from "../../elements/MessageActionBar";
+import MobileBottomSheet from "../../elements/MobileBottomSheet";
+import { useWatchStart } from "../watch/useWatchStart";
+import styles from "./MobileMessageActionSheet.module.css";
+
+const MAX_PREVIEW_LEN = 200;
+
+function stripHtml(html: string): string {
+  return html
+    .replaceAll(/<!--[\s\S]*?-->/g, "")
+    .replaceAll(/<br\s*\/?>/gi, "\n")
+    .replaceAll(/<[^>]*>/g, "")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&")
+    .trim();
+}
+
+function extractFirstImageSrc(html: string): string | null {
+  const match = /<img[^>]+src="([^"]+)"/i.exec(html);
+  return match?.[1] ?? null;
+}
+
+interface MobileMessageActionSheetProps {
+  readonly message: ChatMessage;
+  readonly canDelete: boolean;
+  readonly onClose: () => void;
+  readonly onDelete: (msg: ChatMessage) => void;
+  readonly onSelectMode: (msg: ChatMessage) => void;
+  readonly onReaction?: (msg: ChatMessage, emoji: string) => void;
+  readonly onMoreReactions?: (msg: ChatMessage, e?: React.MouseEvent) => void;
+  readonly onCite?: (msg: ChatMessage) => void;
+  readonly onCopyText?: (msg: ChatMessage) => void;
+  readonly onEdit?: (msg: ChatMessage) => void;
+  /** Pin or unpin a message. */
+  readonly onPin?: (msg: ChatMessage) => void;
+  /** Pop the given image source out into a frameless, always-on-top window. */
+  readonly onPopOutImage?: (msg: ChatMessage, src: string) => void;
+  /** Image source to pop out (when the message contains at least one image). */
+  readonly popOutImageSrc?: string | null;
+  /** Existing reactions on this message (for showing reactor names on mobile). */
+  readonly reactions?: readonly ReactionSummary[];
+  /** Ordered message IDs for read-receipt watermark comparison. */
+  readonly allMessageIds?: string[];
+  /** Channel the message belongs to. */
+  readonly channelId?: number;
+  /** Avatar data-URLs keyed by cert hash. */
+  readonly avatarByHash?: ReadonlyMap<string, string>;
+}
+
+export default function MobileMessageActionSheet({
+  message,
+  canDelete,
+  onClose,
+  onDelete,
+  onSelectMode,
+  onReaction,
+  onMoreReactions,
+  onCite,
+  onCopyText,
+  onEdit,
+  onPin,
+  onPopOutImage,
+  popOutImageSrc,
+  reactions,
+  allMessageIds,
+  channelId,
+  avatarByHash,
+}: MobileMessageActionSheetProps) {
+  const { t } = useTranslation("chat");
+  const previewText = useMemo(() => {
+    const text = stripHtml(message.body);
+    if (text.length <= MAX_PREVIEW_LEN) return text;
+    return text.slice(0, MAX_PREVIEW_LEN) + "\u2026";
+  }, [message.body]);
+
+  const previewImage = useMemo(() => extractFirstImageSrc(message.body), [message.body]);
+  const hasTextPreview = previewText.length > 0;
+
+  const { canStart: canWatchTogether, busy: watchBusy, start: startWatch } = useWatchStart(
+    message.body,
+    message.channel_id,
+  );
+
+  const act = useCallback(
+    (fn: (msg: ChatMessage) => void) => () => {
+      fn(message);
+      onClose();
+    },
+    [message, onClose],
+  );
+
+  const actEmoji = useCallback(
+    (emoji: string) => () => {
+      onReaction?.(message, emoji);
+      onClose();
+    },
+    [message, onReaction, onClose],
+  );
+
+  // Build list of users who read this message
+  const readReceiptVersion = useAppStore((s) => s.readReceiptVersion);
+  const ownSession = useAppStore((s) => s.ownSession);
+  const users = useAppStore((s) => s.users);
+  const ownHash = useMemo(() => users.find((u) => u.session === ownSession)?.hash, [users, ownSession]);
+
+  const isOwnWithId = message.is_own && !!message.message_id && channelId != null && !!allMessageIds;
+
+  const readerEntries = useMemo(() => {
+    const msgId = message.message_id;
+    if (!msgId || !message.is_own || channelId == null || !allMessageIds) return [];
+    const readers = getReadersForMessage(channelId, msgId, allMessageIds);
+    return readers
+      .filter((r) => r.name && (!ownHash || r.cert_hash !== ownHash))
+      .map((r) => ({ certHash: r.cert_hash, name: r.name, isOnline: r.is_online, avatarUrl: avatarByHash?.get(r.cert_hash) }));
+  }, [message, channelId, allMessageIds, avatarByHash, ownHash, readReceiptVersion]);
+
+  return (
+    <MobileBottomSheet open onClose={onClose} ariaLabel="Close message actions">
+      {/* Message preview */}
+      {(hasTextPreview || previewImage) && (
+        <div className={styles.preview}>
+          {previewImage && (
+            <img
+              className={styles.previewImage}
+              src={previewImage}
+              alt=""
+              draggable={false}
+            />
+          )}
+          {hasTextPreview && (
+            <p className={styles.previewText}>{previewText}</p>
+          )}
+        </div>
+      )}
+
+      {/* Quick reactions */}
+      {onReaction && (
+        <div className={styles.reactionRow}>
+          {QUICK_REACTIONS.map((r) => (
+            <button
+              key={r.key}
+              type="button"
+              className={styles.reactionBtn}
+              aria-label={t(`quickReactions.${r.key}`)}
+              onClick={actEmoji(r.emoji)}
+            >
+              {r.emoji}
+            </button>
+          ))}
+          {onMoreReactions && (
+            <button
+              type="button"
+              className={styles.reactionBtn}
+              aria-label={t("contextMenu.moreReactions")}
+              onClick={act((m) => onMoreReactions(m))}
+            >
+              <EmojiPlusIcon width={18} height={18} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Existing reactions with reactor names (mobile-specific) */}
+      {reactions && reactions.length > 0 && (
+        <div className={styles.reactorList}>
+          {reactions.map((r) => {
+            const unique = [...new Set(r.reactorHashNames.values())];
+            if (unique.length === 0) return null;
+            return (
+              <div key={r.emoji} className={styles.reactorRow}>
+                <span className={styles.reactorEmoji}>{r.emoji}</span>
+                <span className={styles.reactorNames}>{unique.join(", ")}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Read by list */}
+      {isOwnWithId && (
+        <div className={styles.reactorList}>
+          <div className={styles.readByLabel}>{t("contextMenu.readBy")}</div>
+          {readerEntries.length > 0 ? (
+            readerEntries.map((entry) => (
+              <div key={entry.certHash} className={`${styles.readByRow} ${entry.isOnline ? "" : styles.offlineReader}`}>
+                {entry.avatarUrl ? (
+                  <img src={entry.avatarUrl} alt="" className={styles.readByAvatar} />
+                ) : (
+                  <div className={styles.readByAvatarFallback}>
+                    {entry.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <span className={styles.reactorNames}>{entry.name}</span>
+              </div>
+            ))
+          ) : (
+            <div className={styles.readByEmpty}>{t("contextMenu.noReaders")}</div>
+          )}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className={styles.actions}>
+        {onCite && (
+          <button type="button" className={styles.actionItem} onClick={act((m) => onCite(m))}>
+            <span className={styles.actionIcon}>
+              <QuoteIcon width={16} height={16} />
+            </span>
+            {t("contextMenu.quote")}
+          </button>
+        )}
+        {canWatchTogether && (
+          <button
+            type="button"
+            className={styles.actionItem}
+            disabled={watchBusy}
+            onClick={() => { void startWatch(); onClose(); }}
+          >
+            <span className={styles.actionIcon}>
+              <PlayIcon width={16} height={16} />
+            </span>
+            {watchBusy ? t("contextMenu.watchTogetherBusy") : t("contextMenu.watchTogether")}
+          </button>
+        )}
+        {onCopyText && (
+          <button type="button" className={styles.actionItem} onClick={act((m) => onCopyText(m))}>
+            <span className={styles.actionIcon}>
+              <CopyIcon width={16} height={16} />
+            </span>
+            {t("contextMenu.copyText")}
+          </button>
+        )}
+        {onEdit && message.is_own && message.message_id && (
+          <button type="button" className={styles.actionItem} onClick={act((m) => onEdit(m))}>
+            <span className={styles.actionIcon}>
+              <EditIcon width={16} height={16} />
+            </span>
+            {t("contextMenu.edit")}
+          </button>
+        )}
+        {onPin && message.message_id && (
+          <button type="button" className={styles.actionItem} onClick={act((m) => onPin(m))}>
+            <span className={styles.actionIcon}><PinIcon width={16} height={16} /></span>
+            {message.pinned ? t("contextMenu.unpin") : t("contextMenu.pin")}
+          </button>
+        )}
+        {onPopOutImage && popOutImageSrc && (
+          <button type="button" className={styles.actionItem} onClick={act((m) => onPopOutImage(m, popOutImageSrc))}>
+            <span className={styles.actionIcon}>
+              <ArrowUpRightIcon width={16} height={16} />
+            </span>
+            {t("contextMenu.popOutImage")}
+          </button>
+        )}
+        {canDelete && (
+          <>
+            <button
+              type="button"
+              className={`${styles.actionItem} ${styles.actionItemDanger}`}
+              onClick={act(onDelete)}
+            >
+              <span className={styles.actionIcon}>
+                <TrashIcon width={16} height={16} />
+              </span>
+              {t("contextMenu.deleteMessage")}
+            </button>
+            <button type="button" className={styles.actionItem} onClick={act(onSelectMode)}>
+              <span className={styles.actionIcon}>
+                <CheckboxIcon width={16} height={16} />
+              </span>
+              {t("contextMenu.selectMessages")}
+            </button>
+          </>
+        )}
+      </div>
+    </MobileBottomSheet>
+  );
+}

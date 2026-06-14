@@ -13,11 +13,15 @@ mod custom_reactions_config;
 mod draw_stroke;
 mod link_preview;
 mod onboarding;
+mod server_settings;
 mod pchat;
 mod permission_denied;
 mod permission_query;
 mod ping;
 mod plugin_data;
+mod plugin_message;
+mod plugin_admin;
+mod poll;
 mod read_receipt;
 mod reject;
 mod server_config;
@@ -168,6 +172,13 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::FancyDrawStroke(m) => m.handle(ctx),
         ControlMessage::FancyOnboardingConfig(m) => m.handle(ctx),
         ControlMessage::FancyOnboardingResponseDeliver(m) => m.handle(ctx),
+        ControlMessage::FancyServerSettings(m) => m.handle(ctx),
+        ControlMessage::FancyPluginAdminList(m) => m.handle(ctx),
+        ControlMessage::FancyPluginAdminAck(m) => m.handle(ctx),
+        ControlMessage::PluginMessage(m) => m.handle(ctx),
+        ControlMessage::PluginRegistry(m) => m.handle(ctx),
+        ControlMessage::FancyPoll(m) => m.handle(ctx),
+        ControlMessage::FancyPollVote(m) => m.handle(ctx),
         ControlMessage::BanList(m) => m.handle(ctx),
         ControlMessage::UserList(m) => m.handle(ctx),
         ControlMessage::Acl(m) => m.handle(ctx),

@@ -15,13 +15,51 @@ pub(crate) fn get_users(state: tauri::State<'_, AppState>) -> Vec<UserEntry> {
 }
 
 /// Return the avatar bytes for a single user.  The frontend calls this
-/// lazily after `get_users` (which returns only `texture_size`).
+/// lazily after `get_users` (which returns only `texture_size`).  When the
+/// avatar exists but has not been loaded yet, this requests the blob from the
+/// server and waits for it - so avatars are fetched only on first view rather
+/// than eagerly for every connected user.
 #[tauri::command]
-pub(crate) fn get_user_texture(
+pub(crate) async fn get_user_texture(
     state: tauri::State<'_, AppState>,
     session: u32,
+) -> Result<Option<Vec<u8>>, ()> {
+    Ok(state.user_texture_or_fetch(session).await)
+}
+
+/// Return the avatar bytes for a registered (offline) user by `user_id`.
+/// The bulk `user-list` event delivers only `texture_size`; the frontend
+/// calls this lazily for users it actually renders, so registered avatars
+/// are never shipped en masse (which spiked the heap during emit).
+#[tauri::command]
+pub(crate) fn get_registered_user_texture(
+    state: tauri::State<'_, AppState>,
+    user_id: u32,
 ) -> Option<Vec<u8>> {
-    state.user_texture(session)
+    state.registered_user_texture(user_id)
+}
+
+/// Drop the cached registered-user avatar bytes.  Called by the frontend
+/// when the last view that consumes the user list closes: every
+/// `request_user_list` response re-populates the cache, so without this
+/// the avatars of all registered users stay in memory for the rest of
+/// the session.  Re-opening such a view re-requests the list, which
+/// re-populates the cache.
+#[tauri::command]
+pub(crate) fn release_registered_user_textures(state: tauri::State<'_, AppState>) {
+    state.release_registered_user_textures();
+}
+
+/// Return the comment/bio text for a single user.  Like `get_user_texture`,
+/// the bio is fetched (and held) only when first viewed rather than eagerly for
+/// every connected user.  The frontend calls this after `get_users` (which
+/// returns only `comment_size`).
+#[tauri::command]
+pub(crate) async fn get_user_comment(
+    state: tauri::State<'_, AppState>,
+    session: u32,
+) -> Result<Option<String>, ()> {
+    Ok(state.user_comment_or_fetch(session).await)
 }
 
 /// Return the description text for a single channel.  The frontend calls

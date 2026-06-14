@@ -9,11 +9,98 @@
   position: relative;
 }
 
-/* When a stream is active, shrink the messages area */
-.main.streamingLayout .messagesWrapper {
+/* Chat column wraps the messages + composer (everything below the
+   live-doc / screen-share panel).  position:relative makes it the
+   containing block for the file-drag overlay so the overlay only
+   covers the chat region, not the panel above it. */
+.chatColumn {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* When a stream is active or the user toggles compact chat (e.g. from
+   a LiveDoc), shrink the messages area to ~25 % of the viewport so the
+   panel above gets the lion's share of the height. */
+.main.compactChat .chatColumn {
+  flex: 0 0 auto;
+}
+
+.main.compactChat .messagesWrapper {
   flex: 0 0 200px;
   min-height: 200px;
   max-height: 260px;
+}
+
+/* LiveDoc open with chat hidden: remove the messages + composer from
+   the layout entirely so the document fills the full height. */
+.main.hiddenChat .chatColumn {
+  display: none;
+}
+
+/* Live Doc wrapper: normally fills all remaining space (hiddenChat)
+   or yielded above the compact chat strip. When the user drags the
+   split handle an inline flex-basis overrides this. */
+.liveDocWrapper {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.main.hiddenChat .liveDocWrapper {
+  flex: 1 1 0;
+}
+
+/* Split handle between Live Doc and chat column. */
+.splitHandle {
+  flex: 0 0 6px;
+  width: 100%;
+  cursor: ns-resize;
+  background: var(--color-glass-border);
+  position: relative;
+  z-index: 5;
+  transition: background 0.15s;
+}
+
+.splitHandle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--color-text-muted);
+  opacity: 0.5;
+  transition: opacity 0.15s, width 0.15s;
+}
+
+.splitHandle:hover {
+  background: var(--color-accent, #2aabee);
+}
+
+.splitHandle:hover::after {
+  opacity: 0.9;
+  width: 48px;
+}
+
+/* When the user has dragged a custom split, let the chat column fill
+   the remaining height instead of the fixed compact strip. */
+.main.splitActive .chatColumn {
+  flex: 1 1 0;
+  min-height: 120px;
+}
+
+.main.splitActive .messagesWrapper {
+  flex: 1 1 0;
+  min-height: 120px;
+  max-height: none;
 }
 
 /* --- Header ----------------------------------------------------- */
@@ -432,6 +519,40 @@
   align-items: flex-end;
   gap: 8px;
   width: 100%;
+  /*
+   * Render-virtualization.  Up to MAX_MESSAGES_PER_THREAD (500) groups can be
+   * in the DOM at once; this lets the browser skip style/layout/paint - and
+   * release the render-side memory (layout boxes + rasterised tiles) - for
+   * groups scrolled out of view, slashing initial-render CPU and idle RAM.
+   *
+   * Unlike JS windowing it keeps every node in the DOM, so the custom
+   * stick-to-bottom scroller, `data-msg-id` scroll-to-message, find-in-page and
+   * the heavy-content offload manager all keep working unchanged.  `auto`
+   * remembers each group's real height after its first paint so the scrollbar
+   * stays stable; 120px is only the pre-measurement estimate.
+   */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
+  /*
+   * `content-visibility: auto` implies `contain: paint`, which clips every
+   * descendant to this group's box - including the hover MessageActionBar that
+   * deliberately floats 30px ABOVE its message (`top: -30px`).  Without this it
+   * gets cut off and becomes unclickable, so reactions can't be triggered.
+   *
+   * Reserve those 30px inside the paint box with `padding-top` and cancel it
+   * again with an equal negative `margin-top`, so inter-group spacing, scroll
+   * height and `contain-intrinsic-size` are all unchanged (padding + margin sum
+   * to 0).  The reserved strip overlaps the group above, so mark the group
+   * click-through and re-enable pointer events on its real children - otherwise
+   * the transparent strip would swallow clicks meant for the message above.
+   */
+  padding-top: 32px;
+  margin-top: -32px;
+  pointer-events: none;
+}
+
+.messageGroup > * {
+  pointer-events: auto;
 }
 
 .messageGroupOwn {
@@ -467,11 +588,37 @@
   position: relative;
 }
 
-/* Show the action bar only when hovering the message bubble itself,
-   not the full-width row.  The bar uses `display: none` by default
-   (see MessageActionBar.module.css).  Also keep it visible while
+/* Invisible hover hitbox that extends the wrapper's hover area across
+   the full width of the messages container while keeping the bubble
+   layout untouched.  Anchored vertically to the wrapper so the action
+   bar only stays open while the cursor is within the message's
+   y-band.  `overflow-x: hidden` on `.messages` clips this so it never
+   creates horizontal scroll.  Using -50vw / 100vw width avoids the
+   pseudo-element contributing layout in browsers that don't fully
+   ignore positioned descendants for sizing. */
+.actionBarWrapper::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -50vw;
+  width: 100vw;
+  z-index: 0;
+  /* pointer-events default `auto` so :hover fires */
+}
+
+/* Keep interactive content above the hitbox.  Must NOT target the
+   floating action bar (`[data-action-bar]`), which relies on its own
+   `position: absolute` declared in MessageActionBar.module.css. */
+.actionBarWrapper > :not([data-action-bar]) {
+  position: relative;
+  z-index: 1;
+}
+
+/* Show the action bar when the cursor is anywhere within the wrapper's
+   vertical band (i.e. anywhere in the row), and keep it visible while
    hovering the bar itself so buttons remain clickable. */
-.actionBarWrapper:has(.bubble:hover) > [data-action-bar],
+.actionBarWrapper:hover > [data-action-bar],
 .actionBarWrapper > [data-action-bar]:hover {
   display: flex;
 }
@@ -589,6 +736,83 @@
   word-break: break-word;
 }
 
+/* --- Image gallery grid (multi-message galleries) --------------- */
+/* Each tile is a normal, individually-offloadable message; these rules lay a
+   run of same-group image messages out as one tiled grid. */
+.galleryGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  width: min(420px, 70vw);
+  max-width: 100%;
+  /* `visible` (not `hidden`) so a tile's hover action bar / reaction picker can
+     overflow the grid instead of being clipped. Tiles are rounded individually
+     below rather than clipped as one block. */
+  overflow: visible;
+}
+
+/* Lift the hovered tile so its floating action bar sits above its neighbours. */
+.galleryTileWrap:hover {
+  z-index: 5;
+}
+
+/* Odd total: the first image spans the full width so the rest tile evenly. */
+.galleryGridOdd > .galleryTileWrap:first-child,
+.galleryGridOdd > .galleryTilePlaceholder:first-child {
+  grid-column: 1 / -1;
+}
+
+.galleryTileWrap {
+  position: relative;
+  min-width: 0;
+}
+
+/* Suppress the message row's full-width hover hitbox inside the grid. */
+.galleryTileWrap::after {
+  content: none;
+}
+
+/* Make the message bubble chain fill its square grid cell. */
+.galleryTileWrap .messageRow {
+  width: 100%;
+  max-width: 100%;
+  align-items: stretch;
+}
+
+.galleryTileWrap .bubble {
+  width: 100%;
+  padding: 0;
+}
+
+/* Placeholder tiles for images still uploading - keep the grid from
+   reflowing as each image of the batch arrives. */
+.galleryTilePlaceholder,
+.skeletonTile {
+  aspect-ratio: 1;
+  width: 100%;
+  background: var(--color-glass-hover);
+  animation: galleryTileShimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes galleryTileShimmer {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.75; }
+}
+
+.pluginComponents {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.pluginComponentRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: flex-start;
+}
+
 .messageTime {
   font-size: 11px;
   font-weight: 400;
@@ -596,6 +820,38 @@
   opacity: 0.6;
   margin-left: 6px;
   white-space: nowrap;
+}
+
+/* --- Inline action icons (copy / quote) shown when the
+       "always show message actions" personalization option is on. */
+
+.inlineActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.inlineActionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.12s, background 0.12s;
+}
+
+.inlineActionBtn:hover {
+  color: var(--color-text-primary, #fff);
+  background: var(--color-glass-hover, rgba(255, 255, 255, 0.1));
 }
 
 .ownBubble .messageTime {
@@ -1344,3 +1600,195 @@
   font-size: 13px;
   text-align: center;
 }
+
+/* --- Pending attachments preview (above composer) ---------------- */
+
+.pendingAttachStrip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--color-glass, rgba(30, 30, 30, 0.6));
+  border-top: 1px solid var(--color-glass-hover);
+}
+
+.pendingAttachItems {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pendingAttachItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 6px;
+  background: var(--color-glass-border);
+  border-radius: 6px;
+  max-width: 300px;
+}
+
+.pendingAttachThumb,
+.pendingAttachThumbBtn {
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  background: var(--color-bg-elevated, rgba(0, 0, 0, 0.3));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+}
+
+/* Clickable image thumbnail (resets <button> chrome). */
+.pendingAttachThumbBtn {
+  padding: 0;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+
+.pendingAttachThumbBtn:hover {
+  transform: scale(1.04);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+.pendingAttachImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pendingAttachMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pendingAttachName {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.pendingAttachKind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.pendingAttachRemove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.pendingAttachRemove:hover {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+}
+
+.pendingAttachSend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-accent-glow, rgba(100, 150, 255, 0.4));
+  border-radius: 6px;
+  background: var(--color-accent, rgba(100, 150, 255, 0.2));
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pendingAttachSend:hover:not(:disabled) {
+  background: var(--color-glass-hover);
+}
+
+.pendingAttachSend:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pendingAttachActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Full-quality / Compressed segmented toggle for image galleries. */
+.pendingAttachQuality {
+  display: inline-flex;
+  border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.pendingAttachQualityBtn {
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.pendingAttachQualityBtn:hover {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+}
+
+.pendingAttachQualityActive {
+  background: var(--color-accent, rgba(100, 150, 255, 0.2));
+  color: var(--color-text-primary);
+}
+
+/* --- Drag-drop chat overlay (when dragging a file over chat) ----- */
+
+.dragOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+.dragOverlayInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 32px;
+  border: 2px dashed var(--color-accent-glow, rgba(100, 150, 255, 0.6));
+  border-radius: 12px;
+  background: var(--color-glass);
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+

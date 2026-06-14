@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback } from "react";
 import type { DragEvent, ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./FileDropZone.module.css";
 
 interface FileDropZoneProps {
@@ -23,11 +24,13 @@ export function FileDropZone({
   accept,
   onFile,
   preview,
-  label = "Drop a file here or click to browse",
+  label,
   onRemove,
   shape = "rect",
   size = "default",
 }: Readonly<FileDropZoneProps>) {
+  const { t } = useTranslation("common");
+  const resolvedLabel = label ?? t("fileDropZone.defaultLabel");
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const dragCounter = useRef(0);
@@ -80,10 +83,10 @@ export function FileDropZone({
         onDrop={handleDrop}
       >
         {preview ?? (
-          <span className={styles.placeholder}>{label}</span>
+          <span className={styles.placeholder}>{resolvedLabel}</span>
         )}
         {dragging && (
-          <span className={styles.overlay}>Drop file here</span>
+          <span className={styles.overlay}>{t("fileDropZone.draggingOverlay")}</span>
         )}
       </button>
       <input
@@ -95,7 +98,7 @@ export function FileDropZone({
       />
       {onRemove && (
         <button type="button" className={styles.removeBtn} onClick={onRemove}>
-          Remove
+          {t("fileDropZone.removeBtn")}
         </button>
       )}
     </div>

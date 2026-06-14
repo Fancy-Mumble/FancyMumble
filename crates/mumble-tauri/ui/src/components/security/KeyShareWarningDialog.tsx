@@ -1,5 +1,7 @@
-import { WarningIcon } from "../../icons";
+﻿import { WarningIcon } from "../../icons";
+import { useTranslation } from "react-i18next";
 import type { PersistenceMode } from "../../types";
+import { Modal } from "../elements/Modal";
 import styles from "./KeyShareWarningDialog.module.css";
 
 interface KeyShareWarningDialogProps {
@@ -11,12 +13,12 @@ interface KeyShareWarningDialogProps {
   readonly onCancel: () => void;
 }
 
-function describeAccess(mode: PersistenceMode, totalStored: number): string {
+function describeAccess(mode: PersistenceMode, totalStored: number, t: (key: string, opts?: Record<string, unknown>) => string): string {
   if (mode === "FANCY_V1_FULL_ARCHIVE") {
-    const count = totalStored > 0 ? ` (${totalStored} stored messages)` : "";
-    return `This channel uses full archive mode. Sharing the key grants access to the entire message history${count}.`;
+    const count = totalStored > 0 ? t("keyShare.archiveCount", { count: totalStored }) : "";
+    return t("keyShare.archiveAccess", { count });
   }
-  return "Sharing the encryption key grants access to encrypted messages in this channel.";
+  return t("keyShare.genericAccess");
 }
 
 export default function KeyShareWarningDialog({
@@ -27,17 +29,19 @@ export default function KeyShareWarningDialog({
   onConfirm,
   onCancel,
 }: KeyShareWarningDialogProps) {
+  const { t } = useTranslation(["sidebar", "common"]);
+  const tStr = t as (key: string, opts?: Record<string, unknown>) => string;
   if (!open) return null;
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="Share encryption key">
-      <div className={styles.dialog}>
+    <Modal onClose={onCancel} closeOnEsc={false} closeOnOverlayClick={false} zIndex={200} overlayClassName={styles.overlayBlur}>
+      <div className={styles.dialog} role="dialog" aria-modal="true" aria-label={t("keyShare.ariaLabel")}>
         <div className={styles.header}>
-          <h2 className={styles.title}>Share Encryption Key</h2>
+          <h2 className={styles.title}>{t("keyShare.title")}</h2>
           <button
             className={styles.closeBtn}
             onClick={onCancel}
-            aria-label="Close"
+            aria-label={t("common:actions.close")}
             type="button"
           >
             &times;
@@ -47,12 +51,11 @@ export default function KeyShareWarningDialog({
         <div className={styles.body}>
           <div className={styles.warningBanner}>
             <WarningIcon className={styles.warningIcon} width={20} height={20} />
-            <span>{describeAccess(persistenceMode, totalStored)}</span>
+            <span>{describeAccess(persistenceMode, totalStored, tStr)}</span>
           </div>
 
           <p className={styles.message}>
-            Are you sure you want to share the encryption key with <strong>{peerName}</strong>?
-            This cannot be undone.
+            <span dangerouslySetInnerHTML={{ __html: t("keyShare.confirmMessage", { name: peerName }) }} />
           </p>
 
           <div className={styles.actions}>
@@ -61,18 +64,18 @@ export default function KeyShareWarningDialog({
               type="button"
               onClick={onCancel}
             >
-              Cancel
+              {t("common:actions.cancel")}
             </button>
             <button
               className={styles.confirmBtn}
               type="button"
               onClick={onConfirm}
             >
-              Share Key
+              {t("keyShare.share")}
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

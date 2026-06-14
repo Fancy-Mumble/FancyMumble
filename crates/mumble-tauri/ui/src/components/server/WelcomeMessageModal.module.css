@@ -1,0 +1,75 @@
+.dialog {
+  background: var(--color-bg-primary, #1a1d23);
+  border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-lg, 12px);
+  padding: 24px;
+  width: 520px;
+  max-width: 92vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: scaleIn 0.12s ease-out;
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.96); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--color-text-primary, #f3f4f6);
+}
+
+.body {
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+.welcomeText {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--color-text-secondary, #c7ccd1);
+  word-break: break-word;
+}
+
+.welcomeText a {
+  color: var(--accent, #2aabee);
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text-secondary, #aaa);
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkboxRow input {
+  cursor: pointer;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.closeBtn {
+  padding: 8px 18px;
+  border-radius: 6px;
+  border: none;
+  background: var(--accent, #2aabee);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.closeBtn:hover {
+  filter: brightness(1.08);
+}

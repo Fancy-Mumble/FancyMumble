@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
    Apprentice Theme - Fancy Mumble
    Neutral grey backbone with saturated, punchy chromatic colors.
    ================================================================ */
@@ -99,15 +99,15 @@
   /* -- Link ------------------------------------------------------ */
   --color-link: #6aacf0;
 
-  /* -- Discord-style palette (neutral greys) --------------------- */
-  --color-discord-purple: #8878dc;
-  --color-discord-dark: #1c1c1c;
-  --color-discord-bg: #262626;
-  --color-discord-border: #3a3a3a;
-  --color-discord-hover: #303030;
-  --color-discord-muted: #6c6c6c;
-  --color-discord-text: #d0d0d0;
-  --color-discord-active: #3a3a3a;
+  /* -- Picker palette (neutral greys) --------------------- */
+  --color-picker-accent: #8878dc;
+  --color-picker-dark: #1c1c1c;
+  --color-picker-bg: #262626;
+  --color-picker-border: #3a3a3a;
+  --color-picker-hover: #303030;
+  --color-picker-muted: #6c6c6c;
+  --color-picker-text: #d0d0d0;
+  --color-picker-active: #3a3a3a;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.2);

@@ -1,6 +1,8 @@
-﻿import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { loadImage, cropToCanvas, resizeImage } from "./imageUtils";
 import styles from "./SettingsPage.module.css";
+import panelStyles from "./ImageEditor.module.css";
 
 interface ImageEditorProps {
   /** Raw image data-URL to edit. */
@@ -32,6 +34,7 @@ export function ImageEditor({
   onConfirm,
   onCancel,
 }: ImageEditorProps) {
+  const { t } = useTranslation(["settings", "common"]);
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -64,7 +67,6 @@ export function ImageEditor({
         y: cropTop + cropH / 2 - (ih * mz) / 2,
       });
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
 
   /** Clamp position so the image always covers the crop area. */
@@ -133,14 +135,14 @@ export function ImageEditor({
 
   return (
     <div className={styles.editorOverlay} onClick={onCancel}>
-      <div className={styles.editorModal} onClick={(e) => e.stopPropagation()}>
-        <h3 className={styles.editorTitle}>
-          {cropShape === "circle" ? "Crop Avatar" : "Crop Banner"}
+      <div className={panelStyles.editorModal} onClick={(e) => e.stopPropagation()}>
+        <h3 className={panelStyles.editorTitle}>
+          {cropShape === "circle" ? t("imageEditor.titleAvatar") : t("imageEditor.titleBanner")}
         </h3>
 
         {/* Viewport */}
         <div
-          className={styles.editorViewport}
+          className={panelStyles.editorViewport}
           style={{ width: VP_W, height: VP_H }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -151,7 +153,7 @@ export function ImageEditor({
             src={src}
             alt=""
             draggable={false}
-            className={styles.editorImg}
+            className={panelStyles.editorImg}
             style={{
               transform: `translate(${pos.x}px, ${pos.y}px) scale(${zoom})`,
               transformOrigin: "0 0",
@@ -161,7 +163,7 @@ export function ImageEditor({
           />
 
           {/* SVG mask overlay - darkens everything outside the crop region */}
-          <svg className={styles.editorMask} viewBox={`0 0 ${VP_W} ${VP_H}`}>
+          <svg className={panelStyles.editorMask} viewBox={`0 0 ${VP_W} ${VP_H}`}>
             <defs>
               <mask id="crop-mask">
                 <rect width={VP_W} height={VP_H} fill="white" />
@@ -216,8 +218,8 @@ export function ImageEditor({
         </div>
 
         {/* Zoom slider */}
-        <div className={styles.editorControls}>
-          <span className={styles.editorZoomIcon}>🔍</span>
+        <div className={panelStyles.editorControls}>
+          <span className={panelStyles.editorZoomIcon}>??</span>
           <input
             type="range"
             min={minZoom}
@@ -225,18 +227,18 @@ export function ImageEditor({
             step={minZoom * 0.05}
             value={zoom}
             onChange={(e) => handleZoom(Number(e.target.value))}
-            className={styles.editorSlider}
+            className={panelStyles.editorSlider}
           />
         </div>
 
         {/* Actions */}
-        <div className={styles.editorActions}>
+        <div className={panelStyles.editorActions}>
           <button
             type="button"
             className={styles.ghostBtn}
             onClick={onCancel}
           >
-            Cancel
+            {t("common:actions.cancel")}
           </button>
           <button
             type="button"
@@ -244,10 +246,11 @@ export function ImageEditor({
             onClick={handleConfirm}
             style={{ padding: "8px 24px", width: "auto" }}
           >
-            Apply
+            {t("imageEditor.applyBtn")}
           </button>
         </div>
       </div>
     </div>
   );
 }
+

@@ -1,6 +1,8 @@
-import { ChevronRightIcon } from "../../icons";
+﻿import { ChevronRightIcon } from "../../icons";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
+import { acquireRegisteredTextures, releaseRegisteredTextures } from "../../registeredTextureLease";
 import { listen } from "@tauri-apps/api/event";
 import { useSearchParams } from "react-router-dom";
 import { useAppStore } from "../../store";
@@ -66,6 +68,7 @@ function filterTree(nodes: TreeNode[], query: string): Set<number> {
 export function ChannelAclTab() {
   const channels = useAppStore((s) => s.channels);
   const users = useAppStore((s) => s.users);
+  const { t } = useTranslation("settings");
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedChannel, setSelectedChannel] = useState<number | null>(null);
   const [aclData, setAclData] = useState<AclData | null>(null);
@@ -98,8 +101,12 @@ export function ChannelAclTab() {
       }
       setRegisteredNames(map);
     });
+    acquireRegisteredTextures();
     invoke("request_user_list").catch(() => {});
-    return () => { unlisten.then((f) => f()); };
+    return () => {
+      unlisten.then((f) => f());
+      releaseRegisteredTextures();
+    };
   }, []);
 
   // Listen for ACL events from the backend.
@@ -277,7 +284,7 @@ export function ChannelAclTab() {
 
   return (
     <>
-      <h2 className={styles.panelTitle}>Channel ACL Editor</h2>
+      <h2 className={styles.panelTitle}>{t("channelAcl.title")}</h2>
 
       <div className={styles.aclSplitView}>
         {/* Left: Channel tree */}
@@ -286,7 +293,7 @@ export function ChannelAclTab() {
             <input
               className={styles.searchInput}
               type="text"
-              placeholder="Search channels..."
+              placeholder={t("channelAcl.searchChannels")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -319,9 +326,9 @@ export function ChannelAclTab() {
         {/* Right: ACL detail */}
         <div className={styles.aclDetailPane}>
           {selectedChannel === null && !loading && (
-            <div className={styles.detailEmpty}>Select a channel to edit its ACL</div>
+            <div className={styles.detailEmpty}>{t("channelAcl.selectChannel")}</div>
           )}
-          {loading && <div className={styles.detailEmpty}>Loading ACL...</div>}
+          {loading && <div className={styles.detailEmpty}>{t("channelAcl.loadingAcl")}</div>}
 
           {aclData && !loading && (
             <>
@@ -329,7 +336,7 @@ export function ChannelAclTab() {
                 <h3 className={styles.aclDetailTitle}>{selectedName}</h3>
                 {dirty && (
                   <button type="button" className={styles.saveBtn} onClick={handleSave}>
-                    Save Changes
+                    {t("channelAcl.saveChanges")}
                   </button>
                 )}
               </div>
@@ -340,7 +347,7 @@ export function ChannelAclTab() {
                   checked={aclData.inherit_acls}
                   onChange={handleToggleInherit}
                 />
-                Inherit ACLs from parent channel
+                {t("channelAcl.inheritAcls")}
               </label>
 
               {/* Tab switcher */}
@@ -350,14 +357,14 @@ export function ChannelAclTab() {
                   className={`${styles.aclTabBtn} ${activeTab === "rules" ? styles.aclTabActive : ""}`}
                   onClick={() => setActiveTab("rules")}
                 >
-                  ACL Rules ({aclData.acls.length})
+                  {t("channelAcl.tabRules", { count: aclData.acls.length })}
                 </button>
                 <button
                   type="button"
                   className={`${styles.aclTabBtn} ${activeTab === "groups" ? styles.aclTabActive : ""}`}
                   onClick={() => setActiveTab("groups")}
                 >
-                  Groups ({aclData.groups.length})
+                  {t("channelAcl.tabGroups", { count: aclData.groups.length })}
                 </button>
               </div>
 

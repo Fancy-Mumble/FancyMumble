@@ -1,36 +1,33 @@
-use crate::command::core::{CommandAction, CommandOutput};
-use crate::message::ControlMessage;
-use crate::proto::mumble_tcp;
-use crate::state::ServerState;
+//! `SendPluginData` is permanently bricked.
+//!
+//! `PluginDataTransmission` is forbidden in Fancy Mumble (removed 0.3.2).
+//! Replaced by native protobuf messages with stable wire IDs:
+//!
+//! - Polls: [`crate::command::SendFancyPoll`], [`crate::command::SendFancyPollVote`]
+//! - Generic plugin envelope (any payload): [`crate::command::SendPluginMessage`]
+//!   (wire ID 200), routed by the server-side plugin host.
+//!
+//! For new data types: either wrap your payload in a `PluginMessage` envelope
+//! (recommended for plugin-scoped features) or add a typed `message Fancy...`
+//! to `proto/Mumble.proto`, register it in [`crate::message::ControlMessage`]
+//! and [`crate::message::TcpMessageType`], then implement
+//! [`crate::command::CommandAction`].
+//!
+//! The inbound [`crate::message::ControlMessage::PluginDataTransmission`] variant
+//! is retained solely to decode legacy peer traffic without erroring.
 
-/// Send a plugin data transmission to the server.
+/// `PluginDataTransmission` is forbidden in Fancy Mumble (removed 0.3.2).
 ///
-/// Used by `FancyMumble` for features like polls that are invisible to
-/// legacy clients.  The `data_id` identifies the type of payload
-/// (e.g. `"fancy-poll"`).
+/// Replace with a typed native message:
+/// - Polls: [`crate::command::SendFancyPoll`] / [`crate::command::SendFancyPollVote`]
+/// - Generic plugin envelope: [`crate::command::SendPluginMessage`] (wire ID 200)
+/// - New data: add a `message Fancy...` in `proto/Mumble.proto` with a stable wire ID.
 #[derive(Debug)]
+#[deprecated(
+    since = "0.2.19",
+    note = "PluginDataTransmission is forbidden. For new types, add a \
+            native proto message (wire ID >= 100). See command/send_plugin_data.rs."
+)]
 pub struct SendPluginData {
-    /// Recipient sessions - must list each target explicitly.
-    /// The Mumble server only forwards to listed sessions; an empty
-    /// list means nobody receives the message.
-    pub receiver_sessions: Vec<u32>,
-    /// Raw payload bytes (typically JSON).
-    pub data: Vec<u8>,
-    /// Plugin identifier string (e.g. "fancy-poll", "fancy-poll-vote").
-    pub data_id: String,
-}
-
-impl CommandAction for SendPluginData {
-    fn execute(&self, _state: &ServerState) -> CommandOutput {
-        let msg = mumble_tcp::PluginDataTransmission {
-            sender_session: None, // Server fills this in.
-            receiver_sessions: self.receiver_sessions.clone(),
-            data: Some(self.data.clone()),
-            data_id: Some(self.data_id.clone()),
-        };
-        CommandOutput {
-            tcp_messages: vec![ControlMessage::PluginDataTransmission(msg)],
-            ..Default::default()
-        }
-    }
+    _unconstructable: std::convert::Infallible,
 }

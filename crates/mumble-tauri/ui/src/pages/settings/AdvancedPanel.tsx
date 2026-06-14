@@ -1,63 +1,123 @@
 ﻿import { useState } from "react";
-import type { UserMode, TimeFormat } from "../../types";
+import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
+import type { UserMode } from "../../types";
 import { Toggle } from "./SharedControls";
+import { registerSettings } from "./settingsSearchRegistry";
 import styles from "./SettingsPage.module.css";
 
-const TIME_FORMAT_OPTIONS: { value: TimeFormat; label: string }[] = [
-  { value: "auto", label: "Auto (follow system)" },
-  { value: "12h", label: "12-hour (AM/PM)" },
-  { value: "24h", label: "24-hour" },
-];
+registerSettings("advanced")
+  .add("advanced.expertMode", ["expert"])
+  .add("advanced.klipyApiKey", ["gif", "klipy", "api key"])
+  .add("advanced.developerMode", ["developer", "debug"])
+  .add("advanced.logLevel", ["logging", "log"])
+  .add("advanced.logToFile", ["logging", "log", "file"])
+  .add("advanced.terminalLogging", ["logging", "log", "terminal", "console", "stdout"])
+  .add("advanced.autoZipLogs", ["logging", "log", "zip", "compress", "zstd"])
+  .add("advanced.logFiles", ["logging", "log", "export", "view", "folder"])
+  .add("advanced.translationHelper")
+  .add("advanced.autoReconnect", ["reconnect"])
+  .add("advanced.autoUpdate", ["update", "auto update"])
+  .add("advanced.persistDms", ["direct messages", "history"])
+  .add("advanced.disconnectWarning", ["disconnect", "confirmation"])
+  .add("advanced.dangerZone", ["reset", "delete"]);
 
 export function AdvancedPanel({
   userMode,
   klipyApiKey,
   logLevel,
+  logToFile,
+  terminalLogging,
+  autoZipLogs,
   autoReconnect,
   autoUpdateOnStartup,
-  timeFormat,
-  convertToLocalTime,
+  persistDms,
+  showDisconnectWarning,
   onToggleMode,
   onKlipyApiKeyChange,
   onLogLevelChange,
+  onToggleLogToFile,
+  onToggleTerminalLogging,
+  onToggleAutoZipLogs,
   onToggleAutoReconnect,
   onToggleAutoUpdate,
-  onTimeFormatChange,
-  onConvertToLocalTimeChange,
+  onTogglePersistDms,
+  onToggleDisconnectWarning,
   onToggleDeveloperMode,
   onReset,
 }: Readonly<{
   userMode: UserMode;
   klipyApiKey: string;
   logLevel: string;
+  logToFile: boolean;
+  terminalLogging: boolean;
+  autoZipLogs: boolean;
   autoReconnect: boolean;
   autoUpdateOnStartup: boolean;
-  timeFormat: TimeFormat;
-  convertToLocalTime: boolean;
+  persistDms: boolean;
+  showDisconnectWarning: boolean;
   onToggleMode: () => void;
   onKlipyApiKeyChange: (key: string) => void;
   onLogLevelChange: (level: string) => void;
+  onToggleLogToFile: () => void;
+  onToggleTerminalLogging: () => void;
+  onToggleAutoZipLogs: () => void;
   onToggleAutoReconnect: () => void;
   onToggleAutoUpdate: () => void;
-  onTimeFormatChange: (fmt: TimeFormat) => void;
-  onConvertToLocalTimeChange: () => void;
+  onTogglePersistDms: () => void;
+  onToggleDisconnectWarning: () => void;
   onToggleDeveloperMode: () => void;
   onReset: () => void;
 }>) {
   const [confirming, setConfirming] = useState(false);
+  const [logBusy, setLogBusy] = useState(false);
+  const { t } = useTranslation(["settings", "common"]);
+
+  const handleExportLogs = async () => {
+    setLogBusy(true);
+    try {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const dest = await save({
+        defaultPath: "fancy-mumble-logs.log.zst",
+        filters: [{ name: "zstd log archive", extensions: ["zst"] }],
+      });
+      if (!dest) return;
+      await invoke("export_logs", { destPath: dest });
+      const { message } = await import("@tauri-apps/plugin-dialog");
+      await message(t("advanced.exportLogsDone"), { kind: "info" });
+    } catch (e) {
+      console.error("export_logs failed:", e);
+      const { message } = await import("@tauri-apps/plugin-dialog");
+      await message(t("advanced.exportLogsError", { error: String(e) }), {
+        kind: "error",
+      });
+    } finally {
+      setLogBusy(false);
+    }
+  };
+
+  const handleViewLogs = async () => {
+    try {
+      const dir = await invoke<string>("get_log_directory");
+      const { openPath } = await import("@tauri-apps/plugin-opener");
+      await openPath(dir);
+    } catch (e) {
+      console.error("open log directory failed:", e);
+    }
+  };
 
   return (
     <>
-      <h2 className={styles.panelTitle}>Advanced</h2>
+      <h2 className={styles.panelTitle}>{t("advanced.panelTitle")}</h2>
 
       <section className={styles.section}>
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
-            <h3 className={styles.sectionTitle}>Expert Mode</h3>
+            <h3 className={styles.sectionTitle}>{t("advanced.expertMode")}</h3>
             <p className={styles.fieldHint}>
               {userMode === "normal"
-                ? "Streamlined - we handle the technical details for you."
-                : "Full control - advanced audio options, custom ports and labels are visible."}
+                ? t("advanced.expertModeHintNormal")
+                : t("advanced.expertModeHintExpert")}
             </p>
           </div>
           <Toggle checked={userMode !== "normal"} onChange={onToggleMode} />
@@ -66,9 +126,9 @@ export function AdvancedPanel({
 
       {userMode !== "normal" && (
         <section className={styles.section}>
-          <h3 className={styles.sectionTitle}>Klipy API Key</h3>
+          <h3 className={styles.sectionTitle}>{t("advanced.klipyApiKey")}</h3>
           <p className={styles.fieldHint}>
-            Provide your own{" "}
+            {t("advanced.klipyApiKeyHintBefore")}{" "}
             <a
               href="https://klipy.com"
               target="_blank"
@@ -77,7 +137,7 @@ export function AdvancedPanel({
             >
               Klipy
             </a>{" "}
-            API key for GIF/sticker search. Leave empty to use the built-in key.
+            {t("advanced.klipyApiKeyHintAfter")}
           </p>
           <input
             type="password"
@@ -95,10 +155,9 @@ export function AdvancedPanel({
         <section className={styles.section}>
           <div className={styles.toggleRow}>
             <div className={styles.toggleInfo}>
-              <h3 className={styles.sectionTitle}>Developer Mode</h3>
+              <h3 className={styles.sectionTitle}>{t("advanced.developerMode")}</h3>
               <p className={styles.fieldHint}>
-                Show debug statistics (message counts, offloaded content, memory
-                usage) in the server info panel.
+                {t("advanced.developerModeHint")}
               </p>
             </div>
             <Toggle
@@ -111,33 +170,98 @@ export function AdvancedPanel({
 
       {userMode === "developer" && (
         <section className={styles.section}>
-          <h3 className={styles.sectionTitle}>Log Level</h3>
-          <p className={styles.fieldHint}>
-            Set the verbosity of Rust backend logging. Lower levels include all
-            messages from higher levels. Changes take effect immediately.
-          </p>
+          <h3 className={styles.sectionTitle}>{t("advanced.logLevel")}</h3>
+          <p className={styles.fieldHint}>{t("advanced.logLevelHint")}</p>
           <select
             className={styles.select}
             value={logLevel}
             onChange={(e) => onLogLevelChange(e.target.value)}
           >
-            <option value="error">error &mdash; errors only</option>
-            <option value="warn">warn &mdash; warnings and errors</option>
-            <option value="info">info &mdash; general info (default)</option>
-            <option value="debug">debug &mdash; verbose diagnostics</option>
-            <option value="trace">trace &mdash; maximum verbosity</option>
+            <option value="error">{t("advanced.logLevelError")}</option>
+            <option value="warn">{t("advanced.logLevelWarn")}</option>
+            <option value="info">{t("advanced.logLevelInfo")}</option>
+            <option value="debug">{t("advanced.logLevelDebug")}</option>
+            <option value="trace">{t("advanced.logLevelTrace")}</option>
           </select>
+        </section>
+      )}
+
+      {userMode === "developer" && (
+        <section className={styles.section}>
+          <div className={styles.toggleRow}>
+            <div className={styles.toggleInfo}>
+              <h3 className={styles.sectionTitle}>{t("advanced.logToFile")}</h3>
+              <p className={styles.fieldHint}>{t("advanced.logToFileHint")}</p>
+            </div>
+            <Toggle checked={logToFile} onChange={onToggleLogToFile} />
+          </div>
+
+          <div className={styles.toggleRow}>
+            <div className={styles.toggleInfo}>
+              <h3 className={styles.sectionTitle}>{t("advanced.autoZipLogs")}</h3>
+              <p className={styles.fieldHint}>{t("advanced.autoZipLogsHint")}</p>
+            </div>
+            <Toggle
+              checked={autoZipLogs}
+              disabled={!logToFile}
+              onChange={onToggleAutoZipLogs}
+            />
+          </div>
+
+          <div className={styles.toggleRow}>
+            <div className={styles.toggleInfo}>
+              <h3 className={styles.sectionTitle}>{t("advanced.terminalLogging")}</h3>
+              <p className={styles.fieldHint}>{t("advanced.terminalLoggingHint")}</p>
+            </div>
+            <Toggle checked={terminalLogging} onChange={onToggleTerminalLogging} />
+          </div>
+
+          <p className={styles.fieldHint} style={{ marginTop: "0.75rem" }}>
+            {t("advanced.logFilesHint")}
+          </p>
+          <div className={styles.confirmBtns}>
+            <button
+              type="button"
+              className={styles.ghostBtn}
+              onClick={() => void handleViewLogs()}
+            >
+              {t("advanced.viewLogsBtn")}
+            </button>
+            <button
+              type="button"
+              className={styles.ghostBtn}
+              disabled={logBusy}
+              onClick={() => void handleExportLogs()}
+            >
+              {t("advanced.exportLogsBtn")}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {userMode === "developer" && (
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>{t("advanced.translationHelper")}</h3>
+          <p className={styles.fieldHint}>{t("advanced.translationHelperHint")}</p>
+          <button
+            type="button"
+            className={styles.ghostBtn}
+            onClick={() => {
+              invoke("open_translation_popout").catch((e) => {
+                console.error("open_translation_popout failed:", e);
+              });
+            }}
+          >
+            {t("advanced.translationHelperOpen")}
+          </button>
         </section>
       )}
 
       <section className={styles.section}>
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
-            <h3 className={styles.sectionTitle}>Auto Reconnect</h3>
-            <p className={styles.fieldHint}>
-              Automatically retry connecting if the server connection drops unexpectedly.
-              Manual disconnects never trigger auto-reconnect.
-            </p>
+            <h3 className={styles.sectionTitle}>{t("advanced.autoReconnect")}</h3>
+            <p className={styles.fieldHint}>{t("advanced.autoReconnectHint")}</p>
           </div>
           <Toggle checked={autoReconnect} onChange={onToggleAutoReconnect} />
         </div>
@@ -146,13 +270,8 @@ export function AdvancedPanel({
       <section className={styles.section}>
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
-            <h3 className={styles.sectionTitle}>Auto-update on startup</h3>
-            <p className={styles.fieldHint}>
-              When enabled, available updates are downloaded and installed
-              automatically when Fancy Mumble starts. A small progress window
-              appears during the download. When disabled, you will be asked
-              before each update.
-            </p>
+            <h3 className={styles.sectionTitle}>{t("advanced.autoUpdate")}</h3>
+            <p className={styles.fieldHint}>{t("advanced.autoUpdateHint")}</p>
           </div>
           <Toggle
             checked={autoUpdateOnStartup}
@@ -162,50 +281,32 @@ export function AdvancedPanel({
       </section>
 
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Time Display</h3>
-        <p className={styles.fieldHint}>
-          Choose how timestamps are formatted in chat messages.
-        </p>
-
-        <label className={styles.fieldLabel}>Time Format</label>
-        <div className={styles.optionGrid}>
-          {TIME_FORMAT_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              className={`${styles.optionCard} ${timeFormat === opt.value ? styles.optionCardSelected : ""}`}
-              onClick={() => onTimeFormatChange(opt.value)}
-            >
-              <span className={styles.optionLabel}>{opt.label}</span>
-            </button>
-          ))}
-        </div>
-
-        <div className={styles.toggleRow} style={{ marginTop: 12 }}>
+        <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
-            <label className={styles.fieldLabel}>Convert to local time</label>
-            <p className={styles.fieldHint}>
-              When enabled, timestamps are displayed in your local timezone.
-              When disabled, times are shown in UTC.
-            </p>
+            <h3 className={styles.sectionTitle}>{t("advanced.persistDms")}</h3>
+            <p className={styles.fieldHint}>{t("advanced.persistDmsHint")}</p>
           </div>
-          <Toggle
-            checked={convertToLocalTime}
-            onChange={onConvertToLocalTimeChange}
-          />
+          <Toggle checked={persistDms} onChange={onTogglePersistDms} />
         </div>
       </section>
 
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Danger Zone</h3>
-        <p className={styles.fieldHint}>
-          Delete all saved data - servers, preferences, and certificates - and
-          return to the welcome screen.
-        </p>
+        <div className={styles.toggleRow}>
+          <div className={styles.toggleInfo}>
+            <h3 className={styles.sectionTitle}>{t("advanced.disconnectWarning", { defaultValue: "Disconnect confirmation" })}</h3>
+            <p className={styles.fieldHint}>{t("advanced.disconnectWarningHint", { defaultValue: "Ask for confirmation before disconnecting from a server." })}</p>
+          </div>
+          <Toggle checked={showDisconnectWarning} onChange={onToggleDisconnectWarning} />
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <h3 className={styles.sectionTitle}>{t("advanced.dangerZone")}</h3>
+        <p className={styles.fieldHint}>{t("advanced.dangerZoneHint")}</p>
         {confirming ? (
           <div className={styles.confirmBox}>
             <p className={styles.confirmText}>
-              Are you sure? This cannot be undone.
+              {t("advanced.dangerConfirmText")}
             </p>
             <div className={styles.confirmBtns}>
               <button
@@ -213,14 +314,14 @@ export function AdvancedPanel({
                 className={styles.dangerBtn}
                 onClick={onReset}
               >
-                Yes, reset everything
+                {t("advanced.dangerConfirmBtn")}
               </button>
               <button
                 type="button"
                 className={styles.ghostBtn}
                 onClick={() => setConfirming(false)}
               >
-                Cancel
+                {t("common:actions.cancel")}
               </button>
             </div>
           </div>
@@ -230,7 +331,7 @@ export function AdvancedPanel({
             className={styles.dangerBtn}
             onClick={() => setConfirming(true)}
           >
-            Reset all data
+            {t("advanced.dangerResetBtn")}
           </button>
         )}
       </section>

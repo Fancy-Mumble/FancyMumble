@@ -16,7 +16,6 @@ use crate::error::{Error, Result};
 use crate::event::EventHandler;
 use crate::fancy_codec::{self, FancyCodec};
 use crate::message::{ControlMessage, ServerMessage, UdpMessage};
-use crate::transport::audio_codec::AudioPacketCodec;
 use crate::transport::ocb2::Ocb2CryptState;
 use crate::proto::mumble_tcp;
 use crate::state::ServerState;
@@ -150,45 +149,13 @@ pub async fn run<H: EventHandler>(
     config: ClientConfig,
     handler: H,
 ) -> Result<(ClientHandle, tokio::task::JoinHandle<()>)> {
-    // 1. Connect TCP - retry on transient connection-reset errors (e.g. the
-    //    server hasn't cleaned up a previous session yet, Windows error 10054).
-    const MAX_RETRIES: u32 = 3;
-    const RETRY_DELAY: Duration = Duration::from_secs(2);
-
-    let mut tcp = None;
-    let mut last_err = None;
-
-    for attempt in 1..=MAX_RETRIES {
-        match TcpTransport::connect(&config.tcp).await {
-            Ok(t) => {
-                tcp = Some(t);
-                break;
-            }
-            Err(e) => {
-                // Only retry on ConnectionRefused (server briefly down or
-                // still starting up).  ConnectionReset / ConnectionAborted
-                // at this early stage almost always means the server
-                // deliberately closed the connection (e.g. IP ban, version
-                // mismatch) - retrying would just spam the server.
-                let is_retryable = matches!(&e, Error::Io(io)
-                    if io.kind() == std::io::ErrorKind::ConnectionRefused
-                );
-                if is_retryable && attempt < MAX_RETRIES {
-                    warn!(
-                        "TCP connection attempt {attempt}/{MAX_RETRIES} failed ({e}), \
-                         retrying in {}s...",
-                        RETRY_DELAY.as_secs()
-                    );
-                    tokio::time::sleep(RETRY_DELAY).await;
-                    last_err = Some(e);
-                } else {
-                    return Err(e);
-                }
-            }
-        }
-    }
-
-    let mut tcp = tcp.ok_or_else(|| last_err.unwrap_or_else(|| Error::Other("connection loop exited without recording an error".into())))?;
+    // 1. Connect TCP - a single attempt.  Retry/backoff is owned by the
+    //    caller (the desktop app's auto-reconnect loop drives retries with a
+    //    growing Fibonacci delay).  Doing it here as well meant every caller
+    //    "attempt" silently fanned out into several fixed-delay TCP tries,
+    //    which slowed the visible reconnect cadence and contradicted the
+    //    caller's backoff schedule.  Fail fast and let the caller decide.
+    let mut tcp = TcpTransport::connect(&config.tcp).await?;
     info!("TCP connected to {}:{}", config.tcp.server_host, config.tcp.server_port);
 
     // 2. Send the Version message FIRST - before anything else touches the
@@ -299,7 +266,13 @@ async fn event_loop<H: EventHandler>(
             biased;
             item = wq_receiver.recv() => Some(item),
             Some(msg) = audio_out_rx.recv() => {
-                send_one_audio_packet(&msg, &mut udp_sender, &outbound_tx, &mut outbound_audio_count);
+                send_one_audio_packet(
+                    &msg,
+                    &mut udp_sender,
+                    &outbound_tx,
+                    &mut outbound_audio_count,
+                    state.connection.supports_protobuf_audio(),
+                );
                 None
             }
             Ok(()) = force_tcp_rx.changed() => {
@@ -310,6 +283,7 @@ async fn event_loop<H: EventHandler>(
                         force_tcp, &stored_crypto, &udp_config, &wq_sender,
                         &mut udp_sender, &mut udp_reader_task, &mut udp_resync_tx,
                         &outbound_tx, &state.decrypt_stats, &mut handler,
+                        state.connection.supports_protobuf_audio(),
                     ).await;
                 }
                 None
@@ -538,6 +512,7 @@ impl<H: EventHandler> EventLoopCtx<'_, H> {
                             self.udp_resync_tx,
                             &self.decrypt_stats,
                             self.handler,
+                            self.state.connection.supports_protobuf_audio(),
                         )
                         .await;
                     }
@@ -600,8 +575,12 @@ impl<H: EventHandler> EventLoopCtx<'_, H> {
 
     /// Send a UDP ping to keep the NAT mapping alive.
     async fn send_udp_ping(&mut self) {
+        let protobuf_audio = self.state.connection.supports_protobuf_audio();
         if let Some(sender) = &mut self.udp_sender {
-            let payload = crate::transport::udp::encode_udp_message(&udp_ping_message());
+            let payload = crate::transport::udp::encode_udp_message_for(
+                &udp_ping_message(),
+                protobuf_audio,
+            );
             if let Err(e) = sender.send_raw(&payload).await {
                 warn!("UDP ping send failed: {e}");
             }
@@ -610,13 +589,15 @@ impl<H: EventHandler> EventLoopCtx<'_, H> {
 
     /// Send outbound UDP audio, preferring real UDP with TCP tunnel fallback.
     async fn send_udp_output(&mut self, messages: &[UdpMessage]) {
+        let protobuf_audio = self.state.connection.supports_protobuf_audio();
         for udp_msg in messages {
             let UdpMessage::Audio(audio) = udp_msg else {
                 continue;
             };
 
             let use_tunnel = if let Some(sender) = &mut self.udp_sender {
-                let payload = crate::transport::udp::encode_udp_message(udp_msg);
+                let payload =
+                    crate::transport::udp::encode_udp_message_for(udp_msg, protobuf_audio);
                 if let Err(e) = sender.send_raw(&payload).await {
                     warn!("UDP send failed, falling back to TCP tunnel: {e}");
                     true
@@ -629,7 +610,7 @@ impl<H: EventHandler> EventLoopCtx<'_, H> {
 
             if use_tunnel {
                 let tunnel_data =
-                    crate::transport::audio_codec::ProtobufAudioCodec::encode(audio);
+                    crate::transport::audio_codec::encode_tunnel_audio(audio, protobuf_audio);
                 let tunnel = ControlMessage::UdpTunnel(tunnel_data);
                 if self.outbound_tx.send(tunnel).await.is_err() {
                     error!("outbound channel closed");
@@ -694,7 +675,7 @@ fn handle_control_message<H: EventHandler>(
         ControlMessage::ChannelState(cs) => state.apply_channel_state(cs),
         ControlMessage::ChannelRemove(cr) => state.remove_channel(cr.channel_id),
         ControlMessage::Reject(r) => {
-            warn!(reason = ?r.reason, "connection rejected");
+            warn!(reason = ?r.reason, reject_type = ?r.r#type, "connection rejected");
         }
         ControlMessage::PermissionDenied(pd) => {
             warn!(reason = ?pd.reason, r#type = ?pd.r#type, "permission denied");
@@ -753,6 +734,7 @@ fn send_one_audio_packet(
     udp_sender: &mut Option<UdpSender>,
     outbound_tx: &mpsc::Sender<ControlMessage>,
     counter: &mut u64,
+    protobuf_audio: bool,
 ) {
     let UdpMessage::Audio(audio) = msg else {
         return;
@@ -767,7 +749,7 @@ fn send_one_audio_packet(
     }
 
     let sent_udp = if let Some(sender) = udp_sender.as_mut() {
-        let payload = crate::transport::udp::encode_udp_message(msg);
+        let payload = crate::transport::udp::encode_udp_message_for(msg, protobuf_audio);
         match sender.try_send_raw(&payload) {
             Ok(true) => true,
             Ok(false) => {
@@ -785,7 +767,7 @@ fn send_one_audio_packet(
 
     if !sent_udp {
         let tunnel_data =
-            crate::transport::audio_codec::ProtobufAudioCodec::encode(audio);
+            crate::transport::audio_codec::encode_tunnel_audio(audio, protobuf_audio);
         let tunnel = ControlMessage::UdpTunnel(tunnel_data);
         if outbound_tx.try_send(tunnel).is_err() {
             warn!("TCP tunnel channel full, dropping audio packet");
@@ -815,6 +797,7 @@ async fn handle_crypt_setup<H: EventHandler>(
     udp_resync_tx: &mut Option<mpsc::Sender<Vec<u8>>>,
     decrypt_stats: &crate::transport::ocb2::SharedPacketStats,
     handler: &mut H,
+    protobuf_audio: bool,
 ) {
     // Full key setup: key + client_nonce + server_nonce all present
     let (Some(key), Some(client_nonce), Some(server_nonce)) =
@@ -863,6 +846,7 @@ async fn handle_crypt_setup<H: EventHandler>(
         udp_resync_tx,
         decrypt_stats,
         handler,
+        protobuf_audio,
     )
     .await;
 }
@@ -880,6 +864,7 @@ async fn handle_force_tcp_change<H: EventHandler>(
     outbound_tx: &mpsc::Sender<ControlMessage>,
     decrypt_stats: &crate::transport::ocb2::SharedPacketStats,
     handler: &mut H,
+    protobuf_audio: bool,
 ) {
     if force_tcp {
         // Tear down active UDP transport.
@@ -905,6 +890,7 @@ async fn handle_force_tcp_change<H: EventHandler>(
                 udp_resync_tx,
                 decrypt_stats,
                 handler,
+                protobuf_audio,
             )
             .await;
         } else {
@@ -927,6 +913,7 @@ async fn start_udp<H: EventHandler>(
     udp_resync_tx: &mut Option<mpsc::Sender<Vec<u8>>>,
     decrypt_stats: &crate::transport::ocb2::SharedPacketStats,
     handler: &mut H,
+    protobuf_audio: bool,
 ) {
 
     // Initialize encrypt CryptState (for outbound audio)
@@ -993,7 +980,10 @@ async fn start_udp<H: EventHandler>(
     // public UDP endpoint (NAT traversal).  Without this the server
     // has no address to forward audio to.
     if let Some(sender) = udp_sender.as_mut() {
-        let payload = crate::transport::udp::encode_udp_message(&udp_ping_message());
+        let payload = crate::transport::udp::encode_udp_message_for(
+            &udp_ping_message(),
+            protobuf_audio,
+        );
         if let Err(e) = sender.send_raw(&payload).await {
             warn!("failed to send initial UDP ping: {e}");
         } else {

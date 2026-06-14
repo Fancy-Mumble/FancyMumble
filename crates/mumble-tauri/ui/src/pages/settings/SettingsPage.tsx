@@ -1,13 +1,13 @@
-﻿import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { load } from "@tauri-apps/plugin-store";
-import type { AudioDevice, AudioSettings, FancyProfile, UserMode, TimeFormat } from "../../types";
+import { load } from "../../utils/store";
+import type { AudioDevice, AudioSettings, FancyProfile, UserMode, TimeFormat, DateFormat, NumberFormat, WelcomeMessageDisplay } from "../../types";
 import { getPreferences, updatePreferences, getSavedAudioSettings, saveAudioSettings } from "../../preferencesStorage";
 import { serializeProfile, dataUrlToBytes } from "../../profileFormat";
-import { setKlipyApiKey } from "../../components/chat/GifPicker";
-import { setKlipyApiKey as setKlipyApiKeyBanner } from "./KlipyGifBrowser";
+import { setKlipyApiKey } from "../../components/chat/gif/klipyConfig";
 import { useAppStore } from "../../store";
 import {
   type ShortcutBindings,
@@ -24,18 +24,26 @@ import { AdvancedPanel } from "./AdvancedPanel";
 import { PrivacyPanel } from "./PrivacyPanel";
 import { IdentitiesPanel } from "./IdentitiesPanel";
 import { PersonalizationPanel } from "./PersonalizationPanel";
+import { LocalizationPanel } from "./LocalizationPanel";
 import { NotificationsPanel, DEFAULT_NOTIFICATION_SOUNDS } from "./NotificationsPanel";
+import { SettingsSearch } from "./SettingsSearch";
 import { getNotificationSounds, saveNotificationSounds } from "../../preferencesStorage";
 import { ProfilePreviewCard } from "./ProfilePreviewCard";
 import { loadPersonalization, savePersonalization, type PersonalizationData } from "../../personalizationStorage";
 import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
+import {
+  UserIcon, MicIcon, KeyboardIcon, KeyIcon, BellIcon, LockIcon,
+  PaletteIcon, GlobeIcon, PuzzleIcon, SlidersIcon, UsersGroupIcon,
+} from "../../icons";
 import ChannelsAndRolesPanel from "../../components/onboarding/ChannelsAndRolesPanel";
 import { isOnboardingSupported } from "../../components/onboarding/onboardingStore";
+import PluginsPanel from "./PluginsPanel";
+import { isMobile } from "../../utils/platform";
 import styles from "./SettingsPage.module.css";
 
 // -- Types & constants ----------------------------------------------
 
-type Tab = "profile" | "voice" | "shortcuts" | "identities" | "advanced" | "personalize" | "notifications" | "privacy" | "channels-roles";
+type Tab = "profile" | "voice" | "shortcuts" | "identities" | "advanced" | "personalize" | "localization" | "notifications" | "privacy" | "channels-roles" | "plugins";
 
 const DEFAULT_AUDIO: AudioSettings = {
   selected_device: null,
@@ -72,34 +80,82 @@ const PERSONALIZATION_DEFAULTS: PersonalizationData = {
   compactMode: false,
   channelViewerStyle: "flat",
   theme: "dark",
+  alwaysShowMessageActions: false,
 };
 
-const BASE_TABS: TabDef<Tab>[] = [
-  { id: "profile", label: "Profile", icon: "👤" },
-  { id: "voice", label: "Voice", icon: "🎙️" },
-  { id: "shortcuts", label: "Shortcuts", icon: "⌨️" },
-  { id: "identities", label: "Identities", icon: "🔑" },
-  { id: "notifications", label: "Notifications", icon: "🔔" },
-  { id: "privacy", label: "Privacy", icon: "🔒" },
-  { id: "personalize", label: "Personalize", icon: "🎨" },
-  { id: "advanced", label: "Advanced", icon: "⚙️" },
-];
+const TAB_ICON_SIZE = 16;
+
+function buildTabs(t: (key: string) => string, hasPlugins: boolean): TabDef<Tab>[] {
+  const tabs: TabDef<Tab>[] = [
+    { id: "profile",        label: t("tabs.profile"),        icon: <UserIcon     width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "voice",          label: t("tabs.voice"),          icon: <MicIcon      width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "shortcuts",      label: t("tabs.shortcuts"),      icon: <KeyboardIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "identities",     label: t("tabs.identities"),     icon: <KeyIcon      width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "notifications",  label: t("tabs.notifications"),  icon: <BellIcon     width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "privacy",        label: t("tabs.privacy"),        icon: <LockIcon     width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "personalize",    label: t("tabs.personalize"),    icon: <PaletteIcon  width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "localization",   label: t("tabs.localization"),   icon: <GlobeIcon    width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+  ];
+  if (hasPlugins) {
+    tabs.push({ id: "plugins", label: t("tabs.plugins"), icon: <PuzzleIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> });
+  }
+  tabs.push({ id: "advanced", label: t("tabs.advanced"), icon: <SlidersIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> });
+  return tabs;
+}
 
 // -- Main component -------------------------------------------------
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation("settings");
   const [tab, setTab] = useState<Tab>("profile");
+  // Settings-search: term to flash-highlight on the active tab after a result
+  // is chosen, and a ref to the content area we scan for matching settings.
+  const [highlightTerm, setHighlightTerm] = useState<string | null>(null);
+  const contentRef = useRef<HTMLElement>(null);
+
+  // Flash-highlight settings on the active tab whose heading matches the search
+  // term picked from the search results, and scroll the first into view.
+  useEffect(() => {
+    if (!highlightTerm) return;
+    const root = contentRef.current;
+    if (!root) return;
+    const term = highlightTerm.toLowerCase();
+    const cls = styles.searchHighlight;
+    const matched: HTMLElement[] = [];
+    const rafId = requestAnimationFrame(() => {
+      let first: HTMLElement | null = null;
+      root.querySelectorAll<HTMLElement>("h3").forEach((el) => {
+        if (el.textContent && el.textContent.toLowerCase().includes(term)) {
+          el.classList.add(cls);
+          matched.push(el);
+          if (!first) first = el;
+        }
+      });
+      (first as HTMLElement | null)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    const timer = setTimeout(() => {
+      matched.forEach((el) => el.classList.remove(cls));
+      setHighlightTerm(null);
+    }, 3200);
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timer);
+      matched.forEach((el) => el.classList.remove(cls));
+    };
+  }, [highlightTerm, tab]);
   const isConnected = useAppStore((s) => s.status) === "connected";
   const connectedCertLabel = useAppStore((s) => s.connectedCertLabel);
   const serverFancyVersion = useAppStore((s) => s.serverFancyVersion);
   const onboardingSupported = isOnboardingSupported(serverFancyVersion);
-  // Insert "Channels & Roles" before "Advanced" only when the server
-  // supports the onboarding workflow (Fancy 0.3.1+).
+  const hasPlugins = useAppStore((s) => s.pluginRegistry.length > 0);
+  const BASE_TABS = buildTabs(t as (key: string) => string, hasPlugins).filter(
+    (tab) => !isMobile || tab.id !== "shortcuts",
+  );
   const TABS: TabDef<Tab>[] = onboardingSupported
     ? [
         ...BASE_TABS.slice(0, BASE_TABS.length - 1),
-        { id: "channels-roles", label: "Channels & Roles", icon: "👋" },
+        { id: "channels-roles", label: t("tabs.channelsRoles"), icon: <UsersGroupIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
         BASE_TABS[BASE_TABS.length - 1],
       ]
     : BASE_TABS;
@@ -116,6 +172,7 @@ export default function SettingsPage() {
   const [defaultUsername, setDefaultUsername] = useState("");
   const [klipyApiKey, setKlipyApiKeyState] = useState("");
   const [enableNotifications, setEnableNotifications] = useState(true);
+  const [welcomeMessageDisplay, setWelcomeMessageDisplay] = useState<WelcomeMessageDisplay>("once");
   const [enableDualPath, setEnableDualPath] = useState(false);
   const [disableReadReceipts, setDisableReadReceipts] = useState(false);
   const [disableTypingIndicators, setDisableTypingIndicators] = useState(false);
@@ -125,10 +182,17 @@ export default function SettingsPage() {
   const [streamerMode, setStreamerMode] = useState(false);
   const [autoReconnect, setAutoReconnect] = useState(false);
   const [autoUpdateOnStartup, setAutoUpdateOnStartup] = useState(false);
+  const [persistDms, setPersistDms] = useState(false);
+  const [showDisconnectWarning, setShowDisconnectWarning] = useState(true);
   const [logLevel, setLogLevel] = useState<string>("info");
+  const [logToFile, setLogToFile] = useState(false);
+  const [terminalLogging, setTerminalLogging] = useState(false);
+  const [autoZipLogs, setAutoZipLogs] = useState(false);
   const [useRodioBackend, setUseRodioBackend] = useState(true);
   const [timeFormat, setTimeFormat] = useState<TimeFormat>("auto");
   const [convertToLocalTime, setConvertToLocalTime] = useState(true);
+  const [dateFormat, setDateFormat] = useState<DateFormat>("auto");
+  const [numberFormat, setNumberFormat] = useState<NumberFormat>("auto");
 
   // Shortcuts
   const [shortcuts, setShortcuts] = useState<ShortcutBindings>(DEFAULT_SHORTCUTS);
@@ -183,8 +247,8 @@ export default function SettingsPage() {
         setDefaultUsername(prefs.defaultUsername);
         setKlipyApiKeyState(prefs.klipyApiKey ?? "");
         setKlipyApiKey(prefs.klipyApiKey);
-        setKlipyApiKeyBanner(prefs.klipyApiKey);
         setEnableNotifications(prefs.enableNotifications ?? true);
+        setWelcomeMessageDisplay(prefs.welcomeMessageDisplay ?? "once");
         setEnableDualPath(prefs.enableDualPath ?? false);
         setDisableReadReceipts(prefs.disableReadReceipts ?? false);
         setDisableTypingIndicators(prefs.disableTypingIndicators ?? false);
@@ -194,9 +258,16 @@ export default function SettingsPage() {
         setStreamerMode(prefs.streamerMode ?? false);
         setAutoReconnect(prefs.autoReconnect ?? false);
         setAutoUpdateOnStartup(prefs.autoUpdateOnStartup ?? false);
+        setPersistDms(prefs.persistDms ?? false);
+        setShowDisconnectWarning(prefs.showDisconnectWarning ?? true);
         setLogLevel(prefs.logLevel ?? (prefs.debugLogging ? "debug" : "info"));
+        setLogToFile(prefs.logToFile ?? false);
+        setTerminalLogging(prefs.terminalLogging ?? false);
+        setAutoZipLogs(prefs.autoZipLogs ?? false);
         setTimeFormat(prefs.timeFormat);
         setConvertToLocalTime(prefs.convertToLocalTime);
+        setDateFormat(prefs.dateFormat ?? "auto");
+        setNumberFormat(prefs.numberFormat ?? "auto");
       } catch {
         /* keep defaults */
       }
@@ -385,7 +456,6 @@ export default function SettingsPage() {
   const handleKlipyApiKeyChange = useCallback(async (key: string) => {
     setKlipyApiKeyState(key);
     setKlipyApiKey(key);
-    setKlipyApiKeyBanner(key);
     await updatePreferences({ klipyApiKey: key });
   }, []);
 
@@ -419,6 +489,16 @@ export default function SettingsPage() {
     });
   }, []);
 
+  const handleDateFormatChange = useCallback(async (fmt: DateFormat) => {
+    setDateFormat(fmt);
+    await updatePreferences({ dateFormat: fmt });
+  }, []);
+
+  const handleNumberFormatChange = useCallback(async (fmt: NumberFormat) => {
+    setNumberFormat(fmt);
+    await updatePreferences({ numberFormat: fmt });
+  }, []);
+
   const handleToggleNotifications = useCallback(async () => {
     setEnableNotifications((prev) => {
       const next = !prev;
@@ -428,6 +508,11 @@ export default function SettingsPage() {
       );
       return next;
     });
+  }, []);
+
+  const handleWelcomeMessageDisplayChange = useCallback((value: WelcomeMessageDisplay) => {
+    setWelcomeMessageDisplay(value);
+    void updatePreferences({ welcomeMessageDisplay: value });
   }, []);
 
   const handleNotificationSoundsChange = useCallback(
@@ -518,6 +603,26 @@ export default function SettingsPage() {
     });
   }, []);
 
+  const handleTogglePersistDms = useCallback(() => {
+    setPersistDms((prev) => {
+      const next = !prev;
+      updatePreferences({ persistDms: next });
+      if (!next) {
+        // Drop any encrypted history when persistence is turned off.
+        import("../../dmStorage").then((m) => m.clearAllDmHistory()).catch(() => undefined);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleDisconnectWarning = useCallback(() => {
+    setShowDisconnectWarning((prev) => {
+      const next = !prev;
+      updatePreferences({ showDisconnectWarning: next });
+      return next;
+    });
+  }, []);
+
   const handleToggleDeveloperMode = useCallback(async () => {
     const next: UserMode = userMode === "developer" ? "expert" : "developer";
     setUserMode(next);
@@ -533,6 +638,39 @@ export default function SettingsPage() {
       console.error("Failed to set log level:", e);
     }
   }, []);
+
+  const handleToggleLogToFile = useCallback(async () => {
+    const next = !logToFile;
+    try {
+      await invoke("set_log_to_file", { enabled: next });
+      setLogToFile(next);
+      await updatePreferences({ logToFile: next });
+    } catch (e) {
+      console.error("Failed to toggle file logging:", e);
+    }
+  }, [logToFile]);
+
+  const handleToggleTerminalLogging = useCallback(async () => {
+    const next = !terminalLogging;
+    try {
+      await invoke("set_terminal_logging", { enabled: next });
+      setTerminalLogging(next);
+      await updatePreferences({ terminalLogging: next });
+    } catch (e) {
+      console.error("Failed to toggle terminal logging:", e);
+    }
+  }, [terminalLogging]);
+
+  const handleToggleAutoZipLogs = useCallback(async () => {
+    const next = !autoZipLogs;
+    try {
+      await invoke("set_auto_zip_logs", { enabled: next });
+      setAutoZipLogs(next);
+      await updatePreferences({ autoZipLogs: next });
+    } catch (e) {
+      console.error("Failed to toggle auto-zip logs:", e);
+    }
+  }, [autoZipLogs]);
 
   const handleToggleAudioBackend = useCallback(async () => {
     const next = !useRodioBackend;
@@ -611,9 +749,18 @@ export default function SettingsPage() {
       onTabChange={setTab}
       onBack={handleBack}
       mainAreaClassName={tab === "profile" ? styles.mainAreaWithPreview : undefined}
+      sidebarExtra={
+        <SettingsSearch
+          tabs={TABS}
+          onSelect={(tabId, term) => {
+            setTab(tabId as Tab);
+            setHighlightTerm(term);
+          }}
+        />
+      }
     >
       {/* Content */}
-      <main className={styles.content}>
+      <main className={styles.content} ref={contentRef}>
         {loadError && <p className={styles.error}>{loadError}</p>}
 
         {tab === "profile" && (
@@ -674,12 +821,27 @@ export default function SettingsPage() {
             />
           )}
 
+          {tab === "localization" && (
+            <LocalizationPanel
+              timeFormat={timeFormat}
+              convertToLocalTime={convertToLocalTime}
+              dateFormat={dateFormat}
+              numberFormat={numberFormat}
+              onTimeFormatChange={handleTimeFormatChange}
+              onConvertToLocalTimeChange={handleConvertToLocalTimeChange}
+              onDateFormatChange={handleDateFormatChange}
+              onNumberFormatChange={handleNumberFormatChange}
+            />
+          )}
+
           {tab === "notifications" && (
             <NotificationsPanel
               settings={notificationSounds}
               onChange={handleNotificationSoundsChange}
               enableNativeNotifications={enableNotifications}
               onToggleNativeNotifications={handleToggleNotifications}
+              welcomeMessageDisplay={welcomeMessageDisplay}
+              onWelcomeMessageDisplayChange={handleWelcomeMessageDisplayChange}
               isExpert={userMode !== "normal"}
             />
           )}
@@ -705,22 +867,30 @@ export default function SettingsPage() {
 
           {tab === "channels-roles" && <ChannelsAndRolesPanel />}
 
+          {tab === "plugins" && <PluginsPanel />}
+
           {tab === "advanced" && (
             <AdvancedPanel
               userMode={userMode}
               klipyApiKey={klipyApiKey}
               logLevel={logLevel}
+              logToFile={logToFile}
+              terminalLogging={terminalLogging}
+              autoZipLogs={autoZipLogs}
               autoReconnect={autoReconnect}
               autoUpdateOnStartup={autoUpdateOnStartup}
-              timeFormat={timeFormat}
-              convertToLocalTime={convertToLocalTime}
+              persistDms={persistDms}
+              showDisconnectWarning={showDisconnectWarning}
               onToggleMode={handleToggleMode}
               onKlipyApiKeyChange={handleKlipyApiKeyChange}
               onLogLevelChange={handleLogLevelChange}
+              onToggleLogToFile={handleToggleLogToFile}
+              onToggleTerminalLogging={handleToggleTerminalLogging}
+              onToggleAutoZipLogs={handleToggleAutoZipLogs}
               onToggleAutoReconnect={handleToggleAutoReconnect}
               onToggleAutoUpdate={handleToggleAutoUpdate}
-              onTimeFormatChange={handleTimeFormatChange}
-              onConvertToLocalTimeChange={handleConvertToLocalTimeChange}
+              onTogglePersistDms={handleTogglePersistDms}
+              onToggleDisconnectWarning={handleToggleDisconnectWarning}
               onToggleDeveloperMode={handleToggleDeveloperMode}
               onReset={handleReset}
             />

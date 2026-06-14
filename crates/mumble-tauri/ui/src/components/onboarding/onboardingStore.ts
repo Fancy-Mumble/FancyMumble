@@ -9,6 +9,7 @@
 
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import { fancyVersionEncode } from "../../utils/version";
 
 import type {
   OnboardingConfig,
@@ -19,17 +20,8 @@ import type {
 /** Local-storage key for "user dismissed the onboarding modal this session". */
 const DISMISSED_PREFIX = "onboarding-dismissed:";
 
-/**
- * Minimum server `fancy_version` required for the onboarding workflow.
- *
- * Mirrors `fancy_message_support!`'s registration of the onboarding
- * message types at `(0, 3, 1)`.  Encoded the same way as the server's
- * `fancy_version_encode`: `(major << 48) | (minor << 32) | (patch << 16)`.
- * For 0.3.1 that's `3 * 2^32 + 1 * 2^16 = 12_884_967_424` — using bit
- * math here keeps the constant readable.
- */
-export const ONBOARDING_MIN_FANCY_VERSION =
-  3 * 2 ** 32 + 1 * 2 ** 16;
+/** Minimum server version for the onboarding workflow (0.3.1). */
+export const ONBOARDING_MIN_FANCY_VERSION = fancyVersionEncode(0, 3, 1);
 
 /**
  * Returns true when the connected server reports a `fancy_version` high
@@ -124,7 +116,6 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
       }
     } catch (e) {
       set({ config: null, response: null });
-      // eslint-disable-next-line no-console
       console.debug("[onboarding] hydrate skipped:", e);
     }
   },

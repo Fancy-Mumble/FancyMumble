@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
    Midnight Pretenders - Fancy Mumble
    Vaporwave palette: hot pink, electric blue, canary yellow, blush.
    Palette: Showa Girl Idol (#F21B7F #0C87F2 #3B82BF #F2E857 #F2B5A7)
@@ -100,15 +100,15 @@
   /* -- Link ------------------------------------------------------ */
   --color-link: #3b82bf;
 
-  /* -- Discord-style palette (reactions / emoji picker) ----------- */
-  --color-discord-purple: #3b82bf;
-  --color-discord-dark: #0d0d1a;
-  --color-discord-bg: #12122a;
-  --color-discord-border: #25253d;
-  --color-discord-hover: #1a1a35;
-  --color-discord-muted: #5a3a50;
-  --color-discord-text: #f2b5a7;
-  --color-discord-active: #25253d;
+  /* -- Picker palette (reactions / emoji picker) ----------- */
+  --color-picker-accent: #3b82bf;
+  --color-picker-dark: #0d0d1a;
+  --color-picker-bg: #12122a;
+  --color-picker-border: #25253d;
+  --color-picker-hover: #1a1a35;
+  --color-picker-muted: #5a3a50;
+  --color-picker-text: #f2b5a7;
+  --color-picker-active: #25253d;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.22);

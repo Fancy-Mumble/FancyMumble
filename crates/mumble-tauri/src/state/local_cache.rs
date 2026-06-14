@@ -157,6 +157,8 @@ impl LocalMessageCache {
                         pinned: false,
                         pinned_by: None,
                         pinned_at: None,
+                        plugin_name: None,
+                        plugin_components: None,
                     })
                     .collect();
                 (channel_id, chat_msgs)

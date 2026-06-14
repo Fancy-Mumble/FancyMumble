@@ -25,12 +25,18 @@ mod emotes;
 pub use emotes::{AddEmoteRequest, AddEmoteResponse, RemoveEmoteRequest};
 mod event_handler;
 mod file_server;
-pub use file_server::{DownloadRequest, UploadRequest, UploadResponse};
+pub use file_server::{
+    AdminDeleteDocumentRequest, AdminDeleteRequest, AdminListRequest, AdminPreviewRequest,
+    DownloadBytesRequest, DownloadRequest, PrivateStorageRequest, UploadBinaryRequest,
+    UploadBytesRequest, UploadRequest, UploadResponse,
+};
 mod handler;
 pub(crate) mod hash_names;
 pub(crate) mod local_cache;
 mod messaging;
 mod onboarding;
+mod server_settings;
+mod plugin_admin;
 pub mod offload;
 mod offload_ops;
 pub(crate) mod pchat;
@@ -46,6 +52,7 @@ mod shared_handle;
 pub mod types;
 
 // Re-export everything that lib.rs needs.
+pub(crate) use registry::UserHashMatch;
 pub use sessions::{ServerId, SessionMeta};
 pub use types::{
     AudioDevice, AudioSettings, ChannelEntry, ChatMessage, ConnectionStatus, DebugStats,
@@ -184,6 +191,12 @@ pub(super) struct SharedState {
     pub server: ServerMetadata,
     pub users: HashMap<u32, UserEntry>,
     pub channels: HashMap<u32, ChannelEntry>,
+    /// Avatar bytes for registered (offline) users, keyed by `user_id`.
+    /// Populated from `UserList` responses; the bulk `user-list` event ships
+    /// only size markers and the frontend fetches each avatar on demand via
+    /// `get_registered_user_texture`. Cleared on disconnect with the rest of
+    /// the per-session state.
+    pub registered_user_textures: HashMap<u32, Vec<u8>>,
     pub selected_channel: Option<u32>,
     pub current_channel: Option<u32>,
     pub permanently_listened: HashSet<u32>,
@@ -204,6 +217,20 @@ pub(super) struct SharedState {
     pub onboarding: Option<OnboardingConfig>,
     /// Local user's onboarding response, fetched on demand.
     pub onboarding_response: Option<OnboardingResponse>,
+    /// Latest editable server-settings snapshot (`None` until a
+    /// `FancyServerSettings` arrives; only admins receive it).
+    pub server_settings: Option<ServerSettingsSnapshot>,
+    /// Cached snapshot of the most recent `PluginRegistry` the server
+    /// has broadcast.  The protobuf message is delivered once after
+    /// `ServerSync` and never resent, so we cache it here to let the
+    /// frontend resync after an HMR reload via `get_plugin_registry`.
+    pub plugin_registry: Vec<PluginRegistryEntryPayload>,
+    /// Cached server-originated `plugin-data` broadcasts (file-server
+    /// config, live-doc config, plugin info, server emotes).  These are
+    /// sent once after `ServerSync` and never resent, so we cache them
+    /// to let the frontend resync after an HMR reload via
+    /// `get_plugin_broadcasts` instead of forcing a full reconnect.
+    pub plugin_broadcasts: Vec<PluginDataPayload>,
 }
 
 // --- Tauri-managed application state ------------------------------
@@ -234,10 +261,14 @@ pub struct AppState {
     /// Stream-share contexts pending pickup by freshly-opened stream popout windows.
     /// Keyed by random id; each entry is consumed once by `take_popout_stream`.
     pub(crate) popout_streams: Mutex<HashMap<String, crate::commands::popout::PopoutStreamPayload>>,
+    /// DM popout payloads pending pickup by freshly-opened DM popout windows.
+    /// Keyed by random id; each entry is consumed once by `take_popout_dm`.
+    pub(crate) popout_dms: Mutex<HashMap<String, crate::commands::popout::PopoutDmPayload>>,
     /// Live stream-popout windows, keyed by window label
     /// (`popout-stream-<id>`).  Value is the broadcaster session, used to
     /// emit `stream-popout-state opened:false` when the OS destroys the
     /// window (any close path - Alt+F4, X button, context menu, app exit).
+    #[cfg(not(target_os = "android"))]
     pub(crate) popout_stream_sessions: Mutex<HashMap<String, u32>>,
     /// Channel/session context for the (single) drawing-overlay window.
     /// Read by the overlay via `take_drawing_overlay_context` once it
@@ -247,6 +278,7 @@ pub struct AppState {
     /// Background task that follows the shared window's screen rect
     /// (Windows only) and repositions the desktop overlay accordingly.
     /// Aborted when the overlay closes.
+    #[cfg(not(target_os = "android"))]
     pub(crate) draw_overlay_tracker: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
@@ -270,8 +302,11 @@ impl AppState {
             upload_cancels: Mutex::new(HashMap::new()),
             popout_images: Mutex::new(HashMap::new()),
             popout_streams: Mutex::new(HashMap::new()),
+            popout_dms: Mutex::new(HashMap::new()),
+            #[cfg(not(target_os = "android"))]
             popout_stream_sessions: Mutex::new(HashMap::new()),
             draw_overlay_context: Mutex::new(None),
+            #[cfg(not(target_os = "android"))]
             draw_overlay_tracker: Mutex::new(None),
         }
     }
@@ -431,6 +466,8 @@ mod tests {
             pinned: false,
             pinned_by: None,
             pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
         }
     }
 

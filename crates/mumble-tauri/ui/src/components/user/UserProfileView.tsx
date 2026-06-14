@@ -1,4 +1,4 @@
-import { CloseIcon, MoonIcon, ShieldCheckIcon } from "../../icons";
+import { CloseIcon, MoonIcon, ShieldCheckIcon, UserFilledIcon } from "../../icons";
 /**
  * Full-height right-side panel showing a user's full profile.
  *
@@ -8,11 +8,12 @@ import { CloseIcon, MoonIcon, ShieldCheckIcon } from "../../icons";
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../store";
 import { SafeHtml } from "../elements/SafeHtml";
 import type { UserEntry, FancyProfile, UserMode } from "../../types";
 import { parseComment } from "../../profileFormat";
-import { useUserAvatar } from "../../lazyBlobs";
+import { useUserAvatar, useUserComment } from "../../lazyBlobs";
 import { getPreferences } from "../../preferencesStorage";
 import { useUserStats } from "../../hooks/useUserStats";
 import { formatDuration } from "../../utils/format";
@@ -126,6 +127,7 @@ function UserProfilePanel({
   onClose?: () => void;
 }>) {
   const [userMode, setUserMode] = useState<UserMode>("normal");
+  const { t } = useTranslation("sidebar");
 
   const isExpert = userMode !== "normal";
 
@@ -139,10 +141,14 @@ function UserProfilePanel({
   const stats = useUserStats(user.session, true);
 
   const avatarDataUrl = useUserAvatar(user.session, user.texture_size);
+  const liveComment = useUserComment(user.session, user.comment_size);
 
   const parsed = useMemo(
-    () => (user.comment ? parseComment(user.comment) : null),
-    [user.comment],
+    () => {
+      const c = user.comment ?? liveComment;
+      return c ? parseComment(c) : null;
+    },
+    [user.comment, liveComment],
   );
 
   const profile: FancyProfile = parsed?.profile ?? {};
@@ -189,7 +195,7 @@ function UserProfilePanel({
         <button
           className={styles.closeBtn}
           onClick={onClose}
-          aria-label="Close profile"
+          aria-label={t("userProfile.closeProfile")}
         >
           <CloseIcon width={18} height={18} />
         </button>
@@ -218,7 +224,7 @@ function UserProfilePanel({
                 className={styles.avatarImg}
               />
             ) : (
-              <span className={styles.avatarPlaceholder}>👤</span>
+              <span className={styles.avatarPlaceholder}><UserFilledIcon width={48} height={48} /></span>
             )}
             {decoration && decoration.id !== "none" && (
               <span className={styles.decoration}>{decoration.preview}</span>
@@ -258,7 +264,7 @@ function UserProfilePanel({
                 {user.name}
               </span>
               {user.user_id != null && user.user_id > 0 && (
-                <span className={styles.registeredBadge} title="Registered">
+                <span className={styles.registeredBadge} title={t("userProfile.registeredTitle")}>
                   <ShieldCheckIcon width={14} height={14} strokeWidth={2.5} />
                 </span>
               )}
@@ -305,7 +311,7 @@ function UserProfilePanel({
 
       {bio && (
         <section className={styles.section}>
-          <h3 className={styles.sectionTitle}>About Me</h3>
+          <h3 className={styles.sectionTitle}>{t("userProfile.aboutMe")}</h3>
           <SafeHtml
             html={bio}
             className={styles.bioContent}
@@ -315,15 +321,15 @@ function UserProfilePanel({
       )}
 
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Info</h3>
+        <h3 className={styles.sectionTitle}>{t("userProfile.info")}</h3>
         <div className={styles.infoGrid}>
-          <span className={styles.infoLabel}>Session</span>
+          <span className={styles.infoLabel}>{t("userProfile.labelSession")}</span>
           <span className={styles.infoValue}>{user.session}</span>
-          <span className={styles.infoLabel}>Channel</span>
+          <span className={styles.infoLabel}>{t("userProfile.labelChannel")}</span>
           <span className={styles.infoValue}>{user.channel_id}</span>
-          <span className={styles.infoLabel}>Registered</span>
+          <span className={styles.infoLabel}>{t("userProfile.labelRegistered")}</span>
           <span className={styles.infoValue}>
-            {user.user_id != null && user.user_id > 0 ? "Yes" : "No"}
+            {user.user_id != null && user.user_id > 0 ? t("userProfile.yes") : t("userProfile.no")}
           </span>
         </div>
       </section>

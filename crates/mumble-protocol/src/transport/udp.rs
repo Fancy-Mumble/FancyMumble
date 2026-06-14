@@ -17,7 +17,7 @@ use tracing::{debug, trace, warn};
 use crate::error::{Error, Result};
 use crate::message::UdpMessage;
 use crate::proto::mumble_udp;
-use crate::transport::audio_codec::{AudioPacketCodec, LegacyAudioCodec};
+use crate::transport::audio_codec::{AudioPacketCodec, LegacyAudioCodec, MumbleVarint};
 
 /// Maximum UDP datagram size (Mumble practical limit).
 const MAX_UDP_SIZE: usize = 1024;
@@ -206,6 +206,33 @@ pub fn encode_udp_message(msg: &UdpMessage) -> Vec<u8> {
     }
 }
 
+/// Encode a [`UdpMessage`] in whichever wire format the server understands:
+/// protobuf for Mumble >= 1.5, legacy varint framing otherwise.
+pub fn encode_udp_message_for(msg: &UdpMessage, protobuf: bool) -> Vec<u8> {
+    if protobuf {
+        encode_udp_message(msg)
+    } else {
+        encode_udp_message_legacy(msg)
+    }
+}
+
+/// Encode a [`UdpMessage`] in the legacy wire format used by Mumble < 1.5.
+///
+/// Audio uses the varint-framed Opus encoding; pings are a `0x20` header
+/// byte (`type 1 << 5 | target 0`) followed by the timestamp as a
+/// Mumble varint, which the server echoes back verbatim.
+pub fn encode_udp_message_legacy(msg: &UdpMessage) -> Vec<u8> {
+    match msg {
+        UdpMessage::Audio(audio) => LegacyAudioCodec::encode(audio),
+        UdpMessage::Ping(ping) => {
+            let mut buf = Vec::with_capacity(1 + 9);
+            buf.push(1 << 5); // header: type = Ping (1), target = 0
+            MumbleVarint::write(&mut buf, ping.timestamp);
+            buf
+        }
+    }
+}
+
 /// Decode a raw UDP payload (after decryption) into a [`UdpMessage`].
 ///
 /// Byte 0 is the `UDPMessageType` enum value:
@@ -230,6 +257,14 @@ pub fn decode_udp_message(data: &[u8]) -> Result<UdpMessage> {
         b if b >> 5 == 4 => {
             let audio = LegacyAudioCodec::decode(data)?;
             Ok(UdpMessage::Audio(audio))
+        }
+        // Legacy ping echo (type 1): header byte + varint timestamp.
+        b if b >> 5 == 1 => {
+            let (timestamp, _) = MumbleVarint::read(&data[1..])?;
+            Ok(UdpMessage::Ping(mumble_udp::Ping {
+                timestamp,
+                ..Default::default()
+            }))
         }
         other => Err(Error::InvalidState(format!(
             "unsupported UDP message type: 0x{other:02x}"
@@ -364,6 +399,46 @@ mod tests {
             }
             other => panic!("expected Audio, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn legacy_ping_encode_decode_roundtrip() -> Result<()> {
+        let ping = mumble_udp::Ping {
+            timestamp: 123_456,
+            ..Default::default()
+        };
+        let encoded = encode_udp_message_legacy(&UdpMessage::Ping(ping));
+        assert_eq!(encoded[0], 0x20, "legacy ping header is type 1, target 0");
+
+        let decoded = decode_udp_message(&encoded)?;
+        match decoded {
+            UdpMessage::Ping(p) => assert_eq!(p.timestamp, 123_456),
+            other => panic!("expected Ping, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_audio_encode_uses_opus_header() {
+        let audio = mumble_udp::Audio {
+            frame_number: 9,
+            opus_data: vec![0x01, 0x02],
+            ..Default::default()
+        };
+        let encoded = encode_udp_message_legacy(&UdpMessage::Audio(audio));
+        assert_eq!(encoded[0] >> 5, 4, "legacy audio header is type 4 (Opus)");
+    }
+
+    #[test]
+    fn encode_udp_message_for_switches_format() {
+        let msg = UdpMessage::Audio(mumble_udp::Audio {
+            opus_data: vec![0xAB],
+            ..Default::default()
+        });
+        let protobuf = encode_udp_message_for(&msg, true);
+        assert_eq!(protobuf[0], 0x00, "protobuf audio marker");
+        let legacy = encode_udp_message_for(&msg, false);
+        assert_eq!(legacy[0] >> 5, 4, "legacy Opus header");
     }
 
     #[test]

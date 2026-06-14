@@ -1,4 +1,7 @@
+import { CloseIcon } from "../../icons";
 import { useState, useCallback, useRef, useEffect, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
+import { Modal } from "../elements/Modal";
 import styles from "./PasswordDialog.module.css";
 
 interface PasswordDialogProps {
@@ -22,6 +25,7 @@ export default function PasswordDialog({
   showSaveOption,
   onChangeUsername,
 }: PasswordDialogProps) {
+  const { t } = useTranslation(["server", "common"]);
   const [password, setPassword] = useState("");
   const [savePassword, setSavePassword] = useState(false);
   const [editingUsername, setEditingUsername] = useState(false);
@@ -71,28 +75,34 @@ export default function PasswordDialog({
     : serverHost ?? "this server";
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="Password required">
-      <div className={styles.dialog}>
+    <Modal
+      onClose={onCancel}
+      closeOnEsc={false}
+      closeOnOverlayClick={false}
+      zIndex={200}
+      overlayClassName={styles.overlayBlur}
+    >
+      <div className={styles.dialog} role="dialog" aria-modal="true" aria-label={t("password.title")}>
         <div className={styles.header}>
-          <h2 className={styles.title}>Password Required</h2>
+          <h2 className={styles.title}>{t("password.title")}</h2>
           <button
             className={styles.closeBtn}
             onClick={onCancel}
-            aria-label="Close"
+            aria-label={t("common:actions.close")}
             type="button"
           >
-            ×
+            <CloseIcon width={16} height={16} />
           </button>
         </div>
 
         {editingUsername && onChangeUsername ? (
           <form className={styles.body} onSubmit={handleChangeUsername}>
             <p className={styles.message}>
-              Connect as a different user on <strong>{serverHost}</strong>.
+              <span dangerouslySetInnerHTML={{ __html: t("password.differentUser.message", { host: serverHost }) }} />
             </p>
             <div className={styles.field}>
               <label className={styles.label} htmlFor="pw-dialog-username">
-                New username
+                {t("password.differentUser.usernameLabel")}
               </label>
               <input
                 ref={usernameInputRef}
@@ -113,14 +123,14 @@ export default function PasswordDialog({
                 type="button"
                 onClick={() => setEditingUsername(false)}
               >
-                Back
+                {t("password.differentUser.back")}
               </button>
               <button
                 className={styles.connectBtn}
                 type="submit"
                 disabled={!usernameDraft.trim() || usernameDraft.trim() === username}
               >
-                Reconnect
+                {t("password.differentUser.reconnect")}
               </button>
             </div>
           </form>
@@ -131,13 +141,13 @@ export default function PasswordDialog({
             )}
             <p className={styles.message}>
               {error
-                ? <>Try again for <strong>{target}</strong>.</>
-                : <>The server requires a password for <strong>{target}</strong>. Enter the password to continue connecting.</>}
+                ? <span dangerouslySetInnerHTML={{ __html: t("password.retryMessage", { target }) }} />
+                : <span dangerouslySetInnerHTML={{ __html: t("password.enterMessage", { target }) }} />}
             </p>
 
             <div className={styles.field}>
               <label className={styles.label} htmlFor="pw-dialog-input">
-                Password
+                {t("password.passwordLabel")}
               </label>
               <input
                 ref={inputRef}
@@ -156,7 +166,7 @@ export default function PasswordDialog({
                 className={styles.changeUserBtn}
                 onClick={() => setEditingUsername(true)}
               >
-                Use a different username
+                {t("password.changeUsername")}
               </button>
             )}
 
@@ -169,7 +179,7 @@ export default function PasswordDialog({
                     onChange={(e) => setSavePassword(e.target.checked)}
                     className={styles.checkbox}
                   />
-                  Save password
+                  {t("password.savePassword")}
                 </label>
               )}
               <button
@@ -177,19 +187,19 @@ export default function PasswordDialog({
                 type="button"
                 onClick={onCancel}
               >
-                Cancel
+                {t("common:actions.cancel")}
               </button>
               <button
                 className={styles.connectBtn}
                 type="submit"
                 disabled={!password}
               >
-                Connect
+                {t("password.connect")}
               </button>
             </div>
           </form>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }

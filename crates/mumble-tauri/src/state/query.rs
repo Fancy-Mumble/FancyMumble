@@ -49,6 +49,109 @@ impl AppState {
             .and_then(|s| s.users.get(&session).and_then(|u| u.texture.clone()))
     }
 
+    /// Return the avatar bytes for a registered (offline) user by `user_id`,
+    /// cached from the `UserList` response.  The frontend fetches these on
+    /// demand after the bulk `user-list` event delivered only `texture_size`.
+    pub fn registered_user_texture(&self, user_id: u32) -> Option<Vec<u8>> {
+        self.inner.snapshot()
+            .lock()
+            .ok()
+            .and_then(|s| s.registered_user_textures.get(&user_id).cloned())
+    }
+
+    /// Drop all cached registered-user avatar bytes.  Called when the last
+    /// frontend view consuming the user list closes; the next
+    /// `request_user_list` re-populates the cache.
+    pub fn release_registered_user_textures(&self) {
+        if let Ok(mut s) = self.inner.snapshot().lock() {
+            s.registered_user_textures = std::collections::HashMap::new();
+        }
+    }
+
+    /// Like [`Self::user_texture`], but when the user HAS an avatar whose bytes
+    /// are not yet loaded, lazily requests the blob from the server and waits
+    /// (bounded) for it to arrive.  This is what lets the backend avoid holding
+    /// an avatar blob for every connected user - they are fetched only when a
+    /// client first views them.
+    pub(crate) async fn user_texture_or_fetch(&self, session: u32) -> Option<Vec<u8>> {
+        if let Some(tex) = self.user_texture(session) {
+            return Some(tex); // already loaded
+        }
+        // Capture the server this session belongs to, so a mid-fetch server
+        // switch cannot make us poll a different session table.
+        let shared = self.inner.snapshot();
+        let handle = {
+            let s = shared.lock().ok()?;
+            let user = s.users.get(&session)?;
+            let _ = user.texture_marker?; // no avatar => nothing to fetch
+            s.conn.client_handle.clone()?
+        };
+        let _ = handle
+            .send(mumble_protocol::command::RequestBlob {
+                session_texture: vec![session],
+                session_comment: Vec::new(),
+                channel_description: Vec::new(),
+                user_id_comment: Vec::new(),
+            })
+            .await;
+        // Poll briefly for the blob; the UserState handler stores it on arrival.
+        for _ in 0..160 {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            if let Some(tex) = shared
+                .lock()
+                .ok()
+                .and_then(|s| s.users.get(&session).and_then(|u| u.texture.clone()))
+            {
+                return Some(tex);
+            }
+        }
+        None
+    }
+
+    /// Cached comment/bio text for a user (no fetch).
+    pub fn user_comment(&self, session: u32) -> Option<String> {
+        self.inner.snapshot()
+            .lock()
+            .ok()
+            .and_then(|s| s.users.get(&session).and_then(|u| u.comment.clone()))
+    }
+
+    /// Like [`Self::user_comment`], but when the user HAS a comment whose text
+    /// is not loaded, lazily requests the blob and waits (bounded) for it -
+    /// mirrors [`Self::user_texture_or_fetch`] so the backend holds a bio only
+    /// for users a client has actually viewed.
+    pub(crate) async fn user_comment_or_fetch(&self, session: u32) -> Option<String> {
+        if let Some(c) = self.user_comment(session) {
+            return Some(c);
+        }
+        let shared = self.inner.snapshot();
+        let handle = {
+            let s = shared.lock().ok()?;
+            let user = s.users.get(&session)?;
+            let _ = user.comment_marker?; // no comment => nothing to fetch
+            s.conn.client_handle.clone()?
+        };
+        let _ = handle
+            .send(mumble_protocol::command::RequestBlob {
+                session_texture: Vec::new(),
+                session_comment: vec![session],
+                channel_description: Vec::new(),
+                user_id_comment: Vec::new(),
+            })
+            .await;
+        for _ in 0..160 {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            if let Some(c) = shared
+                .lock()
+                .ok()
+                .and_then(|s| s.users.get(&session).and_then(|u| u.comment.clone()))
+            {
+                return Some(c);
+            }
+        }
+        None
+    }
+
     /// Return the description text for a single channel, or `None` if the
     /// channel is unknown or has no description.  Used by the frontend to
     /// lazily fetch descriptions after `get_channels` returned only the

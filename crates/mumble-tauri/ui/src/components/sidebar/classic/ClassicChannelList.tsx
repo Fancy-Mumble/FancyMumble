@@ -10,8 +10,9 @@ import { ChevronRightIcon, ListenBadgeIcon, LockIcon } from "../../../icons";
  */
 
 import { memo, useState, useMemo, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import type { ChannelEntry, UserEntry } from "../../../types";
-import { colorFor } from "../UserListItem";
+import { colorFor } from "../user/UserListItem";
 import { useUserAvatar } from "../../../lazyBlobs";
 import { PchatBadge } from "../PchatBadge";
 import { useChannelDropTarget } from "../../../utils/userMoveDnd";
@@ -19,7 +20,7 @@ import { PERM_ENTER } from "../../../utils/permissions";
 import {
   ChannelReorderWrapper,
   useChannelReorderHandler,
-} from "../channelReorder";
+} from "../channel/channelReorder";
 import styles from "./ClassicChannelList.module.css";
 
 const MAX_STACKED = 3;
@@ -153,7 +154,7 @@ function ClassicChannelListImpl({
       return next;
     });
   }, []);
-
+  const { t } = useTranslation(["sidebar", "common"]);
   const usersByChannel = useMemo(() => {
     const map = new Map<number, UserEntry[]>();
     for (const u of users) {
@@ -244,7 +245,7 @@ function ClassicChannelListImpl({
             <button
               className={styles.expandBtn}
               onClick={() => toggleExpand(channel.id)}
-              aria-label={isOpen ? "Collapse" : "Expand"}
+              aria-label={isOpen ? t("common:actions.collapse") : t("channelList.expand")}
             >
               <ChevronRightIcon
                 className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ""}`}
@@ -258,21 +259,21 @@ function ClassicChannelListImpl({
               onDoubleClick={() => onJoinChannel(channel.id)}
             >
               <span className={styles.channelName}>
-                {channel.name || "Unnamed"}
+                {channel.name || t("channelList.unnamed")}
                 {isLocked && (
-                  <span className={styles.lockIndicator} title="No permission to join">
+                  <span className={styles.lockIndicator} title={t("channelList.noPermissionToJoin")}>
                     <LockIcon width={11} height={11} />
                   </span>
                 )}
                 {isListened && (
-                  <span className={styles.listenIndicator} title="Listening">
+                  <span className={styles.listenIndicator} title={t("channelList.listening")}>
                     <ListenBadgeIcon width={12} height={12} />
                   </span>
                 )}
                 <PchatBadge protocol={channel.pchat_protocol} />
               </span>
               <span className={styles.channelMeta}>
-                {totalUsers} {totalUsers === 1 ? "member" : "members"}
+                {t("channelList.member", { count: totalUsers })}
               </span>
             </button>
             {unread > 0 && (
@@ -315,14 +316,14 @@ function ClassicChannelListImpl({
       >
         <div className={styles.channelInfo}>
           <span className={styles.channelName}>
-            {channel.name || "Root"}
+            {channel.name || t("channelList.root")}
             {isLocked && (
-              <span className={styles.lockIndicator} title="No permission to join">
+              <span className={styles.lockIndicator} title={t("channelList.noPermissionToJoin")}>
                 <LockIcon width={11} height={11} />
               </span>
             )}
             {isListened && (
-              <span className={styles.listenIndicator} title="Listening">
+              <span className={styles.listenIndicator} title={t("channelList.listening")}>
                 <ListenBadgeIcon width={12} height={12} />
               </span>
             )}
@@ -351,7 +352,7 @@ function ClassicChannelListImpl({
             onContextMenu={(e) => onContextMenu(e, currentChannelEntry.id)}
           >
             <div className={styles.channelInfo}>
-              <span className={styles.channelName}>{currentChannelEntry.name || "Root"}</span>
+              <span className={styles.channelName}>{currentChannelEntry.name || t("channelList.root")}</span>
             </div>
             <StackedAvatars users={usersByChannel.get(currentChannelEntry.id) ?? []} />
           </button>
@@ -371,7 +372,7 @@ function ClassicChannelListImpl({
           onContextMenu={(e) => onContextMenu(e, root.id)}
         >
           <div className={styles.channelInfo}>
-            <span className={styles.channelName}>{root.name || "Root"}</span>
+            <span className={styles.channelName}>{root.name || t("channelList.root")}</span>
           </div>
           <StackedAvatars users={usersByChannel.get(root.id) ?? []} />
         </button>

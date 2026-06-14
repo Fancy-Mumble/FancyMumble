@@ -1,16 +1,12 @@
 import { HashIcon, MessageIcon, SearchIcon, UserIcon } from "../../icons";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import type { SearchResult, SearchCategory } from "../../types";
 import styles from "./SuperSearch.module.css";
 
 const CATEGORY_ORDER: SearchCategory[] = ["channel", "user", "message"];
-const CATEGORY_LABELS: Record<SearchCategory, string> = {
-  channel: "Channels",
-  user: "Users",
-  message: "Messages",
-};
 
 interface SuperSearchProps {
   readonly open: boolean;
@@ -32,6 +28,13 @@ export function SuperSearch({
   const backdropRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { t } = useTranslation("sidebar");
+
+  const categoryLabels = useMemo<Record<SearchCategory, string>>(() => ({
+    channel: t("superSearch.categoryChannels"),
+    user: t("superSearch.categoryUsers"),
+    message: t("superSearch.categoryMessages"),
+  }), [t]);
 
   // Focus input when opened.
   useEffect(() => {
@@ -145,7 +148,6 @@ export function SuperSearch({
   let flatIdx = 0;
 
   return createPortal(
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <div
       ref={backdropRef}
       className={styles.backdrop}
@@ -164,7 +166,7 @@ export function SuperSearch({
             ref={inputRef}
             className={styles.input}
             type="text"
-            placeholder="Search channels, users, messages..."
+            placeholder={t("superSearch.placeholder")}
             value={query}
             onChange={handleChange}
           />
@@ -173,13 +175,13 @@ export function SuperSearch({
         {/* Results */}
         <div ref={resultsRef} className={styles.results}>
           {query.trim() && results.length === 0 && (
-            <div className={styles.empty}>No results found</div>
+            <div className={styles.empty}>{t("superSearch.noResults")}</div>
           )}
 
           {grouped.map((group) => (
             <div key={group.category}>
               <div className={styles.categoryLabel}>
-                {CATEGORY_LABELS[group.category]}
+                {categoryLabels[group.category]}
               </div>
               {group.items.map((r) => {
                 const idx = flatIdx++;
@@ -208,9 +210,9 @@ export function SuperSearch({
 
         {/* Footer hints */}
         <div className={styles.footer}>
-          <span><span className={styles.footerKey}>↑↓</span> navigate</span>
-          <span><span className={styles.footerKey}>↵</span> select</span>
-          <span><span className={styles.footerKey}>esc</span> close</span>
+          <span><span className={styles.footerKey}>â†‘â†“</span> {t("superSearch.hintNavigate")}</span>
+          <span><span className={styles.footerKey}>â†µ</span> {t("superSearch.hintSelect")}</span>
+          <span><span className={styles.footerKey}>esc</span> {t("superSearch.hintClose")}</span>
         </div>
       </div>
     </div>,

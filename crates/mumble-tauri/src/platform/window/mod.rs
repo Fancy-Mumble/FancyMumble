@@ -148,6 +148,7 @@ pub trait WindowExt {
     /// Returns [`WindowExtError::Unsupported`] on platforms without a
     /// native implementation (currently Linux/X11 - no equivalent of
     /// `WDA_EXCLUDEFROMCAPTURE` exists at the X11 layer).
+    #[cfg(not(target_os = "android"))]
     fn set_excluded_from_capture(&self, excluded: bool) -> Result<(), WindowExtError>;
 }
 
@@ -160,6 +161,7 @@ impl WindowExt for WebviewWindow {
         }
     }
 
+    #[cfg(not(target_os = "android"))]
     fn set_excluded_from_capture(&self, excluded: bool) -> Result<(), WindowExtError> {
         #[cfg(target_os = "windows")]
         {

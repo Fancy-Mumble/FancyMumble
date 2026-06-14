@@ -1,6 +1,6 @@
 [package]
 name = "mumble-protocol"
-version = "0.2.18"
+version = "0.3.0"
 edition = "2021"
 description = "Async Mumble protocol client library with priority-based work queue"
 license = "MIT"
@@ -57,6 +57,7 @@ hkdf = { version = "0.12", optional = true }
 sha2 = { version = "0.10", optional = true }
 hmac = { version = "0.12", optional = true }
 rand = { version = "0.10.0", optional = true }
+zeroize = { version = "1", features = ["zeroize_derive"], optional = true }
 rmp-serde = { version = "1", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_bytes = { version = "0.11", optional = true }
@@ -80,6 +81,7 @@ persistent-chat = [
     "sha2",
     "hmac",
     "rand",
+    "zeroize",
     "rmp-serde",
     "uuid",
     "serde_bytes",

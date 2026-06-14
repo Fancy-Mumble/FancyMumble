@@ -1,11 +1,17 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Routes, Route, useNavigate, Navigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { initEventListeners, useAppStore } from "./store";
 import { getPreferences, getSavedAudioSettings, isFirstRun, getNotificationSounds } from "./preferencesStorage";
-import { setKlipyApiKey } from "./components/chat/GifPicker";
-import { setKlipyApiKey as setKlipyApiKeyBanner } from "./pages/settings/KlipyGifBrowser";
+import { setKlipyApiKey } from "./components/chat/gif/klipyConfig";
 import { loadShortcuts, applyAllGlobalShortcuts } from "./pages/settings/shortcutHelpers";
+import {
+  loadUserShortcuts,
+  applyAllUserShortcuts,
+  JUMP_TO_USER_EVENT,
+  type JumpToUserDetail,
+} from "./pages/settings/userShortcuts";
 import { useVisualViewport } from "./hooks/useVisualViewport";
 import { useNotificationSounds } from "./hooks/useNotificationSounds";
 import { useSpoilerReveal } from "./hooks/useSpoilerReveal";
@@ -18,16 +24,31 @@ import ConnectPage from "./pages/ConnectPage";
 import LoadingSplash from "./components/elements/LoadingSplash";
 import { isUpdaterWindow } from "./updater";
 import UpdaterWindow from "./updater/UpdaterWindow";
-import PopoutPage from "./pages/PopoutPage";
-import StreamPopoutPage from "./pages/StreamPopoutPage";
-import DrawOverlayPage from "./pages/DrawOverlayPage";
-import OnboardingModal from "./components/onboarding/OnboardingModal";
+import i18n, { registerLanguage, type LocaleBundle } from "./i18n";
+import { isE2E } from "./utils/e2e";
 
 const ChatPage = lazy(() => import("./pages/ChatPage"));
 const SettingsPage = lazy(() => import("./pages/settings"));
 const AdminPanel = lazy(() => import("./pages/admin"));
 const RoleEditorPage = lazy(() => import("./pages/admin/RoleEditorPage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
+const FriendsPage = lazy(() => import("./pages/FriendsPage"));
+const MarketplacePluginPage = lazy(() => import("./pages/marketplace/PluginPage"));
+const TranslationPickerOverlay = lazy(() => import("./components/translation/TranslationPickerOverlay"));
+const OnboardingModal = lazy(() => import("./components/onboarding/OnboardingModal"));
+const PluginInteractionLayer = lazy(() => import("./components/plugin/PluginInteractionLayer"));
+const PluginDisabledDialog = lazy(() => import("./components/elements/PluginDisabledDialog"));
+const WelcomeMessageModal = lazy(() => import("./components/server/WelcomeMessageModal"));
+// Popout pages each render only in their own dedicated window, so the main
+// window must not pay their cost.  TranslationPopoutPage in particular pulled
+// `country-flag-icons` (~330 kB, all flags) + `language-flag-colors` (~345 kB)
+// into the main startup bundle/heap; lazying it keeps both out of every window
+// that doesn't show the translator.
+const PopoutPage = lazy(() => import("./pages/PopoutPage"));
+const StreamPopoutPage = lazy(() => import("./pages/StreamPopoutPage"));
+const DmPopoutPage = lazy(() => import("./pages/DmPopoutPage"));
+const DrawOverlayPage = lazy(() => import("./pages/DrawOverlayPage"));
+const TranslationPopoutPage = lazy(() => import("./pages/TranslationPopoutPage"));
 
 /**
  * Returns true when this webview window is an image popout window.
@@ -43,7 +64,10 @@ function isPopoutWindow(): boolean {
   // We run this synchronously by reading the document title fallback.
   const tauriInternals = (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__;
   const label = tauriInternals?.metadata?.currentWindow?.label;
-  return !!label && label.startsWith("popout-") && !label.startsWith("popout-stream-");
+  return !!label
+    && label.startsWith("popout-")
+    && !label.startsWith("popout-stream-")
+    && !label.startsWith("popout-dm-");
 }
 
 /** True when this webview is a stream-share popout (`popout-stream-<id>`). */
@@ -52,6 +76,22 @@ function isStreamPopoutWindow(): boolean {
   const tauriInternals = (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__;
   const label = tauriInternals?.metadata?.currentWindow?.label;
   return !!label && label.startsWith("popout-stream-");
+}
+
+/** True when this webview is a DM popout (`popout-dm-<id>`). */
+function isDmPopoutWindow(): boolean {
+  if (new URLSearchParams(globalThis.location.search).has("popout-dm")) return true;
+  const tauriInternals = (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__;
+  const label = tauriInternals?.metadata?.currentWindow?.label;
+  return !!label && label.startsWith("popout-dm-");
+}
+
+/** True when this webview is the translation helper popout (`popout-translation`). */
+function isTranslationPopoutWindow(): boolean {
+  if (new URLSearchParams(globalThis.location.search).has("popout-translation")) return true;
+  const tauriInternals = (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__;
+  const label = tauriInternals?.metadata?.currentWindow?.label;
+  return label === "popout-translation";
 }
 
 /**
@@ -68,24 +108,34 @@ function isDrawOverlayWindow(): boolean {
   return label === "draw-overlay";
 }
 
-const enum WindowKind { Main, Popout, StreamPopout, Updater, DrawOverlay }
+const enum WindowKind { Main, Popout, StreamPopout, DmPopout, TranslationPopout, Updater, DrawOverlay }
 
 function getWindowKind(): WindowKind {
   if (isUpdaterWindow()) return WindowKind.Updater;
   if (isDrawOverlayWindow()) return WindowKind.DrawOverlay;
   if (isStreamPopoutWindow()) return WindowKind.StreamPopout;
+  if (isDmPopoutWindow()) return WindowKind.DmPopout;
+  if (isTranslationPopoutWindow()) return WindowKind.TranslationPopout;
   if (isPopoutWindow()) return WindowKind.Popout;
   return WindowKind.Main;
 }
 
-export default function App() {
+function renderWindowContent() {
   switch (getWindowKind()) {
-    case WindowKind.Updater:      return <UpdaterWindow />;
-    case WindowKind.DrawOverlay:  return <DrawOverlayPage />;
-    case WindowKind.StreamPopout: return <StreamPopoutPage />;
-    case WindowKind.Popout:       return <PopoutPage />;
-    default:                      return <MainApp />;
+    case WindowKind.Updater:           return <UpdaterWindow />;
+    case WindowKind.DrawOverlay:       return <DrawOverlayPage />;
+    case WindowKind.StreamPopout:      return <StreamPopoutPage />;
+    case WindowKind.DmPopout:          return <DmPopoutPage />;
+    case WindowKind.TranslationPopout: return <TranslationPopoutPage />;
+    case WindowKind.Popout:            return <PopoutPage />;
+    default:                           return <MainApp />;
   }
+}
+
+export default function App() {
+  // Outer Suspense boundary for the now-lazy popout pages; MainApp keeps its
+  // own inner Suspense for routes.
+  return <Suspense fallback={<LoadingSplash />}>{renderWindowContent()}</Suspense>;
 }
 
 function MainApp() {
@@ -115,10 +165,12 @@ function MainApp() {
   // Also apply saved audio settings and shortcuts to the backend so
   // they take effect without the user visiting the settings page.
   useEffect(() => {
-    isFirstRun().then(setFirstRun);
+    // Under e2e automation, skip the first-run welcome flow so tests land
+    // straight on the connect page with a deterministic DOM.
+    if (isE2E()) setFirstRun(false);
+    else isFirstRun().then(setFirstRun);
     getPreferences().then((prefs) => {
       setKlipyApiKey(prefs.klipyApiKey);
-      setKlipyApiKeyBanner(prefs.klipyApiKey);
       useAppStore.setState({ disableLinkPreviews: prefs.disableLinkPreviews ?? false });
       useAppStore.setState({ enableExternalEmbeds: prefs.enableExternalEmbeds ?? false });
       useAppStore.setState({ streamerMode: prefs.streamerMode ?? false });
@@ -165,6 +217,9 @@ function MainApp() {
     loadShortcuts().then((sc) => {
       applyAllGlobalShortcuts(sc).catch(console.error);
     });
+    loadUserShortcuts().then((us) => {
+      applyAllUserShortcuts(us).catch(console.error);
+    });
   }, []);
 
   // Sync notification sounds when settings page saves changes.
@@ -176,6 +231,44 @@ function MainApp() {
     globalThis.addEventListener("notification-sounds-changed", handler);
     return () => globalThis.removeEventListener("notification-sounds-changed", handler);
   }, []);
+
+  // Global "jump to user" shortcuts: identify the user by cert hash
+  // when available (matches on whichever connected server they happen
+  // to be visible on); fall back to a server-scoped name lookup for
+  // anonymous users with no certificate hash.
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const detail = (e as CustomEvent<JumpToUserDetail>).detail;
+      if (!detail) return;
+      try {
+        type Match = { serverId: string; userSession: number; userName: string };
+        let match: Match | null = null;
+        if (detail.userHash) {
+          match = await invoke<Match | null>("find_user_by_hash", { userHash: detail.userHash });
+        }
+        if (!match && detail.serverId) {
+          match = await invoke<Match | null>("find_user_in_server", {
+            serverId: detail.serverId,
+            userName: detail.userName,
+          });
+        }
+        if (!match) {
+          console.warn("jump-to-user: target user not online", detail);
+          return;
+        }
+        const state = useAppStore.getState();
+        if (state.activeServerId !== match.serverId) {
+          await state.switchServer(match.serverId);
+        }
+        navigate("/chat");
+        await useAppStore.getState().selectDmUser(match.userSession);
+      } catch (err) {
+        console.error("jump-to-user failed:", err);
+      }
+    };
+    globalThis.addEventListener(JUMP_TO_USER_EVENT, handler);
+    return () => globalThis.removeEventListener(JUMP_TO_USER_EVENT, handler);
+  }, [navigate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,6 +288,50 @@ function MainApp() {
     };
   }, [navigate]);
 
+  // Translation helper: the popout pushes its currently-edited language
+  // (and the in-progress bundle for custom languages) on every change so
+  // the main window's UI switches to it live.  Built-in languages send a
+  // null bundle since the main window already has them baked in.
+  useEffect(() => {
+    const unlisten = listen<{ code: string; bundle: Partial<LocaleBundle> | null }>(
+      "translation:apply",
+      (e) => {
+        const { code, bundle } = e.payload;
+        if (!code) return;
+        if (bundle) registerLanguage(code, bundle);
+        if (i18n.language !== code) void i18n.changeLanguage(code);
+        else i18n.emit("languageChanged", code);
+      },
+    );
+    return () => { void unlisten.then((f) => f()); };
+  }, []);
+
+  // fancy:// deep links emitted by the Rust deep-link plugin.
+  // Currently supported:
+  //   fancy://marketplace/plugin/<id>  -> open plugin detail page
+  useEffect(() => {
+    const unlisten = listen<string>("deep-link-open", (e) => {
+      const raw = e.payload;
+      let url: URL;
+      try {
+        url = new URL(raw);
+      } catch {
+        console.warn("deep-link: invalid URL", raw);
+        return;
+      }
+      if (url.protocol !== "fancy:") return;
+      // URL parsing of fancy://marketplace/plugin/<id> puts
+      // "marketplace" into the host and "/plugin/<id>" into the path.
+      const segments = [url.host, ...url.pathname.split("/")].filter(Boolean);
+      if (segments[0] === "marketplace" && segments[1] === "plugin" && segments[2]) {
+        navigate(`/marketplace/plugin/${encodeURIComponent(segments[2])}`);
+      } else {
+        console.warn("deep-link: unhandled route", segments);
+      }
+    });
+    return () => { unlisten.then((f) => f()); };
+  }, [navigate]);
+
   // Wait until we know the first-run status before rendering routes.
   if (firstRun === null) return <LoadingSplash />;
 
@@ -212,14 +349,22 @@ function MainApp() {
             <>
               <Route path="/" element={<ConnectPage />} />
               <Route path="/chat" element={<ChatPage />} />
+              <Route path="/friends" element={<FriendsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/admin" element={<AdminPanel />} />
               <Route path="/admin/role/:groupName" element={<RoleEditorPage />} />
+              <Route path="/marketplace/plugin/:id" element={<MarketplacePluginPage />} />
             </>
           )}
         </Routes>
       </Suspense>
-      <OnboardingModal />
+      <Suspense fallback={null}>
+        <OnboardingModal />
+        <PluginInteractionLayer />
+        <TranslationPickerOverlay />
+        <PluginDisabledDialog />
+        <WelcomeMessageModal />
+      </Suspense>
     </div>
   );
 }

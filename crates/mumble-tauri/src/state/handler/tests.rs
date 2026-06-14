@@ -1,4 +1,5 @@
 #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
+#![allow(deprecated, reason = "tests exercise the legacy PluginDataTransmission wire fields")]
 use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
@@ -96,7 +97,9 @@ fn make_user(session: u32, name: &str) -> UserEntry {
         channel_id: 0,
         user_id: None,
         texture: None,
+        texture_marker: None,
         comment: None,
+        comment_marker: None,
         mute: false,
         deaf: false,
         suppress: false,
@@ -175,8 +178,43 @@ fn version_updates_state() {
     assert_eq!(state.server.version_info.version_v2, Some(42));
     drop(state);
 
-    // Version handler emits no events.
-    assert!(emitter.events().is_empty());
+    // Version handler emits a `server-version` event so the frontend can
+    // refresh its cached `serverFancyVersion` reactively.
+    assert_eq!(emitter.event_names(), vec!["server-version"]);
+}
+
+#[test]
+fn version_without_fancy_preserves_known_fancy_version() {
+    let (ctx, _emitter) = make_ctx();
+
+    // A Fancy server announces its extension version.
+    let fancy = mumble_tcp::Version {
+        release: Some("Fancy Mumble".into()),
+        fancy_version: Some(mumble_protocol::state::fancy_version_encode(0, 4, 0)),
+        ..Default::default()
+    };
+    fancy.handle(&ctx);
+
+    // A later standard `Version` message omits `fancy_version`.  It must
+    // NOT erase the value learned above, otherwise the UI would wrongly
+    // gate Fancy-only features off for the rest of the session.
+    let standard = mumble_tcp::Version {
+        release: Some("Mumble 1.5".into()),
+        fancy_version: None,
+        ..Default::default()
+    };
+    standard.handle(&ctx);
+
+    let state = ctx.shared.lock().unwrap();
+    assert_eq!(
+        state.server.fancy_version,
+        Some(mumble_protocol::state::fancy_version_encode(0, 4, 0)),
+        "a later Version without fancy_version must not clobber a known value"
+    );
+    assert_eq!(
+        state.server.version_info.fancy_version,
+        Some(mumble_protocol::state::fancy_version_encode(0, 4, 0))
+    );
 }
 
 // -- ServerSync ----------------------------------------------------
@@ -455,11 +493,12 @@ fn user_state_no_session_is_noop() {
 }
 
 /// When a post-sync `UserState` arrives with `texture_hash` but no `texture`,
-/// the handler must request the full blob so the avatar becomes visible.
-/// (Before this fix, `texture_hash` was silently ignored for post-sync updates,
-/// causing missing avatars when a user joins *after* us and sets their texture.)
+/// the handler records the avatar's existence as a non-zero `texture_marker`
+/// (so the frontend knows it has one) but does NOT eagerly fetch the blob -
+/// avatars are loaded lazily on first view via `get_user_texture`, keeping the
+/// backend from holding a blob for every connected user.
 #[tokio::test]
-async fn user_state_texture_hash_triggers_blob_request() {
+async fn user_state_texture_hash_records_marker_lazily() {
     let (ctx, emitter) = make_ctx();
     {
         let mut state = ctx.shared.lock().unwrap();
@@ -478,23 +517,25 @@ async fn user_state_texture_hash_triggers_blob_request() {
     };
     us.handle(&ctx);
 
-    // The handler spawns a task to request the blob.  Give it a
-    // moment to run (it will find no client_handle and exit gracefully).
     tokio::task::yield_now().await;
 
-    // User is still present and the texture is unchanged (the blob
-    // response would fill it in later).
+    // The avatar's existence is recorded (non-zero marker) but its bytes are
+    // NOT fetched eagerly - that happens lazily on first view.
     let state = ctx.shared.lock().unwrap();
-    assert!(state.users.contains_key(&10));
+    let user = state.users.get(&10).unwrap();
+    assert!(user.texture.is_none(), "bytes must not be fetched eagerly");
+    assert!(user.texture_marker.is_some(), "avatar existence must be recorded");
     drop(state);
 
     // The handler should emit state-changed since we are synced.
     assert!(emitter.event_names().contains(&"state-changed".to_string()));
 }
 
-/// Same as above but for `comment_hash` without comment.
+/// Same as the avatar case but for `comment_hash`: the bio's existence is
+/// recorded as a non-zero `comment_marker` without eagerly fetching the blob -
+/// it is loaded lazily on first view via `get_user_comment`.
 #[tokio::test]
-async fn user_state_comment_hash_triggers_blob_request() {
+async fn user_state_comment_hash_records_marker_lazily() {
     let (ctx, emitter) = make_ctx();
     {
         let mut state = ctx.shared.lock().unwrap();
@@ -513,7 +554,9 @@ async fn user_state_comment_hash_triggers_blob_request() {
     tokio::task::yield_now().await;
 
     let state = ctx.shared.lock().unwrap();
-    assert!(state.users.contains_key(&10));
+    let user = state.users.get(&10).unwrap();
+    assert!(user.comment.is_none(), "bio text must not be fetched eagerly");
+    assert!(user.comment_marker.is_some(), "bio existence must be recorded");
     drop(state);
 
     assert!(emitter.event_names().contains(&"state-changed".to_string()));
@@ -1152,6 +1195,31 @@ fn reject_default_reason() {
     );
 }
 
+#[test]
+fn reject_includes_server_id_when_active() {
+    let (ctx, emitter) = make_ctx();
+    let server_id = crate::state::sessions::ServerId::new();
+    {
+        let mut state = ctx.shared.lock().unwrap();
+        state.server_id = Some(server_id);
+        state.conn.status = ConnectionStatus::Connecting;
+    }
+
+    let r = mumble_tcp::Reject {
+        reason: Some("Wrong certificate or password for existing user".into()),
+        r#type: Some(3),
+    };
+    r.handle(&ctx);
+
+    let events = emitter.events();
+    assert_eq!(events[0].0, "connection-rejected");
+    assert_eq!(
+        events[0].1["serverId"].as_str().unwrap(),
+        server_id.to_string()
+    );
+    assert_eq!(events[0].1["reject_type"].as_i64().unwrap(), 3);
+}
+
 // -- ServerConfig --------------------------------------------------
 
 #[test]
@@ -1344,7 +1412,13 @@ fn plugin_data_payload_content() {
     let plugin = events.iter().find(|(n, _)| n == "plugin-data").unwrap();
     assert_eq!(plugin.1["sender_session"].as_u64().unwrap(), 7);
     assert_eq!(plugin.1["data_id"].as_str().unwrap(), "test-id");
-    assert_eq!(plugin.1["data"].as_array().unwrap().len(), 3);
+    // `data` is serialised as a base64 string (PluginDataPayload uses
+    // `serialize_bytes_base64`), not a JSON number array.
+    use base64::Engine as _;
+    let data = base64::engine::general_purpose::STANDARD
+        .decode(plugin.1["data"].as_str().unwrap())
+        .unwrap();
+    assert_eq!(data, vec![1, 2, 3]);
 }
 
 #[test]
@@ -1356,7 +1430,8 @@ fn plugin_data_no_data_emits_empty_defaults() {
     let events = emitter.events();
     let plugin = events.iter().find(|(n, _)| n == "plugin-data").unwrap();
     assert_eq!(plugin.1["data_id"].as_str().unwrap(), "");
-    assert!(plugin.1["data"].as_array().unwrap().is_empty());
+    // No data -> empty byte slice -> base64 encoding of "" is "".
+    assert_eq!(plugin.1["data"].as_str().unwrap(), "");
 }
 
 // -- PermissionQuery -----------------------------------------------

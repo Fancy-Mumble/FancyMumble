@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AudioSettings } from "../../types";
+import { getPreferences, updatePreferences } from "../../preferencesStorage";
 import { SparklesIcon, SlidersIcon } from "../../icons";
 import { SliderField } from "./SharedControls";
 import { VuMeter, type VuMarker } from "./VuMeter";
 import { RadioCardGroup, type RadioCardOption } from "../../components/elements/RadioCardGroup";
 import styles from "./SettingsPage.module.css";
+import panelStyles from "./CalibrationPanel.module.css";
+
+type TFn = (key: string, opts?: Record<string, unknown>) => string;
 
 type CalibrationMode = "auto" | "manual";
 
@@ -18,7 +23,30 @@ type ReplayPhase =
   | { phase: "playing"; elapsed_ms: number; total_ms: number };
 
 const SPEECH_TARGET_MS = 5000;
-const CALIBRATION_DONE_KEY = "fancy_calibration_done";
+/**
+ * Fingerprint of the audio settings that a voice-activation calibration
+ * depends on.  Persisted in the preferences store (`preferences.json`,
+ * via `calibrationSignature`) so it survives window reopen and app
+ * restart.  The "calibration needed" hint reappears only when this
+ * fingerprint is missing (never calibrated) or differs from the current
+ * one (a relevant input setting changed) - NOT merely because the
+ * window was reopened.
+ *
+ * Only input-chain settings that change what the calibrator measures
+ * are included.  The values calibration itself produces
+ * (`vad_threshold`, `noise_gate_close_ratio`, `hold_frames`,
+ * `max_gain_db`) are deliberately excluded so a completed calibration
+ * does not invalidate itself, and the playback / encoding / PTT
+ * settings are excluded because they do not affect mic calibration.
+ */
+function calibrationSignature(s: AudioSettings): string {
+  return JSON.stringify({
+    device: s.selected_device,
+    autoGain: s.auto_gain,
+    noiseSuppression: s.noise_suppression,
+    denoiser: s.denoiser_algorithm,
+  });
+}
 
 /**
  * Returns the minimum RMS that counts as "speaking" for the speech-progress
@@ -29,31 +57,32 @@ function speechThreshold(vadThreshold: number): number {
   return Math.max(vadThreshold * 0.7, 0.005);
 }
 
-const MODE_OPTIONS: readonly ModeOption[] = [
-  {
-    value: "auto",
-    label: "Auto Calibrate",
-    description:
-      "Start the test and speak normally for ~5 seconds, pausing as you would in a real conversation. Threshold, hysteresis and hold time tune themselves and ignore silent gaps.",
-    Icon: SparklesIcon,
-  },
-  {
-    value: "manual",
-    label: "Manual Calibrate",
-    description:
-      "Drag the green Open and orange Close triangles directly on the meter. The bar lights up green when you would currently be transmitting.",
-    Icon: SlidersIcon,
-  },
-];
+function buildModeOptions(t: TFn): ModeOption[] {
+  return [
+    {
+      value: "auto",
+      label: t("calibration.autoMode"),
+      description: t("calibration.autoModeDesc"),
+      Icon: SparklesIcon,
+    },
+    {
+      value: "manual",
+      label: t("calibration.manualMode"),
+      description: t("calibration.manualModeDesc"),
+      Icon: SlidersIcon,
+    },
+  ];
+}
 
 function CalibrationModeSelector({
   mode,
   onChange,
-}: Readonly<{ mode: CalibrationMode; onChange: (mode: CalibrationMode) => void }>) {
+  t,
+}: Readonly<{ mode: CalibrationMode; onChange: (mode: CalibrationMode) => void; t: TFn }>) {
   return (
     <RadioCardGroup
       name="calibration_mode"
-      options={MODE_OPTIONS}
+      options={buildModeOptions(t)}
       value={mode}
       onChange={onChange}
     />
@@ -68,6 +97,7 @@ function AutoCalibrationView({
   onToggleTest,
   hasCalibrated,
   speechProgress,
+  t,
 }: Readonly<{
   settings: AudioSettings;
   rms: number;
@@ -76,6 +106,7 @@ function AutoCalibrationView({
   onToggleTest: () => void;
   hasCalibrated: boolean;
   speechProgress: number;
+  t: TFn;
 }>) {
   const isSpeaking = rms > speechThreshold(settings.vad_threshold);
 
@@ -104,54 +135,51 @@ function AutoCalibrationView({
   }, [isSpeaking]);
 
   return (
-    <div className={styles.calibrationView}>
+    <div className={panelStyles.calibrationView}>
       {!hasCalibrated && !testing && (
         <div className={styles.warningBanner}>
-          <span>Calibration needed</span>
-          <p>
-            Click Calibrate and speak naturally for 5 seconds so the gate
-            can tune itself to your microphone.
-          </p>
+          <span>{t("calibration.needsCalibration")}</span>
+          <p>{t("calibration.needsCalibrationPara")}</p>
         </div>
       )}
-      <div className={styles.calibrateActionRow}>
-        <div className={styles.calibrationReadouts}>
+      <div className={panelStyles.calibrateActionRow}>
+        <div className={panelStyles.calibrationReadouts}>
           <span>
-            Threshold: <strong>{(settings.vad_threshold * 100).toFixed(1)}%</strong>
+            {t("calibration.threshold")} <strong>{(settings.vad_threshold * 100).toFixed(1)}%</strong>
           </span>
           <span>
-            Close: <strong>{(settings.noise_gate_close_ratio * 100).toFixed(0)}%</strong>
+            {t("calibration.close")} <strong>{(settings.noise_gate_close_ratio * 100).toFixed(0)}%</strong>
           </span>
           <span>
-            Hold: <strong>{settings.hold_frames} frames</strong>
+            {t("calibration.hold")} <strong>{settings.hold_frames} {t("calibration.frames")}</strong>
           </span>
           <span>
-            Max Gain: <strong>{settings.max_gain_db.toFixed(1)} dB</strong>
+            {t("calibration.maxGain")} <strong>{settings.max_gain_db.toFixed(1)} dB</strong>
           </span>
         </div>
         <button
           type="button"
-          className={`${styles.calibrateBtn} ${testing ? styles.micTestActive : styles.calibrateBtnPrimary} ${!hasCalibrated && !testing ? styles.calibrateBtnPulse : ""}`}
+          className={`${panelStyles.calibrateBtn} ${testing ? panelStyles.micTestActive : panelStyles.calibrateBtnPrimary} ${!hasCalibrated && !testing ? panelStyles.calibrateBtnPulse : ""}`}
           onClick={onToggleTest}
         >
-          {testing ? "Stop" : "Calibrate"}
+          {testing ? t("calibration.stop") : t("calibration.calibrate")}
         </button>
       </div>
       {testing && (
-        <div className={styles.speechProgressBar}>
+        <div className={panelStyles.speechProgressBar}>
           <div
-            className={styles.speechProgressFill}
+            className={panelStyles.speechProgressFill}
             style={{ width: `${speechProgress * 100}%` }}
           />
-          <span className={styles.speechProgressStatus}>
+          <span className={panelStyles.speechProgressStatus}>
             {speechProgress >= 1
-              ? "Nailed it!"
-              : `${isSpeakingDisplay ? "Got you!" : "Don't be shy..."}  ${(speechProgress * (SPEECH_TARGET_MS / 1000)).toFixed(1)} / 5.0 s`}
+              ? t("calibration.nailedIt")
+              : `${isSpeakingDisplay ? t("calibration.speaking") : t("calibration.notSpeaking")}  ${(speechProgress * (SPEECH_TARGET_MS / 1000)).toFixed(1)} / 5.0 s`}
           </span>
         </div>
       )}
       {testing && (
-        <div className={styles.micTestRow}>
+        <div className={panelStyles.micTestRow}>
           <VuMeter
             rms={rms}
             peak={peak}
@@ -182,6 +210,7 @@ function ManualCalibrationView({
   peak,
   testing,
   onToggleTest,
+  t,
 }: Readonly<{
   settings: AudioSettings;
   onChange: (patch: Partial<AudioSettings>) => void;
@@ -189,6 +218,7 @@ function ManualCalibrationView({
   peak: number;
   testing: boolean;
   onToggleTest: () => void;
+  t: TFn;
 }>) {
   const closeAbsolute = settings.vad_threshold * settings.noise_gate_close_ratio;
 
@@ -227,33 +257,34 @@ function ManualCalibrationView({
   const talking = rms > settings.vad_threshold;
 
   return (
-    <div className={styles.calibrationView}>
+    <div className={panelStyles.calibrationView}>
       <p className={styles.fieldHint}>
-        Drag the <span className={styles.legendOpen}>Open</span> triangle to where
-        speech reaches and the <span className={styles.legendClose}>Close</span>
-        {" "}triangle below it for a buffer that prevents chatter. The meter
-        turns green when audio is loud enough to transmit.
+        {t("calibration.manualHintPre")}
+        <span className={panelStyles.legendOpen}>{t("calibration.manualHintOpenWord")}</span>
+        {" "}{t("calibration.manualHintMid")}
+        <span className={panelStyles.legendClose}>{t("calibration.manualHintCloseWord")}</span>
+        {" "}{t("calibration.manualHintPost")}
       </p>
       <VuMeter rms={rms} peak={peak} markers={markers} talking={talking} />
-      <div className={styles.micTestRow}>
+      <div className={panelStyles.micTestRow}>
         <button
           type="button"
-          className={`${styles.micTestBtn} ${testing ? styles.micTestActive : ""}`}
+          className={`${panelStyles.micTestBtn} ${testing ? panelStyles.micTestActive : ""}`}
           onClick={onToggleTest}
         >
-          {testing ? "Stop Test" : "Test Mic"}
+          {testing ? t("calibration.stopTest") : t("calibration.testMic")}
         </button>
         <span className={styles.fieldHint}>
           {testing
             ? talking
-              ? "Transmitting now."
-              : "Below threshold - the gate is closed."
-            : "Press Test Mic to preview the gate."}
+              ? t("calibration.transmittingNow")
+              : t("calibration.belowThreshold")
+            : t("calibration.pressTestMic")}
         </span>
       </div>
       <SliderField
-        label="Hold Frames"
-        hint="Frames (~20 ms each) to keep the gate open after audio drops below the close handle. Stops word endings from being clipped."
+        label={t("calibration.holdFramesLabel")}
+        hint={t("calibration.holdFramesHint")}
         min={1}
         max={50}
         step={1}
@@ -278,7 +309,7 @@ function replayProgress(phase: ReplayPhase): number {
   }
 }
 
-function ReplayControl({ phase }: Readonly<{ phase: ReplayPhase }>) {
+function ReplayControl({ phase, t }: Readonly<{ phase: ReplayPhase; t: TFn }>) {
   const toggle = useCallback(async () => {
     try {
       if (phase.phase === "idle") {
@@ -294,11 +325,17 @@ function ReplayControl({ phase }: Readonly<{ phase: ReplayPhase }>) {
   const label = (() => {
     switch (phase.phase) {
       case "idle":
-        return "Record Sample";
+        return t("calibration.recordSample");
       case "recording":
-        return `Stop & Replay  (${Math.round(phase.elapsed_ms / 1000)} / ${Math.round(phase.capacity_ms / 1000)} s)`;
+        return t("calibration.stopReplaySeconds", {
+          elapsed: Math.round(phase.elapsed_ms / 1000),
+          total: Math.round(phase.capacity_ms / 1000),
+        });
       case "playing":
-        return `Stop Playback  (${Math.round(phase.elapsed_ms / 1000)} / ${Math.round(phase.total_ms / 1000)} s)`;
+        return t("calibration.stopPlaybackSeconds", {
+          elapsed: Math.round(phase.elapsed_ms / 1000),
+          total: Math.round(phase.total_ms / 1000),
+        });
     }
   })();
 
@@ -307,27 +344,25 @@ function ReplayControl({ phase }: Readonly<{ phase: ReplayPhase }>) {
   const fillPercent = Math.min(100, Math.max(0, progress * 100));
 
   return (
-    <div className={styles.replaySection}>
-      <div className={styles.replayHeader}>
-        <span className={styles.fieldLabel}>Hear yourself</span>
+    <div className={panelStyles.replaySection}>
+      <div className={panelStyles.replayHeader}>
+        <span className={styles.fieldLabel}>{t("calibration.hearYourself")}</span>
         <p className={styles.fieldHint}>
-          Record up to {REPLAY_CAPACITY_MS / 1000} s of speech through the same filters
-          your listeners receive - AGC, noise suppression and the gate -
-          then plays it back so you can verify how you sound in a real call.
+          {t("calibration.hearYourselfHint", { seconds: REPLAY_CAPACITY_MS / 1000 })}
         </p>
       </div>
       <button
         type="button"
-        className={`${styles.micTestBtn} ${styles.replayBtn} ${isActive ? styles.micTestActive : ""}`}
+        className={`${panelStyles.micTestBtn} ${panelStyles.replayBtn} ${isActive ? panelStyles.micTestActive : ""}`}
         onClick={toggle}
       >
         {isActive && (
           <span
-            className={`${styles.replayBtnFill} ${phase.phase === "recording" ? styles.replayBtnFillRecording : styles.replayBtnFillPlaying}`}
+            className={`${panelStyles.replayBtnFill} ${phase.phase === "recording" ? panelStyles.replayBtnFillRecording : panelStyles.replayBtnFillPlaying}`}
             style={{ width: `${fillPercent}%` }}
           />
         )}
-        <span className={styles.replayBtnLabel}>{label}</span>
+        <span className={panelStyles.replayBtnLabel}>{label}</span>
       </button>
     </div>
   );
@@ -340,18 +375,45 @@ export function CalibrationPanel({
   settings: AudioSettings;
   onChange: (patch: Partial<AudioSettings>) => void;
 }>) {
+  const { t } = useTranslation("settings");
+  const tFn = t as TFn;
   const [testing, setTesting] = useState(false);
   const testingRef = useRef(false);
   const amplitudeRef = useRef({ rms: 0, peak: 0 });
   const [ampTick, setAmpTick] = useState(0);
   const rafHandle = useRef(0);
   const [replayPhase, setReplayPhase] = useState<ReplayPhase>({ phase: "idle" });
-  const [hasCalibrated, setHasCalibrated] = useState(
-    () => localStorage.getItem(CALIBRATION_DONE_KEY) === "true",
+  // Keep the latest settings reachable from the calibration event
+  // listener without re-subscribing on every settings change.
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  // `undefined` until the persisted signature is read from the
+  // preferences store; `null` once read with no prior calibration.
+  const [calibratedSig, setCalibratedSig] = useState<string | null | undefined>(
+    undefined,
   );
+  useEffect(() => {
+    let active = true;
+    getPreferences()
+      .then((p) => {
+        if (active) setCalibratedSig(p.calibrationSignature ?? null);
+      })
+      .catch(() => {
+        if (active) setCalibratedSig(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  // Derived so a relevant settings change or a fresh calibration is
+  // reflected immediately. While the signature is still loading
+  // (`undefined`), assume calibrated so the hint does not flash before
+  // the persisted value arrives.
+  const hasCalibrated =
+    calibratedSig === undefined ||
+    (calibratedSig !== null && calibratedSig === calibrationSignature(settings));
   const speechMsRef = useRef(0);
   const lastAmplitudeEventTime = useRef<number | null>(null);
-  const prevModeRef = useRef<CalibrationMode | null>(null);
   const speechThresholdRef = useRef(speechThreshold(settings.vad_threshold));
   speechThresholdRef.current = speechThreshold(settings.vad_threshold);
 
@@ -423,8 +485,11 @@ export function CalibrationPanel({
         hold_frames: event.payload.hold_frames,
         max_gain_db: event.payload.max_gain_db,
       });
-      setHasCalibrated(true);
-      localStorage.setItem(CALIBRATION_DONE_KEY, "true");
+      // Record the fingerprint of the settings this calibration was done
+      // under, so the hint stays hidden until a relevant setting changes.
+      const sig = calibrationSignature(settingsRef.current);
+      setCalibratedSig(sig);
+      void updatePreferences({ calibrationSignature: sig });
     });
     return () => {
       unlisten.then((f) => f());
@@ -450,32 +515,18 @@ export function CalibrationPanel({
     };
   }, []);
 
-  useEffect(() => {
-    const currentMode: CalibrationMode = settings.auto_input_sensitivity
-      ? "auto"
-      : "manual";
-    if (
-      prevModeRef.current !== null &&
-      prevModeRef.current !== "auto" &&
-      currentMode === "auto"
-    ) {
-      setHasCalibrated(false);
-      localStorage.removeItem(CALIBRATION_DONE_KEY);
-    }
-    prevModeRef.current = currentMode;
-  }, [settings.auto_input_sensitivity]);
-
   void ampTick;
   const { rms, peak } = amplitudeRef.current;
   const mode: CalibrationMode = settings.auto_input_sensitivity ? "auto" : "manual";
 
   return (
-    <div className={styles.calibrationContainer}>
+    <div className={panelStyles.calibrationContainer}>
       <CalibrationModeSelector
         mode={mode}
         onChange={(next) =>
           onChange({ auto_input_sensitivity: next === "auto" })
         }
+        t={tFn}
       />
       {mode === "auto" ? (
         <AutoCalibrationView
@@ -486,6 +537,7 @@ export function CalibrationPanel({
           onToggleTest={toggleTest}
           hasCalibrated={hasCalibrated}
           speechProgress={Math.min(speechMsRef.current / SPEECH_TARGET_MS, 1)}
+          t={tFn}
         />
       ) : (
         <ManualCalibrationView
@@ -495,9 +547,11 @@ export function CalibrationPanel({
           peak={peak}
           testing={testing}
           onToggleTest={toggleTest}
+          t={tFn}
         />
       )}
-      <ReplayControl phase={replayPhase} />
+      <ReplayControl phase={replayPhase} t={tFn} />
     </div>
   );
 }
+
