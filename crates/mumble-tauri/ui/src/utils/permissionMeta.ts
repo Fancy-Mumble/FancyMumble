@@ -33,4 +33,6 @@ export const PERMISSION_META: Record<number, PermissionMeta> = {
   0x80000: { title: "Self-register", description: "Users can register themselves." },
   0x100000: { title: "Reset user content", description: "Wipe avatars, comments and other content from a user." },
   0x200000: { title: "Key owner", description: "Marks the user as a key owner for the persistent-chat key share workflow." },
+  0x800000: { title: "List registered users", description: "Read-only access to the registered-user directory (e.g. to invite offline users), without being able to register or unregister them." },
+  0x1000000: { title: "See hidden channel", description: "See a channel marked as hidden (and the users inside it). Without it the channel is invisible in the channel list. No effect on non-hidden channels." },
 };

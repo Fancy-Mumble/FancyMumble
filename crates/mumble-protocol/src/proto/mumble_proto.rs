@@ -232,6 +232,8 @@ pub struct ChannelState {
     #[prost(uint32, repeated, packed = "false", tag = "7")]
     pub links_remove: ::prost::alloc::vec::Vec<u32>,
     /// True if the channel is temporary.
+    /// Deprecated for Fancy clients: use CHANNEL_ATTRIBUTE_TEMPORARY in `attributes`.
+    #[deprecated]
     #[prost(bool, optional, tag = "8", default = "false")]
     pub temporary: ::core::option::Option<bool>,
     /// Position weight to tweak the channel position in the channel list.
@@ -246,9 +248,13 @@ pub struct ChannelState {
     #[prost(uint32, optional, tag = "11")]
     pub max_users: ::core::option::Option<u32>,
     /// Whether this channel has enter restrictions (ACL denying ENTER) set
+    /// Deprecated for Fancy clients: use CHANNEL_ATTRIBUTE_ENTER_RESTRICTED in `attributes`.
+    #[deprecated]
     #[prost(bool, optional, tag = "12")]
     pub is_enter_restricted: ::core::option::Option<bool>,
     /// Whether the receiver of this msg is considered to be able to enter this channel
+    /// Deprecated for Fancy clients: use CHANNEL_ATTRIBUTE_CAN_ENTER in `attributes`.
+    #[deprecated]
     #[prost(bool, optional, tag = "13")]
     pub can_enter: ::core::option::Option<bool>,
     /// Fancy Mumble persistent chat extension.
@@ -277,6 +283,32 @@ pub struct ChannelState {
     /// the password in UserState.temporary_access_tokens.
     #[prost(string, optional, tag = "104")]
     pub channel_info_password: ::core::option::Option<::prost::alloc::string::String>,
+    /// Hidden-channel extension. When true, only users with the SeeChannel
+    /// permission are told the channel exists (and see the users inside it).
+    #[prost(bool, optional, tag = "105")]
+    pub hidden: ::core::option::Option<bool>,
+    /// Channel expiry extension. expiry_mode: 0 = none, 1 = absolute (removed at
+    /// created_at + duration), 2 = sliding (removed after `duration` seconds of
+    /// inactivity). On expiry the channel is deleted and occupants move to parent.
+    #[prost(uint32, optional, tag = "106")]
+    pub expiry_mode: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag = "107")]
+    pub expiry_duration_secs: ::core::option::Option<u32>,
+    /// Server-computed absolute deadline (unix seconds), for client countdown UI.
+    #[prost(uint64, optional, tag = "108")]
+    pub expires_at: ::core::option::Option<u64>,
+    /// Meeting-room convenience (input-only, on create): registered user_ids to
+    /// invite. The server grants each SeeChannel|Enter|Traverse and denies those to
+    /// @all, making the new channel a private room only invitees can see and join.
+    #[prost(uint32, repeated, packed = "false", tag = "109")]
+    pub invitee_user_ids: ::prost::alloc::vec::Vec<u32>,
+    /// Fancy extension: the set of attributes describing this channel from the
+    /// receiving user's perspective (see ChannelAttribute). Supersedes `can_enter`
+    /// / `is_enter_restricted` for Fancy clients. Input-only on create:
+    /// CHANNEL_ATTRIBUTE_DETACHED requests a parentless, Fancy-only channel that
+    /// never appears in the channel tree.
+    #[prost(enumeration = "ChannelAttribute", repeated, packed = "false", tag = "110")]
+    pub attributes: ::prost::alloc::vec::Vec<i32>,
 }
 /// Used to communicate user leaving or being kicked. May be sent by the client
 /// when it attempts to kick a user. Sent by the server when it informs the
@@ -2747,6 +2779,57 @@ pub struct FancyServerSettings {
 pub struct FancyServerSettingsUpdate {
     #[prost(message, repeated, tag = "1")]
     pub settings: ::prost::alloc::vec::Vec<Setting>,
+}
+/// Fancy Mumble extension: a single channel attribute flag. ChannelState carries
+/// a repeated set of these (its `attributes` field), describing the channel from
+/// the receiving user's perspective. This supersedes the individual `can_enter` /
+/// `is_enter_restricted` booleans for Fancy clients (those booleans are still sent
+/// for legacy clients). Legacy clients ignore the unknown `attributes` field.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ChannelAttribute {
+    /// Zero value, never sent (proto enum default).
+    Unspecified = 0,
+    /// The receiving user is permitted to enter this channel.
+    CanEnter = 1,
+    /// Entry is gated by a password/token: ENTER is denied and the user is not
+    /// otherwise granted it by a user-id ACL.
+    EnterRestricted = 2,
+    /// Hidden: only users holding SeeChannel are told the channel exists.
+    Hidden = 3,
+    /// Temporary: auto-removed by the server when it becomes empty.
+    Temporary = 4,
+    /// Detached: a parentless channel (like the root) that never appears in the
+    /// channel tree and is only ever sent to Fancy clients. Used for meeting rooms.
+    Detached = 5,
+}
+impl ChannelAttribute {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "CHANNEL_ATTRIBUTE_UNSPECIFIED",
+            Self::CanEnter => "CHANNEL_ATTRIBUTE_CAN_ENTER",
+            Self::EnterRestricted => "CHANNEL_ATTRIBUTE_ENTER_RESTRICTED",
+            Self::Hidden => "CHANNEL_ATTRIBUTE_HIDDEN",
+            Self::Temporary => "CHANNEL_ATTRIBUTE_TEMPORARY",
+            Self::Detached => "CHANNEL_ATTRIBUTE_DETACHED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CHANNEL_ATTRIBUTE_UNSPECIFIED" => Some(Self::Unspecified),
+            "CHANNEL_ATTRIBUTE_CAN_ENTER" => Some(Self::CanEnter),
+            "CHANNEL_ATTRIBUTE_ENTER_RESTRICTED" => Some(Self::EnterRestricted),
+            "CHANNEL_ATTRIBUTE_HIDDEN" => Some(Self::Hidden),
+            "CHANNEL_ATTRIBUTE_TEMPORARY" => Some(Self::Temporary),
+            "CHANNEL_ATTRIBUTE_DETACHED" => Some(Self::Detached),
+            _ => None,
+        }
+    }
 }
 /// Unified pchat protocol indicator.
 /// Each value identifies both the E2EE protocol implementation

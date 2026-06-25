@@ -1,4 +1,4 @@
-import { BellIcon, BellOffIcon, ChevronRightIcon, CloseIcon, DatabaseIcon, EditIcon, HeadphonesIcon, HeadphonesOffIcon, InfoIcon, ListenBadgeIcon, LogoutIcon, MenuIcon, MicIcon, MicOffIcon, MicOffSmallIcon, PhoneIcon, PhoneOffIcon, PlusIcon, RecordIcon, SearchIcon, SettingsIcon, ShieldIcon, TrashIcon, UsersGroupIcon } from "../../../icons";
+import { BellIcon, BellOffIcon, ChevronRightIcon, CloseIcon, DatabaseIcon, EditIcon, HeadphonesIcon, HeadphonesOffIcon, InfoIcon, ListenBadgeIcon, LockIcon, LogoutIcon, MenuIcon, MicIcon, MicOffIcon, MicOffSmallIcon, PhoneIcon, PhoneOffIcon, PlusIcon, RecordIcon, SearchIcon, SettingsIcon, ShieldIcon, TrashIcon, UsersGroupIcon } from "../../../icons";
 import { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -26,7 +26,7 @@ const MembersTab = lazy(() => import("../MembersTab").then((m) => ({ default: m.
 const RecordingModal = lazy(() => import("../RecordingModal"));
 import { SidebarTabs } from "../SidebarTabs";
 import { PERM_LISTEN, PERM_WRITE } from "../../../utils/permissions";
-import { filterVisibleChannels } from "../../../utils/channelVisibility";
+import { filterVisibleChannels, channelDisplayName, filterMeetingChannels, meetingRooms, dmPeerUserId, usersForChannelTree } from "../../../utils/channelVisibility";
 import { TID } from "../../../testids";
 
 /** Check whether a channel's cached permissions include the Listen bit. */
@@ -278,6 +278,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
 
   // Section collapse state (all expanded by default, restored from prefs).
   const [channelsOpen, setChannelsOpen] = useState(true);
+  const [privateRoomsOpen, setPrivateRoomsOpen] = useState(true);
 
   // When true, channels with no members are hidden from the viewer (restored
   // from prefs).  Ancestors of populated channels and the current/selected
@@ -297,6 +298,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
       const s = prefs.sidebarSections;
       if (s) {
         setChannelsOpen(s.channels);
+        setPrivateRoomsOpen(s.privateRooms ?? true);
       }
       setHideEmptyChannels(prefs.hideEmptyChannels ?? false);
     });
@@ -380,7 +382,11 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
   }, [selectChannel, onChannelSelect]);
   const handleJoinChannel = useCallback((id: number) => {
     const ch = channels.find((c) => c.id === id);
-    if (ch?.is_enter_restricted) {
+    // Hidden/private rooms (invitee-gated private rooms + meeting rooms) deny
+    // Enter to @all but grant it to invited users by id - so an invited user
+    // enters with no password. Don't pop the password prompt for them (older
+    // servers still mark them is_enter_restricted); just attempt the join.
+    if (ch?.is_enter_restricted && !ch.hidden) {
       setPasswordChannel(ch);
       return;
     }
@@ -393,24 +399,58 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
     onChannelSelect?.();
   }, [selectDmUser, onChannelSelect]);
 
-  /** Get the channel name for a user's current channel. */
+  /** Get the (display) channel name for a user's current channel. Meeting rooms
+   *  show their meeting name; a friend-chat (`__dm:`) channel shows the peer's
+   *  name (a self-chat resolves to the user's own name). */
   const channelName = (channelId: number) => {
     const ch = channels.find((c) => c.id === channelId);
-    return ch?.name || "Root";
+    if (!ch) return "Root";
+    const ownUserId = users.find((u) => u.session === ownSession)?.user_id ?? null;
+    const peerUid = dmPeerUserId(ch, ownUserId);
+    if (peerUid != null) {
+      return users.find((u) => u.user_id === peerUid)?.name ?? channelDisplayName(ch);
+    }
+    return channelDisplayName(ch) || "Root";
   };
 
   // Channels passed to the list renderers.  When "hide empty" is on, only
   // channels with members (plus the current/selected/listened ones) are shown -
   // empty parents are hidden too, with populated subchannels re-parented so the
   // tree stays consistent.  See filterVisibleChannels for the details.
+  // Users as the channel tree should group them: occupants of a friend-chat /
+  // self-notepad (`__dm:`) room - which the tree omits - are re-attributed to
+  // root so the local user doesn't vanish from the list after opening a friend
+  // chat (which joins them into that detached channel). Uses the FULL channel
+  // list (the DM room is filtered out of `visibleChannels`).
+  const treeUsers = useMemo(() => usersForChannelTree(channels, users), [channels, users]);
+
   const visibleChannels = useMemo(() => {
-    if (!hideEmptyChannels) return channels;
-    return filterVisibleChannels(channels, users, {
+    // Detached channels (meeting rooms) live in the dedicated flat list above,
+    // never the main tree.
+    const base = filterMeetingChannels(channels);
+    if (!hideEmptyChannels) return base;
+    // Count members with the tree mapping so a root holding only a remapped
+    // friend-chat occupant isn't pruned as "empty" in hide-empty mode.
+    return filterVisibleChannels(base, treeUsers, {
       currentChannel,
       selectedChannel,
       listenedChannels,
     });
-  }, [channels, users, hideEmptyChannels, currentChannel, selectedChannel, listenedChannels]);
+  }, [channels, treeUsers, hideEmptyChannels, currentChannel, selectedChannel, listenedChannels]);
+
+  // The detached meeting rooms rendered as a flat list above the main tree by
+  // reusing the channel list component. Cloned with `parent_id: null` (so they
+  // render flat, not orphaned) and the display name (meeting-room disambiguation
+  // suffix stripped; the original name stays the server identity).
+  const privateRoomChannels = useMemo(
+    () =>
+      meetingRooms(channels).map((c) => ({
+        ...c,
+        name: channelDisplayName(c),
+        parent_id: null,
+      })),
+    [channels],
+  );
 
   return (
     <RoleColorsContext.Provider value={roleColors}>
@@ -512,6 +552,54 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
           </Suspense>
         ) : null}
         channelsPane={(<>
+      {/* Private/hidden rooms (invitee-only private rooms + meeting rooms) as a
+          flat list, reusing the flat channel-list component. */}
+      {privateRoomChannels.length > 0 && (
+        <div className={styles.meetingsSection} data-testid={TID.privateChannelsViewer}>
+          <div className={styles.sectionHeaderBar}>
+            <button
+              className={styles.collapsibleHeader}
+              onClick={() => toggleSection("privateRooms", privateRoomsOpen, setPrivateRoomsOpen)}
+              type="button"
+            >
+              <ChevronRightIcon
+                className={`${styles.collapseChevron} ${privateRoomsOpen ? styles.collapseChevronOpen : ""}`}
+                width={12}
+                height={12}
+              />
+              <LockIcon width={12} height={12} />
+              <span>{t("channelSidebar.meetings", { defaultValue: "Meetings" })}</span>
+            </button>
+          </div>
+          <div className={`${styles.channelList} ${privateRoomsOpen ? "" : styles.sectionCollapsed}`}>
+            {privateRoomsOpen && (
+              <Suspense fallback={null}>
+                <ModernChannelList
+                  channels={privateRoomChannels}
+                  reorderable={false}
+                  expandableRows={false}
+                  users={treeUsers}
+                  selectedChannel={selectedChannel}
+                  currentChannel={currentChannel}
+                  listenedChannels={listenedChannels}
+                  unreadCounts={unreadCounts}
+                  talkingSessions={talkingSessions}
+                  broadcastingSessions={broadcastingSessions}
+                  shakingChannelId={shakingChannelId}
+                  highlightChannelId={highlightChannelId}
+                  highlightUserSession={highlightUserSession}
+                  onSelectChannel={handleSelectChannel}
+                  onJoinChannel={handleJoinChannel}
+                  onContextMenu={openCtxMenu}
+                  onUserContextMenu={openUserCtxMenu}
+                  onUserClick={handleUserClick}
+                />
+              </Suspense>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Channel list header (always visible) */}
       <div className={styles.sectionHeaderBar}>
         <button
@@ -545,7 +633,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
         {channelsOpen && channelViewerStyle === "flat" && (
           <ModernChannelList
             channels={visibleChannels}
-            users={users}
+            users={treeUsers}
             selectedChannel={selectedChannel}
             currentChannel={currentChannel}
             listenedChannels={listenedChannels}
@@ -566,7 +654,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
         {channelsOpen && channelViewerStyle === "modern" && (
           <ChannelIconList
             channels={visibleChannels}
-            users={users}
+            users={treeUsers}
             selectedChannel={selectedChannel}
             currentChannel={currentChannel}
             listenedChannels={listenedChannels}
@@ -587,7 +675,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
         {channelsOpen && channelViewerStyle === "classic" && (
           <ClassicChannelList
             channels={visibleChannels}
-            users={users}
+            users={treeUsers}
             selectedChannel={selectedChannel}
             currentChannel={currentChannel}
             listenedChannels={listenedChannels}

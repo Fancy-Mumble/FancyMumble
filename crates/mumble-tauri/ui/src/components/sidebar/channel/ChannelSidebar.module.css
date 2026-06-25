@@ -192,6 +192,12 @@
   gap: 6px;
 }
 
+/* The "Meetings" section sits directly under the Channels|Members tab bar;
+   give it breathing room so it doesn't read as part of that bar. */
+.meetingsSection {
+  margin-top: 12px;
+}
+
 /* Right-aligned action(s) in a section header (e.g. the hide-empty toggle). */
 .sectionHeaderAction {
   display: inline-flex;
