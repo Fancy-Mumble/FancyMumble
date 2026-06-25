@@ -44,6 +44,7 @@ import { useReadReceipts } from "./readreceipt/useReadReceipts";
 import { useTypingIndicator } from "./typing/useTypingIndicator";
 import TypingIndicator from "./typing/TypingIndicator";
 import { isMobile } from "../../utils/platform";
+import { channelDisplayName, dmPeerUserId } from "../../utils/channelVisibility";
 import { htmlToMarkdown } from "./markdown/MarkdownInput";
 import type { MessageScope } from "../../messageOffload";
 import { useScreenShare } from "./stream/useScreenShare";
@@ -220,6 +221,19 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   }, [isDmMode, selectedDmUser, selectedChannel]);
 
   const channel = channels.find((c) => c.id === selectedChannel);
+  // Header label: a friend-chat (`__dm:`) channel shows the friend's name (or
+  // "Notepad" for a self-chat), not its raw `__dm:<ids>` channel name.
+  const channelLabel = useMemo(() => {
+    if (!channel) return undefined;
+    const ownUserId = users.find((u) => u.session === ownSession)?.user_id ?? null;
+    const peerUid = dmPeerUserId(channel, ownUserId);
+    // A friend-chat (`__dm:`) channel is labelled with the peer's name; a
+    // self-chat resolves to the user's own name (it behaves like any friend).
+    if (peerUid != null) {
+      return users.find((u) => u.user_id === peerUid)?.name ?? t("header.directMessage");
+    }
+    return channelDisplayName(channel);
+  }, [channel, users, ownSession, t]);
   const memberCount = users.filter(
     (u) => u.channel_id === selectedChannel,
   ).length;
@@ -282,7 +296,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   // Persistent chat hook (banners, key verification, custodian prompt).
   const persistent = usePersistentChat(
     isDmMode ? null : selectedChannel,
-    channel?.name ?? t("header.unknown"),
+    channelLabel ?? t("header.unknown"),
   );
 
   /** Merge real messages with local-only poll messages for rendering. */
@@ -986,7 +1000,10 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
 
   // Compute header values before any early returns (hooks can't be conditional).
   const [headerName, headerMemberCount] = computeHeader(
-    isDmMode, dmPartner, channel, memberCount,
+    isDmMode, dmPartner,
+    // Meeting rooms display their meeting name (server disambiguation suffix
+    // stripped); ordinary channels are unchanged.
+    channel ? { name: channelLabel ?? channel.name } : undefined, memberCount,
     t("header.directMessage"), t("header.unknown"),
   );
   const showJoinButton = !isDmMode && !isInChannel;
@@ -1046,6 +1063,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           isInChannel={isDmMode || isInChannel}
           isDm={isDmMode}
           isPersisted={persistent.isPersisted}
+          isE2E={!isDmMode && (channel?.pchat_protocol === "signal_v1" || channel?.pchat_protocol === "fancy_v1_full_archive")}
           onJoin={showJoinButton ? () => joinChannel(selectedChannel!) : undefined}
           onChannelInfoToggle={onChannelInfoToggle}
           onChannelSearch={onChannelSearch}
