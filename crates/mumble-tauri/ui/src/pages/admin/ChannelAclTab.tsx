@@ -1,47 +1,23 @@
-﻿import { ChevronRightIcon } from "../../icons";
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+﻿import { ChevronRightIcon, LockIcon, TrashIcon } from "../../icons";
+import { useState, useEffect, useCallback, useMemo, useRef, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { acquireRegisteredTextures, releaseRegisteredTextures } from "../../registeredTextureLease";
 import { listen } from "@tauri-apps/api/event";
 import { useSearchParams } from "react-router-dom";
 import { useAppStore } from "../../store";
+import { TID } from "../../testids";
+import { PERM_ENTER } from "../../utils/permissions";
 import type { AclData, AclEntry, AclGroup, ChannelEntry, RegisteredUser } from "../../types";
 import { AclRulesPanel } from "./AclRulesPanel";
 import { GroupsPanel } from "./GroupsPanel";
+import { AccessUsersPanel } from "./AccessUsersPanel";
+import { buildChannelTree, type TreeNode } from "./channelAclModel";
 import styles from "./AdminPanel.module.css";
 
-type AclTab = "groups" | "rules";
+type AclTab = "groups" | "rules" | "users";
 
 // -- Tree helpers -------------------------------------------------
-
-interface TreeNode {
-  channel: ChannelEntry;
-  children: TreeNode[];
-}
-
-function buildChannelTree(channels: ChannelEntry[]): TreeNode[] {
-  const root = channels.find(
-    (c) => c.parent_id === null || c.parent_id === c.id,
-  );
-  if (!root) return [];
-
-  const byParent = new Map<number, ChannelEntry[]>();
-  for (const ch of channels) {
-    if (ch.id === root.id) continue;
-    const pid = ch.parent_id ?? root.id;
-    const list = byParent.get(pid);
-    if (list) list.push(ch);
-    else byParent.set(pid, [ch]);
-  }
-
-  function build(ch: ChannelEntry): TreeNode {
-    const kids = (byParent.get(ch.id) ?? [])
-      .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
-    return { channel: ch, children: kids.map(build) };
-  }
-  return [build(root)];
-}
 
 /** Returns a set of channel IDs whose subtree contains a match. */
 function filterTree(nodes: TreeNode[], query: string): Set<number> {
@@ -68,6 +44,7 @@ function filterTree(nodes: TreeNode[], query: string): Set<number> {
 export function ChannelAclTab() {
   const channels = useAppStore((s) => s.channels);
   const users = useAppStore((s) => s.users);
+  const deleteChannel = useAppStore((s) => s.deleteChannel);
   const { t } = useTranslation("settings");
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedChannel, setSelectedChannel] = useState<number | null>(null);
@@ -78,6 +55,10 @@ export function ChannelAclTab() {
   const [activeTab, setActiveTab] = useState<AclTab>("rules");
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
   const [registeredNames, setRegisteredNames] = useState<Map<number, string>>(new Map());
+  // Right-click context menu for a tree node (`confirming` = delete confirmation).
+  const [menu, setMenu] = useState<
+    { x: number; y: number; channel: ChannelEntry; confirming?: boolean } | null
+  >(null);
 
   const tree = useMemo(() => buildChannelTree(channels), [channels]);
   const matchedIds = useMemo(
@@ -185,6 +166,27 @@ export function ChannelAclTab() {
     });
   }, []);
 
+  const handleContextMenu = useCallback((e: MouseEvent, channel: ChannelEntry) => {
+    e.preventDefault();
+    setMenu({ x: e.clientX, y: e.clientY, channel });
+  }, []);
+
+  const handleDeleteChannel = useCallback(
+    async (channel: ChannelEntry) => {
+      setMenu(null);
+      try {
+        await deleteChannel(channel.id);
+        if (selectedChannel === channel.id) {
+          setSelectedChannel(null);
+          setAclData(null);
+        }
+      } catch (err) {
+        console.error("Failed to delete channel:", err);
+      }
+    },
+    [deleteChannel, selectedChannel],
+  );
+
   // -- ACL data mutations --
 
   const handleToggleInherit = useCallback(() => {
@@ -282,6 +284,19 @@ export function ChannelAclTab() {
 
   const selectedName = channels.find((c) => c.id === selectedChannel)?.name ?? "";
 
+  // Number of registered users explicitly granted Enter access (shown on the
+  // Users tab badge); deny entries cancel a grant.
+  const accessUserCount = useMemo(() => {
+    if (!aclData) return 0;
+    const granted = new Set<number>();
+    for (const a of aclData.acls) {
+      if (a.user_id == null) continue;
+      if ((a.deny & PERM_ENTER) !== 0) granted.delete(a.user_id);
+      else if ((a.grant & PERM_ENTER) !== 0) granted.add(a.user_id);
+    }
+    return granted.size;
+  }, [aclData]);
+
   return (
     <>
       <h2 className={styles.panelTitle}>{t("channelAcl.title")}</h2>
@@ -318,6 +333,7 @@ export function ChannelAclTab() {
                 matchedIds={matchedIds}
                 onSelect={handleChannelSelect}
                 onToggle={toggleExpand}
+                onContextMenu={handleContextMenu}
               />
             ))}
           </div>
@@ -366,6 +382,13 @@ export function ChannelAclTab() {
                 >
                   {t("channelAcl.tabGroups", { count: aclData.groups.length })}
                 </button>
+                <button
+                  type="button"
+                  className={`${styles.aclTabBtn} ${activeTab === "users" ? styles.aclTabActive : ""}`}
+                  onClick={() => setActiveTab("users")}
+                >
+                  {t("channelAcl.tabUsers", { count: accessUserCount })}
+                </button>
               </div>
 
               {/* Tab content */}
@@ -389,11 +412,68 @@ export function ChannelAclTab() {
                     onPatch={patchGroup}
                   />
                 )}
+                {activeTab === "users" && (
+                  <AccessUsersPanel
+                    acls={aclData.acls}
+                    groups={aclData.groups}
+                    users={users}
+                    registeredNames={registeredNames}
+                  />
+                )}
               </div>
             </>
           )}
         </div>
       </div>
+
+      {/* Channel context menu (right-click in the tree) */}
+      {menu && (
+        <>
+          <button
+            type="button"
+            className={styles.ctxBackdrop}
+            aria-label={t("channelAcl.closeMenu", { defaultValue: "Close menu" })}
+            onClick={() => setMenu(null)}
+            onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}
+          />
+          <div className={styles.ctxMenu} style={{ top: menu.y, left: menu.x }} role="menu">
+            {menu.confirming ? (
+              <div className={styles.ctxConfirm}>
+                <span className={styles.ctxConfirmText}>
+                  {t("channelAcl.confirmDeleteChannel", { name: menu.channel.name })}
+                </span>
+                <div className={styles.ctxConfirmRow}>
+                  <button
+                    type="button"
+                    className={styles.ctxDangerBtn}
+                    data-testid={TID.aclDeleteConfirm}
+                    onClick={() => { void handleDeleteChannel(menu.channel); }}
+                  >
+                    {t("channelAcl.deleteChannel")}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.ctxCancelBtn}
+                    onClick={() => setMenu(null)}
+                  >
+                    {t("channelAcl.cancelDelete", { defaultValue: "Cancel" })}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className={`${styles.ctxMenuItem} ${styles.ctxMenuItemDanger}`}
+                data-testid={TID.aclDeleteChannel}
+                onClick={() => setMenu((m) => (m ? { ...m, confirming: true } : m))}
+              >
+                <TrashIcon width={14} height={14} />
+                {t("channelAcl.deleteChannel")}
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </>
   );
 }
@@ -408,6 +488,7 @@ function ChannelTreeNode({
   matchedIds,
   onSelect,
   onToggle,
+  onContextMenu,
 }: Readonly<{
   node: TreeNode;
   depth: number;
@@ -416,11 +497,14 @@ function ChannelTreeNode({
   matchedIds: Set<number> | null;
   onSelect: (id: number) => void;
   onToggle: (id: number) => void;
+  onContextMenu: (e: MouseEvent, channel: ChannelEntry) => void;
 }>) {
+  const { t } = useTranslation("settings");
   const id = node.channel.id;
   const isExpanded = expanded.has(id);
   const hasChildren = node.children.length > 0;
   const isSelected = selected === id;
+  const isPrivate = node.channel.detached === true;
 
   // If filtering and this node isn't in matched set, hide it.
   if (matchedIds && !matchedIds.has(id)) return null;
@@ -431,7 +515,12 @@ function ChannelTreeNode({
         type="button"
         className={`${styles.aclTreeItem} ${isSelected ? styles.aclTreeItemActive : ""}`}
         style={{ paddingLeft: 8 + depth * 16 }}
+        data-testid={TID.aclChannelItem}
+        data-channel-id={id}
+        data-channel-name={node.channel.name}
+        data-private={isPrivate ? "true" : undefined}
         onClick={() => onSelect(id)}
+        onContextMenu={(e) => onContextMenu(e, node.channel)}
       >
         {hasChildren && (
           <span
@@ -449,7 +538,13 @@ function ChannelTreeNode({
           </span>
         )}
         {!hasChildren && <span className={styles.aclTreeChevronSpacer} />}
+        {isPrivate && <LockIcon className={styles.aclTreePrivateIcon} width={11} height={11} />}
         <span className={styles.aclTreeLabel}>{node.channel.name}</span>
+        {isPrivate && (
+          <span className={styles.aclTreePrivateBadge}>
+            {t("channelAcl.privateBadge")}
+          </span>
+        )}
       </button>
       {isExpanded &&
         node.children.map((child) => (
@@ -462,6 +557,7 @@ function ChannelTreeNode({
             matchedIds={matchedIds}
             onSelect={onSelect}
             onToggle={onToggle}
+            onContextMenu={onContextMenu}
           />
         ))}
     </>

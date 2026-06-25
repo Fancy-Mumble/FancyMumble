@@ -503,7 +503,7 @@
     "users": "Users",
     "roles": "Roles",
     "bans": "Ban List",
-    "acl": "Channel ACL",
+    "acl": "Channels / ACL",
     "emotes": "Emotes",
     "onboarding": "Onboarding",
     "serverPlugins": "Server Plugins",
@@ -558,14 +558,24 @@
     "fieldDuration": "Duration (seconds, 0 = permanent)"
   },
   "channelAcl": {
-    "title": "Channel ACL Editor",
+    "title": "Channels / ACL",
     "searchChannels": "Search channels...",
     "selectChannel": "Select a channel to edit its ACL",
     "loadingAcl": "Loading ACL...",
     "saveChanges": "Save Changes",
     "inheritAcls": "Inherit ACLs from parent channel",
     "tabRules": "ACL Rules ({{count}})",
-    "tabGroups": "Groups ({{count}})"
+    "tabGroups": "Groups ({{count}})",
+    "tabUsers": "Users ({{count}})",
+    "privateBadge": "private",
+    "deleteChannel": "Delete channel",
+    "confirmDeleteChannel": "Delete channel \"{{name}}\" and everything under it? This cannot be undone.",
+    "accessAllUsers": "All users have access to this channel.",
+    "accessAllRegistered": "All registered users have access to this channel.",
+    "accessViaGroup": "Members of @{{group}}",
+    "accessNoneExplicit": "No specific users are granted access; access is inherited from parent ACLs.",
+    "accessUsersHeading": "Users with access",
+    "accessOnlineHint": "online"
   },
   "roles": {
     "title": "Server Roles",
