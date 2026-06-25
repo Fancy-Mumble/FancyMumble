@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import type { UserEntry } from "../../../types";
+import { TID } from "../../../testids";
 import { useAppStore } from "../../../store";
 import {
   addFriend,
@@ -165,12 +166,23 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
         await removeFriend(friendEntry.id);
         setToast({ variant: "info", message: t("userMenu.toastFriendRemoved", { name: user.name }) });
       } else {
-        const serverLabel = sessions.find((s) => s.id === activeServerId)?.label;
+        const session = sessions.find((s) => s.id === activeServerId);
         await addFriend({
           userName: user.name,
           userHash: user.hash,
           serverId: activeServerId ?? undefined,
-          serverLabel,
+          serverLabel: session?.label,
+          // Capture the registered uid + connection target so we can open the
+          // friend chat while they're offline, or (re)connect to their server.
+          ...(user.user_id != null && user.user_id >= 0 ? { userId: user.user_id } : {}),
+          ...(session
+            ? {
+                serverHost: session.host,
+                serverPort: session.port,
+                serverUsername: session.username,
+                serverCertLabel: session.certLabel,
+              }
+            : {}),
         });
         setToast({ variant: "success", message: t("userMenu.toastFriendAdded", { name: user.name }) });
       }
@@ -292,6 +304,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
             <button
               type="button"
               className={styles.menuItem}
+              data-testid={TID.userMenuFriendToggle}
               onClick={() => { void handleFriendToggle(); }}
             >
               <span className={styles.menuIcon}>

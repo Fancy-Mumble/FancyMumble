@@ -21,6 +21,42 @@
   text-align: center;
 }
 
+/* Per-server group of friend chats, separated by a labelled divider. */
+.serverGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.serverGroup + .serverGroup {
+  margin-top: 4px;
+}
+
+.serverDivider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+}
+
+.serverDividerLabel {
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid var(--color-glass-border);
+  padding-bottom: 4px;
+}
+
+.serverDividerCount {
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+
 .friendItem {
   display: flex;
   align-items: center;
@@ -138,6 +174,55 @@
   font-size: 14px;
   padding: 32px;
   text-align: center;
+}
+
+/* Connect-to-server prompt shown when clicking a friend on a server we are not
+ * currently connected to. */
+.connectPrompt {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  padding: 32px;
+  text-align: center;
+}
+
+.connectActions {
+  display: flex;
+  gap: 12px;
+}
+
+.connectButton {
+  padding: 8px 18px;
+  border: none;
+  border-radius: 6px;
+  background: var(--color-accent, #5865f2);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.connectButton:hover {
+  filter: brightness(1.08);
+}
+
+.connectCancel {
+  padding: 8px 18px;
+  border: 1px solid var(--color-border, #3a3c43);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.connectCancel:hover {
+  color: var(--color-text-primary);
 }
 
 @media (max-width: 768px) {

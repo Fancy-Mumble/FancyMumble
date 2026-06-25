@@ -1,4 +1,4 @@
-import { ArrowRightIcon, BellIcon, BellOffIcon, CalendarIcon, DatabaseIcon, FileTextIcon, FolderIcon, PinIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, UsersGroupIcon } from "../../icons";
+import { ArrowRightIcon, BellIcon, BellOffIcon, CalendarIcon, DatabaseIcon, FileTextIcon, FolderIcon, PinIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, ShieldCheckIcon, ShieldIcon, UsersGroupIcon } from "../../icons";
 import { useTranslation } from "react-i18next";
 import { isMobile } from "../../utils/platform";
 import type { KeyTrustLevel } from "../../types";
@@ -30,6 +30,10 @@ interface ChatHeaderProps {
   readonly isInChannel: boolean;
   readonly isDm?: boolean;
   readonly isPersisted?: boolean;
+  /** Whether this chat is end-to-end encrypted (a signal_v1 / fancy archive
+   *  channel). Drives the header lock badge so the user always knows whether
+   *  their chat is E2E or a classic (server-readable) chat. */
+  readonly isE2E?: boolean;
   readonly onJoin?: () => void;
   readonly onChannelInfoToggle?: () => void;
   readonly onChannelSearch?: () => void;
@@ -157,6 +161,7 @@ export default function ChatHeader({
   isInChannel,
   isDm,
   isPersisted,
+  isE2E,
   onJoin,
   onChannelInfoToggle,
   onChannelSearch,
@@ -225,7 +230,7 @@ export default function ChatHeader({
         </div>
       ) : (
         <div className={styles.headerInfo}>
-          <h2 className={styles.channelName}>
+          <h2 className={styles.channelName} data-testid={TID.chatHeaderTitle}>
             {prefix} {channelName}
             {isPersisted && (
               <DatabaseIcon
@@ -236,6 +241,36 @@ export default function ChatHeader({
               >
                 <title>{t("header.persistedChatTooltip")}</title>
               </DatabaseIcon>
+            )}
+            {isE2E ? (
+              <ShieldCheckIcon
+                className={styles.e2eBadge}
+                width={14}
+                height={14}
+                data-testid={TID.chatE2EBadge}
+                aria-label={t("header.e2eEncrypted", { defaultValue: "End-to-end encrypted" })}
+              >
+                <title>
+                  {t("header.e2eEncryptedTooltip", {
+                    defaultValue: "End-to-end encrypted - the server cannot read these messages.",
+                  })}
+                </title>
+              </ShieldCheckIcon>
+            ) : (
+              isDm && (
+                <ShieldIcon
+                  className={styles.e2eBadgeOff}
+                  width={14}
+                  height={14}
+                  aria-label={t("header.notE2E", { defaultValue: "Not end-to-end encrypted" })}
+                >
+                  <title>
+                    {t("header.notE2ETooltip", {
+                      defaultValue: "Classic direct message - not end-to-end encrypted or persisted.",
+                    })}
+                  </title>
+                </ShieldIcon>
+              )
             )}
           </h2>
           {!isMobile && (<span className={styles.memberCount}>{subtitle}</span>)}
