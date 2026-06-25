@@ -8,7 +8,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { reconnectDelayMs } from "./utils/reconnectBackoff";
+import { reconnectDelayMs } from "../utils/reconnectBackoff";
 import {
   isPermissionGranted,
   requestPermission,
@@ -25,13 +25,7 @@ import type {
   VoiceState,
   PersistenceMode,
   ChannelPersistenceState,
-  KeyTrustState,
-  CustodianPinState,
-  PendingDispute,
-  ChannelPersistConfig,
   PchatProtocol,
-  PendingKeyShareRequest,
-  KeyHolderEntry,
   ServerInfo,
   ServerLogEntry,
   ReadReceiptDeliverPayload,
@@ -40,75 +34,78 @@ import type {
   LiveDocPluginConfig,
   FileAccessMode,
   UploadResponse,
-  DownloadEntry,
-  NewDownloadInput,
   CustomServerEmote,
   PluginInfoRecord,
   PendingMessage,
-} from "./types";
-import type { PollPayload, PollVotePayload } from "./components/chat/poll/PollCreator";
-import { registerPoll, registerVote } from "./components/chat/poll/PollCard";
-import type { WatchSession, WatchSyncPayload } from "./components/chat/watch/watchTypes";
-import { applyWatchSyncEvent } from "./components/chat/watch/watchStore";
-import { applyReaction, resetReactions, setServerCustomReactions, type ServerCustomReaction } from "./components/chat/reaction/reactionStore";
+} from "../types";
+import type { PollPayload, PollVotePayload } from "../components/chat/poll/PollCreator";
+import { registerPoll, registerVote } from "../components/chat/poll/PollCard";
+import type { WatchSession, WatchSyncPayload } from "../components/chat/watch/watchTypes";
+import { applyWatchSyncEvent } from "../components/chat/watch/watchStore";
+import { resetReactions, setServerCustomReactions, type ServerCustomReaction } from "../components/chat/reaction/reactionStore";
 import {
   applyInteractionResponse,
   decodeInteractionResponse,
   emptyPluginTier1Slice,
   manifestPermitsResponse,
   type PluginTier1Slice,
-} from "./plugins/tier1/store";
-import type { InteractionResponse } from "./plugins/tier1/types";
-import { parseClientManifest } from "./plugins/tier1/manifest";
-import { applyReadStates, clearReadReceipts } from "./components/chat/readreceipt/readReceiptStore";
-import { useOnboardingStore } from "./components/onboarding/onboardingStore";
-import type { OnboardingConfigEvent, OnboardingResponseEvent } from "./types";
-import { offloadManager } from "./messageOffload";
-import { getSilencedChannels, setSilencedChannel, getUserVolumes, saveUserVolume, getMutedPushChannels, setMutedPushChannel, getPreferences, updatePreferences } from "./preferencesStorage";
+} from "../plugins/tier1/store";
+import type { InteractionResponse } from "../plugins/tier1/types";
+import { parseClientManifest } from "../plugins/tier1/manifest";
+import { applyReadStates, clearReadReceipts } from "../components/chat/readreceipt/readReceiptStore";
+import { useOnboardingStore } from "../components/onboarding/onboardingStore";
+import type { OnboardingConfigEvent, OnboardingResponseEvent } from "../types";
+import { offloadManager } from "../messageOffload";
+import { getSilencedChannels, getUserVolumes, getMutedPushChannels, getPreferences, updatePreferences } from "../preferencesStorage";
+import { createDmSlice, dmInitialState, type DmSlice } from "./slices/dm";
+import { createVoiceSlice, voiceInitialState, type VoiceSlice } from "./slices/voice";
 import {
-  friendKeyFor as dmFriendKeyFor,
-  isDmPersistenceEnabled,
-  loadDmHistory,
-  mergeMessages as mergeDmMessages,
-  saveDmHistory,
-} from "./dmStorage";
-import { loadProfileData } from "./pages/settings/profileData";
-import { base64ToBytes } from "./utils/base64";
-import { serializeProfile, dataUrlToBytes } from "./profileFormat";
-import { sanitiseWsUrl } from "./components/chat/livedoc/sanitiseWsUrl";
-import { TauriEvent } from "./constants/tauriEvents";
+  createNotificationsSlice,
+  notificationsInitialState,
+  type NotificationsSlice,
+} from "./slices/notifications";
+import {
+  createDownloadsSlice,
+  downloadsInitialState,
+  type DownloadsSlice,
+} from "./slices/downloads";
+import { loadProfileData } from "../pages/settings/profileData";
+import { base64ToBytes } from "../utils/base64";
+import { serializeProfile, dataUrlToBytes } from "../profileFormat";
+import { sanitiseWsUrl } from "../components/chat/livedoc/sanitiseWsUrl";
+import { TauriEvent } from "../constants/tauriEvents";
 import {
   PluginDataId,
   PluginPayloadType,
   PLUGIN_NAME_FILE_SERVER,
   PLUGIN_NAME_LIVE_DOC,
   friendlyPluginName,
-} from "./constants/pluginData";
+} from "../constants/pluginData";
 import i18next from "i18next";
 import {
   probeFileServerCapabilities,
   rebaseFileServerUrl,
-} from "./store/fileServer";
+} from "./fileServer";
 export {
   DEFAULT_FILE_SERVER_PORT,
   fileServerBaseUrl,
   probeFileServerCapabilities,
   rebaseFileServerUrl,
-} from "./store/fileServer";
+} from "./fileServer";
 import type {
   PluginRegistryEntry,
   PluginRegistryEvent,
-} from "./store/plugins";
+} from "./plugins";
 import {
   reconcilePluginRegistry,
   sendPluginMessage,
   sliceFromState,
   slicePatch,
-} from "./store/plugins";
+} from "./plugins";
 export type {
   PluginRegistryEntry,
   PluginRegistryEvent,
-} from "./store/plugins";
+} from "./plugins";
 export {
   allowPlugin,
   dismissPluginCard,
@@ -121,52 +118,21 @@ export {
   revokePluginTrust,
   sendPluginInteraction,
   sendPluginMessage,
-} from "./store/plugins";
-import { applyCalendarInbound } from "./components/chat/calendar/calendarStore";
-
-/** Event payload for a pin state change delivered by the server. */
-interface PinDeliverEvent {
-  channel_id: number;
-  message_id: string;
-  pinned: boolean;
-  pinner_hash: string;
-  pinner_name: string;
-  timestamp: number;
-}
-
-/** Event payload for a batch of stored pins from the server. */
-interface PinFetchResponseEvent {
-  channel_id: number;
-  pins: {
-    message_id: string;
-    pinner_hash: string;
-    pinner_name: string;
-    timestamp: number;
-  }[];
-}
-
-/** Event payload for a single reaction delivered by the server. */
-interface ReactionDeliverEvent {
-  channel_id: number;
-  message_id: string;
-  emoji: string;
-  action: string;
-  sender_hash: string;
-  sender_name: string;
-  timestamp: number;
-}
-
-/** Event payload for a batch of stored reactions from the server. */
-interface ReactionFetchResponseEvent {
-  channel_id: number;
-  reactions: {
-    message_id: string;
-    emoji: string;
-    sender_hash: string;
-    sender_name: string;
-    timestamp: number;
-  }[];
-}
+} from "./plugins";
+import { applyCalendarInbound } from "../components/chat/calendar/calendarStore";
+import {
+  MSG_MEETING_ROOM,
+  MSG_MEETING_INVITE_LINK,
+  dispatchMeetingRoom,
+  dispatchMeetingInviteLink,
+} from "../components/chat/calendar/meetings";
+import { FRIENDS_PLUGIN, MSG_FRIENDS_ROOM, parseFriendsRoom } from "../friendsChannel";
+import {
+  createPersistentChatSlice,
+  persistentChatInitialState,
+  type PersistentChatSlice,
+} from "./slices/persistentChat";
+import { registerPersistentChatEvents } from "./slices/persistentChat.events";
 
 /** Sessions that have already had their stored volume applied this connection. */
 const volumeAppliedSessions = new Set<number>();
@@ -177,7 +143,7 @@ const volumeAppliedSessions = new Set<number>();
  *  sync via the `preferences-changed` event. */
 let autoReconnectEnabled = false;
 if (typeof window !== "undefined") {
-  void import("./preferencesStorage")
+  void import("../preferencesStorage")
     .then(({ getPreferences }) => getPreferences())
     .then((p) => {
       autoReconnectEnabled = p.autoReconnect ?? false;
@@ -192,7 +158,7 @@ if (typeof window !== "undefined") {
 }
 
 // File-server URL helpers moved to `store/fileServer.ts`; re-exported
-// below so callers continue to `import { rebaseFileServerUrl } from "./store"`.
+// below so callers continue to `import { rebaseFileServerUrl } from "../store"`.
 
 let autoReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let manualDisconnectRequested = false;
@@ -205,7 +171,11 @@ const intentionallyClosingSessions = new Set<string>();
  *  `initEventListeners`; used by store actions that need to redirect
  *  (e.g. `disconnectSession` falling back to the connect page). */
 let navigateRef: ((path: string) => void) | null = null;
-let isRestoringVoice = false;
+/** Reconnect voice-restore guard: while true, voice toggles suppress the
+ *  preference writes that would otherwise clobber the saved on-reconnect
+ *  state. Mutated by the voice-state event handler below; read by the voice
+ *  slice's `toggleMute` (imported there as a live binding). */
+export let isRestoringVoice = false;
 
 function clearAutoReconnectTimer(): void {
   if (autoReconnectTimer !== null) {
@@ -297,7 +267,7 @@ export interface LiveDocSessionInfo {
   /** App-side server tab id this session belongs to.  Used to scope
    *  the live-doc maps so two server tabs do not collide on the same
    *  numeric channel id (channel 0 = root on every Mumble server). */
-  readonly appServerId: import("./types").ServerId | null;
+  readonly appServerId: import("../types").ServerId | null;
   readonly channelId: number;
   readonly slug: string;
   readonly title: string;
@@ -315,14 +285,14 @@ export interface LiveDocSessionInfo {
 export interface LiveDocAnnounceInfo {
   readonly openerName: string;
   readonly title: string;
-  readonly appServerId: import("./types").ServerId | null;
+  readonly appServerId: import("../types").ServerId | null;
   readonly channelId: number;
   readonly slug: string;
 }
 
 /** Composite map key for live-doc state, scoped to a server tab. */
 export function liveDocKey(
-  appServerId: import("./types").ServerId | null,
+  appServerId: import("../types").ServerId | null,
   channelId: number,
 ): string {
   return `${appServerId ?? ""}|${channelId}`;
@@ -330,7 +300,7 @@ export function liveDocKey(
 
 // --- Store shape --------------------------------------------------
 
-export interface AppState {
+export interface AppState extends PersistentChatSlice, DmSlice, VoiceSlice, NotificationsSlice, DownloadsSlice {
   // Reactive state
   status: ConnectionStatus;
   channels: ChannelEntry[];
@@ -344,7 +314,6 @@ export interface AppState {
   ownSession: number | null;
   messages: ChatMessage[];
   error: string | null;
-  listenedChannels: Set<number>;
   unreadCounts: Record<number, number>;
   serverConfig: MumbleServerConfig;
   /** File-server plugin configuration advertised by the server on connect.
@@ -397,33 +366,18 @@ export interface AppState {
   /** Whether the admin File Server dashboard is currently mounted, so a runtime
    *  disable of the file-server plugin can prompt the open admin. */
   fileServerAdminOpen: boolean;
-  /** Locally-saved downloads completed during the current session. Most
-   *  recent first. Cleared on disconnect / reset. */
-  downloads: DownloadEntry[];
-  /** Number of downloads completed since the user last opened the
-   *  Downloads panel. Used to drive the kebab-menu badge. */
-  unseenDownloadCount: number;
+  // Downloads state (downloads/unseenDownloadCount) lives in DownloadsSlice
+  // (store/slices/downloads.ts).
   /** Fancy Mumble version of the connected server (v2-encoded), null if not a fancy server. */
   serverFancyVersion: number | null;
   /** Plugin ABI version the connected server's plugin host was compiled
    *  against (from FancyPluginAdminList.host_abi_version). null until an
    *  admin plugin list is received, or on a non-fancy server. */
   serverHostAbiVersion: number | null;
-  voiceState: VoiceState;
-  /** True when audio is transported over UDP (false = TCP tunnel). */
-  udpActive: boolean;
-  /** True while the user is in an active mobile call session (set by Start/End Call). */
-  inCall: boolean;
-  /** Session IDs of users currently transmitting audio (talking). */
-  talkingSessions: Set<number>;
 
-  // -- DM state --------------------------------------------------
-  /** Session ID of the user whose DM chat is currently viewed. */
-  selectedDmUser: number | null;
-  /** DM messages for the currently viewed conversation. */
-  dmMessages: ChatMessage[];
-  /** DM unread counts keyed by user session. */
-  dmUnreadCounts: Record<number, number>;
+  // Voice state (voiceState/udpActive/inCall/talkingSessions/listenedChannels)
+  // lives in VoiceSlice (store/slices/voice.ts).
+  // DM state lives in DmSlice (store/slices/dm.ts).
 
   // -- Poll state (in-memory, not persisted) ---------------------
   /** All known polls keyed by poll ID. */
@@ -437,7 +391,7 @@ export interface AppState {
 
   // -- Link embed state (in-memory, not persisted) ---------------
   /** Link embeds keyed by message_id. */
-  linkEmbeds: Map<string, import("./types").LinkEmbed[]>;
+  linkEmbeds: Map<string, import("../types").LinkEmbed[]>;
 
   /** Whether the user has opted out of requesting link previews. */
   disableLinkPreviews: boolean;
@@ -524,38 +478,9 @@ export interface AppState {
    *  "Connecting..."). */
   watchingOwnSession: number | null;
 
-  // -- Persistent chat state -------------------------------------
-  /** Persistence metadata per channel (mode, retention, fetch state). */
-  channelPersistence: Record<number, ChannelPersistenceState>;
-  /** Key trust state per channel (trust level, fingerprints, distributor). */
-  keyTrust: Record<number, KeyTrustState>;
-  /** Custodian pin state per channel (TOFU pinning). */
-  custodianPins: Record<number, CustodianPinState>;
-  /** Pending key disputes per channel. */
-  pendingDisputes: Record<number, PendingDispute>;
-  /** Channels currently loading history (awaiting key exchange + fetch). */
-  pchatHistoryLoading: Set<number>;
-  /** Pending key-share consent requests per channel. */
-  pendingKeyShares: Record<number, PendingKeyShareRequest[]>;
-  /** Server-tracked key holders per channel. */
-  keyHolders: Record<number, KeyHolderEntry[]>;
-  /** Channels where the key-possession challenge failed (key revoked). */
-  pchatKeyRevoked: Set<number>;
-  /** Error message when the signal bridge library fails to load. */
-  signalBridgeError: string | null;
-
-  /** Channel IDs silenced for the current server (notifications suppressed). */
-  silencedChannels: Set<number>;
-
-  /** Channel IDs with push notifications disabled (client preference, synced to server). */
-  mutedPushChannels: Set<number>;
-
-  /** Channel IDs we are push-subscribed to (have SubscribePush permission). */
-  pushSubscribedChannels: Set<number>;
-
-  /** Per-user volume overrides keyed by cert hash (0-200, default 100). */
-  /** Per-user volume overrides, keyed by cert hash. */
-  userVolumes: Record<string, number>;
+  // Persistent-chat state lives in PersistentChatSlice (store/slices/persistentChat.ts).
+  // Notification state (silenced/mutedPush/pushSubscribed/userVolumes) lives in
+  // NotificationsSlice (store/slices/notifications.ts).
 
   /** Server activity log entries (connect, disconnect, mute, channel move, etc.). */
   serverLog: ServerLogEntry[];
@@ -596,6 +521,10 @@ export interface AppState {
   selectChannel: (id: number) => Promise<void>;
   joinChannel: (id: number) => Promise<void>;
   joinChannelWithPassword: (id: number, password: string) => Promise<void>;
+  /** Read a 1:1 private chat room (friend chat / self-notepad) WITHOUT joining
+   *  it: fetch its E2E history + pass the key challenge so live messages are
+   *  delivered, while staying in your current channel. Idempotent. */
+  peekChannel: (id: number) => Promise<void>;
   sendMessage: (channelId: number, body: string) => Promise<void>;
   /**
    * Insert a synthetic pending-message placeholder.  Used by the chat
@@ -612,7 +541,6 @@ export interface AppState {
   /** Retry a failed pending message. */
   retryPendingMessage: (pendingId: string) => Promise<void>;
   editMessage: (channelId: number, messageId: string, newBody: string) => Promise<void>;
-  toggleListen: (channelId: number) => Promise<void>;
 
   // Channel management
   createChannel: (parentId: number, name: string, opts?: {
@@ -624,6 +552,11 @@ export interface AppState {
     pchatMaxHistory?: number;
     pchatRetentionDays?: number;
     password?: string;
+    hidden?: boolean;
+    expiryMode?: number;
+    expiryDurationSecs?: number;
+    /** Registered user_ids to invite (private meeting room). Create-only. */
+    invitees?: number[];
   }) => Promise<void>;
   updateChannel: (channelId: number, opts: {
     name?: string;
@@ -635,6 +568,9 @@ export interface AppState {
     pchatMaxHistory?: number;
     pchatRetentionDays?: number;
     password?: string;
+    hidden?: boolean;
+    expiryMode?: number;
+    expiryDurationSecs?: number;
   }) => Promise<void>;
   deleteChannel: (channelId: number) => Promise<void>;
   moveChannelUsers: (fromChannelId: number, toChannelId: number) => Promise<void>;
@@ -642,21 +578,21 @@ export interface AppState {
   // -- Multi-server (Phase C) ------------------------------------
   /** Snapshot of every backend session currently registered.  Survives
    *  disconnects of individual sessions; only cleared by `refreshSessions`. */
-  sessions: import("./types").SessionMeta[];
+  sessions: import("../types").SessionMeta[];
   /** Backend's currently-active session id (the one frontend commands
    *  without an explicit serverId target).  `null` when no sessions. */
-  activeServerId: import("./types").ServerId | null;
+  activeServerId: import("../types").ServerId | null;
   /** Re-pull `list_servers` + `get_active_server` from the backend.
    *  Idempotent; safe to call after any connect / disconnect. */
   refreshSessions: () => Promise<void>;
   /** Make `id` the backend's active session, then refresh per-session
    *  data (channels / users / messages) for the new active session. */
-  switchServer: (id: import("./types").ServerId) => Promise<void>;
+  switchServer: (id: import("../types").ServerId) => Promise<void>;
   /** Tear down a single session by id (used by the tab-close button).
    *  Suppresses the "Connection lost" overlay and switches the active
    *  view to the next remaining session, or to the connect page when
    *  no sessions remain. */
-  disconnectSession: (id: import("./types").ServerId) => Promise<void>;
+  disconnectSession: (id: import("../types").ServerId) => Promise<void>;
   /** Total unread message count per session (channels + DMs combined),
    *  keyed by serverId.  Updated from `unread-changed` /
    *  `dm-unread-changed` events for non-active sessions; the active
@@ -670,10 +606,8 @@ export interface AppState {
 
   refreshState: () => Promise<void>;
   refreshMessages: (channelId: number) => Promise<void>;
-  enableVoice: () => Promise<void>;
-  disableVoice: () => Promise<void>;
-  toggleMute: () => Promise<void>;
-  toggleDeafen: () => Promise<void>;
+  // Voice actions (toggleListen/enableVoice/disableVoice/toggleMute/toggleDeafen)
+  // live in VoiceSlice (store/slices/voice.ts).
   selectUser: (session: number | null) => void;
   sendPluginData: (receiverSessions: number[], data: Uint8Array, dataId: string) => Promise<void>;
   /** Upload a local file via the server-side file-server plugin. Returns the
@@ -705,15 +639,8 @@ export interface AppState {
   pinMessage: (channelId: number, messageId: string, unpin: boolean) => Promise<void>;
   /** Mark all unseen pin notifications as seen for a channel. */
   clearUnseenPins: (channelId: number) => void;
-  /** Append a completed download to the in-memory list and bump the
-   *  unseen badge count. */
-  addDownload: (entry: NewDownloadInput) => void;
-  /** Reset the unseen-downloads badge. Called when the panel opens. */
-  markDownloadsSeen: () => void;
-  /** Remove a single download from the list (does not delete the file). */
-  removeDownload: (id: string) => void;
-  /** Clear the entire downloads list. */
-  clearDownloads: () => void;
+  // Download actions (addDownload/markDownloadsSeen/removeDownload/clearDownloads)
+  // live in DownloadsSlice (store/slices/downloads.ts).
   /** Upload a new custom server emote. Requires admin permission. */
   addCustomEmote: (params: {
     shortcode: string;
@@ -732,9 +659,6 @@ export interface AppState {
   retryWithPassword: (password: string) => Promise<void>;
   /** Dismiss the password prompt without retrying. */
   dismissPasswordPrompt: () => void;
-
-  /** Set a per-user volume override by cert hash (0-200). Persists to disk. */
-  setUserVolume: (hash: string, volume: number) => void;
 
   // Plugin lifecycle
   /** Handle a host broadcast that a server plugin was disabled at runtime:
@@ -755,7 +679,7 @@ export interface AppState {
    *  a tab that may not be the foreground tab at click time). */
   closeActiveLiveDoc: (
     channelId: number,
-    appServerId?: import("./types").ServerId | null,
+    appServerId?: import("../types").ServerId | null,
   ) => void;
   /** Record a pending Live Doc announce so the chat banner can render. */
   setLiveDocAnnounce: (announce: LiveDocAnnounceInfo) => void;
@@ -763,7 +687,7 @@ export interface AppState {
    *  `appServerId` to target a specific server tab. */
   clearLiveDocAnnounce: (
     channelId: number,
-    appServerId?: import("./types").ServerId | null,
+    appServerId?: import("../types").ServerId | null,
   ) => void;
   /** Ask the server to open a Live Doc by slug.  Server validates and
    *  replies with a `fancy-live-doc/invite` PluginDataTransmission that
@@ -787,7 +711,7 @@ export interface AppState {
     channelId: number,
     slug: string,
     title: string,
-    appServerId?: import("./types").ServerId | null,
+    appServerId?: import("../types").ServerId | null,
   ) => void;
   /** Ask the live-doc server to flush/snapshot the document now
    *  (owner-initiated manual save).  Best-effort plugin message. */
@@ -796,54 +720,33 @@ export interface AppState {
   setPendingLiveDocSeed: (
     channelId: number,
     markdown: string,
-    appServerId?: import("./types").ServerId | null,
+    appServerId?: import("../types").ServerId | null,
   ) => void;
   /** Atomic take-and-clear of the pending seed for a channel. */
   consumePendingLiveDocSeed: (
     channelId: number,
-    appServerId?: import("./types").ServerId | null,
+    appServerId?: import("../types").ServerId | null,
   ) => string | undefined;
 
-  // Silenced channels
-  /** Toggle silence for a channel (local-only, persisted per server). */
-  toggleSilenceChannel: (channelId: number) => Promise<boolean>;
-  /** Check whether a channel is silenced. */
-  isChannelSilenced: (channelId: number) => boolean;
+  // Notification actions (silence / push-mute / per-user volume) live in
+  // NotificationsSlice (store/slices/notifications.ts).
 
-  // Push notification muting
-  /** Toggle push-notification mute for a channel (persisted per server, synced to server). */
-  toggleMutePushChannel: (channelId: number) => Promise<boolean>;
-  /** Check whether push notifications are muted for a channel. */
-  isPushChannelMuted: (channelId: number) => boolean;
+  // DM actions live in DmSlice (store/slices/dm.ts).
 
-  // DM actions
-  selectDmUser: (session: number) => Promise<void>;
-  sendDm: (targetSession: number, body: string) => Promise<void>;
-  refreshDmMessages: (session: number) => Promise<void>;
-
-  // Persistent chat actions
-  fetchHistory: (channelId: number, beforeId?: string) => Promise<void>;
-  getPersistenceMode: (channelId: number) => PersistenceMode;
-  verifyKeyFingerprint: (channelId: number) => Promise<void>;
-  acceptCustodianChanges: (channelId: number) => Promise<void>;
-  confirmCustodians: (channelId: number) => Promise<void>;
-  resolveKeyDispute: (channelId: number, trustedSenderHash: string) => Promise<void>;
-  updateChannelPersistenceConfig: (channelId: number, config: ChannelPersistConfig) => void;
-  approveKeyShare: (channelId: number, peerCertHash: string) => Promise<void>;
-  dismissKeyShare: (channelId: number, peerCertHash: string) => Promise<void>;
-  queryKeyHolders: (channelId: number) => Promise<void>;
-
-  // Message deletion
-  deletePchatMessages: (channelId: number, opts: {
-    messageIds?: string[];
-    timeFrom?: number;
-    timeTo?: number;
-    senderHash?: string;
-  }) => Promise<void>;
+  // Persistent-chat actions live in PersistentChatSlice (store/slices/persistentChat.ts).
 }
 
 const INITIAL: Pick<
   AppState,
+  | "channelPersistence"
+  | "keyTrust"
+  | "custodianPins"
+  | "pendingDisputes"
+  | "pchatHistoryLoading"
+  | "pendingKeyShares"
+  | "keyHolders"
+  | "pchatKeyRevoked"
+  | "signalBridgeError"
   | "status"
   | "channels"
   | "users"
@@ -906,15 +809,6 @@ const INITIAL: Pick<
   | "poppedOutStreamSessions"
   | "watchingSession"
   | "watchingOwnSession"
-  | "channelPersistence"
-  | "keyTrust"
-  | "custodianPins"
-  | "pendingDisputes"
-  | "pchatHistoryLoading"
-  | "pendingKeyShares"
-  | "keyHolders"
-  | "pchatKeyRevoked"
-  | "signalBridgeError"
   | "silencedChannels"
   | "mutedPushChannels"
   | "pushSubscribedChannels"
@@ -930,6 +824,11 @@ const INITIAL: Pick<
   | "reconnectScheduled"
   | "nextReconnectAt"
 > = {
+  ...persistentChatInitialState,
+  ...dmInitialState,
+  ...voiceInitialState,
+  ...notificationsInitialState,
+  ...downloadsInitialState,
   status: "disconnected",
   channels: [],
   users: [],
@@ -939,7 +838,6 @@ const INITIAL: Pick<
   ownSession: null,
   messages: [],
   error: null,
-  listenedChannels: new Set(),
   unreadCounts: {},
   serverConfig: {
     max_message_length: 5000,
@@ -964,17 +862,8 @@ const INITIAL: Pick<
   pluginInfos: new Map(),
   pluginDisabledNotice: null,
   fileServerAdminOpen: false,
-  downloads: [],
-  unseenDownloadCount: 0,
   serverFancyVersion: null,
   serverHostAbiVersion: null,
-  voiceState: "inactive" as VoiceState,
-  udpActive: false,
-  inCall: false,
-  talkingSessions: new Set<number>(),
-  selectedDmUser: null,
-  dmMessages: [],
-  dmUnreadCounts: {},
   polls: new Map(),
   pollMessages: [],
   pendingMessages: [],
@@ -998,19 +887,6 @@ const INITIAL: Pick<
   poppedOutStreamSessions: new Set(),
   watchingSession: null,
   watchingOwnSession: null,
-  channelPersistence: {},
-  keyTrust: {},
-  custodianPins: {},
-  pendingDisputes: {},
-  pchatHistoryLoading: new Set(),
-  pendingKeyShares: {},
-  keyHolders: {},
-  pchatKeyRevoked: new Set(),
-  signalBridgeError: null,
-  silencedChannels: new Set(),
-  mutedPushChannels: new Set(),
-  pushSubscribedChannels: new Set(),
-  userVolumes: {},
   serverLog: [],
   passwordRequired: false,
   passwordAttempted: false,
@@ -1044,19 +920,19 @@ let messageWriteSeq = 0;
 const LARGE_MESSAGE_THRESHOLD = 4096;
 
 /** Whether a message body should show an optimistic upload-progress UI. */
-function bodyNeedsProgressUI(body: string): boolean {
+export function bodyNeedsProgressUI(body: string): boolean {
   if (body.includes("<img")) return true;
   if (body.includes("<video")) return true;
   return body.length > LARGE_MESSAGE_THRESHOLD;
 }
 
-function newPendingId(): string {
+export function newPendingId(): string {
   return globalThis.crypto?.randomUUID?.()
     ?? `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 /** Update the taskbar badge with the total unread count (channels + DMs). */
-function updateBadgeCount(): void {
+export function updateBadgeCount(): void {
   const { unreadCounts, dmUnreadCounts, silencedChannels } = useAppStore.getState();
   const channelSum = Object.entries(unreadCounts)
     .filter(([id]) => !silencedChannels.has(Number(id)))
@@ -1068,29 +944,15 @@ function updateBadgeCount(): void {
   });
 }
 
-/**
- * Merges newly-fetched remote DM messages with the encrypted on-device
- * history (when the user has enabled DM persistence) and writes the
- * merged log back.  When persistence is disabled the remote messages
- * are returned unchanged.
- */
-async function applyDmPersistence(
-  state: { users: UserEntry[]; activeServerId: string | null },
-  session: number,
-  remote: ChatMessage[],
-): Promise<ChatMessage[]> {
-  if (!(await isDmPersistenceEnabled())) return remote;
-  const user = state.users.find((u) => u.session === session);
-  if (!user) return remote;
-  const key = dmFriendKeyFor({ hash: user.hash, name: user.name }, state.activeServerId);
-  const persisted = await loadDmHistory(key);
-  const merged = mergeDmMessages(persisted, remote);
-  void saveDmHistory(key, merged);
-  return merged;
-}
+// applyDmPersistence + the DM actions live in DmSlice (store/slices/dm.ts).
 
-export const useAppStore = create<AppState>((set, get) => ({
+export const useAppStore = create<AppState>()((set, get, store) => ({
   ...INITIAL,
+  ...createPersistentChatSlice(set, get, store),
+  ...createDmSlice(set, get, store),
+  ...createVoiceSlice(set, get, store),
+  ...createNotificationsSlice(set, get, store),
+  ...createDownloadsSlice(set, get, store),
   disableLinkPreviews: false,
   enableExternalEmbeds: false,
   streamerMode: false,
@@ -1104,8 +966,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   refreshSessions: async () => {
     try {
       const [sessions, activeServerId] = await Promise.all([
-        invoke<import("./types").SessionMeta[]>("list_servers"),
-        invoke<import("./types").ServerId | null>("get_active_server"),
+        invoke<import("../types").SessionMeta[]>("list_servers"),
+        invoke<import("../types").ServerId | null>("get_active_server"),
       ]);
       set((prev) => {
         // Drop per-tab badge entries for sessions that no longer exist.
@@ -1333,6 +1195,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  peekChannel: async (id) => {
+    try {
+      await invoke("peek_pchat_channel", { channelId: id });
+    } catch (e) {
+      console.error("peek_pchat_channel error:", e);
+    }
+  },
+
   joinChannelWithPassword: async (id, password) => {
     try {
       await invoke("join_channel", { channelId: id, password });
@@ -1355,6 +1225,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         pchatMaxHistory: opts.pchatMaxHistory ?? null,
         pchatRetentionDays: opts.pchatRetentionDays ?? null,
         password: opts.password ?? null,
+        hidden: opts.hidden ?? null,
+        expiryMode: opts.expiryMode ?? null,
+        expiryDurationSecs: opts.expiryDurationSecs ?? null,
+        invitees: opts.invitees ?? null,
       });
     } catch (e) {
       console.error("create_channel error:", e);
@@ -1375,6 +1249,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         pchatMaxHistory: opts.pchatMaxHistory ?? null,
         pchatRetentionDays: opts.pchatRetentionDays ?? null,
         password: opts.password ?? null,
+        hidden: opts.hidden ?? null,
+        expiryMode: opts.expiryMode ?? null,
+        expiryDurationSecs: opts.expiryDurationSecs ?? null,
       });
     } catch (e) {
       console.error("update_channel error:", e);
@@ -1552,7 +1429,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           // store and the chat-only DrawingOverlay module.
           const dropped = [...broadcastingSessions].filter((s) => !currentSessions.has(s));
           if (dropped.length > 0) {
-            void import("./components/chat/drawing/DrawingOverlay").then((m) => {
+            void import("../components/chat/drawing/DrawingOverlay").then((m) => {
               for (const s of dropped) m.clearStrokesFromSender(s);
             }).catch(() => {});
           }
@@ -1578,145 +1455,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  toggleListen: async (channelId) => {
-    try {
-      const isNowListened = await invoke<boolean>("toggle_listen", {
-        channelId,
-      });
-      set((prev) => {
-        const next = new Set(prev.listenedChannels);
-        if (isNowListened) next.add(channelId);
-        else next.delete(channelId);
-        return { listenedChannels: next };
-      });
-    } catch (e) {
-      console.error("toggle_listen error:", e);
-    }
-  },
-
-  enableVoice: async () => {
-    try {
-      await invoke("enable_voice");
-      set({ voiceState: "active", inCall: true });
-      updatePreferences({ voiceOnReconnect: true }).catch(() => {});
-    } catch (e) {
-      console.error("enable_voice error:", e);
-    }
-  },
-
-  disableVoice: async () => {
-    try {
-      await invoke("disable_voice");
-      set({ voiceState: "inactive", inCall: false, talkingSessions: new Set() });
-      updatePreferences({ voiceOnReconnect: false, voiceMutedOnReconnect: false }).catch(() => {});
-    } catch (e) {
-      console.error("disable_voice error:", e);
-    }
-  },
-
-  toggleMute: async () => {
-    // Capture state BEFORE the await so pref write is deterministic and
-    // ordered relative to the user action, not the async Rust IPC delivery.
-    // "active" ? will be muted; "muted" or "inactive" ? will be active.
-    const willBeMuted = useAppStore.getState().voiceState === "active";
-    try {
-      await invoke("toggle_mute");
-      if (!isRestoringVoice) {
-        updatePreferences({ voiceOnReconnect: true, voiceMutedOnReconnect: willBeMuted }).catch(() => {});
-      }
-    } catch (e) {
-      console.error("toggle_mute error:", e);
-    }
-  },
-
-  toggleDeafen: async () => {
-    try {
-      await invoke("toggle_deafen");
-    } catch (e) {
-      console.error("toggle_deafen error:", e);
-    }
-  },
-
   selectUser: (session) => set({ selectedUser: session }),
-
-  selectDmUser: async (session) => {
-    // Toggle: clicking the currently-selected DM user a second time
-    // switches back to the channel the local user is currently in.
-    const { selectedDmUser, currentChannel, selectChannel } = get();
-    if (selectedDmUser === session) {
-      if (currentChannel == null) {
-        set({ selectedDmUser: null, dmMessages: [], selectedUser: null });
-      } else {
-        await selectChannel(currentChannel);
-        set({ selectedUser: null });
-      }
-      return;
-    }
-    set({ selectedDmUser: session, selectedChannel: null, messages: [], selectedUser: session });
-    try {
-      await invoke("select_dm_user", { session });
-      const remote = await invoke<ChatMessage[]>("get_dm_messages", { session });
-      const dmMessages = await applyDmPersistence(get(), session, remote);
-      set({ dmMessages });
-    } catch (e) {
-      console.error("select_dm_user error:", e);
-    }
-  },
-
-  sendDm: async (targetSession, body) => {
-    const pendingId = newPendingId();
-    const showPlaceholder = bodyNeedsProgressUI(body);
-    if (showPlaceholder) {
-      set((s) => ({
-        pendingMessages: [
-          ...s.pendingMessages,
-          {
-            pendingId,
-            channelId: null,
-            dmSession: targetSession,
-            body,
-            createdAt: Date.now(),
-            state: "sending",
-          },
-        ],
-      }));
-    }
-    try {
-      await invoke("send_dm", { targetSession, body });
-      const remote = await invoke<ChatMessage[]>("get_dm_messages", { session: targetSession });
-      const dmMessages = await applyDmPersistence(get(), targetSession, remote);
-      if (showPlaceholder) {
-        set((s) => ({
-          dmMessages,
-          pendingMessages: s.pendingMessages.filter((p) => p.pendingId !== pendingId),
-        }));
-      } else {
-        set({ dmMessages });
-      }
-    } catch (e) {
-      console.error("send_dm error:", e);
-      if (showPlaceholder) {
-        const detail = e instanceof Error ? e.message : String(e);
-        set((s) => ({
-          pendingMessages: s.pendingMessages.map((p) =>
-            p.pendingId === pendingId
-              ? { ...p, state: "failed" as const, errorMessage: detail }
-              : p,
-          ),
-        }));
-      }
-    }
-  },
-
-  refreshDmMessages: async (session) => {
-    try {
-      const remote = await invoke<ChatMessage[]>("get_dm_messages", { session });
-      const dmMessages = await applyDmPersistence(get(), session, remote);
-      set({ dmMessages });
-    } catch (e) {
-      console.error("refresh dm messages error:", e);
-    }
-  },
 
   sendPluginData: async (_receiverSessions, _data, dataId) => {
     // PluginDataTransmission is permanently forbidden in Fancy Mumble.
@@ -1812,27 +1551,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       next.delete(channelId);
       return { unseenPinIds: next };
     });
-  },
-
-  addDownload: (entry) => {
-    const id = (globalThis.crypto?.randomUUID?.() ?? `dl-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    const full: DownloadEntry = { ...entry, id, downloadedAt: Date.now() };
-    set((s) => ({
-      downloads: [full, ...s.downloads].slice(0, 200),
-      unseenDownloadCount: s.unseenDownloadCount + 1,
-    }));
-  },
-
-  markDownloadsSeen: () => {
-    set({ unseenDownloadCount: 0 });
-  },
-
-  removeDownload: (id) => {
-    set((s) => ({ downloads: s.downloads.filter((d) => d.id !== id) }));
-  },
-
-  clearDownloads: () => {
-    set({ downloads: [], unseenDownloadCount: 0 });
   },
 
   addCustomEmote: async ({ shortcode, aliasEmoji, description, filePath, mimeType }) => {
@@ -2103,251 +1821,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   saveLiveDoc: async (channelId, slug) => {
     await sendPluginMessage("fancy-live-doc", "Persist", { channelId, slug });
   },
-
-  // -- Silenced channels ------------------------------------------
-
-  toggleSilenceChannel: async (channelId) => {
-    const { silencedChannels, pendingConnect } = get();
-    if (!pendingConnect) return false;
-    const serverKey = `${pendingConnect.host}:${pendingConnect.port}`;
-    const isSilenced = silencedChannels.has(channelId);
-    const updated = await setSilencedChannel(serverKey, channelId, !isSilenced);
-    set({ silencedChannels: new Set(updated) });
-    updateBadgeCount();
-    return !isSilenced;
-  },
-
-  isChannelSilenced: (channelId) => {
-    return get().silencedChannels.has(channelId);
-  },
-
-  // -- Push notification muting -----------------------------------
-
-  toggleMutePushChannel: async (channelId) => {
-    const { mutedPushChannels, pendingConnect } = get();
-    if (!pendingConnect) return false;
-    const serverKey = `${pendingConnect.host}:${pendingConnect.port}`;
-    const isMuted = mutedPushChannels.has(channelId);
-    const updated = await setMutedPushChannel(serverKey, channelId, !isMuted);
-    set({ mutedPushChannels: new Set(updated) });
-
-    // Sync the muted list to the server via native proto message.
-    try {
-      await invoke("send_push_update", { mutedChannels: updated });
-    } catch (e) {
-      console.error("Failed to sync push mute to server:", e);
-    }
-
-    return !isMuted;
-  },
-
-  isPushChannelMuted: (channelId) => {
-    return get().mutedPushChannels.has(channelId);
-  },
-
-  // -- Per-user volume overrides ----------------------------------
-
-  setUserVolume: (hash, volume) => {
-    const next = { ...get().userVolumes };
-    if (volume === 100) {
-      delete next[hash];
-    } else {
-      next[hash] = volume;
-    }
-    set({ userVolumes: next });
-    saveUserVolume(hash, volume).catch((err) =>
-      console.error("saveUserVolume failed:", err),
-    );
-  },
-
-  // -- Persistent chat actions ------------------------------------
-
-  fetchHistory: async (channelId, beforeId) => {
-    set((prev) => ({
-      channelPersistence: {
-        ...prev.channelPersistence,
-        [channelId]: {
-          ...prev.channelPersistence[channelId],
-          isFetching: true,
-        },
-      },
-    }));
-    try {
-      // Fire-and-forget: the response arrives asynchronously via
-      // "pchat-fetch-complete" and "new-message" events.
-      await invoke<void>("fetch_older_messages", {
-        channelId,
-        beforeId: beforeId ?? null,
-        limit: 50,
-      });
-    } catch (e) {
-      console.error("fetch_older_messages error:", e);
-      set((prev) => ({
-        channelPersistence: {
-          ...prev.channelPersistence,
-          [channelId]: {
-            ...prev.channelPersistence[channelId],
-            isFetching: false,
-          },
-        },
-      }));
-    }
-  },
-
-  getPersistenceMode: (channelId) => {
-    return get().channelPersistence[channelId]?.mode ?? "NONE";
-  },
-
-  verifyKeyFingerprint: async (channelId) => {
-    try {
-      await invoke("verify_channel_key_manual", { channelId });
-      set((prev) => ({
-        keyTrust: {
-          ...prev.keyTrust,
-          [channelId]: {
-            ...prev.keyTrust[channelId],
-            trustLevel: "ManuallyVerified",
-          },
-        },
-      }));
-    } catch (e) {
-      console.error("verify_channel_key_manual error:", e);
-    }
-  },
-
-  acceptCustodianChanges: async (channelId) => {
-    try {
-      await invoke("accept_custodian_changes", { channelId });
-      set((prev) => {
-        const pin = prev.custodianPins[channelId];
-        if (!pin?.pendingUpdate) return {};
-        return {
-          custodianPins: {
-            ...prev.custodianPins,
-            [channelId]: {
-              pinned: pin.pendingUpdate,
-              confirmed: true,
-              pendingUpdate: null,
-            },
-          },
-        };
-      });
-    } catch (e) {
-      console.error("accept_custodian_changes error:", e);
-    }
-  },
-
-  confirmCustodians: async (channelId) => {
-    try {
-      const { custodianPins } = get();
-      const pin = custodianPins[channelId];
-      if (!pin) return;
-      await invoke("confirm_custodians", {
-        channelId,
-        custodianHashes: pin.pinned,
-      });
-      set((prev) => ({
-        custodianPins: {
-          ...prev.custodianPins,
-          [channelId]: { ...prev.custodianPins[channelId], confirmed: true },
-        },
-      }));
-    } catch (e) {
-      console.error("confirm_custodians error:", e);
-    }
-  },
-
-  resolveKeyDispute: async (channelId, trustedSenderHash) => {
-    try {
-      await invoke("resolve_key_dispute", { channelId, trustedSenderHash });
-      set((prev) => {
-        const { [channelId]: _removed, ...rest } = prev.pendingDisputes;
-        return {
-          pendingDisputes: rest,
-          keyTrust: {
-            ...prev.keyTrust,
-            [channelId]: {
-              ...prev.keyTrust[channelId],
-              trustLevel: "ManuallyVerified",
-            },
-          },
-        };
-      });
-    } catch (e) {
-      console.error("resolve_key_dispute error:", e);
-    }
-  },
-
-  updateChannelPersistenceConfig: (channelId, config) => {
-    set((prev) => ({
-      channelPersistence: {
-        ...prev.channelPersistence,
-        [channelId]: {
-          mode: config.mode,
-          maxHistory: config.maxHistory,
-          retentionDays: config.retentionDays,
-          hasMore: false,
-          isFetching: false,
-          totalStored: prev.channelPersistence[channelId]?.totalStored ?? 0,
-        },
-      },
-    }));
-  },
-
-  approveKeyShare: async (channelId, peerCertHash) => {
-    try {
-      await invoke("approve_key_share", { channelId, peerCertHash });
-    } catch (e) {
-      console.error("approve_key_share error:", e);
-    }
-  },
-
-  dismissKeyShare: async (channelId, peerCertHash) => {
-    try {
-      await invoke("dismiss_key_share", { channelId, peerCertHash });
-    } catch (e) {
-      console.error("dismiss_key_share error:", e);
-    }
-  },
-
-  queryKeyHolders: async (channelId) => {
-    try {
-      await invoke("query_key_holders", { channelId });
-    } catch (e) {
-      console.error("query_key_holders error:", e);
-    }
-  },
-
-  deletePchatMessages: async (channelId, opts) => {
-    try {
-      await invoke("delete_pchat_messages", {
-        channelId,
-        messageIds: opts.messageIds ?? [],
-        timeFrom: opts.timeFrom ?? null,
-        timeTo: opts.timeTo ?? null,
-        senderHash: opts.senderHash ?? null,
-      });
-
-      // The invoke resolves only after the server's PchatAck confirms
-      // success, so it is safe to remove the messages locally now.
-      if (opts.messageIds && opts.messageIds.length > 0) {
-        const removed = new Set(opts.messageIds);
-        set((prev) => ({
-          messages: prev.messages.filter(
-            (m) => !m.message_id || !removed.has(m.message_id),
-          ),
-        }));
-      } else {
-        // For time-range or sender-hash deletions we cannot determine
-        // which messages were affected locally, so re-fetch from the
-        // backend.
-        await get().refreshMessages(channelId);
-      }
-    } catch (e) {
-      console.error("delete_pchat_messages error:", e);
-      throw e;
-    }
-  },
 }));
 
 // --- Tauri event bridge -------------------------------------------
@@ -2455,7 +1928,7 @@ interface PluginMessageEvent {
 }
 
 // PluginRegistryEntry / PluginRegistryEvent moved to `store/plugins.ts`
-// (re-exported below so existing `import { PluginRegistryEntry } from "./store"` works).
+// (re-exported below so existing `import { PluginRegistryEntry } from "../store"` works).
 
 /** Decode a base64 `plugin-message` payload as a UTF-8 JSON object. */
 function decodePluginPayload<T>(b64: string): T | null {
@@ -2513,7 +1986,42 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
 
   if (p.pluginName === "fancy-calendar") {
     const data = decodePluginPayload<Record<string, unknown>>(p.payload);
-    if (data) applyCalendarInbound(p.payloadType, data);
+    if (data) {
+      if (p.payloadType === MSG_MEETING_ROOM) {
+        // The server provisioned (or located) our meeting room and admitted us:
+        // join + select it. The backend already knows the channel from the
+        // ChannelState broadcast, so joining is safe even before the UI store
+        // has rendered it.
+        if (dispatchMeetingRoom(data) && typeof data.channelId === "number") {
+          void useAppStore.getState().joinChannel(data.channelId);
+          useAppStore.getState().selectChannel(data.channelId);
+        }
+      } else if (p.payloadType === MSG_MEETING_INVITE_LINK) {
+        dispatchMeetingInviteLink(data);
+      } else {
+        applyCalendarInbound(p.payloadType, data);
+      }
+    }
+    return;
+  }
+
+  if (p.pluginName === FRIENDS_PLUGIN) {
+    // The fancy-friends plugin provisioned (or located) the detached, E2E
+    // (signal_v1), persisted channel for a friend chat and admitted us. Bind the
+    // peer -> channel and switch the chat to it: the friend DM *is* this channel
+    // now (channel-only history). We *peek* rather than join - read its history +
+    // pass the key challenge so live messages are delivered, without moving our
+    // presence into the detached room (which would pull us out of our current
+    // channel and hide us from the channel list).
+    if (p.payloadType === MSG_FRIENDS_ROOM) {
+      const data = decodePluginPayload<Record<string, unknown>>(p.payload);
+      const room = data ? parseFriendsRoom(data) : null;
+      if (room) {
+        useAppStore.getState().bindFriendChannel(room.peerUserId, room.channelId);
+        void useAppStore.getState().peekChannel(room.channelId);
+        useAppStore.getState().selectChannel(room.channelId);
+      }
+    }
     return;
   }
 
@@ -2563,10 +2071,10 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
     if (p.payloadType === "SharedWith") {
       const data = decodePluginPayload<{
         slug: string;
-        sharedWith?: import("./types").LiveDocSharedMember[];
+        sharedWith?: import("../types").LiveDocSharedMember[];
       }>(p.payload);
       if (!data) return;
-      void import("./components/chat/livedoc/sharedWithStore").then(
+      void import("../components/chat/livedoc/sharedWithStore").then(
         ({ useLiveDocSharedWithStore }) => {
           useLiveDocSharedWithStore.getState().setSharedWith(data.slug, data.sharedWith ?? []);
         },
@@ -2969,7 +2477,7 @@ export async function initEventListeners(
 
   // Sync the notification preference to the Rust backend.
   try {
-    const { getPreferences } = await import("./preferencesStorage");
+    const { getPreferences } = await import("../preferencesStorage");
     const prefs = await getPreferences();
     await invoke("set_notifications_enabled", {
       enabled: prefs.enableNotifications ?? true,
@@ -3697,7 +3205,7 @@ export async function initEventListeners(
   // -- Link preview response events --------------------------------
 
   unlisteners.push(
-    await listen<{ request_id: string; embeds: import("./types").LinkEmbed[] }>(
+    await listen<{ request_id: string; embeds: import("../types").LinkEmbed[] }>(
       "link-preview-response",
       (event) => {
         const { request_id, embeds } = event.payload;
@@ -3814,295 +3322,8 @@ export async function initEventListeners(
     }),
   );
 
-  // -- Persistent chat events -------------------------------------
-
-  unlisteners.push(
-    // Channel persistence config changed (from ChannelState updates).
-    await listen<{ channel_id: number; config: ChannelPersistConfig }>(
-      TauriEvent.PersistenceConfigChanged,
-      (event) => {
-        const { channel_id, config } = event.payload;
-        useAppStore.getState().updateChannelPersistenceConfig(channel_id, config);
-      },
-    ),
-
-    // Key trust level changed for a channel.
-    await listen<{ channel_id: number; trust: KeyTrustState }>(
-      TauriEvent.KeyTrustChanged,
-      (event) => {
-        const { channel_id, trust } = event.payload;
-        useAppStore.setState((prev) => {
-          // Receiving a new key clears the revoked flag for this channel.
-          const next = new Set(prev.pchatKeyRevoked);
-          next.delete(channel_id);
-          return {
-            keyTrust: { ...prev.keyTrust, [channel_id]: trust },
-            pchatKeyRevoked: next,
-          };
-        });
-      },
-    ),
-
-    // Custodian list changed (TOFU change detection).
-    await listen<{ channel_id: number; pin: CustodianPinState }>(
-      TauriEvent.CustodianPinChanged,
-      (event) => {
-        const { channel_id, pin } = event.payload;
-        useAppStore.setState((prev) => ({
-          custodianPins: { ...prev.custodianPins, [channel_id]: pin },
-        }));
-      },
-    ),
-
-    // Key dispute detected.
-    await listen<{ channel_id: number; dispute: PendingDispute }>(
-      TauriEvent.KeyDisputeDetected,
-      (event) => {
-        const { channel_id, dispute } = event.payload;
-        useAppStore.setState((prev) => ({
-          pendingDisputes: { ...prev.pendingDisputes, [channel_id]: dispute },
-        }));
-      },
-    ),
-
-    // Key dispute resolved (by custodian shortcut or timeout).
-    await listen<{ channel_id: number }>(
-      TauriEvent.KeyDisputeResolved,
-      (event) => {
-        const { channel_id } = event.payload;
-        useAppStore.setState((prev) => {
-          const { [channel_id]: _removed, ...rest } = prev.pendingDisputes;
-          return { pendingDisputes: rest };
-        });
-      },
-    ),
-
-    // Pchat history loading state (waiting for key exchange).
-    await listen<{ channel_id: number; loading: boolean }>(
-      TauriEvent.PchatHistoryLoading,
-      (event) => {
-        const { channel_id, loading } = event.payload;
-        const next = new Set(useAppStore.getState().pchatHistoryLoading);
-        if (loading) {
-          next.add(channel_id);
-        } else {
-          next.delete(channel_id);
-        }
-        useAppStore.setState({ pchatHistoryLoading: next });
-      },
-    ),
-
-    // Pchat fetch complete -- update pagination metadata.
-    //
-    // Also refresh the displayed `messages` array if the fetched
-    // channel happens to be the one the user is currently viewing.
-    // The "new-message" listener also tries to do this, but during the
-    // initial connect bootstrap the fetch response can arrive *before*
-    // selectChannel(defaultCh) has run -- in that case the new-message
-    // handler bails (selectedChannel still null) and the restored
-    // backlog stays invisible until the user types a message (which
-    // forces a get_messages via sendMessage). Refreshing here closes
-    // that race for the bootstrap case.
-    await listen<{ channel_id: number; has_more: boolean; total_stored: number }>(
-      TauriEvent.PchatFetchComplete,
-      async (event) => {
-        const { channel_id, has_more, total_stored } = event.payload;
-        useAppStore.setState((prev) => ({
-          channelPersistence: {
-            ...prev.channelPersistence,
-            [channel_id]: {
-              ...prev.channelPersistence[channel_id],
-              hasMore: has_more,
-              isFetching: false,
-              totalStored: total_stored,
-            },
-          },
-        }));
-        const { selectedChannel } = useAppStore.getState();
-        if (selectedChannel === channel_id) {
-          await useAppStore.getState().refreshMessages(channel_id);
-        }
-      },
-    ),
-
-    // A new key-share consent request from the backend.
-    await listen<PendingKeyShareRequest>(
-      TauriEvent.PchatKeyShareRequest,
-      (event) => {
-        const req = event.payload;
-        useAppStore.setState((prev) => {
-          const existing = prev.pendingKeyShares[req.channel_id] ?? [];
-          // Avoid duplicates.
-          if (existing.some((p) => p.peer_cert_hash === req.peer_cert_hash)) {
-            return {};
-          }
-          return {
-            pendingKeyShares: {
-              ...prev.pendingKeyShares,
-              [req.channel_id]: [...existing, req],
-            },
-          };
-        });
-      },
-    ),
-
-    // Key-share requests changed (after approve/dismiss).
-    await listen<{ channel_id: number; pending: PendingKeyShareRequest[] }>(
-      TauriEvent.PchatKeyShareRequestsChanged,
-      (event) => {
-        const { channel_id, pending } = event.payload;
-        useAppStore.setState((prev) => {
-          if (pending.length === 0) {
-            const { [channel_id]: _removed, ...rest } = prev.pendingKeyShares;
-            return { pendingKeyShares: rest };
-          }
-          return {
-            pendingKeyShares: {
-              ...prev.pendingKeyShares,
-              [channel_id]: pending,
-            },
-          };
-        });
-      },
-    ),
-
-    // Key holders list updated by the server.
-    await listen<{ channel_id: number; holders: KeyHolderEntry[] }>(
-      TauriEvent.PchatKeyHoldersChanged,
-      (event) => {
-        const { channel_id, holders } = event.payload;
-        useAppStore.setState((prev) => ({
-          keyHolders: {
-            ...prev.keyHolders,
-            [channel_id]: holders,
-          },
-        }));
-      },
-    ),
-
-    // Key restored: a new key was received after a previous revocation.
-    await listen<{ channel_id: number }>(
-      TauriEvent.PchatKeyRestored,
-      (event) => {
-        const { channel_id } = event.payload;
-        useAppStore.setState((prev) => {
-          const next = new Set(prev.pchatKeyRevoked);
-          next.delete(channel_id);
-          return { pchatKeyRevoked: next };
-        });
-      },
-    ),
-
-    // Key-possession challenge failed: our key was wrong/outdated.
-    await listen<{ channel_id: number }>(
-      TauriEvent.PchatKeyRevoked,
-      (event) => {
-        const { channel_id } = event.payload;
-        useAppStore.setState((prev) => {
-          const next = new Set(prev.pchatKeyRevoked);
-          next.add(channel_id);
-          // Clear stale key-trust for this channel.
-          const { [channel_id]: _removedTrust, ...restTrust } = prev.keyTrust;
-          // Clear any messages that were decrypted before the challenge
-          // result arrived (prevents flash of unauthorized content).
-          const clearMessages = prev.selectedChannel === channel_id;
-          // Stop the loading spinner - no fetch response will arrive.
-          const nextLoading = new Set(prev.pchatHistoryLoading);
-          nextLoading.delete(channel_id);
-          const { [channel_id]: prevPersist, ...restPersist } = prev.channelPersistence;
-          return {
-            pchatKeyRevoked: next,
-            keyTrust: restTrust,
-            pchatHistoryLoading: nextLoading,
-            channelPersistence: {
-              ...restPersist,
-              [channel_id]: { ...prevPersist, isFetching: false },
-            },
-            ...(clearMessages ? { messages: [] } : {}),
-          };
-        });
-      },
-    ),
-
-    // Reaction add/remove delivered by the server (persistent channels).
-    await listen<ReactionDeliverEvent>(
-      TauriEvent.PchatReactionDeliver,
-      (event) => {
-        const { message_id, emoji, action, sender_hash, sender_name } = event.payload;
-        const resolvedName = useAppStore.getState().users.find((u) => u.hash === sender_hash)?.name ?? sender_name;
-        applyReaction(message_id, emoji, action as "add" | "remove", sender_hash, resolvedName);
-        useAppStore.setState((s) => ({ reactionVersion: s.reactionVersion + 1 }));
-      },
-    ),
-
-    // Batch reaction fetch response (historical reactions for persistent channels).
-    await listen<ReactionFetchResponseEvent>(
-      TauriEvent.PchatReactionFetchResponse,
-      (event) => {
-        const { users } = useAppStore.getState();
-        for (const r of event.payload.reactions) {
-          const resolvedName = users.find((u) => u.hash === r.sender_hash)?.name ?? r.sender_name;
-          applyReaction(r.message_id, r.emoji, "add", r.sender_hash, resolvedName);
-        }
-        useAppStore.setState((s) => ({ reactionVersion: s.reactionVersion + 1 }));
-      },
-    ),
-
-    // Pin/unpin delivered by the server (persistent channels).
-    await listen<PinDeliverEvent>(
-      TauriEvent.PchatPinDeliver,
-      (event) => {
-        const { channel_id, message_id, pinned, pinner_hash, pinner_name, timestamp } = event.payload;
-        const resolvedName = useAppStore.getState().users.find((u) => u.hash === pinner_hash)?.name ?? pinner_name;
-        useAppStore.setState((s) => {
-          const nextUnseen = new Map(s.unseenPinIds);
-          const channelSet = new Set(nextUnseen.get(channel_id));
-          if (pinned) {
-            channelSet.add(message_id);
-          } else {
-            channelSet.delete(message_id);
-          }
-          if (channelSet.size > 0) nextUnseen.set(channel_id, channelSet);
-          else nextUnseen.delete(channel_id);
-
-          return {
-            messages: s.messages.map((m) =>
-              m.message_id === message_id
-                ? { ...m, pinned, pinned_by: pinned ? resolvedName : null, pinned_at: pinned ? timestamp : null }
-                : m,
-            ),
-            unseenPinIds: nextUnseen,
-          };
-        });
-      },
-    ),
-
-    // Batch pin fetch response (historical pins for persistent channels).
-    await listen<PinFetchResponseEvent>(
-      TauriEvent.PchatPinFetchResponse,
-      (event) => {
-        const { users } = useAppStore.getState();
-        const pinnedIds = new Map(event.payload.pins.map((p) => {
-          const resolvedName = users.find((u) => u.hash === p.pinner_hash)?.name ?? p.pinner_name;
-          return [p.message_id, { pinned_by: resolvedName, pinned_at: p.timestamp }] as const;
-        }));
-        useAppStore.setState((s) => ({
-          messages: s.messages.map((m) => {
-            const pin = m.message_id ? pinnedIds.get(m.message_id) : undefined;
-            return pin ? { ...m, pinned: true, pinned_by: pin.pinned_by, pinned_at: pin.pinned_at } : m;
-          }),
-        }));
-      },
-    ),
-
-    // Signal bridge load failure: show error banner in the UI.
-    await listen<{ message: string }>(
-      TauriEvent.PchatSignalBridgeError,
-      (event) => {
-        useAppStore.setState({ signalBridgeError: event.payload.message });
-      },
-    ),
-  );
+  // -- Persistent chat events (in store/slices/persistentChat.events.ts) ---
+  await registerPersistentChatEvents(unlisteners);
 
   return unlisteners;
 }
