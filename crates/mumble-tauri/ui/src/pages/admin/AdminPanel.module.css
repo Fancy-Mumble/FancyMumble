@@ -1278,3 +1278,179 @@ button.aclCardHeader:hover {
 .emoteDelete {
   flex-shrink: 0;
 }
+
+/* --- Channel tree: private (detached) channel markers ------------- */
+
+.aclTreePrivateIcon {
+  flex-shrink: 0;
+  color: var(--color-text-dim);
+}
+
+.aclTreePrivateBadge {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--color-active);
+  color: var(--color-text-dim);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* --- Channel tree context menu ------------------------------------ */
+
+.ctxBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: default;
+}
+
+.ctxMenu {
+  position: fixed;
+  z-index: 41;
+  min-width: 180px;
+  padding: 4px;
+  background: var(--color-surface, #23252b);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+
+.ctxMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--color-text);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ctxMenuItem:hover {
+  background: var(--color-hover);
+}
+
+.ctxMenuItemDanger {
+  color: var(--color-danger, #e74c3c);
+}
+
+.ctxConfirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+
+.ctxConfirmText {
+  font-size: 0.8rem;
+  color: var(--color-text);
+}
+
+.ctxConfirmRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ctxDangerBtn {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 5px;
+  background: var(--color-danger, #e74c3c);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ctxCancelBtn {
+  padding: 5px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+/* --- Users-with-access tab ---------------------------------------- */
+
+.accessUsers {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.accessNote {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--color-active);
+  color: var(--color-text);
+  font-size: 0.85rem;
+}
+
+.accessUserList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.accessUserItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  font-size: 0.85rem;
+}
+
+.accessUserItem:hover {
+  background: var(--color-hover);
+}
+
+.accessUserDot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-dim);
+  opacity: 0.4;
+}
+
+.accessUserOnline {
+  background: var(--color-success, #3ba55d);
+  opacity: 1;
+}
+
+.accessUserName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accessUserHint {
+  margin-left: auto;
+  color: var(--color-success, #3ba55d);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.accessGroupBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

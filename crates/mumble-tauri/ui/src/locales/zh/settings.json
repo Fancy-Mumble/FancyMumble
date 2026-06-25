@@ -533,7 +533,7 @@
     "users": "用户",
     "roles": "身份组",
     "bans": "封禁列表",
-    "acl": "频道 ACL",
+    "acl": "频道 / ACL",
     "emotes": "表情",
     "onboarding": "入门引导",
     "serverPlugins": "服务器插件",
@@ -692,7 +692,7 @@
     "fieldDuration": "持续时间（秒，0 = 永久）"
   },
   "channelAcl": {
-    "title": "频道 ACL 编辑器",
+    "title": "频道 / ACL",
     "searchChannels": "搜索频道…",
     "selectChannel": "选择一个频道以编辑其 ACL",
     "loadingAcl": "正在加载 ACL…",

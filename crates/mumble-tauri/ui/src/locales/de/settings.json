@@ -503,7 +503,7 @@
     "users": "Nutzer",
     "roles": "Rollen",
     "bans": "Bans",
-    "acl": "Kanal-ACL",
+    "acl": "Kanäle / ACL",
     "emotes": "Emotes",
     "onboarding": "Onboarding",
     "serverPlugins": "Server-Plugins",
@@ -558,7 +558,7 @@
     "fieldDuration": "Dauer (Sekunden, 0 = dauerhaft)"
   },
   "channelAcl": {
-    "title": "Kanal-ACL-Editor",
+    "title": "Kanäle / ACL",
     "searchChannels": "Kanäle suchen...",
     "selectChannel": "Kanal auswählen, um dessen ACL zu bearbeiten",
     "loadingAcl": "ACL wird geladen...",
