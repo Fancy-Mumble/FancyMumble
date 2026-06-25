@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
-import { sendNotification } from "@tauri-apps/plugin-notification";
 import { useAppStore } from "../../../store";
 import { PLUGIN_NAME_CALENDAR } from "../../../constants/pluginData";
 import { loadCalendarFromStore, publishCalendar, useCalendarStore } from "./calendarStore";
+import { showDesktopNotification } from "./calendarSync";
 import { expandEvent } from "./recurrence";
 import { MS_PER_MINUTE } from "./calendarDates";
 import { shortTime } from "./calendarFormat";
@@ -48,14 +48,10 @@ export function useCalendarReminders(): void {
           if (remindAt <= now && occ.start > now && !fired.has(key)) {
             fired.add(key);
             globalThis.dispatchEvent(new CustomEvent("fancy:calendar-reminder"));
-            try {
-              sendNotification({
-                title: event.title || "Meeting",
-                body: `Starts at ${shortTime(occ.start)}${event.location ? ` · ${event.location}` : ""}`,
-              });
-            } catch {
-              /* OS notifications may be unavailable on this platform */
-            }
+            showDesktopNotification(
+              event.title || "Meeting",
+              `Starts at ${shortTime(occ.start)}${event.location ? ` · ${event.location}` : ""}`,
+            );
           }
         }
       }

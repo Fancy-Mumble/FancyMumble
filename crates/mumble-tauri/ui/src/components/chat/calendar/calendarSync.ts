@@ -25,6 +25,34 @@ export function sendCalendar(payloadType: string, payload: unknown): void {
   });
 }
 
+/**
+ * Show a desktop notification through the Tauri notification plugin's Rust IPC
+ * command (`plugin:notification|notify`).
+ *
+ * Deliberately NOT `@tauri-apps/plugin-notification`'s `sendNotification`, which
+ * merely constructs a Web `Notification` in the webview - that path is
+ * unreliable on desktop (the embedded webview may not surface it) and bypasses
+ * the plugin's native delivery and OS permission handling. Routing through the
+ * Rust command uses the platform's real notification API. Fire-and-forget;
+ * `notification:allow-notify` is granted in the app capabilities.
+ */
+export function showDesktopNotification(title: string, body: string): void {
+  // Also surface every notification as a DOM event, decoupling delivery from
+  // observation: an in-app notification UI can react to it, and e2e tests can
+  // assert it (the native IPC below is not interceptable from the webview, whose
+  // `__TAURI_INTERNALS__.invoke` is locked non-writable).
+  try {
+    globalThis.dispatchEvent(
+      new CustomEvent("fancy:desktop-notification", { detail: { title, body } }),
+    );
+  } catch {
+    /* no DOM event target (non-browser context) */
+  }
+  void invoke("plugin:notification|notify", { options: { title, body } }).catch((e) => {
+    console.error("[calendar] notify failed:", e);
+  });
+}
+
 /** File-server base URL + session JWT, or null when unavailable (no file-server
  *  configured, or the user is unregistered - the private store is reg-only). */
 function fsConfig(): { baseUrl: string; sessionJwt: string } | null {
