@@ -132,6 +132,28 @@ message ChannelRemove {
 	required uint32 channel_id = 1;
 }
 
+// Fancy Mumble extension: a single channel attribute flag. ChannelState carries
+// a repeated set of these (its `attributes` field), describing the channel from
+// the receiving user's perspective. This supersedes the individual `can_enter` /
+// `is_enter_restricted` booleans for Fancy clients (those booleans are still sent
+// for legacy clients). Legacy clients ignore the unknown `attributes` field.
+enum ChannelAttribute {
+	// Zero value, never sent (proto enum default).
+	CHANNEL_ATTRIBUTE_UNSPECIFIED = 0;
+	// The receiving user is permitted to enter this channel.
+	CHANNEL_ATTRIBUTE_CAN_ENTER = 1;
+	// Entry is gated by a password/token: ENTER is denied and the user is not
+	// otherwise granted it by a user-id ACL.
+	CHANNEL_ATTRIBUTE_ENTER_RESTRICTED = 2;
+	// Hidden: only users holding SeeChannel are told the channel exists.
+	CHANNEL_ATTRIBUTE_HIDDEN = 3;
+	// Temporary: auto-removed by the server when it becomes empty.
+	CHANNEL_ATTRIBUTE_TEMPORARY = 4;
+	// Detached: a parentless channel (like the root) that never appears in the
+	// channel tree and is only ever sent to Fancy clients. Used for meeting rooms.
+	CHANNEL_ATTRIBUTE_DETACHED = 5;
+}
+
 // Used to communicate channel properties between the client and the server.
 // Sent by the server during the login process or when channel properties are
 // updated. Client may use this message to update said channel properties.
@@ -153,7 +175,8 @@ message ChannelState {
 	// A collection of channel_id values that should be removed from links.
 	repeated uint32 links_remove = 7;
 	// True if the channel is temporary.
-	optional bool temporary = 8 [default = false];
+	// Deprecated for Fancy clients: use CHANNEL_ATTRIBUTE_TEMPORARY in `attributes`.
+	optional bool temporary = 8 [default = false, deprecated = true];
 	// Position weight to tweak the channel position in the channel list.
 	optional int32 position = 9 [default = 0];
 	// SHA1 hash of the description if the description is 128 bytes or more.
@@ -163,9 +186,11 @@ message ChannelState {
 	// server's "usersperchannel" setting.
 	optional uint32 max_users = 11;
 	// Whether this channel has enter restrictions (ACL denying ENTER) set
-	optional bool is_enter_restricted = 12;
+	// Deprecated for Fancy clients: use CHANNEL_ATTRIBUTE_ENTER_RESTRICTED in `attributes`.
+	optional bool is_enter_restricted = 12 [deprecated = true];
 	// Whether the receiver of this msg is considered to be able to enter this channel
-	optional bool can_enter = 13;
+	// Deprecated for Fancy clients: use CHANNEL_ATTRIBUTE_CAN_ENTER in `attributes`.
+	optional bool can_enter = 13 [deprecated = true];
 
 	// Fancy Mumble persistent chat extension.
 	// Field IDs start at 100 to avoid clashing with future upstream
@@ -188,6 +213,29 @@ message ChannelState {
 	// to @all.  Clients joining a password-protected channel must include
 	// the password in UserState.temporary_access_tokens.
 	optional string channel_info_password = 104;
+
+	// Hidden-channel extension. When true, only users with the SeeChannel
+	// permission are told the channel exists (and see the users inside it).
+	optional bool hidden = 105;
+
+	// Channel expiry extension. expiry_mode: 0 = none, 1 = absolute (removed at
+	// created_at + duration), 2 = sliding (removed after `duration` seconds of
+	// inactivity). On expiry the channel is deleted and occupants move to parent.
+	optional uint32 expiry_mode = 106;
+	optional uint32 expiry_duration_secs = 107;
+	// Server-computed absolute deadline (unix seconds), for client countdown UI.
+	optional uint64 expires_at = 108;
+	// Meeting-room convenience (input-only, on create): registered user_ids to
+	// invite. The server grants each SeeChannel|Enter|Traverse and denies those to
+	// @all, making the new channel a private room only invitees can see and join.
+	repeated uint32 invitee_user_ids = 109;
+
+	// Fancy extension: the set of attributes describing this channel from the
+	// receiving user's perspective (see ChannelAttribute). Supersedes `can_enter`
+	// / `is_enter_restricted` for Fancy clients. Input-only on create:
+	// CHANNEL_ATTRIBUTE_DETACHED requests a parentless, Fancy-only channel that
+	// never appears in the channel tree.
+	repeated ChannelAttribute attributes = 110;
 }
 
 // Used to communicate user leaving or being kicked. May be sent by the client

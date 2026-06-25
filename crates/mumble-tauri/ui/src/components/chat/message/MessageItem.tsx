@@ -14,6 +14,7 @@ import { formatTimestamp, colorFor } from "../../../utils/format";
 import { extractUrlsFromMessage } from "../../../utils/extractUrls";
 import { extractOffloadInfo } from "../../../messageOffload";
 import { containsSelfMention } from "../../../utils/mentions";
+import { TID } from "../../../testids";
 import PollCard, { getPoll } from "../poll/PollCard";
 import MediaPreview from "../media/MediaPreview";
 import LinkPreviewCard from "../linkpreview/LinkPreviewCard";
@@ -424,6 +425,8 @@ export default memo(function MessageItem({
           <span
             className={styles.senderName}
             style={{ color: msg.is_own ? "rgba(255,255,255,0.85)" : colorFor(msg.sender_name) }}
+            data-testid={TID.chatMessageSender}
+            data-sender-name={msg.sender_name}
           >
             {msg.sender_name}
             {msg.is_legacy && <span className={styles.legacyBadge}>{t("message.legacyBadge")}</span>}

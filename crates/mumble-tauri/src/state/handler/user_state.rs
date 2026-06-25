@@ -8,7 +8,7 @@ use tracing::info;
 
 use super::{HandleMessage, HandlerContext};
 use crate::state::{pchat, SharedState};
-use crate::state::types::{blob_marker, CurrentChannelPayload, ServerLogEntry, UserEntry, VoiceState};
+use crate::state::types::{blob_marker, CurrentChannelPayload, ServerLogEntry, UserEntry, VoiceState, PRESENCE_HIDDEN_CHANNEL};
 
 impl HandleMessage for mumble_tcp::UserState {
     fn handle(&self, ctx: &HandlerContext) {
@@ -78,7 +78,10 @@ impl HandleMessage for mumble_tcp::UserState {
         emit_activity_logs(ctx, is_synced, &user_name, is_new_user, move_channel_name, old_snapshot, &new_snapshot);
 
         if is_synced {
-            if let Some(ch) = remote_channel_move {
+            // A move into the sentinel channel is a presence-hide (the user went
+            // into a channel we can't see), not a real channel we can act on -
+            // skip the pchat key-share/holder queries it would otherwise trigger.
+            if let Some(ch) = remote_channel_move.filter(|&c| c != PRESENCE_HIDDEN_CHANNEL) {
                 handle_remote_channel_move(&ctx.shared, ch);
             }
         }
@@ -219,10 +222,19 @@ fn handle_own_channel_change(ctx: &HandlerContext, ch: u32) {
         }
     }
 
-    let should_fetch = should_fetch_pchat_history(&ctx.shared, ch);
-    if should_fetch {
-        mark_channel_fetched(&ctx.shared, ch);
-        let shared = Arc::clone(&ctx.shared);
+    ensure_pchat_history(&ctx.shared, ch);
+}
+
+/// Kick off the persistent-chat init (key challenge + history fetch) for `ch`
+/// exactly once. Shared by the own-channel-change path (on join) and the
+/// friend-chat *peek* path - reading a 1:1 private room without joining it:
+/// the server gates pchat fetch/delivery on the key challenge + Enter
+/// permission, not on channel membership, so the history and live messages
+/// arrive without a voice move. Idempotent via `should_fetch_pchat_history`.
+pub(crate) fn ensure_pchat_history(shared: &Arc<Mutex<SharedState>>, ch: u32) {
+    if should_fetch_pchat_history(shared, ch) {
+        mark_channel_fetched(shared, ch);
+        let shared = Arc::clone(shared);
         let _pchat_init_task = tokio::spawn(pchat_init_task(shared, ch));
     }
 }

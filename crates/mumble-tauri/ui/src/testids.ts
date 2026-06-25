@@ -33,6 +33,14 @@ export const TID = {
   /** Wrapper around the (contenteditable) markdown input. */
   chatComposerInput: "chat-composer-input",
   chatSend: "chat-send",
+  /**
+   * The sender-name label on a rendered message (the first message in a
+   * consecutive same-sender group). Carries `data-sender-name` so a message's
+   * attributed author can be asserted without relying on hashed CSS classes -
+   * e.g. to prove a hidden-channel user's message is shown as that user and not
+   * as "Server".
+   */
+  chatMessageSender: "chat-message-sender",
 
   // -- Channel list ---------------------------------------------------------
   /**
@@ -41,6 +49,45 @@ export const TID = {
    * (create/edit/delete); double-click joins.
    */
   channelItem: "channel-item",
+  /** Flat list (above the channel tree) of private/hidden rooms the user is in
+   *  (private rooms + scheduled meeting rooms). */
+  privateChannelsViewer: "private-channels-viewer",
+  /** The shared password-entry dialog (channel-join / file-download). Its
+   *  presence means a password is being demanded. */
+  passwordPromptDialog: "password-prompt-dialog",
+  /** The chat header's end-to-end-encrypted badge. Present only when the open
+   *  chat is E2E (a signal/fancy persisted channel) - e.g. a friend chat that
+   *  upgraded to its detached signal channel. */
+  chatE2EBadge: "chat-e2e-badge",
+  /** A channel row in the admin "Channels / ACL" tree. Carries `data-channel-id`
+   *  and `data-channel-name`; right-click opens the delete context menu. Detached
+   *  (private) channels carry `data-private="true"`. */
+  aclChannelItem: "acl-channel-item",
+  /** The "Delete channel" item in the ACL tree's right-click context menu. */
+  aclDeleteChannel: "acl-delete-channel",
+  /** The confirm button shown after clicking {@link aclDeleteChannel}. */
+  aclDeleteConfirm: "acl-delete-confirm",
+  /** The chat header's title (`<h2>`). Carries the channel/peer display name -
+   *  e.g. a friend chat shows the peer's name and a self-chat shows your own
+   *  name (it is listed as "yourself", not a special "Notepad"). */
+  chatHeaderTitle: "chat-header-title",
+  /** A member row rendered *under a channel* in the flat channel tree (distinct
+   *  from {@link memberItem}, which is the members roster / DM list). Carries
+   *  `data-user-name`. Lets tests assert a user is shown inside the channel tree
+   *  (vs merely online in the roster). */
+  channelMember: "channel-member",
+  /** The add/remove-friend toggle in the user context menu. */
+  userMenuFriendToggle: "user-menu-friend-toggle",
+  /** A row on the Friends page. Carries `data-friend-name` and `data-online`
+   *  ("true"/"false") - the online state is resolved by cert hash over the live
+   *  user list, so it reflects presence even for a friend in a hidden channel. */
+  friendRow: "friend-row",
+  /** The "connect to this friend's server" prompt shown in the Friends chat
+   *  pane when you click a friend whose server you aren't connected to. */
+  friendsConnectPrompt: "friends-connect-prompt",
+  /** The button in {@link friendsConnectPrompt} that (re)connects to the
+   *  friend's server, then auto-opens the chat. */
+  friendsConnect: "friends-connect",
 
   // -- Member / user list ---------------------------------------------------
   /**
@@ -76,8 +123,20 @@ export const TID = {
   calendarInviteeInput: "calendar-invitee-input",
   /** Save button in the meeting dialog. */
   calendarSave: "calendar-save",
+  /** Start date input (`type=date`, YYYY-MM-DD) in the meeting dialog. */
+  calendarStartDate: "calendar-start-date",
+  /** Start time input (`type=time`, HH:MM) in the meeting dialog. */
+  calendarStartTime: "calendar-start-time",
+  /** Reminder offset `<select>` in the meeting dialog (value: "none"|minutes). */
+  calendarReminderSelect: "calendar-reminder-select",
   /** A rendered meeting chip in any view; carries `data-event-title`. */
   calendarEvent: "calendar-event",
+  /** The detail popover shown when an event chip is clicked. */
+  calendarDetailCard: "calendar-detail-card",
+  /** "Join meeting" button on the event detail card (provisions/enters the room). */
+  calendarJoinMeeting: "calendar-join-meeting",
+  /** Organiser-only "Copy invite link" button on the event detail card. */
+  calendarCopyInviteLink: "calendar-copy-invite-link",
 } as const;
 
 export type TestId = (typeof TID)[keyof typeof TID];

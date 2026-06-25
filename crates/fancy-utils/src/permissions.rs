@@ -80,6 +80,12 @@ pub const RESET_USER_CONTENT: u32 = 0x100000;
 pub const KEY_OWNER: u32 = 0x200000;
 /// Root-only: may add and remove custom server emotes.
 pub const MANAGE_EMOTES: u32 = 0x400000;
+/// Root-only: read-only counterpart to `REGISTER` - may view the registered-user
+/// directory (e.g. to invite offline users) but not register/unregister them.
+pub const READ_REGISTER: u32 = 0x800000;
+/// Channel-level: may see a channel flagged hidden (and the users inside it).
+/// Without it a hidden channel is absent from the user's channel list entirely.
+pub const SEE_CHANNEL: u32 = 0x1000000;
 
 /// Every permission entry, in display order.  This is the data that the
 /// build script walks to generate the TypeScript table.
@@ -107,6 +113,8 @@ pub const ENTRIES: &[PermissionEntry] = &[
     PermissionEntry { bit: RESET_USER_CONTENT, ident: "RESET_USER_CONTENT", label: "Reset User Content",  root_only: true  },
     PermissionEntry { bit: KEY_OWNER,          ident: "KEY_OWNER",          label: "Key Owner",           root_only: true  },
     PermissionEntry { bit: MANAGE_EMOTES,      ident: "MANAGE_EMOTES",      label: "Manage Emotes",       root_only: true  },
+    PermissionEntry { bit: READ_REGISTER,      ident: "READ_REGISTER",      label: "List Registered Users", root_only: true  },
+    PermissionEntry { bit: SEE_CHANNEL,        ident: "SEE_CHANNEL",        label: "See Hidden Channel",  root_only: false },
 ];
 
 #[cfg(test)]

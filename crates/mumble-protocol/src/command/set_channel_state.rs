@@ -38,6 +38,15 @@ pub struct SetChannelState {
     /// Channel access password.  `Some("")` removes the password;
     /// `None` leaves the existing password unchanged.
     pub channel_info_password: Option<String>,
+    /// Whether the channel is hidden (only users with SeeChannel see it).
+    pub hidden: Option<bool>,
+    /// Channel expiry mode: 0 = none, 1 = absolute, 2 = sliding.
+    pub expiry_mode: Option<u32>,
+    /// Expiry lifetime / idle window in seconds.
+    pub expiry_duration_secs: Option<u32>,
+    /// Meeting-room invitees (registered user_ids). On create the server grants
+    /// each SeeChannel|Enter|Traverse and denies them to @all. Empty = no-op.
+    pub invitee_user_ids: Vec<u32>,
 }
 
 impl CommandAction for SetChannelState {
@@ -54,6 +63,10 @@ impl CommandAction for SetChannelState {
             pchat_max_history: self.pchat_max_history,
             pchat_retention_days: self.pchat_retention_days,
             channel_info_password: self.channel_info_password.clone(),
+            hidden: self.hidden,
+            expiry_mode: self.expiry_mode,
+            expiry_duration_secs: self.expiry_duration_secs,
+            invitee_user_ids: self.invitee_user_ids.clone(),
             ..Default::default()
         };
         tracing::debug!(

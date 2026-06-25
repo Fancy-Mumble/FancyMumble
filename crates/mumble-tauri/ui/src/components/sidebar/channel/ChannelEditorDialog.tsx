@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect, lazy, Suspense } from "react";
+import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChannelEntry, PchatProtocol } from "../../../types";
 import { useAppStore } from "../../../store";
 import { Modal } from "../../elements/Modal";
+import { MemberPicker } from "../../elements/MemberPicker";
 import { useChannelDescription } from "../../../lazyBlobs";
 const BioEditor = lazy(() => import("../../../pages/settings/BioEditor").then((m) => ({ default: m.BioEditor })));
 import styles from "./ChannelEditorDialog.module.css";
@@ -120,6 +121,31 @@ export default function ChannelEditorDialog({
   // Access password (set = change/add, empty when editing = remove)
   const [password, setPassword] = useState("");
 
+  // Hidden channel + expiry (meeting-room) settings.
+  const [hidden, setHidden] = useState(channel?.hidden ?? false);
+  const [expiryMode, setExpiryMode] = useState(channel?.expiry_mode ?? 0);
+  // Duration is edited as value + unit; persisted/sent in seconds.
+  const initialDurationSecs = channel?.expiry_duration_secs ?? 0;
+  const [expiryUnit, setExpiryUnit] = useState<number>(
+    initialDurationSecs % 86400 === 0 && initialDurationSecs > 0 ? 86400 : 1,
+  );
+  const [expiryValue, setExpiryValue] = useState<number>(
+    initialDurationSecs > 0 ? initialDurationSecs / (initialDurationSecs % 86400 === 0 ? 86400 : 1) : 0,
+  );
+  const expiryDurationSecs = Math.max(0, Math.round(expiryValue * expiryUnit));
+
+  // Invitees for a private (hidden) meeting room. Candidates are the registered
+  // users currently visible; MemberPicker keys on a stable user_id.
+  const users = useAppStore((s) => s.users);
+  const inviteeCandidates = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const u of users) {
+      if (u.user_id != null && u.user_id >= 0) map.set(u.user_id, u.name);
+    }
+    return [...map.entries()].map(([user_id, name]) => ({ user_id, name }));
+  }, [users]);
+  const [invitees, setInvitees] = useState<number[]>([]);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -144,6 +170,10 @@ export default function ChannelEditorDialog({
           temporary: temporary || undefined,
           maxUsers: maxUsers || undefined,
           password: password || undefined,
+          hidden: hidden || undefined,
+          expiryMode: expiryMode || undefined,
+          expiryDurationSecs: expiryMode ? expiryDurationSecs || undefined : undefined,
+          invitees: hidden && invitees.length > 0 ? invitees : undefined,
           ...pchatOpts,
         });
       } else {
@@ -155,6 +185,10 @@ export default function ChannelEditorDialog({
           temporary: temporary !== channel.temporary ? temporary : undefined,
           maxUsers: maxUsers !== channel.max_users ? maxUsers : undefined,
           password: password !== "" ? password : (channel.is_enter_restricted ? "" : undefined),
+          hidden: hidden !== (channel.hidden ?? false) ? hidden : undefined,
+          expiryMode: expiryMode !== (channel.expiry_mode ?? 0) ? expiryMode : undefined,
+          expiryDurationSecs:
+            expiryDurationSecs !== (channel.expiry_duration_secs ?? 0) ? expiryDurationSecs : undefined,
           ...pchatOpts,
         });
       }
@@ -174,6 +208,10 @@ export default function ChannelEditorDialog({
     pchatProtocol,
     pchatMaxHistory,
     pchatRetentionDays,
+    hidden,
+    expiryMode,
+    expiryDurationSecs,
+    invitees,
     isCreate,
     channel,
     parentId,
@@ -253,6 +291,77 @@ export default function ChannelEditorDialog({
           <label className={styles.checkboxLabel} htmlFor="ch-ed-temp">
             {t("channelEditor.temporaryLabel")}
           </label>
+        </div>
+
+        {/* Hidden channel */}
+        <div className={styles.checkboxRow}>
+          <input
+            id="ch-ed-hidden"
+            className={styles.checkbox}
+            type="checkbox"
+            checked={hidden}
+            onChange={(e) => setHidden(e.target.checked)}
+          />
+          <label className={styles.checkboxLabel} htmlFor="ch-ed-hidden">
+            {t("channelEditor.hiddenLabel")}
+          </label>
+        </div>
+
+        {/* Invitees - only when creating a private (hidden) room */}
+        {isCreate && hidden && (
+          <div className={styles.field}>
+            <label className={styles.label}>{t("channelEditor.inviteesLabel")}</label>
+            <MemberPicker
+              value={invitees}
+              candidates={inviteeCandidates}
+              onChange={setInvitees}
+              placeholder={t("channelEditor.inviteesPlaceholder")}
+              inputTestId="ch-ed-invitee-input"
+            />
+          </div>
+        )}
+
+        {/* Expiry */}
+        <div className={styles.row}>
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="ch-ed-expiry-mode">{t("channelEditor.expiryModeLabel")}</label>
+            <select
+              id="ch-ed-expiry-mode"
+              className={styles.input}
+              value={expiryMode}
+              onChange={(e) => setExpiryMode(Number(e.target.value))}
+            >
+              <option value={0}>{t("channelEditor.expiryNone")}</option>
+              <option value={1}>{t("channelEditor.expiryAbsolute")}</option>
+              <option value={2}>{t("channelEditor.expirySliding")}</option>
+            </select>
+          </div>
+          {expiryMode !== 0 && (
+            <div className={styles.field}>
+              <label className={styles.label} htmlFor="ch-ed-expiry-value">{t("channelEditor.expiryAfterLabel")}</label>
+              <div className={styles.row}>
+                <input
+                  id="ch-ed-expiry-value"
+                  className={styles.input}
+                  type="number"
+                  min={0}
+                  value={expiryValue}
+                  onChange={(e) => setExpiryValue(Number(e.target.value))}
+                />
+                <select
+                  id="ch-ed-expiry-unit"
+                  className={styles.input}
+                  value={expiryUnit}
+                  onChange={(e) => setExpiryUnit(Number(e.target.value))}
+                >
+                  <option value={1}>{t("channelEditor.unitSeconds")}</option>
+                  <option value={3600}>{t("channelEditor.unitHours")}</option>
+                  <option value={86400}>{t("channelEditor.unitDays")}</option>
+                  <option value={604800}>{t("channelEditor.unitWeeks")}</option>
+                </select>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Access password */}
