@@ -30,6 +30,18 @@ export interface Friend {
   serverId?: string;
   /** Display label for {@link serverId}. */
   serverLabel?: string;
+  /** The friend's registered user id on {@link serverId}, captured while they
+   *  were online.  Lets us open the (persisted, E2E) friend channel even when
+   *  the friend is offline - the channel name is derived from both user ids. */
+  userId?: number;
+  /** Connection target for {@link serverId} (host/port/username/cert), captured
+   *  from the session the friend was added on.  Because a live server id is a
+   *  random per-connection UUID, these stable fields are what let us re-find the
+   *  friend's connected session - or offer to (re)connect to it when we aren't. */
+  serverHost?: string;
+  serverPort?: number;
+  serverUsername?: string;
+  serverCertLabel?: string | null;
   /** Unix epoch millis when the friend was added. */
   addedAt: number;
   /** Cached avatar (raw texture bytes) as base64. Stored so the icon
@@ -42,6 +54,23 @@ export interface Friend {
   avatarUpdatedAt?: number;
 }
 
+
+/**
+ * Stable grouping key for a friend's origin server.
+ *
+ * The stored {@link Friend.serverId} is a per-connection UUID - the backend mints
+ * a fresh one on every connect - so friends added across different sessions of
+ * the *same* server carry different ids and would split into multiple,
+ * identically-labelled groups.  Prefer the stable display label, then the
+ * connection target, and only fall back to the (volatile) id.
+ */
+export function friendServerKey(
+  f: Pick<Friend, "serverLabel" | "serverHost" | "serverPort" | "serverUsername" | "serverId">,
+): string {
+  if (f.serverLabel) return `label:${f.serverLabel}`;
+  if (f.serverHost != null) return `addr:${f.serverHost}:${f.serverPort}:${f.serverUsername ?? ""}`;
+  return f.serverId ?? "";
+}
 
 const FRIENDS_STORE = "friends.json";
 const FRIENDS_KEY = "friends";
@@ -87,15 +116,44 @@ function isSameFriend(
  * Adds a friend if not already present.  Returns the newly-created entry,
  * or the existing entry when the friend was already saved.
  */
+/** Optional identity/reconnection details captured while a friend is online. */
+export interface FriendIdentity {
+  userId?: number;
+  serverHost?: string;
+  serverPort?: number;
+  serverUsername?: string;
+  serverCertLabel?: string | null;
+}
+
+/** Copy the defined {@link FriendIdentity} fields from `src` onto `dst`. */
+function applyIdentity(dst: Friend, src: FriendIdentity): boolean {
+  let changed = false;
+  const keys: (keyof FriendIdentity)[] = [
+    "userId", "serverHost", "serverPort", "serverUsername", "serverCertLabel",
+  ];
+  for (const k of keys) {
+    const v = src[k];
+    if (v !== undefined && dst[k] !== v) {
+      (dst as unknown as Record<string, unknown>)[k] = v;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 export async function addFriend(input: {
   userName: string;
   userHash?: string;
   serverId?: string;
   serverLabel?: string;
-}): Promise<Friend> {
+} & FriendIdentity): Promise<Friend> {
   const friends = await getFriends();
   const existing = friends.find((f) => isSameFriend(f, input));
-  if (existing) return existing;
+  if (existing) {
+    // Already saved - opportunistically backfill any newly-known identity bits.
+    if (applyIdentity(existing, input)) await saveFriends([...friends]);
+    return existing;
+  }
   const friend: Friend = {
     id: crypto.randomUUID(),
     userName: input.userName,
@@ -104,8 +162,22 @@ export async function addFriend(input: {
     serverLabel: input.serverLabel,
     addedAt: Date.now(),
   };
+  applyIdentity(friend, input);
   await saveFriends([...friends, friend]);
   return friend;
+}
+
+/**
+ * Backfill a saved friend's identity / reconnection details (no-op when nothing
+ * changes or the friend was removed).  Called when a friend is resolved online,
+ * so older entries gain the `userId` + connection target needed to open their
+ * chat while offline or to (re)connect to their server.
+ */
+export async function updateFriendIdentity(id: string, identity: FriendIdentity): Promise<void> {
+  const friends = await getFriends();
+  const friend = friends.find((f) => f.id === id);
+  if (!friend) return;
+  if (applyIdentity(friend, identity)) await saveFriends([...friends]);
 }
 
 export async function removeFriend(id: string): Promise<void> {

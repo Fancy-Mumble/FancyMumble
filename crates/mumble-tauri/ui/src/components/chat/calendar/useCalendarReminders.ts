@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
-import { sendNotification } from "@tauri-apps/plugin-notification";
 import { useAppStore } from "../../../store";
 import { PLUGIN_NAME_CALENDAR } from "../../../constants/pluginData";
 import { loadCalendarFromStore, publishCalendar, useCalendarStore } from "./calendarStore";
+import { showDesktopNotification } from "./calendarSync";
 import { expandEvent } from "./recurrence";
 import { MS_PER_MINUTE } from "./calendarDates";
 import { shortTime } from "./calendarFormat";
@@ -35,40 +35,23 @@ export function useCalendarReminders(): void {
 
   useEffect(() => {
     if (!calendarActive) return;
-    const sendReminder = (event: any, occStart: number) => {
-      globalThis.dispatchEvent(new CustomEvent("fancy:calendar-reminder"));
-      const time = shortTime(occStart);
-      const location = event.location ? ` · ${event.location}` : "";
-      try {
-        sendNotification({
-          title: event.title || "Meeting",
-          body: `Starts at ${time}${location}`,
-        });
-      } catch {
-        /* OS notifications may be unavailable on this platform */
-      }
-    };
-
     const tick = () => {
       const now = Date.now();
       const fired = firedRef.current;
-      const events = useCalendarStore.getState().events;
-
-      for (const event of events) {
+      for (const event of useCalendarStore.getState().events) {
         const offset = event.reminderMinutes;
         if (offset == null || event.myStatus === "declined") continue;
-
         const offsetMs = offset * MS_PER_MINUTE;
-        const occurrences = expandEvent(event, now, now + offsetMs + MS_PER_MINUTE);
-
-        for (const occ of occurrences) {
+        for (const occ of expandEvent(event, now, now + offsetMs + MS_PER_MINUTE)) {
           const remindAt = occ.start - offsetMs;
           const key = `${occ.key}:${offset}`;
-          const shouldFire = remindAt <= now && occ.start > now && !fired.has(key);
-
-          if (shouldFire) {
+          if (remindAt <= now && occ.start > now && !fired.has(key)) {
             fired.add(key);
-            sendReminder(event, occ.start);
+            globalThis.dispatchEvent(new CustomEvent("fancy:calendar-reminder"));
+            showDesktopNotification(
+              event.title || "Meeting",
+              `Starts at ${shortTime(occ.start)}${event.location ? ` · ${event.location}` : ""}`,
+            );
           }
         }
       }

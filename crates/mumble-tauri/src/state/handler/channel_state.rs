@@ -31,6 +31,11 @@ impl HandleMessage for mumble_tcp::ChannelState {
                     pchat_retention_days: None,
                     pchat_key_custodians: Vec::new(),
                     is_enter_restricted: false,
+                    hidden: false,
+                    detached: false,
+                    expiry_mode: 0,
+                    expiry_duration_secs: 0,
+                    expires_at: 0,
                 });
                 let mode_changed = apply_channel_state_fields(ch, self);
                 let new_custodians = ch.pchat_key_custodians.clone();
@@ -76,6 +81,10 @@ impl HandleMessage for mumble_tcp::ChannelState {
     }
 }
 
+// `temporary` / `is_enter_restricted` are [deprecated] in the proto in favour of
+// the `attributes` set, but still sent for compatibility - we keep reading them
+// (they are the reliable, always-present source) until a later migration.
+#[allow(deprecated)]
 fn apply_channel_state_fields(ch: &mut ChannelEntry, proto: &mumble_tcp::ChannelState) -> bool {
     if let Some(parent) = proto.parent {
         ch.parent_id = Some(parent);
@@ -116,6 +125,26 @@ fn apply_channel_state_fields(ch: &mut ChannelEntry, proto: &mumble_tcp::Channel
     }
     if let Some(v) = proto.is_enter_restricted {
         ch.is_enter_restricted = v;
+    }
+    if let Some(v) = proto.hidden {
+        ch.hidden = v;
+    }
+    // Detached marker comes from the `attributes` set. Only update when the server
+    // included attributes (a partial ChannelState update may omit them), so we
+    // never clear a known-detached flag on e.g. an expiry-only update.
+    if !proto.attributes.is_empty() {
+        ch.detached = proto
+            .attributes
+            .contains(&(mumble_tcp::ChannelAttribute::Detached as i32));
+    }
+    if let Some(v) = proto.expiry_mode {
+        ch.expiry_mode = v;
+    }
+    if let Some(v) = proto.expiry_duration_secs {
+        ch.expiry_duration_secs = v;
+    }
+    if let Some(v) = proto.expires_at {
+        ch.expires_at = v;
     }
     mode_changed
 }

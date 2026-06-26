@@ -7,10 +7,11 @@
 
 use std::collections::VecDeque;
 use std::num::NonZero;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, SyncSender, TryRecvError};
 use std::sync::Arc;
 use std::thread;
+use std::time::Instant;
 
 const MONO_CHANNELS: NonZero<u16> = NonZero::new(1).unwrap();
 const SAMPLE_RATE_48K: NonZero<u32> = NonZero::new(48_000).unwrap();
@@ -19,6 +20,7 @@ use mumble_protocol::audio::capture::AudioCapture;
 use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes};
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use mumble_protocol::error::{Error, Result};
+use rodio::conversions::SampleRateConverter;
 use rodio::microphone::{available_inputs, MicrophoneBuilder};
 use rodio::source::Source;
 use tracing::{debug, trace, warn};
@@ -140,31 +142,37 @@ impl AudioCapture for RodioCapture {
                 .default_device()
                 .map_err(|e| Error::InvalidState(format!("No input device: {e}")))?
         };
+        // Open the microphone at its NATIVE sample rate. We deliberately do NOT
+        // force 48 kHz via `prefer_sample_rates`: cpal advertises 48 kHz as
+        // "supported" for shared-mode devices through WASAPI's AUTOCONVERTPCM,
+        // but some (virtual) drivers - e.g. VoiceMeeter - don't actually resample
+        // and instead hand us native-rate samples mislabelled as 48 kHz, which the
+        // pipeline then mistimes (choppy "audio / silence / silence" playback).
+        // Opening at the real rate and resampling to 48 kHz ourselves (see
+        // `capture_thread`) is deterministic regardless of the driver.
         let builder = with_device
             .default_config()
             .map_err(|e| Error::InvalidState(format!("Input config: {e}")))?
-            .prefer_channel_counts([MONO_CHANNELS])
-            .prefer_sample_rates([SAMPLE_RATE_48K]);
+            .prefer_channel_counts([MONO_CHANNELS]);
 
         let mic = builder
             .open_stream()
             .map_err(|e| Error::InvalidState(format!("Open microphone: {e}")))?;
 
         let config = mic.config();
-        debug!(
-            "rodio microphone opened: rate={}, channels={}",
-            config.sample_rate.get(),
-            config.channel_count.get(),
-        );
-
+        let device_rate = config.sample_rate.get();
         let mic_channels = config.channel_count.get() as usize;
+        debug!(
+            "rodio microphone opened: device_rate={device_rate}, channels={mic_channels}, resample_to_48k={}",
+            device_rate != SAMPLE_RATE_48K.get(),
+        );
 
         // ~1 s of audio in CAPTURE_CHUNK-sized batches.
         let (tx, rx) = mpsc::sync_channel::<Vec<f32>>(48_000 / CAPTURE_CHUNK);
 
         let handle = thread::Builder::new()
             .name("rodio-mic-reader".into())
-            .spawn(move || capture_thread(mic, mic_channels, tx))
+            .spawn(move || capture_thread(mic, mic_channels, device_rate, tx))
             .map_err(|e| Error::InvalidState(format!("Spawn mic thread: {e}")))?;
 
         self.sample_rx = Some(rx);
@@ -187,31 +195,98 @@ impl AudioCapture for RodioCapture {
 /// 100 times per second instead of 48 000.
 const CAPTURE_CHUNK: usize = 480;
 
-fn capture_thread(
-    mut mic: rodio::microphone::Microphone,
+/// Reads a [`Microphone`](rodio::microphone::Microphone) and downmixes its
+/// hardware channels to a single mono sample by **averaging**.  Averaging
+/// preserves both channels' energy, unlike rodio's `ChannelCountConverter`
+/// which simply drops the surplus channels.  Yields `None` once the
+/// underlying stream ends.
+struct MonoDownmix {
+    mic: rodio::microphone::Microphone,
     channels: usize,
+    /// Counts every mono sample actually pulled from the device, so the
+    /// capture thread can measure the TRUE real-time delivery rate. For some
+    /// (virtual) drivers this differs from the rate `config.sample_rate`
+    /// claims, which is exactly what makes resampling go wrong.
+    raw_samples: Arc<AtomicU64>,
+}
+
+impl Iterator for MonoDownmix {
+    type Item = f32;
+
+    fn next(&mut self) -> Option<f32> {
+        let mut sum = 0.0f32;
+        for _ in 0..self.channels {
+            sum += self.mic.next()?;
+        }
+        let _ = self.raw_samples.fetch_add(1, Ordering::Relaxed);
+        Some(sum / self.channels as f32)
+    }
+}
+
+fn capture_thread(
+    mic: rodio::microphone::Microphone,
+    channels: usize,
+    device_rate: u32,
     tx: SyncSender<Vec<f32>>,
 ) {
+    let raw_samples = Arc::new(AtomicU64::new(0));
+    let mono = MonoDownmix {
+        mic,
+        channels,
+        raw_samples: Arc::clone(&raw_samples),
+    };
+
+    // Resample the mono stream to 48 kHz when the device's native rate
+    // differs.  The whole downstream pipeline (CAPTURE_CHUNK framing, the
+    // Opus encoder, frame timing) assumes 48 kHz, so feeding native-rate
+    // samples unchanged would make every "10 ms" chunk represent the wrong
+    // amount of real time.  Uses rodio's linear `SampleRateConverter`.
+    let mut source: Box<dyn Iterator<Item = f32>> = match NonZero::new(device_rate) {
+        Some(rate) if rate != SAMPLE_RATE_48K => {
+            Box::new(SampleRateConverter::new(mono, rate, SAMPLE_RATE_48K, MONO_CHANNELS))
+        }
+        _ => Box::new(mono),
+    };
+
+    // Throughput instrumentation: `raw_in` is what the device ACTUALLY
+    // delivers in real time, `resampled_out` is what we hand downstream
+    // (should track 48000 Hz). If `raw_in` does not match `config_rate`,
+    // the rate label is lying and the resampler ratio is wrong - the
+    // direct cause of "too slow"/"too fast" playback.
+    let start = Instant::now();
+    let mut last_report = start;
+    let mut out_samples: u64 = 0;
+
     let mut chunk: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK);
     loop {
-        let mut sum = 0.0f32;
-        for _ in 0..channels {
-            match mic.next() {
-                Some(s) => sum += s,
-                None => {
-                    // Stream ended - flush what we have so the last
-                    // partial chunk is not lost.
-                    if !chunk.is_empty() {
-                        let _ = tx.send(chunk);
+        match source.next() {
+            Some(s) => {
+                chunk.push(s);
+                if chunk.len() >= CAPTURE_CHUNK {
+                    out_samples += CAPTURE_CHUNK as u64;
+                    let now = Instant::now();
+                    if now.duration_since(last_report).as_secs() >= 2 {
+                        let elapsed = now.duration_since(start).as_secs_f64();
+                        let raw = raw_samples.load(Ordering::Relaxed);
+                        debug!(
+                            "rodio capture throughput: raw_in={:.0} Hz (device actual), resampled_out={:.0} Hz (target 48000), config_rate={device_rate}",
+                            raw as f64 / elapsed,
+                            out_samples as f64 / elapsed,
+                        );
+                        last_report = now;
                     }
-                    return;
+                    let full = std::mem::replace(&mut chunk, Vec::with_capacity(CAPTURE_CHUNK));
+                    if tx.send(full).is_err() {
+                        return;
+                    }
                 }
             }
-        }
-        chunk.push(sum / channels as f32);
-        if chunk.len() >= CAPTURE_CHUNK {
-            let full = std::mem::replace(&mut chunk, Vec::with_capacity(CAPTURE_CHUNK));
-            if tx.send(full).is_err() {
+            None => {
+                // Stream ended - flush what we have so the last partial
+                // chunk is not lost.
+                if !chunk.is_empty() {
+                    let _ = tx.send(chunk);
+                }
                 return;
             }
         }

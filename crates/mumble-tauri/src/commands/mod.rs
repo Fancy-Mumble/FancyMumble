@@ -1,8 +1,10 @@
 //! Tauri command handlers, grouped into logical submodules.
 //!
 //! All `#[tauri::command]` functions live here, organised by feature
-//! area.  The crate-root `lib.rs` only contains application bootstrap
-//! and the `tauri::generate_handler!` registration.
+//! area.  The single `tauri::generate_handler!` registration lives in
+//! [`registry`]; `lib.rs` only contains application bootstrap.
+
+pub(crate) mod registry;
 
 pub(crate) mod admin;
 pub(crate) mod audio;

@@ -6,13 +6,14 @@ interface TimeInputProps {
   readonly value: string; // ISO format HH:mm
   readonly onChange: (value: string) => void;
   readonly timeFormat: TimeFormat;
+  readonly testId?: string;
 }
 
 /**
  * Time input that displays and accepts input in the user's preferred format.
  * Internally stores/exchanges ISO format (HH:mm in 24h).
  */
-export function TimeInput({ value, onChange, timeFormat }: TimeInputProps) {
+export function TimeInput({ value, onChange, timeFormat, testId }: TimeInputProps) {
   const [inputValue, setInputValue] = useState("");
 
   // Update display when prop value changes (from outside)
@@ -97,6 +98,7 @@ export function TimeInput({ value, onChange, timeFormat }: TimeInputProps) {
       value={inputValue}
       placeholder={placeholder}
       onChange={handleChange}
+      data-testid={testId}
     />
   );
 }

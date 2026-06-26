@@ -6,13 +6,14 @@ interface DateInputProps {
   readonly value: string; // ISO format YYYY-MM-DD
   readonly onChange: (value: string) => void;
   readonly dateFormat: DateFormat;
+  readonly testId?: string;
 }
 
 /**
  * Date input that displays and accepts input in the user's preferred format.
  * Internally stores/exchanges ISO format (YYYY-MM-DD).
  */
-export function DateInput({ value, onChange, dateFormat }: DateInputProps) {
+export function DateInput({ value, onChange, dateFormat, testId }: DateInputProps) {
   const [inputValue, setInputValue] = useState("");
 
   // Update display when prop value changes (from outside)
@@ -100,6 +101,7 @@ export function DateInput({ value, onChange, dateFormat }: DateInputProps) {
       value={inputValue}
       placeholder={placeholder}
       onChange={handleChange}
+      data-testid={testId}
     />
   );
 }
