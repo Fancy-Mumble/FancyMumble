@@ -30,7 +30,7 @@ mod text_message;
 mod typing_indicator;
 mod user_list;
 mod user_remove;
-mod user_state;
+pub(crate) mod user_state;
 mod user_stats;
 mod version;
 mod watch_sync;

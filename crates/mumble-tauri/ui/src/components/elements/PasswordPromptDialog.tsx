@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Modal } from "./Modal";
+import { TID } from "../../testids";
 import styles from "./PasswordPromptDialog.module.css";
 
 interface PasswordPromptDialogProps {
@@ -53,7 +54,13 @@ export function PasswordPromptDialog({
 
   return (
     <Modal onClose={onCancel}>
-      <form className={styles.dialog} role="dialog" aria-modal="true" onSubmit={handleSubmit}>
+      <form
+        className={styles.dialog}
+        role="dialog"
+        aria-modal="true"
+        data-testid={TID.passwordPromptDialog}
+        onSubmit={handleSubmit}
+      >
         <h3 className={styles.title}>{title}</h3>
         {body != null && <p className={styles.body}>{body}</p>}
         <input

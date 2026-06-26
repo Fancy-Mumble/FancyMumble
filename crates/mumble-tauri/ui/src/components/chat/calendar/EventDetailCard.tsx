@@ -17,6 +17,13 @@ import { getCachedUserAvatar } from "../../../lazyBlobs";
 import { colorFor } from "../../../utils/format";
 import { eventColor, formatRangeFormatted } from "./calendarFormat";
 import { useCalendarFormatPreferences } from "./useCalendarFormatPreferences";
+import { TID } from "../../../testids";
+import {
+  requestJoinMeeting,
+  requestMeetingInviteLink,
+  EVT_MEETING_INVITE_LINK,
+  type MeetingInviteLinkDetail,
+} from "./meetings";
 import styles from "./CalendarPanel.module.css";
 
 const CARD_W = 320;
@@ -33,6 +40,7 @@ export default function EventDetailCard() {
   const deleteEvent = useCalendarStore((s) => s.deleteEvent);
   const users = useAppStore((s) => s.users);
   const formatPrefs = useCalendarFormatPreferences();
+  const ownSession = useAppStore((s) => s.ownSession);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -53,6 +61,35 @@ export default function EventDetailCard() {
     ? getCachedUserAvatar(organizer.session, organizer.texture_size)
     : null;
 
+  // The viewer's registered user_id, used to gate the organiser-only invite link.
+  const ownUserId = users.find((u) => u.session === ownSession)?.user_id ?? null;
+  const isOrganizer = ownUserId != null && ownUserId === event.organizerId;
+
+  // "Join meeting": ask the server to create-or-return the room and admit us.
+  // The inbound `calendar.room` (handled in the store) then navigates us in.
+  const handleJoin = () => {
+    requestJoinMeeting(event.id);
+    closeDetail();
+  };
+
+  // Organiser-only "Copy invite link": request a token URL and copy it once it
+  // arrives back over the plugin channel.
+  const handleCopyInviteLink = () => {
+    const eventId = event.id;
+    const onLink = (e: Event) => {
+      const d = (e as CustomEvent<MeetingInviteLinkDetail>).detail;
+      if (d?.eventId === eventId && d.url) {
+        window.removeEventListener(EVT_MEETING_INVITE_LINK, onLink);
+        void navigator.clipboard?.writeText(d.url).catch(() => {
+          /* clipboard may be unavailable; the link still reached the UI event */
+        });
+      }
+    };
+    window.addEventListener(EVT_MEETING_INVITE_LINK, onLink);
+    setTimeout(() => window.removeEventListener(EVT_MEETING_INVITE_LINK, onLink), 10_000);
+    requestMeetingInviteLink(eventId);
+  };
+
   // Prefer placing the card to the right of the clicked event; flip left if it
   // would overflow, then clamp vertically to the viewport.
   const spaceRight = window.innerWidth - detail.rect.right;
@@ -63,7 +100,11 @@ export default function EventDetailCard() {
   return createPortal(
     <>
       <div className={styles.detailBackdrop} onClick={closeDetail} />
-      <div className={styles.detailCard} style={{ left, top: Math.max(8, top), width: CARD_W }}>
+      <div
+        className={styles.detailCard}
+        style={{ left, top: Math.max(8, top), width: CARD_W }}
+        data-testid={TID.calendarDetailCard}
+      >
         <div className={styles.detailHeader}>
           <span className={styles.detailColorDot} style={{ background: eventColor(event) }} />
           <span className={styles.detailTitle}>{event.title || t("calendar.untitled")}</span>
@@ -127,6 +168,24 @@ export default function EventDetailCard() {
         )}
 
         <div className={styles.detailFooter}>
+          <button
+            type="button"
+            className={styles.detailEditBtn}
+            data-testid={TID.calendarJoinMeeting}
+            onClick={handleJoin}
+          >
+            {t("calendar.joinMeeting", { defaultValue: "Join meeting" })}
+          </button>
+          {isOrganizer && (
+            <button
+              type="button"
+              className={styles.detailEditBtn}
+              data-testid={TID.calendarCopyInviteLink}
+              onClick={handleCopyInviteLink}
+            >
+              {t("calendar.copyInviteLink", { defaultValue: "Copy invite link" })}
+            </button>
+          )}
           <button
             type="button"
             className={styles.detailDeleteBtn}

@@ -53,6 +53,19 @@ interface ModernChannelListProps {
   readonly shakingChannelId?: number;
   readonly highlightChannelId?: number;
   readonly highlightUserSession?: number;
+  /**
+   * Whether channels can be drag-reordered. Defaults to `true`. Set `false` for
+   * derived/virtual lists where order isn't user-owned (e.g. the flat private
+   * rooms list, which is sorted, not hand-ordered).
+   */
+  readonly reorderable?: boolean;
+  /**
+   * Whether a channel row can expand to show its full member list. Defaults to
+   * `true`. Set `false` for compact navigation lists (e.g. the Meetings list):
+   * rows then stay collapsed (compact avatars only) and the per-row expand
+   * chevron is hidden.
+   */
+  readonly expandableRows?: boolean;
 }
 
 // -- Channel drop-target wrapper (drag-to-move users) -------------
@@ -134,6 +147,8 @@ function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMe
       <button
         ref={itemRef}
         type="button"
+        data-testid={TID.channelMember}
+        data-user-name={user.name}
         className={`${styles.memberItem} ${active ? styles.memberItemActive : ""} ${isTalking ? styles.memberTalking : ""}`}
         onMouseEnter={handleEnter}
         onMouseLeave={handleLeave}
@@ -251,6 +266,8 @@ function ModernChannelListImpl({
   onContextMenu,
   onUserContextMenu,
   onUserClick,
+  reorderable = true,
+  expandableRows = true,
 }: ModernChannelListProps) {
   // Collapsed channels (expanded by default = not in the set).
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
@@ -366,7 +383,8 @@ function ModernChannelListImpl({
     const isListened = listenedChannels.has(channel.id);
     const isSelected = selectedChannel === channel.id;
     const isCurrent = currentChannel === channel.id;
-    const isCollapsed = collapsed.has(channel.id);
+    // Non-expandable lists (e.g. Meetings) stay collapsed: compact, no sublist.
+    const isCollapsed = !expandableRows || collapsed.has(channel.id);
     const hasUsers = chUsers.length > 0;
     const isShaking = shakingChannelId === channel.id;
     const isHighlighted = highlightChannelId === channel.id;
@@ -379,7 +397,7 @@ function ModernChannelListImpl({
       >
         {/* Channel header row */}
         <div className={styles.headerRow}>
-          {hasUsers && (
+          {expandableRows && hasUsers && (
             <button
               type="button"
               className={styles.expandBtn}
@@ -460,6 +478,7 @@ function ModernChannelListImpl({
     usersByChannel, unreadCounts, listenedChannels, selectedChannel,
     currentChannel, collapsed, talkingSessions, broadcastingSessions,
     shakingChannelId, highlightChannelId, highlightUserSession, toggleCollapsed, onSelectChannel, onJoinChannel, onContextMenu, onUserContextMenu, onUserClick,
+    expandableRows,
   ]);
 
   return (
@@ -493,6 +512,14 @@ function ModernChannelListImpl({
               >
                 {card}
               </SwipeableCard>
+            </div>
+          );
+        }
+
+        if (!reorderable) {
+          return (
+            <div key={channel.id} ref={setRef}>
+              {card}
             </div>
           );
         }

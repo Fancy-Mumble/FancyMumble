@@ -28,6 +28,16 @@ impl AppState {
         Ok(())
     }
 
+    /// Read a persistent-chat channel WITHOUT joining it (no voice move): fetch
+    /// its history and run the key challenge so live messages are delivered.
+    /// Used to open a 1:1 private chat room (friend chat / self-notepad) you're a
+    /// participant of - the server serves pchat history and relays new messages
+    /// to any key-verified session, so channel membership is not required.
+    /// Idempotent: a no-op once the channel's history has been fetched.
+    pub fn peek_pchat_channel(&self, channel_id: u32) {
+        crate::state::handler::user_state::ensure_pchat_history(&self.inner.snapshot(), channel_id);
+    }
+
     pub async fn join_channel(&self, channel_id: u32, password: Option<String>) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
@@ -135,6 +145,9 @@ impl AppState {
         pchat_max_history: Option<u32>,
         pchat_retention_days: Option<u32>,
         password: Option<String>,
+        hidden: Option<bool>,
+        expiry_mode: Option<u32>,
+        expiry_duration_secs: Option<u32>,
     ) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
@@ -166,6 +179,10 @@ impl AppState {
                     pchat_max_history,
                     pchat_retention_days,
                     channel_info_password: password,
+                    hidden,
+                    expiry_mode,
+                    expiry_duration_secs,
+                    invitee_user_ids: Vec::new(),
                 })
                 .await
                 .map_err(|e| e.to_string())
@@ -202,6 +219,10 @@ impl AppState {
         pchat_max_history: Option<u32>,
         pchat_retention_days: Option<u32>,
         password: Option<String>,
+        hidden: Option<bool>,
+        expiry_mode: Option<u32>,
+        expiry_duration_secs: Option<u32>,
+        invitees: Vec<u32>,
     ) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
@@ -222,6 +243,10 @@ impl AppState {
                     pchat_max_history,
                     pchat_retention_days,
                     channel_info_password: password,
+                    hidden,
+                    expiry_mode,
+                    expiry_duration_secs,
+                    invitee_user_ids: invitees,
                 })
                 .await
                 .map_err(|e| e.to_string())

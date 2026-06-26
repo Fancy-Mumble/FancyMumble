@@ -503,7 +503,7 @@
     "users": "Utilisateurs",
     "roles": "Rôles",
     "bans": "Liste de bans",
-    "acl": "ACL canaux",
+    "acl": "Canaux / ACL",
     "emotes": "Émotes",
     "onboarding": "Onboarding",
     "serverPlugins": "Plugins du serveur",
@@ -558,7 +558,7 @@
     "fieldDuration": "Durée (secondes, 0 = permanent)"
   },
   "channelAcl": {
-    "title": "Éditeur ACL des canaux",
+    "title": "Canaux / ACL",
     "searchChannels": "Rechercher des canaux...",
     "selectChannel": "Sélectionner un canal pour modifier ses ACL",
     "loadingAcl": "Chargement des ACL...",

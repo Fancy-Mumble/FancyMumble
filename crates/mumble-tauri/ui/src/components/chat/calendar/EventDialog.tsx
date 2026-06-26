@@ -1,10 +1,17 @@
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { Modal } from "../../elements/Modal";
 import { MemberPicker } from "../../elements/MemberPicker";
 import { Toggle } from "../../../pages/settings/SharedControls";
 import { useAppStore } from "../../../store";
 import { getCachedUserAvatar } from "../../../lazyBlobs";
+import {
+  acquireRegisteredTextures,
+  releaseRegisteredTextures,
+} from "../../../registeredTextureLease";
+import type { RegisteredUser } from "../../../types";
 import {
   CalendarClockIcon,
   ClockIcon,
@@ -72,18 +79,43 @@ export default function EventDialog() {
   const ownSession = useAppStore((s) => s.ownSession);
   const formatPrefs = useCalendarFormatPreferences();
 
-  // Invitee suggestion pool: every registered user we can see (online list +
-  // anyone already on the event). MemberPicker keys on a stable user_id.
+  // The server's full registered-user directory (online AND offline), so an
+  // organiser can invite someone who isn't currently connected. The query is
+  // available to any authenticated user; the backend emits the response on the
+  // shared `user-list` event and caches registered avatars (released on close).
+  const [registered, setRegistered] = useState<RegisteredUser[]>([]);
+  useEffect(() => {
+    acquireRegisteredTextures();
+    const unlisten = listen<RegisteredUser[]>("user-list", (event) => {
+      setRegistered(event.payload);
+    });
+    invoke("request_user_list").catch(() => {
+      /* server may deny on legacy/locked-down deployments; online list still works */
+    });
+    return () => {
+      unlisten.then((f) => f());
+      releaseRegisteredTextures();
+    };
+  }, []);
+
+  // Invitee suggestion pool: every registered user we can resolve - the online
+  // user list, the server's registered-user directory (covers offline users),
+  // and anyone already on the event. MemberPicker keys on a stable user_id.
   // Registered ids are >= 0 (SuperUser is 0); guests carry -1, so gate on >= 0
   // rather than > 0 or SuperUser could never be invited.
   const candidates = useMemo(() => {
     const map = new Map<number, string>();
+    for (const u of registered) {
+      if (u.user_id >= 0) map.set(u.user_id, u.name);
+    }
+    // Prefer the live online name where present (handles a mid-session rename
+    // the directory snapshot may predate).
     for (const u of users) {
       if (u.user_id != null && u.user_id >= 0) map.set(u.user_id, u.name);
     }
     for (const p of existing?.participants ?? []) map.set(p.userId, p.name);
     return [...map.entries()].map(([user_id, name]) => ({ user_id, name }));
-  }, [users, existing]);
+  }, [registered, users, existing]);
 
   // Avatar resolver for the picker: map a registered user_id to the live online
   // user's cached avatar (mirrors RoleMembersPanel).
@@ -220,12 +252,14 @@ export default function EventDialog() {
               value={startDate}
               onChange={setStartDate}
               dateFormat={formatPrefs.dateFormat}
+              testId={TID.calendarStartDate}
             />
             {!allDay && (
               <TimeInput
                 value={startTime}
                 onChange={setStartTime}
                 timeFormat={formatPrefs.timeFormat}
+                testId={TID.calendarStartTime}
               />
             )}
             <span className={styles.arrow}>→</span>
@@ -348,6 +382,7 @@ export default function EventDialog() {
               onChange={(e) =>
                 setReminder(e.target.value === "none" ? null : Number.parseInt(e.target.value, 10))
               }
+              data-testid={TID.calendarReminderSelect}
             >
               {REMINDER_OPTIONS.map((m) => (
                 <option key={m === null ? "none" : m} value={m === null ? "none" : String(m)}>

@@ -15,6 +15,7 @@ import {
 import { useVisualViewport } from "./hooks/useVisualViewport";
 import { useNotificationSounds } from "./hooks/useNotificationSounds";
 import { useCalendarReminders } from "./components/chat/calendar/useCalendarReminders";
+import { requestJoinMeeting } from "./components/chat/calendar/meetings";
 import { useSpoilerReveal } from "./hooks/useSpoilerReveal";
 import { useCodeHighlight } from "./hooks/useCodeHighlight";
 import { useWatchLifecycle } from "./components/chat/watch/useWatchLifecycle";
@@ -312,7 +313,8 @@ function MainApp() {
 
   // fancy:// deep links emitted by the Rust deep-link plugin.
   // Currently supported:
-  //   fancy://marketplace/plugin/<id>  -> open plugin detail page
+  //   fancy://marketplace/plugin/<id>      -> open plugin detail page
+  //   fancy://meeting/<eventId>?t=<token>  -> join a meeting's room
   useEffect(() => {
     const unlisten = listen<string>("deep-link-open", (e) => {
       const raw = e.payload;
@@ -329,6 +331,13 @@ function MainApp() {
       const segments = [url.host, ...url.pathname.split("/")].filter(Boolean);
       if (segments[0] === "marketplace" && segments[1] === "plugin" && segments[2]) {
         navigate(`/marketplace/plugin/${encodeURIComponent(segments[2])}`);
+      } else if (segments[0] === "meeting" && segments[1]) {
+        // Ask the (currently connected) server to create-or-return the meeting
+        // room and admit us; the inbound `calendar.room` navigates us into it.
+        const eventId = decodeURIComponent(segments[1]);
+        const token = url.searchParams.get("t") ?? undefined;
+        requestJoinMeeting(eventId, token);
+        navigate("/");
       } else {
         console.warn("deep-link: unhandled route", segments);
       }

@@ -17,7 +17,7 @@ import {
   type WorkHours,
 } from "./types";
 import { addDays, addMonths, startOfDay, startOfWeek } from "./calendarDates";
-import { loadCalendarBlob, saveCalendarBlob, sendCalendar } from "./calendarSync";
+import { loadCalendarBlob, saveCalendarBlob, sendCalendar, showDesktopNotification } from "./calendarSync";
 import { useAppStore } from "../../../store";
 
 /** Generate a reasonably unique id without pulling in a uuid dep. */
@@ -244,6 +244,20 @@ export function applyCalendarInbound(payloadType: string, data: Record<string, u
   if (payloadType === "calendar.upsert") {
     const shared = data as unknown as CalendarEvent;
     if (!shared.id) return;
+
+    // Notify on a brand-new invitation: an event we don't already have, that we
+    // were invited to (a participant) and didn't organise ourselves. Keying off
+    // "not already in the store" dedups the connect-time catch-up replay of
+    // meetings we already knew about (the persisted calendar is loaded first),
+    // while a meeting created while we were offline still surfaces on reconnect.
+    const me = myUserId();
+    const alreadyKnown = useCalendarStore.getState().events.some((e) => e.id === shared.id);
+    const isNewInvitation =
+      !alreadyKnown &&
+      me != null &&
+      shared.organizerId !== me &&
+      (shared.participants ?? []).some((p) => p.userId === me);
+
     useCalendarStore.setState((s) => {
       const existing = s.events.find((e) => e.id === shared.id);
       const merged: CalendarEvent = {
@@ -261,6 +275,13 @@ export function applyCalendarInbound(payloadType: string, data: Record<string, u
           : [...s.events, merged],
       };
     });
+
+    if (isNewInvitation) {
+      showDesktopNotification(
+        "Meeting invitation",
+        `You've been invited to "${shared.title || "a meeting"}"`,
+      );
+    }
   } else if (payloadType === "calendar.delete") {
     const id = data.id as string | undefined;
     if (id) useCalendarStore.setState((s) => ({ events: s.events.filter((e) => e.id !== id) }));
