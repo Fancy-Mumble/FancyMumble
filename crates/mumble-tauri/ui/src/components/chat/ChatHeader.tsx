@@ -337,6 +337,7 @@ export default function ChatHeader({
             className={`${styles.serverInfoBtn} ${isScreenSharing ? styles.screenShareActive : ""}`}
             onClick={onToggleScreenShare}
             disabled={!!screenShareDisabledReason}
+            data-testid={TID.screenShareToggle}
             aria-label={isScreenSharing ? t("header.stopSharing") : t("header.shareScreen")}
             title={
               screenShareDisabledReason ?? (
