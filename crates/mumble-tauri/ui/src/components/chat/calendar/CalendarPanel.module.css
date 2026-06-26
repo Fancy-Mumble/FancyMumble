@@ -338,11 +338,9 @@
   padding: 3px 6px;
   font-size: 12px;
   color: #fff;
-  /* No `overflow: hidden` here: the top/bottom resize handles intentionally
-     extend a few px beyond the block (they'd render as half-circles otherwise).
-     Long text is clipped by `.timedTitle` / `.timedMeta` instead. */
   border-left: 3px solid rgba(0, 0, 0, 0.25);
   box-shadow: 0 1px 3px var(--color-overlay-medium);
+  overflow: hidden;
 }
 
 .timedEvent:hover {
@@ -354,6 +352,8 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Hide title if parent box is too small (<20px height - roughly one line) */
+  max-height: 100%;
 }
 
 .timedMeta {
@@ -362,6 +362,8 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Hide time metadata if parent box is very small (<40px height) */
+  max-height: 100%;
 }
 
 /* -- Empty / misc ----------------------------------------------------------- */

@@ -15,7 +15,8 @@ import { useCalendarStore } from "./calendarStore";
 import { useAppStore } from "../../../store";
 import { getCachedUserAvatar } from "../../../lazyBlobs";
 import { colorFor } from "../../../utils/format";
-import { eventColor, formatRange } from "./calendarFormat";
+import { eventColor, formatRangeFormatted } from "./calendarFormat";
+import { useCalendarFormatPreferences } from "./useCalendarFormatPreferences";
 import styles from "./CalendarPanel.module.css";
 
 const CARD_W = 320;
@@ -31,6 +32,7 @@ export default function EventDetailCard() {
   const openEditEvent = useCalendarStore((s) => s.openEditEvent);
   const deleteEvent = useCalendarStore((s) => s.deleteEvent);
   const users = useAppStore((s) => s.users);
+  const formatPrefs = useCalendarFormatPreferences();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -94,7 +96,7 @@ export default function EventDetailCard() {
 
         <div className={styles.detailRow}>
           <ClockIcon width={14} height={14} />
-          <span>{formatRange(occStart, occEnd, event.allDay)}</span>
+          <span>{formatRangeFormatted(occStart, occEnd, event.allDay, formatPrefs.timeFormat, formatPrefs.dateFormat)}</span>
         </div>
 
         {event.repeat.freq !== "none" && (

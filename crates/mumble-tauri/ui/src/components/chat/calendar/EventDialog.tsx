@@ -15,6 +15,9 @@ import {
   UsersGroupIcon,
 } from "../../../icons";
 import { useCalendarStore } from "./calendarStore";
+import { useCalendarFormatPreferences } from "./useCalendarFormatPreferences";
+import { DateInput } from "./DateInput";
+import { TimeInput } from "./TimeInput";
 import {
   fromDateInput,
   startOfDay,
@@ -67,6 +70,7 @@ export default function EventDialog() {
 
   const users = useAppStore((s) => s.users);
   const ownSession = useAppStore((s) => s.ownSession);
+  const formatPrefs = useCalendarFormatPreferences();
 
   // Invitee suggestion pool: every registered user we can see (online list +
   // anyone already on the event). MemberPicker keys on a stable user_id.
@@ -212,33 +216,29 @@ export default function EventDialog() {
 
           <div className={styles.row}>
             <ClockIcon width={14} height={14} className={styles.rowIcon} />
-            <input
-              type="date"
-              className={styles.input}
+            <DateInput
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              onChange={setStartDate}
+              dateFormat={formatPrefs.dateFormat}
             />
             {!allDay && (
-              <input
-                type="time"
-                className={styles.input}
+              <TimeInput
                 value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
+                onChange={setStartTime}
+                timeFormat={formatPrefs.timeFormat}
               />
             )}
             <span className={styles.arrow}>→</span>
-            <input
-              type="date"
-              className={styles.input}
+            <DateInput
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              onChange={setEndDate}
+              dateFormat={formatPrefs.dateFormat}
             />
             {!allDay && (
-              <input
-                type="time"
-                className={styles.input}
+              <TimeInput
                 value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
+                onChange={setEndTime}
+                timeFormat={formatPrefs.timeFormat}
               />
             )}
           </div>
