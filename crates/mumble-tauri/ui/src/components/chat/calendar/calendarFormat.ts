@@ -6,11 +6,53 @@
 
 import type { CSSProperties } from "react";
 import type { CalendarEvent, CalendarView } from "./types";
+import type { TimeFormat, DateFormat } from "../../../types";
 import { addDays, startOfDay, startOfWeek } from "./calendarDates";
+
+/** Resolve the effective hour12 setting for Intl formatting. */
+function resolveHour12(timeFormat: TimeFormat, systemUses24h?: boolean): boolean | undefined {
+  if (timeFormat === "12h") return true;
+  if (timeFormat === "24h") return false;
+  // For "auto", let Intl decide unless we have explicit system info
+  if (systemUses24h !== undefined) return !systemUses24h;
+  return undefined;
+}
+
+/** Resolve the effective locale for date formatting based on dateFormat setting. */
+function resolveDateLocale(dateFormat: DateFormat, baseLocale: string): string {
+  switch (dateFormat) {
+    case "dmy":
+      return "en-GB";
+    case "mdy":
+      return "en-US";
+    case "ymd":
+      return "sv-SE"; // Swedish uses YYYY-MM-DD format
+    default:
+      return baseLocale;
+  }
+}
 
 /** `09:30` / `9:30 AM` per the user's locale. */
 export function shortTime(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/** `09:30` / `9:30 AM` respecting the user's time format preference. */
+export function shortTimeFormatted(
+  ms: number,
+  timeFormat: TimeFormat = "auto",
+  systemUses24h?: boolean,
+): string {
+  const d = new Date(ms);
+  const opts: Intl.DateTimeFormatOptions = {
+    hour: "2-digit",
+    minute: "2-digit",
+  };
+  const hour12 = resolveHour12(timeFormat, systemUses24h);
+  if (hour12 !== undefined) {
+    opts.hour12 = hour12;
+  }
+  return d.toLocaleTimeString(undefined, opts);
 }
 
 /** Monday-first short weekday names (`Mon … Sun`) in the user's locale. */
@@ -118,6 +160,33 @@ export function formatRange(start: number, end: number, allDay: boolean): string
     return `${day(start)} · ${shortTime(start)} – ${shortTime(end)}`;
   }
   return `${day(start)} ${shortTime(start)} – ${day(end)} ${shortTime(end)}`;
+}
+
+/** Human-readable date/time range respecting format preferences. */
+export function formatRangeFormatted(
+  start: number,
+  end: number,
+  allDay: boolean,
+  timeFormat: TimeFormat = "auto",
+  dateFormat: DateFormat = "auto",
+  systemUses24h?: boolean,
+): string {
+  const baseLocale = "en"; // Could be extended to use UI language
+  const dateLocale = resolveDateLocale(dateFormat, baseLocale);
+  const day = (ms: number) =>
+    new Intl.DateTimeFormat(dateLocale, { weekday: "short", day: "numeric", month: "short" }).format(
+      new Date(ms),
+    );
+  if (allDay) {
+    const lastDay = end - 1;
+    return startOfDay(start) === startOfDay(lastDay)
+      ? day(start)
+      : `${day(start)} – ${day(lastDay)}`;
+  }
+  if (startOfDay(start) === startOfDay(end)) {
+    return `${day(start)} · ${shortTimeFormatted(start, timeFormat, systemUses24h)} – ${shortTimeFormatted(end, timeFormat, systemUses24h)}`;
+  }
+  return `${day(start)} ${shortTimeFormatted(start, timeFormat, systemUses24h)} – ${day(end)} ${shortTimeFormatted(end, timeFormat, systemUses24h)}`;
 }
 
 /** Toolbar range label for the current view + anchor (e.g. "March 2026"). */

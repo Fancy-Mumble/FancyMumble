@@ -35,27 +35,40 @@ export function useCalendarReminders(): void {
 
   useEffect(() => {
     if (!calendarActive) return;
+    const sendReminder = (event: any, occStart: number) => {
+      globalThis.dispatchEvent(new CustomEvent("fancy:calendar-reminder"));
+      const time = shortTime(occStart);
+      const location = event.location ? ` · ${event.location}` : "";
+      try {
+        sendNotification({
+          title: event.title || "Meeting",
+          body: `Starts at ${time}${location}`,
+        });
+      } catch {
+        /* OS notifications may be unavailable on this platform */
+      }
+    };
+
     const tick = () => {
       const now = Date.now();
       const fired = firedRef.current;
-      for (const event of useCalendarStore.getState().events) {
+      const events = useCalendarStore.getState().events;
+
+      for (const event of events) {
         const offset = event.reminderMinutes;
         if (offset == null || event.myStatus === "declined") continue;
+
         const offsetMs = offset * MS_PER_MINUTE;
-        for (const occ of expandEvent(event, now, now + offsetMs + MS_PER_MINUTE)) {
+        const occurrences = expandEvent(event, now, now + offsetMs + MS_PER_MINUTE);
+
+        for (const occ of occurrences) {
           const remindAt = occ.start - offsetMs;
           const key = `${occ.key}:${offset}`;
-          if (remindAt <= now && occ.start > now && !fired.has(key)) {
+          const shouldFire = remindAt <= now && occ.start > now && !fired.has(key);
+
+          if (shouldFire) {
             fired.add(key);
-            globalThis.dispatchEvent(new CustomEvent("fancy:calendar-reminder"));
-            try {
-              sendNotification({
-                title: event.title || "Meeting",
-                body: `Starts at ${shortTime(occ.start)}${event.location ? ` · ${event.location}` : ""}`,
-              });
-            } catch {
-              /* OS notifications may be unavailable on this platform */
-            }
+            sendReminder(event, occ.start);
           }
         }
       }

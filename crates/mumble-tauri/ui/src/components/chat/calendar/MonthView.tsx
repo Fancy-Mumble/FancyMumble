@@ -10,7 +10,8 @@ import {
   startOfMonth,
 } from "./calendarDates";
 import type { CalendarEvent, EventOccurrence } from "./types";
-import { eventVisualStyle, shortTime, weekdayShortNames } from "./calendarFormat";
+import { eventVisualStyle, shortTimeFormatted, weekdayShortNames } from "./calendarFormat";
+import { useCalendarFormatPreferences } from "./useCalendarFormatPreferences";
 import { TID } from "../../../testids";
 import styles from "./CalendarPanel.module.css";
 
@@ -28,6 +29,7 @@ export default function MonthView() {
   const openDetail = useCalendarStore((s) => s.openDetail);
   const openMenu = useCalendarStore((s) => s.openMenu);
   const upsertEvent = useCalendarStore((s) => s.upsertEvent);
+  const formatPrefs = useCalendarFormatPreferences();
 
   const days = useMemo(() => monthGridDays(anchor), [anchor]);
   const monthStart = startOfMonth(anchor);
@@ -88,7 +90,7 @@ export default function MonthView() {
                 {new Date(day).getDate()}
               </span>
               {occ.slice(0, MAX_CHIPS_PER_DAY).map((o) => (
-                <MonthChip key={o.key} event={o.event} start={o.start} onDetail={openDetail} onMenu={openMenu} />
+                <MonthChip key={o.key} event={o.event} start={o.start} timeFormat={formatPrefs.timeFormat} onDetail={openDetail} onMenu={openMenu} />
               ))}
               {occ.length > MAX_CHIPS_PER_DAY && (
                 <span className={styles.moreLink}>+{occ.length - MAX_CHIPS_PER_DAY}</span>
@@ -101,17 +103,21 @@ export default function MonthView() {
   );
 }
 
+interface MonthChipProps {
+  readonly event: CalendarEvent;
+  readonly start: number;
+  readonly timeFormat: ReturnType<typeof useCalendarFormatPreferences>["timeFormat"];
+  readonly onDetail: (id: string, occStart: number, rect: { top: number; left: number; bottom: number; right: number }) => void;
+  readonly onMenu: (id: string, x: number, y: number) => void;
+}
+
 function MonthChip({
   event,
   start,
+  timeFormat,
   onDetail,
   onMenu,
-}: {
-  readonly event: CalendarEvent;
-  readonly start: number;
-  readonly onDetail: (id: string, occStart: number, rect: { top: number; left: number; bottom: number; right: number }) => void;
-  readonly onMenu: (id: string, x: number, y: number) => void;
-}) {
+}: MonthChipProps) {
   const downRef = useRef<{ x: number; y: number } | null>(null);
   return (
     <div
@@ -149,7 +155,7 @@ function MonthChip({
         onMenu(event.id, e.clientX, e.clientY);
       }}
     >
-      {!event.allDay && <span className={styles.chipTime}>{shortTime(start)}</span>}
+      {!event.allDay && <span className={styles.chipTime}>{shortTimeFormatted(start, timeFormat)}</span>}
       <span className={styles.chipTitle}>{event.title || "(untitled)"}</span>
     </div>
   );

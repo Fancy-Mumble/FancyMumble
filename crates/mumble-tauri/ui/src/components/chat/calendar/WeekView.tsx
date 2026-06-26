@@ -11,7 +11,8 @@ import {
   startOfWeek,
 } from "./calendarDates";
 import type { EventOccurrence } from "./types";
-import { eventVisualStyle, shortTime, weekdayShortNames } from "./calendarFormat";
+import { eventVisualStyle, shortTimeFormatted, weekdayShortNames } from "./calendarFormat";
+import { useCalendarFormatPreferences } from "./useCalendarFormatPreferences";
 import { TID } from "../../../testids";
 import styles from "./CalendarPanel.module.css";
 
@@ -96,6 +97,7 @@ export default function WeekView({ dayCount }: { readonly dayCount: 1 | 5 | 7 })
   const openDetail = useCalendarStore((s) => s.openDetail);
   const openMenu = useCalendarStore((s) => s.openMenu);
   const upsertEvent = useCalendarStore((s) => s.upsertEvent);
+  const formatPrefs = useCalendarFormatPreferences();
 
   const colsRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -313,6 +315,12 @@ export default function WeekView({ dayCount }: { readonly dayCount: 1 | 5 | 7 })
                     const pos = layout.get(o.key) ?? { lane: 0, lanes: 1 };
                     const widthPct = 100 / pos.lanes;
                     const leftPct = pos.lane * widthPct;
+
+                    // For very short events, hide content to avoid overflow
+                    // 40px: enough for title + time, 25px: only title, 18px: nothing
+                    const showMeta = height >= 40;
+                    const showTitle = height >= 25;
+
                     return (
                       <div
                         key={o.key}
@@ -348,11 +356,13 @@ export default function WeekView({ dayCount }: { readonly dayCount: 1 | 5 | 7 })
                         >
                           <span className={styles.resizeHandle} aria-hidden="true" />
                         </span>
-                        <div className={styles.timedTitle}>{o.event.title || "(untitled)"}</div>
-                        <div className={styles.timedMeta}>
-                          {shortTime(start)} – {shortTime(end)}
-                          {o.event.location ? ` · ${o.event.location}` : ""}
-                        </div>
+                        {showTitle && <div className={styles.timedTitle}>{o.event.title || "(untitled)"}</div>}
+                        {showMeta && (
+                          <div className={styles.timedMeta}>
+                            {shortTimeFormatted(start, formatPrefs.timeFormat)} – {shortTimeFormatted(end, formatPrefs.timeFormat)}
+                            {o.event.location ? ` · ${o.event.location}` : ""}
+                          </div>
+                        )}
                         <span
                           className={styles.resizeEdgeBottom}
                           onPointerDown={(e) => beginDrag(e, o, "resize-end")}
