@@ -137,6 +137,32 @@ export const TID = {
   calendarJoinMeeting: "calendar-join-meeting",
   /** Organiser-only "Copy invite link" button on the event detail card. */
   calendarCopyInviteLink: "calendar-copy-invite-link",
+
+  // -- Screen sharing (Rust capture + WebRTC) -------------------------------
+  /** Chat-header "Share screen" / "Stop sharing" toggle. Opens the source
+   *  picker (when not sharing) or stops the broadcast. */
+  screenShareToggle: "screen-share-toggle",
+  /** Root of the source-picker dialog (the 2-tab Entire Screen / Window
+   *  chooser). Its presence means the picker is open. */
+  screenSharePicker: "screen-share-picker",
+  /** A tab button inside the picker; carries `data-tab` ("screens"|"windows"). */
+  screenSharePickerTab: "screen-share-picker-tab",
+  /** A selectable capture-source card in the picker. Carries `data-source-id`,
+   *  `data-source-kind` ("screen"|"window") and `data-source-title`. */
+  screenShareSource: "screen-share-source",
+  /** Confirm button in the picker that starts the broadcast for the selected
+   *  source. */
+  screenShareConfirm: "screen-share-confirm",
+  /** The stream `<video>` element (own loopback preview or a remote viewer).
+   *  Carries `data-session` (the broadcaster's session) and `data-own`
+   *  ("true" for the broadcaster's own loopback, "false" for a remote view) so
+   *  a test can read back the decoded pixels of a specific stream. */
+  streamViewerVideo: "stream-viewer-video",
+  /** A "someone is sharing" banner row; carries `data-broadcaster-name`. */
+  broadcastBanner: "broadcast-banner",
+  /** The "Watch" button inside a {@link broadcastBanner}; carries
+   *  `data-session` (the broadcaster to watch). */
+  broadcastWatch: "broadcast-watch",
 } as const;
 
 export type TestId = (typeof TID)[keyof typeof TID];
@@ -149,3 +175,9 @@ export const SERVER_ID_ATTR = "data-server-id";
 export const CALENDAR_EVENT_TITLE_ATTR = "data-event-title";
 /** Data attribute key used alongside {@link TID.calendarViewButton}. */
 export const CALENDAR_VIEW_ATTR = "data-view";
+/** Data attribute key carrying a capture source's window/screen title,
+ *  used alongside {@link TID.screenShareSource}. */
+export const STREAM_SOURCE_TITLE_ATTR = "data-source-title";
+/** Data attribute key carrying a broadcaster's display name, used alongside
+ *  {@link TID.broadcastBanner}. */
+export const BROADCASTER_NAME_ATTR = "data-broadcaster-name";

@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../../../store";
 import { useRemoteStream } from "./useScreenShare";
+import { TID } from "../../../testids";
 import styles from "./ScreenShareViewer.module.css";
 
 // ---------------------------------------------------------------------------
@@ -311,6 +312,9 @@ function OwnBroadcastPreview({ stream, channelId, ownSession }: OwnPreviewProps)
         playsInline
         muted
         className={styles.videoElement}
+        data-testid={TID.streamViewerVideo}
+        data-own="true"
+        data-session={ownSession}
       />
       {webrtcConnecting && (
         <div className={styles.connectingOverlay}>
@@ -389,6 +393,9 @@ function RemoteViewer({ session, channelId, ownSession }: { readonly session: nu
         muted
         className={styles.videoElement}
         style={{ display: remoteStream ? "block" : "none" }}
+        data-testid={TID.streamViewerVideo}
+        data-own="false"
+        data-session={session}
       />
       {remoteStream && (
         <StreamControls
@@ -507,6 +514,8 @@ export function BroadcastBanner({ broadcasters, onWatch, sfuAvailable = true }: 
           key={b.session}
           className={`${styles.broadcastBanner} ${!sfuAvailable ? styles.broadcastBannerP2P : ""}`}
           role="status"
+          data-testid={TID.broadcastBanner}
+          data-broadcaster-name={b.name}
         >
           <span className={`${styles.broadcastBannerDot} ${!sfuAvailable ? styles.broadcastBannerDotP2P : ""}`} />
           <span className={styles.broadcastBannerText}>
@@ -521,6 +530,8 @@ export function BroadcastBanner({ broadcasters, onWatch, sfuAvailable = true }: 
             type="button"
             className={styles.broadcastBannerWatchBtn}
             onClick={() => onWatch(b.session)}
+            data-testid={TID.broadcastWatch}
+            data-session={b.session}
           >
             <ScreenShareIcon width={12} height={12} />
             {t("screenShare.banner.watch")}
