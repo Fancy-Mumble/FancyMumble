@@ -8,6 +8,7 @@ pub mod fuzzy;
 pub mod hex;
 pub mod html;
 pub mod image_filter;
+pub mod markdown;
 pub mod net;
 /// Mumble ACL permission bit definitions.
 ///

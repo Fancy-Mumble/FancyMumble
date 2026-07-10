@@ -27,6 +27,45 @@ pub trait AudioPlayback: Send + 'static {
     fn stop(&mut self) -> Result<()>;
 }
 
+/// A playback device that mixes multiple speakers in its own audio callback.
+///
+/// Unlike [`AudioPlayback`], this device does not receive frames via
+/// `write_frame` - decoded samples are written into
+/// [`SpeakerBuffers`](crate::audio::mixer::SpeakerBuffers) by the
+/// [`AudioMixer`](crate::audio::mixer::AudioMixer), and the device's own
+/// output callback reads and sums them directly.
+///
+/// The trait lives here (not in a device-specific crate) so that every
+/// front-end backend - cpal, rodio, oboe (Android) - implements the same
+/// interface regardless of the platform audio API in use.
+pub trait MixingPlayback: Send + 'static {
+    /// Start the output stream.
+    fn start(&mut self) -> Result<()>;
+    /// Stop the output stream.
+    fn stop(&mut self) -> Result<()>;
+}
+
+/// Soft-clip a sample to the `[-1.0, 1.0]` range.
+///
+/// Samples within `[-0.9, 0.9]` pass through unchanged.  Beyond that
+/// threshold the signal is smoothly compressed using `tanh` so it
+/// asymptotically approaches +/-1.0 without ever exceeding it.  This
+/// avoids the harsh distortion of hard clipping while preserving
+/// dynamics for normal-level audio.  Shared by all mixing-playback
+/// backends so the output character is identical across platforms.
+#[inline]
+#[must_use]
+pub fn soft_clip(sample: f32) -> f32 {
+    const KNEE: f32 = 0.9;
+    if sample.abs() <= KNEE {
+        return sample;
+    }
+    let sign = sample.signum();
+    let excess = sample.abs() - KNEE;
+    let compressed = KNEE + (1.0 - KNEE) * (excess / (1.0 - KNEE)).tanh();
+    sign * compressed
+}
+
 // -- Null playback (testing / headless) -----------------------------
 
 /// A playback sink that discards all audio. Useful for testing or bots.

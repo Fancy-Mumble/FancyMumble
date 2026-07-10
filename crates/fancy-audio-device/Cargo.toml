@@ -1,0 +1,14 @@
+[package]
+name = "fancy-audio-device"
+version = "0.1.0"
+edition = "2021"
+description = "Shared cpal-based audio capture and mixing-playback backend for the Fancy Mumble clients"
+license = "MIT"
+
+[dependencies]
+mumble-protocol = { path = "../mumble-protocol" }
+cpal = "0.17.3"
+tracing = "0.1"
+
+[lints]
+workspace = true

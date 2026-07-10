@@ -4,6 +4,7 @@ members = [
     "crates/fancy-utils",
     "crates/fancy-denoiser-deepfilter",
     "crates/mumble-protocol",
+    "crates/fancy-audio-device",
     "crates/mumble-tauri",
 ]
 # The Mumble server-side plugin host crates (mumble-plugin-api, mumble-file-server,
@@ -11,7 +12,13 @@ members = [
 # 3rdparty/mumble-plugin-host/. They are not built from this workspace.
 # signal-bridge is excluded because it depends on AGPL-licensed
 # libsignal-protocol and is built separately as a dynamic library.
-exclude = ["crates/signal-bridge"]
+#
+# qt6ui is excluded because it must be built with the `x86_64-pc-windows-gnu`
+# toolchain against the MinGW Qt 6 kit (MSVC and MinGW have incompatible C++
+# ABIs), so it cannot participate in the default MSVC workspace build.  It
+# path-depends on the workspace crates and is built on its own - see
+# crates/qt6ui/README.md.
+exclude = ["crates/signal-bridge", "crates/qt6ui"]
 
 # -- Workspace-wide lints --------------------------------------------
 # These apply to every crate in the workspace automatically.
