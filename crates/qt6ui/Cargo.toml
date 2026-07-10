@@ -7,7 +7,11 @@ name = "qt6ui"
 version = "0.1.0"
 edition = "2021"
 description = "Minimal, low-RAM native Qt 6 (QML) client for mumble-protocol"
-license = "MIT"
+# This crate (and only this crate) is LGPL-3.0-or-later because it is the
+# Qt-facing front-end (dynamically linked against open-source Qt 6, itself
+# LGPL-3.0). It is a separate executable, so the rest of the workspace
+# stays MIT. See COPYING / COPYING.LESSER and the README's License section.
+license = "LGPL-3.0-or-later"
 
 [[bin]]
 name = "qt6ui"
@@ -33,11 +37,15 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time"
 rustls = { version = "0.23", features = ["ring"] }
 
 serde_json = "1"
+# System UI language detection for the shared locale bundles (tiny, no deps).
+sys-locale = "0.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [build-dependencies]
 cxx-qt-build = { version = "0.7", features = ["link_qt_object_files"] }
+# Parses the repo-root constants.json (shared integration constants) at build time.
+serde_json = "1"
 
 # Aggressively optimise for size + low runtime overhead, matching the
 # "minimal RAM" goal.  A separate profile from the workspace so the MSVC

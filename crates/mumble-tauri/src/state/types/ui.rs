@@ -47,13 +47,13 @@ pub struct ChannelEntry {
     /// Whether the channel requires a password (token) to enter.
     #[serde(default)]
     pub is_enter_restricted: bool,
-    /// Whether this channel is hidden (only users with SeeChannel see it).
+    /// Whether this channel is hidden (only users with `SeeChannel` see it).
     #[serde(default)]
     pub hidden: bool,
     /// Whether this channel is detached: parentless (like the root), never shown
     /// in the channel tree, and only ever delivered to Fancy clients. Surfaced in
-    /// the Meetings/Private-rooms viewer instead. Derived from the ChannelState
-    /// `attributes` set (CHANNEL_ATTRIBUTE_DETACHED).
+    /// the Meetings/Private-rooms viewer instead. Derived from the `ChannelState`
+    /// `attributes` set (`CHANNEL_ATTRIBUTE_DETACHED`).
     #[serde(default)]
     pub detached: bool,
     /// Channel expiry mode: 0 = none, 1 = absolute, 2 = sliding.

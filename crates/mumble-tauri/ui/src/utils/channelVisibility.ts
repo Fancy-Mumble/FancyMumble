@@ -1,4 +1,5 @@
 import type { ChannelEntry, UserEntry } from "../types";
+import { DM_CHANNEL_PREFIX } from "./appConstants";
 
 /**
  * Display name for a channel. Detached/hidden rooms (e.g. server-provisioned
@@ -16,8 +17,9 @@ export function channelDisplayName(channel: ChannelEntry): string {
 
 /** Name prefix of a friend-chat / self-notepad detached channel (the
  *  `fancy-friends` plugin's `__dm:<lo>-<hi>` convention). These are surfaced
- *  through the friends list / DM UI, never the channel viewer. */
-export const DM_CHANNEL_PREFIX = "__dm:";
+ *  through the friends list / DM UI, never the channel viewer. The value
+ *  lives in the repo-root constants.json (shared with the qt6ui client). */
+export { DM_CHANNEL_PREFIX };
 
 /** Whether a channel is a friend-chat (or self-notepad) DM channel. */
 export function isDmChannel(channel: ChannelEntry): boolean {

@@ -108,6 +108,11 @@
   },
   "advanced": {
     "panelTitle": "高级",
+    "uiMode": "轻量界面（极简模式）",
+    "uiModeHint": "重启进入原生极简客户端：内存占用大幅降低，但仅提供核心功能（连接、聊天、频道、语音）。",
+    "uiModeConfirmText": "现在切换到极简界面吗？应用将关闭并启动轻量客户端。",
+    "uiModeConfirmBtn": "切换并重启",
+    "uiModeError": "无法启动极简客户端：{{error}}",
     "expertMode": "专家模式",
     "expertModeHintNormal": "简洁模式：技术细节都交给我们。",
     "expertModeHintExpert": "完全掌控：可看到高级音频选项、自定义端口和标签。",

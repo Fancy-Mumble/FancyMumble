@@ -2,7 +2,7 @@
 //!
 //! The wiring `run()` (in `lib.rs`) performs at startup - runtime-env tuning,
 //! the plugin builder, state hydration, the deep-link handler and (desktop)
-//! WebView2 memory management - lives here so the crate-root entry point stays
+//! `WebView2` memory management - lives here so the crate-root entry point stays
 //! focused on the event loop. Command registration is in [`crate::commands::registry`].
 
 pub(crate) mod builder;

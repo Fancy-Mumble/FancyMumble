@@ -93,6 +93,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_UI_Shell",
     "Win32_Graphics_Gdi",
     "Win32_System_Threading",
+    "Win32_System_SystemInformation",
 ] }
 # WebView2 COM bindings for ICoreWebView2_19::SetMemoryUsageTargetLevel
 # (trim browser memory while minimized).  Versions must match the ones
@@ -123,3 +124,4 @@ tempfile = "3"
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 cc = "1"
+serde_json = "1"

@@ -46,7 +46,28 @@ pub mod qobject {
         #[qproperty(QString, status)]
         #[qproperty(QString, channels_json)]
         #[qproperty(i32, self_channel)]
+        #[qproperty(i32, default_port)]
+        // hide_empty_channels: "hide empty channels" (web client parity),
+        // loaded from and persisted to the shared preferences store - use
+        // persist_hide_empty_channels() to change it, not a raw write.
+        #[qproperty(bool, hide_empty_channels)]
+        // saved_servers_json: the shared saved-server list (servers.json),
+        // same entries the full client shows: [{id, label, host, port,
+        // username, cert_label, favorite}, ...] newest first.
+        #[qproperty(QString, saved_servers_json)]
         type Backend = super::BackendRust;
+
+        /// Translate a namespaced key from the shared locale bundles
+        /// ("server.fields.host"). See `src/i18n.rs`. Named `t` (i18next
+        /// convention) because `tr` would clash with the static
+        /// `QObject::tr` that the Q_OBJECT macro injects.
+        #[qinvokable]
+        fn t(self: &Backend, key: &QString) -> QString;
+
+        /// Plural-aware translate (i18next `_one`/`_other` convention);
+        /// replaces `{{count}}` in the resolved string.
+        #[qinvokable]
+        fn tr_n(self: &Backend, key: &QString, count: i32) -> QString;
 
         /// Connect to a Mumble server and authenticate as `username`.
         #[qinvokable]
@@ -74,6 +95,42 @@ pub mod qobject {
         #[qinvokable]
         fn set_voice_enabled(self: Pin<&mut Backend>, enabled: bool);
 
+        /// Persist the `full` ui-mode marker and start the full (Tauri)
+        /// client. Returns `true` when the full client was spawned - the
+        /// QML side should then `Qt.quit()`. On `false` this client keeps
+        /// running (marker unwritable or full binary not found).
+        #[qinvokable]
+        fn switch_to_full_mode(self: Pin<&mut Backend>) -> bool;
+
+        /// Connect to a saved server by id: uses its stored username,
+        /// password (passwords.json) and TLS identity (`cert_label`).
+        #[qinvokable]
+        fn connect_saved(self: Pin<&mut Backend>, id: &QString);
+
+        /// Persist a new saved server (shared servers.json; the password,
+        /// when `save_password`, goes to passwords.json). Returns the new
+        /// entry's id, or an empty string on failure.
+        #[qinvokable]
+        fn save_server(
+            self: Pin<&mut Backend>,
+            label: &QString,
+            host: &QString,
+            port: i32,
+            username: &QString,
+            password: &QString,
+            save_password: bool,
+        ) -> QString;
+
+        /// Toggle a saved server's favourite flag and refresh the list.
+        #[qinvokable]
+        fn toggle_favorite(self: Pin<&mut Backend>, id: &QString);
+
+        /// Set + persist the hide-empty-channels preference (shared with
+        /// the full client's Settings). Named distinctly because cxx-qt
+        /// already generates `set_hide_empty_channels` for the property.
+        #[qinvokable]
+        fn persist_hide_empty_channels(self: Pin<&mut Backend>, enabled: bool);
+
         /// Emitted when a chat message arrives (or is echoed back).
         #[qsignal]
         fn chat_message(self: Pin<&mut Backend>, channel: QString, sender: QString, text: QString);
@@ -91,6 +148,9 @@ pub struct BackendRust {
     status: QString,
     channels_json: QString,
     self_channel: i32,
+    default_port: i32,
+    hide_empty_channels: bool,
+    saved_servers_json: QString,
     core: Arc<AppCore>,
 }
 
@@ -100,6 +160,9 @@ impl Default for BackendRust {
             status: QString::from("disconnected"),
             channels_json: QString::from("[]"),
             self_channel: -1,
+            default_port: i32::from(crate::constants::DEFAULT_SERVER_PORT),
+            hide_empty_channels: crate::store::hide_empty_channels(),
+            saved_servers_json: QString::from(crate::store::saved_servers().to_string().as_str()),
             core: Arc::new(AppCore::new()),
         }
     }
@@ -124,6 +187,7 @@ impl qobject::Backend {
             port.clamp(1, 65_535) as u16,
             username.to_string(),
             password,
+            None,
         );
     }
 
@@ -146,6 +210,92 @@ impl qobject::Backend {
 
     fn set_voice_enabled(self: Pin<&mut Self>, enabled: bool) {
         self.core.clone().set_voice_enabled(enabled);
+    }
+
+    fn switch_to_full_mode(self: Pin<&mut Self>) -> bool {
+        crate::mode::switch_to_full_mode()
+    }
+
+    /// Connect to a saved server by id (stored username/password/identity).
+    fn connect_saved(self: Pin<&mut Self>, id: &QString) {
+        let id = id.to_string();
+        let Some(entry) = crate::store::saved_server(&id) else {
+            tracing::warn!("connect_saved: no saved server with id {id}");
+            return;
+        };
+        let host = entry["host"].as_str().unwrap_or_default().to_owned();
+        let port = entry["port"].as_u64().unwrap_or(0).clamp(1, 65_535) as u16;
+        let username = entry["username"].as_str().unwrap_or_default().to_owned();
+        if host.is_empty() || username.is_empty() {
+            tracing::warn!("connect_saved: entry {id} is missing host/username");
+            return;
+        }
+        let password = crate::store::server_password(&id);
+        let cert_pems = entry["cert_label"]
+            .as_str()
+            .and_then(crate::store::identity_pems);
+        let thread = self.qt_thread();
+        self.core.clone().connect(thread, host, port, username, password, cert_pems);
+    }
+
+    fn save_server(
+        self: Pin<&mut Self>,
+        label: &QString,
+        host: &QString,
+        port: i32,
+        username: &QString,
+        password: &QString,
+        save_password: bool,
+    ) -> QString {
+        let password = password.to_string();
+        let password = if save_password && !password.is_empty() {
+            Some(password)
+        } else {
+            None
+        };
+        match crate::store::add_server(
+            &label.to_string(),
+            &host.to_string(),
+            port.clamp(1, 65_535) as u16,
+            &username.to_string(),
+            password.as_deref(),
+        ) {
+            Ok(id) => {
+                self.refresh_saved_servers();
+                QString::from(id.as_str())
+            }
+            Err(e) => {
+                tracing::error!("failed to save server: {e}");
+                QString::from("")
+            }
+        }
+    }
+
+    fn toggle_favorite(self: Pin<&mut Self>, id: &QString) {
+        if let Err(e) = crate::store::toggle_favorite(&id.to_string()) {
+            tracing::error!("failed to toggle favourite: {e}");
+        }
+        self.refresh_saved_servers();
+    }
+
+    fn persist_hide_empty_channels(mut self: Pin<&mut Self>, enabled: bool) {
+        self.as_mut().set_hide_empty_channels(enabled);
+        crate::store::set_hide_empty_channels(enabled);
+    }
+
+    /// Reload the shared saved-server list into the QML-facing property
+    /// (after adds/favourite toggles).
+    fn refresh_saved_servers(self: Pin<&mut Self>) {
+        let json = crate::store::saved_servers().to_string();
+        self.set_saved_servers_json(QString::from(json.as_str()));
+    }
+
+    fn t(&self, key: &QString) -> QString {
+        QString::from(crate::i18n::tr(&key.to_string()).as_str())
+    }
+
+    fn tr_n(&self, key: &QString, count: i32) -> QString {
+        QString::from(crate::i18n::tr_n(&key.to_string(), i64::from(count)).as_str())
     }
 }
 

@@ -30,7 +30,7 @@ pub mod flags {
     pub const SPOILER: u16 = 64;
     /// `<@SESSION>` user mention token.
     pub const MENTION: u16 = 128;
-    /// A ``` fence delimiter line (shown muted/monospace).
+    /// A triple-backtick fence delimiter line (shown muted/monospace).
     pub const FENCE_MARKER: u16 = 256;
 }
 
@@ -206,12 +206,11 @@ fn trim_trailing_punctuation(url: &str) -> &str {
     let mut out = url.trim_end_matches(|c| {
         matches!(c, '.' | ',' | ';' | ':' | '!' | '?' | '\'' | '\u{201d}' | '\u{2019}' | '\u{2026}')
     });
-    loop {
-        let Some(last) = out.chars().next_back() else { break };
+    while let Some(last) = out.chars().next_back() {
         let opens = |c| out.chars().filter(|&x| x == c).count();
         let strip = match last {
-            ')' => opens('(') + 1 <= opens(')'),
-            ']' => opens('[') + 1 <= opens(']'),
+            ')' => opens('(') < opens(')'),
+            ']' => opens('[') < opens(']'),
             '>' | '\u{bb}' => true,
             _ => false,
         };
@@ -292,12 +291,7 @@ fn extract_fences(text: &str, stash: &mut Vec<String>) -> String {
                 if let Some(close) = find_sub(b, b"```", k + 1) {
                     let lang = &text[i + 3..k];
                     let body = text[k + 1..close].strip_suffix('\n').unwrap_or(&text[k + 1..close]);
-                    let cls = if lang.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" class=\"language-{lang}\"")
-                    };
-                    stash.push(format!("<pre><code{cls}>{body}</code></pre>"));
+                    stash.push(fence_html(lang, body));
                     out.push_str(&format!("\u{0}FENCE{}\u{0}", stash.len() - 1));
                     i = close + 3;
                     continue;
@@ -307,6 +301,16 @@ fn extract_fences(text: &str, stash: &mut Vec<String>) -> String {
         push_next_char(&mut out, text, &mut i);
     }
     out
+}
+
+/// `<pre><code class="language-lang">body</code></pre>` for one fence
+/// (no class attribute when the language is empty).
+fn fence_html(lang: &str, body: &str) -> String {
+    if lang.is_empty() {
+        format!("<pre><code>{body}</code></pre>")
+    } else {
+        format!("<pre><code class=\"language-{lang}\">{body}</code></pre>")
+    }
 }
 
 /// `` `code` `` -> `<code>code</code>`, stashed behind a sentinel.
@@ -390,12 +394,14 @@ fn restore_stash(text: &str, tag: &str, stash: &[String]) -> String {
                 k += 1;
             }
             if k > digits_start && k < b.len() && b[k] == 0 {
-                if let Ok(idx) = text[digits_start..k].parse::<usize>() {
-                    if let Some(s) = stash.get(idx) {
-                        out.push_str(s);
-                        i = k + 1;
-                        continue;
-                    }
+                let stashed = text[digits_start..k]
+                    .parse::<usize>()
+                    .ok()
+                    .and_then(|idx| stash.get(idx));
+                if let Some(s) = stashed {
+                    out.push_str(s);
+                    i = k + 1;
+                    continue;
                 }
             }
         }
@@ -585,22 +591,32 @@ fn replace_anchors(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut i = 0usize;
     while i < b.len() {
-        if starts_with_ci(text, i, "<a") {
-            if let Some(gt) = find_byte(b, b'>', i + 2) {
-                if !text[i + 2..gt].contains('>') {
-                    if let Some(inner_end) = find_byte(b, b'<', gt + 1) {
-                        if starts_with_ci(text, inner_end, "</a>") {
-                            out.push_str(&text[gt + 1..inner_end]);
-                            i = inner_end + 4;
-                            continue;
-                        }
-                    }
-                }
-            }
+        if let Some((inner_start, inner_end)) = anchor_inner(text, b, i) {
+            out.push_str(&text[inner_start..inner_end]);
+            i = inner_end + 4; // skip "</a>"
+            continue;
         }
         push_next_char(&mut out, text, &mut i);
     }
     out
+}
+
+/// When a complete `<a ...>text</a>` starts at byte `i`, return the byte
+/// range of its inner `text`; `None` otherwise.
+fn anchor_inner(text: &str, b: &[u8], i: usize) -> Option<(usize, usize)> {
+    if !starts_with_ci(text, i, "<a") {
+        return None;
+    }
+    let gt = find_byte(b, b'>', i + 2)?;
+    if text[i + 2..gt].contains('>') {
+        return None;
+    }
+    let inner_end = find_byte(b, b'<', gt + 1)?;
+    if starts_with_ci(text, inner_end, "</a>") {
+        Some((gt + 1, inner_end))
+    } else {
+        None
+    }
 }
 
 /// `<tag>inner</tag>` -> `{open}inner{close}` where `inner` contains no `<`.
@@ -755,9 +771,14 @@ fn attr_value<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
 
 /// Copy the (possibly multi-byte) char at byte `i` to `out` and advance `i`.
 fn push_next_char(out: &mut String, text: &str, i: &mut usize) {
-    let ch = text[*i..].chars().next().expect("index at char boundary");
-    out.push(ch);
-    *i += ch.len_utf8();
+    if let Some(ch) = text[*i..].chars().next() {
+        out.push(ch);
+        *i += ch.len_utf8();
+    } else {
+        // Defensive: callers only invoke this with `i < text.len()`, so an
+        // empty tail is unreachable - but never panic in a chat parser.
+        *i = text.len();
+    }
 }
 
 fn find_byte(b: &[u8], needle: u8, from: usize) -> Option<usize> {

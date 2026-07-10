@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import type { UserMode } from "../../types";
@@ -8,6 +8,7 @@ import styles from "./SettingsPage.module.css";
 
 registerSettings("advanced")
   .add("advanced.expertMode", ["expert"])
+  .add("advanced.uiMode", ["minimal", "lightweight", "qt", "interface", "ram", "memory"])
   .add("advanced.klipyApiKey", ["gif", "klipy", "api key"])
   .add("advanced.developerMode", ["developer", "debug"])
   .add("advanced.logLevel", ["logging", "log"])
@@ -71,7 +72,49 @@ export function AdvancedPanel({
 }>) {
   const [confirming, setConfirming] = useState(false);
   const [logBusy, setLogBusy] = useState(false);
+  // Interface mode (full Tauri UI vs. minimal native qt6ui client). The
+  // marker lives in a file both binaries share, so it is read/written via
+  // invoke instead of the preferences store.
+  const [minimalUi, setMinimalUi] = useState(false);
+  const [confirmingMinimal, setConfirmingMinimal] = useState(false);
   const { t } = useTranslation(["settings", "common"]);
+
+  useEffect(() => {
+    invoke<string>("get_ui_mode")
+      .then((mode) => setMinimalUi(mode === "minimal"))
+      .catch(() => undefined);
+  }, []);
+
+  const handleUiModeToggle = () => {
+    if (minimalUi) {
+      // Turning minimal OFF while the full app runs (the marker was left
+      // on "minimal", e.g. after a fallback start): just persist "full".
+      invoke("set_ui_mode", { mode: "full" })
+        .then(() => setMinimalUi(false))
+        .catch((e) => console.error("set_ui_mode failed:", e));
+    } else {
+      setConfirmingMinimal(true);
+    }
+  };
+
+  const handleSwitchToMinimal = async () => {
+    try {
+      await invoke("set_ui_mode", { mode: "minimal" });
+      setMinimalUi(true);
+      setConfirmingMinimal(false);
+      // Hands off to qt6ui and exits this app; on error we roll back so
+      // the toggle never lies about the active mode.
+      await invoke("relaunch_in_minimal_mode");
+    } catch (e) {
+      console.error("switch to minimal mode failed:", e);
+      await invoke("set_ui_mode", { mode: "full" }).catch(() => undefined);
+      setMinimalUi(false);
+      const { message } = await import("@tauri-apps/plugin-dialog");
+      await message(t("advanced.uiModeError", { error: String(e) }), {
+        kind: "error",
+      });
+    }
+  };
 
   const handleExportLogs = async () => {
     setLogBusy(true);
@@ -122,6 +165,37 @@ export function AdvancedPanel({
           </div>
           <Toggle checked={userMode !== "normal"} onChange={onToggleMode} />
         </div>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.toggleRow}>
+          <div className={styles.toggleInfo}>
+            <h3 className={styles.sectionTitle}>{t("advanced.uiMode")}</h3>
+            <p className={styles.fieldHint}>{t("advanced.uiModeHint")}</p>
+          </div>
+          <Toggle checked={minimalUi} onChange={handleUiModeToggle} />
+        </div>
+        {confirmingMinimal && (
+          <div className={styles.confirmBox}>
+            <p className={styles.confirmText}>{t("advanced.uiModeConfirmText")}</p>
+            <div className={styles.confirmBtns}>
+              <button
+                type="button"
+                className={styles.ghostBtn}
+                onClick={() => void handleSwitchToMinimal()}
+              >
+                {t("advanced.uiModeConfirmBtn")}
+              </button>
+              <button
+                type="button"
+                className={styles.ghostBtn}
+                onClick={() => setConfirmingMinimal(false)}
+              >
+                {t("common:actions.cancel")}
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {userMode !== "normal" && (

@@ -1,7 +1,7 @@
-//! Windows-only WebView2 memory management.
+//! Windows-only `WebView2` memory management.
 //!
 //! The browser process tree dwarfs the Rust backend's heap and by default holds
-//! its working set while the app idles minimized or in the tray. We ask WebView2
+//! its working set while the app idles minimized or in the tray. We ask `WebView2`
 //! to trim memory while the main window is minimized and restore it on show.
 
 use crate::updater;

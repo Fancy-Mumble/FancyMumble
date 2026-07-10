@@ -14,7 +14,7 @@ param([Parameter(ValueFromRemainingArguments = $true)] $Rest)
 $ErrorActionPreference = "Stop"
 
 # --- Locate the Qt kit + its matching MinGW toolchain ---------------------
-$Qt    = if ($env:QT6_MINGW_DIR) { $env:QT6_MINGW_DIR } else { "C:\Qt\6.10.0\mingw_64" }
+$Qt    = if ($env:QT6_MINGW_DIR) { $env:QT6_MINGW_DIR } else { "C:\Qt\6.11.1\mingw_64" }
 $Mingw = if ($env:QT6_MINGW_GCC) { $env:QT6_MINGW_GCC } else { "C:\Qt\Tools\mingw1310_64" }
 
 if (-not (Test-Path "$Qt\bin\qmake.exe"))  { throw "qmake not found under $Qt (set QT6_MINGW_DIR)" }
@@ -24,6 +24,16 @@ if (-not (Test-Path "$Mingw\bin\g++.exe")) { throw "g++ not found under $Mingw (
 # the C++ glue and the final Rust link use the Qt-compatible compiler.
 $env:QMAKE = "$Qt\bin\qmake.exe"
 $env:PATH  = "$Mingw\bin;$Qt\bin;$env:PATH"
+
+# CMake-based -sys crates (e.g. audiopus_sys) default to "Unix Makefiles" and
+# pick up whatever `make`/`sh` is first on PATH (e.g. w64devkit's), whose
+# shell cannot spawn "C:/Program Files/CMake/bin/cmake.exe" (space).  Use the
+# Ninja bundled with Qt Tools instead - it has no shell and handles spaces.
+$Ninja = "C:\Qt\Tools\Ninja"
+if (Test-Path "$Ninja\ninja.exe") {
+    $env:PATH = "$Ninja;$env:PATH"
+    $env:CMAKE_GENERATOR = "Ninja"
+}
 
 $run = $false
 $cargoArgs = @()

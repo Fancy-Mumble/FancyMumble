@@ -108,6 +108,11 @@
   },
   "advanced": {
     "panelTitle": "Avancé",
+    "uiMode": "Interface légère (mode minimal)",
+    "uiModeHint": "Redémarre dans le client natif minimal : consommation de RAM bien plus faible, mais uniquement les fonctions essentielles (connexion, chat, canaux, voix).",
+    "uiModeConfirmText": "Passer à l'interface minimale maintenant ? L'application va se fermer et le client léger va démarrer.",
+    "uiModeConfirmBtn": "Changer et redémarrer",
+    "uiModeError": "Impossible de démarrer le client minimal : {{error}}",
     "expertMode": "Mode expert",
     "expertModeHintNormal": "Simplifié - on s'occupe des détails techniques pour vous.",
     "expertModeHintExpert": "Contrôle total - options audio avancées, ports personnalisés et libellés sont visibles.",

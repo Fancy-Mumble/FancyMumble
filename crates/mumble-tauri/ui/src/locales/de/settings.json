@@ -108,6 +108,11 @@
   },
   "advanced": {
     "panelTitle": "Erweitert",
+    "uiMode": "Leichtgewichtige Oberfläche (Minimalmodus)",
+    "uiModeHint": "Startet den nativen Minimal-Client: deutlich weniger RAM-Verbrauch, aber nur Kernfunktionen (Verbinden, Chat, Kanäle, Sprache).",
+    "uiModeConfirmText": "Jetzt zur minimalen Oberfläche wechseln? Die App wird geschlossen und der leichtgewichtige Client gestartet.",
+    "uiModeConfirmBtn": "Wechseln & neu starten",
+    "uiModeError": "Der Minimal-Client konnte nicht gestartet werden: {{error}}",
     "expertMode": "Expertenmodus",
     "expertModeHintNormal": "Vereinfacht - wir kümmern uns um die technischen Details.",
     "expertModeHintExpert": "Volle Kontrolle - erweiterte Audiooptionen, eigene Ports und Bezeichnungen sind sichtbar.",

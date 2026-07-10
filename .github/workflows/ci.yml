@@ -353,12 +353,139 @@ jobs:
           if-no-files-found: warn
 
   # ----------------------------------------------------------------
+  # 2c. Build minimal Qt client - a standalone archive containing ONLY
+  #     qt6ui and (on Windows) the Qt/MinGW runtime it needs.
+  # ----------------------------------------------------------------
+
+  build-minimal:
+    name: Build (Minimal Qt client, ${{ matrix.target.name }})
+    runs-on: ${{ matrix.target.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          # Windows must use the GNU toolchain: MSVC and the MinGW Qt kit
+          # have incompatible C++ ABIs (see crates/qt6ui/README.md).
+          - name: Windows
+            os: windows-latest
+            rust: stable-x86_64-pc-windows-gnu
+            qt-arch: win64_mingw
+            qt-tools: tools_mingw1310
+          - name: Linux
+            os: ubuntu-latest
+            rust: stable
+            qt-arch: linux_gcc_64
+            qt-tools: ''
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.target.rust }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ matrix.target.os }}-minimal
+          workspaces: crates/qt6ui
+
+      - name: Install Qt 6
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.11.1'
+          arch: ${{ matrix.target.qt-arch }}
+          tools: ${{ matrix.target.qt-tools }}
+          cache: true
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: libasound2-dev protobuf-compiler libgl1-mesa-dev libxkbcommon-dev ninja-build
+          version: 1.0
+
+      - name: Install protoc and ninja (Windows)
+        if: runner.os == 'Windows'
+        run: choco install protoc ninja -y
+
+      - name: Build qt6ui (Windows)
+        if: runner.os == 'Windows'
+        working-directory: crates/qt6ui
+        shell: pwsh
+        run: |
+          $mingw = Get-ChildItem "$env:IQTA_TOOLS" -Directory -Filter "mingw*" |
+            Select-Object -First 1 -ExpandProperty FullName
+          "QT_MINGW_BIN=$mingw\bin" >> $env:GITHUB_ENV
+          $env:PATH = "$mingw\bin;$env:QT_ROOT_DIR\bin;$env:PATH"
+          $env:QMAKE = "$env:QT_ROOT_DIR\bin\qmake.exe"
+          # audiopus_sys' CMake build must not fall back to "Unix Makefiles"
+          # with a stray make/sh; Ninja handles paths with spaces.
+          $env:CMAKE_GENERATOR = "Ninja"
+          cargo +stable-x86_64-pc-windows-gnu build --release
+
+      - name: Build qt6ui (Linux)
+        if: runner.os == 'Linux'
+        working-directory: crates/qt6ui
+        run: |
+          export QMAKE="$QT_ROOT_DIR/bin/qmake"
+          export CMAKE_GENERATOR=Ninja
+          cargo build --release
+
+      - name: Package minimal client (Windows, windeployqt)
+        if: runner.os == 'Windows'
+        working-directory: crates/qt6ui
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:QT_MINGW_BIN;$env:QT_ROOT_DIR\bin;$env:PATH"
+          New-Item -ItemType Directory dist-minimal | Out-Null
+          Copy-Item target\release\qt6ui.exe dist-minimal\
+          # LGPL compliance: ship the license texts with the Qt runtime.
+          Copy-Item COPYING, COPYING.LESSER, README.md dist-minimal\
+          & "$env:QT_ROOT_DIR\bin\windeployqt.exe" --release --qmldir qml `
+            --no-translations --no-system-d3d-compiler --no-opengl-sw `
+            --compiler-runtime dist-minimal\qt6ui.exe
+          Compress-Archive -Path dist-minimal\* -DestinationPath fancy-mumble-minimal-win64.zip
+          "minimal zip: {0:N1} MB" -f ((Get-Item fancy-mumble-minimal-win64.zip).Length / 1MB)
+
+      - name: Package minimal client (Linux, tar.gz)
+        if: runner.os == 'Linux'
+        working-directory: crates/qt6ui
+        run: |
+          mkdir dist-minimal
+          cp target/release/qt6ui dist-minimal/
+          cp COPYING COPYING.LESSER README.md dist-minimal/
+          cat > dist-minimal/README-LINUX.txt <<'EOF'
+          Fancy Mumble - minimal Qt client (Linux x86_64)
+
+          Requires the Qt 6 QML runtime from your distribution:
+            Debian/Ubuntu: qml6-module-qtquick-controls qml6-module-qtquick-layouts
+                           qml6-module-qtquick-window libqt6quick6
+            Fedora:        qt6-qtdeclarative
+            Arch:          qt6-declarative
+
+          Then run ./qt6ui
+          EOF
+          tar -C dist-minimal -czf fancy-mumble-minimal-linux-x64.tar.gz .
+          ls -lh fancy-mumble-minimal-linux-x64.tar.gz
+
+      - name: Upload minimal client artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fancy-mumble-minimal-${{ matrix.target.name }}
+          path: |
+            crates/qt6ui/fancy-mumble-minimal-*.zip
+            crates/qt6ui/fancy-mumble-minimal-*.tar.gz
+          if-no-files-found: error
+
+  # ----------------------------------------------------------------
   # 3. Release (only on push to main)
   # ----------------------------------------------------------------
 
   release:
     name: Release
-    needs: [version-check, build, build-android]
+    needs: [version-check, build, build-android, build-minimal]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
@@ -435,4 +562,6 @@ jobs:
             artifacts/**/*.apk
             artifacts/**/*.so
             artifacts/**/*.dll
+            artifacts/**/fancy-mumble-minimal-*.zip
+            artifacts/**/fancy-mumble-minimal-*.tar.gz
             latest.json

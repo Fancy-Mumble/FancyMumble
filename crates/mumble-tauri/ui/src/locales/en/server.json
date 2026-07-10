@@ -1,4 +1,10 @@
 ﻿{
+  "weakPc": {
+    "title": "Limited hardware detected",
+    "message": "This computer has limited memory or CPU power. Fancy Mumble can run with a lightweight minimal interface that uses far less RAM, offering the core features only (connect, chat, channels, voice).\n\nYou can change this anytime in Settings → Advanced.",
+    "useMinimal": "Use minimal mode",
+    "keepFull": "Keep full interface"
+  },
   "password": {
     "title": "Password Required",
     "differentUser": {

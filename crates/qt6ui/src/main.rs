@@ -10,8 +10,12 @@
 
 mod app;
 mod bridge;
+mod constants;
 mod events;
+mod i18n;
+mod mode;
 mod profile;
+mod store;
 
 use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QUrl};
 

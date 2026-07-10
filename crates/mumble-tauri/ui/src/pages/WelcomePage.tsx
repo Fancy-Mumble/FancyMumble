@@ -1,11 +1,21 @@
-﻿import { useState, useCallback } from "react";
+﻿import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { completeSetup } from "../preferencesStorage";
 import BrandLogo from "../components/elements/BrandLogo";
 import type { UserMode } from "../types";
+// Hardware floors for the minimal-mode suggestion: the WebView-based full
+// UI needs a few hundred MB, so on very small machines the native qt6ui
+// client (~60-105 MB) is the better default. Values come from the repo-root
+// constants.json (single source of truth, generated at build time).
+import { WEAK_PC_MAX_MEMORY_MB, WEAK_PC_MAX_CPU_CORES } from "../utils/appConstants";
 import styles from "./WelcomePage.module.css";
+
+interface SystemSpecs {
+  total_memory_mb: number;
+  cpu_cores: number;
+}
 
 export default function WelcomePage({ onComplete }: Readonly<{ onComplete?: () => void }>) {
   const { t } = useTranslation("server");
@@ -13,6 +23,38 @@ export default function WelcomePage({ onComplete }: Readonly<{ onComplete?: () =
   const [mode, setMode] = useState<UserMode>("normal");
   const [username, setUsername] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // First-run weak-PC check: WelcomePage only renders on the very first
+  // startup, so this prompt appears at most once. Choosing "minimal"
+  // persists the marker and hands off to the qt6ui client immediately.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const specs = await invoke<SystemSpecs>("get_system_specs");
+        const weak =
+          (specs.total_memory_mb > 0 && specs.total_memory_mb <= WEAK_PC_MAX_MEMORY_MB) ||
+          (specs.cpu_cores > 0 && specs.cpu_cores <= WEAK_PC_MAX_CPU_CORES);
+        if (!weak || cancelled) return;
+        const { ask } = await import("@tauri-apps/plugin-dialog");
+        const useMinimal = await ask(t("weakPc.message"), {
+          title: t("weakPc.title"),
+          okLabel: t("weakPc.useMinimal"),
+          cancelLabel: t("weakPc.keepFull"),
+        });
+        if (!useMinimal || cancelled) return;
+        await invoke("set_ui_mode", { mode: "minimal" });
+        await invoke("relaunch_in_minimal_mode");
+      } catch (e) {
+        // Non-fatal: specs unavailable or qt6ui missing - stay in full mode.
+        console.warn("weak-PC minimal-mode prompt skipped:", e);
+        await invoke("set_ui_mode", { mode: "full" }).catch(() => undefined);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
 
   const handleSubmit = useCallback(
     async (e: { preventDefault: () => void }) => {
