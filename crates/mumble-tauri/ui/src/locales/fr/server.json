@@ -1,4 +1,10 @@
 ﻿{
+  "weakPc": {
+    "title": "Matériel limité détecté",
+    "message": "Cet ordinateur dispose de peu de mémoire ou de puissance CPU. Fancy Mumble peut fonctionner avec une interface minimale légère qui consomme beaucoup moins de RAM, avec uniquement les fonctions essentielles (connexion, chat, canaux, voix).\n\nModifiable à tout moment dans Paramètres → Avancé.",
+    "useMinimal": "Utiliser le mode minimal",
+    "keepFull": "Garder l'interface complète"
+  },
   "password": {
     "title": "Mot de passe requis",
     "differentUser": {

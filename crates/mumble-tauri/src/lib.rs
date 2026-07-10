@@ -46,9 +46,11 @@ use mimalloc as _;
 mod app;
 mod audio;
 pub(crate) mod commands;
+pub(crate) mod constants;
 pub(crate) mod logging;
 pub mod platform;
 mod state;
+pub(crate) mod ui_mode;
 #[cfg(not(target_os = "android"))]
 mod updater;
 
@@ -64,7 +66,7 @@ use tauri::Manager;
 /// isolation for the e2e suite requires this explicit hook. Production runs
 /// (no env var set) behave exactly as before.
 pub(crate) fn e2e_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
-    if let Ok(dir) = std::env::var("FANCY_E2E_DATA_DIR") {
+    if let Ok(dir) = std::env::var(constants::ENV_E2E_DATA_DIR) {
         if !dir.trim().is_empty() {
             return Ok(std::path::PathBuf::from(dir));
         }
@@ -97,6 +99,15 @@ pub fn run() {
 
     platform::init();
     logging::init();
+
+    // Minimal-mode dispatch: when the persisted UI mode is "minimal", hand
+    // off to the native qt6ui client instead of bringing up the WebView
+    // stack (falls through when the minimal binary is missing).
+    #[cfg(not(target_os = "android"))]
+    if ui_mode::dispatch_if_minimal() {
+        return;
+    }
+
     platform::check_dependencies();
 
     // When run via plain `cargo run` (not `cargo tauri dev`), start the Vite

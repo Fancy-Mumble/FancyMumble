@@ -8,6 +8,7 @@
 
 /// Register every command on the builder. Add new commands under their domain's
 /// section below (and implement them in the matching `commands::<domain>` file).
+#[allow(clippy::too_many_lines, reason = "intentionally a single flat list of every registered command")]
 pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
     builder.invoke_handler(tauri::generate_handler![
         // -- connection / servers --------------------------------------
@@ -222,6 +223,11 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::system::set_disable_dual_path,
         super::system::update_badge_count,
         super::system::get_system_clock_format,
+        // -- interface mode (full vs. minimal qt6ui client) --------------
+        super::ui_mode::get_ui_mode,
+        super::ui_mode::set_ui_mode,
+        super::ui_mode::get_system_specs,
+        super::ui_mode::relaunch_in_minimal_mode,
         // -- updater (desktop only) ------------------------------------
         #[cfg(not(target_os = "android"))]
         crate::updater::commands::updater_check,

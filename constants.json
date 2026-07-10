@@ -1,0 +1,24 @@
+{
+  "$doc": "Single source of truth for cross-cutting integration constants shared by the full (mumble-tauri) client, the minimal (qt6ui) client and the React UI. Parsed at BUILD time: each crate's build.rs generates a Rust constants module into OUT_DIR, and mumble-tauri/build.rs additionally regenerates ui/src/utils/appConstants.ts. Nothing reads this file at runtime - changing a value requires a rebuild.",
+
+  "appIdentifier": "com.fancymumble.app",
+
+  "uiModeMarkerFile": "ui-mode",
+
+  "envE2eDataDir": "FANCY_E2E_DATA_DIR",
+  "envQt6uiBin": "FANCY_QT6UI_BIN",
+  "envFullClientBin": "FANCY_FULL_CLIENT_BIN",
+
+  "qt6uiBinaryName": "qt6ui",
+  "fullClientBinaryNames": ["FancyMumble", "fancy-mumble", "mumble-tauri"],
+
+  "weakPcMaxMemoryMb": 4096,
+  "weakPcMaxCpuCores": 2,
+
+  "defaultServerPort": 64738,
+
+  "dmChannelPrefix": "__dm:",
+
+  "locales": ["en", "de", "fr", "zh"],
+  "defaultLocale": "en"
+}

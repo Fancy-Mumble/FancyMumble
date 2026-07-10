@@ -1,4 +1,10 @@
 ﻿{
+  "weakPc": {
+    "title": "Begrenzte Hardware erkannt",
+    "message": "Dieser Computer hat wenig Arbeitsspeicher oder CPU-Leistung. Fancy Mumble kann mit einer leichtgewichtigen minimalen Oberfläche laufen, die deutlich weniger RAM benötigt und nur die Kernfunktionen bietet (Verbinden, Chat, Kanäle, Sprache).\n\nDies kann jederzeit unter Einstellungen → Erweitert geändert werden.",
+    "useMinimal": "Minimalmodus verwenden",
+    "keepFull": "Volle Oberfläche behalten"
+  },
   "password": {
     "title": "Passwort erforderlich",
     "differentUser": {

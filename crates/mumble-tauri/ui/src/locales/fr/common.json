@@ -1,5 +1,14 @@
 ﻿{
   "brand": "Fancy Mumble",
+  "minimal": {
+    "settings": "Paramètres",
+    "connected": "Connecté",
+    "voiceOn": "Voix connectée",
+    "voiceOff": "Voix désactivée",
+    "me": "(moi)",
+    "switchToFull": "Passer à l'interface complète",
+    "fullClientNotFound": "Client complet introuvable - le mode minimal reste actif."
+  },
   "actions": {
     "minimize": "Réduire",
     "maximize": "Agrandir",

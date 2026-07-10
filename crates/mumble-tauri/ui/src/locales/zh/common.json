@@ -1,5 +1,14 @@
 {
   "brand": "Fancy Mumble",
+  "minimal": {
+    "settings": "设置",
+    "connected": "已连接",
+    "voiceOn": "语音已连接",
+    "voiceOff": "语音关闭",
+    "me": "（我）",
+    "switchToFull": "切换到完整界面",
+    "fullClientNotFound": "未找到完整客户端——继续使用极简模式。"
+  },
   "actions": {
     "minimize": "最小化",
     "maximize": "最大化",

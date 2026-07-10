@@ -84,7 +84,7 @@ impl HandleMessage for mumble_tcp::ChannelState {
 // `temporary` / `is_enter_restricted` are [deprecated] in the proto in favour of
 // the `attributes` set, but still sent for compatibility - we keep reading them
 // (they are the reliable, always-present source) until a later migration.
-#[allow(deprecated)]
+#[allow(deprecated, reason = "legacy wire fields remain the reliable, always-present source until the attributes migration")]
 fn apply_channel_state_fields(ch: &mut ChannelEntry, proto: &mumble_tcp::ChannelState) -> bool {
     if let Some(parent) = proto.parent {
         ch.parent_id = Some(parent);

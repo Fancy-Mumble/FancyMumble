@@ -370,7 +370,7 @@ fn user_state_without_channel_id_stays_in_root_not_presence_hidden() {
     assert_eq!(user.channel_id, 0, "a channel-less user must default to root (0)");
     assert_ne!(
         user.channel_id,
-        crate::state::types::PRESENCE_HIDDEN_CHANNEL,
+        PRESENCE_HIDDEN_CHANNEL,
         "must not infer presence-hidden from an absent channel_id",
     );
 }

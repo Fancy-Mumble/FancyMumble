@@ -1,1 +1,4 @@
 ui/
+# build.rs copies the bundled signal-bridge library in here on every
+# build-script run; watching it restarts `cargo tauri dev` in a loop.
+signal-bridge/

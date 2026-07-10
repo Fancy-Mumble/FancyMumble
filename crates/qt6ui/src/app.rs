@@ -94,6 +94,9 @@ impl AppCore {
     }
 
     /// Connect to `host:port` and authenticate as `username`.
+    ///
+    /// `cert_pems` is an optional `(certificate, key)` PEM pair for TLS
+    /// client auth (a saved server's identity); `None` connects anonymously.
     pub fn connect(
         self: Arc<Self>,
         ui: CxxQtThread<Backend>,
@@ -101,6 +104,7 @@ impl AppCore {
         port: u16,
         username: String,
         password: Option<String>,
+        cert_pems: Option<(String, String)>,
     ) {
         // Tear down any previous session first.
         self.teardown();
@@ -114,7 +118,7 @@ impl AppCore {
 
         let core = Arc::clone(&self);
         let task = self.rt.spawn(async move {
-            core.run_session(ui, host, port, username, password).await;
+            core.run_session(ui, host, port, username, password, cert_pems).await;
         });
         self.lock().connect_task = Some(task);
     }
@@ -128,6 +132,7 @@ impl AppCore {
         port: u16,
         username: String,
         password: Option<String>,
+        cert_pems: Option<(String, String)>,
     ) {
         // -- Inbound audio: mixer writes into buffers, playback reads them.
         let buffers: SpeakerBuffers = Arc::new(Mutex::new(std::collections::HashMap::new()));
@@ -145,13 +150,17 @@ impl AppCore {
 
         let handler = QtEventHandler::new(ui.clone(), Arc::clone(&self.shared), mixer);
 
+        let (client_cert_pem, client_key_pem) = match cert_pems {
+            Some((cert, key)) => (Some(cert.into_bytes()), Some(key.into_bytes())),
+            None => (None, None),
+        };
         let config = ClientConfig {
             tcp: TcpConfig {
                 server_host: host.clone(),
                 server_port: port,
                 accept_invalid_certs: true,
-                client_cert_pem: None,
-                client_key_pem: None,
+                client_cert_pem,
+                client_key_pem,
             },
             udp: UdpConfig { server_host: host, server_port: port },
             ..ClientConfig::default()

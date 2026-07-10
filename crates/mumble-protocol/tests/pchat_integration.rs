@@ -290,16 +290,8 @@ async fn set_pchat_protocol(
 ) {
     let cmd = SetChannelState {
         channel_id: Some(channel_id),
-        parent: None,
-        name: None,
-        description: None,
-        position: None,
-        temporary: None,
-        max_users: None,
-        channel_info_password: None,
         pchat_protocol: Some(mode),
-        pchat_max_history: None,
-        pchat_retention_days: None,
+        ..Default::default()
     };
     let output = cmd.execute(state);
     for msg in &output.tcp_messages {

@@ -8,6 +8,15 @@ workspace crates **without** the Tauri/WebView stack.
 ## What it does
 
 - **Connect** to a Mumble server (TLS, self-signed certs accepted).
+- **Saved servers** (start screen, mirroring the web client's ConnectPage):
+  the list, search, favourites and "Connect & Save" all operate on the
+  **same** store files the full client uses (`servers.json`,
+  `passwords.json` in the shared config dir — see
+  [`src/store.rs`](src/store.rs)), so servers saved in either client appear
+  in both. Connecting to a saved entry uses its stored password and TLS
+  identity (`identities/{label}/tls.{cert,key}.pem`). Preferences are
+  shared the same way (currently `hideEmptyChannels`), written back on
+  change so the two clients never drift.
 - **Chat**: send to your current channel, receive channel/broadcast messages.
 - **WYSIWYG markdown input** (`qml/MarkdownField.qml`, reusable): the value
   stays plain markdown while `**bold**`, `*italic*`, `__underline__`,
@@ -55,10 +64,39 @@ The `Backend` QObject ([`src/bridge.rs`](src/bridge.rs)) is a thin shell over
 protocol client. [`QtEventHandler`](src/events.rs) keeps a private
 `ServerState` and marshals updates onto the Qt thread via `CxxQtThread`.
 
+## Minimal ↔ full mode switching
+
+This client is the app's **minimal mode**. The full (Tauri) client and this
+binary share a `ui-mode` marker file (`full`/`minimal`) in the app config dir
+(`%APPDATA%\com.fancymumble.app`, or `FANCY_E2E_DATA_DIR` when set):
+
+- FancyMumble reads the marker at startup and hands off to `qt6ui` when it
+  says `minimal` (Settings → Advanced has the switch; a first-run prompt
+  offers it on low-RAM machines).
+- The connect page's "Switch to the full interface" link
+  ([`src/mode.rs`](src/mode.rs)) writes `full` back and relaunches the
+  FancyMumble binary (override its location with `FANCY_FULL_CLIENT_BIN`;
+  the full client finds this binary via `FANCY_QT6UI_BIN`).
+
+## Shared constants & translations
+
+- Integration constants (app identifier, marker file name, binary names,
+  env-var names, default port, weak-PC thresholds, locale list) live in the
+  repo-root **`constants.json`** — the single source of truth. `build.rs`
+  bakes them into `src/constants.rs` at compile time (the full client and
+  the React UI generate their own copies the same way), so changing a value
+  means editing one file and rebuilding.
+- UI strings come from the **same locale bundles as the web front-end**
+  (`crates/mumble-tauri/ui/src/locales/{lang}/{ns}.json`), embedded at build
+  time and exposed to QML as `backend.t("ns.path.key")` /
+  `backend.tr_n("ns.path.key", count)` ([`src/i18n.rs`](src/i18n.rs)).
+  Language is auto-detected from the OS (override with `FANCY_LANG=de`).
+  Strings unique to this client live under `common.json → "minimal"`.
+
 ## Why it is not in the workspace
 
 `qt6ui` is listed under `exclude` in the workspace `Cargo.toml`. Only a **MinGW**
-Qt 6 kit is installed (`C:\Qt\6.10.0\mingw_64`), and MSVC/MinGW have
+Qt 6 kit is installed (`C:\Qt\6.11.1\mingw_64`), and MSVC/MinGW have
 incompatible C++ ABIs, so this crate must be built with the
 `x86_64-pc-windows-gnu` Rust toolchain and the MinGW `g++` that matches the Qt
 kit. Keeping it excluded means the normal MSVC workspace build is unaffected.
@@ -68,7 +106,7 @@ kit. Keeping it excluded means the normal MSVC workspace build is unaffected.
 Prerequisites (already present on the dev machine):
 
 - Rust GNU toolchain: `rustup toolchain install stable-x86_64-pc-windows-gnu`
-- Qt 6 MinGW kit at `C:\Qt\6.10.0\mingw_64`
+- Qt 6 MinGW kit at `C:\Qt\6.11.1\mingw_64`
 - MinGW g++ at `C:\Qt\Tools\mingw1310_64`
 
 ```powershell
@@ -77,13 +115,34 @@ cd crates/qt6ui
 .\build.ps1 run --release  # build and launch
 ```
 
+You normally don't need to run this by hand: `mumble-tauri/build.rs` also
+builds this crate (and copies `qt6ui.exe` next to the full client's binary)
+on every `cargo build` / `cargo tauri dev`, the same way it builds
+`signal-bridge`. The step probes for the Qt kit, MinGW and the GNU Rust
+toolchain and skips with a warning when they are missing; set `SKIP_QT6UI=1`
+to opt out explicitly.
+
 The helper sets `QMAKE` and prepends the MinGW + Qt `bin` dirs to `PATH`.
 Override locations with the `QT6_MINGW_DIR` / `QT6_MINGW_GCC` env vars.
 
-To run the resulting binary standalone, either keep `C:\Qt\6.10.0\mingw_64\bin`
+To run the resulting binary standalone, either keep `C:\Qt\6.11.1\mingw_64\bin`
 on `PATH` or run `windeployqt` against `target\release\qt6ui.exe`.
 
 Logging: set `RUST_LOG` (e.g. `RUST_LOG=qt6ui=debug,mumble_protocol=info`).
+
+## License
+
+This crate — **and only this crate** — is licensed **LGPL-3.0-or-later**
+(see [`COPYING.LESSER`](COPYING.LESSER) and [`COPYING`](COPYING)): it is the
+Qt-facing front-end and links dynamically against the open-source
+(LGPL-3.0) Qt 6 libraries. Because `qt6ui` is a separate executable, the
+rest of the repository remains MIT-licensed, including the shared crates
+this binary consumes (`mumble-protocol`, `fancy-audio-device`,
+`fancy-utils` — MIT code may be incorporated into an LGPL work).
+
+Qt itself is © The Qt Company, used under LGPL-3.0; sources are available
+at <https://code.qt.io>. Keep Qt dynamically linked (the default here) so
+users can swap in their own Qt build, as the LGPL requires.
 
 ## RAM
 

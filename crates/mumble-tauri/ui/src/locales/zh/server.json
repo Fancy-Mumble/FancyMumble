@@ -1,4 +1,10 @@
 {
+  "weakPc": {
+    "title": "检测到硬件性能有限",
+    "message": "这台电脑的内存或 CPU 性能有限。Fancy Mumble 可以使用轻量的极简界面运行，内存占用大幅降低，仅提供核心功能（连接、聊天、频道、语音）。\n\n之后可随时在 设置 → 高级 中更改。",
+    "useMinimal": "使用极简模式",
+    "keepFull": "保留完整界面"
+  },
   "password": {
     "title": "需要密码",
     "differentUser": {

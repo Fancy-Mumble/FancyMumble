@@ -13,7 +13,7 @@ use crate::state::{PchatProtocol, ServerState};
 /// the server ignores absent fields.  The caller must ensure the
 /// user has the required permissions (Write / `MakeChannel`) before
 /// sending.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SetChannelState {
     /// Target channel ID.  `None` when creating a new channel.
     pub channel_id: Option<u32>,
@@ -38,19 +38,20 @@ pub struct SetChannelState {
     /// Channel access password.  `Some("")` removes the password;
     /// `None` leaves the existing password unchanged.
     pub channel_info_password: Option<String>,
-    /// Whether the channel is hidden (only users with SeeChannel see it).
+    /// Whether the channel is hidden (only users with `SeeChannel` see it).
     pub hidden: Option<bool>,
     /// Channel expiry mode: 0 = none, 1 = absolute, 2 = sliding.
     pub expiry_mode: Option<u32>,
     /// Expiry lifetime / idle window in seconds.
     pub expiry_duration_secs: Option<u32>,
-    /// Meeting-room invitees (registered user_ids). On create the server grants
-    /// each SeeChannel|Enter|Traverse and denies them to @all. Empty = no-op.
+    /// Meeting-room invitees (registered `user_id`s). On create the server grants
+    /// each `SeeChannel|Enter|Traverse` and denies them to `@all`. Empty = no-op.
     pub invitee_user_ids: Vec<u32>,
 }
 
 impl CommandAction for SetChannelState {
     fn execute(&self, _state: &ServerState) -> CommandOutput {
+        #[allow(deprecated, reason = "the legacy `temporary` wire field must still be sent for server compatibility")]
         let msg = mumble_tcp::ChannelState {
             channel_id: self.channel_id,
             parent: self.parent,

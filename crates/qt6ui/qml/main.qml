@@ -24,7 +24,10 @@ ApplicationWindow {
     minimumHeight: 400
     flags: Qt.Window | Qt.FramelessWindowHint
     color: theme.bgPrimary
-    title: "Fancy Mumble"
+    // All user-facing strings come from the shared locale bundles via
+    // backend.t()/tr_n() (see src/i18n.rs) so translations are maintained
+    // once for both clients.
+    title: backend.t("common.brand")
 
     Backend { id: backend }
 
@@ -81,10 +84,51 @@ ApplicationWindow {
             return []
         }
     }
+    // "Hide empty channels" (web client's channelVisibility.ts option):
+    // drop memberless channels, but keep the one we are in. The list is
+    // flat (depth-indented), so no re-parenting is needed here.
+    readonly property var visibleChannels: {
+        if (!backend.hide_empty_channels)
+            return channels
+        const out = []
+        for (let i = 0; i < channels.length; ++i) {
+            const c = channels[i]
+            if (c.users.length > 0 || c.id === backend.self_channel)
+                out.push(c)
+        }
+        return out
+    }
     readonly property var currentChannel: {
         for (let i = 0; i < channels.length; ++i)
             if (channels[i].id === backend.self_channel) return channels[i]
         return null
+    }
+
+    // ---- Saved servers (shared servers.json, same file as the full
+    // client - see src/store.rs) ------------------------------------------
+    property string serverSearch: ""
+    property bool showAddForm: false
+    readonly property var savedServers: {
+        try {
+            return JSON.parse(backend.saved_servers_json || "[]")
+        } catch (e) {
+            return []
+        }
+    }
+    readonly property bool hasSavedServers: savedServers.length > 0
+    // The add/quick-connect form shows when requested or nothing is saved yet.
+    readonly property bool formVisible: showAddForm || !hasSavedServers
+    // Favourites first (stable within groups: stored order is newest-first).
+    readonly property var serverListModel: {
+        let list = savedServers.slice()
+        const q = serverSearch.trim().toLowerCase()
+        if (q.length > 0) {
+            list = list.filter(s => (s.label || "").toLowerCase().includes(q)
+                                 || (s.host || "").toLowerCase().includes(q)
+                                 || (s.username || "").toLowerCase().includes(q))
+        }
+        list.sort((a, b) => (b.favorite === true) - (a.favorite === true))
+        return list
     }
 
     // Same palette + hash as ui/src/utils/format.ts colorFor().
@@ -324,7 +368,7 @@ ApplicationWindow {
             }
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: "Fancy Mumble"
+                text: backend.t("common.brand")
                 color: theme.textPrimary
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
@@ -394,7 +438,7 @@ ApplicationWindow {
                     Item { width: 1; height: 16 }
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "Fancy Mumble"
+                        text: backend.t("common.brand")
                         color: theme.textPrimary
                         font.pixelSize: 24
                         font.weight: Font.DemiBold
@@ -403,7 +447,7 @@ ApplicationWindow {
                     Item { width: 1; height: 4 }
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "Choose a server to connect"
+                        text: backend.t("server.chooseServer")
                         color: theme.textSecondary
                         font.pixelSize: 14
                     }
@@ -451,14 +495,205 @@ ApplicationWindow {
                     }
                 }
 
+                // ---- Saved servers (ConnectPage parity) -----------------
+                Column {
+                    width: parent.width
+                    spacing: 10
+                    visible: !window.formVisible
+
+                    Item {
+                        width: parent.width
+                        height: 20
+                        Text {
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: backend.t("server.list.heading")
+                            color: theme.textMuted
+                            font.pixelSize: 11
+                            font.weight: Font.DemiBold
+                            font.capitalization: Font.AllUppercase
+                            font.letterSpacing: 0.55
+                        }
+                        Text {
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: backend.t("server.list.addServer")
+                            color: addServerMouse.containsMouse ? theme.accentHover : theme.accent
+                            font.pixelSize: 12
+                            font.weight: Font.Medium
+                            MouseArea {
+                                id: addServerMouse
+                                anchors.fill: parent
+                                anchors.margins: -4
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: window.showAddForm = true
+                            }
+                        }
+                    }
+
+                    GlassField {
+                        width: parent.width
+                        placeholderText: backend.t("server.list.searchPlaceholder")
+                        onTextChanged: window.serverSearch = text
+                    }
+
+                    ListView {
+                        id: savedList
+                        width: parent.width
+                        height: Math.min(contentHeight, 288)
+                        clip: true
+                        spacing: 8
+                        model: window.serverListModel
+
+                        delegate: Rectangle {
+                            id: serverRow
+                            required property var modelData
+                            width: savedList.width
+                            height: 56
+                            radius: 12
+                            color: rowMouse.containsMouse ? theme.glassHover : theme.glass
+                            border.width: 1
+                            border.color: theme.glassBorder
+
+                            MouseArea {
+                                id: rowMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                enabled: !connecting
+                                onClicked: {
+                                    window.selfName = serverRow.modelData.username
+                                    window.selfHost = serverRow.modelData.host
+                                    backend.connect_saved(serverRow.modelData.id)
+                                }
+                            }
+
+                            Row {
+                                anchors.left: parent.left
+                                anchors.leftMargin: 10
+                                anchors.right: favStar.left
+                                anchors.rightMargin: 8
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 10
+                                Rectangle {
+                                    width: 36
+                                    height: 36
+                                    radius: 10
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    gradient: Gradient {
+                                        GradientStop { position: 0; color: theme.accent }
+                                        GradientStop { position: 1; color: theme.purple }
+                                    }
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: initial(serverRow.modelData.label || serverRow.modelData.host)
+                                        color: "#ffffff"
+                                        font.weight: Font.DemiBold
+                                        font.pixelSize: 15
+                                    }
+                                }
+                                Column {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: 1
+                                    Text {
+                                        text: serverRow.modelData.label || serverRow.modelData.host
+                                        color: theme.textPrimary
+                                        font.pixelSize: 14
+                                        font.weight: Font.Medium
+                                    }
+                                    Text {
+                                        text: serverRow.modelData.username || ""
+                                        color: theme.textSecondary
+                                        font.pixelSize: 12
+                                    }
+                                }
+                            }
+
+                            Text {
+                                id: favStar
+                                anchors.right: parent.right
+                                anchors.rightMargin: 12
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: serverRow.modelData.favorite ? "★" : "☆"
+                                color: serverRow.modelData.favorite ? "#f59e0b"
+                                       : (starMouse.containsMouse ? theme.textSecondary : theme.textMuted)
+                                font.pixelSize: 16
+                                ToolTip.visible: starMouse.containsMouse
+                                ToolTip.delay: 500
+                                ToolTip.text: serverRow.modelData.favorite
+                                              ? backend.t("server.list.removeFromFavorites")
+                                              : backend.t("server.list.addToFavorites")
+                                MouseArea {
+                                    id: starMouse
+                                    anchors.fill: parent
+                                    anchors.margins: -6
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: backend.toggle_favorite(serverRow.modelData.id)
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        visible: savedList.count === 0
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        text: backend.t("server.list.noMatch").replace("{{query}}", window.serverSearch)
+                        color: theme.textMuted
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
+                    }
+
+                    Text {
+                        visible: connecting
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        text: backend.t("server.actions.connecting")
+                        color: theme.textSecondary
+                        font.pixelSize: 12
+                    }
+                }
+
+                // ---- Add / quick-connect form ---------------------------
+                Text {
+                    visible: window.formVisible && window.hasSavedServers
+                    text: "‹ " + backend.t("server.backToSavedServers")
+                    color: backMouse.containsMouse ? theme.accentHover : theme.accent
+                    font.pixelSize: 13
+                    MouseArea {
+                        id: backMouse
+                        anchors.fill: parent
+                        anchors.margins: -4
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: window.showAddForm = false
+                    }
+                }
+
                 Column {
                     width: parent.width
                     spacing: 6
-                    FieldLabel { text: "Server address" }
+                    visible: window.formVisible
+                    FieldLabel { text: backend.t("server.fields.label") }
+                    GlassField {
+                        id: labelField
+                        width: parent.width
+                        placeholderText: backend.t("server.fields.labelPlaceholderFallback")
+                        enabled: !connecting
+                    }
+                }
+
+                Column {
+                    width: parent.width
+                    spacing: 6
+                    visible: window.formVisible
+                    FieldLabel { text: backend.t("server.fields.host") }
                     GlassField {
                         id: hostField
                         width: parent.width
-                        placeholderText: "mumble.example.com"
+                        placeholderText: backend.t("server.fields.hostPlaceholder")
                         text: "localhost"
                         enabled: !connecting
                     }
@@ -467,15 +702,16 @@ ApplicationWindow {
                 Row {
                     width: parent.width
                     spacing: 16
+                    visible: window.formVisible
                     Column {
                         width: 110
                         spacing: 6
-                        FieldLabel { text: "Port" }
+                        FieldLabel { text: backend.t("server.fields.port") }
                         GlassField {
                             id: portField
                             width: parent.width
-                            placeholderText: "64738"
-                            text: "64738"
+                            placeholderText: backend.default_port.toString()
+                            text: backend.default_port.toString()
                             inputMethodHints: Qt.ImhDigitsOnly
                             enabled: !connecting
                         }
@@ -483,11 +719,11 @@ ApplicationWindow {
                     Column {
                         width: parent.width - 126
                         spacing: 6
-                        FieldLabel { text: "Username" }
+                        FieldLabel { text: backend.t("server.fields.username") }
                         GlassField {
                             id: userField
                             width: parent.width
-                            placeholderText: "Your name"
+                            placeholderText: backend.t("server.fields.usernamePlaceholder")
                             enabled: !connecting
                         }
                     }
@@ -496,87 +732,143 @@ ApplicationWindow {
                 Column {
                     width: parent.width
                     spacing: 6
-                    FieldLabel { text: "Password" }
+                    visible: window.formVisible
+                    FieldLabel { text: backend.t("sidebar.channelEditor.passwordLabel") }
                     GlassField {
                         id: passField
                         width: parent.width
-                        placeholderText: "Leave empty if not required"
+                        placeholderText: backend.t("server.edit.passwordPlaceholderEmpty")
                         echoMode: TextInput.Password
                         enabled: !connecting
-                        onAccepted: connectBtn.go()
+                        onAccepted: connectRow.doConnect(false)
                     }
                 }
 
-                // Gradient connect button (.button)
-                Rectangle {
-                    id: connectBtn
+                // Quick Connect (secondary) + Connect & Save (primary),
+                // like the wizard's final step in the full client.
+                Row {
+                    id: connectRow
                     width: parent.width
-                    height: 46
-                    radius: 12
-                    opacity: enabled ? (btnMouse.containsMouse ? 0.9 : 1) : 0.5
-                    enabled: !connecting && hostField.text.length > 0 && userField.text.length > 0
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0; color: theme.accent }
-                        GradientStop { position: 1; color: theme.accentHover }
-                    }
+                    spacing: 10
+                    visible: window.formVisible
 
-                    function go() {
-                        if (!enabled)
+                    readonly property bool formValid: !connecting
+                                                      && hostField.text.length > 0
+                                                      && userField.text.length > 0
+
+                    function doConnect(save) {
+                        if (!formValid)
                             return
                         window.selfName = userField.text
                         window.selfHost = hostField.text
-                        backend.connect_to_server(hostField.text,
-                                                  parseInt(portField.text || "64738"),
+                        const port = parseInt(portField.text) || backend.default_port
+                        if (save) {
+                            const id = backend.save_server(labelField.text, hostField.text, port,
+                                                           userField.text, passField.text,
+                                                           passField.text.length > 0)
+                            if (id !== "") {
+                                window.showAddForm = false
+                                backend.connect_saved(id)
+                                return
+                            }
+                        }
+                        backend.connect_to_server(hostField.text, port,
                                                   userField.text, passField.text)
                     }
 
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 8
-                        // .spinner: rotating arc while connecting
-                        Canvas {
-                            width: 18
-                            height: 18
-                            visible: connecting
-                            anchors.verticalCenter: parent.verticalCenter
-                            onPaint: {
-                                const ctx = getContext("2d")
-                                ctx.reset()
-                                ctx.lineWidth = 2
-                                ctx.strokeStyle = "rgba(255,255,255,0.3)"
-                                ctx.beginPath()
-                                ctx.arc(9, 9, 8, 0, 2 * Math.PI)
-                                ctx.stroke()
-                                ctx.strokeStyle = "#ffffff"
-                                ctx.beginPath()
-                                ctx.arc(9, 9, 8, -Math.PI / 2, 0)
-                                ctx.stroke()
-                            }
-                            RotationAnimation on rotation {
-                                running: connecting
-                                loops: Animation.Infinite
-                                from: 0
-                                to: 360
-                                duration: 600
-                            }
+                    Rectangle {
+                        width: (parent.width - 10) / 2
+                        height: 46
+                        radius: 12
+                        color: quickMouse.containsMouse ? theme.glassHover : theme.glass
+                        border.width: 1
+                        border.color: theme.glassBorder
+                        opacity: connectRow.formValid ? 1 : 0.5
+                        Text {
+                            anchors.centerIn: parent
+                            text: connecting ? backend.t("server.actions.connecting")
+                                             : backend.t("server.actions.quickConnect")
+                            color: theme.textPrimary
+                            font.pixelSize: 14
+                            font.weight: Font.Medium
+                        }
+                        MouseArea {
+                            id: quickMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: connectRow.formValid ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: connectRow.doConnect(false)
+                        }
+                    }
+
+                    Rectangle {
+                        width: (parent.width - 10) / 2
+                        height: 46
+                        radius: 12
+                        opacity: connectRow.formValid ? (saveMouse.containsMouse ? 0.9 : 1) : 0.5
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop { position: 0; color: theme.accent }
+                            GradientStop { position: 1; color: theme.accentHover }
                         }
                         Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: connecting ? "Connecting..." : "Quick Connect"
+                            anchors.centerIn: parent
+                            text: connecting ? backend.t("server.actions.connecting")
+                                             : backend.t("server.actions.connectAndSave")
                             color: "#ffffff"
-                            font.pixelSize: 15
+                            font.pixelSize: 14
                             font.weight: Font.DemiBold
                         }
-                    }
-                    MouseArea {
-                        id: btnMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                        onClicked: connectBtn.go()
+                        MouseArea {
+                            id: saveMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: connectRow.formValid ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: connectRow.doConnect(true)
+                        }
                     }
                 }
+            }
+        }
+
+        // Switch back to the full (Tauri) interface. Writes the shared
+        // ui-mode marker and hands off to the FancyMumble binary; only
+        // quits once the full client actually spawned.
+        Column {
+            anchors.top: connectCard.bottom
+            anchors.topMargin: 16
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 6
+
+            Text {
+                id: fullModeLink
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: backend.t("common.minimal.switchToFull")
+                color: fullModeMouse.containsMouse ? theme.accent : theme.textMuted
+                font.pixelSize: 12
+                font.underline: fullModeMouse.containsMouse
+                MouseArea {
+                    id: fullModeMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        fullModeError.visible = false
+                        if (backend.switch_to_full_mode())
+                            Qt.quit()
+                        else
+                            fullModeError.visible = true
+                    }
+                }
+            }
+
+            Text {
+                id: fullModeError
+                visible: false
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: backend.t("common.minimal.fullClientNotFound")
+                color: theme.dangerLight
+                font.pixelSize: 11
             }
         }
     }
@@ -647,7 +939,7 @@ ApplicationWindow {
                         anchors.topMargin: 20
                         spacing: 2
                         Text {
-                            text: selfHost !== "" ? selfHost : "Fancy Mumble"
+                            text: selfHost !== "" ? selfHost : backend.t("common.brand")
                             color: theme.textPrimary
                             font.pixelSize: 18
                             font.weight: Font.DemiBold
@@ -665,7 +957,7 @@ ApplicationWindow {
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                             Text {
-                                text: "Connected"
+                                text: backend.t("common.minimal.connected")
                                 color: theme.textSecondary
                                 font.pixelSize: 11
                             }
@@ -680,18 +972,43 @@ ApplicationWindow {
                     }
                 }
 
-                // Section title (.sectionTitle)
-                Text {
+                // Section title (.sectionTitle) + hide-empty-channels toggle
+                RowLayout {
                     Layout.fillWidth: true
                     Layout.leftMargin: 12
+                    Layout.rightMargin: 12
                     Layout.topMargin: 10
                     Layout.bottomMargin: 4
-                    text: "Channels"
-                    color: theme.textMuted
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
-                    font.capitalization: Font.AllUppercase
-                    font.letterSpacing: 0.55
+                    spacing: 6
+                    Text {
+                        Layout.fillWidth: true
+                        text: backend.t("sidebar.channelSidebar.channels")
+                        color: theme.textMuted
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                        font.capitalization: Font.AllUppercase
+                        font.letterSpacing: 0.55
+                    }
+                    Text {
+                        id: hideEmptyBtn
+                        text: "" // RedEye glyph
+                        font.family: theme.iconFont
+                        font.pixelSize: 12
+                        color: backend.hide_empty_channels ? theme.accent : theme.textMuted
+                        ToolTip.visible: hideEmptyMouse.containsMouse
+                        ToolTip.delay: 500
+                        ToolTip.text: backend.hide_empty_channels
+                                      ? backend.t("sidebar.channelSidebar.showAllChannels")
+                                      : backend.t("sidebar.channelSidebar.hideEmptyChannels")
+                        MouseArea {
+                            id: hideEmptyMouse
+                            anchors.fill: parent
+                            anchors.margins: -4 // easier hit target
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: backend.persist_hide_empty_channels(!backend.hide_empty_channels)
+                        }
+                    }
                 }
 
                 // Flat channel list (ModernChannelList.module.css)
@@ -703,7 +1020,7 @@ ApplicationWindow {
                     Layout.rightMargin: 8
                     clip: true
                     spacing: 2
-                    model: channels
+                    model: visibleChannels
 
                     delegate: Rectangle {
                         id: channelCard
@@ -833,7 +1150,8 @@ ApplicationWindow {
                                             Text {
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 text: memberRow.modelData.name
-                                                      + (memberRow.modelData.me ? " (me)" : "")
+                                                      + (memberRow.modelData.me
+                                                         ? " " + backend.t("common.minimal.me") : "")
                                                 color: theme.textPrimary
                                                 font.pixelSize: 13
                                                 elide: Text.ElideRight
@@ -892,12 +1210,17 @@ ApplicationWindow {
                                 elide: Text.ElideRight
                             }
                             Text {
-                                text: voiceOn ? "Voice connected" : "Voice off"
+                                text: voiceOn ? backend.t("common.minimal.voiceOn")
+                                              : backend.t("common.minimal.voiceOff")
                                 color: voiceOn ? theme.online : theme.textMuted
                                 font.pixelSize: 11
                             }
                         }
 
+                        SidebarButton {
+                            glyph: "" // gear (settings)
+                            onActivated: settingsPopup.open()
+                        }
                         SidebarButton {
                             glyph: voiceOn ? "" : "" // mic / mic-off
                             glyphColor: voiceOn ? theme.online : theme.textSecondary
@@ -955,15 +1278,15 @@ ApplicationWindow {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 2
                     Text {
-                        text: currentChannel ? currentChannel.name : "Fancy Mumble"
+                        text: currentChannel ? currentChannel.name : backend.t("common.brand")
                         color: theme.textPrimary
                         font.pixelSize: 16
                         font.weight: Font.DemiBold
                     }
                     Text {
                         text: currentChannel
-                              ? currentChannel.users.length
-                                + (currentChannel.users.length === 1 ? " member" : " members")
+                              ? backend.tr_n("sidebar.movePicker.member",
+                                             currentChannel.users.length)
                               : ""
                         color: theme.textSecondary
                         font.pixelSize: 12
@@ -1142,7 +1465,7 @@ ApplicationWindow {
                     }
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "No messages yet."
+                        text: backend.t("chat.dmPopout.empty")
                         color: theme.textSecondary
                         font.pixelSize: 15
                     }
@@ -1177,7 +1500,7 @@ ApplicationWindow {
                         id: messageField
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignBottom
-                        placeholderText: "Write a message..."
+                        placeholderText: backend.t("chat.composer.placeholderMobile")
                         onSubmitted: sendArea.send()
                     }
 
@@ -1216,6 +1539,140 @@ ApplicationWindow {
                             onClicked: send()
                         }
                     }
+                }
+            }
+        }
+    }
+
+    // ---- Settings popup (minimal client options) --------------------------
+    // Opened from the gear in the self-user panel; the connect page keeps
+    // its inline "switch to full interface" link for the pre-connect case.
+    Popup {
+        id: settingsPopup
+        anchors.centerIn: parent
+        width: 300
+        modal: true
+        focus: true
+        padding: 20
+        background: Rectangle {
+            radius: 16
+            color: theme.bgGradMid
+            border.width: 1
+            border.color: theme.glassBorder
+        }
+
+        contentItem: Column {
+            spacing: 14
+
+            Text {
+                text: backend.t("common.minimal.settings")
+                color: theme.textPrimary
+                font.pixelSize: 16
+                font.weight: Font.DemiBold
+            }
+
+            // Hide empty channels (same backend property as the sidebar
+            // eye button, so the two controls stay in sync).
+            Item {
+                width: parent.width
+                height: 24
+                Text {
+                    anchors.left: parent.left
+                    anchors.right: emptyToggle.left
+                    anchors.rightMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: backend.t("sidebar.channelSidebar.hideEmptyChannels")
+                    color: theme.textSecondary
+                    font.pixelSize: 13
+                    wrapMode: Text.Wrap
+                }
+                Rectangle {
+                    id: emptyToggle
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 34
+                    height: 18
+                    radius: 9
+                    color: backend.hide_empty_channels ? theme.accent : theme.glassHover
+                    border.width: 1
+                    border.color: theme.glassBorder
+                    Rectangle {
+                        width: 14
+                        height: 14
+                        radius: 7
+                        color: "#ffffff"
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: backend.hide_empty_channels ? parent.width - width - 2 : 2
+                        Behavior on x { NumberAnimation { duration: 120 } }
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: backend.persist_hide_empty_channels(!backend.hide_empty_channels)
+                    }
+                }
+            }
+
+            Rectangle { width: parent.width; height: 1; color: theme.glassBorder }
+
+            // Switch back to the full (Tauri) interface; only quits once
+            // the full client actually spawned.
+            Rectangle {
+                width: parent.width
+                height: 38
+                radius: 10
+                color: switchMouse.containsMouse ? theme.glassHover : theme.glass
+                border.width: 1
+                border.color: theme.glassBorder
+                Text {
+                    anchors.centerIn: parent
+                    text: backend.t("common.minimal.switchToFull")
+                    color: theme.textPrimary
+                    font.pixelSize: 13
+                }
+                MouseArea {
+                    id: switchMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        settingsSwitchError.visible = false
+                        if (backend.switch_to_full_mode())
+                            Qt.quit()
+                        else
+                            settingsSwitchError.visible = true
+                    }
+                }
+            }
+            Text {
+                id: settingsSwitchError
+                visible: false
+                width: parent.width
+                text: backend.t("common.minimal.fullClientNotFound")
+                color: theme.dangerLight
+                font.pixelSize: 11
+                wrapMode: Text.Wrap
+            }
+
+            // Close
+            Rectangle {
+                width: parent.width
+                height: 34
+                radius: 10
+                color: closeMouse.containsMouse ? theme.accentHover : theme.accent
+                Text {
+                    anchors.centerIn: parent
+                    text: backend.t("common.actions.close")
+                    color: "#ffffff"
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
+                }
+                MouseArea {
+                    id: closeMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: settingsPopup.close()
                 }
             }
         }

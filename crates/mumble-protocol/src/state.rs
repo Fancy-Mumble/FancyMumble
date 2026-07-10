@@ -194,6 +194,11 @@ pub struct Channel {
     /// Whether the server reports the current user can enter
     /// this channel (`ChannelState.can_enter`).
     pub can_enter: bool,
+    /// Whether the channel is detached: parentless (like the root), never
+    /// shown in the channel tree, and only delivered to Fancy clients
+    /// (scheduled meeting rooms, `__dm:` friend chats). Derived from the
+    /// `ChannelState.attributes` set (`ChannelAttribute::Detached`).
+    pub detached: bool,
     /// Persistent-chat protocol.  `None` if not announced by the server.
     pub pchat_protocol: Option<PchatProtocol>,
     /// Maximum stored messages (0 = unlimited).  `None` if not set.
@@ -319,6 +324,7 @@ impl ServerState {
             permissions: None,
             is_enter_restricted: false,
             can_enter: true,
+            detached: false,
             pchat_protocol: None,
             pchat_max_history: None,
             pchat_retention_days: None,
@@ -329,10 +335,21 @@ impl ServerState {
         let _ = state.description.as_ref().inspect(|v| channel.description.clone_from(v));
         let _ = state.description_hash.as_ref().inspect(|v| channel.description_hash = Some((*v).clone()));
         let _ = state.position.inspect(|&v| channel.position = v);
-        let _ = state.temporary.inspect(|&v| channel.temporary = v);
+        #[allow(deprecated, reason = "legacy wire fields are still sent by current servers; no non-deprecated alternative yet")]
+        {
+            let _ = state.temporary.inspect(|&v| channel.temporary = v);
+            let _ = state.is_enter_restricted.inspect(|&v| channel.is_enter_restricted = v);
+            let _ = state.can_enter.inspect(|&v| channel.can_enter = v);
+        }
         let _ = state.max_users.inspect(|&v| channel.max_users = v);
-        let _ = state.is_enter_restricted.inspect(|&v| channel.is_enter_restricted = v);
-        let _ = state.can_enter.inspect(|&v| channel.can_enter = v);
+        // Detached marker comes from the `attributes` set. Only update when
+        // the server included attributes (a partial update may omit them), so
+        // a known-detached flag is never cleared by e.g. an expiry-only update.
+        if !state.attributes.is_empty() {
+            channel.detached = state
+                .attributes
+                .contains(&(crate::proto::mumble_tcp::ChannelAttribute::Detached as i32));
+        }
         let _ = state.pchat_protocol.inspect(|&v| channel.pchat_protocol = Some(PchatProtocol::from_proto(v)));
         let _ = state.pchat_max_history.inspect(|&v| channel.pchat_max_history = Some(v));
         let _ = state.pchat_retention_days.inspect(|&v| channel.pchat_retention_days = Some(v));
@@ -587,6 +604,7 @@ mod tests {
         };
         state.apply_channel_state(&create);
 
+        #[allow(deprecated, reason = "test exercises the legacy `temporary` wire field")]
         let update = mumble_tcp::ChannelState {
             channel_id: Some(1),
             description: Some("Welcome!".into()),

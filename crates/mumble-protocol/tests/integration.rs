@@ -599,6 +599,7 @@ async fn test_channel_description_blob_request() {
         return;
     }
 
+    #[allow(deprecated, reason = "test creates a channel via the legacy `temporary` wire field")]
     su.send(&ControlMessage::ChannelState(mumble_tcp::ChannelState {
         parent: Some(0),
         name: Some(channel_name.into()),

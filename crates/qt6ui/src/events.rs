@@ -53,15 +53,31 @@ impl QtEventHandler {
     ///
     /// Members are objects (not bare names) so the QML `NameCard` hover card
     /// can show registration, status and bio without extra round trips.
+    ///
+    /// Mirrors the web client's visibility rules (`channelVisibility.ts`):
+    /// detached rooms (scheduled meetings, `__dm:` friend chats) never appear
+    /// in the tree, and occupants of `__dm:` rooms are re-attributed to the
+    /// root channel so they stay visible instead of vanishing into a channel
+    /// that is never drawn.
     fn push_channels(&self) {
-        let mut channels: Vec<&Channel> = self.state.channels.values().collect();
+        let mut channels: Vec<&Channel> =
+            self.state.channels.values().filter(|c| !c.detached).collect();
         channels.sort_by(|a, b| a.position.cmp(&b.position).then(a.channel_id.cmp(&b.channel_id)));
 
-        // Group users by channel id.
+        let dm_rooms: std::collections::HashSet<u32> = self
+            .state
+            .channels
+            .values()
+            .filter(|c| c.detached && c.name.starts_with(crate::constants::DM_CHANNEL_PREFIX))
+            .map(|c| c.channel_id)
+            .collect();
+
+        // Group users by channel id (DM-room occupants counted under root).
         let mut members: HashMap<u32, Vec<serde_json::Value>> = HashMap::new();
         for user in self.state.users.values() {
             let profile = crate::profile::parse_comment(&user.comment);
-            members.entry(user.channel_id).or_default().push(serde_json::json!({
+            let channel_id = if dm_rooms.contains(&user.channel_id) { 0 } else { user.channel_id };
+            members.entry(channel_id).or_default().push(serde_json::json!({
                 "name": user.name,
                 "me": Some(user.session) == self.own_session,
                 "registered": user.user_id.is_some_and(|id| id > 0),
