@@ -183,12 +183,32 @@ impl AppCore {
     }
 
     /// Disconnect and stop audio.
+    ///
+    /// The event loop is taken out of `Shared` *before* `teardown` so it is
+    /// NOT aborted while the `Disconnect` command is still in flight: the
+    /// command must reach the event loop, which then exits on its own and
+    /// closes the TCP connection (that close is what makes the server drop
+    /// our session - aborting concurrently used to leak the connection and
+    /// leave a pinging ghost session behind). Waiting happens off the Qt
+    /// thread; the abort after the timeout is a safety net, and since the
+    /// event loop's sub-tasks abort on drop it also closes the socket.
     pub fn disconnect(&self) {
-        let client = self.lock().client.clone();
+        let (client, event_loop) = {
+            let mut sh = self.lock();
+            (sh.client.take(), sh.event_loop.take())
+        };
         if let Some(client) = client {
             self.rt.spawn(async move {
                 let _ = client.send(Disconnect).await;
+                if let Some(mut join) = event_loop {
+                    if tokio::time::timeout(Duration::from_secs(3), &mut join).await.is_err() {
+                        tracing::warn!("event loop did not exit after Disconnect; aborting it");
+                        join.abort();
+                    }
+                }
             });
+        } else if let Some(join) = event_loop {
+            join.abort();
         }
         self.teardown();
         if let Some(ui) = self.lock().ui.clone() {

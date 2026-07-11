@@ -217,6 +217,26 @@ pub async fn run<H: EventHandler>(
 
 // -- Event loop -----------------------------------------------------
 
+/// A spawned sub-task whose lifetime is tied to the event loop: dropping
+/// the guard aborts the task.
+///
+/// The embedding client may abort the event-loop task itself (e.g. a UI
+/// disconnect tearing the session down). Sub-tasks held as plain
+/// `JoinHandle`s would then be *detached*, not aborted - leaking the TCP
+/// writer (which owns the socket's write half, keeping the connection
+/// open) and the keep-alive ping loop. The server would see a healthy,
+/// pinging client forever: a ghost session that not even the ping timeout
+/// could reap. Owning every sub-task through this guard aborts them
+/// however the event-loop future ends - normal exit, error, or abort.
+#[derive(Debug)]
+struct TaskGuard(tokio::task::JoinHandle<()>);
+
+impl Drop for TaskGuard {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
 #[allow(clippy::too_many_arguments, reason = "protocol event loop requires all transport handles")]
 async fn event_loop<H: EventHandler>(
     mut handler: H,
@@ -234,19 +254,24 @@ async fn event_loop<H: EventHandler>(
     let state_decrypt_stats = state.decrypt_stats.clone();
 
     let (outbound_tx, outbound_rx) = mpsc::channel::<ControlMessage>(64);
-    let tcp_writer_task = tokio::spawn(tcp_writer_loop(tcp_writer, outbound_rx));
-    let mut tcp_reader_task = tokio::spawn(tcp_reader_loop(tcp_reader, wq_sender.clone()));
-    let ping_task = tokio::spawn(ping_loop(
+    // Every sub-task is held through a TaskGuard so it is aborted however
+    // this future ends - including when the embedding client aborts the
+    // event-loop task itself (see TaskGuard).
+    let _tcp_writer_task = TaskGuard(tokio::spawn(tcp_writer_loop(tcp_writer, outbound_rx)));
+    let mut tcp_reader_task =
+        TaskGuard(tokio::spawn(tcp_reader_loop(tcp_reader, wq_sender.clone())));
+    let _ping_task = TaskGuard(tokio::spawn(ping_loop(
         outbound_tx.clone(),
         state.ping_stats.clone(),
         state.decrypt_stats.clone(),
         ping_interval,
-    ));
-    let cmd_forwarder_task = tokio::spawn(cmd_forwarder_loop(ext_cmd_rx, wq_sender.clone()));
+    )));
+    let _cmd_forwarder_task =
+        TaskGuard(tokio::spawn(cmd_forwarder_loop(ext_cmd_rx, wq_sender.clone())));
 
     let mut codec: Box<dyn FancyCodec> = Box::new(fancy_codec::LegacyCodec);
     let mut udp_sender: Option<UdpSender> = None;
-    let mut udp_reader_task: Option<tokio::task::JoinHandle<()>> = None;
+    let mut udp_reader_task: Option<TaskGuard> = None;
     // Channel used by the control loop to push server-supplied decrypt
     // nonces (from a partial `CryptSetup` resync) into the running UDP
     // reader task.  Recreated by `start_udp` on every (re-)start.
@@ -288,7 +313,7 @@ async fn event_loop<H: EventHandler>(
                 }
                 None
             }
-            result = &mut tcp_reader_task, if tcp_reader_alive => {
+            result = &mut tcp_reader_task.0, if tcp_reader_alive => {
                 tcp_reader_alive = false;
                 warn!("TCP reader ended unexpectedly: {result:?}");
                 Some(WorkItem::Shutdown)
@@ -316,16 +341,10 @@ async fn event_loop<H: EventHandler>(
         }
     }
 
-    ping_task.abort();
-    cmd_forwarder_task.abort();
-    if tcp_reader_alive {
-        tcp_reader_task.abort();
-    }
-    tcp_writer_task.abort();
-    if let Some(task) = &udp_reader_task {
-        task.abort();
-    }
-    debug!("all sub-tasks aborted");
+    // Sub-tasks abort when their TaskGuards drop here. The TCP writer's
+    // drop releases the socket's write half, which closes the connection
+    // and lets the server remove the session immediately.
+    debug!("event loop exited; sub-task guards dropping");
     Ok(())
 }
 
@@ -440,7 +459,7 @@ struct EventLoopCtx<'a, H> {
     outbound_tx: &'a mpsc::Sender<ControlMessage>,
     codec: &'a mut Box<dyn FancyCodec>,
     udp_sender: &'a mut Option<UdpSender>,
-    udp_reader_task: &'a mut Option<tokio::task::JoinHandle<()>>,
+    udp_reader_task: &'a mut Option<TaskGuard>,
     /// Sender side of the channel that pushes new server decrypt nonces
     /// into the active UDP reader task (see `udp_reader_loop`).
     udp_resync_tx: &'a mut Option<mpsc::Sender<Vec<u8>>>,
@@ -793,7 +812,7 @@ async fn handle_crypt_setup<H: EventHandler>(
     outbound_tx: &mpsc::Sender<ControlMessage>,
     stored_crypto: &mut Option<StoredCrypto>,
     udp_sender: &mut Option<UdpSender>,
-    udp_reader_task: &mut Option<tokio::task::JoinHandle<()>>,
+    udp_reader_task: &mut Option<TaskGuard>,
     udp_resync_tx: &mut Option<mpsc::Sender<Vec<u8>>>,
     decrypt_stats: &crate::transport::ocb2::SharedPacketStats,
     handler: &mut H,
@@ -859,7 +878,7 @@ async fn handle_force_tcp_change<H: EventHandler>(
     udp_config: &UdpConfig,
     wq_sender: &WorkQueueSender,
     udp_sender: &mut Option<UdpSender>,
-    udp_reader_task: &mut Option<tokio::task::JoinHandle<()>>,
+    udp_reader_task: &mut Option<TaskGuard>,
     udp_resync_tx: &mut Option<mpsc::Sender<Vec<u8>>>,
     outbound_tx: &mpsc::Sender<ControlMessage>,
     decrypt_stats: &crate::transport::ocb2::SharedPacketStats,
@@ -867,10 +886,8 @@ async fn handle_force_tcp_change<H: EventHandler>(
     protobuf_audio: bool,
 ) {
     if force_tcp {
-        // Tear down active UDP transport.
-        if let Some(task) = udp_reader_task.take() {
-            task.abort();
-        }
+        // Tear down active UDP transport (the reader aborts on guard drop).
+        *udp_reader_task = None;
         *udp_sender = None;
         *udp_resync_tx = None;
         info!("force_tcp enabled at runtime, switched to TCP tunnel");
@@ -909,7 +926,7 @@ async fn start_udp<H: EventHandler>(
     wq_sender: &WorkQueueSender,
     outbound_tx: &mpsc::Sender<ControlMessage>,
     udp_sender: &mut Option<UdpSender>,
-    udp_reader_task: &mut Option<tokio::task::JoinHandle<()>>,
+    udp_reader_task: &mut Option<TaskGuard>,
     udp_resync_tx: &mut Option<mpsc::Sender<Vec<u8>>>,
     decrypt_stats: &crate::transport::ocb2::SharedPacketStats,
     handler: &mut H,
@@ -941,10 +958,8 @@ async fn start_udp<H: EventHandler>(
 
     let socket = transport.socket_arc();
 
-    // Abort any previous reader task
-    if let Some(task) = udp_reader_task.take() {
-        task.abort();
-    }
+    // Abort any previous reader task (on guard drop).
+    *udp_reader_task = None;
 
     // Channel used by the control loop to push new server decrypt nonces
     // (from a partial CryptSetup resync) into the running reader.  Bounded
@@ -958,7 +973,7 @@ async fn start_udp<H: EventHandler>(
     let reader_wq = wq_sender.clone();
     let reader_stats = decrypt_stats.clone();
     let reader_outbound = outbound_tx.clone();
-    *udp_reader_task = Some(tokio::spawn(async move {
+    *udp_reader_task = Some(TaskGuard(tokio::spawn(async move {
         udp_reader_loop(
             reader_socket,
             decrypt_crypt,
@@ -968,7 +983,7 @@ async fn start_udp<H: EventHandler>(
             reader_outbound,
         )
         .await;
-    }));
+    })));
 
     // Store sender handle
     *udp_sender = Some(UdpSender {
