@@ -11,7 +11,7 @@ import PanelCloseButton from "../PanelCloseButton";
  * - Drag-and-drop reordering of both the drawer strip and grid panes.
  *   Dropping onto the primary pane switches the focused stream.
  */
-import { lazy, Suspense, useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
+import { lazy, Suspense, useState, useEffect, useRef, useCallback, useMemo, memo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useRemoteStream } from "../stream/useScreenShare";
 import { useStreamThumbnail } from "./useStreamPreview";
@@ -19,6 +19,7 @@ import { useAppStore } from "../../../store";
 import styles from "./StreamFocusView.module.css";
 import { useBroadcasterOrder, useDragStream } from "./useStreamDrag";
 import type { Broadcaster, PointerDragItemProps, PointerDragHandlers } from "./useStreamDrag";
+import { TID } from "../../../testids";
 
 // Lazy like ChatView's usage: ScreenShareViewer is also dynamically imported
 // there, and mixing static + dynamic imports of one module makes rolldown
@@ -151,6 +152,9 @@ const SecondaryPanel = memo(function SecondaryPanel({ session, name, className, 
       onPointerDown={(e) => onItemPointerDown(e, session)}
       style={{ touchAction: "none" }}
       aria-label={t("streamFocus.switchToStream", { name })}
+      data-testid={TID.streamWatchTile}
+      data-session={session}
+      data-broadcaster-name={name}
     >
       {stream
         ? (
@@ -198,6 +202,9 @@ const DrawerThumb = memo(function DrawerThumb({ session, name, isDragOver, onIte
       onPointerDown={(e) => onItemPointerDown(e, session)}
       style={{ touchAction: "none" }}
       aria-label={t("streamFocus.watchDrawerThumb", { name })}
+      data-testid={TID.streamWatchTile}
+      data-session={session}
+      data-broadcaster-name={name}
     >
       <div className={styles.drawerThumbImg}>
         {thumbnail
@@ -345,6 +352,7 @@ function StreamDrawer({ broadcasters, orderedList, dragOverTarget, dragHandlers 
         title={open ? t("streamFocus.hideOtherStreams") : t("streamFocus.showOtherStreams")}
         aria-label={open ? t("streamFocus.hideOtherStreams") : t("streamFocus.showOtherStreams")}
         aria-expanded={open}
+        data-testid={TID.streamDrawerToggle}
       >
         <ChevronDownIcon
           width={14}
@@ -464,6 +472,9 @@ interface StreamFocusViewProps {
   readonly onClose?: () => void;
   /** Accessible label for the close button. */
   readonly closeLabel?: string;
+  /** Optional stream-config kebab menu, rendered beside the close × (own
+   *  broadcast only). It positions itself absolutely. */
+  readonly configMenu?: ReactNode;
 }
 
 export default function StreamFocusView({
@@ -475,6 +486,7 @@ export default function StreamFocusView({
   ownBroadcastStream,
   onClose,
   closeLabel,
+  configMenu,
 }: StreamFocusViewProps) {
   const [layout, setLayout] = useState<GridLayout>("solo");
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -515,6 +527,7 @@ export default function StreamFocusView({
 
   return (
     <div className={styles.container}>
+      {configMenu}
       {onClose && <PanelCloseButton onClose={onClose} label={closeLabel} />}
       <div className={`${styles.videoArea} ${LAYOUT_CSS[layout]}`}>
         <PrimaryPane

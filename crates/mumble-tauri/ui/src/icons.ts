@@ -64,6 +64,8 @@ export {
   MicOff as MicOffIcon,
   MicOff as MicOffSmallIcon,
   Minus as MinimizeIcon,
+  Monitor as MonitorIcon,
+  AppWindow as AppWindowIcon,
   Moon as MoonIcon,
   Pause as PauseIcon,
   PictureInPicture2 as PopoutIcon,

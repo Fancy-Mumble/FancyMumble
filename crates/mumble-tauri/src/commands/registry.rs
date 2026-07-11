@@ -228,6 +228,15 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::ui_mode::set_ui_mode,
         super::ui_mode::get_system_specs,
         super::ui_mode::relaunch_in_minimal_mode,
+        // -- screen sharing (desktop only) -----------------------------
+        #[cfg(not(target_os = "android"))]
+        super::screenshare::list_capture_sources,
+        #[cfg(not(target_os = "android"))]
+        super::screenshare::capture_source_thumbnail,
+        #[cfg(not(target_os = "android"))]
+        super::screenshare::start_screen_broadcast,
+        #[cfg(not(target_os = "android"))]
+        super::screenshare::stop_screen_broadcast,
         // -- updater (desktop only) ------------------------------------
         #[cfg(not(target_os = "android"))]
         crate::updater::commands::updater_check,

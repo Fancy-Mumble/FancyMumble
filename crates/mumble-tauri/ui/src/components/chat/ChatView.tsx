@@ -48,6 +48,8 @@ import { channelDisplayName, dmPeerUserId } from "../../utils/channelVisibility"
 import { htmlToMarkdown } from "./markdown/MarkdownInput";
 import type { MessageScope } from "../../messageOffload";
 import { useScreenShare } from "./stream/useScreenShare";
+const ScreenSharePickerDialog = lazy(() => import("./stream/ScreenSharePickerDialog"));
+const StreamConfigMenu = lazy(() => import("./stream/StreamConfigMenu"));
 const ScreenShareViewer = lazy(() => import("./stream/ScreenShareViewer"));
 const BroadcastBanner = lazy(() =>
   import("./stream/ScreenShareViewer").then((m) => ({ default: m.BroadcastBanner })),
@@ -1206,14 +1208,25 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
         </Suspense>
       )}
 
-      {/* Solo own broadcast preview (no other broadcasters) */}
-      {activeScreenShare?.isOwn && activeScreenShare.stream && !showFocusView && (
+      {/* Solo own broadcast preview (no other broadcasters). Rendered as
+           soon as the broadcast starts - the stream itself (the loopback
+           view of our own SFU session) may arrive a moment later, and the
+           panel is also the only place the share can be stopped from. */}
+      {activeScreenShare?.isOwn && !showFocusView && (
         <ResizableSplitPanel
           fillByDefault
           minPx={200}
           onClose={screenShare.stopSharing}
           closeLabel={t("screenShare.stopSharing")}
         >
+          <Suspense fallback={null}>
+            <StreamConfigMenu
+              settings={screenShare.settings}
+              onStop={screenShare.stopSharing}
+              onChangeSource={screenShare.startSharing}
+              onSetSettings={screenShare.changeSettings}
+            />
+          </Suspense>
           <Suspense fallback={null}>
             <ScreenShareViewer
               isOwnBroadcast
@@ -1239,6 +1252,18 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
               onClose={activeScreenShare.isOwn ? screenShare.stopSharing : screenShare.stopWatching}
               closeLabel={
                 activeScreenShare.isOwn ? t("screenShare.stopSharing") : t("screenShare.stopWatching")
+              }
+              configMenu={
+                activeScreenShare.isOwn ? (
+                  <Suspense fallback={null}>
+                    <StreamConfigMenu
+                      settings={screenShare.settings}
+                      onStop={screenShare.stopSharing}
+                      onChangeSource={screenShare.startSharing}
+                      onSetSettings={screenShare.changeSettings}
+                    />
+                  </Suspense>
+                ) : undefined
               }
             />
           </Suspense>
@@ -1526,6 +1551,17 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
             open={showLiveDocLaunch}
             onSubmit={handleLiveDocLaunchSubmit}
             onCancel={() => setShowLiveDocLaunch(false)}
+          />
+        </Suspense>
+      )}
+
+      {/* Screen/window source picker (Rust-native capture) */}
+      {screenShare.pickerOpen && (
+        <Suspense fallback={null}>
+          <ScreenSharePickerDialog
+            initialSettings={screenShare.settings}
+            onConfirm={(kind, id, settings) => void screenShare.confirmSource(kind, id, settings)}
+            onCancel={screenShare.cancelPicker}
           />
         </Suspense>
       )}

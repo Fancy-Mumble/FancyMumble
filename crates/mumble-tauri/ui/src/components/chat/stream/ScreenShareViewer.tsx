@@ -248,7 +248,9 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
 // ---------------------------------------------------------------------------
 
 interface OwnPreviewProps {
-  readonly stream: MediaStream;
+  /** The loopback own-preview stream; null while the broadcast is still
+   *  connecting (the panel shows the "setting up" overlay until it arrives). */
+  readonly stream: MediaStream | null;
   readonly channelId: number;
   readonly ownSession: number;
 }
@@ -276,7 +278,7 @@ function OwnBroadcastPreview({ stream, channelId, ownSession }: OwnPreviewProps)
       // Pass the captured track's pixel size + display surface kind so
       // the Rust side can either pin the overlay over the shared window
       // (display_surface = "window") or cover the matching monitor.
-      const track = stream.getVideoTracks()[0];
+      const track = stream?.getVideoTracks()[0];
       const settings = (track?.getSettings?.() ?? {}) as MediaTrackSettings & { displaySurface?: string };
       await invoke("open_drawing_overlay", {
         channelId,
@@ -316,7 +318,7 @@ function OwnBroadcastPreview({ stream, channelId, ownSession }: OwnPreviewProps)
         data-own="true"
         data-session={ownSession}
       />
-      {webrtcConnecting && (
+      {(webrtcConnecting || !stream) && (
         <div className={styles.connectingOverlay}>
           <div className={styles.connectingDots}>
             <span className={styles.connectingDot} />
@@ -434,7 +436,7 @@ export default function ScreenShareViewer({
 }: ScreenShareViewerProps) {
   return (
     <div className={styles.broadcastArea}>
-      {isOwnBroadcast && localStream
+      {isOwnBroadcast
         ? <OwnBroadcastPreview stream={localStream} channelId={channelId} ownSession={ownSession} />
         : <RemoteViewer session={session ?? 0} channelId={channelId} ownSession={ownSession} />}
     </div>

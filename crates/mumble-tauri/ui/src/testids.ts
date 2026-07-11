@@ -163,6 +163,20 @@ export const TID = {
   /** The "Watch" button inside a {@link broadcastBanner}; carries
    *  `data-session` (the broadcaster to watch). */
   broadcastWatch: "broadcast-watch",
+  /** A clickable stream tile inside the focus view (secondary pane or bottom
+   *  drawer) that switches the primary stream to that broadcaster. Carries
+   *  `data-session` and `data-broadcaster-name`. This is how a user who is
+   *  ALREADY broadcasting watches someone else (the banner is only shown to
+   *  idle viewers). */
+  streamWatchTile: "stream-watch-tile",
+  /** The focus view's bottom-drawer toggle (the drawer starts collapsed). */
+  streamDrawerToggle: "stream-drawer-toggle",
+  /** Kebab/burger button opening the own-broadcast stream-config menu
+   *  (stop / change source / quality), beside the stop-stream × button. */
+  streamConfigMenu: "stream-config-menu",
+  /** Gear button in the source picker opening the "Stream Mode" popover
+   *  (presets + screen-resolution / frame-rate submenus). */
+  screenShareSettings: "screen-share-settings",
 } as const;
 
 export type TestId = (typeof TID)[keyof typeof TID];

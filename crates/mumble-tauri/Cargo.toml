@@ -73,6 +73,8 @@ dhat = { version = "0.3", optional = true }
 png = "0.18"
 mumble-protocol = { path = "../mumble-protocol", features = ["opus-codec", "persistent-chat", "rnnoise-denoiser"] }
 cpal = "0.17.3"
+# Screen sharing core (source enumeration, capture, encode, WebRTC broadcast).
+fancy-screenshare = { path = "../fancy-screenshare" }
 rodio = { version = "0.22", features = ["recording"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-window-state = "2"

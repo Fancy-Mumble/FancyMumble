@@ -1,0 +1,404 @@
+.dialog {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-lg, 12px);
+  padding: 18px;
+  width: 760px;
+  max-width: 94vw;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: scaleIn 0.12s ease-out;
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.96); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--color-text-primary);
+}
+
+/* Segmented pill tab bar (Discord-style). */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--color-glass-hover, rgba(0, 0, 0, 0.2));
+  border-radius: 999px;
+  align-self: center;
+}
+
+.tab {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab:hover {
+  color: var(--color-text-primary);
+}
+
+.tabActive,
+.tabActive:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  min-height: 200px;
+  max-height: min(52vh, 460px);
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.card {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.thumb {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm, 8px);
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  border: 2px solid transparent;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.card:hover .thumb {
+  border-color: var(--color-glass-border);
+}
+
+.cardSelected .thumb {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cardLabel {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 0 2px;
+}
+
+.cardLabel svg {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+.cardTitle {
+  font-size: 13px;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status {
+  grid-column: 1 / -1;
+  align-self: center;
+  padding: 40px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+/* Footer: quality selector + share, split left/right like Discord. */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--color-glass-border);
+  padding-top: 14px;
+}
+
+.quality {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  background: var(--color-glass-hover, rgba(0, 0, 0, 0.2));
+  border-radius: var(--radius-sm, 8px);
+}
+
+.qualityBtn {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.qualityBtnActive {
+  background: var(--color-bg-primary);
+  color: var(--color-accent);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.cancelBtn {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-glass-border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cancelBtn:hover {
+  background: var(--color-glass-hover);
+}
+
+.confirmBtn {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 8px 20px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--color-accent);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.confirmBtn:hover {
+  opacity: 0.85;
+}
+
+.confirmBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* --- Stream Mode gear + popover -------------------------------------- */
+.modeRoot {
+  position: relative;
+}
+
+.gearBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.gearBtn:hover,
+.gearBtnActive {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+}
+
+/* Opens upward: the footer is at the bottom of the dialog. */
+.modeMenu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 250px;
+  padding: 6px;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-md, 10px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  z-index: 30;
+  animation: modeIn 0.1s ease-out;
+}
+
+@keyframes modeIn {
+  from { transform: translateY(4px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.modeHeader {
+  padding: 6px 10px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.modeItem {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.modeItem:hover {
+  background: var(--color-glass-hover, rgba(255, 255, 255, 0.06));
+}
+
+.modeText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.modeName {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.modeHint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.radioOn {
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.radioOff {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.modeSeparator {
+  height: 1px;
+  margin: 5px 4px;
+  background: var(--color-glass-border);
+}
+
+.modeRow {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.modeRow:hover:not(.modeDisabled) {
+  background: var(--color-glass-hover, rgba(255, 255, 255, 0.06));
+}
+
+.modeRowName {
+  flex: 1;
+}
+
+.modeRowValue {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.subRow {
+  padding-left: 12px;
+}
+
+.check {
+  display: inline-flex;
+  width: 15px;
+  justify-content: center;
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+  transition: transform 0.12s;
+}
+
+.modeDisabled {
+  color: var(--color-text-muted);
+  cursor: default;
+}

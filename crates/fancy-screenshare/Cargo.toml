@@ -1,0 +1,83 @@
+[package]
+name = "fancy-screenshare"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Frontend-agnostic screen sharing core: source enumeration, capture, encode, WebRTC broadcast"
+
+[dependencies]
+# Screen / window enumeration + frame capture (Windows, macOS, Linux).
+xcap = "0.6"
+# Thumbnail JPEG encoding (xcap already returns image::RgbaImage).
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+# SIMD frame downscaling for the capture->encode path. image's own
+# imageops::resize is scalar and needs hundreds of ms per 4K frame - it
+# alone pushed real screen shares below 1 fps.
+fast_image_resize = "5"
+# H.264 encoder (Cisco openh264, compiled from vendored source with cc -
+# builds on MSVC and MinGW alike, unlike libvpx).
+openh264 = "0.8"
+# WebRTC peer (ICE, DTLS, SRTP, RTP packetization).
+webrtc = "0.13"
+# Async runtime for the webrtc peer; the broadcaster owns a small dedicated
+# runtime so embedders (Tauri today, the Qt client later) need no ambient one.
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+tracing = "0.1"
+
+[features]
+default = ["gpu"]
+# Per-OS native pipelines behind the shared EncodePipeline trait (the
+# industry layering: Chromium/Discord/Teams all select a native GPU
+# capture+encode backend per platform under one orchestration layer).
+#   Windows: WGC capture -> D3D11 video processor -> Media Foundation H.264
+#   Linux:   xdg-desktop-portal ScreenCast -> PipeWire -> VA-API H.264
+# Disable to force the portable CPU pipeline everywhere. On Linux that drops
+# the portal (ashpd) and VA-API (cros-codecs -> libva) dependencies; note
+# xcap itself still links libpipewire/xcb there for its own capture paths.
+gpu = ["dep:ashpd", "dep:pipewire", "dep:cros-codecs", "dep:libloading"]
+
+# The Linux capture+encode stack mirrors Chromium's: the xdg-desktop-portal
+# ScreenCast API hands us a PipeWire stream (the only capture path Wayland
+# permits, and Chromium's default on X11 too), and VA-API does the H.264
+# encode. cros-codecs is the ChromeOS media team's encoder stack - the same
+# lineage as Chromium's VaapiVideoEncodeAccelerator (and what Discord forks
+# for their Linux client).
+[target.'cfg(target_os = "linux")'.dependencies]
+ashpd = { version = "0.13", default-features = false, features = ["tokio", "screencast"], optional = true }
+# 0.8 to stay on xcap's pipewire-sys (Cargo permits one links="pipewire-0.3").
+pipewire = { version = "0.8", optional = true }
+cros-codecs = { version = "0.0.6", features = ["vaapi"], optional = true }
+# dlopen for the NVENC tier (libcuda/libnvidia-encode load at runtime;
+# the binary must start on machines without an NVIDIA driver).
+libloading = { version = "0.8", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Foundation",
+    "Graphics_Capture",
+    "Security_Authorization_AppCapabilityAccess",
+    "Graphics_DirectX",
+    "Graphics_DirectX_Direct3D11",
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D11on12",
+    "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_Media_MediaFoundation",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_Ole",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_System_WinRT_Direct3D11",
+    "Win32_System_WinRT_Graphics_Capture",
+] }
+
+[lints]
+workspace = true
