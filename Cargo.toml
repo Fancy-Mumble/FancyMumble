@@ -5,6 +5,7 @@ members = [
     "crates/fancy-denoiser-deepfilter",
     "crates/mumble-protocol",
     "crates/fancy-audio-device",
+    "crates/fancy-screenshare",
     "crates/mumble-tauri",
 ]
 # The Mumble server-side plugin host crates (mumble-plugin-api, mumble-file-server,

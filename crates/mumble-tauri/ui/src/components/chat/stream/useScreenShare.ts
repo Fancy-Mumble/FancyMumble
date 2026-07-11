@@ -1,14 +1,24 @@
 /**
- * Server-relayed screen sharing via getDisplayMedia + WebRTC SFU.
+ * Server-relayed screen sharing: Rust-native capture + WebRTC SFU.
  *
- * Architecture: the broadcaster sends ONE WebRTC stream to the Mumble
- * server's SFU (Selective Forwarding Unit), which re-broadcasts it to
- * each viewer via separate WebRTC connections.  Broadcaster upload is
- * O(1) regardless of viewer count.
+ * Architecture: capture and H.264 encoding happen in Rust (the
+ * `fancy-screenshare` crate, driven via the `start_screen_broadcast` /
+ * `stop_screen_broadcast` commands).  The Rust broadcaster sends ONE WebRTC
+ * stream to the Mumble server's SFU (Selective Forwarding Unit), which
+ * re-broadcasts it to each viewer via separate WebRTC connections.
+ * Broadcaster upload is O(1) regardless of viewer count.
+ *
+ * The webview never holds a local capture MediaStream.  Instead, the
+ * broadcaster's own preview is a *loopback viewer*: we watch our own SFU
+ * session like any other viewer, so the preview `<video>` plays the pixels
+ * that are actually transmitted (encode round-trip included).
  *
  * All signaling travels over the existing Mumble TCP connection using
  * WebRtcSignal protobuf messages (ID 120).  Media flows via WebRTC
  * UDP between each client and the server (never client-to-client).
+ * The SFU's answer to the Rust broadcaster's offer is intercepted natively
+ * (`try_intercept_answer`) and never reaches this dispatcher; every answer
+ * seen here belongs to a webview viewer peer.
  *
  * SignalType enum (matches proto):
  *   START         = 0  - broadcaster announces (channel broadcast)
@@ -19,7 +29,7 @@
  */
 import { useEffect, useCallback, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { emit as emitTauri } from "@tauri-apps/api/event";
+import { emit as emitTauri, listen as listenTauri } from "@tauri-apps/api/event";
 import { useAppStore, onWebRtcSignal } from "../../../store";
 import {
   getPreviewPc,
@@ -30,12 +40,14 @@ import {
   storeLocalThumbnail,
 } from "../stream/useStreamPreview";
 import { clearAllStrokesInChannel, clearStrokesFromSender } from "../drawing/DrawingOverlay";
+import type { CaptureSourceKind } from "./ScreenSharePickerDialog";
+import { QUALITY_PRESETS, type StreamSettings } from "./streamSettings";
 
-// This module holds singleton WebRTC state (broadcasterPc, viewerPcs, etc.).
-// Vite HMR would otherwise hot-swap the module while leaving stale closures
-// in the store's signal-handler registry, causing SDP answers to be routed
-// to a dead module instance.  Forcing a full reload on any change keeps dev
-// behaviour aligned with production.
+// This module holds singleton WebRTC state (viewerPcs, the broadcast pin,
+// etc.).  Vite HMR would otherwise hot-swap the module while leaving stale
+// closures in the store's signal-handler registry, causing SDP answers to be
+// routed to a dead module instance.  Forcing a full reload on any change
+// keeps dev behaviour aligned with production.
 if (import.meta.hot) {
   import.meta.hot.accept(() => {
     import.meta.hot!.invalidate();
@@ -67,13 +79,13 @@ const RTC_CONFIG: RTCConfiguration = {
  * `serverId` MUST be the id of the connection that owns this peer
  * connection.  Without it, the backend would send the signal through
  * whichever tab is currently active - so when the user switches tabs
- * while the broadcaster is still gathering ICE candidates, those
- * candidates would leak through the wrong connection and the SFU
- * handshake would never complete.
+ * while a viewer is still gathering ICE candidates, those candidates
+ * would leak through the wrong connection and the SFU handshake would
+ * never complete.
  */
 function sendSignal(targetSession: number, signalType: number, payload: string, serverId: string | null): void {
   const { sendWebRtcSignal } = useAppStore.getState();
-  sendWebRtcSignal(targetSession, signalType, payload, serverId);
+  void sendWebRtcSignal(targetSession, signalType, payload, serverId);
 }
 
 /** Broadcast a signal to all users in our channel (target_session = 0). */
@@ -88,24 +100,13 @@ function showWebRtcError(message: string): void {
 
 // ---------------------------------------------------------------------------
 // Broadcaster state (module-level singleton - only one broadcast at a time)
+//
+// The capture pipeline itself lives in Rust; what remains here is the
+// bookkeeping the webview owns: which connection/channel the broadcast is
+// pinned to, plus the drawing-overlay lifecycle tied to it.
 // ---------------------------------------------------------------------------
 
-/** Active local media stream from getDisplayMedia. */
-let localStream: MediaStream | null = null;
-
-/** Single peer connection from broadcaster to the server SFU. */
-let broadcasterPc: RTCPeerConnection | null = null;
-
-/** Monotonic id of the current broadcaster PC; increments every time a new
- *  RTCPeerConnection is assigned to {@link broadcasterPc}.  Used to tell
- *  fresh SDP answers from stale ones when the user re-shares quickly. */
-let broadcasterPcEpoch = 0;
-
-/** Epoch we are currently waiting an SDP answer for; cleared once the
- *  answer has been applied (or the PC is torn down). */
-let broadcasterAwaitingAnswer: number | null = null;
-
-/** ServerId of the connection that owns the broadcaster PC.
+/** ServerId of the connection that owns the active broadcast.
  *  See {@link sendSignal} for why this is required. */
 let broadcasterServerId: string | null = null;
 
@@ -113,173 +114,17 @@ let broadcasterServerId: string | null = null;
  *  drawings tied to the broadcast when it ends. */
 let broadcasterChannelId: number | null = null;
 
-/** ICE candidates received before the broadcaster peer had a remote description. */
-let broadcasterPendingIce: RTCIceCandidateInit[] = [];
+/** The source the local broadcast is capturing, kept so the stream-config
+ *  menu can restart it at new settings without re-opening the picker. */
+let broadcasterSource: { kind: CaptureSourceKind; id: number } | null = null;
 
-/** Interval handle for periodic WebRTC stats logging. */
-let broadcasterStatsInterval: ReturnType<typeof setInterval> | null = null;
+/** Encoder settings the local broadcast is running at (default HD). */
+let broadcasterSettings: StreamSettings = QUALITY_PRESETS.hd;
 
-/** Log outbound video stats from the broadcaster PC for diagnostics. */
-function startBroadcasterStatsLog(pc: RTCPeerConnection): void {
-  stopBroadcasterStatsLog();
-  broadcasterStatsInterval = setInterval(async () => {
-    if (pc.connectionState !== "connected") return;
-    const stats = await pc.getStats();
-    stats.forEach((report) => {
-      if (report.type === "outbound-rtp" && report.kind === "video") {
-        console.log(
-          `[sfu] outbound-rtp: qualityLimitationReason=${report.qualityLimitationReason}` +
-            ` targetBitrate=${report.targetBitrate}` +
-            ` bytesSent=${report.bytesSent}` +
-            ` packetsSent=${report.packetsSent}` +
-            ` framesPerSecond=${report.framesPerSecond}` +
-            ` frameWidth=${report.frameWidth}x${report.frameHeight}` +
-            ` encoderImplementation=${report.encoderImplementation}`,
-        );
-      }
-    });
-  }, 2000);
-}
-
-function stopBroadcasterStatsLog(): void {
-  if (broadcasterStatsInterval !== null) {
-    clearInterval(broadcasterStatsInterval);
-    broadcasterStatsInterval = null;
-  }
-}
-
-/** ICE connection timeout handle - cleared on success or explicit failure. */
-let broadcasterIceTimeout: ReturnType<typeof setTimeout> | null = null;
-
-function clearBroadcasterIceTimeout(): void {
-  if (broadcasterIceTimeout !== null) {
-    clearTimeout(broadcasterIceTimeout);
-    broadcasterIceTimeout = null;
-  }
-}
-
-/** Flush queued ICE candidates after remote description is set. */
-function flushBroadcasterIce(): void {
-  if (!broadcasterPc) return;
-  for (const c of broadcasterPendingIce) {
-    broadcasterPc.addIceCandidate(c).catch((e) =>
-      console.error("[sfu] broadcaster addIceCandidate error:", e),
-    );
-  }
-  broadcasterPendingIce = [];
-}
-
-/** Send our screen stream to the server SFU via a single WebRTC connection. */
-async function connectBroadcasterToServer(): Promise<void> {
-  if (!localStream) return;
-
-  // Pin the broadcaster to the connection that is active *now*.  All
-  // subsequent signaling (offer, ICE candidates, STOP) must go through
-  // this connection regardless of which tab the user looks at later.
-  broadcasterServerId = useAppStore.getState().activeServerId;
-  const sid = broadcasterServerId;
-
-  // Close any stale broadcaster peer.
-  if (broadcasterPc) {
-    broadcasterPc.close();
-    broadcasterPc = null;
-  }
-  broadcasterPendingIce = [];
-  broadcasterAwaitingAnswer = null;
-
-  const pc = new RTCPeerConnection(RTC_CONFIG);
-  broadcasterPc = pc;
-  broadcasterPcEpoch += 1;
-  const pcEpoch = broadcasterPcEpoch;
-  useAppStore.setState({ webrtcConnecting: true });
-
-  // Add screen tracks (video + optional audio).
-  for (const track of localStream.getTracks()) {
-    pc.addTrack(track, localStream);
-  }
-
-  // Tell Chrome to prefer framerate over resolution when bandwidth is limited.
-  // Without this, Chrome's default "balanced" degradation drops both framerate
-  // and resolution, often resulting in <1fps screen shares through the SFU.
-  for (const sender of pc.getSenders()) {
-    if (sender.track?.kind === "video") {
-      const params = sender.getParameters();
-      params.degradationPreference = "maintain-framerate";
-      await sender.setParameters(params);
-    }
-  }
-
-  // Send our ICE candidates to the server (target=0).
-  pc.onicecandidate = (e) => {
-    if (e.candidate) {
-      sendSignal(0, SIGNAL_ICE_CANDIDATE, JSON.stringify(e.candidate.toJSON()), sid);
-    }
-  };
-
-  pc.onconnectionstatechange = () => {
-    if (pc !== broadcasterPc) return; // stale closure
-    if (pc.connectionState === "connected") {
-      clearBroadcasterIceTimeout();
-      useAppStore.setState({ webrtcConnecting: false });
-      startBroadcasterStatsLog(pc);
-    } else if (pc.connectionState === "failed") {
-      clearBroadcasterIceTimeout();
-      stopBroadcasterStatsLog();
-      stopBroadcasting();
-      const { ownSession } = useAppStore.getState();
-      useAppStore.setState((s) => {
-        const next = new Set(s.broadcastingSessions);
-        if (ownSession) next.delete(ownSession);
-        return { isSharingOwn: false, broadcastingOwnSession: null, broadcastingSessions: next };
-      });
-      if (ownSession) broadcastSignal(SIGNAL_STOP, "", sid);
-      showWebRtcError("Screen sharing failed: unable to reach the WebRTC server. Check that the required ports are not blocked by your firewall.");
-    }
-  };
-
-  const offer = await pc.createOffer();
-  if (broadcasterPc !== pc) return; // replaced while awaiting
-  await pc.setLocalDescription(offer);
-  if (broadcasterPc !== pc) return; // replaced while awaiting
-
-  broadcasterAwaitingAnswer = pcEpoch;
-
-  // Send offer to the server SFU (target=0 tells server this is our broadcast offer).
-  sendSignal(0, SIGNAL_SDP_OFFER, offer.sdp!, sid);
-
-  // If the browser has not reached "connected" within 20s the WebRTC port
-  // is likely blocked. Trigger the same failure path as a native ICE failure
-  // to give the user feedback instead of waiting ~30s for the browser. The
-  // 20s budget gives DTLS room to complete on slower networks; the SFU has
-  // been observed to accept the offer and serve viewers within ~4s, so the
-  // broadcaster handshake should comfortably finish in <10s on a healthy
-  // link.
-  clearBroadcasterIceTimeout();
-  broadcasterIceTimeout = setTimeout(() => {
-    broadcasterIceTimeout = null;
-    if (broadcasterPc !== pc) return;
-    if (pc.connectionState !== "connected") {
-      console.warn(
-        `[sfu] broadcaster ICE timeout fired: connectionState=${pc.connectionState} iceConnectionState=${pc.iceConnectionState} iceGatheringState=${pc.iceGatheringState} signalingState=${pc.signalingState}`,
-      );
-      pc.close();
-      stopBroadcasting();
-      const { ownSession } = useAppStore.getState();
-      useAppStore.setState((s) => {
-        const next = new Set(s.broadcastingSessions);
-        if (ownSession) next.delete(ownSession);
-        return { isSharingOwn: false, broadcastingOwnSession: null, broadcastingSessions: next };
-      });
-      if (ownSession) broadcastSignal(SIGNAL_STOP, "", sid);
-      showWebRtcError("Screen sharing failed: unable to reach the WebRTC server. Check that the required ports are not blocked by your firewall.");
-    }
-  }, 20000);
-}
-
-/** Clean up all broadcaster state. */
+/** Clean up the webview-side broadcast bookkeeping (drawing overlay,
+ *  annotations, connection pin).  The Rust capture/peer is stopped
+ *  separately - see {@link endOwnBroadcast}. */
 function stopBroadcasting(): void {
-  clearBroadcasterIceTimeout();
-  stopBroadcasterStatsLog();
   // Closing the desktop drawing-overlay window here (rather than from a
   // React unmount effect) ensures the overlay survives tab switches and
   // is only torn down when the broadcast actually ends.
@@ -295,16 +140,6 @@ function stopBroadcasting(): void {
       drawingActiveChannels: drawing,
     };
   });
-  if (localStream) {
-    for (const track of localStream.getTracks()) track.stop();
-    localStream = null;
-  }
-  if (broadcasterPc) {
-    broadcasterPc.close();
-    broadcasterPc = null;
-  }
-  broadcasterPendingIce = [];
-  broadcasterAwaitingAnswer = null;
   broadcasterServerId = null;
   // Wipe every annotation that was drawn on this broadcast (including
   // viewers' annotations on the local cache) so the next share starts
@@ -314,6 +149,29 @@ function stopBroadcasting(): void {
     clearAllStrokesInChannel(broadcasterChannelId);
     broadcasterChannelId = null;
   }
+}
+
+/** Tear down the local broadcast end-to-end: the Rust capture/peer, the
+ *  loopback viewer feeding the own-preview, webview bookkeeping, store
+ *  state, and the STOP announcement to the channel.  Shared by the header
+ *  toggle and the Rust broadcaster's failure path. */
+function endOwnBroadcast(reason: string): void {
+  console.info(`[screenshare] ending own broadcast (${reason})`);
+  // Capture the pinned connection BEFORE stopBroadcasting() clears it - the
+  // STOP signal must travel through the connection that announced the share.
+  const sid = broadcasterServerId;
+  const own = useAppStore.getState().broadcastingOwnSession;
+  invoke("stop_screen_broadcast").catch((e) =>
+    console.warn("[screenshare] stop_screen_broadcast failed:", e),
+  );
+  if (own !== null) closeViewer(own);
+  stopBroadcasting();
+  useAppStore.setState((s) => {
+    const next = new Set(s.broadcastingSessions);
+    if (own !== null) next.delete(own);
+    return { isSharingOwn: false, broadcastingOwnSession: null, broadcastingSessions: next };
+  });
+  if (own !== null) broadcastSignal(SIGNAL_STOP, "", sid);
 }
 
 // ---------------------------------------------------------------------------
@@ -366,10 +224,34 @@ function closeViewer(session?: number): void {
   }
 }
 
-/** Connect to the server SFU to watch a broadcaster's stream. Returns immediately if already connected. */
-async function startWatching(broadcasterSession: number): Promise<void> {
-  if (viewerPcs.has(broadcasterSession)) return;
+/** Tear down a dead viewer PC and, while its broadcast is still announced,
+ *  rebuild it with a fresh offer; otherwise clear the watch state. */
+function reconnectOrDropViewer(broadcasterSession: number): void {
+  closeViewer(broadcasterSession);
+  if (useAppStore.getState().broadcastingSessions.has(broadcasterSession)) {
+    startWatching(broadcasterSession).catch((e) =>
+      console.error("[sfu] viewer reconnect failed:", e),
+    );
+    return;
+  }
+  const { watchingSession } = useAppStore.getState();
+  if (watchingSession === broadcasterSession) {
+    useAppStore.setState({ watchingSession: null, watchingOwnSession: null });
+  }
+}
 
+/** Connect to the server SFU to watch a broadcaster's stream. Returns immediately if already connected.
+ *
+ * Watching your OWN session is the loopback own-preview: the SFU serves our
+ * broadcast back to us exactly like it serves any other viewer.
+ */
+async function startWatching(broadcasterSession: number): Promise<void> {
+  if (viewerPcs.has(broadcasterSession)) {
+    console.info(`[sfu] viewer for ${broadcasterSession} already open`);
+    return;
+  }
+
+  console.info(`[sfu] opening viewer for session ${broadcasterSession}`);
   closePreview();
 
   // Pin this viewer to the connection that is active *now* so that
@@ -397,30 +279,73 @@ async function startWatching(broadcasterSession: number): Promise<void> {
 
   // Send our ICE candidates to the server (routed via broadcaster session).
   pc.onicecandidate = (e) => {
-    if (e.candidate) {
-      sendSignal(broadcasterSession, SIGNAL_ICE_CANDIDATE, JSON.stringify(e.candidate.toJSON()), sid);
-    }
+    if (!e.candidate) return;
+    // With the server SFU active, client ICE candidates are ignored
+    // server-side (ICE-lite: it learns our address from the STUN binding
+    // requests; its own candidate rides in the SDP answer). Worse, every
+    // candidate is its own invoke that RACES the SDP-offer invoke into
+    // murmur's shared leaky bucket (1 msg/s, burst 5) - when the trickle
+    // wins, the offer itself is silently rate-dropped and the stream
+    // never starts. Only the SFU-less peer-to-peer fallback needs them.
+    if (useAppStore.getState().serverConfig.webrtc_sfu_available) return;
+    sendSignal(broadcasterSession, SIGNAL_ICE_CANDIDATE, JSON.stringify(e.candidate.toJSON()), sid);
   };
 
   pc.onconnectionstatechange = () => {
     if (viewerPcs.get(broadcasterSession)?.pc !== pc) return; // stale closure
-    if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-      closeViewer(broadcasterSession);
-      const { watchingSession } = useAppStore.getState();
-      if (watchingSession === broadcasterSession) {
-        useAppStore.setState({ watchingSession: null, watchingOwnSession: null });
-      }
+    if (pc.connectionState === "disconnected") {
+      // Usually transient (a missed ICE consent check under load) and
+      // Chromium recovers to "connected" on its own. Give it a grace
+      // period; only rebuild the viewer if it never comes back.
+      console.warn(`[sfu] viewer PC for ${broadcasterSession} disconnected - awaiting recovery`);
+      setTimeout(() => {
+        if (viewerPcs.get(broadcasterSession)?.pc !== pc) return;
+        if (pc.connectionState === "connected") return; // recovered
+        console.warn(`[sfu] viewer PC for ${broadcasterSession} did not recover`);
+        reconnectOrDropViewer(broadcasterSession);
+      }, 5000);
+      return;
+    }
+    if (pc.connectionState === "failed") {
+      console.warn(`[sfu] viewer PC for ${broadcasterSession} failed`);
+      reconnectOrDropViewer(broadcasterSession);
     }
   };
 
   const offer = await pc.createOffer();
-  if (viewerPcs.get(broadcasterSession)?.pc !== pc) return; // replaced while awaiting
+  if (viewerPcs.get(broadcasterSession)?.pc !== pc) {
+    console.warn(`[sfu] viewer for ${broadcasterSession} replaced during createOffer`);
+    return;
+  }
   await pc.setLocalDescription(offer);
-  if (viewerPcs.get(broadcasterSession)?.pc !== pc) return; // replaced while awaiting
+  if (viewerPcs.get(broadcasterSession)?.pc !== pc) {
+    console.warn(`[sfu] viewer for ${broadcasterSession} replaced during setLocalDescription`);
+    return;
+  }
 
   // Send offer to server, targeting the broadcaster session.
   // The server intercepts this and creates an SFU outbound peer.
-  sendSignal(broadcasterSession, SIGNAL_SDP_OFFER, offer.sdp!, sid);
+  const offerSdp = offer.sdp!;
+  sendSignal(broadcasterSession, SIGNAL_SDP_OFFER, offerSdp, sid);
+  console.info(`[sfu] viewer offer sent for session ${broadcasterSession}`);
+
+  // The Mumble control channel silently rate-limits (leaky bucket, ~1 msg/s
+  // with a small burst, shared with everything else this client sends), and
+  // a broadcast start emits several signals back-to-back - this offer can be
+  // dropped without any trace. Re-send it until the SFU's answer arrives
+  // (extra answers to the same offer are ignored by the have-local-offer
+  // check in the dispatcher).
+  let attempts = 1;
+  const retry = setInterval(() => {
+    const s = viewerPcs.get(broadcasterSession);
+    if (!s || s.pc !== pc || pc.signalingState !== "have-local-offer" || attempts >= 5) {
+      clearInterval(retry);
+      return;
+    }
+    attempts += 1;
+    console.info(`[sfu] re-sending viewer offer for ${broadcasterSession} (attempt ${attempts})`);
+    sendSignal(broadcasterSession, SIGNAL_SDP_OFFER, offerSdp, s.serverId);
+  }, 1500);
 }
 
 /** Handle an SDP answer from the server SFU. */
@@ -432,30 +357,22 @@ async function handleServerAnswer(pc: RTCPeerConnection, sdp: string): Promise<v
 // Incoming signal dispatcher
 // ---------------------------------------------------------------------------
 
-/** Route an SDP answer to the peer that is waiting for one. */
+/** Route an SDP answer to the viewer peer that is waiting for one.
+ *
+ * The answer to the Rust broadcaster's offer never arrives here - it is
+ * claimed natively before the `webrtc-signal` event is emitted (see
+ * `try_intercept_answer` in `commands/screenshare.rs`).
+ */
 function routeSdpAnswer(senderSession: number, payload: string): void {
   // Viewer PCs are keyed by the broadcaster's session, so if we are
-  // watching `senderSession` the answer is for that viewer PC.
+  // watching `senderSession` the answer is for that viewer PC.  The
+  // loopback own-preview is keyed by our own session and matches the
+  // same way (the SFU addresses its answer to us).
   const viewerState = viewerPcs.get(senderSession);
   if (viewerState?.pc.signalingState === "have-local-offer") {
     handleServerAnswer(viewerState.pc, payload)
       .then(() => flushViewerIce(senderSession))
       .catch((e) => console.error("[sfu] viewer setRemoteDescription error:", e));
-    return;
-  }
-
-  // Otherwise the answer must belong to our broadcaster PC if it is
-  // waiting for one.  We deliberately do NOT cross-check `senderSession`
-  // against `broadcastingOwnSession` here: that store value can race
-  // with the answer (the SFU replies in ~50 ms and `setState` from
-  // `startSharing` may not have flushed by then), and any answer that
-  // is not for a known viewer must be for our broadcaster - the SFU
-  // never sends unsolicited answers.
-  if (broadcasterPc?.signalingState === "have-local-offer") {
-    broadcasterAwaitingAnswer = null;
-    handleServerAnswer(broadcasterPc, payload)
-      .then(flushBroadcasterIce)
-      .catch((e) => console.error("[sfu] broadcaster setRemoteDescription error:", e));
     return;
   }
 
@@ -470,18 +387,17 @@ function routeSdpAnswer(senderSession: number, payload: string): void {
     {
       senderSession,
       viewerSessions: [...viewerPcs.keys()],
-      broadcasterPcExists: !!broadcasterPc,
-      broadcasterSignalingState: broadcasterPc?.signalingState ?? null,
-      broadcasterConnectionState: broadcasterPc?.connectionState ?? null,
-      broadcasterEpoch: broadcasterPcEpoch,
-      awaitingAnswerForEpoch: broadcasterAwaitingAnswer,
       answerUfrag,
       payloadLength: payload.length,
     },
   );
 }
 
-/** Route an ICE candidate to the correct peer (broadcaster > viewer by sender session > preview). */
+/** Route an ICE candidate to the correct peer (viewer by sender session > preview).
+ *
+ * With the SFU active the server never trickles candidates (they ride in
+ * its ICE-lite SDP answer), so in practice this only serves legacy paths.
+ */
 function routeIceCandidate(senderSession: number, payload: string): void {
   let candidate: RTCIceCandidateInit | null = null;
   try {
@@ -490,18 +406,6 @@ function routeIceCandidate(senderSession: number, payload: string): void {
     return;
   }
   if (!candidate) return;
-
-  if (broadcasterPc) {
-    console.log(
-      `[sfu] broadcaster remote ICE candidate (queued=${!broadcasterPc.remoteDescription}): ${candidate.candidate ?? "<end>"}`,
-    );
-    if (broadcasterPc.remoteDescription) {
-      broadcasterPc.addIceCandidate(candidate).catch(console.error);
-    } else {
-      broadcasterPendingIce.push(candidate);
-    }
-    return;
-  }
 
   const viewerState = viewerPcs.get(senderSession);
   if (viewerState) {
@@ -582,17 +486,29 @@ export interface ScreenShareHook {
   /** Whether we are currently broadcasting our screen. */
   isBroadcasting: boolean;
   /** Whether *another* tab in the same window is currently broadcasting.
-   *  The single shared webview can only run one capture at a time, so the
-   *  share button on every other tab must be disabled while this is true. */
+   *  Only one capture can run at a time, so the share button on every
+   *  other tab must be disabled while this is true. */
   isBroadcastingFromOtherTab: boolean;
   /** Session IDs of other users currently broadcasting. */
   broadcastingSessions: Set<number>;
   /** Session we are currently watching (null if not watching). */
   watchingSession: number | null;
-  /** The local MediaStream (for own preview). null if not broadcasting. */
+  /** The own-preview MediaStream (the loopback view of our own SFU
+   *  session). null while not broadcasting or still connecting. */
   localStream: MediaStream | null;
-  /** Start sharing our screen. */
-  startSharing: () => Promise<void>;
+  /** Whether the source-picker dialog is open. */
+  pickerOpen: boolean;
+  /** Encoder settings the current/next broadcast uses (for the picker + menu). */
+  settings: StreamSettings;
+  /** Open the source picker (does not start capturing yet). Works while
+   *  already broadcasting too - confirming replaces the live source. */
+  startSharing: () => void;
+  /** Close the source picker without sharing. */
+  cancelPicker: () => void;
+  /** Start (or replace) the broadcast with the picked source + settings. */
+  confirmSource: (kind: CaptureSourceKind, id: number, settings: StreamSettings) => Promise<void>;
+  /** Restart the live broadcast at new settings (same source). */
+  changeSettings: (settings: StreamSettings) => void;
   /** Stop sharing our screen. */
   stopSharing: () => void;
   /** Start watching another user's broadcast. */
@@ -612,20 +528,20 @@ export function useScreenShare(): ScreenShareHook {
   // Only treat *this* tab as the broadcaster when its `ownSession`
   // matches the one that started the capture.  Without this guard a
   // second server tab in the same window would inherit the global
-  // `isSharingOwn` flag (and the module-level `localStream`), causing
-  // the desktop-overlay button and a phantom local preview to appear
-  // on the wrong tab.
+  // `isSharingOwn` flag, causing the desktop-overlay button and a
+  // phantom local preview to appear on the wrong tab.
   const isBroadcasting = broadcastingOwnSession !== null
     && ownSession !== null
     && broadcastingOwnSession === ownSession;
   // True when a different tab in the same window already owns the
-  // module-level capture state.  The browser allows only one
-  // `getDisplayMedia` per webview at a time, so attempting to share
-  // again from another tab would silently no-op against the existing
-  // `localStream`.
+  // singleton broadcast state.  Only one Rust capture runs per app,
+  // so attempting to share again from another tab must be blocked.
   const isBroadcastingFromOtherTab = broadcastingOwnSession !== null
     && (ownSession === null || broadcastingOwnSession !== ownSession);
-  const [stream, setStream] = useState<MediaStream | null>(localStream);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  // The own-preview: the loopback viewer's remote stream for our session.
+  const loopbackStream = useRemoteStream(ownSession ?? -1);
 
   // Track channel members so we can re-announce to late joiners.
   const prevChannelSessionsRef = useRef<Set<number>>(new Set());
@@ -639,9 +555,47 @@ export function useScreenShare(): ScreenShareHook {
     return unregister;
   }, []);
 
+  // React to the Rust broadcaster's lifecycle (fancy-screenshare): clear the
+  // "setting up" state once media flows, and tear everything down when the
+  // capture dies (shared window closed, ICE failed, ...).
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listenTauri<{ state: string; message: string | null }>(
+      "screen-broadcast-state",
+      (event) => {
+        const { state: bcState, message } = event.payload;
+        if (bcState === "connected") {
+          useAppStore.setState({ webrtcConnecting: false });
+        } else if (bcState === "failed") {
+          console.error("[screenshare] Rust broadcaster failed:", message);
+          // Guard: popout webviews register this listener too, but only
+          // the realm that owns the broadcast state may react.
+          if (useAppStore.getState().broadcastingOwnSession === null) return;
+          endOwnBroadcast(`broadcaster failed: ${message ?? "unknown"}`);
+          showWebRtcError(
+            message !== null && message !== ""
+              ? `Screen sharing failed: ${message}`
+              : "Screen sharing failed.",
+          );
+        }
+      },
+    ).then((un) => {
+      if (disposed) {
+        un();
+      } else {
+        unlisten = un;
+      }
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
   // Re-announce broadcast when new users join our channel (late-joiner fix).
   useEffect(() => {
-    if (!localStream || !ownSession || currentChannel === null) return;
+    if (!isBroadcasting || !ownSession || currentChannel === null) return;
     const currentSessions = new Set(
       users.filter((u) => u.channel_id === currentChannel).map((u) => u.session),
     );
@@ -654,14 +608,17 @@ export function useScreenShare(): ScreenShareHook {
       broadcastSignal(SIGNAL_START, "", broadcasterServerId);
     }
     prevChannelSessionsRef.current = currentSessions;
-  }, [users, currentChannel, ownSession]);
+  }, [users, currentChannel, ownSession, isBroadcasting]);
 
   // Clean up when the user disconnects.
   useEffect(() => {
     if (!ownSession) {
+      if (useAppStore.getState().broadcastingOwnSession !== null) {
+        invoke("stop_screen_broadcast").catch(() => {});
+      }
       stopBroadcasting();
       closeViewer();
-      setStream(null);
+      setPickerOpen(false);
     }
   }, [ownSession]);
 
@@ -669,20 +626,20 @@ export function useScreenShare(): ScreenShareHook {
   // secondary panel in StreamFocusView while watching another broadcaster.
   // Refreshes every 55 s (well within the 60 s TTL) to prevent stale cache.
   useEffect(() => {
-    if (!isBroadcasting || !stream || !ownSession) return;
-    storeLocalThumbnail(ownSession, stream).catch(console.error);
+    if (!isBroadcasting || !loopbackStream || !ownSession) return;
+    storeLocalThumbnail(ownSession, loopbackStream).catch(console.error);
     const interval = setInterval(() => {
-      if (localStream) storeLocalThumbnail(ownSession, localStream).catch(console.error);
+      storeLocalThumbnail(ownSession, loopbackStream).catch(console.error);
     }, 55_000);
     return () => {
       clearInterval(interval);
       clearThumbnail(ownSession);
     };
-  }, [isBroadcasting, stream, ownSession]);
+  }, [isBroadcasting, loopbackStream, ownSession]);
 
-  const startSharing = useCallback(async () => {
-    if (localStream) return; // already broadcasting
-
+  const startSharing = useCallback(() => {
+    // Opening the picker while already broadcasting is allowed: confirming
+    // replaces the live source ("Change Stream" in the stream-config menu).
     const { serverConfig } = useAppStore.getState();
     if (serverConfig.webrtc_sfu_available) {
       console.info("[screen-share] server has WebRTC SFU - media will be relayed via server");
@@ -691,76 +648,96 @@ export function useScreenShare(): ScreenShareHook {
       showWebRtcError("This server does not have a WebRTC relay configured. Screen sharing is unlikely to work.");
     }
 
-    try {
-      const mediaStream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true,
-      });
+    setPickerOpen(true);
+  }, []);
 
-      localStream = mediaStream;
-      setStream(mediaStream);
+  const cancelPicker = useCallback(() => setPickerOpen(false), []);
+
+  const confirmSource = useCallback(
+    async (kind: CaptureSourceKind, id: number, settings: StreamSettings) => {
+      setPickerOpen(false);
+      if (ownSession === null) {
+        console.warn("[screenshare] confirmSource ignored: no ownSession");
+        return;
+      }
+      // Replacing an already-running broadcast (Change Stream / Change
+      // Quality): the Rust broadcaster swaps its capture+peer in place and
+      // the SFU keeps forwarding to existing viewers, so we skip the START
+      // announce and keep the loopback viewer we already have.
+      const isReplace = useAppStore.getState().broadcastingOwnSession === ownSession;
+
+      const { activeServerId, sendWebRtcSignal } = useAppStore.getState();
+      broadcasterServerId = activeServerId;
       // Pin the broadcast to the channel the user was in when they
       // started sharing.  When the broadcast ends, every annotation in
       // that channel - drawn by the broadcaster OR any viewer - is
       // wiped (see `stopBroadcasting()`).
       broadcasterChannelId = useAppStore.getState().currentChannel;
+      broadcasterSource = { kind, id };
+      broadcasterSettings = settings;
       useAppStore.setState((s) => {
         const next = new Set(s.broadcastingSessions);
-        if (ownSession) next.add(ownSession);
+        next.add(ownSession);
         return {
           isSharingOwn: true,
-          broadcastingOwnSession: ownSession ?? null,
+          broadcastingOwnSession: ownSession,
           broadcastingSessions: next,
+          webrtcConnecting: true,
+          // Starting a fresh share moves focus to the OWN broadcast; a
+          // replace keeps whatever the user was already viewing.
+          watchingSession: isReplace ? s.watchingSession : null,
+          watchingOwnSession: isReplace ? s.watchingOwnSession : null,
         };
       });
 
-      // Announce to all channel members.
-      broadcastSignal(SIGNAL_START, "", useAppStore.getState().activeServerId);
-
-      // Connect to the server SFU (single WebRTC connection).
-      await connectBroadcasterToServer();
-
-      // Listen for the user stopping via the browser's built-in "Stop sharing" button.
-      const videoTrack = mediaStream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.addEventListener("ended", () => {
-          // Capture the broadcaster's serverId BEFORE stopBroadcasting()
-          // clears it - the STOP signal must travel through the same
-          // connection that announced the broadcast.
-          const sid = broadcasterServerId;
-          stopBroadcasting();
-          setStream(null);
-          useAppStore.setState((s) => {
-            const next = new Set(s.broadcastingSessions);
-            const own = useAppStore.getState().ownSession;
-            if (own) next.delete(own);
-            return { isSharingOwn: false, broadcastingOwnSession: null, broadcastingSessions: next };
-          });
-          broadcastSignal(SIGNAL_STOP, "", sid);
-        });
+      // Ordering matters and all of it rides the same Mumble TCP connection:
+      // the SFU creates the broadcast session when it sees START, so START
+      // must be on the wire before the Rust broadcaster's SDP offer, which
+      // in turn must precede our loopback-viewer offer.
+      if (!isReplace) {
+        await sendWebRtcSignal(0, SIGNAL_START, "", activeServerId);
       }
-    } catch (e) {
-      // User cancelled the screen picker dialog - not an error.
-      console.warn("[screenshare] getDisplayMedia failed or cancelled:", e);
+      try {
+        await invoke("start_screen_broadcast", {
+          kind,
+          id,
+          serverId: activeServerId,
+          maxDimension: settings.maxDimension,
+          maxFps: settings.maxFps,
+        });
+      } catch (e) {
+        console.error("[screenshare] start_screen_broadcast failed:", e);
+        endOwnBroadcast("start_screen_broadcast rejected");
+        showWebRtcError(`Screen sharing failed to start: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
+      // Loopback own-preview: watch our own SFU session so the preview
+      // <video> decodes the frames that are actually being transmitted
+      // (capture and encoding live in Rust; there is no local MediaStream).
+      // No-op when replacing (the viewer already exists).
+      console.info("[screenshare] broadcast started; opening loopback preview");
+      startWatching(ownSession).catch((e) =>
+        console.error("[screenshare] loopback preview failed:", e),
+      );
+    },
+    [ownSession],
+  );
+
+  const changeSettings = useCallback((settings: StreamSettings) => {
+    if (!broadcasterSource) return;
+    if (
+      settings.maxDimension === broadcasterSettings.maxDimension &&
+      settings.maxFps === broadcasterSettings.maxFps
+    ) {
+      return;
     }
-  }, [ownSession]);
+    void confirmSource(broadcasterSource.kind, broadcasterSource.id, settings);
+  }, [confirmSource]);
 
   const stopSharingCb = useCallback(() => {
-    // Capture the broadcaster's serverId BEFORE stopBroadcasting()
-    // clears it - the STOP signal must travel through the same
-    // connection that announced the broadcast.
-    const sid = broadcasterServerId;
-    stopBroadcasting();
-    setStream(null);
-    useAppStore.setState((s) => {
-      const next = new Set(s.broadcastingSessions);
-      if (ownSession) next.delete(ownSession);
-      return { isSharingOwn: false, broadcastingOwnSession: null, broadcastingSessions: next };
-    });
-    if (ownSession) {
-      broadcastSignal(SIGNAL_STOP, "", sid);
-    }
-  }, [ownSession]);
+    broadcasterSource = null;
+    endOwnBroadcast("user stopped");
+  }, []);
 
   // Auto-connect to all active broadcasters in our channel so streams are
   // ready before the user clicks into focus view, and disconnect from
@@ -812,12 +789,17 @@ export function useScreenShare(): ScreenShareHook {
     isBroadcastingFromOtherTab,
     broadcastingSessions,
     watchingSession,
-    // Only expose the captured MediaStream to the tab that actually owns it.
+    // Only expose the loopback stream to the tab that owns the broadcast.
     // Other tabs in the same window must never see it - otherwise their
     // ChatView would render an `OwnBroadcastPreview` over a stream that
     // belongs to a different connection.
-    localStream: isBroadcasting ? stream : null,
+    localStream: isBroadcasting ? loopbackStream : null,
+    pickerOpen,
+    settings: broadcasterSettings,
     startSharing,
+    cancelPicker,
+    confirmSource,
+    changeSettings,
     stopSharing: stopSharingCb,
     watchBroadcast,
     stopWatching: stopWatchingCb,

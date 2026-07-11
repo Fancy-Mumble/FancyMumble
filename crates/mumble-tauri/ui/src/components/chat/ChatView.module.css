@@ -117,9 +117,13 @@
   transition: background 0.2s, border-color 0.2s;
 }
 
+/* Streaming leaves the in-app header visually untouched: the "you are
+   sharing" indicator is the red bar pinned to the SHARED window/screen
+   itself (see mumble-tauri's share_indicator), not app chrome. The class
+   stays defined (empty) so ChatHeader's className lookup keeps resolving. */
 .headerStreaming {
-  background: var(--color-surface-1);
-  border-bottom-color: var(--color-danger-alt-border);
+  /* intentionally empty */
+  --streaming: 1;
 }
 
 /* --- Broadcaster info (shown when streaming) -------------------- */
