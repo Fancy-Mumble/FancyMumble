@@ -36,6 +36,27 @@ pub mod qobject {
         include!("cxx-qt-lib/qstring.h");
         /// Qt's UTF-16 string type (from cxx-qt-lib).
         type QString = cxx_qt_lib::QString;
+
+        include!("cxx-qt-lib/qimage.h");
+        /// Qt's image type (from cxx-qt-lib); decode/scale are exposed by
+        /// the wrapper, the encode leaves below come from cpp/image_codec.
+        type QImage = cxx_qt_lib::QImage;
+
+        include!("image_codec.h");
+        /// Encode `img` as JPEG at `quality` (1-100); raw base64, no
+        /// `data:` prefix. Empty when encoding fails.
+        pub fn image_to_jpeg_base64(img: &QImage, quality: i32) -> QString;
+        /// Base64-encode raw bytes (pass-through image path).
+        pub fn bytes_to_base64(bytes: &[u8]) -> QString;
+        /// Persist a data URL's payload into the per-process spill dir and
+        /// return the file path (empty on failure). See media::spill_images.
+        pub fn data_url_to_spill_file(data_url: &QString) -> QString;
+        /// Save an image to a file (format from the extension); used for
+        /// the on-disk thumbnails of large spilled images.
+        pub fn qimage_save_file(img: &QImage, path: &QString, quality: i32) -> bool;
+        /// Local path for the clipboard's image (copied file path or a
+        /// temp PNG of raster data); empty when none. GUI thread only.
+        pub fn clipboard_image_path() -> QString;
     }
 
     extern "RustQt" {
@@ -86,6 +107,44 @@ pub mod qobject {
         /// Send a chat text message to the current channel.
         #[qinvokable]
         fn send_message(self: Pin<&mut Backend>, text: &QString);
+
+        /// Send staged image files (`paths_json`: JSON array of local file
+        /// paths) as one gallery, captioned by `caption` (markdown).
+        /// `compressed` picks the smaller per-image byte budget - the same
+        /// Full quality / Compressed toggle as the web client's tray.
+        #[qinvokable]
+        fn send_images(
+            self: Pin<&mut Backend>,
+            paths_json: &QString,
+            caption: &QString,
+            compressed: bool,
+        );
+
+        /// Local path for an image on the clipboard (empty when none);
+        /// backs Ctrl+V image paste in the composer.
+        #[qinvokable]
+        fn paste_image_path(self: Pin<&mut Backend>) -> QString;
+
+        /// Ask the server for a user's stats; the answer arrives via the
+        /// `user_stats` signal (hover card's online/idle pills).
+        #[qinvokable]
+        fn request_user_stats(self: Pin<&mut Backend>, session: i32);
+
+        /// Set our avatar from a local image file (empty path clears it).
+        #[qinvokable]
+        fn set_avatar(self: Pin<&mut Backend>, path: &QString);
+
+        /// Publish our Fancy profile (settings page): status line, banner
+        /// color/image (local file path, "" = none) and bio (markdown).
+        /// Unedited profile fields are preserved.
+        #[qinvokable]
+        fn save_profile(
+            self: Pin<&mut Backend>,
+            status: &QString,
+            banner_color: &QString,
+            banner_image_path: &QString,
+            bio: &QString,
+        );
 
         /// Move ourselves into the channel with the given id.
         #[qinvokable]
@@ -138,12 +197,30 @@ pub mod qobject {
         fn persist_hide_empty_channels(self: Pin<&mut Backend>, enabled: bool);
 
         /// Emitted when a chat message arrives (or is echoed back).
+        /// `images` is a JSON array of displayable image sources
+        /// (data:/http(s) URLs) extracted from the HTML body.
         #[qsignal]
-        fn chat_message(self: Pin<&mut Backend>, channel: QString, sender: QString, text: QString);
+        fn chat_message(
+            self: Pin<&mut Backend>,
+            channel: QString,
+            sender: QString,
+            text: QString,
+            images: QString,
+        );
 
         /// Emitted for user-facing log/diagnostic lines.
         #[qsignal]
         fn log_message(self: Pin<&mut Backend>, line: QString);
+
+        /// A user's server stats (seconds; -1 = unknown), answering
+        /// `request_user_stats`.
+        #[qsignal]
+        fn user_stats(
+            self: Pin<&mut Backend>,
+            session: i32,
+            onlinesecs: i32,
+            idlesecs: i32,
+        );
     }
 
     impl cxx_qt::Threading for Backend {}
@@ -213,6 +290,48 @@ impl qobject::Backend {
         if !text.trim().is_empty() {
             self.core.clone().send_message(text);
         }
+    }
+
+    fn send_images(
+        self: Pin<&mut Self>,
+        paths_json: &QString,
+        caption: &QString,
+        compressed: bool,
+    ) {
+        let paths: Vec<String> =
+            serde_json::from_str(&paths_json.to_string()).unwrap_or_default();
+        if !paths.is_empty() {
+            self.core.clone().send_images(paths, caption.to_string(), compressed);
+        }
+    }
+
+    fn paste_image_path(self: Pin<&mut Self>) -> QString {
+        qobject::clipboard_image_path()
+    }
+
+    fn request_user_stats(self: Pin<&mut Self>, session: i32) {
+        if session >= 0 {
+            self.core.clone().request_user_stats(session as u32);
+        }
+    }
+
+    fn set_avatar(self: Pin<&mut Self>, path: &QString) {
+        self.core.clone().set_avatar(path.to_string());
+    }
+
+    fn save_profile(
+        self: Pin<&mut Self>,
+        status: &QString,
+        banner_color: &QString,
+        banner_image_path: &QString,
+        bio: &QString,
+    ) {
+        self.core.clone().save_profile(
+            status.to_string(),
+            banner_color.to_string(),
+            banner_image_path.to_string(),
+            bio.to_string(),
+        );
     }
 
     fn join_channel(self: Pin<&mut Self>, channel_id: i32) {
@@ -292,8 +411,12 @@ impl qobject::Backend {
     }
 
     fn persist_hide_empty_channels(mut self: Pin<&mut Self>, enabled: bool) {
+        // Update the property synchronously (this drives the UI) but persist
+        // off the Qt thread: writing preferences.json (read + parse +
+        // serialize + write) must never block the toggle. store's write lock
+        // keeps concurrent toggles from racing the file.
         self.as_mut().set_hide_empty_channels(enabled);
-        crate::store::set_hide_empty_channels(enabled);
+        std::thread::spawn(move || crate::store::set_hide_empty_channels(enabled));
     }
 
     /// Reload the shared saved-server list into the QML-facing property

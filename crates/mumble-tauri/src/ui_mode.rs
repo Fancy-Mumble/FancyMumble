@@ -122,17 +122,22 @@ fn find_qt6ui_binary() -> Option<PathBuf> {
     }
 
     // Dev layout: walk up towards the workspace root and probe the
-    // out-of-workspace qt6ui target dir.
+    // out-of-workspace qt6ui target dir. Prefer the *newest* of the
+    // release/debug builds by mtime rather than a fixed profile order:
+    // in the dev loop the freshly-rebuilt profile (usually debug) must win
+    // over a stale one, otherwise the launcher runs old code. (This matters
+    // more now that the mumble-tauri build script skips the nested qt6ui
+    // rebuild in dev — see its build.rs.)
     let mut dir = exe_dir.as_path();
     for _ in 0..4 {
-        for profile in ["release", "debug"] {
-            let candidate = dir
-                .join("crates/qt6ui/target")
-                .join(profile)
-                .join(&exe_name);
-            if candidate.is_file() {
-                return Some(candidate);
-            }
+        let base = dir.join("crates/qt6ui/target");
+        let newest = ["release", "debug"]
+            .iter()
+            .map(|profile| base.join(profile).join(&exe_name))
+            .filter(|p| p.is_file())
+            .max_by_key(|p| p.metadata().and_then(|m| m.modified()).ok());
+        if let Some(candidate) = newest {
+            return Some(candidate);
         }
         dir = dir.parent()?;
     }
@@ -211,6 +216,23 @@ pub(crate) fn launch_minimal_client() -> Result<(), String> {
         path.push(std::env::var_os("PATH").unwrap_or_default());
         let _ = cmd.env("PATH", path);
         tracing::info!("qt6ui: prepending Qt runtime {} to child PATH", qt_bin.display());
+    }
+
+    // Fully detach the child from any console this process is attached to
+    // (`cargo run` / `cargo tauri dev`): with inherited handles, debug
+    // builds of qt6ui (console subsystem) keep the dev terminal captive
+    // until the qt6ui window closes - and closing that terminal kills the
+    // minimal client with it. DETACHED_PROCESS also stops Windows from
+    // popping a brand-new console window for the debug child.
+    let _ = cmd
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        let _ = cmd.creation_flags(DETACHED_PROCESS);
     }
 
     let mut child = cmd

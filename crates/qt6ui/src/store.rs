@@ -83,7 +83,13 @@ pub fn hide_empty_channels() -> bool {
 }
 
 /// Persist `preferences.hideEmptyChannels`, preserving all other keys.
+///
+/// Safe to call from a background thread (see the bridge's
+/// `persist_hide_empty_channels`): the read-modify-write is serialised by a
+/// lock so overlapping toggles cannot interleave and corrupt the file.
 pub fn set_hide_empty_channels(enabled: bool) {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut store = read_store(PREFERENCES_FILE);
     if !store["preferences"].is_object() {
         store["preferences"] = json!({});

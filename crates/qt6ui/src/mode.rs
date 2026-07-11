@@ -85,7 +85,22 @@ pub fn switch_to_full_mode() -> bool {
         );
         return false;
     };
-    match Command::new(&bin).spawn() {
+    let mut cmd = Command::new(&bin);
+    // Never tether the full client to our console: debug builds of this
+    // client run with a console window, and inherited handles would keep
+    // that terminal open for as long as the full client lives - and
+    // closing the terminal would kill the full client with it
+    // (CTRL_CLOSE_EVENT goes to every attached process).
+    cmd.stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        cmd.creation_flags(DETACHED_PROCESS);
+    }
+    match cmd.spawn() {
         Ok(_) => {
             tracing::info!("switching to full client: {}", bin.display());
             true
