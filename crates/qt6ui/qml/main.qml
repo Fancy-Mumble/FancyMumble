@@ -29,7 +29,11 @@ ApplicationWindow {
     // once for both clients.
     title: backend.t("common.brand")
 
-    Backend { id: backend }
+    Backend {
+        id: backend
+        // No-op unless FANCY_QT6UI_E2E_PORT is set (e2e control channel).
+        Component.onCompleted: backend.e2e_start()
+    }
 
     // ---- Design tokens (themes/dark.css, theme.css) --------------------
     QtObject {

@@ -11,6 +11,7 @@
 mod app;
 mod bridge;
 mod constants;
+mod e2e;
 mod events;
 mod i18n;
 mod mode;

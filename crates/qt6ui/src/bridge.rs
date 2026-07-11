@@ -95,6 +95,12 @@ pub mod qobject {
         #[qinvokable]
         fn set_voice_enabled(self: Pin<&mut Backend>, enabled: bool);
 
+        /// Start the env-gated e2e control channel (see `src/e2e.rs`).
+        /// Called once from QML `Component.onCompleted`; a no-op unless
+        /// `FANCY_QT6UI_E2E_PORT` is set.
+        #[qinvokable]
+        fn e2e_start(self: Pin<&mut Backend>);
+
         /// Persist the `full` ui-mode marker and start the full (Tauri)
         /// client. Returns `true` when the full client was spawned - the
         /// QML side should then `Qt.quit()`. On `false` this client keeps
@@ -171,7 +177,8 @@ impl Default for BackendRust {
 impl qobject::Backend {
     /// Delegate: start connecting.  Captures a `CxxQtThread` handle so the
     /// background tasks can push UI updates back onto the Qt thread.
-    fn connect_to_server(
+    /// `pub(crate)` so the e2e control channel drives the same code path.
+    pub(crate) fn connect_to_server(
         self: Pin<&mut Self>,
         host: &QString,
         port: i32,
@@ -191,8 +198,14 @@ impl qobject::Backend {
         );
     }
 
-    fn disconnect_from_server(self: Pin<&mut Self>) {
+    /// `pub(crate)` so the e2e control channel drives the same code path.
+    pub(crate) fn disconnect_from_server(self: Pin<&mut Self>) {
         self.core.clone().disconnect();
+    }
+
+    /// Start the e2e control channel (no-op without `FANCY_QT6UI_E2E_PORT`).
+    fn e2e_start(self: Pin<&mut Self>) {
+        crate::e2e::maybe_start(self.qt_thread());
     }
 
     fn send_message(self: Pin<&mut Self>, text: &QString) {
