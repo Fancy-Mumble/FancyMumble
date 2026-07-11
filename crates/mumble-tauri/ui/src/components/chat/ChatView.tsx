@@ -847,6 +847,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     dragTarget,
     addFromFile,
     removeAttachment,
+    toggleSpoiler,
   } = useDragDropAttachments({
     enabled: canDropAttachments,
     resolveTarget: resolveDragTarget,
@@ -878,6 +879,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     if (images.length > 0) {
       try {
         const resolved: File[] = [];
+        const spoilers: boolean[] = [];
         for (const att of images) {
           let file = att.file;
           if (!file && att.path) {
@@ -885,10 +887,13 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
             const blob = await res.blob();
             file = new File([blob], att.name, { type: blob.type || "image/png" });
           }
-          if (file) resolved.push(file);
+          if (file) {
+            resolved.push(file);
+            spoilers.push(att.spoiler ?? false);
+          }
         }
         if (resolved.length > 0) {
-          await sendMediaGallery(resolved, draft, galleryQuality);
+          await sendMediaGallery(resolved, draft, galleryQuality, spoilers);
           setDraft("");
           captionConsumed = true;
         }
@@ -1418,6 +1423,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       <PendingAttachmentsStrip
         attachments={pendingAttachments}
         onRemove={removeAttachment}
+        onToggleSpoiler={toggleSpoiler}
         onSend={() => void handleSendAndResetTyping()}
         quality={galleryQuality}
         onQualityChange={setGalleryQuality}

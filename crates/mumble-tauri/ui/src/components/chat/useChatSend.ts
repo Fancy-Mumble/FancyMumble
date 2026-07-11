@@ -215,7 +215,13 @@ export function useChatSend({ pendingQuotes, clearQuotes, draft, clearDraft, edi
    *  the per-image budget: full = the server's image limit, compressed = a
    *  smaller target to save bandwidth. */
   const sendMediaGallery = useCallback(
-    async (allFiles: File[], caption: string, quality: GalleryQuality): Promise<void> => {
+    async (
+      allFiles: File[],
+      caption: string,
+      quality: GalleryQuality,
+      /** Per-file spoiler flags, aligned by index with `allFiles`. */
+      spoilers?: boolean[],
+    ): Promise<void> => {
       if (allFiles.length === 0) return;
       if (!isDmMode && selectedChannel === null) return;
 
@@ -285,7 +291,7 @@ export function useChatSend({ pendingQuotes, clearQuotes, draft, clearDraft, edi
             dataUrl = await fitImage(file, perImageBudget);
             sendKind = "image";
           }
-          const media = mediaToHtml(dataUrl, sendKind, file.name || "image");
+          const media = mediaToHtml(dataUrl, sendKind, file.name || "image", spoilers?.[index] ?? false);
           const marker = single ? "" : galleryMarker(groupId, index, files.length);
           const cap = single ? captionHtml : "";
           clearPlaceholderOnce();

@@ -38,7 +38,13 @@
     "qualityFullHint": "Jedes Bild wird in voller Qualität als eigene Nachricht gesendet.",
     "qualityCompressed": "Komprimiert",
     "qualityCompressedHint": "Kleinere, leichtere Bilder senden, um Bandbreite zu sparen.",
-    "preview": "Zum Vergrößern klicken"
+    "preview": "Zum Vergrößern klicken",
+    "markSpoiler": "Als Spoiler markieren",
+    "unmarkSpoiler": "Spoiler-Markierung entfernen"
+  },
+  "spoiler": {
+    "badge": "Spoiler",
+    "reveal": "Spoiler – zum Anzeigen klicken"
   },
   "header": {
     "directMessage": "Direktnachricht",

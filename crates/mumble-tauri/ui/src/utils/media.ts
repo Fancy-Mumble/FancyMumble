@@ -205,18 +205,25 @@ export async function fitImage(
 
 /**
  * Build the HTML string to embed a media file in a Mumble text message.
+ *
+ * When `spoiler` is set, the element carries a `data-spoiler="1"` marker so
+ * the receiving client renders it heavily blurred until clicked. The marker
+ * rides along on the tag itself and survives the server's verbatim message
+ * relay (the same way the message body's `<!-- FANCY_* -->` markers do).
  */
 export function mediaToHtml(
   dataUrl: string,
   kind: MediaKind,
   fileName: string,
+  spoiler = false,
 ): string {
+  const spoilerAttr = spoiler ? ' data-spoiler="1"' : "";
   switch (kind) {
     case "image":
     case "gif":
-      return `<img src="${dataUrl}" alt="${escapeAttr(fileName)}" />`;
+      return `<img src="${dataUrl}" alt="${escapeAttr(fileName)}"${spoilerAttr} />`;
     case "video":
-      return `<video src="${dataUrl}" controls>${escapeAttr(fileName)}</video>`;
+      return `<video src="${dataUrl}" controls${spoilerAttr}>${escapeAttr(fileName)}</video>`;
   }
 }
 

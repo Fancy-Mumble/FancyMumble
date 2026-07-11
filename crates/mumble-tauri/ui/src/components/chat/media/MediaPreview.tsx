@@ -16,8 +16,10 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import styles from "./MediaPreview.module.css";
 import { ExternalLinkGuard } from "../../elements/ExternalLinkGuard";
+import { EyeOffIcon } from "../../../icons";
 import type { TimeFormat } from "../../../types";
 import { formatTimestamp } from "../../../utils/format";
 
@@ -27,6 +29,8 @@ export interface MediaItem {
   kind: "image" | "gif" | "video";
   src: string; // data-URL or remote URL
   alt: string;
+  /** When true, render heavily blurred until the viewer clicks to reveal. */
+  spoiler: boolean;
 }
 
 interface Props {
@@ -65,6 +69,14 @@ const playedGifs = new Set<string>();
 
 /** Cached frozen-frame data URLs so re-mounts don't need to reload. */
 const frozenFrames = new Map<string, string>();
+
+/**
+ * Spoiler thumbnails the viewer has already revealed this session.
+ * Module-scope (like `playedGifs`) so a reveal survives unmount/remount -
+ * e.g. switching to settings and back, or scrolling the message out of view
+ * and back - instead of snapping back to blurred.
+ */
+const revealedSpoilers = new Set<string>();
 
 // --- Helpers ------------------------------------------------------
 
@@ -241,7 +253,7 @@ export function extractMedia(html: string): { cleaned: string; media: MediaItem[
       src.startsWith("data:image/gif") ||
       src.toLowerCase().endsWith(".gif") ||
       (src.toLowerCase().endsWith(".webp") && src.includes("klipy.com"));
-    media.push({ kind: isGif ? "gif" : "image", src, alt: img.alt || "" });
+    media.push({ kind: isGif ? "gif" : "image", src, alt: img.alt || "", spoiler: img.getAttribute("data-spoiler") === "1" });
     img.remove();
   });
 
@@ -252,7 +264,7 @@ export function extractMedia(html: string): { cleaned: string; media: MediaItem[
       vid.querySelector("source")?.getAttribute("src") ??
       "";
     if (!src) return;
-    media.push({ kind: "video", src, alt: "" });
+    media.push({ kind: "video", src, alt: "", spoiler: vid.getAttribute("data-spoiler") === "1" });
     vid.remove();
   });
 
@@ -267,6 +279,17 @@ export function extractMedia(html: string): { cleaned: string; media: MediaItem[
 
 // --- Sub-components -----------------------------------------------
 
+/** Centered "Spoiler" badge overlaid on blurred spoiler media. */
+function SpoilerBadge() {
+  const { t } = useTranslation("chat");
+  return (
+    <span className={styles.spoilerBadge} aria-hidden="true">
+      <EyeOffIcon width={18} height={18} />
+      <span className={styles.spoilerBadgeText}>{t("spoiler.badge")}</span>
+    </span>
+  );
+}
+
 function GifThumb({
   item,
   id,
@@ -276,8 +299,10 @@ function GifThumb({
   id: string;
   timeLabel?: string | null;
 }>) {
+  const { t } = useTranslation("chat");
   const imgRef = useRef<HTMLImageElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [revealed, setRevealed] = useState(() => revealedSpoilers.has(id));
   const [frozen, setFrozen] = useState(() => playedGifs.has(id));
   const [posterSrc, setPosterSrc] = useState<string | null>(
     () => frozenFrames.get(id) ?? null,
@@ -371,6 +396,23 @@ function GifThumb({
     startTimer();
   }, [startTimer]);
 
+  // Spoiler cover: keep the GIF hidden (and never auto-play) behind a heavy
+  // blur until the viewer clicks to reveal.
+  if (item.spoiler && !revealed) {
+    return (
+      <button
+        type="button"
+        className={styles.thumbWrap}
+        onClick={() => { revealedSpoilers.add(id); setRevealed(true); }}
+        aria-label={t("spoiler.reveal")}
+      >
+        <img className={`${styles.thumb} ${styles.spoilerBlurred}`} src={posterSrc ?? item.src} alt="" />
+        <SpoilerBadge />
+        {timeLabel && <span className={styles.timeChip}>{timeLabel}</span>}
+      </button>
+    );
+  }
+
   if (frozen) {
     return (
       <button type="button" className={styles.thumbWrap} onClick={handleToggle}>
@@ -406,16 +448,39 @@ function GifThumb({
 
 function ImageThumb({
   item,
+  id,
   onOpen,
   timeLabel,
 }: Readonly<{
   item: MediaItem;
+  id: string;
   onOpen: () => void;
   timeLabel?: string | null;
 }>) {
+  const { t } = useTranslation("chat");
+  const [revealed, setRevealed] = useState(() => revealedSpoilers.has(id));
+  const blurred = item.spoiler && !revealed;
+  const handleClick = useCallback(() => {
+    if (blurred) {
+      revealedSpoilers.add(id);
+      setRevealed(true);
+      return;
+    }
+    onOpen();
+  }, [blurred, id, onOpen]);
   return (
-    <button type="button" className={styles.thumbWrap} onClick={onOpen}>
-      <img className={styles.thumb} src={item.src} alt={item.alt} />
+    <button
+      type="button"
+      className={styles.thumbWrap}
+      onClick={handleClick}
+      aria-label={blurred ? t("spoiler.reveal") : undefined}
+    >
+      <img
+        className={`${styles.thumb} ${blurred ? styles.spoilerBlurred : ""}`}
+        src={item.src}
+        alt={blurred ? "" : item.alt}
+      />
+      {blurred && <SpoilerBadge />}
       {timeLabel && <span className={styles.timeChip}>{timeLabel}</span>}
     </button>
   );
@@ -423,17 +488,35 @@ function ImageThumb({
 
 function VideoThumb({
   item,
+  id,
   onOpen,
   timeLabel,
 }: Readonly<{
   item: MediaItem;
+  id: string;
   onOpen: () => void;
   timeLabel?: string | null;
 }>) {
+  const { t } = useTranslation("chat");
+  const [revealed, setRevealed] = useState(() => revealedSpoilers.has(id));
+  const blurred = item.spoiler && !revealed;
+  const handleClick = useCallback(() => {
+    if (blurred) {
+      revealedSpoilers.add(id);
+      setRevealed(true);
+      return;
+    }
+    onOpen();
+  }, [blurred, id, onOpen]);
   return (
-    <button type="button" className={styles.thumbWrap} onClick={onOpen}>
-      <video className={styles.thumb} src={item.src} muted preload="metadata" />
-      <span className={styles.playBadge}>&#x25B6;</span>
+    <button
+      type="button"
+      className={styles.thumbWrap}
+      onClick={handleClick}
+      aria-label={blurred ? t("spoiler.reveal") : undefined}
+    >
+      <video className={`${styles.thumb} ${blurred ? styles.spoilerBlurred : ""}`} src={item.src} muted preload="metadata" />
+      {blurred ? <SpoilerBadge /> : <span className={styles.playBadge}>&#x25B6;</span>}
       {timeLabel && <span className={styles.timeChip}>{timeLabel}</span>}
     </button>
   );
@@ -579,6 +662,7 @@ export default function MediaPreview({ html, messageId, compact = false, timesta
                 return (
                   <ImageThumb
                     key={key}
+                    id={key}
                     item={item}
                     onOpen={() => openLightbox(i)}
                     timeLabel={itemTimeLabel}
@@ -588,6 +672,7 @@ export default function MediaPreview({ html, messageId, compact = false, timesta
                 return (
                   <VideoThumb
                     key={key}
+                    id={key}
                     item={item}
                     onOpen={() => openLightbox(i)}
                     timeLabel={itemTimeLabel}
