@@ -28,7 +28,7 @@ function newId(): string {
 /** Build a pending attachment from a Tauri file path. */
 function attachmentFromPath(path: string): PendingAttachment {
   const name = fileNameFromPath(path);
-  return { id: newId(), path, file: null, name, isImage: isImageName(name) };
+  return { id: newId(), path, file: null, name, isImage: isImageName(name), spoiler: false };
 }
 
 /** Build a pending attachment from a browser File blob. */
@@ -40,6 +40,7 @@ function attachmentFromFile(file: File): PendingAttachment {
     file,
     name,
     isImage: file.type.startsWith("image/") || isImageName(name),
+    spoiler: false,
   };
 }
 
@@ -60,6 +61,8 @@ interface UseDragDropAttachmentsResult {
   readonly dragTarget: DragRegion;
   readonly addFromFile: (file: File) => void;
   readonly removeAttachment: (id: string) => void;
+  /** Flip the spoiler flag on one pending image attachment. */
+  readonly toggleSpoiler: (id: string) => void;
   readonly clearAttachments: () => void;
 }
 
@@ -83,6 +86,12 @@ export function useDragDropAttachments({
 
   const removeAttachment = useCallback((id: string) => {
     setAttachments((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+
+  const toggleSpoiler = useCallback((id: string) => {
+    setAttachments((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, spoiler: !a.spoiler } : a)),
+    );
   }, []);
 
   const clearAttachments = useCallback(() => setAttachments([]), []);
@@ -139,5 +148,5 @@ export function useDragDropAttachments({
     };
   }, [enabled, resolveTarget, onLiveDocFiles]);
 
-  return { attachments, setAttachments, dragTarget, addFromFile, removeAttachment, clearAttachments };
+  return { attachments, setAttachments, dragTarget, addFromFile, removeAttachment, toggleSpoiler, clearAttachments };
 }

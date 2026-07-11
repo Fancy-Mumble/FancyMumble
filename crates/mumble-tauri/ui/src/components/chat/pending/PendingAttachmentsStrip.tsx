@@ -1,7 +1,7 @@
 import { useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { CloseIcon, FileIcon, ImageIcon, SendIcon } from "../../../icons";
+import { CloseIcon, EyeIcon, EyeOffIcon, FileIcon, ImageIcon, SendIcon } from "../../../icons";
 import type { GalleryQuality } from "../../../utils/media";
 import styles from "../ChatView.module.css";
 
@@ -17,11 +17,16 @@ export interface PendingAttachment {
   name: string;
   /** True when the attachment is a previewable image/gif. */
   isImage: boolean;
+  /** When true, the image is sent as a spoiler (heavily blurred until the
+   *  viewer clicks to reveal). Only meaningful for images. */
+  spoiler?: boolean;
 }
 
 interface Props {
   readonly attachments: PendingAttachment[];
   readonly onRemove: (id: string) => void;
+  /** Toggle the spoiler flag on an image attachment. */
+  readonly onToggleSpoiler?: (id: string) => void;
   readonly onSend: () => void;
   /** Current gallery quality mode (only meaningful when images are staged). */
   readonly quality?: GalleryQuality;
@@ -38,7 +43,7 @@ function rawPreviewSrc(att: PendingAttachment): string | null {
   return null;
 }
 
-export default function PendingAttachmentsStrip({ attachments, onRemove, onSend, quality, onQualityChange, onPreview, disabled }: Props) {
+export default function PendingAttachmentsStrip({ attachments, onRemove, onToggleSpoiler, onSend, quality, onQualityChange, onPreview, disabled }: Props) {
   const { t } = useTranslation("chat");
   // Build preview URLs once per attachment set and revoke object URLs on
   // change/unmount so repeated renders don't leak blobs.
@@ -72,12 +77,12 @@ export default function PendingAttachmentsStrip({ attachments, onRemove, onSend,
                   title={t("pendingAttachments.preview")}
                   aria-label={t("pendingAttachments.preview")}
                 >
-                  <img src={src} alt={att.name} className={styles.pendingAttachImg} />
+                  <img src={src} alt={att.name} className={`${styles.pendingAttachImg} ${att.spoiler ? styles.pendingAttachImgSpoiler : ""}`} />
                 </button>
               ) : (
                 <div className={styles.pendingAttachThumb}>
                   {src
-                    ? <img src={src} alt={att.name} className={styles.pendingAttachImg} />
+                    ? <img src={src} alt={att.name} className={`${styles.pendingAttachImg} ${att.spoiler ? styles.pendingAttachImgSpoiler : ""}`} />
                     : <FileIcon width={28} height={28} />}
                 </div>
               )}
@@ -89,6 +94,20 @@ export default function PendingAttachmentsStrip({ attachments, onRemove, onSend,
                     : <><FileIcon width={12} height={12} /> {t("pendingAttachments.kindFile")}</>}
                 </span>
               </div>
+              {att.isImage && onToggleSpoiler && (
+                <button
+                  type="button"
+                  className={`${styles.pendingAttachSpoiler} ${att.spoiler ? styles.pendingAttachSpoilerActive : ""}`}
+                  onClick={() => onToggleSpoiler(att.id)}
+                  aria-pressed={att.spoiler ?? false}
+                  aria-label={att.spoiler ? t("pendingAttachments.unmarkSpoiler") : t("pendingAttachments.markSpoiler")}
+                  title={att.spoiler ? t("pendingAttachments.unmarkSpoiler") : t("pendingAttachments.markSpoiler")}
+                >
+                  {att.spoiler
+                    ? <EyeOffIcon width={14} height={14} />
+                    : <EyeIcon width={14} height={14} />}
+                </button>
+              )}
               <button
                 type="button"
                 className={styles.pendingAttachRemove}

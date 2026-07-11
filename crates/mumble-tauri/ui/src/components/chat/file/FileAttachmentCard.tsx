@@ -348,7 +348,7 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
       </div>
       {lightboxOpen && previewSrc && kind === "image" && createPortal(
         <MediaLightbox
-          item={{ kind: "image", src: previewSrc, alt: info.filename }}
+          item={{ kind: "image", src: previewSrc, alt: info.filename, spoiler: false }}
           onClose={closeLightbox}
         />,
         document.body,

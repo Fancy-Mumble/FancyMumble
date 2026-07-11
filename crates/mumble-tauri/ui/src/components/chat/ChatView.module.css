@@ -1727,6 +1727,35 @@
   color: var(--color-text-primary);
 }
 
+.pendingAttachSpoiler {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.pendingAttachSpoiler:hover {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+}
+
+.pendingAttachSpoilerActive,
+.pendingAttachSpoilerActive:hover {
+  background: var(--color-accent, rgba(100, 150, 255, 0.2));
+  color: var(--color-text-primary);
+}
+
+/* Preview cue in the tray: blur the staged thumbnail while it is marked. */
+.pendingAttachImgSpoiler {
+  filter: blur(8px);
+}
+
 .pendingAttachSend {
   display: inline-flex;
   align-items: center;

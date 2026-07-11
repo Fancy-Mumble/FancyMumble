@@ -38,6 +38,8 @@ export {
   Pencil as EditIcon,
   SmilePlus as EmojiPlusIcon,
   CircleAlert as ErrorCircleIcon,
+  Eye as EyeIcon,
+  EyeOff as EyeOffIcon,
   Folder as FolderIcon,
   Minimize as FullscreenExitIcon,
   Maximize as FullscreenIcon,
