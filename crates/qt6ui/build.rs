@@ -11,7 +11,7 @@ use cxx_qt_build::{CxxQtBuilder, QmlModule};
 /// Locale namespaces this client embeds from the full client's bundles
 /// (`crates/mumble-tauri/ui/src/locales/{lang}/{ns}.json`). Kept to the
 /// namespaces the QML actually uses so the binary stays small.
-const LOCALE_NAMESPACES: &[&str] = &["common", "server", "sidebar", "chat"];
+const LOCALE_NAMESPACES: &[&str] = &["common", "server", "sidebar", "chat", "settings"];
 
 fn main() {
     generate_shared_constants_and_locales();
@@ -24,14 +24,18 @@ fn main() {
             ..Default::default()
         })
         // Hand-written C++: the QSyntaxHighlighter that decorates the chat
-        // input (parsing itself is in Rust via the bridge). QQuickTextDocument
-        // lives in the Quick module.
+        // input (parsing itself is in Rust via the bridge) and the image
+        // codec leaves for image messages (fit strategy in src/media.rs).
+        // QQuickTextDocument lives in the Quick module.
         .qt_module("Quick")
         .qobject_header("cpp/markdown_highlighter.h")
         .cc_builder(|cc| {
             cc.file("cpp/markdown_highlighter.cpp");
+            cc.file("cpp/image_codec.cpp");
             cc.include("cpp");
             println!("cargo:rerun-if-changed=cpp/markdown_highlighter.cpp");
+            println!("cargo:rerun-if-changed=cpp/image_codec.cpp");
+            println!("cargo:rerun-if-changed=cpp/image_codec.h");
         })
         .build();
 

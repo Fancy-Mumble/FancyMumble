@@ -59,6 +59,14 @@ pub struct Shared {
     pub current_channel: Option<u32>,
     /// Our own display name, for locally echoing sent messages.
     pub own_name: String,
+    /// Server limits from `ServerConfig` (0 = not announced): max bytes for
+    /// an image message and for a plain text message.
+    pub max_image_bytes: u32,
+    pub max_message_bytes: u32,
+    /// Our own raw comment as last seen on the wire, kept so the settings
+    /// page can update single profile fields without wiping the ones it
+    /// does not edit (nameStyle, themeColors, ... set in the full client).
+    pub own_comment: String,
 }
 
 /// The application core.  Held behind an `Arc` inside the `Backend` QObject.
@@ -246,8 +254,10 @@ impl AppCore {
         let channel = channel.unwrap_or(0);
         let body = fancy_utils::markdown::markdown_to_html(&text);
         if let Some(ui) = ui {
-            let display = fancy_utils::markdown::sanitize_styled_text(&body);
-            ui_emit_chat(&ui, channel.to_string(), own_name, display);
+            let (display_html, images) = crate::media::extract_images(&body);
+            let display = fancy_utils::markdown::sanitize_styled_text(&display_html);
+            let images_json = serde_json::json!(crate::media::spill_images(images)).to_string();
+            ui_emit_chat(&ui, channel.to_string(), own_name, display, images_json);
         }
         self.rt.spawn(async move {
             let _ = client
@@ -264,12 +274,251 @@ impl AppCore {
         });
     }
 
+    /// Send staged image files as one gallery, captioned by `caption`
+    /// (markdown), mirroring the web client's `useChatSend.sendMediaGallery`:
+    /// each image goes out as its own full-quality message carrying a shared
+    /// gallery marker; a multi-image gallery's caption becomes its own
+    /// leading message while a single image keeps it inline. `compressed`
+    /// targets a third of the server's image budget to save bandwidth.
+    ///
+    /// The (possibly multi-second) fit/encode work runs on a dedicated
+    /// thread: the single-worker tokio runtime also drives the outbound
+    /// voice loop and must never stall on JPEG re-encoding.
+    pub fn send_images(self: Arc<Self>, paths: Vec<String>, caption: String, compressed: bool) {
+        let (client, channel, ui, own_name, max_image, max_message) = {
+            let sh = self.lock();
+            (
+                sh.client.clone(),
+                sh.current_channel,
+                sh.ui.clone(),
+                sh.own_name.clone(),
+                sh.max_image_bytes,
+                sh.max_message_bytes,
+            )
+        };
+        let Some(client) = client else { return };
+        let channel = channel.unwrap_or(0);
+
+        let dropped = paths.len().saturating_sub(crate::media::MAX_GALLERY_IMAGES);
+        let paths: Vec<String> =
+            paths.into_iter().take(crate::media::MAX_GALLERY_IMAGES).collect();
+        if dropped > 0 {
+            if let Some(ui) = &ui {
+                ui_log(
+                    ui,
+                    format!(
+                        "Only the first {} images were sent.",
+                        crate::media::MAX_GALLERY_IMAGES
+                    ),
+                );
+            }
+        }
+
+        // 0 means "no special image limit" -> fall back to message_length
+        // (and a sane default when the server announced neither).
+        let max_bytes = if max_image > 0 {
+            max_image as usize
+        } else if max_message > 0 {
+            max_message as usize
+        } else {
+            131_072
+        };
+        let per_image = if compressed { (max_bytes / 3).max(60_000) } else { max_bytes };
+
+        let caption = caption.trim().to_owned();
+        let caption_html = if caption.is_empty() {
+            String::new()
+        } else {
+            fancy_utils::markdown::markdown_to_html(&caption)
+        };
+        let caption_text = fancy_utils::markdown::sanitize_styled_text(&caption_html);
+
+        let rt = self.rt.handle().clone();
+        std::thread::spawn(move || {
+            let single = paths.len() == 1;
+            let total = paths.len();
+            let group = if single { String::new() } else { crate::media::new_gallery_id() };
+            let mut bodies: Vec<String> = Vec::with_capacity(total + 1);
+
+            // For a gallery the caption is its own leading message so every
+            // tile stays a uniform image; a single image keeps it inline.
+            if !single && !caption_html.is_empty() {
+                bodies.push(caption_html.clone());
+                if let Some(ui) = &ui {
+                    ui_emit_chat(
+                        ui,
+                        channel.to_string(),
+                        own_name.clone(),
+                        caption_text.clone(),
+                        "[]".to_owned(),
+                    );
+                }
+            }
+
+            for (index, path) in paths.iter().enumerate() {
+                match crate::media::fit_image_file(path, per_image) {
+                    Ok(data_url) => {
+                        let name = path.rsplit(['/', '\\']).next().unwrap_or("image");
+                        let img_html = format!(
+                            "<img src=\"{data_url}\" alt=\"{}\" />",
+                            crate::media::escape_attr(name)
+                        );
+                        let marker = if single {
+                            String::new()
+                        } else {
+                            crate::media::gallery_marker(&group, index, total)
+                        };
+                        let cap = if single { caption_html.as_str() } else { "" };
+                        bodies.push(format!("{marker}{cap}{img_html}"));
+                        if let Some(ui) = &ui {
+                            let text = if single { caption_text.clone() } else { String::new() };
+                            // Echo through the disk spill too - the model
+                            // must never retain the base64 payload.
+                            let spilled = crate::media::spill_images(vec![data_url]);
+                            let images_json = serde_json::json!(spilled).to_string();
+                            ui_emit_chat(ui, channel.to_string(), own_name.clone(), text, images_json);
+                        }
+                    }
+                    Err(e) => {
+                        if let Some(ui) = &ui {
+                            ui_log(ui, format!("Failed to send images: {e}"));
+                        }
+                    }
+                }
+            }
+
+            // One task sends everything in order so the gallery arrives in
+            // sequence on the wire.
+            rt.spawn(async move {
+                for message in bodies {
+                    let _ = client
+                        .send(SendTextMessage {
+                            channel_ids: vec![channel],
+                            user_sessions: vec![],
+                            tree_ids: vec![],
+                            message,
+                            message_id: None,
+                            timestamp: None,
+                            edit_id: None,
+                        })
+                        .await;
+                }
+            });
+        });
+    }
+
     /// Move ourselves into `channel_id`.
     pub fn join_channel(&self, channel_id: u32) {
         let client = self.lock().client.clone();
         let Some(client) = client else { return };
         self.rt.spawn(async move {
             let _ = client.send(JoinChannel { channel_id, password: None }).await;
+        });
+    }
+
+    /// Set (or clear, with an empty path) our avatar: the image file is
+    /// fitted to the server's image budget and sent as the Mumble texture.
+    /// The server echoes it back in a `UserState`, which flows through the
+    /// normal absorb/spill path and refreshes every avatar in the UI.
+    pub fn set_avatar(self: Arc<Self>, path: String) {
+        let (client, ui, max_image) = {
+            let sh = self.lock();
+            (sh.client.clone(), sh.ui.clone(), sh.max_image_bytes)
+        };
+        let Some(client) = client else { return };
+        let rt = self.rt.handle().clone();
+        std::thread::spawn(move || {
+            let texture = if path.is_empty() {
+                Vec::new() // clears the avatar
+            } else {
+                let budget = if max_image > 0 { max_image as usize } else { 131_072 };
+                match crate::media::fit_image_file_bytes(&path, budget) {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        if let Some(ui) = &ui {
+                            ui_log(ui, format!("Failed to set avatar: {e}"));
+                        }
+                        return;
+                    }
+                }
+            };
+            rt.spawn(async move {
+                let _ = client.send(mumble_protocol::command::SetTexture { texture }).await;
+            });
+        });
+    }
+
+    /// Update our Fancy profile (status, banner, bio) and publish it as
+    /// the Mumble comment. Fields this client does not edit (nameStyle,
+    /// themeColors, ...) are preserved from the last comment on the wire.
+    /// `banner_image_path` is a local file ("" = no banner image).
+    pub fn save_profile(
+        self: Arc<Self>,
+        status: String,
+        banner_color: String,
+        banner_image_path: String,
+        bio_markdown: String,
+    ) {
+        let (client, ui, own_comment) = {
+            let sh = self.lock();
+            (sh.client.clone(), sh.ui.clone(), sh.own_comment.clone())
+        };
+        let Some(client) = client else { return };
+        let rt = self.rt.handle().clone();
+        std::thread::spawn(move || {
+            let (existing, _) = crate::profile::split_comment(&own_comment);
+            let mut profile = existing.unwrap_or_else(|| serde_json::json!({}));
+            profile["v"] = serde_json::json!(1);
+
+            let status = status.trim();
+            if status.is_empty() {
+                profile.as_object_mut().map(|o| o.remove("status"));
+            } else {
+                profile["status"] = serde_json::json!(status);
+            }
+
+            let mut banner = serde_json::Map::new();
+            if !banner_color.trim().is_empty() {
+                banner.insert("color".into(), serde_json::json!(banner_color.trim()));
+            }
+            if !banner_image_path.is_empty() {
+                // The banner rides inside the comment: keep it well under
+                // the server's image budget so the whole comment fits.
+                match crate::media::fit_image_file(&banner_image_path, 98_304) {
+                    Ok(data_url) => {
+                        banner.insert("image".into(), serde_json::json!(data_url));
+                    }
+                    Err(e) => {
+                        if let Some(ui) = &ui {
+                            ui_log(ui, format!("Failed to set banner: {e}"));
+                        }
+                    }
+                }
+            }
+            if banner.is_empty() {
+                profile.as_object_mut().map(|o| o.remove("banner"));
+            } else {
+                profile["banner"] = serde_json::Value::Object(banner);
+            }
+
+            let bio = bio_markdown.trim();
+            let bio_html =
+                if bio.is_empty() { String::new() } else { fancy_utils::markdown::markdown_to_html(bio) };
+            let comment = crate::profile::build_comment(&profile, &bio_html);
+
+            rt.spawn(async move {
+                let _ = client.send(mumble_protocol::command::SetComment { comment }).await;
+            });
+        });
+    }
+
+    /// Ask the server for a user's stats (hover card online/idle pills);
+    /// the answer flows back through the `user_stats` signal.
+    pub fn request_user_stats(&self, session: u32) {
+        let client = self.lock().client.clone();
+        let Some(client) = client else { return };
+        self.rt.spawn(async move {
+            let _ = client.send(mumble_protocol::command::RequestUserStats { session }).await;
         });
     }
 
@@ -386,10 +635,22 @@ pub(crate) fn ui_set_self_channel(ui: &CxxQtThread<Backend>, channel: i32) {
     let _ = ui.queue(move |mut o: Pin<&mut Backend>| o.as_mut().set_self_channel(channel));
 }
 
-/// Emit the `chatMessage` signal on the Qt thread.
-pub(crate) fn ui_emit_chat(ui: &CxxQtThread<Backend>, channel: String, sender: String, text: String) {
+/// Emit the `chatMessage` signal on the Qt thread. `images` is a JSON array
+/// of displayable image sources extracted from the message body.
+pub(crate) fn ui_emit_chat(
+    ui: &CxxQtThread<Backend>,
+    channel: String,
+    sender: String,
+    text: String,
+    images: String,
+) {
     let _ = ui.queue(move |mut o: Pin<&mut Backend>| {
-        o.as_mut().chat_message(QString::from(&channel), QString::from(&sender), QString::from(&text));
+        o.as_mut().chat_message(
+            QString::from(&channel),
+            QString::from(&sender),
+            QString::from(&text),
+            QString::from(&images),
+        );
     });
 }
 
@@ -397,4 +658,16 @@ pub(crate) fn ui_emit_chat(ui: &CxxQtThread<Backend>, channel: String, sender: S
 pub(crate) fn ui_log(ui: &CxxQtThread<Backend>, line: String) {
     tracing::info!("{line}");
     let _ = ui.queue(move |mut o: Pin<&mut Backend>| o.as_mut().log_message(QString::from(&line)));
+}
+
+/// Emit the `userStats` signal on the Qt thread (-1 = unknown).
+pub(crate) fn ui_emit_user_stats(
+    ui: &CxxQtThread<Backend>,
+    session: i32,
+    onlinesecs: i32,
+    idlesecs: i32,
+) {
+    let _ = ui.queue(move |mut o: Pin<&mut Backend>| {
+        o.as_mut().user_stats(session, onlinesecs, idlesecs);
+    });
 }

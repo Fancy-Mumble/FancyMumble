@@ -116,11 +116,20 @@ cd crates/qt6ui
 ```
 
 You normally don't need to run this by hand: `mumble-tauri/build.rs` also
-builds this crate (and copies `qt6ui.exe` next to the full client's binary)
-on every `cargo build` / `cargo tauri dev`, the same way it builds
-`signal-bridge`. The step probes for the Qt kit, MinGW and the GNU Rust
-toolchain and skips with a warning when they are missing; set `SKIP_QT6UI=1`
-to opt out explicitly.
+builds this crate (and copies `qt6ui.exe` next to the full client's binary),
+the same way it builds `signal-bridge`. The step probes for the Qt kit,
+MinGW and the GNU Rust toolchain and skips with a warning when they are
+missing; set `SKIP_QT6UI=1` to opt out explicitly.
+
+**Dev-loop note:** in **debug** builds, `mumble-tauri/build.rs` *skips* this
+nested rebuild once a `qt6ui.exe` already exists in `crates/qt6ui/target/`,
+because rebuilding the whole Qt client (a separate toolchain + C++ QML
+codegen) inside the full client's build script stalled every
+`cargo build` / `cargo tauri dev` for minutes at *"Compiling mumble-tauri"*.
+The full client's launcher then picks up whichever of `target/{debug,release}`
+is newest, so **rebuild this crate yourself** (`.\build.ps1`) after changing
+its sources during a debug session. **Release** builds always do the nested
+rebuild (so bundles are fresh); set `FORCE_QT6UI_BUILD=1` to force it in debug.
 
 The helper sets `QMAKE` and prepends the MinGW + Qt `bin` dirs to `PATH`.
 Override locations with the `QT6_MINGW_DIR` / `QT6_MINGW_GCC` env vars.
@@ -145,6 +154,15 @@ at <https://code.qt.io>. Keep Qt dynamically linked (the default here) so
 users can swap in their own Qt build, as the LGPL requires.
 
 ## RAM
+
+**Hard budget: RSS must never exceed 400 MB, and typical (average) usage
+must stay under 200 MB.** Every feature has to fit inside this envelope;
+anything unbounded has to be offloaded to disk and streamed back on demand.
+Chat images follow this rule: message bodies never carry base64 payloads
+into the UI — images are spilled to `{temp}/qt6ui-chat-images/{pid}` (large
+ones with an extra `.thumb.jpg`), the model holds only file paths, bubbles
+decode just the thumbnail while the message is on screen (`sourceSize`-capped,
+uncached), and the full-size file is decoded only while the lightbox is open.
 
 Measured RSS of the release build on Windows (Qt 6.10, idle after load):
 

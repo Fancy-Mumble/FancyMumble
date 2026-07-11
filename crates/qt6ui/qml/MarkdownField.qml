@@ -39,6 +39,12 @@ Item {
     /// Emitted when the user presses Enter (without Shift).
     signal submitted()
 
+    /// Optional hook for Ctrl+V: a function returning true when it consumed
+    /// the paste (e.g. an image was staged into the attachment tray, like
+    /// the web editor's onPaste). Returning false lets the normal text
+    /// paste proceed.
+    property var imagePasteHandler: null
+
     implicitWidth: 200
     implicitHeight: Math.max(40, Math.min(area.implicitHeight, 200))
 
@@ -100,6 +106,11 @@ Item {
                     return
                 }
                 if (event.modifiers & Qt.ControlModifier) {
+                    if (event.key === Qt.Key_V) {
+                        if (root.imagePasteHandler && root.imagePasteHandler())
+                            event.accepted = true // image staged; skip text paste
+                        return
+                    }
                     if (event.key === Qt.Key_B) {
                         event.accepted = true
                         root.wrapSelection("**", "**")

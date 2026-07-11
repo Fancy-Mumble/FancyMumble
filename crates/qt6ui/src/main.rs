@@ -14,6 +14,7 @@ mod constants;
 mod e2e;
 mod events;
 mod i18n;
+mod media;
 mod mode;
 mod profile;
 mod store;
@@ -43,6 +44,10 @@ fn main() {
     // Users who want to trade GPU rendering for ~30 MB less RAM can set
     // `QT_QUICK_BACKEND=software` in the environment.
 
+    // Reclaim chat-image spill dirs left behind by dead sessions (chat
+    // images are offloaded to disk, not held in RAM - see src/media.rs).
+    media::sweep_stale_spill();
+
     let mut app = QGuiApplication::new();
 
     // Hand-written C++ QML types must be registered before the engine
@@ -62,4 +67,12 @@ fn main() {
     if let Some(app) = app.as_mut() {
         app.exec();
     }
+
+    // The window is gone: leave nothing behind. Detached encode threads,
+    // the tokio runtime and audio streams must never keep the process (and
+    // in debug builds its console window) alive past the UI - teardown
+    // hangs here are audio-driver/timing dependent, so exit
+    // deterministically instead of unwinding the world.
+    tracing::info!("event loop finished; exiting");
+    std::process::exit(0);
 }

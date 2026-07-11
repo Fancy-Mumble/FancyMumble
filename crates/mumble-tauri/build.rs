@@ -309,14 +309,40 @@ fn build_qt6ui() {
     println!("cargo:rerun-if-changed=../qt6ui/cpp");
     println!("cargo:rerun-if-changed=../qt6ui/Cargo.toml");
     println!("cargo:rerun-if-env-changed=SKIP_QT6UI");
+    println!("cargo:rerun-if-env-changed=FORCE_QT6UI_BUILD");
     println!("cargo:rerun-if-env-changed=QT6_MINGW_DIR");
     println!("cargo:rerun-if-env-changed=QT6_MINGW_GCC");
+
+    let profile = std::env::var("PROFILE").unwrap_or_else(|_| "debug".to_owned());
+
+    // Dev-loop cost control: rebuilding the entire Qt client inside this
+    // build script stalls `cargo build`/`cargo tauri dev` for minutes at
+    // "Compiling mumble-tauri" every time any qt6ui source changed. In
+    // non-release builds, when a previously-built qt6ui binary exists in
+    // its own target dir, skip the nested build: the launcher's dev-layout
+    // fallback (ui_mode::find_qt6ui_binary) picks that binary up directly,
+    // and qt6ui developers build it themselves (crates/qt6ui/build.ps1).
+    // First runs (no binary yet) still build it, and release builds keep
+    // the always-fresh guarantee for bundling. Set FORCE_QT6UI_BUILD=1 to
+    // opt back into the nested build in dev.
+    if profile != "release" && std::env::var("FORCE_QT6UI_BUILD").is_err() {
+        let exe_name = if cfg!(windows) { "qt6ui.exe" } else { "qt6ui" };
+        let prebuilt = ["release", "debug"]
+            .iter()
+            .map(|p| qt6ui_dir.join("target").join(p).join(exe_name))
+            .find(|p| p.is_file());
+        if let Some(prebuilt) = prebuilt {
+            eprintln!(
+                "skipping nested qt6ui build (dev profile; launcher will use {})",
+                prebuilt.display()
+            );
+            return;
+        }
+    }
 
     let Some((qt, mingw, qmake)) = qt6ui_prerequisites() else {
         return; // warnings already emitted
     };
-
-    let profile = std::env::var("PROFILE").unwrap_or_else(|_| "debug".to_owned());
     let mut path = format!("{mingw}\\bin;{qt}\\bin");
     // CMake-based -sys crates (audiopus_sys) must not pick up a stray
     // `make`/`sh` from the ambient PATH; prefer Qt Tools' Ninja (see
