@@ -89,6 +89,9 @@ oboe = "0.6.1"
 # Windows-only: native window subclassing for aspect-ratio constraints
 # (see crates/mumble-tauri/src/platform/window/windows.rs).
 [target.'cfg(target_os = "windows")'.dependencies]
+# Native WASAPI capture with exclusive-mode support (the "take the device"
+# path used by the exclusive-input setting), shared with the Qt client.
+fancy-audio-device = { path = "../fancy-audio-device" }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",

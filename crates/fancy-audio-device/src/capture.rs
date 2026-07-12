@@ -8,6 +8,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use tracing::{error, warn};
 
 use mumble_protocol::audio::capture::AudioCapture;
+use mumble_protocol::audio::resampler::StreamResampler;
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use mumble_protocol::error::{Error, Result};
 
@@ -27,6 +28,9 @@ pub struct CpalCapture {
     device: cpal::Device,
     /// Number of channels the hardware actually uses.
     hw_channels: u16,
+    /// The device's native sample rate; the stream is opened at this
+    /// rate and resampled to 48 kHz in the callback.
+    hw_rate: u32,
     /// Live input volume multiplier (`f32` bits in `AtomicU32`).
     volume: Arc<AtomicU32>,
     /// Suppresses repeated overflow warnings from the cpal callback.
@@ -77,12 +81,17 @@ impl CpalCapture {
                 .ok_or_else(|| Error::InvalidState("No default input device".into()))?
         };
 
-        // Use the device's preferred channel count so we don't fail on
-        // devices that only support stereo.
+        // Use the device's preferred channel count AND sample rate.
+        // Opening at the native rate and resampling ourselves is
+        // deterministic; requesting 48 kHz instead delegates the
+        // conversion to WASAPI's AUTOCONVERTPCM (or to a virtual driver
+        // that merely relabels the rate), which is exactly what produced
+        // mistimed audio on non-48 kHz devices.
         let default_cfg = device
             .default_input_config()
             .map_err(|e| Error::InvalidState(e.to_string()))?;
         let hw_channels = default_cfg.channels();
+        let hw_rate = default_cfg.sample_rate();
 
         Ok(Self {
             format: AudioFormat::MONO_48KHZ_F32,
@@ -92,6 +101,7 @@ impl CpalCapture {
             stream: None,
             device,
             hw_channels,
+            hw_rate,
             volume,
             overflow_warned: Arc::new(AtomicBool::new(false)),
         })
@@ -103,16 +113,28 @@ fn handle_cpal_input(
     data: &[f32],
     hw_channels: u16,
     overflow_warned: &Arc<AtomicBool>,
+    resampler: &mut StreamResampler,
+    mono_scratch: &mut Vec<f32>,
+    out_scratch: &mut Vec<f32>,
 ) {
-    let Ok(mut buf) = buffer.lock() else { return };
+    // Downmix to mono at the device rate...
+    mono_scratch.clear();
     if hw_channels == 1 {
-        buf.extend(data.iter().copied());
+        mono_scratch.extend_from_slice(data);
     } else {
         for chunk in data.chunks(hw_channels as usize) {
             let sum: f32 = chunk.iter().sum();
-            buf.push_back(sum / hw_channels as f32);
+            mono_scratch.push(sum / hw_channels as f32);
         }
     }
+
+    // ...then convert to the pipeline's 48 kHz world (passthrough when
+    // the device already runs at 48 kHz).
+    out_scratch.clear();
+    resampler.process_into(mono_scratch, out_scratch);
+
+    let Ok(mut buf) = buffer.lock() else { return };
+    buf.extend(out_scratch.iter().copied());
     const MAX_SAMPLES: usize = 9_600;
     if buf.len() > MAX_SAMPLES {
         if !overflow_warned.swap(true, Ordering::Relaxed) {
@@ -173,20 +195,35 @@ impl AudioCapture for CpalCapture {
     fn start(&mut self) -> Result<()> {
         let buffer = self.buffer.clone();
         let hw_channels = self.hw_channels;
+        let hw_rate = self.hw_rate;
         let overflow_warned = self.overflow_warned.clone();
 
         let stream_config = cpal::StreamConfig {
             channels: hw_channels,
-            sample_rate: 48_000,
+            sample_rate: hw_rate,
             buffer_size: cpal::BufferSize::Default,
         };
+        warn!("cpal capture: opening input at native {hw_rate} Hz, {hw_channels} ch (resampling to 48 kHz)");
+
+        let mut resampler = StreamResampler::new(f64::from(hw_rate), 48_000.0)
+            .map_err(|e| Error::InvalidState(format!("resampler init: {e}")))?;
+        let mut mono_scratch: Vec<f32> = Vec::new();
+        let mut out_scratch: Vec<f32> = Vec::new();
 
         let stream = self
             .device
             .build_input_stream(
                 &stream_config,
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                    handle_cpal_input(&buffer, data, hw_channels, &overflow_warned);
+                    handle_cpal_input(
+                        &buffer,
+                        data,
+                        hw_channels,
+                        &overflow_warned,
+                        &mut resampler,
+                        &mut mono_scratch,
+                        &mut out_scratch,
+                    );
                 },
                 |err| error!("cpal input error: {err}"),
                 None,

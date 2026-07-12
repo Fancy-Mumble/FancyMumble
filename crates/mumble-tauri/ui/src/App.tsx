@@ -215,6 +215,11 @@ function MainApp() {
         const cfg = await invoke<AudioSettings>("get_audio_settings");
         const merged: AudioSettings = { ...cfg, ...saved };
         await invoke("set_audio_settings", { settings: merged });
+        // Probe the mic once at startup so a persisted "device in use"
+        // condition (e.g. exclusive mode with another app holding it) is
+        // reflected immediately - including the sidebar mic button - before
+        // the user opens settings or enables voice.
+        await invoke("probe_microphone");
       } catch (e) {
         console.error("Startup audio settings error:", e);
       }

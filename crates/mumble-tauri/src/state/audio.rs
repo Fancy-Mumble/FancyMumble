@@ -10,6 +10,83 @@ use tauri::Emitter;
 use super::types::VoiceState;
 use super::AppState;
 
+// -- Capture-error surfacing ---------------------------------------
+
+/// Tauri event carrying the latest microphone capture-start result to the
+/// UI. A `null` payload clears any shown error; an object payload shows a
+/// banner. `kind = "device_busy"` is detected from the WASAPI HRESULTs so
+/// the UI can suggest exclusive mode.
+pub(crate) const CAPTURE_ERROR_EVENT: &str = "capture-error";
+
+/// True when a capture-start error string reports the device is in use /
+/// held exclusively. Matched on the stable HRESULT hex codes rather than
+/// OS-localised message text:
+/// - `0x800700AA` ERROR_BUSY ("resource in use")
+/// - `0x8889000A` AUDCLNT_E_DEVICE_IN_USE
+/// - `0x8889000B` AUDCLNT_E_EXCLUSIVE_MODE_ONLY (device is exclusive-only)
+pub(crate) fn is_device_busy(err: &str) -> bool {
+    let e = err.to_ascii_lowercase();
+    e.contains("800700aa") || e.contains("8889000a") || e.contains("8889000b")
+}
+
+/// The last microphone capture-start result, mirrored into the event.
+#[derive(Clone, serde::Serialize)]
+pub(crate) struct CaptureState {
+    /// `"device_busy"` or `"other"`.
+    kind: String,
+    /// Raw error message.
+    message: String,
+    /// Other apps holding the microphone (best-effort, Windows).
+    holders: Vec<String>,
+}
+
+/// Process-wide slot holding the latest capture state, so a component that
+/// mounts AFTER the event fired (e.g. the sidebar after leaving the
+/// settings route) can query it rather than miss the transient event.
+fn capture_state_slot() -> &'static std::sync::Mutex<Option<CaptureState>> {
+    static SLOT: std::sync::OnceLock<std::sync::Mutex<Option<CaptureState>>> =
+        std::sync::OnceLock::new();
+    SLOT.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+/// The current capture error, for a UI that just mounted.
+pub(crate) fn current_capture_state() -> Option<CaptureState> {
+    capture_state_slot().lock().ok().and_then(|s| s.clone())
+}
+
+/// Emit a capture-start failure to the UI (best-effort) and record it so
+/// late-mounting views can query it. When the device is busy, includes the
+/// name(s) of the other application(s) holding the microphone.
+pub(crate) fn emit_capture_error(app: Option<&tauri::AppHandle>, err: &str) {
+    let busy = is_device_busy(err);
+    #[cfg(target_os = "windows")]
+    let holders: Vec<String> =
+        if busy { fancy_audio_device::capture_device_users() } else { Vec::new() };
+    #[cfg(not(target_os = "windows"))]
+    let holders: Vec<String> = Vec::new();
+    let state = CaptureState {
+        kind: if busy { "device_busy" } else { "other" }.to_owned(),
+        message: err.to_owned(),
+        holders,
+    };
+    if let Ok(mut slot) = capture_state_slot().lock() {
+        *slot = Some(state.clone());
+    }
+    if let Some(app) = app {
+        let _ = app.emit(CAPTURE_ERROR_EVENT, &state);
+    }
+}
+
+/// Clear any shown capture error (microphone opened successfully).
+pub(crate) fn clear_capture_error(app: Option<&tauri::AppHandle>) {
+    if let Ok(mut slot) = capture_state_slot().lock() {
+        *slot = None;
+    }
+    if let Some(app) = app {
+        let _ = app.emit(CAPTURE_ERROR_EVENT, serde_json::Value::Null);
+    }
+}
+
 // -- Shared methods (all platforms) --------------------------------
 
 impl AppState {
@@ -147,6 +224,7 @@ mod voice_pipeline {
                 state.audio.speaker_volumes.clone()
             };
             let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
+            crate::e2e_stats::register_speaker_buffers(&speaker_buffers);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
                 output_vol.clone(),
@@ -318,6 +396,7 @@ mod voice_pipeline {
                 state.audio.speaker_volumes.clone()
             };
             let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
+            crate::e2e_stats::register_speaker_buffers(&speaker_buffers);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
                 output_vol.clone(),
@@ -452,6 +531,7 @@ mod voice_pipeline {
                 state.audio.speaker_volumes.clone()
             };
             let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
+            crate::e2e_stats::register_speaker_buffers(&speaker_buffers);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
                 output_vol.clone(),
@@ -660,13 +740,25 @@ mod voice_pipeline {
 
             let input_vol = Arc::new(AtomicU32::new(audio_settings.input_volume.to_bits()));
 
-            let mut capture = PlatformAudioFactory::create_capture(
+            let app_for_err = self.app_handle();
+            let mut capture = match PlatformAudioFactory::create_capture(
                 audio_settings.selected_device.as_deref(),
                 960, // 20ms @ 48kHz
                 input_vol,
-            )?;
+            ) {
+                Ok(c) => c,
+                Err(e) => {
+                    super::emit_capture_error(app_for_err.as_ref(), &e);
+                    return Err(e);
+                }
+            };
 
-            capture.start().map_err(|e| format!("Mic test capture start: {e}"))?;
+            if let Err(e) = capture.start() {
+                let msg = format!("Mic test capture start: {e}");
+                super::emit_capture_error(app_for_err.as_ref(), &msg);
+                return Err(msg);
+            }
+            super::clear_capture_error(app_for_err.as_ref());
 
             // Same AGC config as the voice pipeline so the calibrator
             // measures the post-gain signal the noise gate will see.
@@ -694,6 +786,40 @@ mod voice_pipeline {
                     handle.abort();
                 }
             }
+        }
+
+        /// Probe whether the microphone can be opened right now with the
+        /// current settings (including exclusive mode), emitting a
+        /// `capture-error` event on failure or clearing it on success.
+        ///
+        /// The settings UI calls this on load so a persisted device-in-use
+        /// condition surfaces immediately (capture is otherwise only
+        /// attempted on voice-enable). Runs on a short-lived thread: it
+        /// briefly opens and closes the device (a no-op share when voice is
+        /// already active, thanks to the shared-capture broker).
+        pub fn probe_microphone(&self) {
+            let app = self.app_handle();
+            let settings = self.audio_settings();
+            let _probe = std::thread::spawn(move || {
+                // Ensure the atomic reflects the persisted choice before the
+                // factory reads it (belt-and-braces; startup already applies it).
+                crate::audio::set_exclusive_input(settings.exclusive_input);
+                let vol = Arc::new(AtomicU32::new(settings.input_volume.to_bits()));
+                match PlatformAudioFactory::create_capture(
+                    settings.selected_device.as_deref(),
+                    480,
+                    vol,
+                ) {
+                    Ok(mut capture) => match capture.start() {
+                        Ok(()) => {
+                            let _ = capture.stop();
+                            super::clear_capture_error(app.as_ref());
+                        }
+                        Err(e) => super::emit_capture_error(app.as_ref(), &e.to_string()),
+                    },
+                    Err(e) => super::emit_capture_error(app.as_ref(), &e),
+                }
+            });
         }
 
         /// Start a voice replay session.

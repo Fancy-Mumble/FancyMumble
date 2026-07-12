@@ -10,5 +10,20 @@ mumble-protocol = { path = "../mumble-protocol" }
 cpal = "0.17.3"
 tracing = "0.1"
 
+# Native WASAPI capture that mirrors the official Mumble client's device
+# open (shared mode + GetMixFormat), so we succeed on drivers/interfaces
+# where cpal's own-format open is rejected as "device in use".
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Media_Audio",
+    "Win32_Media_KernelStreaming",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_Devices_FunctionDiscovery",
+] }
+
 [lints]
 workspace = true

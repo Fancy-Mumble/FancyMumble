@@ -90,6 +90,8 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::audio::set_audio_settings,
         super::audio::set_audio_backend,
         super::audio::get_audio_backend,
+        super::audio::probe_microphone,
+        super::audio::get_capture_state,
         super::audio::get_voice_state,
         super::audio::enable_voice,
         super::audio::enable_voice_muted,

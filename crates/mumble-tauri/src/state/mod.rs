@@ -15,7 +15,7 @@
 //! - [`offload_ops`]        - content offloading to encrypted temp files.
 
 mod admin;
-mod audio;
+pub(crate) mod audio;
 mod audio_tasks;
 mod calibration;
 mod voice_replay;

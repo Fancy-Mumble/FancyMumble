@@ -39,6 +39,7 @@ pub(crate) fn hydrate_persisted_prefs(app: &tauri::AppHandle, state: &AppState) 
         match serde_json::from_value::<state::types::AudioSettings>(audio.clone()) {
             Ok(settings) => {
                 tracing::info!("hydrate_persisted_prefs: applying saved audio settings");
+                crate::audio::set_exclusive_input(settings.exclusive_input);
                 let _ = state.set_audio_settings(settings);
             }
             Err(e) => {

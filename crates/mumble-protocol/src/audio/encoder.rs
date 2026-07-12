@@ -15,7 +15,16 @@ use crate::error::Error;
 pub struct EncodedPacket {
     /// The compressed payload bytes.
     pub data: Vec<u8>,
-    /// Monotonically increasing sequence number.
+    /// Mumble `frame_number` for this packet, counted in 10 ms frames
+    /// (480 samples @ 48 kHz), NOT in packets.
+    ///
+    /// This mirrors the official client, whose `iFrameCounter` advances
+    /// once per 10 ms frame and which sends `iFrameCounter - frames` per
+    /// packet. The distinction matters because official receivers place
+    /// packets in their jitter buffer at `timestamp = frame_number *
+    /// 480`: a sender that increments by one per 20 ms packet makes its
+    /// timestamps advance at half real-time, and the receiver's jitter
+    /// buffer perpetually starves - heard as laggy, glitchy audio.
     pub sequence: u64,
     /// Duration of audio this packet represents, in samples.
     pub frame_samples: u32,
@@ -221,7 +230,11 @@ impl AudioEncoder for OpusEncoder {
             sequence: self.sequence,
             frame_samples: self.config.frame_size as u32,
         };
-        self.sequence += 1;
+        // Advance in Mumble sequence units: one per 10 ms frame (480
+        // samples @ 48 kHz), i.e. 2 for a 20 ms packet, 4 for 40 ms.
+        // See the `EncodedPacket::sequence` docs for why this must not
+        // be a plain per-packet increment.
+        self.sequence += (self.config.frame_size as u64 / 480).max(1);
         Ok(packet)
     }
 
@@ -291,16 +304,24 @@ mod tests {
     }
 
     #[test]
-    fn sequence_increments() -> Result<()> {
-        let fmt = AudioFormat::MONO_48KHZ_F32;
-        let config = OpusEncoderConfig::default();
-        let frame_size = config.frame_size;
-        let mut enc = OpusEncoder::new(config, fmt)?;
-        let frame = silent_frame(fmt, frame_size);
-        let p0 = enc.encode(&frame)?;
-        let p1 = enc.encode(&frame.clone())?;
-        assert_eq!(p0.sequence, 0);
-        assert_eq!(p1.sequence, 1);
+    fn sequence_advances_in_10ms_frame_units() -> Result<()> {
+        // Mumble's frame_number counts 10 ms frames (480 samples @48 kHz),
+        // exactly like the official client's iFrameCounter. Official
+        // receivers compute jitter-buffer timestamps as frame_number*480,
+        // so a per-packet increment would desync them for any packet
+        // duration other than 10 ms.
+        for (frame_size, expected_step) in [(480usize, 1u64), (960, 2), (1920, 4), (2880, 6)] {
+            let fmt = AudioFormat::MONO_48KHZ_F32;
+            let config = OpusEncoderConfig { frame_size, ..OpusEncoderConfig::default() };
+            let mut enc = OpusEncoder::new(config, fmt)?;
+            let frame = silent_frame(fmt, frame_size);
+            let p0 = enc.encode(&frame)?;
+            let p1 = enc.encode(&frame.clone())?;
+            let p2 = enc.encode(&frame.clone())?;
+            assert_eq!(p0.sequence, 0, "frame_size {frame_size}");
+            assert_eq!(p1.sequence, expected_step, "frame_size {frame_size}");
+            assert_eq!(p2.sequence, expected_step * 2, "frame_size {frame_size}");
+        }
         Ok(())
     }
 

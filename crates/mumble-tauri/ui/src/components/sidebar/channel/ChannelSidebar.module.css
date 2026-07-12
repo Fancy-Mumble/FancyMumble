@@ -1217,3 +1217,14 @@
 .deleteConfirmOk:hover {
   opacity: 0.85;
 }
+
+/* Microphone held by another application: greyed, warning-tinted, but
+ * still clickable so a click can retry once the other app releases it. */
+.voiceInUse,
+.voiceInUse:hover {
+  color: var(--color-warning, #f59e0b);
+  background: var(--color-warning-bg, rgba(245, 158, 11, 0.12));
+  border-color: var(--color-warning, rgba(245, 158, 11, 0.45));
+  opacity: 0.6;
+  cursor: help;
+}

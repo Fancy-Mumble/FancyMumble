@@ -45,6 +45,8 @@ export interface AudioSettings {
   auto_input_sensitivity: boolean;
   /** Force audio to use TCP tunnel instead of UDP (e.g. behind strict NAT). */
   force_tcp_audio: boolean;
+  /** Open the microphone in WASAPI exclusive mode (Windows only). */
+  exclusive_input?: boolean;
 }
 
 export type VoiceState = "inactive" | "active" | "muted";

@@ -181,6 +181,16 @@ pub struct AudioSettings {
     /// Force audio to use TCP tunnel instead of UDP (e.g. behind strict NAT).
     #[serde(default)]
     pub force_tcp_audio: bool,
+    /// Open the microphone in WASAPI **exclusive mode** (Windows only).
+    ///
+    /// Exclusive mode connects straight to the audio driver, bypassing the
+    /// shared Windows audio engine. On interfaces that only admit a single
+    /// client at non-48 kHz rates (e.g. some USB audio devices) this is the
+    /// only way to reliably capture - and it lets the client "take" the
+    /// device the way the official Mumble client's exclusive input does.
+    /// Ignored on non-Windows platforms.
+    #[serde(default)]
+    pub exclusive_input: bool,
 }
 
 impl AudioSettings {
@@ -234,6 +244,7 @@ impl AudioSettings {
             || self.denoiser_algorithm != other.denoiser_algorithm
             || self.denoiser_params != other.denoiser_params
             || self.auto_input_sensitivity != other.auto_input_sensitivity
+            || self.exclusive_input != other.exclusive_input
     }
 
     /// Whether the output device changed, requiring inbound pipeline restart.
@@ -263,6 +274,7 @@ impl Default for AudioSettings {
             output_volume: 1.0,
             auto_input_sensitivity: false,
             force_tcp_audio: false,
+            exclusive_input: false,
         }
     }
 }

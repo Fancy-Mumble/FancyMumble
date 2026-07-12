@@ -26,6 +26,15 @@ export function isDesktopPlatform(): boolean {
   return !isMobile;
 }
 
+/** Detect whether the app is running on Windows (for Windows-only settings
+ *  such as WASAPI exclusive-mode input). */
+export function isWindowsPlatform(): boolean {
+  return /Windows|Win32|Win64|WOW64/i.test(navigator.userAgent);
+}
+
+/** Cached `isWindowsPlatform()` - the user-agent is stable per session. */
+export const isWindows: boolean = isWindowsPlatform();
+
 /**
  * CSS class helper: returns the given class name only on mobile,
  * empty string on desktop.

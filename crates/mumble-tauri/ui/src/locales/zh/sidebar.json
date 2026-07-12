@@ -92,6 +92,8 @@
     "purgeHistory": "清空聊天记录",
     "mute": "静音",
     "unmute": "取消静音",
+    "micInUse": "麦克风正被另一个应用程序占用",
+    "micInUseBy": "麦克风正被 {{app}} 占用",
     "enableVoice": "启用语音",
     "disableVoice": "停用语音",
     "noListenPerm": "你没有收听该频道的权限",

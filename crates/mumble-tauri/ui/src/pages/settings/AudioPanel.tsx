@@ -12,11 +12,13 @@ import type {
 import {
   ActivityIcon,
   AudioWaveformIcon,
+  CloseIcon,
   MicOffIcon,
   SlidersIcon,
   SparklesIcon,
+  WarningIcon,
 } from "../../icons";
-import { isDesktopPlatform } from "../../utils/platform";
+import { isDesktopPlatform, isWindows } from "../../utils/platform";
 import { Toggle, SliderField } from "./SharedControls";
 import { DenoiserAdvancedControls } from "./DenoiserAdvancedControls";
 import { ActivationModeSelector } from "./ActivationModeSelector";
@@ -146,6 +148,29 @@ export function AudioPanel({
   const { t } = useTranslation("settings");
   const tStr = t as (key: string) => string;
   const denoiserOptions = buildDenoiserOptions(tStr);
+
+  // Microphone capture-start errors, surfaced from the backend so the user
+  // sees an actionable banner instead of only a console log. Cleared when
+  // the microphone opens successfully.
+  const [captureError, setCaptureError] = useState<{ kind: string; message: string; holders?: string[] } | null>(null);
+  useEffect(() => {
+    const unlisten = listen<{ kind: string; message: string; holders?: string[] } | null>(
+      "capture-error",
+      (event) => setCaptureError(event.payload ?? null),
+    );
+    return () => {
+      unlisten.then((f) => f());
+    };
+  }, []);
+  const captureHolderText = (captureError?.holders ?? []).filter(Boolean).join(", ");
+
+  // Probe the microphone when the panel opens and whenever the input
+  // device or exclusive-mode setting changes, so a persisted
+  // "device in use" condition (e.g. after a restart with exclusive mode
+  // on) surfaces here without waiting for the user to enable voice.
+  useEffect(() => {
+    invoke("probe_microphone").catch(() => { /* best-effort */ });
+  }, [settings.exclusive_input, settings.selected_device]);
   const [availableAlgorithms, setAvailableAlgorithms] = useState<
     NoiseSuppressionAlgorithm[]
   >(["none", "omlsa_imcra", "spectral_subtraction"]);
@@ -159,9 +184,58 @@ export function AudioPanel({
 
   const isVoiceGate = !settings.push_to_talk && settings.noise_suppression;
 
+  const busy = captureError?.kind === "device_busy";
+  const canSuggestExclusive = busy && isWindows && !settings.exclusive_input;
+
   return (
     <>
       <h2 className={styles.panelTitle}>{t("audio.panelTitle")}</h2>
+
+      {captureError && (
+        <div className={panelStyles.captureErrorBanner} role="alert">
+          <WarningIcon className={panelStyles.captureErrorIcon} width={18} height={18} />
+          <div className={panelStyles.captureErrorBody}>
+            <span className={panelStyles.captureErrorTitle}>
+              {busy ? t("audio.captureBusyTitle") : t("audio.captureFailedTitle")}
+            </span>
+            <p className={panelStyles.captureErrorText}>
+              {busy
+                ? canSuggestExclusive
+                  ? t("audio.captureBusySuggestExclusive")
+                  : settings.exclusive_input
+                    ? t("audio.captureBusyExclusiveOn")
+                    : t("audio.captureBusyGeneric")
+                : captureError.message}
+            </p>
+            {busy && captureHolderText && (
+              <p className={panelStyles.captureErrorText}>
+                {t("audio.captureHeldBy", { app: captureHolderText })}
+              </p>
+            )}
+            {canSuggestExclusive && (
+              <button
+                type="button"
+                className={panelStyles.captureErrorAction}
+                onClick={() => {
+                  onChange({ exclusive_input: true });
+                  setCaptureError(null);
+                }}
+              >
+                {t("audio.captureEnableExclusive")}
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            className={panelStyles.captureErrorDismiss}
+            aria-label={t("audio.captureDismiss")}
+            title={t("audio.captureDismiss")}
+            onClick={() => setCaptureError(null)}
+          >
+            <CloseIcon width={14} height={14} />
+          </button>
+        </div>
+      )}
 
       {/* -- Input & Output Devices (side by side) ---------- */}
       <section className={styles.section}>
@@ -359,6 +433,23 @@ export function AudioPanel({
           />
         </div>
       </section>
+
+      {/* -- Device (Windows exclusive input) ---------------- */}
+      {isWindows && (
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>{t("audio.device")}</h3>
+          <div className={styles.toggleRow}>
+            <div className={styles.toggleInfo}>
+              <span className={styles.fieldLabel}>{t("audio.exclusiveInput")}</span>
+              <p className={styles.fieldHint}>{t("audio.exclusiveInputHint")}</p>
+            </div>
+            <Toggle
+              checked={settings.exclusive_input ?? false}
+              onChange={() => onChange({ exclusive_input: !settings.exclusive_input })}
+            />
+          </div>
+        </section>
+      )}
 
       {/* -- Expert settings -------------------------------- */}
       {isExpert && isDesktopPlatform() && (
