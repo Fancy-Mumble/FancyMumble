@@ -811,6 +811,16 @@ export function useScreenShare(): ScreenShareHook {
 // ---------------------------------------------------------------------------
 
 /**
+ * Current viewer RTCPeerConnection for a broadcaster session, or null
+ * when not watching. Callers must re-read on every use (never cache the
+ * returned PC) - it is replaced when a viewer reconnects. Used by the
+ * "Stats for Nerds" panel to poll `getStats()`.
+ */
+export function getViewerPc(session: number): RTCPeerConnection | null {
+  return viewerPcs.get(session)?.pc ?? null;
+}
+
+/**
  * Subscribe to the remote MediaStream for a specific broadcaster.
  * Returns the current stream for that session (or null while connecting).
  */

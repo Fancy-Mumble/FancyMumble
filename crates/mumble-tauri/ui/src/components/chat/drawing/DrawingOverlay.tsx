@@ -15,11 +15,23 @@
  * installed on first use and keeps the store up to date even when no
  * overlay is mounted. Local strokes are stored alongside remote strokes so
  * any redraw (resize, incoming remote stroke) replays them as well.
+ *
+ * Cross-window sync: each Tauri webview window (main window, desktop
+ * draw-overlay, stream popout) is its own JS realm with its own copy of
+ * the store. The server relays strokes only to OTHER clients - it never
+ * echoes our own back - so two client-side mechanisms keep the realms
+ * consistent:
+ *  - locally drawn stroke packets (and clears) are re-broadcast to every
+ *    window via `emit("draw-stroke", ...)` (see `mirrorToOtherWindows`);
+ *  - on first use each realm emits a `draw-stroke-sync-request`, and any
+ *    realm that already holds strokes answers with a full
+ *    `draw-stroke-snapshot`, so freshly opened popout/overlay windows
+ *    start from the current canvas instead of an empty one.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { useAppStore } from "../../../store";
 import styles from "./DrawingOverlay.module.css";
 import { TrashIcon } from "../../../icons";
@@ -51,6 +63,15 @@ interface RemoteStroke {
   widthFrac: number | null;
   /** Normalised [x,y,x,y,...] in source-content space, accumulated across packets. */
   points: number[];
+}
+
+/** Full-state answer to a `draw-stroke-sync-request` from another webview. */
+interface StrokeSnapshotEvent {
+  /** INSTANCE_ID of the realm that asked for the snapshot. */
+  requesterId: string;
+  /** INSTANCE_ID of the realm that produced the snapshot. */
+  responderId: string;
+  channels: { channelId: number; strokes: RemoteStroke[] }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +138,9 @@ function subscribeToChannel(channelId: number, fn: ChangeListener): () => void {
 }
 
 function applyStrokeEvent(payload: DrawStrokeEvent): void {
-  // Server echoes our own strokes back; ignore them so we don't duplicate points.
+  // Our own strokes come back to this realm via the cross-window mirror
+  // broadcast; the realm the user actually drew in already stored them
+  // synchronously, so applying the mirror would duplicate points.
   if (ownSessions.has(payload.senderSession)) {
     logDraw("rx-self-skip", {
       sender: payload.senderSession,
@@ -173,13 +196,87 @@ function applyStrokeEvent(payload: DrawStrokeEvent): void {
   notifyChange(payload.channelId);
 }
 
+/**
+ * Re-broadcast a locally generated stroke event to every other webview
+ * window of this client (desktop draw overlay, stream popouts). The
+ * server never echoes our own messages back, so without this the user's
+ * own drawings would only ever exist in the window they drew them in.
+ * The originating realm receives its own broadcast too and drops it via
+ * the `ownSessions` filter in {@link applyStrokeEvent}.
+ */
+function mirrorToOtherWindows(payload: DrawStrokeEvent): void {
+  emit("draw-stroke", payload).catch((err) => {
+    logDraw("mirror-error", { error: String(err), strokeId: payload.strokeId });
+  });
+}
+
+/** Answer another realm's sync request with everything we hold. */
+function respondWithSnapshot(requesterId: string): void {
+  if (requesterId === INSTANCE_ID) return;
+  const channels = [...channelStrokes.entries()]
+    .map(([channelId, strokes]) => ({ channelId, strokes: [...strokes.values()] }))
+    .filter((c) => c.strokes.length > 0);
+  if (channels.length === 0) return;
+  logDraw("sync-respond", { requesterId, channels: channels.length });
+  const snapshot: StrokeSnapshotEvent = { requesterId, responderId: INSTANCE_ID, channels };
+  emit("draw-stroke-snapshot", snapshot).catch((err) => {
+    logDraw("sync-respond-error", { error: String(err) });
+  });
+}
+
+/**
+ * Merge one channel's snapshot strokes into `target`. Returns how many
+ * strokes were added or replaced. Exported for tests.
+ *
+ * A stroke's point array only ever grows, so "more points" means
+ * "newer"; this keeps the merge idempotent when several realms answer
+ * the same sync request, and prevents a stale responder from
+ * overwriting a stroke the local realm has already extended.
+ */
+export function mergeSnapshotStrokes(target: StrokeMap, strokes: RemoteStroke[]): number {
+  let changed = 0;
+  for (const stroke of strokes) {
+    const existing = target.get(stroke.strokeId);
+    if (!existing || stroke.points.length > existing.points.length) {
+      target.set(stroke.strokeId, stroke);
+      changed++;
+    }
+  }
+  return changed;
+}
+
+function applySnapshot(payload: StrokeSnapshotEvent): void {
+  if (payload.requesterId !== INSTANCE_ID || payload.responderId === INSTANCE_ID) return;
+  for (const { channelId, strokes } of payload.channels) {
+    const changed = mergeSnapshotStrokes(getChannelStrokes(channelId), strokes);
+    if (changed > 0) {
+      logDraw("sync-apply", { responderId: payload.responderId, channelId, changed });
+      notifyChange(channelId);
+    }
+  }
+}
+
 function ensureGlobalListener(): void {
   if (globalListenerInstalled) return;
   globalListenerInstalled = true;
   logDraw("listener-install", {});
-  void listen<DrawStrokeEvent>("draw-stroke", (event) => {
-    applyStrokeEvent(event.payload);
-  });
+  const ready = [
+    listen<DrawStrokeEvent>("draw-stroke", (event) => {
+      applyStrokeEvent(event.payload);
+    }),
+    listen<{ requesterId: string }>("draw-stroke-sync-request", (event) => {
+      respondWithSnapshot(event.payload.requesterId);
+    }),
+    listen<StrokeSnapshotEvent>("draw-stroke-snapshot", (event) => {
+      applySnapshot(event.payload);
+    }),
+  ];
+  // Once our snapshot listener is live, ask the longer-running webviews
+  // for the strokes they already hold so this realm (e.g. a freshly
+  // opened stream popout) doesn't start from an empty canvas.
+  void Promise.all(ready)
+    .then(() => emit("draw-stroke-sync-request", { requesterId: INSTANCE_ID }))
+    .catch((err) => logDraw("sync-request-error", { error: String(err) }));
 }
 
 /**
@@ -489,11 +586,12 @@ export default function DrawingOverlay({ channelId, ownSession, hideToolbar, vie
       hasVideoRef: !!videoRef,
     });
     // Only register our session as "own" in the interactive overlay - that
-    // window stores local strokes synchronously, so the server echo would
-    // be a duplicate. The passive desktop overlay (hideToolbar) lives in
-    // a separate webview process whose only source of strokes IS the
-    // server echo; if it filtered its own session it would drop every
-    // stroke the broadcaster draws.
+    // realm stores local strokes synchronously, so the cross-window mirror
+    // broadcast coming back to it would be a duplicate. Passive overlays
+    // (hideToolbar: the desktop draw overlay and the stream popout) live in
+    // separate webview realms whose only source of the user's own strokes
+    // IS that mirror broadcast; if they filtered their own session they
+    // would drop every stroke the user draws.
     if (ownSession && !hideToolbar) ownSessions.add(ownSession);
     const unsubscribe = subscribeToChannel(channelId, redraw);
     // Replay any existing strokes for this channel on (re)mount.
@@ -542,6 +640,17 @@ export default function DrawingOverlay({ channelId, ownSession, hideToolbar, vie
         },
       }).catch((err) => {
         logDraw("tx-error", { error: String(err), strokeId: currentStrokeId.current });
+      });
+      mirrorToOtherWindows({
+        senderSession: ownSession,
+        channelId,
+        strokeId: currentStrokeId.current,
+        color: colorRef.current,
+        width: widthRef.current,
+        widthFrac,
+        points: pts,
+        isEnd,
+        isClear: false,
       });
     },
     [channelId, ownSession],
@@ -695,27 +804,15 @@ export default function DrawingOverlay({ channelId, ownSession, hideToolbar, vie
 
   const handleClear = useCallback(() => {
     const strokes = getChannelStrokes(channelId);
-    if (isOwnBroadcaster) {
+    const clearAll = isOwnBroadcaster;
+    if (clearAll) {
       // Broadcaster wipes EVERY sender's strokes locally and on every viewer.
       strokes.clear();
-      notifyChange(channelId);
-      void invoke("send_draw_stroke", {
-        args: {
-          channelId,
-          strokeId: crypto.randomUUID(),
-          color: 0,
-          width: 0,
-          points: [],
-          isEnd: false,
-          isClear: true,
-          clearAll: true,
-        },
-      });
-      return;
-    }
-    const prefix = `${ownSession}:`;
-    for (const id of [...strokes.keys()]) {
-      if (id.startsWith(prefix)) strokes.delete(id);
+    } else {
+      const prefix = `${ownSession}:`;
+      for (const id of [...strokes.keys()]) {
+        if (id.startsWith(prefix)) strokes.delete(id);
+      }
     }
     notifyChange(channelId);
     void invoke("send_draw_stroke", {
@@ -727,8 +824,20 @@ export default function DrawingOverlay({ channelId, ownSession, hideToolbar, vie
         points: [],
         isEnd: false,
         isClear: true,
-        clearAll: false,
+        clearAll,
       },
+    });
+    mirrorToOtherWindows({
+      senderSession: ownSession,
+      channelId,
+      strokeId: "",
+      color: 0,
+      width: 0,
+      widthFrac: null,
+      points: [],
+      isEnd: false,
+      isClear: true,
+      clearAll,
     });
   }, [channelId, ownSession, isOwnBroadcaster]);
 

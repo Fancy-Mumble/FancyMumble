@@ -16,7 +16,7 @@
 use std::ffi::c_void;
 use std::time::Duration;
 
-use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager};
+use tauri::{AppHandle, Manager};
 use tokio::time::sleep;
 use windows_sys::core::BOOL;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, POINT, RECT};
@@ -113,15 +113,10 @@ pub(super) fn spawn_tracker(app: AppHandle, hwnd: isize) -> tokio::task::JoinHan
                 continue;
             }
             last = Some(rect);
-            // Convert physical pixels to logical units for Tauri.
-            let scale = window.scale_factor().unwrap_or(1.0);
-            let _ = window.set_position(LogicalPosition::new(
-                f64::from(rect.x) / scale,
-                f64::from(rect.y) / scale,
-            ));
-            let _ = window.set_size(LogicalSize::new(
-                f64::from(rect.w) / scale,
-                f64::from(rect.h) / scale,
+            let _ = window.set_position(tauri::PhysicalPosition::new(rect.x, rect.y));
+            let _ = window.set_size(tauri::PhysicalSize::new(
+                rect.w.max(1) as u32,
+                rect.h.max(1) as u32,
             ));
         }
     })

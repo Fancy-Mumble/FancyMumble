@@ -1,0 +1,94 @@
+/* StreamStatsPanel - "Stats for Nerds" overlay (YouTube-style). */
+
+.panel {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  /* Above the DrawingOverlay canvas (3) and the stream controls (5) so
+     the close button stays clickable while drawing mode is active. */
+  z-index: 6;
+  min-width: 340px;
+  max-width: min(480px, calc(100% - 16px));
+  padding: 6px 10px 8px;
+  border-radius: 6px;
+  background: rgba(12, 12, 12, 0.82);
+  color: #e6e6e6;
+  font-family: Consolas, Menlo, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  pointer-events: auto;
+  user-select: text;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 3px;
+}
+
+.title {
+  font-weight: 700;
+  color: #fff;
+}
+
+.closeBtn {
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: #b5b5b5;
+  cursor: pointer;
+}
+
+.closeBtn:hover {
+  color: #fff;
+}
+
+.grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 172px minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: center;
+}
+
+.label {
+  font-weight: 700;
+  color: #fff;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.valueText {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sparkline {
+  flex: 0 0 auto;
+  width: 110px;
+  height: 13px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.waiting {
+  padding: 4px 0;
+  color: #b5b5b5;
+}

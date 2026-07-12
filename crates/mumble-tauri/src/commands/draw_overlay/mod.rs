@@ -13,12 +13,17 @@
 //!   appear in the broadcaster's outgoing stream.
 //!
 //! Sizing strategy (in priority order):
-//! 1. `display_surface == "window"` on Windows: enumerate top-level
-//!    windows for one whose client area matches the captured size and
-//!    pin the overlay over its screen rect, then poll for movement.
-//! 2. `display_surface == "monitor"`: pick the monitor whose pixel
-//!    dimensions match the captured size and cover it fully.
-//! 3. Fallback: monitor under the cursor, then primary monitor.
+//! 1. The running Rust broadcast knows exactly which monitor or window
+//!    it captures - resolve that source's screen rect directly and pin
+//!    the overlay over it (window shares are then followed by HWND on
+//!    Windows).
+//! 2. Legacy fallback when no Rust broadcast is active:
+//!    a. `display_surface == "window"` on Windows: enumerate top-level
+//!       windows for one whose client area matches the captured size and
+//!       pin the overlay over its screen rect, then poll for movement.
+//!    b. `display_surface == "monitor"`: pick the monitor whose pixel
+//!       dimensions match the captured size and cover it fully.
+//!    c. Monitor under the cursor, then primary monitor.
 //!
 //! At most one overlay window per app process; reopening replaces the
 //! previous one.
@@ -49,12 +54,12 @@ pub(crate) struct DrawOverlayContext {
 #[cfg(not(target_os = "android"))]
 #[derive(Copy, Clone)]
 struct OverlayPlacement {
-    /// Logical-units position (top-left).
-    x: f64,
-    y: f64,
-    /// Logical-units size.
-    w: f64,
-    h: f64,
+    /// Physical-pixel position (top-left) on the virtual desktop.
+    x: i32,
+    y: i32,
+    /// Physical-pixel size.
+    w: u32,
+    h: u32,
     /// Optional Windows HWND of the source window to follow.
     #[cfg(target_os = "windows")]
     hwnd_to_track: Option<isize>,
@@ -63,11 +68,11 @@ struct OverlayPlacement {
 /// Open the drawing-overlay window for `channel_id`.  Replaces any
 /// existing overlay.  No-op on Android.
 ///
-/// `capture_width` / `capture_height` are the pixel dimensions of the
-/// shared video track (from `MediaStreamTrack.getSettings()`).
-/// `display_surface` is `"monitor"`, `"window"`, `"browser"` or
-/// `"application"` (also from `getSettings()`); when `"window"` we try
-/// to find the matching top-level window and pin the overlay over it.
+/// Placement prefers the running Rust broadcast's capture source (see
+/// module docs).  `capture_width` / `capture_height` / `display_surface`
+/// only feed the legacy fallback: pixel dimensions and surface kind of
+/// the shared track from `MediaStreamTrack.getSettings()`, used to guess
+/// the shared window or monitor when no Rust broadcast is active.
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 pub(crate) async fn open_drawing_overlay(
@@ -105,10 +110,15 @@ pub(crate) async fn open_drawing_overlay(
     .always_on_top(true)
     .skip_taskbar(true)
     .resizable(false)
-    .inner_size(placement.w, placement.h)
-    .position(placement.x, placement.y)
+    .focused(false)
     .build()
     .map_err(|e: tauri::Error| e.to_string())?;
+
+    // Exact physical placement (builder coordinates are logical; setting
+    // physical afterwards avoids per-monitor scale-factor guesswork; the
+    // window is transparent, so the brief reposition is invisible).
+    let _ = window.set_position(tauri::PhysicalPosition::new(placement.x, placement.y));
+    let _ = window.set_size(tauri::PhysicalSize::new(placement.w, placement.h));
 
     if let Err(e) = window.set_ignore_cursor_events(true) {
         tracing::warn!("draw-overlay: set_ignore_cursor_events failed: {e}");
@@ -130,8 +140,15 @@ fn compute_placement(
     capture_height: Option<u32>,
     display_surface: Option<&str>,
 ) -> Result<OverlayPlacement, String> {
+    // Preferred: the running Rust broadcast knows exactly which monitor
+    // or window it is capturing - pin the overlay over that source.
+    if let Some(p) = broadcast_source_placement() {
+        return Ok(p);
+    }
+    // Legacy fallback (no Rust broadcast running): guess the source from
+    // the capture dimensions the frontend passed.
     if matches!(display_surface, Some("window") | Some("application")) {
-        if let Some(p) = window_share_placement(app, capture_width, capture_height) {
+        if let Some(p) = window_share_placement(capture_width, capture_height) {
             return Ok(p);
         }
         tracing::info!(
@@ -142,45 +159,49 @@ fn compute_placement(
     monitor_placement(app, capture_width, capture_height)
 }
 
+/// Placement over the exact source of the running Rust broadcast.
+#[cfg(not(target_os = "android"))]
+fn broadcast_source_placement() -> Option<OverlayPlacement> {
+    let (kind, id) = crate::commands::screenshare::active_broadcast_source()?;
+    let Some((x, y, w, h)) = fancy_screenshare::sources::source_rect(kind, id) else {
+        tracing::info!(?kind, id, "draw-overlay: broadcast source rect unavailable; falling back");
+        return None;
+    };
+    tracing::info!(?kind, id, x, y, w, h, "draw-overlay: pinned to the broadcast's capture source");
+    Some(OverlayPlacement {
+        x,
+        y,
+        w,
+        h,
+        #[cfg(target_os = "windows")]
+        hwnd_to_track: (kind == fancy_screenshare::SourceKind::Window).then_some(id as isize),
+    })
+}
+
 /// Try to find a top-level window with matching client size.  Windows-only.
 #[cfg(target_os = "windows")]
 fn window_share_placement(
-    app: &tauri::AppHandle,
     capture_width: Option<u32>,
     capture_height: Option<u32>,
 ) -> Option<OverlayPlacement> {
     let (w, h) = (capture_width?, capture_height?);
     let hwnd = win_tracker::find_window_by_client_size(w, h)?;
     let rect = win_tracker::screen_rect_of(hwnd)?;
-    // Use the primary monitor's scale factor as a stand-in; Tauri
-    // reapplies the right scale when the window appears on its target
-    // monitor.  The tracker re-aligns immediately afterwards anyway.
-    let scale = primary_scale(app);
     Some(OverlayPlacement {
-        x: f64::from(rect.x) / scale,
-        y: f64::from(rect.y) / scale,
-        w: f64::from(rect.w) / scale,
-        h: f64::from(rect.h) / scale,
+        x: rect.x,
+        y: rect.y,
+        w: rect.w.max(1) as u32,
+        h: rect.h.max(1) as u32,
         hwnd_to_track: Some(hwnd),
     })
 }
 
 #[cfg(all(not(target_os = "android"), not(target_os = "windows")))]
 fn window_share_placement(
-    _app: &tauri::AppHandle,
     _capture_width: Option<u32>,
     _capture_height: Option<u32>,
 ) -> Option<OverlayPlacement> {
     None
-}
-
-#[cfg(target_os = "windows")]
-fn primary_scale(app: &tauri::AppHandle) -> f64 {
-    app.primary_monitor()
-        .ok()
-        .flatten()
-        .map(|m| m.scale_factor())
-        .unwrap_or(1.0)
 }
 
 /// Choose the monitor that the overlay should cover and turn it into
@@ -194,12 +215,11 @@ fn monitor_placement(
     let monitor = pick_target_monitor(app, capture_width, capture_height)?;
     let size = monitor.size();
     let position = monitor.position();
-    let scale = monitor.scale_factor();
     Ok(OverlayPlacement {
-        x: f64::from(position.x) / scale,
-        y: f64::from(position.y) / scale,
-        w: f64::from(size.width) / scale,
-        h: f64::from(size.height) / scale,
+        x: position.x,
+        y: position.y,
+        w: size.width,
+        h: size.height,
         #[cfg(target_os = "windows")]
         hwnd_to_track: None,
     })

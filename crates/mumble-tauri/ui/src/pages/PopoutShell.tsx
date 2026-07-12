@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { listen } from "@tauri-apps/api/event";
 import styles from "./PopoutPage.module.css";
-import { usePopoutMenu } from "./usePopoutMenu";
+import { usePopoutMenu, type PopoutMenuItem } from "./usePopoutMenu";
 
 interface InfoBarData {
   readonly name?: string | null;
@@ -34,6 +34,8 @@ interface PopoutShellProps {
   readonly error?: string | null;
   readonly placeholder?: ReactNode;
   readonly infoBar?: InfoBarData | null;
+  /** Page-specific context-menu entries rendered above "Close". */
+  readonly extraMenuItems?: readonly PopoutMenuItem[];
   readonly children: ReactNode;
 }
 
@@ -60,10 +62,10 @@ function initialFor(name: string | null | undefined): string {
 
 export default function PopoutShell({
   mediaRef, mediaReady, mediaLabel, aspectStorageKey,
-  error, placeholder, infoBar, children,
+  error, placeholder, infoBar, extraMenuItems, children,
 }: PopoutShellProps) {
   const { onContextMenu, renderMenu, close } = usePopoutMenu({
-    mediaRef, mediaReady, mediaLabel, aspectStorageKey,
+    mediaRef, mediaReady, mediaLabel, aspectStorageKey, extraItems: extraMenuItems,
   });
 
   // Make the host page transparent so the OS-level transparent window

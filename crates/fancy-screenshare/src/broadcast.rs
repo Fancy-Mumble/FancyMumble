@@ -86,6 +86,9 @@ pub struct ScreenBroadcaster {
     awaiting_answer: Arc<AtomicBool>,
     capture_thread: Option<std::thread::JoinHandle<()>>,
     sink: Arc<dyn SignalSink>,
+    /// The source being captured, for embedders that need to locate it
+    /// on screen (e.g. to pin an overlay window over the shared content).
+    source: (SourceKind, u32),
 }
 
 impl std::fmt::Debug for ScreenBroadcaster {
@@ -174,7 +177,13 @@ impl ScreenBroadcaster {
             awaiting_answer,
             capture_thread: Some(capture_thread),
             sink,
+            source: (kind, source_id),
         })
+    }
+
+    /// The capture source this broadcast is streaming.
+    pub fn source(&self) -> (SourceKind, u32) {
+        self.source
     }
 
     /// Whether the broadcaster has sent an offer and not yet received the

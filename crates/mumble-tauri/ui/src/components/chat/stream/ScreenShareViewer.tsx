@@ -1,4 +1,4 @@
-import { CloseIcon, EditIcon, ErrorCircleIcon, FullscreenExitIcon, FullscreenIcon, PauseIcon, PlayIcon, PopoutIcon, ScreenShareIcon, VolumeIcon, VolumeOffIcon } from "../../../icons";
+import { ActivityIcon, CloseIcon, EditIcon, ErrorCircleIcon, FullscreenExitIcon, FullscreenIcon, PauseIcon, PlayIcon, PopoutIcon, ScreenShareIcon, VolumeIcon, VolumeOffIcon } from "../../../icons";
 /**
  * Screen share viewer components.
  *
@@ -9,11 +9,12 @@ import { CloseIcon, EditIcon, ErrorCircleIcon, FullscreenExitIcon, FullscreenIco
  * - BroadcastBanner: notification bar shown when someone else is sharing
  */
 import DrawingOverlay from "../drawing/DrawingOverlay";
+import StreamStatsPanel from "./StreamStatsPanel";
 import { useRef, useEffect, useMemo, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../../../store";
-import { useRemoteStream } from "./useScreenShare";
+import { getViewerPc, useRemoteStream } from "./useScreenShare";
 import { TID } from "../../../testids";
 import styles from "./ScreenShareViewer.module.css";
 
@@ -38,6 +39,9 @@ interface StreamControlsProps {
   /** When provided, renders a popout button that detaches the stream
    *  into a separate always-on-top window. */
   readonly onPopout?: () => void;
+  /** When provided, renders the "Stats for Nerds" toggle button. */
+  readonly statsOn?: boolean;
+  readonly onToggleStats?: () => void;
 }
 
 function VolumeControl({ muted, volume, onToggleMute, onChange }: {
@@ -80,7 +84,7 @@ function VolumeControl({ muted, volume, onToggleMute, onChange }: {
   );
 }
 
-function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, desktopOverlayOn, onToggleDesktopOverlay, onPopout }: StreamControlsProps) {
+function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, desktopOverlayOn, onToggleDesktopOverlay, onPopout, statsOn, onToggleStats }: StreamControlsProps) {
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(100);
@@ -209,6 +213,20 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
         </button>
       )}
 
+      {/* "Stats for Nerds" toggle */}
+      {onToggleStats && (
+        <button
+          type="button"
+          className={`${styles.controlBtn} ${statsOn ? styles.controlBtnActive : ""}`}
+          onClick={onToggleStats}
+          title={statsOn ? t("screenShare.stats.hide") : t("screenShare.stats.toggle")}
+          aria-label={statsOn ? t("screenShare.stats.hide") : t("screenShare.stats.toggle")}
+          aria-pressed={statsOn}
+        >
+          <ActivityIcon width={16} height={16} />
+        </button>
+      )}
+
       {/* Spacer */}
       <div className={styles.controlsSpacer} />
 
@@ -265,6 +283,10 @@ function OwnBroadcastPreview({ stream, channelId, ownSession }: OwnPreviewProps)
   // It is closed automatically by `stopBroadcasting()` in `useScreenShare`
   // when the broadcast actually ends.
   const desktopOverlayOn = useAppStore((s) => s.desktopDrawingOverlayOpen);
+  const [statsOn, setStatsOn] = useState(false);
+  // The own preview is served by the loopback viewer PC (keyed by our own
+  // session), so the stats panel polls it like any remote viewer's PC.
+  const getStatsPc = useCallback(() => getViewerPc(ownSession), [ownSession]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -275,9 +297,10 @@ function OwnBroadcastPreview({ stream, channelId, ownSession }: OwnPreviewProps)
 
   const openDesktopOverlay = useCallback(async () => {
     try {
-      // Pass the captured track's pixel size + display surface kind so
-      // the Rust side can either pin the overlay over the shared window
-      // (display_surface = "window") or cover the matching monitor.
+      // The Rust side pins the overlay over the active broadcast's
+      // capture source directly. The track settings below only feed its
+      // legacy fallback (no Rust broadcast running); with the Rust-native
+      // capture there is no local MediaStream and they resolve to null.
       const track = stream?.getVideoTracks()[0];
       const settings = (track?.getSettings?.() ?? {}) as MediaTrackSettings & { displaySurface?: string };
       await invoke("open_drawing_overlay", {
@@ -335,8 +358,13 @@ function OwnBroadcastPreview({ stream, channelId, ownSession }: OwnPreviewProps)
         drawChannelId={channelId}
         desktopOverlayOn={desktopOverlayOn}
         onToggleDesktopOverlay={toggleDesktopOverlay}
+        statsOn={statsOn}
+        onToggleStats={() => setStatsOn((v) => !v)}
       />
       <DrawingOverlay channelId={channelId} ownSession={ownSession} videoRef={videoRef} />
+      {statsOn && (
+        <StreamStatsPanel getPc={getStatsPc} videoRef={videoRef} onClose={() => setStatsOn(false)} />
+      )}
     </div>
   );
 }
@@ -352,6 +380,8 @@ function RemoteViewer({ session, channelId, ownSession }: { readonly session: nu
   const broadcaster = useAppStore((s) => s.users.find((u) => u.session === session));
   const activeServerId = useAppStore((s) => s.activeServerId);
   const { t } = useTranslation(["chat", "common"]);
+  const [statsOn, setStatsOn] = useState(false);
+  const getStatsPc = useCallback(() => getViewerPc(session), [session]);
 
   const handlePopout = useCallback(() => {
     if (!ownSession || !activeServerId) return;
@@ -405,9 +435,14 @@ function RemoteViewer({ session, channelId, ownSession }: { readonly session: nu
           containerRef={containerRef}
           drawChannelId={channelId}
           onPopout={handlePopout}
+          statsOn={statsOn}
+          onToggleStats={() => setStatsOn((v) => !v)}
         />
       )}
       <DrawingOverlay channelId={channelId} ownSession={ownSession} videoRef={videoRef} />
+      {statsOn && (
+        <StreamStatsPanel getPc={getStatsPc} videoRef={videoRef} onClose={() => setStatsOn(false)} />
+      )}
     </div>
   );
 }

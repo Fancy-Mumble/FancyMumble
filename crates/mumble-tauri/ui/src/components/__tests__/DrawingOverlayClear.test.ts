@@ -11,6 +11,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(async () => () => {}),
+  emit: vi.fn(async () => undefined),
 }));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async () => undefined),
@@ -19,6 +20,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 import {
   clearAllStrokesInChannel,
   clearStrokesFromSender,
+  mergeSnapshotStrokes,
 } from "../chat/drawing/DrawingOverlay";
 
 // Module-private store helpers aren't exported, so we exercise them
@@ -51,5 +53,49 @@ describe("DrawingOverlay sender / channel clear helpers", () => {
     clearStrokesFromSender(7);
     // No throws, no leaked state - the assertion is reaching this line.
     expect(true).toBe(true);
+  });
+});
+
+// Cross-window snapshot merging: a freshly opened popout/overlay window
+// requests the stroke state from longer-running webviews and merges the
+// answers.  Merging must be idempotent (several windows may respond) and
+// must never let a stale responder shrink a stroke the local realm has
+// already extended via live mirror packets.
+describe("mergeSnapshotStrokes", () => {
+  const stroke = (strokeId: string, points: number[]) => ({
+    strokeId,
+    color: 0xff_ff_00_00,
+    width: 4,
+    widthFrac: 0.005,
+    points,
+  });
+
+  it("adds strokes missing from the target", () => {
+    const target = new Map();
+    const changed = mergeSnapshotStrokes(target, [stroke("5:a", [0.1, 0.2])]);
+    expect(changed).toBe(1);
+    expect(target.get("5:a")?.points).toEqual([0.1, 0.2]);
+  });
+
+  it("replaces a stroke when the snapshot has more points", () => {
+    const target = new Map([["5:a", stroke("5:a", [0.1, 0.2])]]);
+    const changed = mergeSnapshotStrokes(target, [stroke("5:a", [0.1, 0.2, 0.3, 0.4])]);
+    expect(changed).toBe(1);
+    expect(target.get("5:a")?.points).toEqual([0.1, 0.2, 0.3, 0.4]);
+  });
+
+  it("keeps the local stroke when it is longer than the snapshot's", () => {
+    const target = new Map([["5:a", stroke("5:a", [0.1, 0.2, 0.3, 0.4])]]);
+    const changed = mergeSnapshotStrokes(target, [stroke("5:a", [0.1, 0.2])]);
+    expect(changed).toBe(0);
+    expect(target.get("5:a")?.points).toEqual([0.1, 0.2, 0.3, 0.4]);
+  });
+
+  it("is idempotent when the same snapshot is applied twice", () => {
+    const target = new Map();
+    mergeSnapshotStrokes(target, [stroke("5:a", [0.1, 0.2]), stroke("6:b", [0.5, 0.6])]);
+    const changed = mergeSnapshotStrokes(target, [stroke("5:a", [0.1, 0.2]), stroke("6:b", [0.5, 0.6])]);
+    expect(changed).toBe(0);
+    expect(target.size).toBe(2);
   });
 });
