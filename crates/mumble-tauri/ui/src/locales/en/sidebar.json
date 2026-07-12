@@ -104,6 +104,8 @@
     "purgeHistory": "Purge chat history",
     "mute": "Mute",
     "unmute": "Unmute",
+    "micInUse": "Microphone is in use by another application",
+    "micInUseBy": "Microphone is in use by {{app}}",
     "enableVoice": "Enable Voice",
     "disableVoice": "Disable Voice",
     "noListenPerm": "You do not have permission to listen to this channel",

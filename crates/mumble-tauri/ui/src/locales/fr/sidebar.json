@@ -92,6 +92,8 @@
     "purgeHistory": "Purger l'historique du chat",
     "mute": "Mettre en sourdine",
     "unmute": "Sortir de la sourdine",
+    "micInUse": "Le microphone est utilisé par une autre application",
+    "micInUseBy": "Le microphone est utilisé par {{app}}",
     "enableVoice": "Activer le micro",
     "disableVoice": "Désactiver le micro",
     "noListenPerm": "Vous n'avez pas la permission d'écouter ce canal en parallèle",

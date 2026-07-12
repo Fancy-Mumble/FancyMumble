@@ -18,9 +18,9 @@ const SAMPLE_RATE_48K: NonZero<u32> = NonZero::new(48_000).unwrap();
 
 use mumble_protocol::audio::capture::AudioCapture;
 use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes};
+use mumble_protocol::audio::resampler::StreamResampler;
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use mumble_protocol::error::{Error, Result};
-use rodio::conversions::SampleRateConverter;
 use rodio::microphone::{available_inputs, MicrophoneBuilder};
 use rodio::source::Source;
 use tracing::{debug, trace, warn};
@@ -49,6 +49,20 @@ pub struct RodioCapture {
     volume: Arc<AtomicU32>,
     pending: Vec<f32>,
     device_name: Option<String>,
+}
+
+/// Format an error with its full `source()` chain. rodio's `OpenError`
+/// Display is just "Could not open microphone" - the actionable cause
+/// (e.g. WASAPI "resource is in use", exclusive-mode holders) lives in
+/// the wrapped cpal error and would otherwise never reach the logs.
+fn error_chain(e: &dyn std::error::Error) -> String {
+    let mut out = e.to_string();
+    let mut src = e.source();
+    while let Some(s) = src {
+        out.push_str(&format!(" -> {s}"));
+        src = s.source();
+    }
+    out
 }
 
 impl RodioCapture {
@@ -157,7 +171,7 @@ impl AudioCapture for RodioCapture {
 
         let mic = builder
             .open_stream()
-            .map_err(|e| Error::InvalidState(format!("Open microphone: {e}")))?;
+            .map_err(|e| Error::InvalidState(format!("Open microphone: {}", error_chain(&e))))?;
 
         let config = mic.config();
         let device_rate = config.sample_rate.get();
@@ -223,6 +237,10 @@ impl Iterator for MonoDownmix {
     }
 }
 
+/// Input samples accumulated before each resampler call.  Small enough
+/// to add sub-millisecond latency, large enough to amortise the call.
+const RESAMPLE_BATCH: usize = 64;
+
 fn capture_thread(
     mic: rodio::microphone::Microphone,
     channels: usize,
@@ -230,66 +248,176 @@ fn capture_thread(
     tx: SyncSender<Vec<f32>>,
 ) {
     let raw_samples = Arc::new(AtomicU64::new(0));
-    let mono = MonoDownmix {
+    let mut mono = MonoDownmix {
         mic,
         channels,
         raw_samples: Arc::clone(&raw_samples),
     };
 
-    // Resample the mono stream to 48 kHz when the device's native rate
-    // differs.  The whole downstream pipeline (CAPTURE_CHUNK framing, the
-    // Opus encoder, frame timing) assumes 48 kHz, so feeding native-rate
-    // samples unchanged would make every "10 ms" chunk represent the wrong
-    // amount of real time.  Uses rodio's linear `SampleRateConverter`.
-    let mut source: Box<dyn Iterator<Item = f32>> = match NonZero::new(device_rate) {
-        Some(rate) if rate != SAMPLE_RATE_48K => {
-            Box::new(SampleRateConverter::new(mono, rate, SAMPLE_RATE_48K, MONO_CHANNELS))
+    // Resample the mono stream to 48 kHz.  The whole downstream pipeline
+    // (CAPTURE_CHUNK framing, the Opus encoder, Mumble's frame timing)
+    // assumes 48 kHz, so feeding native-rate samples unchanged would make
+    // every "10 ms" chunk represent the wrong amount of real time - the
+    // direct cause of laggy / out-of-sync audio on receiving clients.
+    // `StreamResampler` is a windowed-sinc design (the same class the
+    // official client uses via speex) and accepts ANY rate, fractional
+    // included; at exactly 48 kHz it is a zero-cost passthrough.
+    let mut resampler = match StreamResampler::new(f64::from(device_rate), 48_000.0) {
+        Ok(rs) => rs,
+        Err(e) => {
+            warn!("rodio capture: cannot resample {device_rate} Hz -> 48 kHz: {e}");
+            return;
         }
-        _ => Box::new(mono),
     };
 
-    // Throughput instrumentation: `raw_in` is what the device ACTUALLY
-    // delivers in real time, `resampled_out` is what we hand downstream
-    // (should track 48000 Hz). If `raw_in` does not match `config_rate`,
-    // the rate label is lying and the resampler ratio is wrong - the
-    // direct cause of "too slow"/"too fast" playback.
+    // Some (virtual) drivers - e.g. VoiceMeeter - accept a config rate but
+    // actually deliver samples at another rate.  `RateWatch` measures the
+    // TRUE real-time delivery rate and, once the deviation is sustained
+    // and consistent, the resampler is retuned to the measured (usually
+    // fractional) rate.  That is only possible because the resampler
+    // takes arbitrary `f64` rates.
+    let mut watch = RateWatch::new(f64::from(device_rate));
+
     let start = Instant::now();
     let mut last_report = start;
     let mut out_samples: u64 = 0;
 
-    let mut chunk: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK);
-    loop {
-        match source.next() {
-            Some(s) => {
-                chunk.push(s);
-                if chunk.len() >= CAPTURE_CHUNK {
-                    out_samples += CAPTURE_CHUNK as u64;
-                    let now = Instant::now();
-                    if now.duration_since(last_report).as_secs() >= 2 {
-                        let elapsed = now.duration_since(start).as_secs_f64();
-                        let raw = raw_samples.load(Ordering::Relaxed);
-                        debug!(
-                            "rodio capture throughput: raw_in={:.0} Hz (device actual), resampled_out={:.0} Hz (target 48000), config_rate={device_rate}",
-                            raw as f64 / elapsed,
-                            out_samples as f64 / elapsed,
-                        );
-                        last_report = now;
-                    }
-                    let full = std::mem::replace(&mut chunk, Vec::with_capacity(CAPTURE_CHUNK));
-                    if tx.send(full).is_err() {
-                        return;
-                    }
+    let mut in_buf: Vec<f32> = Vec::with_capacity(RESAMPLE_BATCH);
+    let mut resampled: Vec<f32> = Vec::with_capacity(CAPTURE_CHUNK * 4);
+    let mut ended = false;
+
+    while !ended {
+        // Pull one batch from the device (blocking on hardware pace).
+        while in_buf.len() < RESAMPLE_BATCH {
+            match mono.next() {
+                Some(s) => in_buf.push(s),
+                None => {
+                    ended = true;
+                    break;
                 }
             }
-            None => {
-                // Stream ended - flush what we have so the last partial
-                // chunk is not lost.
-                if !chunk.is_empty() {
-                    let _ = tx.send(chunk);
-                }
+        }
+
+        resampler.process_into(&in_buf, &mut resampled);
+        in_buf.clear();
+
+        // Measured-rate correction (lying drivers).
+        let now = Instant::now();
+        if let Some(measured) = watch.observe(raw_samples.load(Ordering::Relaxed), now) {
+            match resampler.set_input_rate(measured) {
+                Ok(()) => warn!(
+                    "rodio capture: device claims {device_rate} Hz but delivers {measured:.2} Hz; \
+                     resampler retuned to the measured rate"
+                ),
+                Err(e) => warn!("rodio capture: rate correction to {measured:.2} Hz failed: {e}"),
+            }
+        }
+
+        // Hand full 10 ms chunks downstream.
+        while resampled.len() >= CAPTURE_CHUNK {
+            let chunk: Vec<f32> = resampled.drain(..CAPTURE_CHUNK).collect();
+            out_samples += CAPTURE_CHUNK as u64;
+            if tx.send(chunk).is_err() {
                 return;
             }
         }
+
+        // Throughput instrumentation: `raw_in` is what the device ACTUALLY
+        // delivers in real time, `resampled_out` is what we hand downstream
+        // (should track 48000 Hz).
+        if now.duration_since(last_report).as_secs() >= 2 {
+            let elapsed = now.duration_since(start).as_secs_f64();
+            let raw = raw_samples.load(Ordering::Relaxed);
+            debug!(
+                "rodio capture throughput: raw_in={:.0} Hz (device actual), resampled_out={:.0} Hz \
+                 (target 48000), config_rate={device_rate}, resampler_rate={:.2}",
+                raw as f64 / elapsed,
+                out_samples as f64 / elapsed,
+                resampler.input_rate(),
+            );
+            last_report = now;
+        }
+    }
+
+    // Stream ended - flush what we have so the tail is not lost.
+    if !resampled.is_empty() {
+        let _ = tx.send(std::mem::take(&mut resampled));
+    }
+}
+
+/// Detects a sustained mismatch between a device's *claimed* sample rate
+/// and the rate it *actually* delivers, using windowed wall-clock
+/// measurements of the raw sample counter.
+///
+/// A correction is only reported after [`RATE_STREAK`] consecutive
+/// measurement windows that (a) each deviate more than
+/// [`RATE_DEVIATION`] from the currently-applied rate and (b) agree with
+/// each other within [`RATE_CONSISTENCY`].  Transient dips (scheduler
+/// stalls, channel backpressure) produce inconsistent measurements and
+/// never trigger a correction; a lying driver produces rock-stable ones
+/// and does.
+struct RateWatch {
+    /// Rate currently applied to the resampler (starts at the claim).
+    applied: f64,
+    window_start: Instant,
+    window_start_count: u64,
+    /// Consecutive deviating measurements (cleared on any pass/outlier).
+    streak: Vec<f64>,
+}
+
+/// Seconds per measurement window.
+const RATE_WINDOW_SECS: f64 = 4.0;
+/// Relative deviation from the applied rate that counts as "wrong".
+const RATE_DEVIATION: f64 = 0.005; // 0.5 %
+/// Maximum relative spread between streak measurements to be "consistent".
+const RATE_CONSISTENCY: f64 = 0.002; // 0.2 %
+/// Consecutive consistent deviating windows required before correcting.
+const RATE_STREAK: usize = 3;
+
+impl RateWatch {
+    fn new(claimed_rate: f64) -> Self {
+        Self {
+            applied: claimed_rate,
+            window_start: Instant::now(),
+            window_start_count: 0,
+            streak: Vec::with_capacity(RATE_STREAK),
+        }
+    }
+
+    /// Feed the current cumulative raw-sample count; returns the measured
+    /// rate to switch to when a sustained, consistent mismatch is proven.
+    fn observe(&mut self, total_raw: u64, now: Instant) -> Option<f64> {
+        let elapsed = now.duration_since(self.window_start).as_secs_f64();
+        if elapsed < RATE_WINDOW_SECS {
+            return None;
+        }
+        let measured = (total_raw.saturating_sub(self.window_start_count)) as f64 / elapsed;
+        self.window_start = now;
+        self.window_start_count = total_raw;
+        self.decide(measured)
+    }
+
+    /// Pure decision logic, separated for testability.
+    fn decide(&mut self, measured: f64) -> Option<f64> {
+        if measured <= 0.0 || ((measured / self.applied) - 1.0).abs() <= RATE_DEVIATION {
+            self.streak.clear();
+            return None;
+        }
+        if let Some(&first) = self.streak.first() {
+            if ((measured / first) - 1.0).abs() > RATE_CONSISTENCY {
+                // Deviating, but not the same deviation as before:
+                // transient noise, start over with this one.
+                self.streak.clear();
+            }
+        }
+        self.streak.push(measured);
+        if self.streak.len() < RATE_STREAK {
+            return None;
+        }
+        let corrected = self.streak.iter().sum::<f64>() / self.streak.len() as f64;
+        self.streak.clear();
+        self.applied = corrected;
+        Some(corrected)
     }
 }
 
@@ -731,6 +859,209 @@ mod tests {
         let volume = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
         let running = Arc::new(AtomicBool::new(true));
         MumbleMixerSource::new(buffers, speaker_volumes, volume, running)
+    }
+
+    /// Contention diagnostic - probes EVERY cpal input device: default
+    /// config + a short open attempt, printing full error chains. Shows
+    /// which devices are openable and which are held by another client.
+    /// `cargo test -p mumble-tauri cpal_inputs_hw -- --ignored --nocapture`
+    #[test]
+    #[ignore = "requires audio hardware; run manually with --ignored --nocapture"]
+    fn cpal_inputs_hw_probe() {
+        use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+        let host = cpal::default_host();
+        let devices: Vec<_> = host.input_devices().expect("enumerate").collect();
+        println!("{} input device(s)", devices.len());
+        for d in devices {
+            let name = d
+                .description()
+                .map(|x| x.name().to_string())
+                .unwrap_or_else(|_| "<unnamed>".into());
+            match d.default_input_config() {
+                Ok(cfg) => {
+                    println!(
+                        "device '{name}': default {} Hz, {} ch, {:?}",
+                        cfg.sample_rate(),
+                        cfg.channels(),
+                        cfg.sample_format(),
+                    );
+                    let sc = cpal::StreamConfig {
+                        channels: cfg.channels(),
+                        sample_rate: cfg.sample_rate(),
+                        buffer_size: cpal::BufferSize::Default,
+                    };
+                    match d.build_input_stream(
+                        &sc,
+                        move |_data: &[f32], _| {},
+                        |e| println!("  stream error cb: {e}"),
+                        None,
+                    ) {
+                        Ok(s) => {
+                            let played = s.play();
+                            println!("  open at native rate: OK (play: {played:?})");
+                            drop(s);
+                        }
+                        Err(e) => {
+                            let mut chain = format!("{e}");
+                            let mut src: Option<&dyn std::error::Error> =
+                                std::error::Error::source(&e);
+                            while let Some(s) = src {
+                                chain.push_str(&format!(" -> {s}"));
+                                src = std::error::Error::source(s);
+                            }
+                            println!("  open at native rate FAILED: {chain}");
+                        }
+                    }
+                }
+                Err(e) => println!("device '{name}': no default config: {e}"),
+            }
+        }
+    }
+
+    /// Hardware diagnostic - run manually on a machine with a mic:
+    /// `cargo test -p mumble-tauri rodio_mic_hw -- --ignored --nocapture`
+    ///
+    /// Replicates `RodioCapture::start()`'s open sequence, printing every
+    /// device, the chosen config, and (on failure) the FULL error chain
+    /// including the cpal error that rodio's `OpenError` Display hides.
+    #[test]
+    #[ignore = "requires audio hardware; run manually with --ignored --nocapture"]
+    fn rodio_mic_hw_probe() {
+        match available_inputs() {
+            Ok(inputs) => {
+                for i in &inputs {
+                    println!("input device: {i}");
+                }
+            }
+            Err(e) => println!("available_inputs failed: {e}"),
+        }
+
+        let builder = MicrophoneBuilder::new()
+            .default_device()
+            .expect("default input device");
+        let builder = builder.default_config().expect("default input config");
+        let builder = builder.prefer_channel_counts([MONO_CHANNELS]);
+
+        match builder.open_stream() {
+            Ok(mut mic) => {
+                let (rate, chans, fmt) = {
+                    let cfg = mic.config();
+                    (cfg.sample_rate.get(), cfg.channel_count.get(), cfg.sample_format)
+                };
+                println!("OPEN OK: rate={rate} Hz, channels={chans}, format={fmt:?}");
+                // Pull ~200 ms of samples to prove data flows.
+                let mut n = 0u32;
+                let deadline = Instant::now() + std::time::Duration::from_millis(400);
+                while Instant::now() < deadline && n < rate / 5 {
+                    if mic.next().is_some() {
+                        n += 1;
+                    }
+                }
+                println!("pulled {n} samples in 400 ms");
+                assert!(n > 0, "microphone opened but delivered no samples");
+            }
+            Err(e) => {
+                let mut chain = format!("{e}");
+                let mut src: Option<&dyn std::error::Error> = std::error::Error::source(&e);
+                while let Some(s) = src {
+                    chain.push_str(&format!(" -> {s}"));
+                    src = std::error::Error::source(s);
+                }
+                panic!("open_stream failed: {chain}");
+            }
+        }
+    }
+
+    /// Full-path hardware diagnostic: RodioCapture (incl. the resampling
+    /// capture thread) must deliver 48 kHz frames from the real mic.
+    /// `cargo test -p mumble-tauri rodio_capture_hw -- --ignored --nocapture`
+    #[test]
+    #[ignore = "requires audio hardware; run manually with --ignored --nocapture"]
+    fn rodio_capture_hw_end_to_end() {
+        let volume = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
+        let mut cap = RodioCapture::new(None, 960, volume).expect("create");
+        cap.start().expect("start");
+        let deadline = Instant::now() + std::time::Duration::from_secs(3);
+        let mut frames = 0u32;
+        while Instant::now() < deadline && frames < 50 {
+            match cap.read_frame() {
+                Ok(_) => frames += 1,
+                Err(Error::NotEnoughSamples) => {
+                    thread::sleep(std::time::Duration::from_millis(5));
+                }
+                Err(e) => panic!("read_frame failed: {e}"),
+            }
+        }
+        let _ = cap.stop();
+        println!("got {frames} x 20 ms frames in <=3 s");
+        assert!(
+            frames >= 50,
+            "expected >=50 frames (1 s of audio) in 3 s, got {frames}"
+        );
+    }
+
+    fn make_watch(rate: f64) -> RateWatch {
+        RateWatch {
+            applied: rate,
+            window_start: Instant::now(),
+            window_start_count: 0,
+            streak: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn rate_watch_corrects_sustained_consistent_mismatch() {
+        // Driver claims 48 kHz, actually delivers ~44.1 kHz (VoiceMeeter
+        // case). Three consistent windows must trigger a correction to
+        // the measured (fractional) rate.
+        let mut w = make_watch(48_000.0);
+        assert_eq!(w.decide(44_100.4), None);
+        assert_eq!(w.decide(44_099.6), None);
+        let corrected = w.decide(44_100.2).expect("third consistent window corrects");
+        assert!((corrected - 44_100.07).abs() < 1.0, "corrected to {corrected}");
+        // Afterwards the measured rate matches the applied rate: stable.
+        assert_eq!(w.decide(44_100.1), None);
+        assert!(w.streak.is_empty());
+    }
+
+    #[test]
+    fn rate_watch_ignores_transient_dips() {
+        // Backpressure stalls produce inconsistent measurements - the
+        // streak must reset instead of correcting.
+        let mut w = make_watch(48_000.0);
+        assert_eq!(w.decide(45_000.0), None);
+        assert_eq!(w.decide(40_000.0), None); // inconsistent with 45 kHz
+        assert_eq!(w.decide(47_950.0), None); // back within tolerance
+        assert!(w.streak.is_empty(), "streak must be cleared");
+        assert_eq!(w.applied, 48_000.0, "no correction applied");
+    }
+
+    #[test]
+    fn rate_watch_passes_honest_devices() {
+        let mut w = make_watch(44_100.0);
+        for _ in 0..10 {
+            assert_eq!(w.decide(44_101.0), None);
+        }
+        assert_eq!(w.applied, 44_100.0);
+    }
+
+    #[test]
+    fn rate_watch_windows_use_deltas_not_cumulative_counts() {
+        let mut w = make_watch(48_000.0);
+        let t0 = w.window_start;
+        // First window: 4 s x 44.1 kHz delivered.
+        let n1 = 4 * 44_100;
+        assert_eq!(w.observe(n1, t0 + std::time::Duration::from_secs(4)), None);
+        assert_eq!(w.window_start_count, n1, "window base must advance");
+        // Second window measures the DELTA, not the running total.
+        let n2 = n1 + 4 * 44_100;
+        assert_eq!(w.observe(n2, t0 + std::time::Duration::from_secs(8)), None);
+        // Third window completes the streak.
+        let n3 = n2 + 4 * 44_100;
+        let corrected = w
+            .observe(n3, t0 + std::time::Duration::from_secs(12))
+            .expect("sustained mismatch corrects");
+        assert!((corrected - 44_100.0).abs() < 5.0, "corrected to {corrected}");
     }
 
     #[test]

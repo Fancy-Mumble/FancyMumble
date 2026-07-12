@@ -1971,6 +1971,7 @@ dependencies = [
  "cpal",
  "mumble-protocol",
  "tracing",
+ "windows",
 ]
 
 [[package]]
@@ -3965,6 +3966,7 @@ dependencies = [
  "chrono",
  "cpal",
  "dhat",
+ "fancy-audio-device",
  "fancy-screenshare",
  "fancy-utils",
  "futures-util",

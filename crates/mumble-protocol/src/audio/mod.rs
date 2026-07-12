@@ -33,6 +33,9 @@
 //! | `encoder`  | [`AudioEncoder`] trait + [`OpusEncoder`] stub |
 //! | `decoder`  | [`AudioDecoder`] trait + [`OpusDecoder`] stub |
 //! | `pipeline` | [`OutboundPipeline`] / [`InboundPipeline`] + builders |
+//! | `resampler`| [`StreamResampler`]: arbitrary-rate -> 48 kHz conversion |
+//!
+//! [`StreamResampler`]: resampler::StreamResampler
 
 pub mod capture;
 pub mod decoder;
@@ -41,4 +44,5 @@ pub mod filter;
 pub mod mixer;
 pub mod pipeline;
 pub mod playback;
+pub mod resampler;
 pub mod sample;

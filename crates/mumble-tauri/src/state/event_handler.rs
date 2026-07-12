@@ -153,6 +153,14 @@ impl EventHandler for TauriEventHandler {
             let session = audio.sender_session;
             let is_terminator = audio.is_terminator;
 
+            // e2e timing assertions (no-op unless FANCY_E2E_AUDIO_STATS_FILE
+            // is set): tallies wire-level packet stats per sender.
+            crate::e2e_stats::record_packet(
+                session,
+                audio.frame_number,
+                &audio.opus_data,
+                is_terminator,
+            );
             self.inbound_audio_count += 1;
             if self.inbound_audio_count == 1 || self.inbound_audio_count.is_multiple_of(500) {
                 debug!(

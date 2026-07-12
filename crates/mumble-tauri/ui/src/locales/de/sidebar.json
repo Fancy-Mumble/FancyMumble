@@ -92,6 +92,8 @@
     "purgeHistory": "Chatverlauf leeren",
     "mute": "Stummschalten",
     "unmute": "Stummschaltung aufheben",
+    "micInUse": "Das Mikrofon wird von einer anderen Anwendung verwendet",
+    "micInUseBy": "Das Mikrofon wird von {{app}} verwendet",
     "enableVoice": "Sprache aktivieren",
     "disableVoice": "Sprache deaktivieren",
     "noListenPerm": "Du hast keine Berechtigung, diesen Kanal mitzuhören",

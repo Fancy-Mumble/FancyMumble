@@ -122,6 +122,9 @@ pub(crate) async fn set_audio_settings(
     settings: AudioSettings,
 ) -> Result<(), String> {
     let force_tcp = settings.force_tcp_audio;
+    // Apply the exclusive-input selection before any pipeline restart below
+    // so the (re)opened capture uses the new mode.
+    audio::set_exclusive_input(settings.exclusive_input);
     let (needs_outbound, needs_inbound, force_tcp_changed) = state
         .set_audio_settings(settings)
         .unwrap_or((false, false, false));
@@ -156,6 +159,25 @@ pub(crate) fn set_audio_backend(use_rodio: bool) {
 #[tauri::command]
 pub(crate) fn get_audio_backend() -> bool {
     audio::is_rodio_backend()
+}
+
+/// Probe microphone availability with the current settings, emitting a
+/// `capture-error` event (device-in-use, with the holding app named) or
+/// clearing it. The audio settings page calls this on load so a persisted
+/// exclusive-mode / device-busy state is shown without waiting for the
+/// user to enable voice.
+#[tauri::command]
+pub(crate) fn probe_microphone(state: tauri::State<'_, AppState>) {
+    state.probe_microphone();
+}
+
+/// Return the last known microphone capture state (device-in-use, with the
+/// holding app named, or none). A newly-mounted view (e.g. the sidebar
+/// after returning from the settings route) queries this so it reflects a
+/// busy device it may have missed the live event for.
+#[tauri::command]
+pub(crate) fn get_capture_state() -> Option<crate::state::audio::CaptureState> {
+    crate::state::audio::current_capture_state()
 }
 
 /// Get the current voice state.

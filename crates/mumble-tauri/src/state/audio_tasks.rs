@@ -73,8 +73,11 @@ pub(super) async fn outbound_audio_loop(
     // stream only begins producing samples when we are ready to consume.
     if let Err(e) = pipeline.start() {
         warn!("outbound_audio_loop: capture start failed: {e}");
+        super::audio::emit_capture_error(app.as_ref(), &e.to_string());
         return;
     }
+    // Microphone opened - clear any previously shown capture error.
+    super::audio::clear_capture_error(app.as_ref());
 
     // Bounded channel: 50 packets ~ 1 second of audio at 20ms/frame.
     let (tx, rx) = tokio::sync::mpsc::channel::<AudioPacketOut>(50);

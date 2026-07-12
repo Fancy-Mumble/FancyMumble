@@ -1,4 +1,4 @@
-import { BellIcon, BellOffIcon, ChevronRightIcon, CloseIcon, DatabaseIcon, EditIcon, HeadphonesIcon, HeadphonesOffIcon, InfoIcon, ListenBadgeIcon, LockIcon, LogoutIcon, MenuIcon, MicIcon, MicOffIcon, MicOffSmallIcon, PhoneIcon, PhoneOffIcon, PlusIcon, RecordIcon, SearchIcon, SettingsIcon, ShieldIcon, TrashIcon, UsersGroupIcon } from "../../../icons";
+import { BellIcon, BellOffIcon, ChevronRightIcon, CloseIcon, DatabaseIcon, EditIcon, HeadphonesIcon, HeadphonesOffIcon, InfoIcon, ListenBadgeIcon, LockIcon, LogoutIcon, MenuIcon, MicIcon, MicOffIcon, MicOffSmallIcon, PhoneIcon, PhoneOffIcon, PlusIcon, RecordIcon, SearchIcon, SettingsIcon, ShieldIcon, TrashIcon, UsersGroupIcon, WarningIcon } from "../../../icons";
 import { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -10,6 +10,8 @@ import { getPreferences, updatePreferences } from "../../../preferencesStorage";
 const SidebarSearchView = lazy(() => import("../SidebarSearchView").then((m) => ({ default: m.SidebarSearchView })));
 import { UserListItem, RoleColorsContext, RoleGroupsContext, buildRoleColorMap, buildRoleGroupsMap } from "../user/UserListItem";
 import { useAclGroups } from "../../../hooks/useAclGroups";
+import { useCaptureError, captureHolders } from "../../../hooks/useCaptureError";
+import { Tooltip } from "../../elements/Tooltip";
 import { UserContextMenu } from "../user/UserContextMenu";
 import type { UserContextMenuState } from "../user/UserContextMenu";
 import ChannelEditorDialog, { canEditChannel, canCreateChannel, canOnlyCreateTemp, canDeleteChannel, canDeleteMessages } from "./ChannelEditorDialog";
@@ -48,29 +50,40 @@ interface SelfVoiceControlsProps {
   readonly enableVoice: () => void;
   readonly disableVoice: () => void;
   readonly onCollapse?: () => void;
+  /** True when the microphone is held by another application. */
+  readonly micInUse?: boolean;
+  /** Tooltip explaining the mic-in-use state (names the holding app). */
+  readonly micInUseTitle?: string;
 }
 
-function SelfVoiceControls({ voiceState, inCall, toggleMute, toggleDeafen, enableVoice, disableVoice, onCollapse }: Readonly<SelfVoiceControlsProps>) {
+function SelfVoiceControls({ voiceState, inCall, toggleMute, toggleDeafen, enableVoice, disableVoice, onCollapse, micInUse, micInUseTitle }: Readonly<SelfVoiceControlsProps>) {
   const { t } = useTranslation(["sidebar", "common"]);
   const isActive = voiceState === "active";
   const isInactive = voiceState === "inactive";
-  const muteTitle = isActive ? t("channelSidebar.mute") : t("channelSidebar.unmute");
+  const muteTitle = micInUse
+    ? micInUseTitle ?? t("channelSidebar.micInUse")
+    : isActive ? t("channelSidebar.mute") : t("channelSidebar.unmute");
 
   return (<>
     {/* Desktop: mute + deaf toggles (hidden on mobile via CSS) */}
     <div className={`${styles.selfVoiceActions} ${styles.desktopOnly}`}>
-      <button
-        className={`${styles.voiceToggle} ${isActive ? styles.voiceActive : styles.voiceMuted}`}
-        data-testid={TID.toggleMute}
-        onClick={toggleMute}
-        title={muteTitle}
-      >
-        {isActive ? (
-          <MicIcon width={18} height={18} />
-        ) : (
-          <MicOffIcon width={18} height={18} />
-        )}
-      </button>
+      <Tooltip label={muteTitle}>
+        <button
+          className={`${styles.voiceToggle} ${isActive ? styles.voiceActive : styles.voiceMuted} ${micInUse ? styles.voiceInUse : ""}`}
+          data-testid={TID.toggleMute}
+          data-mic-in-use={micInUse ? "true" : undefined}
+          onClick={toggleMute}
+          aria-label={muteTitle}
+        >
+          {micInUse ? (
+            <WarningIcon width={18} height={18} />
+          ) : isActive ? (
+            <MicIcon width={18} height={18} />
+          ) : (
+            <MicOffIcon width={18} height={18} />
+          )}
+        </button>
+      </Tooltip>
       <button
         className={`${styles.voiceToggle} ${isInactive ? styles.voiceMuted : styles.voiceActive}`}
         data-testid={TID.toggleDeafen}
@@ -141,6 +154,14 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
   const listenedChannels = useAppStore((s) => s.listenedChannels);
   const unreadCounts = useAppStore((s) => s.unreadCounts);
   const voiceState = useAppStore((s) => s.voiceState);
+  const captureError = useCaptureError();
+  const micInUse = captureError?.kind === "device_busy";
+  const micHolders = captureHolders(captureError);
+  const micInUseTitle = micInUse
+    ? micHolders
+      ? t("channelSidebar.micInUseBy", { app: micHolders })
+      : t("channelSidebar.micInUse")
+    : undefined;
   const toggleMute = useAppStore((s) => s.toggleMute);
   const toggleDeafen = useAppStore((s) => s.toggleDeafen);
   const enableVoice = useAppStore((s) => s.enableVoice);
@@ -719,6 +740,8 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
                 enableVoice={enableVoice}
                 disableVoice={disableVoice}
                 onCollapse={onCollapse}
+                micInUse={micInUse}
+                micInUseTitle={micInUseTitle}
               />
             )}
           </div>

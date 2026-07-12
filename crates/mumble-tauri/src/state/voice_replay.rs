@@ -80,9 +80,11 @@ pub(super) async fn voice_replay_loop(
     let _ = ctx.playback.start();
     if let Err(e) = ctx.capture.start() {
         warn!("voice_replay: capture start failed: {e}");
+        super::audio::emit_capture_error(Some(&app), &e.to_string());
         emit_state(&app, VoiceReplayState::Idle);
         return;
     }
+    super::audio::clear_capture_error(Some(&app));
 
     let buffer = record(&mut ctx, &app, &mut stop_rx).await;
     let _ = ctx.capture.stop();
