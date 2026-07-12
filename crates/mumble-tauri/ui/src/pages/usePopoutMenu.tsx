@@ -19,6 +19,14 @@ import styles from "./PopoutPage.module.css";
 
 interface MenuPos { x: number; y: number; }
 
+/** Extra page-specific entry rendered above "Close" in the menu. */
+export interface PopoutMenuItem {
+  readonly label: string;
+  /** When set, the item renders as a checkbox with a leading checkmark. */
+  readonly checked?: boolean;
+  readonly onClick: () => void;
+}
+
 export interface PopoutMenuOptions {
   /** Ref to the rendered media element used for fit + aspect ratio. */
   readonly mediaRef: RefObject<HTMLImageElement | HTMLVideoElement | null>;
@@ -28,10 +36,12 @@ export interface PopoutMenuOptions {
   readonly mediaLabel: string;
   /** localStorage key for aspect-lock persistence. */
   readonly aspectStorageKey?: string;
+  /** Page-specific menu entries (e.g. the stream popout's stats toggle). */
+  readonly extraItems?: readonly PopoutMenuItem[];
 }
 
 /** Hook + JSX renderer for the popout right-click menu. */
-export function usePopoutMenu({ mediaRef, mediaReady, mediaLabel, aspectStorageKey = "popout.aspectLocked" }: PopoutMenuOptions) {
+export function usePopoutMenu({ mediaRef, mediaReady, mediaLabel, aspectStorageKey = "popout.aspectLocked", extraItems }: PopoutMenuOptions) {
   const [menu, setMenu] = useState<MenuPos | null>(null);
   const [aspectLocked, setAspectLocked] = useState<boolean>(() => {
     try { return localStorage.getItem(aspectStorageKey) === "1"; } catch { return false; }
@@ -130,6 +140,18 @@ export function usePopoutMenu({ mediaRef, mediaReady, mediaLabel, aspectStorageK
         >
           {aspectLocked ? "\u2713 " : ""}Lock Aspect Ratio
         </button>
+        {extraItems?.map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            className={styles.menuItem}
+            onClick={() => { closeMenu(); item.onClick(); }}
+            role={item.checked === undefined ? undefined : "menuitemcheckbox"}
+            aria-checked={item.checked}
+          >
+            {item.checked ? "\u2713 " : ""}{item.label}
+          </button>
+        ))}
         <button type="button" className={styles.menuItem} onClick={() => { closeMenu(); close(); }}>
           Close
         </button>

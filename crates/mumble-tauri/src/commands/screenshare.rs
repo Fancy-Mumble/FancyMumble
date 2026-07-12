@@ -132,6 +132,13 @@ pub(crate) fn try_intercept_answer(signal_type: i32, payload: &str) -> bool {
     true
 }
 
+/// Capture source of the currently running Rust broadcast, if any.
+/// Lets the drawing overlay pin itself over the exact shared content
+/// instead of guessing a monitor from capture dimensions.
+pub(crate) fn active_broadcast_source() -> Option<(SourceKind, u32)> {
+    broadcaster_slot().lock().ok()?.as_ref().map(ScreenBroadcaster::source)
+}
+
 /// List all capturable screens and windows for the source picker.
 #[tauri::command]
 pub(crate) async fn list_capture_sources() -> Result<Vec<CaptureSource>, String> {

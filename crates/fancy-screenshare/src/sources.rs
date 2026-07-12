@@ -105,6 +105,33 @@ fn native_sources() -> Result<Vec<CaptureSource>, String> {
     Ok(out)
 }
 
+/// Physical-pixel rectangle `(x, y, w, h)` of a capture source on the
+/// virtual desktop, e.g. for pinning an overlay window over the shared
+/// content. `None` when the source is gone or minimized, or when the
+/// backend cannot report positions (Wayland portal sources, whose ids
+/// are advisory).
+pub fn source_rect(kind: SourceKind, id: u32) -> Option<(i32, i32, u32, u32)> {
+    match CaptureTarget::resolve(kind, id).ok()? {
+        CaptureTarget::Monitor(m) => Some((
+            m.x().ok()?,
+            m.y().ok()?,
+            m.width().ok()?.max(1),
+            m.height().ok()?.max(1),
+        )),
+        CaptureTarget::Window(w) => {
+            if w.is_minimized().unwrap_or(false) {
+                return None;
+            }
+            Some((
+                w.x().ok()?,
+                w.y().ok()?,
+                w.width().ok()?.max(1),
+                w.height().ok()?.max(1),
+            ))
+        }
+    }
+}
+
 /// Capture one frame of the given source, scaled down to at most `max_dim`
 /// pixels on the longer edge, and return it as a `data:image/jpeg;base64,...`
 /// URL for direct use in an `<img>` / QML `Image`.
