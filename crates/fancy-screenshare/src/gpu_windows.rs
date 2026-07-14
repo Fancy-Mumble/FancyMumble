@@ -14,8 +14,9 @@
 //! Everything here is best-effort: [`GpuPipeline::new`] returns `Err` on any
 //! missing capability (no hardware encoder, RDP session, old driver, ...)
 //! and the caller falls back to the CPU pipeline.
-#![allow(unsafe_code)] // FFI with D3D11/MF/WGC; every unsafe block is a COM call.
+#![allow(unsafe_code, reason = "FFI with D3D11/MF/WGC; every unsafe block is a COM call")]
 
+use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use windows::core::Interface;
@@ -98,6 +99,9 @@ pub(crate) struct GpuPipeline {
     processor_enum: ID3D11VideoProcessorEnumerator,
     nv12_pool: Vec<ID3D11Texture2D>,
     next_nv12: usize,
+    /// Last converted picture, for idle keep-alive re-encodes. Safe to reuse:
+    /// pool slots only advance when a NEW capture frame is converted.
+    last_nv12: Option<ID3D11Texture2D>,
     frame_pool: Direct3D11CaptureFramePool,
     session: GraphicsCaptureSession,
     encoder: IMFTransform,
@@ -105,12 +109,22 @@ pub(crate) struct GpuPipeline {
     codec_api: ICodecAPI,
     /// Inputs the encoder has asked for and we have not yet satisfied.
     pending_need_input: u32,
-    /// Whether the encoder signalled `METransformHaveOutput` not yet drained.
-    have_output: bool,
+    /// Outputs the encoder signalled via `METransformHaveOutput` and we have
+    /// not yet drained. MUST be a COUNT, not a bool: the async MFT raises one
+    /// event per available output, and each REQUIRES its own `ProcessOutput`.
+    /// Collapsing several events into a bool strands the surplus outputs in the
+    /// encoder, which then stops raising `METransformNeedInput` (it cannot make
+    /// output room) - a saturation that stalls `submit()` for its full 200 ms
+    /// timeout and drops frames in bursts.
+    have_output: u32,
+    /// Encoded frames already pulled from the MFT but not yet returned to the
+    /// caller. Decouples draining from emitting: `submit()` drains here WHILE
+    /// it waits for `METransformNeedInput` so the encoder is never blocked on
+    /// undrained output (the deadlock behind the 200 ms `submit` stalls), and
+    /// the caller pops one per `next_frame`.
+    output_queue: VecDeque<EncodedFrame>,
     out_width: u32,
     out_height: u32,
-    in_width: u32,
-    in_height: u32,
     frame_duration_100ns: i64,
     started_at: Instant,
 }
@@ -130,31 +144,8 @@ impl GpuPipeline {
     pub(crate) fn new(monitor_id: u32, settings: &EncodeSettings) -> Result<Self, String> {
         ensure_mf_started()?;
 
-        // -- D3D11 device shared by capture, video processor and encoder --
-        let mut device: Option<ID3D11Device> = None;
-        let mut context: Option<ID3D11DeviceContext> = None;
-        let mut feature_level = D3D_FEATURE_LEVEL::default();
-        unsafe {
-            D3D11CreateDevice(
-                None,
-                D3D_DRIVER_TYPE_HARDWARE,
-                HMODULE::default(),
-                D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
-                None,
-                D3D11_SDK_VERSION,
-                Some(&mut device),
-                Some(&mut feature_level),
-                Some(&mut context),
-            )
-        }
-        .map_err(|e| format!("D3D11CreateDevice: {e}"))?;
-        let device = device.ok_or("no D3D11 device")?;
-        let context = context.ok_or("no D3D11 context")?;
-
-        // MF and WGC drive the device from their own threads.
-        let multithread: ID3D11Multithread =
-            device.cast().map_err(|e| format!("ID3D11Multithread: {e}"))?;
-        let _ = unsafe { multithread.SetMultithreadProtected(true) };
+        // D3D11 device shared by capture, video processor and encoder.
+        let (device, context) = create_d3d11_device()?;
 
         // -- Windows.Graphics.Capture session for the monitor --------------
         let dxgi: IDXGIDevice = device.cast().map_err(|e| format!("IDXGIDevice: {e}"))?;
@@ -187,46 +178,8 @@ impl GpuPipeline {
 
         // -- D3D11 video processor: scale + BGRA -> NV12 --------------------
         let (out_width, out_height) = output_dims(in_width, in_height, settings.max_dimension);
-        let video_device: ID3D11VideoDevice =
-            device.cast().map_err(|e| format!("ID3D11VideoDevice: {e}"))?;
-        let video_context: ID3D11VideoContext =
-            context.cast().map_err(|e| format!("ID3D11VideoContext: {e}"))?;
-
-        let content_desc = D3D11_VIDEO_PROCESSOR_CONTENT_DESC {
-            InputFrameFormat: D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE,
-            InputWidth: in_width,
-            InputHeight: in_height,
-            OutputWidth: out_width,
-            OutputHeight: out_height,
-            Usage: D3D11_VIDEO_USAGE_PLAYBACK_NORMAL,
-            ..Default::default()
-        };
-        let processor_enum = unsafe { video_device.CreateVideoProcessorEnumerator(&content_desc) }
-            .map_err(|e| format!("CreateVideoProcessorEnumerator: {e}"))?;
-        let processor = unsafe { video_device.CreateVideoProcessor(&processor_enum, 0) }
-            .map_err(|e| format!("CreateVideoProcessor: {e}"))?;
-
-        let nv12_desc = D3D11_TEXTURE2D_DESC {
-            Width: out_width,
-            Height: out_height,
-            MipLevels: 1,
-            ArraySize: 1,
-            Format: DXGI_FORMAT_NV12,
-            SampleDesc: windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC {
-                Count: 1,
-                Quality: 0,
-            },
-            Usage: D3D11_USAGE_DEFAULT,
-            BindFlags: D3D11_BIND_RENDER_TARGET.0 as u32,
-            ..Default::default()
-        };
-        let mut nv12_pool = Vec::with_capacity(NV12_POOL);
-        for _ in 0..NV12_POOL {
-            let mut tex: Option<ID3D11Texture2D> = None;
-            unsafe { device.CreateTexture2D(&nv12_desc, None, Some(&mut tex)) }
-                .map_err(|e| format!("CreateTexture2D(NV12): {e}"))?;
-            nv12_pool.push(tex.ok_or("no NV12 texture")?);
-        }
+        let VideoProcessor { video_device, video_context, processor, processor_enum, nv12_pool } =
+            create_video_processor(&device, &context, (in_width, in_height), (out_width, out_height))?;
 
         // -- Hardware H.264 encoder MFT -------------------------------------
         let (encoder, codec_api, encoder_events) = create_hardware_encoder(
@@ -246,17 +199,17 @@ impl GpuPipeline {
             processor_enum,
             nv12_pool,
             next_nv12: 0,
+            last_nv12: None,
             frame_pool,
             session,
             encoder,
             encoder_events,
             codec_api,
             pending_need_input: 0,
-            have_output: false,
+            have_output: 0,
+            output_queue: VecDeque::new(),
             out_width,
             out_height,
-            in_width,
-            in_height,
             frame_duration_100ns: (10_000_000.0 / fps) as i64,
             started_at: Instant::now(),
         })
@@ -299,7 +252,8 @@ impl GpuPipeline {
                         .map_err(|e| format!("surface texture: {e}"))?
                 };
                 let nv12 = self.convert(&texture)?;
-                self.submit(nv12, force_keyframe)?;
+                self.submit(&nv12, force_keyframe)?;
+                self.last_nv12 = Some(nv12);
                 // Give the encoder a moment to produce output on this pass.
                 continue;
             }
@@ -370,14 +324,22 @@ impl GpuPipeline {
     }
 
     /// Wrap the NV12 texture in an MF sample and hand it to the encoder.
-    fn submit(&mut self, nv12: ID3D11Texture2D, force_keyframe: bool) -> Result<(), String> {
+    fn submit(&mut self, nv12: &ID3D11Texture2D, force_keyframe: bool) -> Result<(), String> {
         // Wait until the encoder has asked for input (async MFT contract).
+        // CRITICAL: drain output while waiting. A hardware MFT stops raising
+        // `METransformNeedInput` when its output buffers are full, and it only
+        // frees them when we call `ProcessOutput`. If we merely spin on events
+        // without draining (as before), the encoder waits for us to drain and
+        // we wait for it to ask for input - a deadlock that burned the whole
+        // 200 ms timeout and dropped the frame, in bursts. Draining here breaks
+        // it; the pulled frames are queued for the caller.
         let deadline = Instant::now() + Duration::from_millis(200);
         while self.pending_need_input == 0 {
             self.pump_encoder_events()?;
+            self.drain_outputs()?;
             if self.pending_need_input == 0 {
                 if Instant::now() >= deadline {
-                    // Encoder is saturated - drop this frame rather than stall.
+                    // Genuinely saturated - drop this frame rather than stall.
                     return Ok(());
                 }
                 std::thread::sleep(Duration::from_millis(1));
@@ -391,7 +353,7 @@ impl GpuPipeline {
         }
 
         let buffer = unsafe {
-            MFCreateDXGISurfaceBuffer(&ID3D11Texture2D::IID, &nv12, 0, false)
+            MFCreateDXGISurfaceBuffer(&ID3D11Texture2D::IID, nv12, 0, false)
         }
         .map_err(|e| format!("MFCreateDXGISurfaceBuffer: {e}"))?;
         let sample = unsafe { MFCreateSample() }.map_err(|e| format!("MFCreateSample: {e}"))?;
@@ -425,21 +387,41 @@ impl GpuPipeline {
             if kind == METransformNeedInput.0 as u32 {
                 self.pending_need_input += 1;
             } else if kind == METransformHaveOutput.0 as u32 {
-                // Handled by try_take_output (ProcessOutput below).
-                self.have_output = true;
+                // One output ready per event; try_take_output drains one each.
+                self.have_output += 1;
             }
         }
     }
 
-    /// Pull one encoded sample if the encoder signalled output.
+    /// Pull all currently-signalled outputs into the queue, then return the
+    /// oldest. Draining ALL of them (not one) keeps the MFT's output buffers
+    /// free so it keeps requesting input.
     fn try_take_output(&mut self) -> Result<Option<EncodedFrame>, String> {
-        if !self.have_output {
+        self.drain_outputs()?;
+        Ok(self.output_queue.pop_front())
+    }
+
+    /// Call `ProcessOutput` for every output the encoder has signalled,
+    /// pushing each onto [`Self::output_queue`]. Safe to call anytime; a no-op
+    /// when nothing is pending.
+    fn drain_outputs(&mut self) -> Result<(), String> {
+        while self.have_output > 0 {
+            match self.take_one_output()? {
+                Some(frame) => self.output_queue.push_back(frame),
+                None => break,
+            }
+        }
+        Ok(())
+    }
+
+    /// Pull exactly one encoded sample via `ProcessOutput` if one is signalled.
+    fn take_one_output(&mut self) -> Result<Option<EncodedFrame>, String> {
+        if self.have_output == 0 {
             return Ok(None);
         }
-        self.have_output = false;
+        self.have_output -= 1;
 
-        let mut out_buffer = MFT_OUTPUT_DATA_BUFFER::default();
-        out_buffer.dwStreamID = 0;
+        let mut out_buffer = MFT_OUTPUT_DATA_BUFFER { dwStreamID: 0, ..Default::default() };
         let mut status = 0u32;
         let result = unsafe {
             self.encoder
@@ -491,6 +473,26 @@ impl crate::pipeline::EncodePipeline for GpuPipeline {
         force_keyframe: bool,
     ) -> Result<Option<EncodedFrame>, String> {
         self.pump(wait, force_keyframe)
+    }
+
+    fn encode_repeat(&mut self) -> Result<Option<EncodedFrame>, String> {
+        let Some(nv12) = self.last_nv12.clone() else {
+            return Ok(None);
+        };
+        // Same picture again = a minimal delta frame (no keyframe). Drain
+        // briefly like next_frame's normal pass; the async MFT usually has
+        // the output ready within a few polls.
+        self.submit(&nv12, false)?;
+        let deadline = Instant::now() + Duration::from_millis(50);
+        loop {
+            if let Some(frame) = self.try_take_output()? {
+                return Ok(Some(frame));
+            }
+            if Instant::now() >= deadline {
+                return Ok(None);
+            }
+            std::thread::sleep(Duration::from_millis(2));
+        }
     }
 
     fn shutdown(&mut self) {
@@ -582,6 +584,91 @@ fn try_bind_encoder(
     // The MFT AddRef'd the manager; our reference drops normally.
     drop(manager);
     Ok(encoder)
+}
+
+/// Create the shared D3D11 hardware device + immediate context, marked
+/// multithread-protected (MF and WGC drive it from their own threads).
+fn create_d3d11_device() -> Result<(ID3D11Device, ID3D11DeviceContext), String> {
+    let mut device: Option<ID3D11Device> = None;
+    let mut context: Option<ID3D11DeviceContext> = None;
+    let mut feature_level = D3D_FEATURE_LEVEL::default();
+    unsafe {
+        D3D11CreateDevice(
+            None,
+            D3D_DRIVER_TYPE_HARDWARE,
+            HMODULE::default(),
+            D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
+            None,
+            D3D11_SDK_VERSION,
+            Some(&mut device),
+            Some(&mut feature_level),
+            Some(&mut context),
+        )
+    }
+    .map_err(|e| format!("D3D11CreateDevice: {e}"))?;
+    let device = device.ok_or("no D3D11 device")?;
+    let context = context.ok_or("no D3D11 context")?;
+    let multithread: ID3D11Multithread =
+        device.cast().map_err(|e| format!("ID3D11Multithread: {e}"))?;
+    let _ = unsafe { multithread.SetMultithreadProtected(true) };
+    Ok((device, context))
+}
+
+/// The D3D11 video-processor objects plus the NV12 output texture pool.
+struct VideoProcessor {
+    video_device: ID3D11VideoDevice,
+    video_context: ID3D11VideoContext,
+    processor: ID3D11VideoProcessor,
+    processor_enum: ID3D11VideoProcessorEnumerator,
+    nv12_pool: Vec<ID3D11Texture2D>,
+}
+
+/// Build the video processor (GPU scale + BGRA -> NV12) and its NV12 output
+/// texture pool for the given input/output dimensions.
+fn create_video_processor(
+    device: &ID3D11Device,
+    context: &ID3D11DeviceContext,
+    (in_width, in_height): (u32, u32),
+    (out_width, out_height): (u32, u32),
+) -> Result<VideoProcessor, String> {
+    let video_device: ID3D11VideoDevice =
+        device.cast().map_err(|e| format!("ID3D11VideoDevice: {e}"))?;
+    let video_context: ID3D11VideoContext =
+        context.cast().map_err(|e| format!("ID3D11VideoContext: {e}"))?;
+
+    let content_desc = D3D11_VIDEO_PROCESSOR_CONTENT_DESC {
+        InputFrameFormat: D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE,
+        InputWidth: in_width,
+        InputHeight: in_height,
+        OutputWidth: out_width,
+        OutputHeight: out_height,
+        Usage: D3D11_VIDEO_USAGE_PLAYBACK_NORMAL,
+        ..Default::default()
+    };
+    let processor_enum = unsafe { video_device.CreateVideoProcessorEnumerator(&content_desc) }
+        .map_err(|e| format!("CreateVideoProcessorEnumerator: {e}"))?;
+    let processor = unsafe { video_device.CreateVideoProcessor(&processor_enum, 0) }
+        .map_err(|e| format!("CreateVideoProcessor: {e}"))?;
+
+    let nv12_desc = D3D11_TEXTURE2D_DESC {
+        Width: out_width,
+        Height: out_height,
+        MipLevels: 1,
+        ArraySize: 1,
+        Format: DXGI_FORMAT_NV12,
+        SampleDesc: windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+        Usage: D3D11_USAGE_DEFAULT,
+        BindFlags: D3D11_BIND_RENDER_TARGET.0 as u32,
+        ..Default::default()
+    };
+    let mut nv12_pool = Vec::with_capacity(NV12_POOL);
+    for _ in 0..NV12_POOL {
+        let mut tex: Option<ID3D11Texture2D> = None;
+        unsafe { device.CreateTexture2D(&nv12_desc, None, Some(&mut tex)) }
+            .map_err(|e| format!("CreateTexture2D(NV12): {e}"))?;
+        nv12_pool.push(tex.ok_or("no NV12 texture")?);
+    }
+    Ok(VideoProcessor { video_device, video_context, processor, processor_enum, nv12_pool })
 }
 
 /// Find and configure a hardware H.264 encoder MFT bound to `device`.

@@ -112,19 +112,17 @@ fn writer_loop(inner: &'static StatsInner) {
     loop {
         std::thread::sleep(std::time::Duration::from_millis(1_000));
 
-        // Tone + buffer-depth snapshot from the decoded speaker buffers.
+        // Tone + buffer-depth snapshot from the decoded speaker buffers
+        // (empty when the buffers are unavailable this tick).
         let mut tone: HashMap<u32, (usize, f64)> = HashMap::new();
-        if let Ok(slot) = inner.buffers.lock() {
-            if let Some(buffers) = slot.as_ref() {
-                if let Ok(bufs) = buffers.lock() {
-                    for (&session, buf) in bufs.iter() {
-                        let take = buf.len().min(TONE_WINDOW);
-                        let window: Vec<f32> =
-                            buf.iter().skip(buf.len() - take).copied().collect();
-                        let _ = tone
-                            .insert(session, (buf.len(), tone_ratio(&window, TONE_HZ, 48_000.0)));
-                    }
-                }
+        'tone: {
+            let Ok(slot) = inner.buffers.lock() else { break 'tone };
+            let Some(buffers) = slot.as_ref() else { break 'tone };
+            let Ok(bufs) = buffers.lock() else { break 'tone };
+            for (&session, buf) in bufs.iter() {
+                let take = buf.len().min(TONE_WINDOW);
+                let window: Vec<f32> = buf.iter().skip(buf.len() - take).copied().collect();
+                let _ = tone.insert(session, (buf.len(), tone_ratio(&window, TONE_HZ, 48_000.0)));
             }
         }
 
@@ -217,6 +215,10 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(
+        clippy::unusual_byte_groupings,
+        reason = "the underscores mark the Opus TOC bit layout: config(5) | stereo(1) | code(2)"
+    )]
     fn toc_parser_matches_known_durations() {
         // CELT fullband 20 ms (config 31), code 0 -> 960 samples.
         assert_eq!(opus_nb_samples_48k(&[0b11111_0_00]), Some(960));

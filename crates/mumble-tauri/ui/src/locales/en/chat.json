@@ -72,7 +72,8 @@
     "channelOptions": "Channel options",
     "join": "Join",
     "joinChannel": "Join Channel",
-    "popOutDm": "Pop out direct message"
+    "popOutDm": "Pop out direct message",
+    "changeSharing": "Change what you're sharing"
   },
   "calendar": {
     "title": "Calendar",
@@ -365,10 +366,13 @@
       "title": "Choose what to share",
       "tabScreens": "Entire Screen",
       "tabWindows": "Window",
+      "tabDevices": "Device",
       "loading": "Finding your screens and windows…",
       "empty": "Nothing available to share here.",
       "loadFailed": "Could not list screens and windows: {{detail}}",
+      "emptyDevices": "No camera found.",
       "share": "Share",
+      "shareBoth": "Share both",
       "cancel": "Cancel",
       "qualityLabel": "Stream quality",
       "quality_sd": "SD",
@@ -380,7 +384,11 @@
       "res_720p": "720p",
       "res_1080p": "1080p",
       "res_1440p": "1440p",
-      "res_source": "Source"
+      "res_source": "Source",
+      "sharingLabel": "Sharing:",
+      "addCameraHint": "Tip: add a camera from the Device tab to share both",
+      "addDisplayHint": "Tip: add a screen or window to share both",
+      "removeSource": "Remove {{title}}"
     },
     "mode": {
       "title": "Stream Mode",
@@ -445,13 +453,24 @@
       "freezes": "Freezes",
       "freezesValue": "{{n}} ({{seconds}} s total)",
       "jitter": "Jitter",
-      "date": "Date"
+      "date": "Date",
+      "codec": "Codec",
+      "audioCodec": "Audio codec",
+      "trackScreen": "Screen",
+      "trackCamera": "Camera",
+      "trackVideo": "Video {{n}}"
     },
     "banner": {
       "isSharingScreen": "{{name}} is sharing their screen",
+      "isSharingCamera": "{{name}} is sharing their camera",
+      "isSharingScreenCamera": "{{name}} is sharing their screen and camera",
       "watch": "Watch",
       "dismiss": "Dismiss notification"
-    }
+    },
+    "addScreenTrack": "Share your screen too",
+    "addCameraTrack": "Add your camera",
+    "endCamera": "Stop sharing your camera",
+    "stopScreenShare": "Stop sharing your screen"
   },
   "streamFocus": {
     "layout": {

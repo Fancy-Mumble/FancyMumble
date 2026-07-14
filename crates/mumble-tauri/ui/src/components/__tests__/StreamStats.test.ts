@@ -88,6 +88,48 @@ describe("parseStatsReports", () => {
     expect(sample.frameWidth).toBeNull();
     expect(sample.rttMs).toBeNull();
     expect(sample.bytesReceived).toBe(0);
+    expect(sample.videos).toEqual([]);
+  });
+
+  it("exposes one per-track entry, mirrored into the top-level fields", () => {
+    const sample = parseStatsReports(makeReports(), 1000);
+    expect(sample.videos).toHaveLength(1);
+    const v = sample.videos[0]!;
+    expect(v.frameWidth).toBe(1920);
+    expect(v.frameHeight).toBe(1080);
+    expect(v.videoCodec).toBe("H264 (42e01f)");
+    expect(v.packetsLost).toBe(10);
+  });
+
+  it("keeps BOTH video tracks of a screen+camera share separate", () => {
+    const reports = [
+      ...makeReports(),
+      {
+        id: "v2",
+        type: "inbound-rtp",
+        kind: "video",
+        mid: "1",
+        codecId: "c1",
+        bytesReceived: 200_000,
+        packetsReceived: 400,
+        packetsLost: 5,
+        frameWidth: 1280,
+        frameHeight: 720,
+        framesPerSecond: 30,
+        framesDecoded: 900,
+      },
+    ];
+    const sample = parseStatsReports(reports, 1000);
+    expect(sample.videos).toHaveLength(2);
+    expect(sample.videos.map((v) => `${v.frameWidth}x${v.frameHeight}`)).toEqual([
+      "1920x1080",
+      "1280x720",
+    ]);
+    // Packet counters aggregate across tracks for the connection-level loss %.
+    expect(sample.packetsReceived).toBe(900 + 400);
+    expect(sample.packetsLost).toBe(10 + 5);
+    // Top-level video fields mirror the FIRST track.
+    expect(sample.frameWidth).toBe(1920);
   });
 });
 
@@ -111,6 +153,7 @@ function sampleAt(timestampMs: number, overrides: Partial<StatsSample>): StatsSa
     audioCodec: null,
     rttMs: null,
     icePath: null,
+    videos: [],
     ...overrides,
   };
 }

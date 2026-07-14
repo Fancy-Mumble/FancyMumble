@@ -9,8 +9,10 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use fancy_screenshare::{BroadcastState, CaptureSource, ScreenBroadcaster, SignalSink, SourceKind};
-use serde::Serialize;
+use fancy_screenshare::{
+    BroadcastSource, BroadcastState, CaptureSource, ScreenBroadcaster, SignalSink, SourceKind,
+};
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::state::AppState;
@@ -47,7 +49,7 @@ impl MumbleSignalSink {
     fn send_signal(&self, signal_type: i32, payload: String) {
         let app = self.app.clone();
         let server_id = self.server_id.clone();
-        let _ = tauri::async_runtime::spawn(async move {
+        let _detached = tauri::async_runtime::spawn(async move {
             let state = app.state::<AppState>();
             if let Err(e) = state.send_webrtc_signal(0, signal_type, payload, server_id).await {
                 tracing::warn!("screenshare: sending signal {signal_type} failed: {e}");
@@ -97,10 +99,11 @@ impl SignalSink for MumbleSignalSink {
 ///
 /// The SFU's answers to the broadcaster and to a (loopback) viewer carry an
 /// identical envelope (`sender = target = own session`), so the payload is
-/// the discriminator: the answer to our *sendonly* offer is `recvonly`,
-/// answers to viewers' recvonly offers are `sendonly`. Only claim the former,
-/// and only while our offer is actually unanswered - everything else flows to
-/// the webview's dispatcher untouched.
+/// the discriminator: the answer to our *sendonly* offer is all-`recvonly`
+/// (one m-section per broadcast track), while answers to viewers' recvonly
+/// offers contain `sendonly` m-lines. Only claim the former, and only while
+/// our offer is actually unanswered - everything else flows to the webview's
+/// dispatcher untouched.
 pub(crate) fn try_intercept_answer(signal_type: i32, payload: &str) -> bool {
     if signal_type != 3 {
         return false; // not an SDP_ANSWER
@@ -116,13 +119,19 @@ pub(crate) fn try_intercept_answer(signal_type: i32, payload: &str) -> bool {
         tracing::debug!(m_sections, "screenshare: answer not claimed (not awaiting)");
         return false;
     }
-    // The broadcaster's offer carries exactly ONE (video) m-section, so its
-    // answer must too - a multi-section answer belongs to a webview viewer
-    // (they offer video+audio) even if an audio m-line says "recvonly".
-    if m_sections != 1 || !payload.contains("a=recvonly") {
+    // The broadcaster's offer carries one video m-section per shared source,
+    // all sendonly, so its answer has exactly that many m-sections and no
+    // sendonly at all - a viewer's answer (video+video+audio, sendonly from
+    // the SFU's side) never matches, even while an audio m-line says
+    // "recvonly".
+    if m_sections != broadcaster.track_count()
+        || !payload.contains("a=recvonly")
+        || payload.contains("a=sendonly")
+    {
         tracing::debug!(
             m_sections,
             has_recvonly = payload.contains("a=recvonly"),
+            has_sendonly = payload.contains("a=sendonly"),
             "screenshare: answer not claimed (not the broadcaster's)",
         );
         return false;
@@ -132,11 +141,12 @@ pub(crate) fn try_intercept_answer(signal_type: i32, payload: &str) -> bool {
     true
 }
 
-/// Capture source of the currently running Rust broadcast, if any.
-/// Lets the drawing overlay pin itself over the exact shared content
-/// instead of guessing a monitor from capture dimensions.
+/// Desktop capture source (screen or window) of the currently running Rust
+/// broadcast, if any. Lets the drawing overlay pin itself over the exact
+/// shared content instead of guessing a monitor from capture dimensions.
+/// Camera tracks have no desktop location and are ignored here.
 pub(crate) fn active_broadcast_source() -> Option<(SourceKind, u32)> {
-    broadcaster_slot().lock().ok()?.as_ref().map(ScreenBroadcaster::source)
+    broadcaster_slot().lock().ok()?.as_ref().and_then(ScreenBroadcaster::display_source)
 }
 
 /// List all capturable screens and windows for the source picker.
@@ -179,7 +189,18 @@ fn encode_settings_for(
     settings
 }
 
-/// Start broadcasting the given source through the server SFU.
+/// One source in a broadcast, as sent by the picker UI. Wire format of the
+/// crate's [`BroadcastSource`] (kind uses the `SourceKind` serde form).
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub(crate) struct SourceSpec {
+    /// Screen, window or camera.
+    kind: SourceKind,
+    /// Backend-native source id.
+    id: u32,
+}
+
+/// Start broadcasting the given sources (screen/window and/or camera; one
+/// video track each, mids in list order) through the server SFU.
 ///
 /// `server_id` pins all signaling to the connection that starts the
 /// broadcast (multi-tab safety, mirroring the webview's `broadcasterServerId`).
@@ -188,15 +209,26 @@ fn encode_settings_for(
 #[tauri::command]
 pub(crate) async fn start_screen_broadcast(
     app: AppHandle,
-    kind: SourceKind,
-    id: u32,
+    sources: Vec<SourceSpec>,
     server_id: Option<String>,
     max_dimension: Option<u32>,
     max_fps: Option<f32>,
 ) -> Result<(), String> {
-    let indicator_app = app.clone();
+    // SCREEN shares must not capture this app itself: the live own-preview
+    // inside the captured screen forms a delayed video feedback loop that
+    // self-oscillates (delivery stall -> static screen -> capture pause ->
+    // catch-up burst -> stall...), measured as constant receiver "freezes".
+    // Excluding our windows (Discord does the same - their app is black in
+    // captures) kills the loop and stops chats leaking into shares. Window
+    // shares are unaffected: picking THIS app's window still works because
+    // exclusion is only applied while a screen share runs.
+    let excludes_screen = sources.iter().any(|s| s.kind == SourceKind::Screen);
+    set_own_windows_excluded_from_capture(&app, excludes_screen);
+
     let sink = std::sync::Arc::new(MumbleSignalSink { app, server_id });
     let settings = encode_settings_for(max_dimension, max_fps);
+    let broadcast_sources: Vec<BroadcastSource> =
+        sources.iter().map(|s| BroadcastSource { kind: s.kind, id: s.id }).collect();
     tauri::async_runtime::spawn_blocking(move || {
         // Hold the slot lock across construction: `ScreenBroadcaster::start`
         // sends the SDP offer before returning and the SFU answers within
@@ -205,7 +237,7 @@ pub(crate) async fn start_screen_broadcast(
         // this it leaks to the webview and poisons the loopback viewer's
         // peer connection ("m-line order doesn't match").
         let mut slot = broadcaster_slot().lock().map_err(|_| "broadcaster mutex poisoned")?;
-        let broadcaster = ScreenBroadcaster::start(kind, id, settings, sink)?;
+        let broadcaster = ScreenBroadcaster::start(broadcast_sources, settings, sink)?;
         if let Some(mut old) = slot.replace(broadcaster) {
             old.stop();
         }
@@ -213,17 +245,30 @@ pub(crate) async fn start_screen_broadcast(
     })
     .await
     .map_err(|e| e.to_string())??;
-
-    // Pin the red "you are sharing" bar to the shared source (replaces the
-    // OS's yellow capture border). Best-effort - never fails the broadcast.
-    super::share_indicator::open(&indicator_app, kind, id);
     Ok(())
 }
+
+/// Apply (or lift) capture exclusion on every window of this app. Best
+/// effort: a window that cannot be excluded logs and stays visible in the
+/// share rather than failing the broadcast.
+#[cfg(not(target_os = "android"))]
+fn set_own_windows_excluded_from_capture(app: &AppHandle, excluded: bool) {
+    use crate::platform::window::WindowExt;
+    use tauri::Manager;
+    for (label, window) in app.webview_windows() {
+        if let Err(e) = window.set_excluded_from_capture(excluded) {
+            tracing::warn!(%label, excluded, "screenshare: capture exclusion failed: {e}");
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+fn set_own_windows_excluded_from_capture(_app: &AppHandle, _excluded: bool) {}
 
 /// Stop the active broadcast (no-op when none is running).
 #[tauri::command]
 pub(crate) async fn stop_screen_broadcast(app: AppHandle) -> Result<(), String> {
-    super::share_indicator::close(&app);
+    set_own_windows_excluded_from_capture(&app, false);
     let old = {
         let mut slot = broadcaster_slot().lock().map_err(|_| "broadcaster mutex poisoned")?;
         slot.take()

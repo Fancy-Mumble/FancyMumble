@@ -68,6 +68,27 @@ opt-level = 3             # Full optimizations
 strip = "symbols"         # Strip debug symbols from the binary
 panic = "abort"           # Abort on panic (smaller binary, no unwind overhead)
 
+# -- Dev-profile overrides for frame-hot crates ----------------------
+# `cargo tauri dev` compiles everything unoptimized, which makes the
+# per-frame video path (camera/screen convert, downscale, H.264 encode)
+# 10x+ slower than release - cameras crawl at a few fps in dev for no
+# code reason. Optimizing just these leaf crates keeps app rebuilds fast
+# while dev video behaves like release.
+[profile.dev.package.fancy-screenshare]
+opt-level = 3
+[profile.dev.package.image]
+opt-level = 3
+[profile.dev.package.fast_image_resize]
+opt-level = 3
+[profile.dev.package.openh264]
+opt-level = 3
+[profile.dev.package.openh264-sys2]
+opt-level = 3
+[profile.dev.package.nokhwa]
+opt-level = 3
+[profile.dev.package.nokhwa-core]
+opt-level = 3
+
 # -- Release + debug-info profile (for profiling) --------------------
 # Fully optimized like `release`, but keeps debug symbols so heap/CPU
 # profilers (dhat via `--features dhat-heap`, perf, VTune, Superluminal)

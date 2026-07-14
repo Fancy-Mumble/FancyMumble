@@ -1,4 +1,4 @@
-import { ActivityIcon, CloseIcon, EditIcon, ErrorCircleIcon, FullscreenExitIcon, FullscreenIcon, PauseIcon, PlayIcon, PopoutIcon, ScreenShareIcon, VolumeIcon, VolumeOffIcon } from "../../../icons";
+import { ActivityIcon, CloseIcon, EditIcon, ErrorCircleIcon, FullscreenExitIcon, FullscreenIcon, HighlighterIcon, MonitorIcon, PauseIcon, PlayIcon, PopoutIcon, ScreenShareIcon, VolumeIcon, VolumeOffIcon, WebcamIcon } from "../../../icons";
 /**
  * Screen share viewer components.
  *
@@ -14,9 +14,63 @@ import { useRef, useEffect, useMemo, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../../../store";
-import { getViewerPc, useRemoteStream } from "./useScreenShare";
+import { getBroadcastContent, getTrackContentMap, getViewerPc, useRemoteStreams } from "./useScreenShare";
 import { TID } from "../../../testids";
 import styles from "./ScreenShareViewer.module.css";
+
+// ---------------------------------------------------------------------------
+// Camera picture-in-picture tile (screen + camera shares)
+// ---------------------------------------------------------------------------
+
+/** The broadcaster's camera, floating over the stream viewport when they
+ *  share screen + camera together. Purely presentational; a camera-only
+ *  share renders in the main viewport instead (no tile). */
+function CameraPipTile({ stream, session, own, onEnd }: {
+  readonly stream: MediaStream;
+  readonly session: number;
+  readonly own: boolean;
+  /** When provided (own broadcast), render an × that ends just the camera
+   *  track (the screen keeps sharing). */
+  readonly onEnd?: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const { t } = useTranslation("chat");
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.srcObject = stream;
+    video.play().catch(() => {});
+    return () => { video.srcObject = null; };
+  }, [stream]);
+
+  return (
+    <div className={styles.cameraPipWrap}>
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className={styles.cameraPip}
+        data-testid={TID.streamCameraVideo}
+        data-own={own ? "true" : "false"}
+        data-session={session}
+      />
+      {onEnd && (
+        <button
+          type="button"
+          className={styles.cameraPipClose}
+          onClick={onEnd}
+          data-testid={TID.streamEndCamera}
+          title={t("screenShare.endCamera")}
+          aria-label={t("screenShare.endCamera")}
+        >
+          <CloseIcon width={13} height={13} />
+        </button>
+      )}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Stream controls overlay
@@ -36,6 +90,11 @@ interface StreamControlsProps {
    *  so the parent can manage the click-through overlay window lifecycle. */
   readonly desktopOverlayOn?: boolean;
   readonly onToggleDesktopOverlay?: () => void;
+  /** Which source kind the own broadcast is missing (broadcaster only).
+   *  Renders an "add screen"/"add camera" shortcut that reopens the
+   *  picker seeded with the live sources, so the share can be EXTENDED. */
+  readonly missingSourceKind?: "screen" | "camera";
+  readonly onAddSource?: () => void;
   /** When provided, renders a popout button that detaches the stream
    *  into a separate always-on-top window. */
   readonly onPopout?: () => void;
@@ -84,7 +143,7 @@ function VolumeControl({ muted, volume, onToggleMute, onChange }: {
   );
 }
 
-function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, desktopOverlayOn, onToggleDesktopOverlay, onPopout, statsOn, onToggleStats }: StreamControlsProps) {
+function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, desktopOverlayOn, onToggleDesktopOverlay, missingSourceKind, onAddSource, onPopout, statsOn, onToggleStats }: StreamControlsProps) {
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(100);
@@ -209,7 +268,30 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
           aria-label={desktopOverlayOn ? t("screenShare.hideOverlay") : t("screenShare.showOverlay")}
           aria-pressed={desktopOverlayOn}
         >
-          <ScreenShareIcon width={16} height={16} />
+          <HighlighterIcon width={16} height={16} />
+        </button>
+      )}
+
+      {/* Add the missing source kind to the live broadcast (own preview
+          only): a camera-only share offers "share screen too", a screen-only
+          share offers "add camera". Opens the picker seeded with the live
+          sources, so confirming EXTENDS the share. */}
+      {missingSourceKind && onAddSource && (
+        <button
+          type="button"
+          className={styles.controlBtn}
+          onClick={onAddSource}
+          data-testid={TID.streamAddSource}
+          title={missingSourceKind === "screen"
+            ? t("screenShare.addScreenTrack")
+            : t("screenShare.addCameraTrack")}
+          aria-label={missingSourceKind === "screen"
+            ? t("screenShare.addScreenTrack")
+            : t("screenShare.addCameraTrack")}
+        >
+          {missingSourceKind === "screen"
+            ? <MonitorIcon width={16} height={16} />
+            : <WebcamIcon width={16} height={16} />}
         </button>
       )}
 
@@ -271,12 +353,21 @@ interface OwnPreviewProps {
   readonly stream: MediaStream | null;
   readonly channelId: number;
   readonly ownSession: number;
+  /** See {@link StreamControlsProps.missingSourceKind}. */
+  readonly missingSourceKind?: "screen" | "camera";
+  readonly onAddSource?: () => void;
+  /** Ends just the camera track (renders an × on the camera PiP tile). */
+  readonly onEndCamera?: () => void;
 }
 
-function OwnBroadcastPreview({ stream, channelId, ownSession }: OwnPreviewProps) {
+function OwnBroadcastPreview({ stream, channelId, ownSession, missingSourceKind, onAddSource, onEndCamera }: OwnPreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const webrtcConnecting = useAppStore((s) => s.webrtcConnecting);
+  // The loopback camera PiP (screen + camera shares). Gated on `stream`
+  // below so tabs that don't own the broadcast (stream = null) never
+  // render it.
+  const { camera: cameraStream } = useRemoteStreams(ownSession);
   const { t } = useTranslation(["chat", "common"]);
   // Persisted in the global store so the overlay stays open when the user
   // switches to a different server tab (which unmounts this component).
@@ -341,6 +432,9 @@ function OwnBroadcastPreview({ stream, channelId, ownSession }: OwnPreviewProps)
         data-own="true"
         data-session={ownSession}
       />
+      {stream !== null && cameraStream !== null && (
+        <CameraPipTile stream={cameraStream} session={ownSession} own onEnd={onEndCamera} />
+      )}
       {(webrtcConnecting || !stream) && (
         <div className={styles.connectingOverlay}>
           <div className={styles.connectingDots}>
@@ -358,12 +452,19 @@ function OwnBroadcastPreview({ stream, channelId, ownSession }: OwnPreviewProps)
         drawChannelId={channelId}
         desktopOverlayOn={desktopOverlayOn}
         onToggleDesktopOverlay={toggleDesktopOverlay}
+        missingSourceKind={missingSourceKind}
+        onAddSource={onAddSource}
         statsOn={statsOn}
         onToggleStats={() => setStatsOn((v) => !v)}
       />
       <DrawingOverlay channelId={channelId} ownSession={ownSession} videoRef={videoRef} />
       {statsOn && (
-        <StreamStatsPanel getPc={getStatsPc} videoRef={videoRef} onClose={() => setStatsOn(false)} />
+        <StreamStatsPanel
+          getPc={getStatsPc}
+          videoRef={videoRef}
+          contentByMid={getTrackContentMap(ownSession)}
+          onClose={() => setStatsOn(false)}
+        />
       )}
     </div>
   );
@@ -376,7 +477,7 @@ function OwnBroadcastPreview({ stream, channelId, ownSession }: OwnPreviewProps)
 function RemoteViewer({ session, channelId, ownSession }: { readonly session: number; readonly channelId: number; readonly ownSession: number }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const remoteStream = useRemoteStream(session);
+  const { primary: remoteStream, camera: cameraStream } = useRemoteStreams(session);
   const broadcaster = useAppStore((s) => s.users.find((u) => u.session === session));
   const activeServerId = useAppStore((s) => s.activeServerId);
   const { t } = useTranslation(["chat", "common"]);
@@ -429,6 +530,9 @@ function RemoteViewer({ session, channelId, ownSession }: { readonly session: nu
         data-own="false"
         data-session={session}
       />
+      {remoteStream !== null && cameraStream !== null && (
+        <CameraPipTile stream={cameraStream} session={session} own={false} />
+      )}
       {remoteStream && (
         <StreamControls
           videoRef={videoRef}
@@ -441,7 +545,12 @@ function RemoteViewer({ session, channelId, ownSession }: { readonly session: nu
       )}
       <DrawingOverlay channelId={channelId} ownSession={ownSession} videoRef={videoRef} />
       {statsOn && (
-        <StreamStatsPanel getPc={getStatsPc} videoRef={videoRef} onClose={() => setStatsOn(false)} />
+        <StreamStatsPanel
+          getPc={getStatsPc}
+          videoRef={videoRef}
+          contentByMid={getTrackContentMap(session)}
+          onClose={() => setStatsOn(false)}
+        />
       )}
     </div>
   );
@@ -460,6 +569,11 @@ interface ScreenShareViewerProps {
   readonly channelId?: number;
   /** Our own session ID for drawing overlay (filters out own echoes). */
   readonly ownSession?: number;
+  /** See {@link StreamControlsProps.missingSourceKind} (own broadcast only). */
+  readonly missingSourceKind?: "screen" | "camera";
+  readonly onAddSource?: () => void;
+  /** Ends just the camera track (own broadcast only). */
+  readonly onEndCamera?: () => void;
 }
 
 export default function ScreenShareViewer({
@@ -468,11 +582,23 @@ export default function ScreenShareViewer({
   session,
   channelId = 0,
   ownSession = 0,
+  missingSourceKind,
+  onAddSource,
+  onEndCamera,
 }: ScreenShareViewerProps) {
   return (
     <div className={styles.broadcastArea}>
       {isOwnBroadcast
-        ? <OwnBroadcastPreview stream={localStream} channelId={channelId} ownSession={ownSession} />
+        ? (
+          <OwnBroadcastPreview
+            stream={localStream}
+            channelId={channelId}
+            ownSession={ownSession}
+            missingSourceKind={missingSourceKind}
+            onAddSource={onAddSource}
+            onEndCamera={onEndCamera}
+          />
+        )
         : <RemoteViewer session={session ?? 0} channelId={channelId} ownSession={ownSession} />}
     </div>
   );
@@ -514,9 +640,16 @@ interface BroadcastBannerProps {
   readonly sfuAvailable?: boolean;
 }
 
+/** Banner phrasing per announced share content ("screen" / "camera" / both). */
+const BANNER_LABEL_KEYS = {
+  screen: "screenShare.banner.isSharingScreen",
+  camera: "screenShare.banner.isSharingCamera",
+  both: "screenShare.banner.isSharingScreenCamera",
+} as const;
+
 /**
  * Notification bar shown above the chat when another user is sharing their
- * screen. Provides a "Watch" button to join the broadcast.
+ * screen (and/or camera). Provides a "Watch" button to join the broadcast.
  * When the server has no SFU the banner is shown in amber to indicate
  * that the share is peer-to-peer rather than server-relayed.
  */
@@ -556,7 +689,8 @@ export function BroadcastBanner({ broadcasters, onWatch, sfuAvailable = true }: 
         >
           <span className={`${styles.broadcastBannerDot} ${!sfuAvailable ? styles.broadcastBannerDotP2P : ""}`} />
           <span className={styles.broadcastBannerText}>
-            <span className={styles.broadcastBannerName}>{b.name}</span> {t("screenShare.banner.isSharingScreen")}
+            <span className={styles.broadcastBannerName}>{b.name}</span>{" "}
+            {t(BANNER_LABEL_KEYS[getBroadcastContent(b.session)])}
           </span>
           {!sfuAvailable && (
             <span className={styles.broadcastBannerP2PLabel} title={t("screenShare.p2pTooltip")}>

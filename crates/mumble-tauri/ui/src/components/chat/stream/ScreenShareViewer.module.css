@@ -30,6 +30,56 @@
   pointer-events: none;
 }
 
+/* Camera picture-in-picture tile (screen + camera shares): floats over the
+   bottom-right of the viewport, above the video but below the controls. */
+.cameraPipWrap {
+  position: absolute;
+  right: 12px;
+  bottom: 52px; /* clears the controls bar */
+  width: clamp(120px, 24%, 280px);
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  /* The tile itself is non-interactive so it never blocks the video or the
+     controls beneath it; only the × button opts back into pointer events. */
+  pointer-events: none;
+}
+
+.cameraPip {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+  display: block;
+}
+
+.cameraPipClose {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s, background 0.15s;
+  pointer-events: auto;
+}
+
+.cameraPipClose:hover {
+  opacity: 1;
+  background: var(--color-danger, #d9534f);
+}
+
 /* --- Stream controls overlay ------------------------------------ */
 
 .streamControls {

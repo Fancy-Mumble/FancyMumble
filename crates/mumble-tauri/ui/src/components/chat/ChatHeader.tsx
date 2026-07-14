@@ -332,17 +332,17 @@ export default function ChatHeader({
             <CalendarIcon width={18} height={18} />
           </button>
         )}
-        {onToggleScreenShare && !privateBadge && !broadcastInfo?.isOwnBroadcast && (
+        {onToggleScreenShare && !privateBadge && (
           <button
             className={`${styles.serverInfoBtn} ${isScreenSharing ? styles.screenShareActive : ""}`}
             onClick={onToggleScreenShare}
             disabled={!!screenShareDisabledReason}
             data-testid={TID.screenShareToggle}
-            aria-label={isScreenSharing ? t("header.stopSharing") : t("header.shareScreen")}
+            aria-label={isScreenSharing ? t("header.changeSharing") : t("header.shareScreen")}
             title={
               screenShareDisabledReason ?? (
                 isScreenSharing
-                  ? t("header.stopSharing")
+                  ? t("header.changeSharing")
                   : sfuAvailable
                     ? t("header.shareScreenRelayed")
                     : t("header.shareScreenP2P")
