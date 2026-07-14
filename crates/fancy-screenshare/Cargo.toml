@@ -17,6 +17,11 @@ fast_image_resize = "5"
 # H.264 encoder (Cisco openh264, compiled from vendored source with cc -
 # builds on MSVC and MinGW alike, unlike libvpx).
 openh264 = "0.8"
+# Webcam capture for the "Device" source kind (Media Foundation on Windows,
+# V4L2 on Linux, AVFoundation on macOS - per-OS backends behind one API,
+# mirroring the screen pipelines' layering). `decoding` pulls the MJPEG
+# decoder; most UVC cameras deliver MJPEG at 720p and above.
+nokhwa = { version = "0.10", features = ["input-native", "decoding"] }
 # WebRTC peer (ICE, DTLS, SRTP, RTP packetization).
 webrtc = "0.13"
 # Async runtime for the webrtc peer; the broadcaster owns a small dedicated
@@ -55,6 +60,10 @@ cros-codecs = { version = "0.0.6", features = ["vaapi"], optional = true }
 libloading = { version = "0.8", optional = true }
 
 [target.'cfg(windows)'.dependencies]
+# Direct dependency (besides the `windows` umbrella) so the `#[interface]`
+# macro's generated `windows_core::` paths resolve for the hand-declared
+# DirectShow `ISampleGrabber` interface.
+windows-core = "0.61"
 windows = { version = "0.61", features = [
     "Foundation",
     "Graphics_Capture",
@@ -69,15 +78,21 @@ windows = { version = "0.61", features = [
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
     "Win32_Graphics_Gdi",
+    "Win32_Media_DirectShow",
     "Win32_Media_MediaFoundation",
     "Win32_Security",
     "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
     "Win32_System_Ole",
     "Win32_System_Threading",
     "Win32_System_Variant",
     "Win32_System_WinRT_Direct3D11",
     "Win32_System_WinRT_Graphics_Capture",
 ] }
+
+[dev-dependencies]
+# Manual pipeline diagnostics print StageTimings via tracing.
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [lints]
 workspace = true
