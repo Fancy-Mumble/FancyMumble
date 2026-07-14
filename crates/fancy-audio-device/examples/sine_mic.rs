@@ -21,11 +21,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-// Examples inherit the crate's dependencies; silence unused-crate warnings
-// for the ones this standalone tool doesn't need.
+// Examples inherit the crate's dependencies; acknowledge the ones this
+// standalone tool doesn't use directly (else `unused_crate_dependencies` fires).
 use fancy_audio_device as _;
 use mumble_protocol as _;
 use tracing as _;
+use windows as _;
 
 struct Args {
     list: bool,
@@ -58,7 +59,7 @@ fn device_name(d: &cpal::Device) -> String {
     d.description().map(|x| x.name().to_string()).unwrap_or_else(|_| "<unnamed>".into())
 }
 
-fn main() {
+fn main() -> Result<(), String> {
     let args = parse_args();
     let host = cpal::default_host();
 
@@ -71,28 +72,27 @@ fn main() {
         for d in host.input_devices().into_iter().flatten() {
             println!("  {}", device_name(&d));
         }
-        return;
+        return Ok(());
     }
 
     if let Some(pattern) = args.verify {
-        verify(&host, &pattern, args.freq);
-        return;
+        return verify(&host, &pattern, args.freq);
     }
 
-    play(&host, args.device.as_deref(), args.freq, args.amp);
+    play(&host, args.device.as_deref(), args.freq, args.amp)
 }
 
 /// Play an endless sine at `freq` into the selected output device.
-fn play(host: &cpal::Host, pattern: Option<&str>, freq: f64, amp: f32) {
+fn play(host: &cpal::Host, pattern: Option<&str>, freq: f64, amp: f32) -> Result<(), String> {
     let device = match pattern {
         Some(p) => host
             .output_devices()
-            .expect("enumerate outputs")
+            .map_err(|e| format!("enumerate outputs: {e}"))?
             .find(|d| device_name(d).to_lowercase().contains(&p.to_lowercase()))
-            .unwrap_or_else(|| panic!("no output device matching '{p}' (try --list)")),
-        None => host.default_output_device().expect("default output device"),
+            .ok_or_else(|| format!("no output device matching '{p}' (try --list)"))?,
+        None => host.default_output_device().ok_or("no default output device")?,
     };
-    let cfg = device.default_output_config().expect("output config");
+    let cfg = device.default_output_config().map_err(|e| format!("output config: {e}"))?;
     let rate = cfg.sample_rate();
     let channels = cfg.channels() as usize;
     println!(
@@ -125,8 +125,8 @@ fn play(host: &cpal::Host, pattern: Option<&str>, freq: f64, amp: f32) {
             |e| eprintln!("output stream error: {e}"),
             None,
         )
-        .expect("build output stream");
-    stream.play().expect("start output stream");
+        .map_err(|e| format!("build output stream: {e}"))?;
+    stream.play().map_err(|e| format!("start output stream: {e}"))?;
 
     // Park forever; Ctrl+C exits.
     loop {
@@ -135,13 +135,13 @@ fn play(host: &cpal::Host, pattern: Option<&str>, freq: f64, amp: f32) {
 }
 
 /// Record ~1 s from the matching input device and measure the tone.
-fn verify(host: &cpal::Host, pattern: &str, freq: f64) {
+fn verify(host: &cpal::Host, pattern: &str, freq: f64) -> Result<(), String> {
     let device = host
         .input_devices()
-        .expect("enumerate inputs")
+        .map_err(|e| format!("enumerate inputs: {e}"))?
         .find(|d| device_name(d).to_lowercase().contains(&pattern.to_lowercase()))
-        .unwrap_or_else(|| panic!("no input device matching '{pattern}' (try --list)"));
-    let cfg = device.default_input_config().expect("input config");
+        .ok_or_else(|| format!("no input device matching '{pattern}' (try --list)"))?;
+    let cfg = device.default_input_config().map_err(|e| format!("input config: {e}"))?;
     let rate = cfg.sample_rate();
     let channels = cfg.channels() as usize;
     println!("recording 1 s from '{}' at {rate} Hz...", device_name(&device));
@@ -174,21 +174,22 @@ fn verify(host: &cpal::Host, pattern: &str, freq: f64) {
             },
             None,
         )
-        .expect("build input stream (is another app holding the device?)");
-    stream.play().expect("start input stream");
+        .map_err(|e| format!("build input stream (is another app holding the device?): {e}"))?;
+    stream.play().map_err(|e| format!("start input stream: {e}"))?;
     std::thread::sleep(std::time::Duration::from_millis(1100));
     drop(stream);
 
-    let buf = samples.lock().expect("samples");
+    let buf = samples.lock().map_err(|e| format!("samples lock: {e}"))?;
     let n = buf.len();
-    if n < u32::from(rate) as usize / 4 {
-        panic!("captured only {n} samples in 1 s - device delivered almost nothing");
+    if n < rate as usize / 4 {
+        return Err(format!("captured only {n} samples in 1 s - device delivered almost nothing"));
     }
     let (ratio, rms) = tone_ratio(&buf, freq, f64::from(rate));
     println!(
         "captured {n} samples: RMS {rms:.4}, Goertzel({freq} Hz) ratio {ratio:.3} {}",
         if ratio > 0.5 { "- TONE PRESENT" } else { "- tone NOT detected" },
     );
+    Ok(())
 }
 
 /// Normalised Goertzel power ratio + RMS (1.0 = pure tone at `freq`).

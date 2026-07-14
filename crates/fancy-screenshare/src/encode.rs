@@ -202,7 +202,7 @@ impl I420Frame {
         // bands. Each band writes disjoint plane slices - plain safe
         // borrows, no synchronization needed beyond the scope join.
         let bands = std::thread::available_parallelism()
-            .map(|n| n.get())
+            .map(std::num::NonZero::get)
             .unwrap_or(4)
             .clamp(1, 8);
         // Chroma subsampling works on row PAIRS: band boundaries must stay
@@ -303,6 +303,7 @@ mod tests {
     /// `cargo test -p fancy-screenshare --release -- --ignored --nocapture`.
     #[test]
     #[ignore = "manual benchmark, not a correctness test"]
+    #[allow(clippy::excessive_nesting, reason = "throwaway synthetic-frame generation in a bench")]
     fn bench_convert_encode_1080p() {
         let (w, h) = (1920u32, 1080u32);
         let frames = 60u32;

@@ -176,8 +176,8 @@ pub(crate) fn probe_microphone(state: tauri::State<'_, AppState>) {
 /// after returning from the settings route) queries this so it reflects a
 /// busy device it may have missed the live event for.
 #[tauri::command]
-pub(crate) fn get_capture_state() -> Option<crate::state::audio::CaptureState> {
-    crate::state::audio::current_capture_state()
+pub(crate) fn get_capture_state() -> Option<state::audio::CaptureState> {
+    state::audio::current_capture_state()
 }
 
 /// Get the current voice state.

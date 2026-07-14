@@ -80,11 +80,6 @@ pub fn set_exclusive_input(exclusive: bool) {
     EXCLUSIVE_INPUT.store(exclusive, Ordering::Relaxed);
 }
 
-/// Returns `true` if exclusive-mode input is currently selected.
-#[cfg(not(target_os = "android"))]
-pub fn is_exclusive_input() -> bool {
-    EXCLUSIVE_INPUT.load(Ordering::Relaxed)
-}
 
 /// On Android there is only one capture path; exclusive mode is a no-op.
 #[cfg(target_os = "android")]

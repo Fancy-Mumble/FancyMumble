@@ -867,6 +867,10 @@ mod tests {
     /// `cargo test -p mumble-tauri cpal_inputs_hw -- --ignored --nocapture`
     #[test]
     #[ignore = "requires audio hardware; run manually with --ignored --nocapture"]
+    #[allow(
+        clippy::excessive_nesting,
+        reason = "manual hardware probe; the per-device attempt/error-chain dump reads better inline"
+    )]
     fn cpal_inputs_hw_probe() {
         use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
         let host = cpal::default_host();
@@ -972,7 +976,7 @@ mod tests {
         }
     }
 
-    /// Full-path hardware diagnostic: RodioCapture (incl. the resampling
+    /// Full-path hardware diagnostic: `RodioCapture` (incl. the resampling
     /// capture thread) must deliver 48 kHz frames from the real mic.
     /// `cargo test -p mumble-tauri rodio_capture_hw -- --ignored --nocapture`
     #[test]

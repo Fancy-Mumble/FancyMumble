@@ -21,9 +21,9 @@ pub(crate) const CAPTURE_ERROR_EVENT: &str = "capture-error";
 /// True when a capture-start error string reports the device is in use /
 /// held exclusively. Matched on the stable HRESULT hex codes rather than
 /// OS-localised message text:
-/// - `0x800700AA` ERROR_BUSY ("resource in use")
-/// - `0x8889000A` AUDCLNT_E_DEVICE_IN_USE
-/// - `0x8889000B` AUDCLNT_E_EXCLUSIVE_MODE_ONLY (device is exclusive-only)
+/// - `0x800700AA` `ERROR_BUSY` ("resource in use")
+/// - `0x8889000A` `AUDCLNT_E_DEVICE_IN_USE`
+/// - `0x8889000B` `AUDCLNT_E_EXCLUSIVE_MODE_ONLY` (device is exclusive-only)
 pub(crate) fn is_device_busy(err: &str) -> bool {
     let e = err.to_ascii_lowercase();
     e.contains("800700aa") || e.contains("8889000a") || e.contains("8889000b")
