@@ -13,6 +13,8 @@ pub enum SourceKind {
     Screen,
     /// A single application window.
     Window,
+    /// A video capture device (webcam).
+    Device,
 }
 
 /// One selectable capture source (a monitor or a window).
@@ -31,23 +33,25 @@ pub struct CaptureSource {
 }
 
 /// Enumerate all capturable sources: every monitor, then every visible,
-/// non-minimized window that has a title.
+/// non-minimized window that has a title, then every connected camera.
 ///
-/// Errors from the OS enumeration are returned; individual sources that fail
-/// to report a property are skipped rather than failing the whole list.
+/// Errors from the OS screen/window enumeration are returned; individual
+/// sources that fail to report a property are skipped rather than failing
+/// the whole list. Camera enumeration is best-effort (no cameras is normal).
 ///
 /// On Wayland, applications cannot enumerate other windows or outputs at
 /// all - the compositor's xdg-desktop-portal dialog does the real picking.
 /// When native enumeration comes back empty there (and the portal pipeline
 /// is compiled in), one synthetic entry per kind is returned so the flow
 /// stays reachable from the in-app picker; their `id` is advisory and the
-/// portal dialog chooses the concrete source.
+/// portal dialog chooses the concrete source. Cameras enumerate normally
+/// there (V4L2 needs no portal).
 pub fn list_sources() -> Result<Vec<CaptureSource>, String> {
     let native = native_sources();
 
     #[cfg(all(target_os = "linux", feature = "gpu"))]
     if !matches!(&native, Ok(list) if !list.is_empty()) {
-        return Ok(vec![
+        let mut out = vec![
             CaptureSource {
                 id: 0,
                 kind: SourceKind::Screen,
@@ -62,10 +66,15 @@ pub fn list_sources() -> Result<Vec<CaptureSource>, String> {
                 width: 0,
                 height: 0,
             },
-        ]);
+        ];
+        out.extend(crate::camera::list_devices());
+        return Ok(out);
     }
 
-    native
+    native.map(|mut list| {
+        list.extend(crate::camera::list_devices());
+        list
+    })
 }
 
 fn native_sources() -> Result<Vec<CaptureSource>, String> {
@@ -107,9 +116,9 @@ fn native_sources() -> Result<Vec<CaptureSource>, String> {
 
 /// Physical-pixel rectangle `(x, y, w, h)` of a capture source on the
 /// virtual desktop, e.g. for pinning an overlay window over the shared
-/// content. `None` when the source is gone or minimized, or when the
-/// backend cannot report positions (Wayland portal sources, whose ids
-/// are advisory).
+/// content. `None` when the source is gone or minimized, when the backend
+/// cannot report positions (Wayland portal sources, whose ids are
+/// advisory), or for cameras (which have no desktop rectangle at all).
 pub fn source_rect(kind: SourceKind, id: u32) -> Option<(i32, i32, u32, u32)> {
     match CaptureTarget::resolve(kind, id).ok()? {
         CaptureTarget::Monitor(m) => Some((
@@ -189,6 +198,9 @@ impl CaptureTarget {
                 .find(|w| w.id().map(|wid| wid == id).unwrap_or(false))
                 .map(Self::Window)
                 .ok_or_else(|| format!("window {id} not found")),
+            // Cameras are not desktop capture targets; they resolve through
+            // crate::camera on the capture thread instead.
+            SourceKind::Device => Err("cameras have no desktop capture target".to_owned()),
         }
     }
 
@@ -203,6 +215,9 @@ impl CaptureTarget {
 
 /// Capture a single RGBA frame of a source (one-shot: thumbnails, probes).
 pub(crate) fn capture_frame(kind: SourceKind, id: u32) -> Result<RgbaImage, String> {
+    if kind == SourceKind::Device {
+        return crate::camera::capture_device_frame(id);
+    }
     CaptureTarget::resolve(kind, id)?.capture()
 }
 
@@ -252,17 +267,14 @@ impl ScreenRecorder {
     /// Wait up to `wait` for a frame, then drain to the newest pending one -
     /// encoding stale frames would only add latency.
     pub(crate) fn latest_frame(&self, wait: std::time::Duration) -> RecorderFrame {
-        use std::sync::mpsc::{RecvTimeoutError, TryRecvError};
+        use std::sync::mpsc::RecvTimeoutError;
         let mut latest = match self.rx.recv_timeout(wait) {
             Ok(f) => f,
             Err(RecvTimeoutError::Timeout) => return RecorderFrame::Idle,
             Err(RecvTimeoutError::Disconnected) => return RecorderFrame::Dead,
         };
-        loop {
-            match self.rx.try_recv() {
-                Ok(newer) => latest = newer,
-                Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
-            }
+        while let Ok(newer) = self.rx.try_recv() {
+            latest = newer;
         }
         RecorderFrame::Frame(latest)
     }
