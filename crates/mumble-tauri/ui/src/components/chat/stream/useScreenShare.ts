@@ -21,7 +21,10 @@
  * seen here belongs to a webview viewer peer.
  *
  * SignalType enum (matches proto):
- *   START         = 0  - broadcaster announces (channel broadcast)
+ *   START         = 0  - broadcaster announces (channel broadcast). The
+ *                        payload (JSON, may be empty on legacy clients)
+ *                        maps each video track's SDP mid to its content
+ *                        ("screen" | "camera") for screen+camera shares.
  *   STOP          = 1  - broadcaster stops (channel broadcast)
  *   SDP_OFFER     = 2  - client sends offer to server SFU
  *   SDP_ANSWER    = 3  - server SFU replies with answer
@@ -40,7 +43,7 @@ import {
   storeLocalThumbnail,
 } from "../stream/useStreamPreview";
 import { clearAllStrokesInChannel, clearStrokesFromSender } from "../drawing/DrawingOverlay";
-import type { CaptureSourceKind } from "./ScreenSharePickerDialog";
+import type { SourceSelection } from "./ScreenSharePickerDialog";
 import { QUALITY_PRESETS, type StreamSettings } from "./streamSettings";
 
 // This module holds singleton WebRTC state (viewerPcs, the broadcast pin,
@@ -60,6 +63,58 @@ const SIGNAL_STOP = 1;
 const SIGNAL_SDP_OFFER = 2;
 const SIGNAL_SDP_ANSWER = 3;
 const SIGNAL_ICE_CANDIDATE = 4;
+
+// ---------------------------------------------------------------------------
+// Track metadata (what each broadcast video track shows)
+// ---------------------------------------------------------------------------
+
+/** What a broadcast video track carries. */
+export type TrackContent = "screen" | "camera";
+
+/** Per-mid content map for one broadcaster ("0" -> screen, "1" -> camera). */
+export type TrackContentMap = Readonly<Record<string, TrackContent>>;
+
+/** Track content announced when only a bare/legacy START was received:
+ *  a single track that is (or is treated as) a screen. */
+const LEGACY_TRACKS: TrackContentMap = { "0": "screen" };
+
+/** Content maps per broadcaster session, fed by START payloads (and by
+ *  ourselves when we are the broadcaster). Module-level like the viewer
+ *  PCs: metadata must survive React remounts. */
+const trackContentBySession = new Map<number, TrackContentMap>();
+
+/** Build the START announce payload for a source list. Mid order == source
+ *  order (the Rust broadcaster adds one transceiver per source, in order). */
+function buildStartPayload(sources: readonly SourceSelection[]): string {
+  return JSON.stringify({
+    v: 1,
+    tracks: sources.map((s, i) => ({
+      mid: String(i),
+      content: s.kind === "device" ? "camera" : "screen",
+    })),
+  });
+}
+
+/** Parse a START payload into a content map; empty/malformed payloads (old
+ *  clients announce with "") fall back to the single-screen assumption. */
+function parseStartPayload(payload: string): TrackContentMap {
+  if (payload === "") return LEGACY_TRACKS;
+  try {
+    const parsed = JSON.parse(payload) as {
+      tracks?: { mid?: string; content?: string }[];
+    };
+    if (!Array.isArray(parsed.tracks) || parsed.tracks.length === 0) return LEGACY_TRACKS;
+    const map: Record<string, TrackContent> = {};
+    for (const track of parsed.tracks) {
+      if (typeof track.mid === "string") {
+        map[track.mid] = track.content === "camera" ? "camera" : "screen";
+      }
+    }
+    return Object.keys(map).length > 0 ? map : LEGACY_TRACKS;
+  } catch {
+    return LEGACY_TRACKS;
+  }
+}
 
 // STUN servers for the client to discover its public address.
 // The server SFU uses ICE-lite and needs no STUN.
@@ -114,12 +169,25 @@ let broadcasterServerId: string | null = null;
  *  drawings tied to the broadcast when it ends. */
 let broadcasterChannelId: number | null = null;
 
-/** The source the local broadcast is capturing, kept so the stream-config
- *  menu can restart it at new settings without re-opening the picker. */
-let broadcasterSource: { kind: CaptureSourceKind; id: number } | null = null;
+/** The sources the local broadcast is capturing (display first, then
+ *  camera - broadcast track order), kept so the stream-config menu can
+ *  restart it at new settings without re-opening the picker. */
+let broadcasterSources: readonly SourceSelection[] | null = null;
 
 /** Encoder settings the local broadcast is running at (default HD). */
 let broadcasterSettings: StreamSettings = QUALITY_PRESETS.hd;
+
+/** True while a source-change (replace) is settling. On a replace the loopback
+ *  viewer's transceivers are reused, so when a track is removed its slot keeps
+ *  presenting the OLD frame until the new media arrives on the (renumbered)
+ *  mids. Clearing the "setting up" overlay the instant the broadcaster reports
+ *  "connected" would expose that stale frame (the "screen, then camera" flash);
+ *  we hold the overlay a short settle past "connected" instead. */
+let broadcastReplaceSettling = false;
+
+/** How long to keep the "setting up" overlay after a replace connects, to mask
+ *  the reused transceivers swapping content. */
+const REPLACE_SETTLE_MS = 600;
 
 /** Clean up the webview-side broadcast bookkeeping (drawing overlay,
  *  annotations, connection pin).  The Rust capture/peer is stopped
@@ -141,6 +209,7 @@ function stopBroadcasting(): void {
     };
   });
   broadcasterServerId = null;
+  broadcastReplaceSettling = false;
   // Wipe every annotation that was drawn on this broadcast (including
   // viewers' annotations on the local cache) so the next share starts
   // with a clean canvas and stale drawings don't reappear if the user
@@ -164,7 +233,10 @@ function endOwnBroadcast(reason: string): void {
   invoke("stop_screen_broadcast").catch((e) =>
     console.warn("[screenshare] stop_screen_broadcast failed:", e),
   );
-  if (own !== null) closeViewer(own);
+  if (own !== null) {
+    closeViewer(own);
+    trackContentBySession.delete(own);
+  }
   stopBroadcasting();
   useAppStore.setState((s) => {
     const next = new Set(s.broadcastingSessions);
@@ -178,22 +250,100 @@ function endOwnBroadcast(reason: string): void {
 // Viewer state (module-level - one WebRTC connection per broadcaster)
 // ---------------------------------------------------------------------------
 
+/** The per-broadcaster streams handed to the UI: the primary content (the
+ *  screen, or the camera when nothing else is shared) and the secondary
+ *  camera (only when it accompanies a screen - rendered as a PiP tile). */
+export interface RemoteStreams {
+  readonly primary: MediaStream | null;
+  readonly camera: MediaStream | null;
+}
+
+const NO_STREAMS: RemoteStreams = { primary: null, camera: null };
+
 interface ViewerState {
   pc: RTCPeerConnection;
   pendingIce: RTCIceCandidateInit[];
-  stream: MediaStream | null;
+  /** Received video tracks keyed by their SDP mid ("0", "1", ...). */
+  videoByMid: Map<string, MediaStreamTrack>;
+  /** Received audio tracks (attached to the primary stream). */
+  audioTracks: MediaStreamTrack[];
+  /** Stable stream objects (so <video>.srcObject never needs re-attaching);
+   *  tracks are swapped in/out as they arrive or metadata changes. */
+  primaryStream: MediaStream;
+  cameraStream: MediaStream;
   /** ServerId of the connection that owns this viewer PC. */
   serverId: string | null;
+  /** Adaptive jitter-buffer controller + its polling handle. */
+  jitterCtl: JitterCtl;
+  jitterMonitor: ReturnType<typeof setInterval> | null;
 }
 
 const viewerPcs = new Map<number, ViewerState>();
-const remoteStreamListeners = new Map<number, Set<(stream: MediaStream | null) => void>>();
+const remoteStreamListeners = new Map<number, Set<(streams: RemoteStreams) => void>>();
 
-function notifyStreamListeners(session: number, stream: MediaStream | null): void {
+/** Sort mids numerically ("2" after "10" would be wrong lexically). */
+function midOrder(a: string, b: string): number {
+  return Number(a) - Number(b);
+}
+
+/**
+ * Assemble the UI-facing streams for a broadcaster from the tracks received
+ * so far plus the announced per-mid content map. Called whenever either side
+ * changes (a track arrived, or a START announce updated the metadata).
+ */
+function computeStreams(session: number): RemoteStreams {
+  const state = viewerPcs.get(session);
+  if (!state) return NO_STREAMS;
+  const contentByMid = trackContentBySession.get(session) ?? LEGACY_TRACKS;
+
+  let screenTrack: MediaStreamTrack | null = null;
+  let cameraTrack: MediaStreamTrack | null = null;
+  for (const mid of [...state.videoByMid.keys()].sort(midOrder)) {
+    const content = contentByMid[mid];
+    if (content === undefined) continue; // unannounced m-line (silent slot)
+    const track = state.videoByMid.get(mid)!;
+    if (content === "camera") {
+      cameraTrack ??= track;
+    } else {
+      screenTrack ??= track;
+    }
+  }
+
+  const primaryTrack = screenTrack ?? cameraTrack;
+  const pipTrack = screenTrack !== null ? cameraTrack : null;
+
+  syncStreamTracks(state.primaryStream, [
+    ...(primaryTrack ? [primaryTrack] : []),
+    ...state.audioTracks,
+  ]);
+  syncStreamTracks(state.cameraStream, pipTrack ? [pipTrack] : []);
+
+  return {
+    primary: primaryTrack ? state.primaryStream : null,
+    camera: pipTrack ? state.cameraStream : null,
+  };
+}
+
+/** Make `stream` contain exactly `tracks` (identity-preserving). */
+function syncStreamTracks(stream: MediaStream, tracks: readonly MediaStreamTrack[]): void {
+  for (const existing of stream.getTracks()) {
+    if (!tracks.includes(existing)) stream.removeTrack(existing);
+  }
+  for (const track of tracks) {
+    if (!stream.getTrackById(track.id)) stream.addTrack(track);
+  }
+}
+
+function notifyStreamListeners(session: number, streams: RemoteStreams): void {
   const listeners = remoteStreamListeners.get(session);
   if (listeners) {
-    for (const cb of listeners) cb(stream);
+    for (const cb of listeners) cb(streams);
   }
+}
+
+/** Recompute and publish a broadcaster's streams (track or metadata change). */
+function refreshStreams(session: number): void {
+  notifyStreamListeners(session, computeStreams(session));
 }
 
 function flushViewerIce(session: number): void {
@@ -210,17 +360,19 @@ function flushViewerIce(session: number): void {
 function closeViewer(session?: number): void {
   if (session === undefined) {
     for (const [sess, state] of viewerPcs) {
+      if (state.jitterMonitor !== null) clearInterval(state.jitterMonitor);
       state.pc.close();
-      notifyStreamListeners(sess, null);
+      notifyStreamListeners(sess, NO_STREAMS);
     }
     viewerPcs.clear();
     return;
   }
   const state = viewerPcs.get(session);
   if (state) {
+    if (state.jitterMonitor !== null) clearInterval(state.jitterMonitor);
     state.pc.close();
     viewerPcs.delete(session);
-    notifyStreamListeners(session, null);
+    notifyStreamListeners(session, NO_STREAMS);
   }
 }
 
@@ -237,6 +389,122 @@ function reconnectOrDropViewer(broadcasterSession: number): void {
   const { watchingSession } = useAppStore.getState();
   if (watchingSession === broadcasterSession) {
     useAppStore.setState({ watchingSession: null, watchingOwnSession: null });
+  }
+}
+
+/**
+ * Adaptive jitter-buffer control for received screen-share video.
+ *
+ * Screen-share senders emit occasional large inter-frame gaps (measured:
+ * ~200-300 ms sender-pipeline stalls, in bursts) that a shallow buffer cannot
+ * absorb, so each surfaces as a decoded FREEZE even though decode (~0.5 ms/
+ * frame) and the network (0% loss) are healthy. A deeper jitter buffer plays
+ * through the gap instead - but depth costs latency, so we adapt it: GROW fast
+ * toward a 2 s ceiling while freezes keep happening, then SHRINK slowly back
+ * toward a modest floor once the stream has been freeze-free AND the measured
+ * buffer occupancy is steady (low variance = healthy, no need for the depth).
+ * Screen sharing tolerates the added latency; this is not an interactive path.
+ */
+const JB_START_MS = 500; // initial target
+const JB_FLOOR_MS = 300; // never below this - some buffer always helps
+const JB_CEILING_MS = 2000; // grow no further (user-facing latency cap)
+const JB_GROW_MS = 400; // additive step when a freeze is seen
+const JB_SHRINK_MS = 150; // gentler step down when consistently healthy
+const JB_TICK_MS = 2000; // control cadence
+const JB_CLEAN_TICKS_TO_SHRINK = 3; // ~6 s freeze-free before easing down
+const JB_STABLE_SPREAD_MS = 80; // max buffer-occupancy spread to call "steady"
+
+interface JitterCtl {
+  targetMs: number;
+  lastFreeze: number;
+  lastDelay: number;
+  lastEmitted: number;
+  /** Recent per-tick buffer occupancy (ms) for the steadiness test. */
+  bufferHist: number[];
+  cleanTicks: number;
+}
+
+function newJitterCtl(): JitterCtl {
+  return { targetMs: JB_START_MS, lastFreeze: 0, lastDelay: 0, lastEmitted: 0, bufferHist: [], cleanTicks: 0 };
+}
+
+/** Set the jitter-buffer target on a viewer PC's video receivers. Best-effort:
+ *  the property is recent (Chromium/WebView2), with `playoutDelayHint` as an
+ *  older fallback; failure just leaves the UA's adaptive default. */
+function applyVideoJitterBufferTarget(pc: RTCPeerConnection, targetMs: number): void {
+  for (const receiver of pc.getReceivers()) {
+    // Right after addTransceiver the track is not yet attached (kind unknown);
+    // skip only receivers already known to be audio. Screen shares carry no
+    // audio here, so setting it on a not-yet-typed receiver is harmless.
+    if (receiver.track?.kind === "audio") continue;
+    const r = receiver as RTCRtpReceiver & {
+      jitterBufferTarget?: number | null;
+      playoutDelayHint?: number;
+    };
+    try {
+      if ("jitterBufferTarget" in receiver) {
+        r.jitterBufferTarget = targetMs;
+      } else if ("playoutDelayHint" in receiver) {
+        r.playoutDelayHint = targetMs / 1000;
+      }
+    } catch (e) {
+      console.warn("[sfu] could not set video jitter buffer target:", e);
+    }
+  }
+}
+
+/** One control step: sample video freeze + buffer counters and nudge the
+ *  target up (freezing) or down (steadily healthy). */
+async function adaptJitterBuffer(session: number): Promise<void> {
+  const state = viewerPcs.get(session);
+  if (!state) return;
+  const ctl = state.jitterCtl;
+  let report: RTCStatsReport;
+  try {
+    report = await state.pc.getStats();
+  } catch {
+    return;
+  }
+  let freeze = 0;
+  let delay = 0;
+  let emitted = 0;
+  for (const raw of report.values() as Iterable<Record<string, unknown>>) {
+    if (raw.type !== "inbound-rtp") continue;
+    if ((raw.kind ?? raw.mediaType) !== "video") continue;
+    freeze += (raw.freezeCount as number | undefined) ?? 0;
+    delay += (raw.jitterBufferDelay as number | undefined) ?? 0;
+    emitted += (raw.jitterBufferEmittedCount as number | undefined) ?? 0;
+  }
+
+  const froze = freeze > ctl.lastFreeze;
+  ctl.lastFreeze = freeze;
+  const dEmitted = emitted - ctl.lastEmitted;
+  const dDelay = delay - ctl.lastDelay;
+  ctl.lastEmitted = emitted;
+  ctl.lastDelay = delay;
+  if (dEmitted > 0 && dDelay >= 0) {
+    ctl.bufferHist.push((dDelay / dEmitted) * 1000);
+    if (ctl.bufferHist.length > 5) ctl.bufferHist.shift();
+  }
+
+  let next = ctl.targetMs;
+  if (froze) {
+    next = Math.min(JB_CEILING_MS, ctl.targetMs + JB_GROW_MS);
+    ctl.cleanTicks = 0;
+  } else {
+    ctl.cleanTicks += 1;
+    const steady =
+      ctl.bufferHist.length >= 3 &&
+      Math.max(...ctl.bufferHist) - Math.min(...ctl.bufferHist) < JB_STABLE_SPREAD_MS;
+    if (ctl.cleanTicks >= JB_CLEAN_TICKS_TO_SHRINK && steady && ctl.targetMs > JB_FLOOR_MS) {
+      next = Math.max(JB_FLOOR_MS, ctl.targetMs - JB_SHRINK_MS);
+      ctl.cleanTicks = 0;
+    }
+  }
+  if (next !== ctl.targetMs) {
+    ctl.targetMs = next;
+    applyVideoJitterBufferTarget(state.pc, next);
+    console.debug(`[sfu] jitter buffer target -> ${next}ms (froze=${froze})`);
   }
 }
 
@@ -261,20 +529,44 @@ async function startWatching(broadcasterSession: number): Promise<void> {
   const sid = useAppStore.getState().activeServerId;
 
   const pc = new RTCPeerConnection(RTC_CONFIG);
-  const state: ViewerState = { pc, pendingIce: [], stream: null, serverId: sid };
+  const state: ViewerState = {
+    pc,
+    pendingIce: [],
+    videoByMid: new Map(),
+    audioTracks: [],
+    primaryStream: new MediaStream(),
+    cameraStream: new MediaStream(),
+    serverId: sid,
+    jitterCtl: newJitterCtl(),
+    jitterMonitor: null,
+  };
   viewerPcs.set(broadcasterSession, state);
 
+  // TWO video slots: broadcasts may carry screen + camera as separate
+  // tracks (mids "0"/"1"). Against a single-track broadcaster the second
+  // m-line simply stays silent - no renegotiation is ever needed when the
+  // broadcaster adds/removes its camera mid-share.
+  pc.addTransceiver("video", { direction: "recvonly" });
   pc.addTransceiver("video", { direction: "recvonly" });
   pc.addTransceiver("audio", { direction: "recvonly" });
+  applyVideoJitterBufferTarget(pc, state.jitterCtl.targetMs);
+  // Adapt the buffer depth to observed freezes for the life of the viewer.
+  state.jitterMonitor = setInterval(() => {
+    void adaptJitterBuffer(broadcasterSession);
+  }, JB_TICK_MS);
 
   pc.ontrack = (e) => {
     const s = viewerPcs.get(broadcasterSession);
     if (!s) return;
-    s.stream ??= new MediaStream();
-    if (!s.stream.getTrackById(e.track.id)) {
-      s.stream.addTrack(e.track);
+    if (e.track.kind === "video") {
+      // The mid identifies the broadcast track; the START announce says
+      // whether it carries the screen or the camera.
+      const mid = e.transceiver.mid;
+      if (mid !== null) s.videoByMid.set(mid, e.track);
+    } else if (!s.audioTracks.some((t) => t.id === e.track.id)) {
+      s.audioTracks.push(e.track);
     }
-    notifyStreamListeners(broadcasterSession, s.stream);
+    refreshStreams(broadcasterSession);
   };
 
   // Send our ICE candidates to the server (routed via broadcaster session).
@@ -435,6 +727,11 @@ function handleSignal(senderSession: number, _targetSession: number | null, sign
 
   switch (signalType) {
     case SIGNAL_START:
+      // The payload announces what each broadcast track (mid) carries; a
+      // re-announce mid-broadcast updates it (e.g. camera added/removed on
+      // a source change). Empty payloads come from legacy broadcasters.
+      trackContentBySession.set(senderSession, parseStartPayload(payload));
+      refreshStreams(senderSession);
       useAppStore.setState((s) => {
         const next = new Set(s.broadcastingSessions);
         next.add(senderSession);
@@ -453,6 +750,7 @@ function handleSignal(senderSession: number, _targetSession: number | null, sign
           watchingOwnSession: watchingCleared ? null : s.watchingOwnSession,
         };
       });
+      trackContentBySession.delete(senderSession);
       clearThumbnail(senderSession);
       closeViewer(senderSession);
       // The broadcaster's annotations only made sense while their
@@ -494,20 +792,28 @@ export interface ScreenShareHook {
   /** Session we are currently watching (null if not watching). */
   watchingSession: number | null;
   /** The own-preview MediaStream (the loopback view of our own SFU
-   *  session). null while not broadcasting or still connecting. */
+   *  session). null while not broadcasting or still connecting. The camera
+   *  PiP companion is fetched by the viewer components themselves via
+   *  {@link useRemoteStreams}. */
   localStream: MediaStream | null;
   /** Whether the source-picker dialog is open. */
   pickerOpen: boolean;
   /** Encoder settings the current/next broadcast uses (for the picker + menu). */
   settings: StreamSettings;
+  /** Sources of the ACTIVE broadcast (display first, then camera), or null
+   *  when not broadcasting. Lets the picker seed its selection so confirming
+   *  ADDS to the live share instead of replacing it wholesale, and lets the
+   *  viewer offer an "add the missing kind" shortcut. */
+  activeSources: readonly SourceSelection[] | null;
   /** Open the source picker (does not start capturing yet). Works while
-   *  already broadcasting too - confirming replaces the live source. */
+   *  already broadcasting too - confirming replaces the live sources. */
   startSharing: () => void;
   /** Close the source picker without sharing. */
   cancelPicker: () => void;
-  /** Start (or replace) the broadcast with the picked source + settings. */
-  confirmSource: (kind: CaptureSourceKind, id: number, settings: StreamSettings) => Promise<void>;
-  /** Restart the live broadcast at new settings (same source). */
+  /** Start (or replace) the broadcast with the picked sources + settings.
+   *  Order matters: display source first, then camera (track/mid order). */
+  confirmSource: (sources: readonly SourceSelection[], settings: StreamSettings) => Promise<void>;
+  /** Restart the live broadcast at new settings (same sources). */
   changeSettings: (settings: StreamSettings) => void;
   /** Stop sharing our screen. */
   stopSharing: () => void;
@@ -540,7 +846,8 @@ export function useScreenShare(): ScreenShareHook {
     && (ownSession === null || broadcastingOwnSession !== ownSession);
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  // The own-preview: the loopback viewer's remote stream for our session.
+  // The own-preview: the loopback viewer's primary remote stream for our
+  // session (the camera PiP is picked up by the viewer components).
   const loopbackStream = useRemoteStream(ownSession ?? -1);
 
   // Track channel members so we can re-announce to late joiners.
@@ -566,7 +873,15 @@ export function useScreenShare(): ScreenShareHook {
       (event) => {
         const { state: bcState, message } = event.payload;
         if (bcState === "connected") {
-          useAppStore.setState({ webrtcConnecting: false });
+          // On a replace, hold the "setting up" overlay a short settle past
+          // "connected" so the reused transceivers finish swapping content
+          // (removing a track otherwise flashes the old frame briefly).
+          if (broadcastReplaceSettling) {
+            broadcastReplaceSettling = false;
+            setTimeout(() => useAppStore.setState({ webrtcConnecting: false }), REPLACE_SETTLE_MS);
+          } else {
+            useAppStore.setState({ webrtcConnecting: false });
+          }
         } else if (bcState === "failed") {
           console.error("[screenshare] Rust broadcaster failed:", message);
           // Guard: popout webviews register this listener too, but only
@@ -605,7 +920,14 @@ export function useScreenShare(): ScreenShareHook {
     if (hasNewMembers) {
       // Send via the broadcaster's connection so the announcement
       // reaches the right channel even when the user has switched tabs.
-      broadcastSignal(SIGNAL_START, "", broadcasterServerId);
+      // Re-announces MUST carry the same track payload as the original
+      // START: every channel member re-parses it, and an empty payload
+      // would downgrade their metadata to "single screen track".
+      broadcastSignal(
+        SIGNAL_START,
+        broadcasterSources ? buildStartPayload(broadcasterSources) : "",
+        broadcasterServerId,
+      );
     }
     prevChannelSessionsRef.current = currentSessions;
   }, [users, currentChannel, ownSession, isBroadcasting]);
@@ -654,17 +976,23 @@ export function useScreenShare(): ScreenShareHook {
   const cancelPicker = useCallback(() => setPickerOpen(false), []);
 
   const confirmSource = useCallback(
-    async (kind: CaptureSourceKind, id: number, settings: StreamSettings) => {
+    async (sources: readonly SourceSelection[], settings: StreamSettings) => {
       setPickerOpen(false);
       if (ownSession === null) {
         console.warn("[screenshare] confirmSource ignored: no ownSession");
         return;
       }
+      if (sources.length === 0) {
+        console.warn("[screenshare] confirmSource ignored: no sources");
+        return;
+      }
       // Replacing an already-running broadcast (Change Stream / Change
       // Quality): the Rust broadcaster swaps its capture+peer in place and
-      // the SFU keeps forwarding to existing viewers, so we skip the START
-      // announce and keep the loopback viewer we already have.
+      // the SFU keeps forwarding to existing viewers, so we keep the
+      // loopback viewer we already have.
       const isReplace = useAppStore.getState().broadcastingOwnSession === ownSession;
+      // Mask the reused-transceiver content swap until the new media settles.
+      broadcastReplaceSettling = isReplace;
 
       const { activeServerId, sendWebRtcSignal } = useAppStore.getState();
       broadcasterServerId = activeServerId;
@@ -673,8 +1001,12 @@ export function useScreenShare(): ScreenShareHook {
       // that channel - drawn by the broadcaster OR any viewer - is
       // wiped (see `stopBroadcasting()`).
       broadcasterChannelId = useAppStore.getState().currentChannel;
-      broadcasterSource = { kind, id };
+      broadcasterSources = sources;
       broadcasterSettings = settings;
+      // Label our own tracks locally (the server does not echo our START
+      // back to us), so the loopback preview can split screen vs camera.
+      trackContentBySession.set(ownSession, parseStartPayload(buildStartPayload(sources)));
+      refreshStreams(ownSession);
       useAppStore.setState((s) => {
         const next = new Set(s.broadcastingSessions);
         next.add(ownSession);
@@ -693,14 +1025,14 @@ export function useScreenShare(): ScreenShareHook {
       // Ordering matters and all of it rides the same Mumble TCP connection:
       // the SFU creates the broadcast session when it sees START, so START
       // must be on the wire before the Rust broadcaster's SDP offer, which
-      // in turn must precede our loopback-viewer offer.
-      if (!isReplace) {
-        await sendWebRtcSignal(0, SIGNAL_START, "", activeServerId);
-      }
+      // in turn must precede our loopback-viewer offer. The payload tells
+      // viewers what each track (mid) carries; on a replace it is sent
+      // again purely as a metadata update (the SFU's createSession is
+      // idempotent and legacy clients treat a repeat START as a no-op).
+      await sendWebRtcSignal(0, SIGNAL_START, buildStartPayload(sources), activeServerId);
       try {
         await invoke("start_screen_broadcast", {
-          kind,
-          id,
+          sources: sources.map((s) => ({ kind: s.kind, id: s.id })),
           serverId: activeServerId,
           maxDimension: settings.maxDimension,
           maxFps: settings.maxFps,
@@ -724,18 +1056,18 @@ export function useScreenShare(): ScreenShareHook {
   );
 
   const changeSettings = useCallback((settings: StreamSettings) => {
-    if (!broadcasterSource) return;
+    if (!broadcasterSources) return;
     if (
       settings.maxDimension === broadcasterSettings.maxDimension &&
       settings.maxFps === broadcasterSettings.maxFps
     ) {
       return;
     }
-    void confirmSource(broadcasterSource.kind, broadcasterSource.id, settings);
+    void confirmSource(broadcasterSources, settings);
   }, [confirmSource]);
 
   const stopSharingCb = useCallback(() => {
-    broadcasterSource = null;
+    broadcasterSources = null;
     endOwnBroadcast("user stopped");
   }, []);
 
@@ -789,13 +1121,14 @@ export function useScreenShare(): ScreenShareHook {
     isBroadcastingFromOtherTab,
     broadcastingSessions,
     watchingSession,
-    // Only expose the loopback stream to the tab that owns the broadcast.
-    // Other tabs in the same window must never see it - otherwise their
+    // Only expose the loopback streams to the tab that owns the broadcast.
+    // Other tabs in the same window must never see them - otherwise their
     // ChatView would render an `OwnBroadcastPreview` over a stream that
     // belongs to a different connection.
     localStream: isBroadcasting ? loopbackStream : null,
     pickerOpen,
     settings: broadcasterSettings,
+    activeSources: isBroadcasting ? broadcasterSources : null,
     startSharing,
     cancelPicker,
     confirmSource,
@@ -821,24 +1154,44 @@ export function getViewerPc(session: number): RTCPeerConnection | null {
 }
 
 /**
- * Subscribe to the remote MediaStream for a specific broadcaster.
- * Returns the current stream for that session (or null while connecting).
+ * What a broadcaster announced they are sharing (from the START payload) -
+ * for labels like the "is sharing" banner. Metadata always arrives with (or
+ * before) the broadcast becoming visible, so a plain read is sufficient.
  */
-export function useRemoteStream(session: number): MediaStream | null {
-  const [stream, setStream] = useState<MediaStream | null>(
-    () => viewerPcs.get(session)?.stream ?? null,
-  );
+export function getBroadcastContent(session: number): "screen" | "camera" | "both" {
+  const contents = Object.values(trackContentBySession.get(session) ?? LEGACY_TRACKS);
+  const hasScreen = contents.includes("screen");
+  const hasCamera = contents.includes("camera");
+  if (hasScreen && hasCamera) return "both";
+  return hasCamera ? "camera" : "screen";
+}
+
+/**
+ * Per-mid content map for a broadcaster ("0" -> "screen", "1" -> "camera"),
+ * so the stats panel can label each inbound video track by what it shows.
+ */
+export function getTrackContentMap(session: number): TrackContentMap {
+  return trackContentBySession.get(session) ?? LEGACY_TRACKS;
+}
+
+/**
+ * Subscribe to the remote streams for a specific broadcaster: the primary
+ * content plus the camera PiP when the broadcaster shares both. Streams are
+ * null while connecting.
+ */
+export function useRemoteStreams(session: number): RemoteStreams {
+  const [streams, setStreams] = useState<RemoteStreams>(() => computeStreams(session));
 
   useEffect(() => {
-    const handler = (s: MediaStream | null) => setStream(s);
+    const handler = (s: RemoteStreams) => setStreams(s);
     let listeners = remoteStreamListeners.get(session);
     if (!listeners) {
       listeners = new Set();
       remoteStreamListeners.set(session, listeners);
     }
     listeners.add(handler);
-    // Sync in case the stream arrived before we subscribed.
-    setStream(viewerPcs.get(session)?.stream ?? null);
+    // Sync in case tracks arrived before we subscribed.
+    setStreams(computeStreams(session));
     return () => {
       const ls = remoteStreamListeners.get(session);
       if (ls) {
@@ -848,5 +1201,15 @@ export function useRemoteStream(session: number): MediaStream | null {
     };
   }, [session]);
 
-  return stream;
+  return streams;
+}
+
+/**
+ * Subscribe to a broadcaster's primary remote MediaStream (the screen, or
+ * the camera on a camera-only share); null while connecting. Thumbnails and
+ * single-video consumers use this; the focus viewer uses
+ * {@link useRemoteStreams} to also render the camera PiP.
+ */
+export function useRemoteStream(session: number): MediaStream | null {
+  return useRemoteStreams(session).primary;
 }

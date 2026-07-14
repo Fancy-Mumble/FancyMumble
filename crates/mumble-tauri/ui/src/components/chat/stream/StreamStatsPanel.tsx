@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CloseIcon } from "../../../icons";
+import { TID } from "../../../testids";
 import styles from "./StreamStatsPanel.module.css";
 
 // ---------------------------------------------------------------------------
@@ -32,7 +33,39 @@ function str(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
 }
 
-/** One absolute snapshot of the connection's receive-side counters. */
+/** Per-video-track receive-side counters. A screen+camera share has one of
+ *  these per inbound video track, so the panel can show BOTH. */
+export interface VideoTrackStats {
+  /** SDP mid of the inbound track (maps to screen/camera content). */
+  mid: string | null;
+  frameWidth: number | null;
+  frameHeight: number | null;
+  framesPerSecond: number | null;
+  framesDecoded: number;
+  framesDropped: number;
+  freezeCount: number;
+  totalFreezesDurationS: number;
+  packetsReceived: number;
+  packetsLost: number;
+  jitterMs: number | null;
+  videoCodec: string | null;
+  /** Decoder backend name reported by the UA, e.g. "ExternalDecoder"
+   *  (hardware) vs "libvpx"/"FFmpeg"/"OpenH264" (software). */
+  decoderImplementation: string | null;
+  /** True when the UA decodes this track on a power-efficient (hardware)
+   *  path. The single clearest "is decode accelerated?" signal. */
+  powerEfficient: boolean | null;
+  /** Cumulative decode time in seconds (spec: summed per decoded frame).
+   *  Divided by framesDecoded it yields ms/frame - a HW decoder does ~2 MP in
+   *  1-3 ms, software 15-30 ms - so it exposes software fallback even when the
+   *  UA omits `decoderImplementation`. */
+  totalDecodeTimeS: number;
+}
+
+/** One absolute snapshot of the connection's receive-side counters. The
+ *  connection-level fields (bytes, RTT, ICE path, audio) are shared; the
+ *  per-track video counters live in {@link videos}. The top-level video
+ *  fields mirror the FIRST video track for backward compatibility. */
 export interface StatsSample {
   timestampMs: number;
   frameWidth: number | null;
@@ -60,6 +93,8 @@ export interface StatsSample {
   rttMs: number | null;
   /** Selected ICE candidate types, "local / remote" (e.g. "host / srflx"). */
   icePath: string | null;
+  /** One entry per inbound video track (screen and/or camera). */
+  videos: VideoTrackStats[];
 }
 
 /** "video/H264" + "…profile-level-id=42e01f…" becomes "H264 (42e01f)". */
@@ -104,9 +139,12 @@ export function parseStatsReports(reports: Iterable<StatsDict>, timestampMs: num
     audioCodec: null,
     rttMs: null,
     icePath: null,
+    videos: [],
   };
 
   extractSelectedPair(all, byId, sample);
+  let jitterBufferDelay = 0;
+  let jitterBufferEmittedCount = 0;
   for (const r of all) {
     if (r.type !== "inbound-rtp") continue;
     const kind = str(r.kind) ?? str(r.mediaType);
@@ -114,10 +152,35 @@ export function parseStatsReports(reports: Iterable<StatsDict>, timestampMs: num
     const codecId = str(r.codecId);
     const codec = codecId ? byId.get(codecId) : undefined;
     if (kind === "video") {
-      extractVideoInbound(r, codec, sample);
+      sample.videos.push(extractVideoTrack(r, codec));
+      // Jitter-buffer delay is summed across video tracks for the (shared)
+      // buffer-health graph.
+      jitterBufferDelay += num(r.jitterBufferDelay) ?? 0;
+      jitterBufferEmittedCount += num(r.jitterBufferEmittedCount) ?? 0;
     } else if (kind === "audio" && codec) {
       sample.audioCodec = formatCodec(codec);
     }
+  }
+  sample.jitterBufferDelay = jitterBufferDelay;
+  sample.jitterBufferEmittedCount = jitterBufferEmittedCount;
+
+  // Mirror the first video track into the legacy top-level fields, and
+  // aggregate packet counters across tracks for the connection-level loss %.
+  const first = sample.videos[0];
+  if (first) {
+    sample.frameWidth = first.frameWidth;
+    sample.frameHeight = first.frameHeight;
+    sample.framesPerSecond = first.framesPerSecond;
+    sample.framesDecoded = first.framesDecoded;
+    sample.framesDropped = first.framesDropped;
+    sample.freezeCount = first.freezeCount;
+    sample.totalFreezesDurationS = first.totalFreezesDurationS;
+    sample.jitterMs = first.jitterMs;
+    sample.videoCodec = first.videoCodec;
+  }
+  for (const v of sample.videos) {
+    sample.packetsReceived += v.packetsReceived;
+    sample.packetsLost += v.packetsLost;
   }
   return sample;
 }
@@ -141,21 +204,40 @@ function extractSelectedPair(all: StatsDict[], byId: Map<string, StatsDict>, sam
   if (localType || remoteType) sample.icePath = `${localType ?? "?"} / ${remoteType ?? "?"}`;
 }
 
-function extractVideoInbound(r: StatsDict, codec: StatsDict | undefined, sample: StatsSample): void {
-  sample.frameWidth = num(r.frameWidth);
-  sample.frameHeight = num(r.frameHeight);
-  sample.framesPerSecond = num(r.framesPerSecond);
-  sample.framesDecoded = num(r.framesDecoded) ?? 0;
-  sample.framesDropped = num(r.framesDropped) ?? 0;
-  sample.freezeCount = num(r.freezeCount) ?? 0;
-  sample.totalFreezesDurationS = num(r.totalFreezesDuration) ?? 0;
-  sample.packetsReceived = num(r.packetsReceived) ?? 0;
-  sample.packetsLost = num(r.packetsLost) ?? 0;
+function extractVideoTrack(r: StatsDict, codec: StatsDict | undefined): VideoTrackStats {
   const jitter = num(r.jitter);
-  sample.jitterMs = jitter === null ? null : jitter * 1000;
-  sample.jitterBufferDelay = num(r.jitterBufferDelay) ?? 0;
-  sample.jitterBufferEmittedCount = num(r.jitterBufferEmittedCount) ?? 0;
-  if (codec) sample.videoCodec = formatCodec(codec);
+  return {
+    mid: str(r.mid),
+    frameWidth: num(r.frameWidth),
+    frameHeight: num(r.frameHeight),
+    framesPerSecond: num(r.framesPerSecond),
+    framesDecoded: num(r.framesDecoded) ?? 0,
+    framesDropped: num(r.framesDropped) ?? 0,
+    freezeCount: num(r.freezeCount) ?? 0,
+    totalFreezesDurationS: num(r.totalFreezesDuration) ?? 0,
+    packetsReceived: num(r.packetsReceived) ?? 0,
+    packetsLost: num(r.packetsLost) ?? 0,
+    jitterMs: jitter === null ? null : jitter * 1000,
+    videoCodec: codec ? formatCodec(codec) : null,
+    decoderImplementation: str(r.decoderImplementation),
+    powerEfficient: typeof r.powerEfficientDecoder === "boolean" ? r.powerEfficientDecoder : null,
+    totalDecodeTimeS: num(r.totalDecodeTime) ?? 0,
+  };
+}
+
+/** Decoder diagnostic string: implementation name (when the UA exposes it),
+ *  HW/SW power-efficiency, and average decode time per frame. The ms/frame is
+ *  the reliable part - it exposes a software decoder even when the name and
+ *  power-efficient flag are absent (WebView2 commonly omits both). */
+function formatDecoder(v: VideoTrackStats): string {
+  const parts: string[] = [];
+  if (v.decoderImplementation) parts.push(v.decoderImplementation);
+  if (v.powerEfficient === true) parts.push("HW");
+  else if (v.powerEfficient === false) parts.push("SW");
+  if (v.framesDecoded > 0 && v.totalDecodeTimeS > 0) {
+    parts.push(`${((v.totalDecodeTimeS / v.framesDecoded) * 1000).toFixed(1)} ms/frame`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : "–";
 }
 
 /** Rates derived from two consecutive snapshots. */
@@ -298,10 +380,13 @@ interface StreamStatsPanelProps {
   readonly getPc: () => RTCPeerConnection | null;
   /** The video element, for viewport size and volume rows. */
   readonly videoRef: React.RefObject<HTMLVideoElement | null>;
+  /** SDP-mid -> content, so each inbound video track is labelled screen /
+   *  camera in a screen+camera share. */
+  readonly contentByMid?: Readonly<Record<string, "screen" | "camera">>;
   readonly onClose: () => void;
 }
 
-export default function StreamStatsPanel({ getPc, videoRef, onClose }: StreamStatsPanelProps) {
+export default function StreamStatsPanel({ getPc, videoRef, contentByMid, onClose }: StreamStatsPanelProps) {
   const { t } = useTranslation("chat");
   const [data, setData] = useState<PanelData | null>(null);
   const prevSampleRef = useRef<StatsSample | null>(null);
@@ -354,17 +439,26 @@ export default function StreamStatsPanel({ getPc, videoRef, onClose }: StreamSta
 
   const info = describeVideoElement(videoRef.current, t("screenShare.stats.muted"));
 
-  const rows: { key: string; label: string; value: string; graph?: readonly number[]; color?: string }[] = [];
+  interface Row {
+    key: string;
+    label: string;
+    value: string;
+    graph?: readonly number[];
+    color?: string;
+    /** Renders as a sub-heading separating one video track's rows. */
+    heading?: boolean;
+    testid?: string;
+  }
+  const rows: Row[] = [];
   if (data) {
     const { sample, interval, hist } = data;
     // Prefer the render-side counters (what the user actually saw miss its
     // deadline); fall back to the RTP decode counters when unavailable.
     const droppedFrames = info.droppedFrames ?? sample.framesDropped;
     const totalFrames = info.totalFrames ?? sample.framesDropped + sample.framesDecoded;
-    const currentRes = sample.frameWidth && sample.frameHeight
-      ? `${sample.frameWidth}×${sample.frameHeight}@${fmt(interval.fps)}`
-      : "–";
     const icePathSuffix = sample.icePath ? ` (${sample.icePath})` : "";
+
+    // Connection-level rows (shared by all tracks).
     rows.push(
       {
         key: "viewportFrames",
@@ -374,17 +468,7 @@ export default function StreamStatsPanel({ getPc, videoRef, onClose }: StreamSta
           total: totalFrames,
         })}`,
       },
-      {
-        key: "currentRes",
-        label: t("screenShare.stats.currentRes"),
-        value: currentRes,
-      },
       { key: "volume", label: t("screenShare.stats.volume"), value: info.volume },
-      {
-        key: "codecs",
-        label: t("screenShare.stats.codecs"),
-        value: `${sample.videoCodec ?? "–"} / ${sample.audioCodec ?? "–"}`,
-      },
       {
         key: "connection",
         label: t("screenShare.stats.connection"),
@@ -426,17 +510,62 @@ export default function StreamStatsPanel({ getPc, videoRef, onClose }: StreamSta
           total: sample.packetsLost,
         }),
       },
-      {
-        key: "freezes",
-        label: t("screenShare.stats.freezes"),
-        value: t("screenShare.stats.freezesValue", {
-          n: sample.freezeCount,
-          seconds: sample.totalFreezesDurationS.toFixed(1),
-        }),
-      },
-      { key: "jitter", label: t("screenShare.stats.jitter"), value: `${fmt(sample.jitterMs, 1)} ms` },
-      { key: "date", label: t("screenShare.stats.date"), value: new Date().toString() },
+      { key: "audioCodec", label: t("screenShare.stats.audioCodec"), value: sample.audioCodec ?? "–" },
     );
+
+    // Per-video-track rows - a screen+camera share lists BOTH. Each group is
+    // headed by what the track shows (screen / camera). Only announced tracks
+    // are shown: after a track is removed (e.g. the screen ended) its inbound
+    // stats linger for a while with the old resolution, so - exactly like the
+    // video display in `computeStreams` - we drop any track whose mid is no
+    // longer in the content map.
+    const videos = contentByMid
+      ? sample.videos.filter((v) => v.mid == null || contentByMid[v.mid] !== undefined)
+      : sample.videos;
+    videos.forEach((v, i) => {
+      const content = v.mid != null ? contentByMid?.[v.mid] : undefined;
+      const heading = content === "camera"
+        ? t("screenShare.stats.trackCamera")
+        : content === "screen"
+          ? t("screenShare.stats.trackScreen")
+          : t("screenShare.stats.trackVideo", { n: i + 1 });
+      const res = v.frameWidth && v.frameHeight
+        ? `${v.frameWidth}×${v.frameHeight}@${fmt(v.framesPerSecond)}`
+        : "–";
+      rows.push(
+        { key: `t${i}-h`, label: heading, value: "", heading: true },
+        {
+          key: `t${i}-res`,
+          label: t("screenShare.stats.currentRes"),
+          value: res,
+          testid: TID.streamStatsResolution,
+        },
+        { key: `t${i}-codec`, label: t("screenShare.stats.codec"), value: v.videoCodec ?? "–" },
+        {
+          key: `t${i}-decoder`,
+          // Untranslated on purpose: a technical diagnostic. Shows the UA's
+          // decoder backend, whether it is power-efficient (hardware), and the
+          // average per-frame decode time. Slow ms/frame (>~10 ms for ~2 MP)
+          // means a software decoder, the usual cause of render-sink frame
+          // drops on otherwise-capable hardware - and it is present even when
+          // the UA omits the implementation name (which WebView2 often does).
+          label: "Decoder",
+          value: formatDecoder(v),
+        },
+        {
+          key: `t${i}-freezes`,
+          label: t("screenShare.stats.freezes"),
+          value: t("screenShare.stats.freezesValue", {
+            n: v.freezeCount,
+            seconds: v.totalFreezesDurationS.toFixed(1),
+          }),
+          testid: TID.streamStatsFreezes,
+        },
+        { key: `t${i}-jitter`, label: t("screenShare.stats.jitter"), value: `${fmt(v.jitterMs, 1)} ms` },
+      );
+    });
+
+    rows.push({ key: "date", label: t("screenShare.stats.date"), value: new Date().toString() });
   }
 
   return (
@@ -456,13 +585,17 @@ export default function StreamStatsPanel({ getPc, videoRef, onClose }: StreamSta
       {data ? (
         <div className={styles.grid}>
           {rows.map((row) => (
-            <div key={row.key} className={styles.row}>
-              <span className={styles.label}>{row.label}</span>
-              <span className={styles.value}>
-                {row.graph && <Sparkline values={row.graph} color={row.color ?? "#ddd"} />}
-                <span className={styles.valueText}>{row.value}</span>
-              </span>
-            </div>
+            row.heading ? (
+              <div key={row.key} className={styles.trackHeading}>{row.label}</div>
+            ) : (
+              <div key={row.key} className={styles.row} data-testid={row.testid}>
+                <span className={styles.label}>{row.label}</span>
+                <span className={styles.value}>
+                  {row.graph && <Sparkline values={row.graph} color={row.color ?? "#ddd"} />}
+                  <span className={styles.valueText}>{row.value}</span>
+                </span>
+              </div>
+            )
           ))}
         </div>
       ) : (

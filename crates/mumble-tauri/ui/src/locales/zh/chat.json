@@ -1,4 +1,4 @@
-{
+﻿{
   "composer": {
     "editingMessage": "正在编辑消息",
     "attachTooltipImageFile": "添加图片或文件",
@@ -72,7 +72,8 @@
     "channelOptions": "频道选项",
     "join": "加入",
     "joinChannel": "加入频道",
-    "popOutDm": "弹出私信"
+    "popOutDm": "弹出私信",
+    "changeSharing": "更改共享内容"
   },
   "calendar": {
     "title": "日历",
@@ -365,10 +366,13 @@
       "title": "选择要分享的内容",
       "tabScreens": "整个屏幕",
       "tabWindows": "窗口",
+      "tabDevices": "设备",
       "loading": "正在查找屏幕和窗口…",
       "empty": "此分类下没有可分享的内容。",
       "loadFailed": "无法列出屏幕和窗口：{{detail}}",
+      "emptyDevices": "未找到摄像头。",
       "share": "分享",
+      "shareBoth": "同时分享",
       "cancel": "取消",
       "qualityLabel": "直播画质",
       "quality_sd": "标清",
@@ -380,7 +384,11 @@
       "res_720p": "720p",
       "res_1080p": "1080p",
       "res_1440p": "1440p",
-      "res_source": "原画"
+      "res_source": "原画",
+      "sharingLabel": "共享内容：",
+      "addCameraHint": "提示：可在设备标签页中再添加摄像头，同时共享两者",
+      "addDisplayHint": "提示：还可以再添加屏幕或窗口，同时共享两者",
+      "removeSource": "移除 {{title}}"
     },
     "mode": {
       "title": "直播模式",
@@ -445,13 +453,24 @@
       "freezes": "卡顿",
       "freezesValue": "{{n}} 次（共 {{seconds}} 秒）",
       "jitter": "抖动",
-      "date": "日期"
+      "date": "日期",
+      "codec": "编解码器",
+      "audioCodec": "音频编解码器",
+      "trackScreen": "屏幕",
+      "trackCamera": "摄像头",
+      "trackVideo": "视频 {{n}}"
     },
     "banner": {
       "isSharingScreen": "{{name}} 正在共享屏幕",
+      "isSharingCamera": "{{name}} 正在共享摄像头",
+      "isSharingScreenCamera": "{{name}} 正在共享屏幕和摄像头",
       "watch": "观看",
       "dismiss": "关闭通知"
-    }
+    },
+    "addScreenTrack": "同时共享屏幕",
+    "addCameraTrack": "添加摄像头",
+    "endCamera": "停止共享摄像头",
+    "stopScreenShare": "停止共享屏幕"
   },
   "streamFocus": {
     "layout": {

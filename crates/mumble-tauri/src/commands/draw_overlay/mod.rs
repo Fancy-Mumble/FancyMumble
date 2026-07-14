@@ -18,12 +18,12 @@
 //!    the overlay over it (window shares are then followed by HWND on
 //!    Windows).
 //! 2. Legacy fallback when no Rust broadcast is active:
-//!    a. `display_surface == "window"` on Windows: enumerate top-level
-//!       windows for one whose client area matches the captured size and
-//!       pin the overlay over its screen rect, then poll for movement.
-//!    b. `display_surface == "monitor"`: pick the monitor whose pixel
-//!       dimensions match the captured size and cover it fully.
-//!    c. Monitor under the cursor, then primary monitor.
+//!    (a) `display_surface == "window"` on Windows: enumerate top-level
+//!    windows for one whose client area matches the captured size and
+//!    pin the overlay over its screen rect, then poll for movement.
+//!    (b) `display_surface == "monitor"`: pick the monitor whose pixel
+//!    dimensions match the captured size and cover it fully.
+//!    (c) Monitor under the cursor, then primary monitor.
 //!
 //! At most one overlay window per app process; reopening replaces the
 //! previous one.

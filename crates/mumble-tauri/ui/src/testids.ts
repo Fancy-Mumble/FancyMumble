@@ -142,22 +142,30 @@ export const TID = {
   /** Chat-header "Share screen" / "Stop sharing" toggle. Opens the source
    *  picker (when not sharing) or stops the broadcast. */
   screenShareToggle: "screen-share-toggle",
-  /** Root of the source-picker dialog (the 2-tab Entire Screen / Window
+  /** Root of the source-picker dialog (the Entire Screen / Window / Device
    *  chooser). Its presence means the picker is open. */
   screenSharePicker: "screen-share-picker",
-  /** A tab button inside the picker; carries `data-tab` ("screens"|"windows"). */
+  /** A tab button inside the picker; carries `data-tab`
+   *  ("screens"|"windows"|"devices"). */
   screenSharePickerTab: "screen-share-picker-tab",
   /** A selectable capture-source card in the picker. Carries `data-source-id`,
-   *  `data-source-kind` ("screen"|"window") and `data-source-title`. */
+   *  `data-source-kind` ("screen"|"window"|"device") and `data-source-title`.
+   *  One screen/window and one device can be selected together (screen +
+   *  camera share). */
   screenShareSource: "screen-share-source",
   /** Confirm button in the picker that starts the broadcast for the selected
-   *  source. */
+   *  source(s). */
   screenShareConfirm: "screen-share-confirm",
   /** The stream `<video>` element (own loopback preview or a remote viewer).
    *  Carries `data-session` (the broadcaster's session) and `data-own`
    *  ("true" for the broadcaster's own loopback, "false" for a remote view) so
    *  a test can read back the decoded pixels of a specific stream. */
   streamViewerVideo: "stream-viewer-video",
+  /** The camera picture-in-picture `<video>` overlaid on a stream when the
+   *  broadcaster shares screen + camera together. Same `data-session` /
+   *  `data-own` attributes as {@link streamViewerVideo}. A camera-ONLY share
+   *  renders in the main {@link streamViewerVideo} element instead. */
+  streamCameraVideo: "stream-camera-video",
   /** A "someone is sharing" banner row; carries `data-broadcaster-name`. */
   broadcastBanner: "broadcast-banner",
   /** The "Watch" button inside a {@link broadcastBanner}; carries
@@ -177,6 +185,19 @@ export const TID = {
   /** Gear button in the source picker opening the "Stream Mode" popover
    *  (presets + screen-resolution / frame-rate submenus). */
   screenShareSettings: "screen-share-settings",
+  /** One chip in the picker's selection summary row (a picked screen/window
+   *  or camera; `data-chip-kind` holds the source kind). */
+  screenShareSelectionChip: "screen-share-selection-chip",
+  /** Own-stream control-bar shortcut that adds the missing source kind
+   *  (screen or camera) to the live broadcast via the seeded picker. */
+  streamAddSource: "stream-add-source",
+  /** × on the own camera PiP tile that ends just the camera track. */
+  streamEndCamera: "stream-end-camera",
+  /** Per-track "Current resolution" row in the stats panel (one per inbound
+   *  video track - a screen+camera share has two). */
+  streamStatsResolution: "stream-stats-resolution",
+  /** Per-track "Freezes" row in the stats panel ("n (x.x s total)"). */
+  streamStatsFreezes: "stream-stats-freezes",
 } as const;
 
 export type TestId = (typeof TID)[keyof typeof TID];

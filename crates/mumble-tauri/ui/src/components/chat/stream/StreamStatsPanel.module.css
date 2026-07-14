@@ -58,6 +58,18 @@
   align-items: center;
 }
 
+/* Sub-heading separating one video track's rows (screen / camera). */
+.trackHeading {
+  margin-top: 8px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-accent, #7ab8ff);
+}
+
 .label {
   font-weight: 700;
   color: #fff;

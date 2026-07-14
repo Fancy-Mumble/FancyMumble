@@ -72,7 +72,8 @@
     "channelOptions": "Options du canal",
     "join": "Rejoindre",
     "joinChannel": "Rejoindre le canal",
-    "popOutDm": "Détacher la conversation"
+    "popOutDm": "Détacher la conversation",
+    "changeSharing": "Modifier ce que vous partagez"
   },
   "calendar": {
     "title": "Calendrier",
@@ -365,10 +366,13 @@
       "title": "Choisissez ce que vous voulez partager",
       "tabScreens": "Écran entier",
       "tabWindows": "Fenêtre",
+      "tabDevices": "Appareil",
       "loading": "Recherche des écrans et fenêtres…",
       "empty": "Rien à partager ici.",
       "loadFailed": "Impossible de lister les écrans et fenêtres : {{detail}}",
+      "emptyDevices": "Aucune caméra détectée.",
       "share": "Partager",
+      "shareBoth": "Partager les deux",
       "cancel": "Annuler",
       "qualityLabel": "Qualité du flux",
       "quality_sd": "SD",
@@ -380,7 +384,11 @@
       "res_720p": "720p",
       "res_1080p": "1080p",
       "res_1440p": "1440p",
-      "res_source": "Source"
+      "res_source": "Source",
+      "sharingLabel": "Partage :",
+      "addCameraHint": "Astuce : ajoutez une caméra depuis l'onglet Appareil pour partager les deux",
+      "addDisplayHint": "Astuce : ajoutez aussi un écran ou une fenêtre pour partager les deux",
+      "removeSource": "Retirer {{title}}"
     },
     "mode": {
       "title": "Mode de diffusion",
@@ -445,13 +453,24 @@
       "freezes": "Blocages",
       "freezesValue": "{{n}} ({{seconds}} s au total)",
       "jitter": "Gigue",
-      "date": "Date"
+      "date": "Date",
+      "codec": "Codec",
+      "audioCodec": "Codec audio",
+      "trackScreen": "Écran",
+      "trackCamera": "Caméra",
+      "trackVideo": "Vidéo {{n}}"
     },
     "banner": {
       "isSharingScreen": "{{name}} partage son écran",
+      "isSharingCamera": "{{name}} partage sa caméra",
+      "isSharingScreenCamera": "{{name}} partage son écran et sa caméra",
       "watch": "Regarder",
       "dismiss": "Ignorer la notification"
-    }
+    },
+    "addScreenTrack": "Partager aussi votre écran",
+    "addCameraTrack": "Ajouter votre caméra",
+    "endCamera": "Arrêter de partager votre caméra",
+    "stopScreenShare": "Arrêter de partager votre écran"
   },
   "streamFocus": {
     "layout": {

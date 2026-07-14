@@ -233,9 +233,12 @@ interface PrimaryPaneProps {
   readonly isPrimaryDragOver: boolean;
   readonly channelId: number;
   readonly ownSession: number;
+  readonly missingSourceKind?: "screen" | "camera";
+  readonly onAddSource?: () => void;
+  readonly onEndCamera?: () => void;
 }
 
-function PrimaryPane({ isOwnBroadcast, localStream, session, hasOthers, isPrimaryDragOver, channelId, ownSession }: PrimaryPaneProps) {
+function PrimaryPane({ isOwnBroadcast, localStream, session, hasOthers, isPrimaryDragOver, channelId, ownSession, missingSourceKind, onAddSource, onEndCamera }: PrimaryPaneProps) {
   const { t } = useTranslation("chat");
   return (
     <section
@@ -244,7 +247,7 @@ function PrimaryPane({ isOwnBroadcast, localStream, session, hasOthers, isPrimar
       data-drop-zone={hasOthers ? "primary" : undefined}
     >
       <Suspense fallback={null}>
-        <ScreenShareViewer isOwnBroadcast={isOwnBroadcast} localStream={localStream} session={session} channelId={channelId} ownSession={ownSession} />
+        <ScreenShareViewer isOwnBroadcast={isOwnBroadcast} localStream={localStream} session={session} channelId={channelId} ownSession={ownSession} missingSourceKind={missingSourceKind} onAddSource={onAddSource} onEndCamera={onEndCamera} />
       </Suspense>
       {hasOthers && (
         <div
@@ -475,6 +478,11 @@ interface StreamFocusViewProps {
   /** Optional stream-config kebab menu, rendered beside the close × (own
    *  broadcast only). It positions itself absolutely. */
   readonly configMenu?: ReactNode;
+  /** Which source kind the own broadcast is missing ("add screen/camera"
+   *  shortcut in the stream controls; own broadcast only). */
+  readonly missingSourceKind?: "screen" | "camera";
+  readonly onAddSource?: () => void;
+  readonly onEndCamera?: () => void;
 }
 
 export default function StreamFocusView({
@@ -487,6 +495,9 @@ export default function StreamFocusView({
   onClose,
   closeLabel,
   configMenu,
+  missingSourceKind,
+  onAddSource,
+  onEndCamera,
 }: StreamFocusViewProps) {
   const [layout, setLayout] = useState<GridLayout>("solo");
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -538,6 +549,9 @@ export default function StreamFocusView({
           isPrimaryDragOver={dragOverTarget === "primary"}
           channelId={channelId}
           ownSession={ownSession ?? 0}
+          missingSourceKind={missingSourceKind}
+          onAddSource={onAddSource}
+          onEndCamera={onEndCamera}
         />
 
         <LayoutSecondaryPanes

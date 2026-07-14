@@ -72,7 +72,8 @@
     "channelOptions": "Kanaloptionen",
     "join": "Beitreten",
     "joinChannel": "Kanal beitreten",
-    "popOutDm": "Direktnachricht ausklinken"
+    "popOutDm": "Direktnachricht ausklinken",
+    "changeSharing": "Freigabe ändern"
   },
   "calendar": {
     "title": "Kalender",
@@ -365,10 +366,13 @@
       "title": "Wähle aus, was du teilen möchtest",
       "tabScreens": "Gesamter Bildschirm",
       "tabWindows": "Fenster",
+      "tabDevices": "Gerät",
       "loading": "Bildschirme und Fenster werden gesucht…",
       "empty": "Hier gibt es nichts zum Teilen.",
       "loadFailed": "Bildschirme und Fenster konnten nicht aufgelistet werden: {{detail}}",
+      "emptyDevices": "Keine Kamera gefunden.",
       "share": "Teilen",
+      "shareBoth": "Beides teilen",
       "cancel": "Abbrechen",
       "qualityLabel": "Stream-Qualität",
       "quality_sd": "SD",
@@ -380,7 +384,11 @@
       "res_720p": "720p",
       "res_1080p": "1080p",
       "res_1440p": "1440p",
-      "res_source": "Quelle"
+      "res_source": "Quelle",
+      "sharingLabel": "Wird geteilt:",
+      "addCameraHint": "Tipp: Über den Gerät-Tab lässt sich zusätzlich eine Kamera teilen",
+      "addDisplayHint": "Tipp: Zusätzlich lässt sich ein Bildschirm oder Fenster teilen",
+      "removeSource": "{{title}} entfernen"
     },
     "mode": {
       "title": "Stream-Modus",
@@ -445,13 +453,24 @@
       "freezes": "Freezes",
       "freezesValue": "{{n}} ({{seconds}} s gesamt)",
       "jitter": "Jitter",
-      "date": "Datum"
+      "date": "Datum",
+      "codec": "Codec",
+      "audioCodec": "Audio-Codec",
+      "trackScreen": "Bildschirm",
+      "trackCamera": "Kamera",
+      "trackVideo": "Video {{n}}"
     },
     "banner": {
       "isSharingScreen": "{{name}} teilt den Bildschirm",
+      "isSharingCamera": "{{name}} teilt die Kamera",
+      "isSharingScreenCamera": "{{name}} teilt Bildschirm und Kamera",
       "watch": "Ansehen",
       "dismiss": "Benachrichtigung verwerfen"
-    }
+    },
+    "addScreenTrack": "Zusätzlich den Bildschirm teilen",
+    "addCameraTrack": "Kamera hinzufügen",
+    "endCamera": "Kamera nicht mehr teilen",
+    "stopScreenShare": "Bildschirm nicht mehr teilen"
   },
   "streamFocus": {
     "layout": {

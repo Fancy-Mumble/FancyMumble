@@ -44,6 +44,18 @@ pub(crate) trait EncodePipeline {
         force_keyframe: bool,
     ) -> Result<Option<EncodedFrame>, String>;
 
+    /// Re-encode the last produced picture as a (near-empty) delta frame.
+    ///
+    /// Change-driven capture emits NOTHING while the source is static, which
+    /// starves the receiver's jitter buffer and makes natural pauses register
+    /// as stream "freezes". The capture loop calls this on idle so RTP keeps
+    /// flowing at a low keep-alive rate (Chrome's screen capture does the
+    /// same). `Ok(None)` when the backend has no picture to repeat (or the
+    /// concept doesn't apply - cameras never idle).
+    fn encode_repeat(&mut self) -> Result<Option<EncodedFrame>, String> {
+        Ok(None)
+    }
+
     /// Release OS resources (capture sessions, encoder devices). Idempotent.
     fn shutdown(&mut self);
 }
@@ -54,6 +66,13 @@ pub(crate) fn create_pipeline(
     source_id: u32,
     settings: EncodeSettings,
 ) -> Result<Box<dyn EncodePipeline>, String> {
+    // Cameras have exactly one capture path (the OS camera API via nokhwa);
+    // the GPU screen-capture tiers below do not apply to them.
+    if kind == SourceKind::Device {
+        return crate::camera::CameraPipeline::new(source_id, settings)
+            .map(|p| Box::new(p) as Box<dyn EncodePipeline>);
+    }
+
     #[cfg(all(windows, feature = "gpu"))]
     if kind == SourceKind::Screen {
         // Tier 1: the D3D12-native pipeline (Windows 11 video encode API -
@@ -138,7 +157,8 @@ impl CpuPipeline {
         let target = sources::CaptureTarget::resolve(kind, source_id)?;
         let recorder = match kind {
             SourceKind::Screen => sources::ScreenRecorder::start(source_id),
-            SourceKind::Window => None,
+            // Devices never reach this pipeline (routed to CameraPipeline).
+            SourceKind::Window | SourceKind::Device => None,
         };
         Ok(Self {
             kind,
@@ -225,6 +245,14 @@ impl EncodePipeline for CpuPipeline {
         }
         self.timings.maybe_log("cpu", img.width(), img.height());
         Ok(encoded)
+    }
+
+    fn encode_repeat(&mut self) -> Result<Option<EncodedFrame>, String> {
+        let Some(img) = self.last_scaled.as_ref() else {
+            return Ok(None);
+        };
+        // Same input again = a minimal P-frame (no keyframe).
+        self.encoder.encode_rgba(img.width(), img.height(), img.as_raw(), false)
     }
 
     fn shutdown(&mut self) {
@@ -324,5 +352,96 @@ impl FrameScaler {
         }
         image::RgbaImage::from_raw(nw, nh, dst.into_vec())
             .unwrap_or_else(|| image::RgbaImage::new(2, 2))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Manual diagnostic for screen-share delivery stalls: run the REAL
+    /// pipeline selection (`create_pipeline`, GPU tier first) against the
+    /// primary monitor for 20 s, mimicking the broadcast loop's pacing and
+    /// 4 s periodic keyframes, and report the inter-frame GAP distribution.
+    /// Freezes at receivers are born from gaps here. Run with an animated
+    /// window on screen (e.g. `py fixtures/checkerboard.py --animate-ms 50`):
+    /// `cargo test -p fancy-screenshare --release manual_screen_pipeline_gaps -- --ignored --nocapture`
+    #[test]
+    #[ignore = "manual diagnostic; needs a display with moving content"]
+    fn manual_screen_pipeline_gaps() {
+        tracing_subscriber::fmt().with_env_filter("info").init();
+        let monitors = xcap::Monitor::all().expect("monitors");
+        let monitor = monitors.first().expect("at least one monitor");
+        let id = monitor.id().expect("monitor id");
+
+        let settings = EncodeSettings::default();
+        let mut pipeline = create_pipeline(SourceKind::Screen, id, settings).expect("pipeline");
+        println!("pipeline: {}", pipeline.name());
+
+        let frame_interval = Duration::from_secs_f32(1.0 / settings.max_fps.max(1.0));
+        let run = Duration::from_secs(20);
+        let periodic = Duration::from_secs(4);
+        let start = Instant::now();
+        let mut last_keyframe = Instant::now();
+        let mut last_frame: Option<Instant> = None;
+        let mut last_emit = Instant::now();
+        let mut gaps_ms: Vec<u64> = Vec::new();
+        let mut frames = 0u32;
+        let mut repeats = 0u32;
+        let mut sizes: Vec<usize> = Vec::new();
+
+        // Mirror the production capture loop EXACTLY: 100 ms `next_frame` wait
+        // (full throughput on active content) plus a 90 ms gap-fill repeat so
+        // idle holes do not become receiver freezes. The emitted-frame gap
+        // distribution here is what the receiver sees.
+        const IDLE_REPEAT: Duration = Duration::from_millis(90);
+        while start.elapsed() < run {
+            let tick = Instant::now();
+            let force = last_keyframe.elapsed() >= periodic;
+            let produced = pipeline
+                .next_frame(frame_interval.max(Duration::from_millis(100)), force)
+                .and_then(|frame| match frame {
+                    Some(f) => Ok(Some((f, false))),
+                    None if last_emit.elapsed() >= IDLE_REPEAT => {
+                        Ok(pipeline.encode_repeat()?.map(|f| (f, true)))
+                    }
+                    None => Ok(None),
+                });
+            match produced {
+                Ok(Some((f, is_repeat))) => {
+                    last_emit = Instant::now();
+                    if f.keyframe {
+                        last_keyframe = Instant::now();
+                    }
+                    let now = Instant::now();
+                    if let Some(prev) = last_frame.replace(now) {
+                        gaps_ms.push(now.duration_since(prev).as_millis() as u64);
+                    }
+                    frames += 1;
+                    repeats += u32::from(is_repeat);
+                    sizes.push(f.data.len());
+                }
+                Ok(None) => {}
+                Err(e) => panic!("pipeline failed after {frames} frames: {e}"),
+            }
+            let elapsed = tick.elapsed();
+            if elapsed < frame_interval {
+                std::thread::sleep(frame_interval - elapsed);
+            }
+        }
+        pipeline.shutdown();
+
+        gaps_ms.sort_unstable();
+        let p = |q: f64| gaps_ms.get(((gaps_ms.len() as f64 * q) as usize).min(gaps_ms.len() - 1)).copied().unwrap_or(0);
+        let over200 = gaps_ms.iter().filter(|&&g| g > 200).count();
+        let max_size = sizes.iter().copied().max().unwrap_or(0);
+        let avg_size = if sizes.is_empty() { 0 } else { sizes.iter().sum::<usize>() / sizes.len() };
+        let over150 = gaps_ms.iter().filter(|&&g| g > 150).count();
+        println!(
+            "frames={frames} ({repeats} repeats) over 20s = {:.1} fps | gap p50={}ms p95={}ms p99={}ms max={}ms | gaps>150ms: {over150} >200ms: {over200} | frame size avg={avg_size}B max={max_size}B",
+            f64::from(frames) / 20.0,
+            p(0.5), p(0.95), p(0.99),
+            gaps_ms.last().copied().unwrap_or(0),
+        );
     }
 }

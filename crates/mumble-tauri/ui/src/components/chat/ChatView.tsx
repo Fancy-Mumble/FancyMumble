@@ -962,6 +962,49 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     activeScreenShare = { session: ownSession!, isOwn: true, stream: screenShare.localStream };
   }
 
+  // Which source kind the own broadcast is missing (drives the viewer's
+  // "add screen / add camera" control-bar shortcut; undefined = complete
+  // or not broadcasting).
+  let ownMissingSourceKind: "screen" | "camera" | undefined;
+  if (screenShare.activeSources !== null) {
+    const hasDisplay = screenShare.activeSources.some((s) => s.kind !== "device");
+    const hasCamera = screenShare.activeSources.some((s) => s.kind === "device");
+    if (!hasDisplay) ownMissingSourceKind = "screen";
+    else if (!hasCamera) ownMissingSourceKind = "camera";
+  }
+
+  // End just the camera track (× on the camera PiP): re-broadcast with the
+  // remaining display source, or stop entirely if the camera was the only
+  // source. The camera PiP only renders alongside a screen, so in practice
+  // this drops screen+camera down to screen-only.
+  const { confirmSource: doConfirmSource, stopSharing: doStopSharing, settings: shareSettings, activeSources } = screenShare;
+  const handleEndCamera = useCallback(() => {
+    const remaining = (activeSources ?? []).filter((s) => s.kind !== "device");
+    if (remaining.length === 0) {
+      doStopSharing();
+    } else {
+      void doConfirmSource(remaining, shareSettings);
+    }
+  }, [activeSources, doConfirmSource, doStopSharing, shareSettings]);
+
+  // The panel "stop" ×: symmetric to the camera ×. With BOTH screen and
+  // camera live it ends only the SCREEN (the camera keeps streaming); with a
+  // single source it stops the whole broadcast. So each source has an
+  // affordance that removes it, and removing the last one ends the stream.
+  const shareHasCamera = activeSources?.some((s) => s.kind === "device") ?? false;
+  const shareHasDisplay = activeSources?.some((s) => s.kind !== "device") ?? false;
+  const shareHasBoth = shareHasCamera && shareHasDisplay;
+  const handleStopScreen = useCallback(() => {
+    const cameraOnly = (activeSources ?? []).filter((s) => s.kind === "device");
+    if (cameraOnly.length > 0 && cameraOnly.length < (activeSources?.length ?? 0)) {
+      void doConfirmSource(cameraOnly, shareSettings); // drop the screen, keep camera
+    } else {
+      doStopSharing();
+    }
+  }, [activeSources, doConfirmSource, doStopSharing, shareSettings]);
+  // Label reflects what the × will do: end the screen (both live) vs stop all.
+  const ownStopLabel = shareHasBoth ? t("screenShare.stopScreenShare") : t("screenShare.stopSharing");
+
   // Other users broadcasting in the current channel (for the notification banner).
   // Sessions whose stream is already open in a detached popout window are
   // excluded so the user does not see a redundant "watch" prompt.
@@ -1081,8 +1124,12 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           onToggleSilence={selectedChannel !== null ? () => toggleSilenceChannel(selectedChannel) : undefined}
           isScreenSharing={screenShare.isBroadcasting}
           onToggleScreenShare={
+            // Always the picker: the header button stays visible while
+            // broadcasting so the user can change/add sources (confirming a
+            // seeded picker edits the live share). Stopping lives on the
+            // stream panel × and the camera-PiP ×.
             !inPopout && !isMobile && serverFancyVersion != null && serverFancyVersion >= SCREEN_SHARE_MIN_VERSION
-              ? (screenShare.isBroadcasting ? screenShare.stopSharing : screenShare.startSharing)
+              ? screenShare.startSharing
               : undefined
           }
           screenShareDisabledReason={
@@ -1221,8 +1268,8 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
         <ResizableSplitPanel
           fillByDefault
           minPx={200}
-          onClose={screenShare.stopSharing}
-          closeLabel={t("screenShare.stopSharing")}
+          onClose={handleStopScreen}
+          closeLabel={ownStopLabel}
         >
           <Suspense fallback={null}>
             <StreamConfigMenu
@@ -1238,6 +1285,9 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
               localStream={activeScreenShare.stream}
               channelId={selectedChannel ?? 0}
               ownSession={ownSession ?? 0}
+              missingSourceKind={ownMissingSourceKind}
+              onAddSource={screenShare.startSharing}
+              onEndCamera={handleEndCamera}
             />
           </Suspense>
         </ResizableSplitPanel>
@@ -1251,12 +1301,15 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
               isOwnBroadcast={activeScreenShare.isOwn}
               localStream={activeScreenShare.isOwn ? activeScreenShare.stream : null}
               session={activeScreenShare.isOwn ? undefined : activeScreenShare.session}
+              missingSourceKind={activeScreenShare.isOwn ? ownMissingSourceKind : undefined}
+              onAddSource={activeScreenShare.isOwn ? screenShare.startSharing : undefined}
+              onEndCamera={activeScreenShare.isOwn ? handleEndCamera : undefined}
               ownBroadcastStream={screenShare.isBroadcasting ? screenShare.localStream : null}
               otherBroadcasters={focusViewSecondaries}
               onWatch={handleFocusWatch}
-              onClose={activeScreenShare.isOwn ? screenShare.stopSharing : screenShare.stopWatching}
+              onClose={activeScreenShare.isOwn ? handleStopScreen : screenShare.stopWatching}
               closeLabel={
-                activeScreenShare.isOwn ? t("screenShare.stopSharing") : t("screenShare.stopWatching")
+                activeScreenShare.isOwn ? ownStopLabel : t("screenShare.stopWatching")
               }
               configMenu={
                 activeScreenShare.isOwn ? (
@@ -1561,12 +1614,13 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
         </Suspense>
       )}
 
-      {/* Screen/window source picker (Rust-native capture) */}
+      {/* Screen/window/camera source picker (Rust-native capture) */}
       {screenShare.pickerOpen && (
         <Suspense fallback={null}>
           <ScreenSharePickerDialog
             initialSettings={screenShare.settings}
-            onConfirm={(kind, id, settings) => void screenShare.confirmSource(kind, id, settings)}
+            initialSelection={screenShare.activeSources ?? undefined}
+            onConfirm={(sources, settings) => void screenShare.confirmSource(sources, settings)}
             onCancel={screenShare.cancelPicker}
           />
         </Suspense>
