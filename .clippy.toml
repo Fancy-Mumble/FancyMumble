@@ -1,1 +1,17 @@
 excessive-nesting-threshold = 5
+
+# unwrap()/expect()/panic!() are denied in production code (see the
+# [workspace.lints.clippy] table in Cargo.toml) but are idiomatic in tests,
+# where a failed assertion SHOULD panic with a clear message.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+
+# Domain/product names that read fine unbackticked in prose. `..` keeps
+# clippy's built-in defaults (OpenGL, WebGL, ...).
+doc-valid-idents = [
+    "DirectShow", "MediaFoundation", "AVFoundation", "DroidCam", "OBS",
+    "PipeWire", "VideoProcessor", "GStreamer", "OpenH264", "WebRTC",
+    "MF_SDK_VERSION", "MF_API_VERSION", "V4L2",
+    "..",
+]

@@ -330,7 +330,8 @@ impl Drop for WasapiCapture {
 /// exclusive/shared open ladder, and the event-driven capture loop.
 #[allow(
     clippy::too_many_arguments,
-    reason = "single-use thread body; a struct would only obscure the handshake"
+    clippy::needless_pass_by_value,
+    reason = "single-use thread body; it owns its captured state for the thread's lifetime"
 )]
 fn capture_thread(
     device_name: Option<String>,
@@ -521,6 +522,10 @@ fn open_stream(
 /// - No `IsFormatSupported` pre-check (Mumble has none; drivers answer
 ///   the query unreliably) - just attempt `Initialize`.
 /// - Period is at least 10 ms (`max(min, 100000)`), matching Mumble.
+#[allow(
+    clippy::excessive_nesting,
+    reason = "the rate x bit-depth x alignment-retry open ladder is one flat search, clearer inline"
+)]
 unsafe fn open_exclusive(
     device: &IMMDevice,
     mix_rate: u32,

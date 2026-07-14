@@ -17,6 +17,12 @@
     reason = "raw WASAPI COM to mirror the official Mumble client's device open"
 )]
 
+// The example inherits the crate's deps; acknowledge the ones it doesn't use
+// directly (else `unused_crate_dependencies` fires).
+use cpal as _;
+use mumble_protocol as _;
+use tracing as _;
+
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Media::Audio::{
@@ -51,10 +57,26 @@ fn main() {
 unsafe fn run(want: Option<&str>) -> windows::core::Result<()> {
     let enumerator: IMMDeviceEnumerator =
         CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
-    let collection = enumerator.EnumAudioEndpoints(
-        eCapture,
-        windows::Win32::Media::Audio::DEVICE_STATE_ACTIVE,
-    )?;
+    let device = select_device(&enumerator, want)?;
+
+    let rate = probe_shared(&device)?; // section 2
+    probe_exclusive(&device, rate)?; // section 3
+    probe_mumble_exact(&device)?; // section 4
+
+    println!("\nInterpretation:");
+    println!("  SHARED failing 'in use' + EXCLUSIVE OK -> add exclusive-mode capture (like Mumble).");
+    println!("  Both failing 'in use' -> device is held EXCLUSIVE by another process.");
+    Ok(())
+}
+
+/// List active capture devices and pick the one whose name matches `want`
+/// (or the default capture device).
+unsafe fn select_device(
+    enumerator: &IMMDeviceEnumerator,
+    want: Option<&str>,
+) -> windows::core::Result<IMMDevice> {
+    let collection =
+        enumerator.EnumAudioEndpoints(eCapture, windows::Win32::Media::Audio::DEVICE_STATE_ACTIVE)?;
     let count = collection.GetCount()?;
     println!("{count} active capture device(s)");
 
@@ -68,15 +90,18 @@ unsafe fn run(want: Option<&str>) -> windows::core::Result<()> {
             chosen = Some(dev);
         }
     }
-    let device = match chosen {
-        Some(d) => d,
+    match chosen {
+        Some(d) => Ok(d),
         None => {
             println!("(no name match; using default capture device)");
-            enumerator.GetDefaultAudioEndpoint(eCapture, eConsole)?
+            enumerator.GetDefaultAudioEndpoint(eCapture, eConsole)
         }
-    };
+    }
+}
 
-    // --- 2. Mumble-style: SHARED mode with the device's own mix format ---
+/// Section 2 - Mumble's default: SHARED mode with the device's own mix format.
+/// Returns the mix sample rate (reused by the exclusive attempts).
+unsafe fn probe_shared(device: &IMMDevice) -> windows::core::Result<u32> {
     let client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
     let mix = client.GetMixFormat()?;
     // WAVEFORMATEX is #[repr(packed)]; read each field unaligned into locals.
@@ -86,18 +111,17 @@ unsafe fn run(want: Option<&str>) -> windows::core::Result<()> {
     let tag = std::ptr::addr_of!((*mix).wFormatTag).read_unaligned();
     println!("\nGetMixFormat: {rate} Hz, {ch} ch, {bits}-bit (tag {tag})");
 
-    let shared = client.Initialize(
+    match client.Initialize(
         AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
         0,
         0,
         mix,
         None,
-    );
-    match &shared {
+    ) {
         Ok(()) => {
-            // Give it an event handle + start, exactly like Mumble, to be
-            // sure the open is real and not deferred.
+            // Event handle + start, exactly like Mumble, to be sure the open
+            // is real and not deferred.
             let ev = windows::Win32::System::Threading::CreateEventW(None, false, false, PCWSTR::null())?;
             let _ = client.SetEventHandle(HANDLE(ev.0));
             let started = client.Start();
@@ -107,16 +131,18 @@ unsafe fn run(want: Option<&str>) -> windows::core::Result<()> {
         Err(e) => println!("WASAPI SHARED + mix format: FAILED hr=0x{:08X} ({})", e.code().0, e.message()),
     }
     CoTaskMemFree(Some(mix as *const _ as *const _));
+    Ok(rate)
+}
 
-    // --- 3. Exclusive path at the DEVICE'S ACTUAL rate ---
-    // Exclusive mode requires a format the hardware natively supports, so
-    // try a set of standard PCM formats at the real endpoint rate (not a
-    // hardcoded 48k). Exclusive bypasses the shared engine, so it can
-    // succeed even when the shared open above returns "in use".
+/// Section 3 - exclusive path at the device's ACTUAL rate. Exclusive mode
+/// needs a natively supported format, so try a set of standard PCM formats.
+/// Exclusive bypasses the shared engine, so it can succeed even when the
+/// shared open returns "in use".
+unsafe fn probe_exclusive(device: &IMMDevice, rate: u32) -> windows::core::Result<()> {
     for &(ch, bits) in &[(2u16, 16u16), (1, 16), (2, 24), (1, 24), (2, 32), (1, 32)] {
-        let client2: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
+        let client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
         let (mut def, mut minp) = (0i64, 0i64);
-        client2.GetDevicePeriod(Some(&mut def), Some(&mut minp))?;
+        client.GetDevicePeriod(Some(&mut def), Some(&mut minp))?;
         let want_period = minp.max(30_000);
         let block = ch * bits / 8;
         let wfe = WAVEFORMATEX {
@@ -129,50 +155,43 @@ unsafe fn run(want: Option<&str>) -> windows::core::Result<()> {
             cbSize: 0,
         };
         // Ask the driver whether this exact format is exclusive-capable.
-        let supported =
-            client2.IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, &wfe, None);
-        if supported.is_err() {
+        if client.IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, &wfe, None).is_err() {
             continue;
         }
-        let excl = client2.Initialize(
+        match client.Initialize(
             AUDCLNT_SHAREMODE_EXCLUSIVE,
             AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
             want_period,
             want_period,
             &wfe,
             None,
-        );
-        match &excl {
+        ) {
             Ok(()) => {
-                let ev = windows::Win32::System::Threading::CreateEventW(
-                    None, false, false, PCWSTR::null(),
-                )?;
-                let _ = client2.SetEventHandle(HANDLE(ev.0));
-                let started = client2.Start();
+                let ev = windows::Win32::System::Threading::CreateEventW(None, false, false, PCWSTR::null())?;
+                let _ = client.SetEventHandle(HANDLE(ev.0));
+                let started = client.Start();
                 println!(
                     "WASAPI EXCLUSIVE {rate}Hz/{ch}ch/{bits}bit: OK (start: {started:?})  <== this is how to 'take' the device",
                 );
-                let _ = client2.Stop();
+                let _ = client.Stop();
                 break;
             }
-            Err(e) => println!(
-                "WASAPI EXCLUSIVE {rate}Hz/{ch}ch/{bits}bit: FAILED hr=0x{:08X}",
-                e.code().0,
-            ),
+            Err(e) => println!("WASAPI EXCLUSIVE {rate}Hz/{ch}ch/{bits}bit: FAILED hr=0x{:08X}", e.code().0),
         }
     }
+    Ok(())
+}
 
-    // --- 4. MUMBLE-EXACT exclusive open (WASAPI.cpp verbatim) ---
-    // Differences from section 3: rate hardcoded to 48000 (exclusive talks
-    // to the HARDWARE, not the Windows endpoint format), channels tried in
-    // Mumble's order 1 then 2, 16-bit only, period = max(min, 100000)
-    // (>= 10 ms), and NO IsFormatSupported pre-check (drivers lie there;
-    // Mumble just attempts Initialize).
+/// Section 4 - MUMBLE-EXACT exclusive open (WASAPI.cpp verbatim): rate
+/// hardcoded to 48000 (exclusive talks to the HARDWARE, not the Windows
+/// endpoint format), channels tried 1 then 2, 16-bit only, period
+/// `max(min, 100000)` (>= 10 ms), and NO `IsFormatSupported` pre-check.
+unsafe fn probe_mumble_exact(device: &IMMDevice) -> windows::core::Result<()> {
     for channels in 1u16..=2 {
-        let client3: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
-        let (mut def3, mut min3) = (0i64, 0i64);
-        client3.GetDevicePeriod(Some(&mut def3), Some(&mut min3))?;
-        let want3 = min3.max(100_000);
+        let client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
+        let (mut def, mut minp) = (0i64, 0i64);
+        client.GetDevicePeriod(Some(&mut def), Some(&mut minp))?;
+        let want_period = minp.max(100_000);
         let block = channels * 2;
         let wfe = WAVEFORMATEX {
             wFormatTag: WAVE_FORMAT_PCM as u16,
@@ -183,36 +202,30 @@ unsafe fn run(want: Option<&str>) -> windows::core::Result<()> {
             nAvgBytesPerSec: 48_000 * u32::from(block),
             cbSize: 0,
         };
-        match client3.Initialize(
+        match client.Initialize(
             AUDCLNT_SHAREMODE_EXCLUSIVE,
             AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-            want3,
-            want3,
+            want_period,
+            want_period,
             &wfe,
             None,
         ) {
             Ok(()) => {
-                let ev = windows::Win32::System::Threading::CreateEventW(
-                    None, false, false, PCWSTR::null(),
-                )?;
-                let _ = client3.SetEventHandle(HANDLE(ev.0));
-                let started = client3.Start();
+                let ev = windows::Win32::System::Threading::CreateEventW(None, false, false, PCWSTR::null())?;
+                let _ = client.SetEventHandle(HANDLE(ev.0));
+                let started = client.Start();
                 println!(
-                    "MUMBLE-EXACT EXCLUSIVE 48000Hz/{channels}ch/16bit (period {want3}): OK (start: {started:?})"
+                    "MUMBLE-EXACT EXCLUSIVE 48000Hz/{channels}ch/16bit (period {want_period}): OK (start: {started:?})"
                 );
-                let _ = client3.Stop();
+                let _ = client.Stop();
                 break;
             }
             Err(e) => println!(
-                "MUMBLE-EXACT EXCLUSIVE 48000Hz/{channels}ch/16bit (period {want3}): FAILED hr=0x{:08X}",
+                "MUMBLE-EXACT EXCLUSIVE 48000Hz/{channels}ch/16bit (period {want_period}): FAILED hr=0x{:08X}",
                 e.code().0,
             ),
         }
     }
-
-    println!("\nInterpretation:");
-    println!("  SHARED failing 'in use' + EXCLUSIVE OK -> add exclusive-mode capture (like Mumble).");
-    println!("  Both failing 'in use' -> device is held EXCLUSIVE by another process.");
     Ok(())
 }
 

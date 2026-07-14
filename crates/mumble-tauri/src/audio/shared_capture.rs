@@ -25,9 +25,6 @@ use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use mumble_protocol::error::{Error, Result};
 use tracing::{debug, warn};
 
-/// Frame size (in samples) the broker pulls from the real device: 10 ms
-/// at 48 kHz, the pipeline's base granularity.
-const PUMP_FRAME: usize = 480;
 
 /// Per-subscriber buffer cap (1 s at 48 kHz); oldest samples are dropped
 /// when a consumer stalls so it never wedges the others.
@@ -68,9 +65,9 @@ fn registry() -> &'static Mutex<HashMap<String, Arc<StreamShared>>> {
 
 /// Acquire a shared capture handle for `device_name`.
 ///
-/// `factory` must create the real capture with a frame size of
-/// [`PUMP_FRAME`] and a neutral (1.0) volume; the handle applies
-/// `volume` itself and assembles `frame_size`-sample frames.
+/// `factory` must create the real capture with a `480`-sample frame (10 ms
+/// at 48 kHz, the pipeline's base granularity) and a neutral (1.0) volume;
+/// the handle applies `volume` itself and assembles `frame_size`-sample frames.
 pub(crate) fn acquire(
     device_name: Option<&str>,
     frame_size: usize,
@@ -275,6 +272,17 @@ impl Drop for SharedCaptureHandle {
     }
 }
 
+/// Record a fatal device error on every live subscriber, so each reader
+/// surfaces it on its next poll.
+fn mark_subscribers_dead(shared: &StreamShared, reason: &str) {
+    let Ok(subs) = shared.subscribers.lock() else { return };
+    for sub in subs.iter().filter_map(Weak::upgrade) {
+        if let Ok(mut dead) = sub.dead.lock() {
+            *dead = Some(reason.to_owned());
+        }
+    }
+}
+
 /// Pump thread: pulls 10 ms frames from the real device and fans the
 /// samples out to every live subscriber until the last consumer stops.
 fn pump(shared: Arc<StreamShared>, mut underlying: Box<dyn AudioCapture>) {
@@ -301,14 +309,7 @@ fn pump(shared: Arc<StreamShared>, mut underlying: Box<dyn AudioCapture>) {
             }
             Err(e) => {
                 warn!("shared capture '{}': device error: {e}", shared.key);
-                let reason = e.to_string();
-                if let Ok(subs) = shared.subscribers.lock() {
-                    for sub in subs.iter().filter_map(Weak::upgrade) {
-                        if let Ok(mut dead) = sub.dead.lock() {
-                            *dead = Some(reason.clone());
-                        }
-                    }
-                }
+                mark_subscribers_dead(&shared, &e.to_string());
                 break;
             }
         }
@@ -323,6 +324,9 @@ mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
     use super::*;
     use std::time::{Duration, Instant};
+
+    /// The broker's real-device pull size (10 ms at 48 kHz), used by the mock.
+    const PUMP_FRAME: usize = 480;
 
     /// Scripted device: counts opens/closes and emits a ramp of samples.
     struct FakeDevice {

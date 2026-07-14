@@ -19,7 +19,10 @@
 //! D3D11/MediaFoundation tier, then CPU. The H.264 SPS/PPS writer Stage B
 //! needs is already here (and unit-tested) - the D3D12 encoder emits slice
 //! NALs only, parameter sets are the application's job.
-#![allow(unsafe_code)] // FFI with D3D12/D3D11On12/WGC; every unsafe block is a COM call.
+#![allow(unsafe_code, reason = "FFI with D3D12/D3D11On12/WGC; every unsafe block is a COM call")]
+// The D3D12 capture+encode front is staged (Stage B mounts it once the encoder
+// lands); several helpers are wired up but not yet called from a live path.
+#![allow(dead_code, reason = "staged D3D12 pipeline; called once Stage B mounts the encoder")]
 
 use std::time::Duration;
 
@@ -117,251 +120,317 @@ impl std::fmt::Debug for GpuFrontD3D12 {
     }
 }
 
+/// Enable the D3D12 debug layer when `FANCY_D3D12_DEBUG=1`. It routes D3D12's
+/// otherwise-cryptic `0x8000FFFF`-at-Close mistakes into readable messages.
+fn enable_debug_layer_if_requested() {
+    if std::env::var_os("FANCY_D3D12_DEBUG").is_none() {
+        return;
+    }
+    let mut dbg: Option<windows::Win32::Graphics::Direct3D12::ID3D12Debug> = None;
+    if unsafe { windows::Win32::Graphics::Direct3D12::D3D12GetDebugInterface(&mut dbg) }.is_ok() {
+        if let Some(d) = dbg {
+            unsafe { d.EnableDebugLayer() };
+        }
+    }
+}
+
+/// Create the D3D12 device, its video device, and the `DIRECT` (11On12/WGC)
+/// and `VIDEO_PROCESS` command queues. Video-process support is queried
+/// implicitly: creating the video device/processor fails cleanly where
+/// unsupported.
+fn create_d3d12_devices(
+) -> Result<(ID3D12Device, ID3D12VideoDevice, ID3D12CommandQueue, ID3D12CommandQueue), String> {
+    let mut device: Option<ID3D12Device> = None;
+    unsafe { D3D12CreateDevice(None, D3D_FEATURE_LEVEL_11_0, &mut device) }
+        .map_err(|e| format!("D3D12CreateDevice: {e}"))?;
+    let device = device.ok_or("no D3D12 device")?;
+    let video_device: ID3D12VideoDevice =
+        device.cast().map_err(|e| format!("ID3D12VideoDevice: {e}"))?;
+    let direct_queue: ID3D12CommandQueue = unsafe {
+        device.CreateCommandQueue(&D3D12_COMMAND_QUEUE_DESC {
+            Type: D3D12_COMMAND_LIST_TYPE_DIRECT,
+            ..Default::default()
+        })
+    }
+    .map_err(|e| format!("direct queue: {e}"))?;
+    let video_queue: ID3D12CommandQueue = unsafe {
+        device.CreateCommandQueue(&D3D12_COMMAND_QUEUE_DESC {
+            Type: D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS,
+            ..Default::default()
+        })
+    }
+    .map_err(|e| format!("video-process queue: {e}"))?;
+    Ok((device, video_device, direct_queue, video_queue))
+}
+
+/// The `D3D11On12` interop layer + `Windows.Graphics.Capture` session that
+/// feed the pipeline BGRA frames of the monitor.
+struct CaptureShim {
+    d3d11_device: ID3D11Device,
+    d3d11_context: ID3D11DeviceContext,
+    on12: ID3D11On12Device,
+    frame_pool: Direct3D11CaptureFramePool,
+    session: GraphicsCaptureSession,
+    in_width: u32,
+    in_height: u32,
+}
+
+/// Build the 11On12 layer (over `direct_queue`) and start a free-threaded WGC
+/// capture session for `monitor_id`.
+fn create_capture_shim(
+    device: &ID3D12Device,
+    direct_queue: &ID3D12CommandQueue,
+    monitor_id: u32,
+) -> Result<CaptureShim, String> {
+    let mut d3d11_device: Option<ID3D11Device> = None;
+    let mut d3d11_context: Option<ID3D11DeviceContext> = None;
+    let direct_queue_unk: windows::core::IUnknown =
+        direct_queue.cast().map_err(|e| format!("direct queue IUnknown: {e}"))?;
+    let queues: [Option<windows::core::IUnknown>; 1] = [Some(direct_queue_unk)];
+    unsafe {
+        D3D11On12CreateDevice(
+            device,
+            D3D11_CREATE_DEVICE_BGRA_SUPPORT.0,
+            None,
+            Some(&queues),
+            0,
+            Some(&mut d3d11_device),
+            Some(&mut d3d11_context),
+            None,
+        )
+    }
+    .map_err(|e| format!("D3D11On12CreateDevice: {e}"))?;
+    let d3d11_device = d3d11_device.ok_or("no 11On12 device")?;
+    let d3d11_context = d3d11_context.ok_or("no 11On12 context")?;
+    let on12: ID3D11On12Device =
+        d3d11_device.cast().map_err(|e| format!("ID3D11On12Device: {e}"))?;
+
+    let dxgi: IDXGIDevice = d3d11_device.cast().map_err(|e| format!("IDXGIDevice: {e}"))?;
+    let winrt_device: IDirect3DDevice = {
+        let inspectable = unsafe { CreateDirect3D11DeviceFromDXGIDevice(&dxgi) }
+            .map_err(|e| format!("CreateDirect3D11DeviceFromDXGIDevice: {e}"))?;
+        inspectable.cast().map_err(|e| format!("IDirect3DDevice: {e}"))?
+    };
+    let interop = windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()
+        .map_err(|e| format!("capture interop factory: {e}"))?;
+    let item: GraphicsCaptureItem =
+        unsafe { interop.CreateForMonitor(HMONITOR(monitor_id as usize as *mut _)) }
+            .map_err(|e| format!("CreateForMonitor: {e}"))?;
+    let size = item.Size().map_err(|e| format!("capture item size: {e}"))?;
+    let (in_width, in_height) = (size.Width.max(2) as u32, size.Height.max(2) as u32);
+    let frame_pool = Direct3D11CaptureFramePool::CreateFreeThreaded(
+        &winrt_device,
+        DirectXPixelFormat::B8G8R8A8UIntNormalized,
+        2,
+        size,
+    )
+    .map_err(|e| format!("capture frame pool: {e}"))?;
+    let session =
+        frame_pool.CreateCaptureSession(&item).map_err(|e| format!("capture session: {e}"))?;
+    crate::gpu_windows::disable_capture_border(&session);
+    session.StartCapture().map_err(|e| format!("StartCapture: {e}"))?;
+
+    Ok(CaptureShim { d3d11_device, d3d11_context, on12, frame_pool, session, in_width, in_height })
+}
+
+/// Create the BGRA staging texture (born D3D12, wrapped for the 11On12 copy).
+/// Returns the D3D12 resource, its 11-wrapped view, and the desc/heap reused
+/// for the NV12 output texture.
+fn create_staging_textures(
+    device: &ID3D12Device,
+    on12: &ID3D11On12Device,
+    in_width: u32,
+    in_height: u32,
+) -> Result<(ID3D12Resource, ID3D11Texture2D, D3D12_RESOURCE_DESC, D3D12_HEAP_PROPERTIES), String> {
+    let staging_desc = D3D12_RESOURCE_DESC {
+        Dimension: D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+        Width: u64::from(in_width),
+        Height: in_height,
+        DepthOrArraySize: 1,
+        MipLevels: 1,
+        Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+        SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+        Layout: D3D12_TEXTURE_LAYOUT_UNKNOWN,
+        Flags: D3D12_RESOURCE_FLAG_NONE,
+        ..Default::default()
+    };
+    let heap = D3D12_HEAP_PROPERTIES { Type: D3D12_HEAP_TYPE_DEFAULT, ..Default::default() };
+    let mut staging12: Option<ID3D12Resource> = None;
+    unsafe {
+        device.CreateCommittedResource(
+            &heap,
+            D3D12_HEAP_FLAG_NONE,
+            &staging_desc,
+            D3D12_RESOURCE_STATE_COMMON,
+            None,
+            &mut staging12,
+        )
+    }
+    .map_err(|e| format!("staging texture: {e}"))?;
+    let staging12 = staging12.ok_or("no staging texture")?;
+    let mut staging11: Option<ID3D11Resource> = None;
+    unsafe {
+        on12.CreateWrappedResource(
+            &staging12,
+            &D3D11_RESOURCE_FLAGS::default(),
+            D3D12_RESOURCE_STATE_COPY_DEST,
+            D3D12_RESOURCE_STATE_VIDEO_PROCESS_READ,
+            &mut staging11,
+        )
+    }
+    .map_err(|e| format!("CreateWrappedResource: {e}"))?;
+    let staging11: ID3D11Texture2D = staging11
+        .ok_or("no wrapped staging")?
+        .cast()
+        .map_err(|e| format!("wrapped staging cast: {e}"))?;
+    Ok((staging12, staging11, staging_desc, heap))
+}
+
+/// The D3D12 video-processor objects: BGRA(any size) -> NV12(out size), plus
+/// the NV12 output texture, its command allocator/list, and the sync fence.
+struct VideoPipeline {
+    processor: ID3D12VideoProcessor,
+    nv12: ID3D12Resource,
+    video_alloc: ID3D12CommandAllocator,
+    video_list: ID3D12VideoProcessCommandList,
+    fence: ID3D12Fence,
+    fence_event: windows::Win32::Foundation::HANDLE,
+}
+
+/// Build the video processor, NV12 output texture, command list and fence.
+fn create_video_pipeline(
+    device: &ID3D12Device,
+    video_device: &ID3D12VideoDevice,
+    staging_desc: &D3D12_RESOURCE_DESC,
+    heap: &D3D12_HEAP_PROPERTIES,
+    (in_width, in_height): (u32, u32),
+    (out_width, out_height): (u32, u32),
+    settings: &EncodeSettings,
+) -> Result<VideoPipeline, String> {
+    let fps = settings.max_fps.clamp(1.0, 60.0) as u32;
+    let frame_rate = DXGI_RATIONAL { Numerator: fps, Denominator: 1 };
+
+    let input_desc = D3D12_VIDEO_PROCESS_INPUT_STREAM_DESC {
+        Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+        ColorSpace: DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709,
+        SourceAspectRatio: DXGI_RATIONAL { Numerator: 1, Denominator: 1 },
+        DestinationAspectRatio: DXGI_RATIONAL { Numerator: 1, Denominator: 1 },
+        FrameRate: frame_rate,
+        SourceSizeRange: D3D12_VIDEO_SIZE_RANGE {
+            MaxWidth: in_width,
+            MaxHeight: in_height,
+            MinWidth: in_width,
+            MinHeight: in_height,
+        },
+        DestinationSizeRange: D3D12_VIDEO_SIZE_RANGE {
+            MaxWidth: out_width,
+            MaxHeight: out_height,
+            MinWidth: out_width,
+            MinHeight: out_height,
+        },
+        EnableOrientation: false.into(),
+        FilterFlags: D3D12_VIDEO_PROCESS_FILTER_FLAG_NONE,
+        StereoFormat: D3D12_VIDEO_FRAME_STEREO_FORMAT_NONE,
+        FieldType: D3D12_VIDEO_FIELD_TYPE_NONE,
+        DeinterlaceMode: Default::default(),
+        EnableAlphaBlending: false.into(),
+        LumaKey: Default::default(),
+        NumPastFrames: 0,
+        NumFutureFrames: 0,
+        EnableAutoProcessing: false.into(),
+    };
+    let output_desc = D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC {
+        Format: DXGI_FORMAT_NV12,
+        ColorSpace: DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P709,
+        AlphaFillMode: D3D12_VIDEO_PROCESS_ALPHA_FILL_MODE_OPAQUE,
+        AlphaFillModeSourceStreamIndex: 0,
+        BackgroundColor: [0.0, 0.0, 0.0, 1.0],
+        FrameRate: frame_rate,
+        EnableStereo: false.into(),
+    };
+    let processor: ID3D12VideoProcessor =
+        unsafe { video_device.CreateVideoProcessor(0, &output_desc, &[input_desc]) }
+            .map_err(|e| format!("CreateVideoProcessor(d3d12): {e}"))?;
+
+    // NV12 output texture (Stage B's encoder input).
+    let nv12_desc = D3D12_RESOURCE_DESC {
+        Format: DXGI_FORMAT_NV12,
+        Width: u64::from(out_width),
+        Height: out_height,
+        ..*staging_desc
+    };
+    let mut nv12: Option<ID3D12Resource> = None;
+    unsafe {
+        device.CreateCommittedResource(
+            heap,
+            D3D12_HEAP_FLAG_NONE,
+            &nv12_desc,
+            D3D12_RESOURCE_STATE_COMMON,
+            None,
+            &mut nv12,
+        )
+    }
+    .map_err(|e| format!("nv12 texture: {e}"))?;
+    let nv12 = nv12.ok_or("no nv12 texture")?;
+
+    let video_alloc: ID3D12CommandAllocator =
+        unsafe { device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS) }
+            .map_err(|e| format!("video allocator: {e}"))?;
+    let video_list: ID3D12VideoProcessCommandList = unsafe {
+        device.CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS, &video_alloc, None)
+    }
+    .map_err(|e| format!("video-process list: {e}"))?;
+    unsafe { video_list.Close() }.map_err(|e| format!("initial close: {e}"))?;
+
+    let fence: ID3D12Fence = unsafe { device.CreateFence(0, D3D12_FENCE_FLAG_NONE) }
+        .map_err(|e| format!("fence: {e}"))?;
+    let fence_event =
+        unsafe { CreateEventW(None, false, false, None) }.map_err(|e| format!("fence event: {e}"))?;
+
+    Ok(VideoPipeline { processor, nv12, video_alloc, video_list, fence, fence_event })
+}
+
 impl GpuFrontD3D12 {
     /// Build device + capture shim + video processor for `monitor_id`
     /// (an `HMONITOR` value, as the source enumeration reports for screens).
     pub(crate) fn new(monitor_id: u32, settings: &EncodeSettings) -> Result<Self, String> {
-        // Opt-in validation: FANCY_D3D12_DEBUG=1 turns on the debug layer and
-        // routes its messages into our error strings (invaluable - D3D12
-        // surfaces recording mistakes as bare 0x8000FFFF at Close otherwise).
-        if std::env::var_os("FANCY_D3D12_DEBUG").is_some() {
-            let mut dbg: Option<windows::Win32::Graphics::Direct3D12::ID3D12Debug> = None;
-            if unsafe { windows::Win32::Graphics::Direct3D12::D3D12GetDebugInterface(&mut dbg) }
-                .is_ok()
-            {
-                if let Some(d) = dbg {
-                    unsafe { d.EnableDebugLayer() };
-                }
-            }
-        }
-
-        // -- D3D12 device ----------------------------------------------------
-        let mut device: Option<ID3D12Device> = None;
-        unsafe { D3D12CreateDevice(None, D3D_FEATURE_LEVEL_11_0, &mut device) }
-            .map_err(|e| format!("D3D12CreateDevice: {e}"))?;
-        let device = device.ok_or("no D3D12 device")?;
-        // Video-process support is queried implicitly: creating the video
-        // device/processor below fails cleanly where unsupported.
-        let video_device: ID3D12VideoDevice =
-            device.cast().map_err(|e| format!("ID3D12VideoDevice: {e}"))?;
-
-        // A DIRECT queue for the 11On12 layer (WGC + our staging copy)...
-        let direct_queue: ID3D12CommandQueue = unsafe {
-            device.CreateCommandQueue(&D3D12_COMMAND_QUEUE_DESC {
-                Type: D3D12_COMMAND_LIST_TYPE_DIRECT,
-                ..Default::default()
-            })
-        }
-        .map_err(|e| format!("direct queue: {e}"))?;
-        // ...and the video-process queue for scale/convert.
-        let video_queue: ID3D12CommandQueue = unsafe {
-            device.CreateCommandQueue(&D3D12_COMMAND_QUEUE_DESC {
-                Type: D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS,
-                ..Default::default()
-            })
-        }
-        .map_err(|e| format!("video-process queue: {e}"))?;
-
-        // -- D3D11On12 layer for WGC ------------------------------------------
-        let mut d3d11_device: Option<ID3D11Device> = None;
-        let mut d3d11_context: Option<ID3D11DeviceContext> = None;
-        let queues: [Option<windows::core::IUnknown>; 1] = [Some(direct_queue.cast().unwrap())];
-        unsafe {
-            D3D11On12CreateDevice(
-                &device,
-                D3D11_CREATE_DEVICE_BGRA_SUPPORT.0,
-                None,
-                Some(&queues),
-                0,
-                Some(&mut d3d11_device),
-                Some(&mut d3d11_context),
-                None,
-            )
-        }
-        .map_err(|e| format!("D3D11On12CreateDevice: {e}"))?;
-        let d3d11_device = d3d11_device.ok_or("no 11On12 device")?;
-        let d3d11_context = d3d11_context.ok_or("no 11On12 context")?;
-        let on12: ID3D11On12Device =
-            d3d11_device.cast().map_err(|e| format!("ID3D11On12Device: {e}"))?;
-
-        // -- WGC session -------------------------------------------------------
-        let dxgi: IDXGIDevice = d3d11_device.cast().map_err(|e| format!("IDXGIDevice: {e}"))?;
-        let winrt_device: IDirect3DDevice = {
-            let inspectable = unsafe { CreateDirect3D11DeviceFromDXGIDevice(&dxgi) }
-                .map_err(|e| format!("CreateDirect3D11DeviceFromDXGIDevice: {e}"))?;
-            inspectable.cast().map_err(|e| format!("IDirect3DDevice: {e}"))?
-        };
-        let interop = windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()
-            .map_err(|e| format!("capture interop factory: {e}"))?;
-        let item: GraphicsCaptureItem =
-            unsafe { interop.CreateForMonitor(HMONITOR(monitor_id as usize as *mut _)) }
-                .map_err(|e| format!("CreateForMonitor: {e}"))?;
-        let size = item.Size().map_err(|e| format!("capture item size: {e}"))?;
-        let (in_width, in_height) = (size.Width.max(2) as u32, size.Height.max(2) as u32);
-        let frame_pool = Direct3D11CaptureFramePool::CreateFreeThreaded(
-            &winrt_device,
-            DirectXPixelFormat::B8G8R8A8UIntNormalized,
-            2,
-            size,
-        )
-        .map_err(|e| format!("capture frame pool: {e}"))?;
-        let session = frame_pool
-            .CreateCaptureSession(&item)
-            .map_err(|e| format!("capture session: {e}"))?;
-        crate::gpu_windows::disable_capture_border(&session);
-        session.StartCapture().map_err(|e| format!("StartCapture: {e}"))?;
-
-        // -- BGRA staging texture: born D3D12, wrapped for the 11 copy --------
-        let staging_desc = D3D12_RESOURCE_DESC {
-            Dimension: D3D12_RESOURCE_DIMENSION_TEXTURE2D,
-            Width: u64::from(in_width),
-            Height: in_height,
-            DepthOrArraySize: 1,
-            MipLevels: 1,
-            Format: DXGI_FORMAT_B8G8R8A8_UNORM,
-            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-            Layout: D3D12_TEXTURE_LAYOUT_UNKNOWN,
-            Flags: D3D12_RESOURCE_FLAG_NONE,
-            ..Default::default()
-        };
-        let heap = D3D12_HEAP_PROPERTIES {
-            Type: D3D12_HEAP_TYPE_DEFAULT,
-            ..Default::default()
-        };
-        let mut staging12: Option<ID3D12Resource> = None;
-        unsafe {
-            device.CreateCommittedResource(
-                &heap,
-                D3D12_HEAP_FLAG_NONE,
-                &staging_desc,
-                D3D12_RESOURCE_STATE_COMMON,
-                None,
-                &mut staging12,
-            )
-        }
-        .map_err(|e| format!("staging texture: {e}"))?;
-        let staging12 = staging12.ok_or("no staging texture")?;
-        let mut staging11: Option<ID3D11Resource> = None;
-        unsafe {
-            on12.CreateWrappedResource(
-                &staging12,
-                &D3D11_RESOURCE_FLAGS::default(),
-                D3D12_RESOURCE_STATE_COPY_DEST,
-                D3D12_RESOURCE_STATE_VIDEO_PROCESS_READ,
-                &mut staging11,
-            )
-        }
-        .map_err(|e| format!("CreateWrappedResource: {e}"))?;
-        let staging11: ID3D11Texture2D = staging11
-            .ok_or("no wrapped staging")?
-            .cast()
-            .map_err(|e| format!("wrapped staging cast: {e}"))?;
-
-        // -- Video processor: BGRA(any size) -> NV12(out size) ----------------
-        let (out_width, out_height) = output_dims(in_width, in_height, settings.max_dimension);
-        let fps = settings.max_fps.clamp(1.0, 60.0) as u32;
-        let frame_rate = DXGI_RATIONAL { Numerator: fps, Denominator: 1 };
-
-        let input_desc = D3D12_VIDEO_PROCESS_INPUT_STREAM_DESC {
-            Format: DXGI_FORMAT_B8G8R8A8_UNORM,
-            ColorSpace: DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709,
-            SourceAspectRatio: DXGI_RATIONAL { Numerator: 1, Denominator: 1 },
-            DestinationAspectRatio: DXGI_RATIONAL { Numerator: 1, Denominator: 1 },
-            FrameRate: frame_rate,
-            SourceSizeRange: D3D12_VIDEO_SIZE_RANGE {
-                MaxWidth: in_width,
-                MaxHeight: in_height,
-                MinWidth: in_width,
-                MinHeight: in_height,
-            },
-            DestinationSizeRange: D3D12_VIDEO_SIZE_RANGE {
-                MaxWidth: out_width,
-                MaxHeight: out_height,
-                MinWidth: out_width,
-                MinHeight: out_height,
-            },
-            EnableOrientation: false.into(),
-            FilterFlags: D3D12_VIDEO_PROCESS_FILTER_FLAG_NONE,
-            StereoFormat: D3D12_VIDEO_FRAME_STEREO_FORMAT_NONE,
-            FieldType: D3D12_VIDEO_FIELD_TYPE_NONE,
-            DeinterlaceMode: Default::default(),
-            EnableAlphaBlending: false.into(),
-            LumaKey: Default::default(),
-            NumPastFrames: 0,
-            NumFutureFrames: 0,
-            EnableAutoProcessing: false.into(),
-        };
-        let output_desc = D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC {
-            Format: DXGI_FORMAT_NV12,
-            ColorSpace: DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P709,
-            AlphaFillMode: D3D12_VIDEO_PROCESS_ALPHA_FILL_MODE_OPAQUE,
-            AlphaFillModeSourceStreamIndex: 0,
-            BackgroundColor: [0.0, 0.0, 0.0, 1.0],
-            FrameRate: frame_rate,
-            EnableStereo: false.into(),
-        };
-        let processor: ID3D12VideoProcessor = unsafe {
-            video_device.CreateVideoProcessor(0, &output_desc, &[input_desc])
-        }
-        .map_err(|e| format!("CreateVideoProcessor(d3d12): {e}"))?;
-
-        // NV12 output texture (Stage B's encoder input).
-        let nv12_desc = D3D12_RESOURCE_DESC {
-            Format: DXGI_FORMAT_NV12,
-            Width: u64::from(out_width),
-            Height: out_height,
-            ..staging_desc
-        };
-        let mut nv12: Option<ID3D12Resource> = None;
-        unsafe {
-            device.CreateCommittedResource(
-                &heap,
-                D3D12_HEAP_FLAG_NONE,
-                &nv12_desc,
-                D3D12_RESOURCE_STATE_COMMON,
-                None,
-                &mut nv12,
-            )
-        }
-        .map_err(|e| format!("nv12 texture: {e}"))?;
-        let nv12 = nv12.ok_or("no nv12 texture")?;
-
-        let video_alloc: ID3D12CommandAllocator = unsafe {
-            device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS)
-        }
-        .map_err(|e| format!("video allocator: {e}"))?;
-        let video_list: ID3D12VideoProcessCommandList = unsafe {
-            device.CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS, &video_alloc, None)
-        }
-        .map_err(|e| format!("video-process list: {e}"))?;
-        unsafe { video_list.Close() }.map_err(|e| format!("initial close: {e}"))?;
-
-        let fence: ID3D12Fence =
-            unsafe { device.CreateFence(0, D3D12_FENCE_FLAG_NONE) }
-                .map_err(|e| format!("fence: {e}"))?;
-        let fence_event = unsafe { CreateEventW(None, false, false, None) }
-            .map_err(|e| format!("fence event: {e}"))?;
+        enable_debug_layer_if_requested();
+        let (device, video_device, direct_queue, video_queue) = create_d3d12_devices()?;
+        let shim = create_capture_shim(&device, &direct_queue, monitor_id)?;
+        let (staging12, staging11, staging_desc, heap) =
+            create_staging_textures(&device, &shim.on12, shim.in_width, shim.in_height)?;
+        let (out_width, out_height) =
+            output_dims(shim.in_width, shim.in_height, settings.max_dimension);
+        let vp = create_video_pipeline(
+            &device,
+            &video_device,
+            &staging_desc,
+            &heap,
+            (shim.in_width, shim.in_height),
+            (out_width, out_height),
+            settings,
+        )?;
 
         Ok(Self {
             device,
-            d3d11_device,
-            d3d11_context,
-            frame_pool,
-            session,
+            d3d11_device: shim.d3d11_device,
+            d3d11_context: shim.d3d11_context,
+            frame_pool: shim.frame_pool,
+            session: shim.session,
             staging12,
             staging11,
-            on12,
+            on12: shim.on12,
             video_queue,
-            video_alloc,
-            video_list,
-            processor,
-            nv12,
+            video_alloc: vp.video_alloc,
+            video_list: vp.video_list,
+            processor: vp.processor,
+            nv12: vp.nv12,
             nv12_state: D3D12_RESOURCE_STATE_COMMON,
-            fence,
+            fence: vp.fence,
             fence_value: 0,
-            fence_event,
-            in_width,
-            in_height,
+            fence_event: vp.fence_event,
+            in_width: shim.in_width,
+            in_height: shim.in_height,
             out_width,
             out_height,
         })
@@ -399,8 +468,10 @@ impl GpuFrontD3D12 {
                 surface.cast().map_err(|e| format!("surface interop: {e}"))?;
             unsafe { access.GetInterface() }.map_err(|e| format!("surface texture: {e}"))?
         };
+        let staging11_res: ID3D11Resource =
+            self.staging11.cast().map_err(|e| format!("staging11 resource: {e}"))?;
         unsafe {
-            let wrapped: [Option<ID3D11Resource>; 1] = [Some(self.staging11.cast().unwrap())];
+            let wrapped: [Option<ID3D11Resource>; 1] = [Some(staging11_res)];
             self.on12.AcquireWrappedResources(&wrapped);
             self.d3d11_context.CopyResource(&self.staging11, &capture_tex);
             self.on12.ReleaseWrappedResources(&wrapped);
@@ -472,14 +543,15 @@ impl GpuFrontD3D12 {
         unsafe { self.video_list.Close() }
             .map_err(|e| format!("list close: {e}{}", debug_messages(&self.device)))?;
 
-        let lists = [Some(self.video_list.cast::<windows::Win32::Graphics::Direct3D12::ID3D12CommandList>().unwrap())];
+        let video_list: windows::Win32::Graphics::Direct3D12::ID3D12CommandList =
+            self.video_list.cast().map_err(|e| format!("video command list: {e}"))?;
+        let lists = [Some(video_list)];
         unsafe { self.video_queue.ExecuteCommandLists(&lists) };
         self.wait_video_queue()?;
 
         // Release the ManuallyDrop interface clones the arg structs held.
-        for mut s in [input_args] {
-            unsafe { std::mem::ManuallyDrop::drop(&mut s.InputStream[0].pTexture2D) };
-        }
+        let mut s = input_args;
+        unsafe { std::mem::ManuallyDrop::drop(&mut s.InputStream[0].pTexture2D) };
         let mut out = output_args;
         unsafe { std::mem::ManuallyDrop::drop(&mut out.OutputStream[0].pTexture2D) };
         Ok(true)
