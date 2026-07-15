@@ -191,12 +191,10 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          TAURI_CONFIG: >-
-            ${{ runner.os == 'Windows'
-                && '{"bundle":{"resources":["signal-bridge/*.dll"]}}'
-                || runner.os == 'macOS'
-                && '{"bundle":{"resources":["signal-bridge/*.dylib"]}}'
-                || '{"bundle":{"resources":["signal-bridge/*.so"]}}' }}
+          # signal-bridge cdylib is bundled via bundle.resources in the
+          # platform config files (tauri.linux/windows/macos.conf.json),
+          # which Tauri v2 auto-merges. (The old TAURI_CONFIG env var was a
+          # Tauri v1 feature and is ignored by Tauri v2.)
         run: cargo tauri build
 
       - name: Upload build artifacts
