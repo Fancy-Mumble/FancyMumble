@@ -1,4 +1,4 @@
-import { ArrowRightIcon, BellIcon, BellOffIcon, CalendarIcon, DatabaseIcon, FileTextIcon, FolderIcon, PinIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, ShieldCheckIcon, ShieldIcon, UsersGroupIcon } from "../../icons";
+import { ArrowRightIcon, BellIcon, BellOffIcon, CalendarIcon, ClockIcon, DatabaseIcon, FileTextIcon, FolderIcon, ForumIcon, PinIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, ShieldCheckIcon, ShieldIcon, UsersGroupIcon } from "../../icons";
 import { useTranslation } from "react-i18next";
 import { isMobile } from "../../utils/platform";
 import type { KeyTrustLevel } from "../../types";
@@ -64,6 +64,10 @@ interface ChatHeaderProps {
   readonly onOpenDocLibrary?: () => void;
   /** Called when the user opens the calendar panel. */
   readonly onOpenCalendar?: () => void;
+  /** Called when the user opens the channel forum panel. */
+  readonly onForums?: () => void;
+  /** Called when the user opens the scheduled-messages panel. */
+  readonly onScheduledMessages?: () => void;
   /** Called when the user clicks "Pop out DM" (only meaningful when isDm). */
   readonly onPopOutDm?: () => void;
 }
@@ -78,10 +82,12 @@ function buildKebabItems({
   onDownloads,
   onMySharedFiles,
   onOpenDocLibrary,
+  onForums,
+  onScheduledMessages,
   onChannelSearch,
   onChannelInfoToggle,
   t,
-}: Pick<ChatHeaderProps, "onPollCreate" | "isSilenced" | "onToggleSilence" | "hasNewPins" | "onPinnedMessages" | "hasNewDownloads" | "onDownloads" | "onMySharedFiles" | "onOpenDocLibrary" | "onChannelSearch" | "onChannelInfoToggle"> & { t: (key: string) => string }): KebabMenuItem[] {
+}: Pick<ChatHeaderProps, "onPollCreate" | "isSilenced" | "onToggleSilence" | "hasNewPins" | "onPinnedMessages" | "hasNewDownloads" | "onDownloads" | "onMySharedFiles" | "onOpenDocLibrary" | "onForums" | "onScheduledMessages" | "onChannelSearch" | "onChannelInfoToggle"> & { t: (key: string) => string }): KebabMenuItem[] {
   const items: KebabMenuItem[] = [];
   if (onChannelSearch) {
     items.push({
@@ -141,6 +147,22 @@ function buildKebabItems({
       onClick: onOpenDocLibrary,
     });
   }
+  if (onForums) {
+    items.push({
+      id: "forums",
+      label: t("header.forums"),
+      icon: <ForumIcon width={16} height={16} />,
+      onClick: onForums,
+    });
+  }
+  if (onScheduledMessages) {
+    items.push({
+      id: "scheduled-messages",
+      label: t("header.scheduledMessages"),
+      icon: <ClockIcon width={16} height={16} />,
+      onClick: onScheduledMessages,
+    });
+  }
   if (onToggleSilence) {
     items.push({
       id: "toggle-silence",
@@ -182,6 +204,8 @@ export default function ChatHeader({
   onMySharedFiles,
   onOpenDocLibrary,
   onOpenCalendar,
+  onForums,
+  onScheduledMessages,
   onPopOutDm,
 }: ChatHeaderProps) {
   const { t } = useTranslation("chat");
@@ -357,7 +381,7 @@ export default function ChatHeader({
             / StreamFocusView. */}
         {!privateBadge && (
           <KebabMenu
-            items={buildKebabItems({ onPollCreate, isSilenced, onToggleSilence, hasNewPins, onPinnedMessages, hasNewDownloads, onDownloads, onMySharedFiles, onOpenDocLibrary, onChannelSearch: isMobile ? onChannelSearch : undefined, onChannelInfoToggle: isMobile ? onChannelInfoToggle : undefined, t: tStr })}
+            items={buildKebabItems({ onPollCreate, isSilenced, onToggleSilence, hasNewPins, onPinnedMessages, hasNewDownloads, onDownloads, onMySharedFiles, onOpenDocLibrary, onForums, onScheduledMessages, onChannelSearch: isMobile ? onChannelSearch : undefined, onChannelInfoToggle: isMobile ? onChannelInfoToggle : undefined, t: tStr })}
             ariaLabel={t("header.channelOptions")}
             badge={hasNewPins || hasNewDownloads}
           />

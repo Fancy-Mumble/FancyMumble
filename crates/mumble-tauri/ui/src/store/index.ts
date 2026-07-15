@@ -55,6 +55,8 @@ import { parseClientManifest } from "../plugins/tier1/manifest";
 import { applyReadStates, clearReadReceipts } from "../components/chat/readreceipt/readReceiptStore";
 import { useOnboardingStore } from "../components/onboarding/onboardingStore";
 import type { OnboardingConfigEvent, OnboardingResponseEvent } from "../types";
+import { useForumStore, type ForumPost, type ForumFetchResponse } from "../components/forum/forumStore";
+import { useScheduledStore, type ScheduledMessage, type ScheduledAck } from "../components/scheduled/scheduledStore";
 import { offloadManager } from "../messageOffload";
 import { getSilencedChannels, getUserVolumes, getMutedPushChannels, getPreferences, updatePreferences } from "../preferencesStorage";
 import { createDmSlice, dmInitialState, type DmSlice } from "./slices/dm";
@@ -1106,6 +1108,8 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
         volumeAppliedSessions.clear();
         clearReadReceipts();
         useOnboardingStore.getState().clear();
+        useForumStore.getState().clearForums();
+        useScheduledStore.getState().clearScheduled();
         set({ ...INITIAL });
         invoke("update_badge_count", { count: null }).catch(() => {});
         navigateRef?.("/");
@@ -1178,6 +1182,8 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     resetReactions();
     clearReadReceipts();
     useOnboardingStore.getState().clear();
+    useForumStore.getState().clearForums();
+    useScheduledStore.getState().clearScheduled();
     set({ ...INITIAL });
     invoke("update_badge_count", { count: null }).catch(() => {});
     useAppStore.getState().refreshSessions().catch(() => {});
@@ -2792,6 +2798,8 @@ export async function initEventListeners(
         volumeAppliedSessions.clear();
         clearReadReceipts();
         useOnboardingStore.getState().clear();
+        useForumStore.getState().clearForums();
+        useScheduledStore.getState().clearScheduled();
         const { error: currentError, passwordRequired: pwRequired, pendingConnect: pending } = useAppStore.getState();
         // If a password prompt is already pending, keep the rejection error
         // instead of overwriting it with a generic disconnect message.
@@ -3242,6 +3250,34 @@ export async function initEventListeners(
       };
       registerVote(vote);
       useAppStore.setState({});
+    }),
+  );
+
+  // -- Forum events ------------------------------------------------
+
+  unlisteners.push(
+    await listen<ForumPost>(TauriEvent.FancyForumPost, (event) => {
+      useForumStore.getState().applyForumPost(event.payload);
+    }),
+  );
+  unlisteners.push(
+    await listen<ForumFetchResponse>(TauriEvent.FancyForumFetchResponse, (event) => {
+      useForumStore.getState().applyForumFetchResponse(event.payload);
+    }),
+  );
+
+  // -- Scheduled message events ------------------------------------
+
+  unlisteners.push(
+    await listen<{ messages: ScheduledMessage[] }>(TauriEvent.FancyScheduledMessageList, (event) => {
+      useScheduledStore.getState().setMessages(event.payload.messages);
+    }),
+  );
+  unlisteners.push(
+    await listen<ScheduledAck>(TauriEvent.FancyScheduledMessageAck, (event) => {
+      useScheduledStore.getState().setLastAck(event.payload);
+      // Refresh the pending list after any schedule / cancel outcome.
+      void useScheduledStore.getState().listScheduledMessages();
     }),
   );
 

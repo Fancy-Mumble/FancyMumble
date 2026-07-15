@@ -67,6 +67,8 @@
     "mySharedFiles": "我分享的文件",
     "createPoll": "创建投票",
     "browseDocuments": "浏览文档",
+    "forums": "论坛",
+    "scheduledMessages": "定时消息",
     "muteChannel": "静音频道",
     "unmuteChannel": "取消频道静音",
     "channelOptions": "频道选项",

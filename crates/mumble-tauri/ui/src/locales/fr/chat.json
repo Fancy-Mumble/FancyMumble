@@ -67,6 +67,8 @@
     "mySharedFiles": "Mes fichiers partagés",
     "createPoll": "Créer un sondage",
     "browseDocuments": "Parcourir les documents",
+    "forums": "Forum",
+    "scheduledMessages": "Messages programmés",
     "muteChannel": "Mettre le canal en sourdine",
     "unmuteChannel": "Sortir le canal de la sourdine",
     "channelOptions": "Options du canal",

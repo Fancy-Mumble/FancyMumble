@@ -141,6 +141,8 @@ export {
   Outdent as OutdentIcon,
   Circle as CircleIcon,
   CircleDot as CircleDotIcon,
+  MessagesSquare as ForumIcon,
+  Clock as ClockIcon,
   Square as SquareIcon,
   Link2 as Link2Icon,
   Columns2 as Columns2Icon,

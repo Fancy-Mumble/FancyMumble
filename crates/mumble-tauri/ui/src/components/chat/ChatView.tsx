@@ -14,6 +14,8 @@ import ResizableSplitPanel from "./ResizableSplitPanel";
 const PinnedMessagesPanel = lazy(() => import("./pinned/PinnedMessagesPanel"));
 const DownloadsPanel = lazy(() => import("./download/DownloadsPanel"));
 const MySharedFilesPanel = lazy(() => import("./MySharedFilesPanel"));
+const ForumsPanel = lazy(() => import("../forum/ForumsPanel"));
+const ScheduledMessagesPanel = lazy(() => import("../scheduled/ScheduledMessagesPanel"));
 import UploadProgressItem, { type UploadPlaceholder } from "./upload/UploadProgressItem";
 import PendingMessageItem from "./pending/PendingMessageItem";
 import ChatComposer from "./ChatComposer";
@@ -175,6 +177,8 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   const [showDownloadsPanel, setShowDownloadsPanel] = useState(false);
   const [showMySharedFilesPanel, setShowMySharedFilesPanel] = useState(false);
   const [showCalendarPanel, setShowCalendarPanel] = useState(false);
+  const [showForumsPanel, setShowForumsPanel] = useState(false);
+  const [showScheduledPanel, setShowScheduledPanel] = useState(false);
   const {
     polls, pollMessages, showPollCreator, openPollCreator, closePollCreator,
     handlePollCreate, handlePollVote,
@@ -429,6 +433,19 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   const handleOpenMySharedFiles = useCallback(() => {
     setShowMySharedFilesPanel(true);
   }, []);
+  const handleOpenForums = useCallback(() => {
+    setShowForumsPanel(true);
+  }, []);
+  const handleCloseForums = useCallback(() => {
+    setShowForumsPanel(false);
+  }, []);
+  const handleOpenScheduled = useCallback(() => {
+    setShowScheduledPanel(true);
+  }, []);
+  const handleCloseScheduled = useCallback(() => {
+    setShowScheduledPanel(false);
+  }, []);
+
   const handleCloseMySharedFiles = useCallback(() => {
     setShowMySharedFilesPanel(false);
   }, []);
@@ -1146,6 +1163,8 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           onOpenCalendar={calendarActive ? handleOpenCalendar : undefined}
           onMySharedFiles={fileServerConfig ? handleOpenMySharedFiles : undefined}
           onOpenDocLibrary={liveDocActive ? handleOpenDocLibrary : undefined}
+          onForums={!isDmMode && selectedChannel !== null ? handleOpenForums : undefined}
+          onScheduledMessages={!isDmMode && selectedChannel !== null ? handleOpenScheduled : undefined}
           onPopOutDm={inPopout ? undefined : handlePopOutDm}
         />
         )
@@ -1205,6 +1224,32 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
         >
           <Suspense fallback={null}>
             <MySharedFilesPanel />
+          </Suspense>
+        </ResizableSplitPanel>
+      )}
+
+      {showForumsPanel && selectedChannel !== null && (
+        <ResizableSplitPanel
+          defaultPx={420}
+          minPx={240}
+          onClose={handleCloseForums}
+          closeLabel={t("header.forums")}
+        >
+          <Suspense fallback={null}>
+            <ForumsPanel channelId={selectedChannel} onClose={handleCloseForums} />
+          </Suspense>
+        </ResizableSplitPanel>
+      )}
+
+      {showScheduledPanel && selectedChannel !== null && (
+        <ResizableSplitPanel
+          defaultPx={420}
+          minPx={240}
+          onClose={handleCloseScheduled}
+          closeLabel={t("header.scheduledMessages")}
+        >
+          <Suspense fallback={null}>
+            <ScheduledMessagesPanel channelId={selectedChannel} onClose={handleCloseScheduled} />
           </Suspense>
         </ResizableSplitPanel>
       )}
