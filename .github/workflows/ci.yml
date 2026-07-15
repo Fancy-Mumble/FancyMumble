@@ -85,11 +85,14 @@ jobs:
           # version than the runner's stale apt lists, which aborted the whole
           # install. `apt-get update` first keeps versions current;
           # libglib2.0-dev stays listed explicitly so glib-sys finds its .pc.
+          # libpipewire-0.3-dev provides libpipewire-0.3.pc, which xcap (via
+          # fancy-screenshare) links against on Linux - libspa-sys' build
+          # script panics without it.
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
             libasound2-dev libgtk-3-dev libglib2.0-dev libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev protobuf-compiler
+            libjavascriptcoregtk-4.1-dev protobuf-compiler libpipewire-0.3-dev
 
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
@@ -185,11 +188,14 @@ jobs:
           # version than the runner's stale apt lists, which aborted the whole
           # install. `apt-get update` first keeps versions current;
           # libglib2.0-dev stays listed explicitly so glib-sys finds its .pc.
+          # libpipewire-0.3-dev provides libpipewire-0.3.pc, which xcap (via
+          # fancy-screenshare) links against on Linux - libspa-sys' build
+          # script panics without it.
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
             libasound2-dev libgtk-3-dev libglib2.0-dev libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev protobuf-compiler
+            libjavascriptcoregtk-4.1-dev protobuf-compiler libpipewire-0.3-dev
 
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
