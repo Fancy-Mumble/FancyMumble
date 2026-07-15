@@ -64,6 +64,16 @@ impl PortalSession {
         let source_type = match kind {
             SourceKind::Screen => SourceType::Monitor,
             SourceKind::Window => SourceType::Window,
+            // Cameras never reach the ScreenCast portal: create_pipeline()
+            // routes SourceKind::Device to CameraPipeline (nokhwa/V4L2) before
+            // this is called. Guard the invariant so a mis-route fails loudly
+            // instead of opening a screen-capture dialog for a webcam.
+            SourceKind::Device => {
+                return Err(
+                    "cameras are captured via the camera pipeline, not the screencast portal"
+                        .to_string(),
+                );
+            }
         };
 
         let (session, node_id, size, fd) = rt
