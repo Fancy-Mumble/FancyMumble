@@ -30,6 +30,8 @@ mod send_plugin_data;
 mod send_plugin_message;
 mod send_fancy_poll;
 mod send_fancy_poll_vote;
+mod send_fancy_forum;
+mod send_fancy_scheduled_message;
 mod send_text_message;
 mod send_webrtc_signal;
 mod send_pchat_ack;
@@ -100,6 +102,10 @@ pub use send_plugin_data::SendPluginData;
 pub use send_plugin_message::SendPluginMessage;
 pub use send_fancy_poll::SendFancyPoll;
 pub use send_fancy_poll_vote::SendFancyPollVote;
+pub use send_fancy_forum::{SendFancyForumDelete, SendFancyForumFetch, SendFancyForumPost};
+pub use send_fancy_scheduled_message::{
+    RequestFancyScheduledMessages, SendFancyScheduledMessage, SendFancyScheduledMessageCancel,
+};
 pub use send_text_message::SendTextMessage;
 pub use send_webrtc_signal::SendWebRtcSignal;
 pub use send_pchat_ack::SendPchatAck;

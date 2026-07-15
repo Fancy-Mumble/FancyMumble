@@ -15,6 +15,7 @@ pub(crate) mod connection;
 pub(crate) mod dm;
 pub(crate) mod draw_overlay;
 pub(crate) mod files;
+pub(crate) mod forum;
 pub(crate) mod image;
 pub(crate) mod keyshare;
 pub(crate) mod messaging;
@@ -30,6 +31,7 @@ pub(crate) mod realtime;
 /// Screen sharing needs OS capture APIs unavailable on Android.
 #[cfg(not(target_os = "android"))]
 pub(crate) mod screenshare;
+pub(crate) mod scheduled_message;
 pub(crate) mod server;
 pub(crate) mod servers;
 pub(crate) mod system;

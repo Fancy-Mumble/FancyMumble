@@ -173,6 +173,24 @@ pub enum TcpMessageType {
     FancyAccountSettingsUpdate = 155,
     /// Fancy Mumble: server status reply for an account operation.
     FancyAccountAck = 156,
+    /// Fancy Mumble: create/edit or broadcast of a forum post.
+    FancyForumPost = 157,
+    /// Fancy Mumble: fetch forum threads or a thread's posts.
+    FancyForumFetch = 158,
+    /// Fancy Mumble: response to a forum fetch.
+    FancyForumFetchResponse = 159,
+    /// Fancy Mumble: delete a forum post (or thread).
+    FancyForumDelete = 160,
+    /// Fancy Mumble: schedule a message for future delivery.
+    FancyScheduledMessage = 161,
+    /// Fancy Mumble: request the caller's pending scheduled messages.
+    FancyScheduledMessageList = 162,
+    /// Fancy Mumble: the caller's scheduled messages.
+    FancyScheduledMessageListResponse = 163,
+    /// Fancy Mumble: cancel a pending scheduled message.
+    FancyScheduledMessageCancel = 164,
+    /// Fancy Mumble: acknowledge a schedule/cancel/delivery outcome.
+    FancyScheduledMessageAck = 165,
     /// Fancy Mumble: generic plugin envelope (bidirectional).
     PluginMessage = 200,
     /// Fancy Mumble: server enumerates loaded plugins after `ServerSync`.
@@ -376,6 +394,24 @@ pub enum ControlMessage {
     FancyAccountSettingsUpdate(mumble_tcp::FancyAccountSettingsUpdate),
     /// Fancy: server status reply for an account operation.
     FancyAccountAck(mumble_tcp::FancyAccountAck),
+    /// Fancy: create/edit or broadcast of a forum post.
+    FancyForumPost(mumble_tcp::FancyForumPost),
+    /// Fancy: fetch forum threads or a thread's posts.
+    FancyForumFetch(mumble_tcp::FancyForumFetch),
+    /// Fancy: response to a forum fetch.
+    FancyForumFetchResponse(mumble_tcp::FancyForumFetchResponse),
+    /// Fancy: delete a forum post (or thread).
+    FancyForumDelete(mumble_tcp::FancyForumDelete),
+    /// Fancy: schedule a message for future delivery.
+    FancyScheduledMessage(mumble_tcp::FancyScheduledMessage),
+    /// Fancy: request the caller's pending scheduled messages.
+    FancyScheduledMessageList(mumble_tcp::FancyScheduledMessageList),
+    /// Fancy: the caller's scheduled messages.
+    FancyScheduledMessageListResponse(mumble_tcp::FancyScheduledMessageListResponse),
+    /// Fancy: cancel a pending scheduled message.
+    FancyScheduledMessageCancel(mumble_tcp::FancyScheduledMessageCancel),
+    /// Fancy: acknowledge a schedule/cancel/delivery outcome.
+    FancyScheduledMessageAck(mumble_tcp::FancyScheduledMessageAck),
     /// Fancy: generic plugin envelope (bidirectional).
     PluginMessage(mumble_tcp::PluginMessage),
     /// Fancy: server enumerates loaded plugins.
@@ -417,6 +453,10 @@ message_type_mapping! {
     FancyPluginAdminUninstall, FancyPluginAdminAck,
     FancyServerSettings, FancyServerSettingsUpdate,
     FancyAccountSettings, FancyAccountSettingsUpdate, FancyAccountAck,
+    FancyForumPost, FancyForumFetch, FancyForumFetchResponse, FancyForumDelete,
+    FancyScheduledMessage, FancyScheduledMessageList,
+    FancyScheduledMessageListResponse, FancyScheduledMessageCancel,
+    FancyScheduledMessageAck,
     PluginMessage, PluginRegistry,
 }
 
@@ -581,7 +621,7 @@ mod tests {
         assert!(TcpMessageType::try_from(141u16).is_err());
         assert!(TcpMessageType::try_from(142u16).is_err());
         assert!(TcpMessageType::try_from(143u16).is_err());
-        assert!(TcpMessageType::try_from(157u16).is_err());
+        assert!(TcpMessageType::try_from(166u16).is_err());
         assert!(TcpMessageType::try_from(199u16).is_err());
         assert!(TcpMessageType::try_from(202u16).is_err());
         assert!(TcpMessageType::try_from(u16::MAX).is_err());

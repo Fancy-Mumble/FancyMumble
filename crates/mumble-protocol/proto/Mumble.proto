@@ -2029,3 +2029,144 @@ message FancyAccountAck {
 }
 
 // ---------------------------------------------------------------------------
+// Forums (Fancy Mumble extension, IDs 157-160)
+// ---------------------------------------------------------------------------
+
+// A single forum post. Sent Client -> Server to create or edit a post, and
+// Server -> Client both as a real-time broadcast and as elements of a
+// FancyForumFetchResponse. Identity/timestamp fields are stamped by the
+// server; clients leave them empty on create.
+//
+// A forum is a per-channel, server-persisted, threaded message board. Threads
+// are ordered by their most recent activity; posts within a thread are ordered
+// by creation time.
+//
+// Wire type ID = 157.
+message FancyForumPost {
+  optional uint32 channel_id = 1;
+  // UUID of this post. The server assigns one when empty on create.
+  optional string post_id = 2;
+  // UUID of the thread root this post belongs to. Empty on a new-thread
+  // create; the server then sets thread_id = post_id. Non-empty means the
+  // post is a reply within that thread.
+  optional string thread_id = 3;
+  // Thread title. Only meaningful on a thread's root post.
+  optional string title = 4;
+  // Post body (the server enforces the configured text message length limit).
+  optional string body = 5;
+  // TLS certificate hash of the author (set by the server).
+  optional string author_hash = 6;
+  // Session ID of the author at post time (set by the server).
+  optional uint32 author_session = 7;
+  // Best-effort display name of the author (set by the server).
+  optional string author_name = 8;
+  // Creation time, Unix epoch milliseconds (set by the server).
+  optional uint64 created_at = 9;
+  // Last edit time, Unix epoch milliseconds (set by the server on edit).
+  optional uint64 edited_at = 10;
+  // True on a delete broadcast: the post (or whole thread) has been removed.
+  optional bool deleted = 11;
+  // Number of replies in the thread, excluding the root (set by the server on
+  // thread listings only).
+  optional uint32 reply_count = 12;
+}
+
+// Client -> Server: fetch forum threads for a channel, or the posts within a
+// single thread. Wire type ID = 158.
+message FancyForumFetch {
+  optional uint32 channel_id = 1;
+  // Empty: list thread roots in the channel (most recently active first).
+  // Non-empty: list posts in this thread (root first, then replies by time).
+  optional string thread_id = 2;
+  // Pagination cursor: return items that sort before this post_id.
+  optional string before_id = 3;
+  // Maximum items to return (the server caps this; default 50).
+  optional uint32 limit = 4;
+}
+
+// Server -> Client: response to a FancyForumFetch. Wire type ID = 159.
+message FancyForumFetchResponse {
+  optional uint32 channel_id = 1;
+  // Echoes the requested thread_id (empty for a thread listing).
+  optional string thread_id = 2;
+  repeated FancyForumPost posts = 3;
+  // True when more items exist beyond the returned page.
+  optional bool has_more = 4;
+}
+
+// Client -> Server: delete a forum post. Only the original author or a user
+// with Write permission on the channel may delete. Deleting a thread root
+// deletes the entire thread. The server broadcasts a FancyForumPost with
+// deleted = true to channel members. Wire type ID = 160.
+message FancyForumDelete {
+  optional uint32 channel_id = 1;
+  optional string post_id = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Scheduled messages (Fancy Mumble extension, IDs 161-165)
+// ---------------------------------------------------------------------------
+
+// Lifecycle status of a scheduled message.
+enum FancyScheduledStatus {
+  FANCY_SCHEDULED_PENDING = 0;
+  FANCY_SCHEDULED_DELIVERED = 1;
+  FANCY_SCHEDULED_CANCELLED = 2;
+  FANCY_SCHEDULED_REJECTED = 3;
+}
+
+// A text message the server stores and delivers to its target channel(s) at a
+// future time. Sent Client -> Server to schedule, and Server -> Client as
+// elements of a FancyScheduledMessageListResponse. Identity/timestamp fields
+// are stamped by the server. Wire type ID = 161.
+message FancyScheduledMessage {
+  // UUID. The server assigns one when empty on create.
+  optional string schedule_id = 1;
+  // Target channels; the message is posted to each. At least one channel_id
+  // or tree_id is required.
+  repeated uint32 channel_id = 2 [packed = true];
+  // Target channel trees; the message is posted to the whole tree.
+  repeated uint32 tree_id = 3 [packed = true];
+  // Message body (the server enforces the text message length limit).
+  optional string message = 4;
+  // Delivery time, Unix epoch milliseconds.
+  optional uint64 deliver_at = 5;
+  // Creator session ID at schedule time (set by the server).
+  optional uint32 creator_session = 6;
+  // Creator TLS certificate hash (set by the server); used to key ownership
+  // stably across reconnects.
+  optional string creator_hash = 7;
+  // Creator display name (set by the server).
+  optional string creator_name = 8;
+  // When it was scheduled, Unix epoch milliseconds (set by the server).
+  optional uint64 created_at = 9;
+  // Current status (set by the server in list responses).
+  optional FancyScheduledStatus status = 10;
+}
+
+// Client -> Server: request the caller's own pending scheduled messages.
+// Wire type ID = 162.
+message FancyScheduledMessageList {
+}
+
+// Server -> Client: the caller's scheduled messages. Wire type ID = 163.
+message FancyScheduledMessageListResponse {
+  repeated FancyScheduledMessage messages = 1;
+}
+
+// Client -> Server: cancel a pending scheduled message. Only the creator (by
+// certificate hash) may cancel. Wire type ID = 164.
+message FancyScheduledMessageCancel {
+  optional string schedule_id = 1;
+}
+
+// Server -> Client: acknowledge the outcome of a schedule, cancel, or delivery.
+// Wire type ID = 165.
+message FancyScheduledMessageAck {
+  optional string schedule_id = 1;
+  optional FancyScheduledStatus status = 2;
+  // Human-readable detail on rejection or other outcomes.
+  optional string reason = 3;
+}
+
+// ---------------------------------------------------------------------------
