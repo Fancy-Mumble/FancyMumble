@@ -29,8 +29,6 @@ pub(crate) mod realtime;
 /// Screen sharing needs OS capture APIs unavailable on Android.
 #[cfg(not(target_os = "android"))]
 pub(crate) mod screenshare;
-/// The red "you are sharing" bar pinned to the shared screen/window.
-#[cfg(not(target_os = "android"))]
 pub(crate) mod server;
 pub(crate) mod servers;
 pub(crate) mod system;
