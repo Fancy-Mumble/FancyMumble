@@ -1,4 +1,4 @@
-/* --- Welcome / Onboarding Page ----------------------------------- */
+/* --- Welcome / Onboarding wizard -------------------------------- */
 
 .page {
   display: flex;
@@ -14,57 +14,147 @@
 
 .card {
   width: 100%;
-  max-width: 360px;
-  padding: 32px 28px;
+  max-width: 520px;
+  padding: 28px 30px 24px;
   background: var(--color-glass);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
   border: 1px solid var(--color-glass-border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
 }
 
-/* --- Logo ------------------------------------------------------- */
+/* --- Header ----------------------------------------------------- */
 
-.logo {
-  text-align: center;
-  margin-bottom: 24px;
+.header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .logoIcon {
-  margin: 0 auto 12px;
+  flex: 0 0 auto;
 }
 
 .title {
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 650;
   letter-spacing: -0.01em;
+  line-height: 1.2;
 }
 
-/* --- Form fields ------------------------------------------------ */
-
-.field {
-  margin-bottom: 20px;
-}
-
-.label {
-  display: block;
+.subtitle {
   font-size: 13px;
-  font-weight: 500;
-  margin-bottom: 8px;
   color: var(--color-text-secondary);
+  margin-top: 3px;
 }
+
+/* --- Stepper ---------------------------------------------------- */
+
+.stepper {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 8px;
+}
+
+.stepDot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stepBar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-glass-border);
+  transition: background 0.25s ease;
+}
+
+.stepLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  letter-spacing: 0.01em;
+  transition: color 0.25s ease;
+}
+
+.stepDone .stepBar {
+  background: var(--color-accent-hover);
+}
+
+.stepCurrent .stepBar {
+  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-hover));
+  box-shadow: 0 0 10px var(--color-accent-glow);
+}
+
+.stepCurrent .stepLabel {
+  color: var(--color-text-primary);
+}
+
+/* --- Body / steps ----------------------------------------------- */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 210px;
+  animation: fade 0.25s ease;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.stepHead {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.stepIcon {
+  color: var(--color-accent);
+}
+
+.stepTitle {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.hint {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+/* --- Inputs ----------------------------------------------------- */
 
 .input {
   width: 100%;
-  padding: 12px 16px;
+  padding: 13px 16px;
   background: var(--color-glass);
   border: 1px solid var(--color-glass-border);
   border-radius: var(--radius-md);
   color: var(--color-text-primary);
   font-size: 15px;
   outline: none;
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
 }
 
 .input::placeholder {
@@ -74,49 +164,143 @@
 .input:focus {
   border-color: var(--color-accent);
   background: var(--color-glass-hover);
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
 }
 
-.actionRow {
+/* --- Theme grid ------------------------------------------------- */
+
+.themeGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.themeCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  padding: 8px;
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+
+.themeCard:hover {
+  background: var(--color-glass-hover);
+  transform: translateY(-1px);
+}
+
+.themeActive {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent), 0 4px 14px var(--color-accent-glow);
+}
+
+.swatches {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  height: 34px;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.swatch {
+  width: 100%;
+  height: 100%;
+}
+
+.themeLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.themeActive .themeLabel {
+  color: var(--color-text-primary);
+}
+
+.themeCheck {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  color: #fff;
+  background: var(--color-accent);
+  border-radius: 999px;
+  padding: 2px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+/* --- Ready step ------------------------------------------------- */
+
+.ready {
+  align-items: center;
+  text-align: center;
+  justify-content: center;
+}
+
+.readyLogo {
+  margin-bottom: 4px;
+}
+
+.readyTitle {
+  font-size: 19px;
+  font-weight: 650;
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.summaryChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--color-glass-hover);
+  border: 1px solid var(--color-glass-border);
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.summaryChip svg {
+  color: var(--color-accent);
+}
+
+/* --- Footer / actions ------------------------------------------ */
+
+.footer {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
 }
 
-.actionRow .button {
-  flex: 1;
-}
-
-.backLink {
-  background: none;
-  border: none;
-  color: var(--color-accent);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  white-space: nowrap;
-  transition: background 0.15s;
-}
-
-.backLink:hover {
-  background: var(--color-glass-hover);
-}
-
-/* --- Continue button -------------------------------------------- */
-
 .button {
-  width: 100%;
-  padding: 12px;
+  min-width: 148px;
+  padding: 12px 20px;
   background: linear-gradient(135deg, var(--color-accent), var(--color-accent-hover));
   border: none;
   border-radius: var(--radius-md);
-  color: white;
-  font-size: 15px;
+  color: #fff;
+  font-size: 14.5px;
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.2s, transform 0.1s, box-shadow 0.2s;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
@@ -124,7 +308,7 @@
 }
 
 .button:hover:not(:disabled) {
-  opacity: 0.9;
+  opacity: 0.92;
   box-shadow: 0 6px 24px var(--color-accent-glow);
 }
 
@@ -136,51 +320,34 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
-/* --- Mode toggle ------------------------------------------------ */
 
-.modeToggle {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0;
-  background: rgba(0, 0, 0, 0.18);
-  border-radius: var(--radius-md);
-  padding: 3px;
-}
-
-.modeOption {
-  display: flex;
-  flex-direction: column;
+.ghostButton {
+  display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 10px 8px;
+  gap: 6px;
+  padding: 11px 16px;
   background: transparent;
-  border: none;
-  border-radius: calc(var(--radius-md) - 2px);
-  cursor: pointer;
-  transition: background 0.18s, box-shadow 0.18s;
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-md);
   color: var(--color-text-secondary);
-  line-height: 1;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.modeOption:hover:not(.modeActive) {
-  background: var(--color-glass-subtle);
+.ghostButton:hover:not(:disabled) {
+  background: var(--color-glass-hover);
   color: var(--color-text-primary);
 }
 
-.modeActive {
-  background: var(--color-glass-active);
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
-  color: var(--color-text-primary);
+.ghostButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.modeTitle {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-
-.modeHint {
-  font-size: 11px;
-  color: inherit;
-  opacity: 0.65;
+@media (max-width: 560px) {
+  .themeGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }

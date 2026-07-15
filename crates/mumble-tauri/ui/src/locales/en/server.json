@@ -293,5 +293,34 @@
     "advancedHint": "Full control"
   },
   "submit": "Get started",
-  "submitting": "Starting..."
+  "submitting": "Starting...",
+  "onboarding": {
+    "subtitle": "Let's set up Fancy Mumble in a few quick steps.",
+    "stepOf": "Step {{current}} of {{total}}",
+    "next": "Next",
+    "back": "Back",
+    "finish": "Get started",
+    "steps": {
+      "identity": "Identity",
+      "interface": "Interface",
+      "appearance": "Appearance",
+      "ready": "All set"
+    },
+    "identity": {
+      "title": "What should we call you?",
+      "hint": "This is the name others see. You can use a different name per server later."
+    },
+    "interface": {
+      "title": "Choose your interface",
+      "hint": "You can switch anytime in Settings."
+    },
+    "appearance": {
+      "title": "Pick a theme",
+      "hint": "Make it yours — plenty more in Settings."
+    },
+    "ready": {
+      "title": "You're all set, {{name}}!",
+      "hint": "Jump in and connect to your first server."
+    }
+  }
 }
