@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useAppStore } from "../../store";
@@ -7,18 +7,15 @@ import type {
   OnboardingConfig,
   OnboardingQuestion,
 } from "../../types";
+import { Autocomplete, type AutocompleteOption } from "../elements/Autocomplete";
+import { PlusIcon, TrashIcon, HashIcon, SparklesIcon } from "../../icons";
 import { isOnboardingSupported, useOnboardingStore } from "./onboardingStore";
 import styles from "./OnboardingAdminPanel.module.css";
 
 const MAX_QUESTIONS = 5;
 
 function emptyAnswer(): OnboardingAnswer {
-  return {
-    id: crypto.randomUUID(),
-    label: "",
-    channel_ids: [],
-    group_names: [],
-  };
+  return { id: crypto.randomUUID(), label: "", channel_ids: [], group_names: [] };
 }
 
 function emptyQuestion(): OnboardingQuestion {
@@ -33,22 +30,7 @@ function emptyQuestion(): OnboardingQuestion {
 }
 
 function emptyConfig(): OnboardingConfig {
-  return {
-    version: 1,
-    enabled: false,
-    default_channel_ids: [],
-    questions: [emptyQuestion()],
-    revision: 0,
-  };
-}
-
-function parseIdList(raw: string): number[] {
-  return raw
-    .split(/[\s,]+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((s) => Number(s))
-    .filter((n) => Number.isInteger(n) && n >= 0);
+  return { version: 1, enabled: false, default_channel_ids: [], questions: [emptyQuestion()], revision: 0 };
 }
 
 function parseStringList(raw: string): string[] {
@@ -58,10 +40,35 @@ function parseStringList(raw: string): string[] {
     .filter(Boolean);
 }
 
+/** A labelled on/off switch that matches the app's design system. */
+function Toggle({
+  checked,
+  onChange,
+  label,
+  hint,
+}: Readonly<{ checked: boolean; onChange: (v: boolean) => void; label: string; hint?: string }>) {
+  return (
+    <label className={styles.toggle}>
+      <input
+        type="checkbox"
+        className={styles.toggleInput}
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span className={styles.toggleTrack} aria-hidden="true">
+        <span className={styles.toggleThumb} />
+      </span>
+      <span className={styles.toggleText}>
+        <span className={styles.toggleLabel}>{label}</span>
+        {hint ? <span className={styles.toggleHint}>{hint}</span> : null}
+      </span>
+    </label>
+  );
+}
+
 /**
- * Admin editor for the onboarding workflow.  Pre-populates from the
- * server-broadcast config and persists changes via
- * `save_onboarding_config`.
+ * Admin editor for the server onboarding workflow.  Pre-populates from the
+ * server-broadcast config and persists changes via `save_onboarding_config`.
  */
 export default function OnboardingAdminPanel() {
   const remote = useOnboardingStore((s) => s.config);
@@ -74,9 +81,7 @@ export default function OnboardingAdminPanel() {
   const supported = isOnboardingSupported(serverFancyVersion);
   const { t } = useTranslation("settings");
 
-  const [draft, setDraft] = useState<OnboardingConfig>(
-    () => remote ?? emptyConfig(),
-  );
+  const [draft, setDraft] = useState<OnboardingConfig>(() => remote ?? emptyConfig());
 
   // Re-seed when the server pushes a new revision so we don't overwrite a
   // newer admin's edit.
@@ -84,73 +89,58 @@ export default function OnboardingAdminPanel() {
     if (remote) setDraft(remote);
   }, [remote]);
 
-  const updateQuestion = (idx: number, patch: Partial<OnboardingQuestion>) => {
-    setDraft((d) => ({
-      ...d,
-      questions: d.questions.map((q, i) => (i === idx ? { ...q, ...patch } : q)),
-    }));
-  };
+  // Channel picker: real names instead of raw numeric IDs.
+  const channelOptions = useMemo<readonly AutocompleteOption<number>[]>(
+    () => channels.map((c) => ({ key: c.id, label: `# ${c.name}`, value: c.id })),
+    [channels],
+  );
+  const optionById = useMemo(() => {
+    const m = new Map<number, AutocompleteOption<number>>();
+    for (const o of channelOptions) m.set(o.value, o);
+    return m;
+  }, [channelOptions]);
+  const toOptions = (ids: number[]): AutocompleteOption<number>[] =>
+    ids.map((id) => optionById.get(id) ?? { key: id, label: `#${id}`, value: id });
 
-  const updateAnswer = (
-    qIdx: number,
-    aIdx: number,
-    patch: Partial<OnboardingAnswer>,
-  ) => {
+  const updateQuestion = (idx: number, patch: Partial<OnboardingQuestion>) =>
+    setDraft((d) => ({ ...d, questions: d.questions.map((q, i) => (i === idx ? { ...q, ...patch } : q)) }));
+
+  const updateAnswer = (qIdx: number, aIdx: number, patch: Partial<OnboardingAnswer>) =>
     setDraft((d) => ({
       ...d,
-      questions: d.questions.map((q, i) => {
-        if (i !== qIdx) return q;
-        return {
-          ...q,
-          answers: q.answers.map((a, j) =>
-            j === aIdx ? { ...a, ...patch } : a,
-          ),
-        };
-      }),
+      questions: d.questions.map((q, i) =>
+        i !== qIdx ? q : { ...q, answers: q.answers.map((a, j) => (j === aIdx ? { ...a, ...patch } : a)) },
+      ),
     }));
-  };
 
   const addQuestion = () =>
     setDraft((d) =>
-      d.questions.length >= MAX_QUESTIONS
-        ? d
-        : { ...d, questions: [...d.questions, emptyQuestion()] },
+      d.questions.length >= MAX_QUESTIONS ? d : { ...d, questions: [...d.questions, emptyQuestion()] },
     );
 
   const removeQuestion = (idx: number) =>
-    setDraft((d) => ({
-      ...d,
-      questions: d.questions.filter((_, i) => i !== idx),
-    }));
+    setDraft((d) => ({ ...d, questions: d.questions.filter((_, i) => i !== idx) }));
 
   const addAnswer = (qIdx: number) =>
     setDraft((d) => ({
       ...d,
-      questions: d.questions.map((q, i) =>
-        i === qIdx ? { ...q, answers: [...q.answers, emptyAnswer()] } : q,
-      ),
+      questions: d.questions.map((q, i) => (i === qIdx ? { ...q, answers: [...q.answers, emptyAnswer()] } : q)),
     }));
 
   const removeAnswer = (qIdx: number, aIdx: number) =>
     setDraft((d) => ({
       ...d,
       questions: d.questions.map((q, i) =>
-        i === qIdx
-          ? { ...q, answers: q.answers.filter((_, j) => j !== aIdx) }
-          : q,
+        i === qIdx ? { ...q, answers: q.answers.filter((_, j) => j !== aIdx) } : q,
       ),
     }));
 
   const handleSave = () => {
-    // Drop questions/answers without a label/text so we never save UI placeholders.
     const sanitized: OnboardingConfig = {
       ...draft,
       questions: draft.questions
         .filter((q) => q.text.trim().length > 0)
-        .map((q) => ({
-          ...q,
-          answers: q.answers.filter((a) => a.label.trim().length > 0),
-        }))
+        .map((q) => ({ ...q, answers: q.answers.filter((a) => a.label.trim().length > 0) }))
         .filter((q) => q.answers.length > 0),
     };
     saveConfig(sanitized).catch(() => {});
@@ -159,65 +149,64 @@ export default function OnboardingAdminPanel() {
   if (!supported) {
     return (
       <div className={styles.panel}>
-        <h3 className={styles.heading}>{t("onboarding.admin.heading")}</h3>
-        <p className={styles.subtle}>
-          {t("onboarding.admin.unsupportedServer")}
-        </p>
+        <header className={styles.pageHead}>
+          <SparklesIcon className={styles.pageIcon} width={20} height={20} />
+          <h3 className={styles.heading}>{t("onboarding.admin.heading")}</h3>
+        </header>
+        <p className={styles.subtle}>{t("onboarding.admin.unsupportedServer")}</p>
       </div>
     );
   }
 
   return (
     <div className={styles.panel}>
-      <h3 className={styles.heading}>{t("onboarding.admin.heading")}</h3>
-      <p className={styles.subtle}>
-        {t("onboarding.admin.description")} {t("onboarding.admin.maxQuestionsHint", { max: MAX_QUESTIONS })}
-      </p>
+      <header className={styles.pageHead}>
+        <SparklesIcon className={styles.pageIcon} width={20} height={20} />
+        <div>
+          <h3 className={styles.heading}>{t("onboarding.admin.heading")}</h3>
+          <p className={styles.subtle}>
+            {t("onboarding.admin.description")}{" "}
+            {t("onboarding.admin.maxQuestionsHint", { max: MAX_QUESTIONS })}
+          </p>
+        </div>
+        <span className={styles.tag}>{t("onboarding.admin.revisionTag", { n: draft.revision, m: channels.length })}</span>
+      </header>
 
-      <div className={styles.checkboxRow}>
-        <label>
-          <input
-            type="checkbox"
-            checked={draft.enabled}
-            onChange={(e) =>
-              setDraft({ ...draft, enabled: e.target.checked })
-            }
-          />{" "}
-          {t("onboarding.admin.enabledLabel")}
-        </label>
-        <span className={styles.spacer} />
-        <span className={styles.tag}>
-          {t("onboarding.admin.revisionTag", { n: draft.revision, m: channels.length })}
-        </span>
-      </div>
-
-      <div className={styles.field}>
-        <label className={styles.fieldLabel}>
-          {t("onboarding.admin.defaultChannelIdsLabel")}
-        </label>
-        <input
-          className={styles.input}
-          value={draft.default_channel_ids.join(", ")}
-          onChange={(e) =>
-            setDraft({
-              ...draft,
-              default_channel_ids: parseIdList(e.target.value),
-            })
-          }
-          placeholder="0, 1"
+      <div className={styles.card}>
+        <Toggle
+          checked={draft.enabled}
+          onChange={(v) => setDraft({ ...draft, enabled: v })}
+          label={t("onboarding.admin.enabledLabel")}
         />
+        <div className={styles.field}>
+          <label className={styles.fieldLabel}>
+            <HashIcon width={13} height={13} /> {t("onboarding.admin.defaultChannelIdsLabel")}
+          </label>
+          <Autocomplete
+            multiple
+            options={channelOptions}
+            value={toOptions(draft.default_channel_ids)}
+            onChange={(opts) => setDraft({ ...draft, default_channel_ids: opts.map((o) => o.value) })}
+            placeholder={t("onboarding.admin.defaultChannelIdsLabel")}
+            noOptionsText={t("onboarding.admin.noChannels", { defaultValue: "No channels" })}
+          />
+        </div>
       </div>
 
       {draft.questions.map((q, qIdx) => (
-        <div key={q.id} className={styles.questionCard}>
+        <section key={q.id} className={styles.questionCard}>
           <div className={styles.cardHeader}>
+            <span className={styles.cardBadge}>{qIdx + 1}</span>
             <p className={styles.cardTitle}>{t("onboarding.admin.questionTitle", { n: qIdx + 1 })}</p>
+            <span className={styles.grow} />
             <button
-              className={`${styles.btn} ${styles.btnDanger}`}
+              className={styles.iconBtn}
               onClick={() => removeQuestion(qIdx)}
               disabled={draft.questions.length <= 1}
+              aria-label={t("onboarding.admin.deleteBtn")}
+              title={t("onboarding.admin.deleteBtn")}
             >
-              {t("onboarding.admin.deleteBtn")}
+              <TrashIcon width={15} height={15} />
             </button>
           </div>
 
@@ -231,142 +220,109 @@ export default function OnboardingAdminPanel() {
             />
           </div>
 
-          <div className={styles.checkboxRow}>
-            <label>
-              <input
-                type="checkbox"
-                checked={q.multi_select}
-                onChange={(e) =>
-                  updateQuestion(qIdx, { multi_select: e.target.checked })
-                }
-              />{" "}
-              {t("onboarding.admin.multiSelectLabel")}
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={q.required}
-                onChange={(e) =>
-                  updateQuestion(qIdx, { required: e.target.checked })
-                }
-              />{" "}
-              {t("onboarding.admin.requiredLabel")}
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={q.ask_before_join}
-                onChange={(e) =>
-                  updateQuestion(qIdx, { ask_before_join: e.target.checked })
-                }
-              />{" "}
-              {t("onboarding.admin.askBeforeJoinLabel")}
-            </label>
+          <div className={styles.toggleRow}>
+            <Toggle
+              checked={q.multi_select}
+              onChange={(v) => updateQuestion(qIdx, { multi_select: v })}
+              label={t("onboarding.admin.multiSelectLabel")}
+            />
+            <Toggle
+              checked={q.required}
+              onChange={(v) => updateQuestion(qIdx, { required: v })}
+              label={t("onboarding.admin.requiredLabel")}
+            />
+            <Toggle
+              checked={q.ask_before_join}
+              onChange={(v) => updateQuestion(qIdx, { ask_before_join: v })}
+              label={t("onboarding.admin.askBeforeJoinLabel")}
+            />
           </div>
 
-          {q.answers.map((a, aIdx) => (
-            <div key={a.id} className={styles.answerCard}>
-              <div className={styles.cardHeader}>
-                <p className={styles.cardTitle}>{t("onboarding.admin.answerTitle", { n: aIdx + 1 })}</p>
-                <button
-                  className={`${styles.btn} ${styles.btnDanger}`}
-                  onClick={() => removeAnswer(qIdx, aIdx)}
-                  disabled={q.answers.length <= 1}
-                >
-                  {t("onboarding.admin.deleteBtn")}
-                </button>
-              </div>
-              <div className={styles.row}>
-                <div className={styles.field}>
-                  <label className={styles.fieldLabel}>{t("onboarding.admin.answerLabelField")}</label>
+          <div className={styles.answers}>
+            {q.answers.map((a, aIdx) => (
+              <div key={a.id} className={styles.answerCard}>
+                <div className={styles.answerTop}>
                   <input
-                    className={styles.input}
-                    value={a.label}
-                    onChange={(e) =>
-                      updateAnswer(qIdx, aIdx, { label: e.target.value })
-                    }
-                    placeholder="Gaming"
-                  />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.fieldLabel}>{t("onboarding.admin.emojiLabel")}</label>
-                  <input
-                    className={styles.input}
+                    className={`${styles.input} ${styles.emojiInput}`}
                     value={a.emoji ?? ""}
-                    onChange={(e) =>
-                      updateAnswer(qIdx, aIdx, {
-                        emoji: e.target.value || undefined,
-                      })
-                    }
+                    onChange={(e) => updateAnswer(qIdx, aIdx, { emoji: e.target.value || undefined })}
                     maxLength={4}
+                    placeholder="🙂"
+                    aria-label={t("onboarding.admin.emojiLabel")}
+                  />
+                  <input
+                    className={`${styles.input} ${styles.grow}`}
+                    value={a.label}
+                    onChange={(e) => updateAnswer(qIdx, aIdx, { label: e.target.value })}
+                    placeholder={t("onboarding.admin.answerLabelField")}
+                    aria-label={t("onboarding.admin.answerLabelField")}
+                  />
+                  <button
+                    className={styles.iconBtn}
+                    onClick={() => removeAnswer(qIdx, aIdx)}
+                    disabled={q.answers.length <= 1}
+                    aria-label={t("onboarding.admin.deleteBtn")}
+                    title={t("onboarding.admin.deleteBtn")}
+                  >
+                    <TrashIcon width={14} height={14} />
+                  </button>
+                </div>
+
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel}>
+                    <HashIcon width={13} height={13} /> {t("onboarding.admin.channelIdsLabel")}
+                  </label>
+                  <Autocomplete
+                    multiple
+                    options={channelOptions}
+                    value={toOptions(a.channel_ids)}
+                    onChange={(opts) => updateAnswer(qIdx, aIdx, { channel_ids: opts.map((o) => o.value) })}
+                    placeholder={t("onboarding.admin.channelIdsLabel")}
+                    noOptionsText={t("onboarding.admin.noChannels", { defaultValue: "No channels" })}
+                  />
+                </div>
+
+                <div className={styles.row}>
+                  <div className={styles.field}>
+                    <label className={styles.fieldLabel}>{t("onboarding.admin.aclGroupNamesLabel")}</label>
+                    <input
+                      className={styles.input}
+                      value={a.group_names.join(", ")}
+                      onChange={(e) => updateAnswer(qIdx, aIdx, { group_names: parseStringList(e.target.value) })}
+                      placeholder="gamers, newcomer"
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel}>{t("onboarding.admin.descriptionLabel")}</label>
+                  <textarea
+                    className={styles.textarea}
+                    value={a.description ?? ""}
+                    onChange={(e) => updateAnswer(qIdx, aIdx, { description: e.target.value || undefined })}
+                    rows={2}
                   />
                 </div>
               </div>
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>
-                  {t("onboarding.admin.channelIdsLabel")}
-                </label>
-                <input
-                  className={styles.input}
-                  value={a.channel_ids.join(", ")}
-                  onChange={(e) =>
-                    updateAnswer(qIdx, aIdx, {
-                      channel_ids: parseIdList(e.target.value),
-                    })
-                  }
-                  placeholder="5, 6"
-                />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>
-                  {t("onboarding.admin.aclGroupNamesLabel")}
-                </label>
-                <input
-                  className={styles.input}
-                  value={a.group_names.join(", ")}
-                  onChange={(e) =>
-                    updateAnswer(qIdx, aIdx, {
-                      group_names: parseStringList(e.target.value),
-                    })
-                  }
-                  placeholder="gamers, newcomer"
-                />
-              </div>
-              <div className={styles.field}>
-                  <label className={styles.fieldLabel}>{t("onboarding.admin.descriptionLabel")}</label>
-                <textarea
-                  className={styles.textarea}
-                  value={a.description ?? ""}
-                  onChange={(e) =>
-                    updateAnswer(qIdx, aIdx, {
-                      description: e.target.value || undefined,
-                    })
-                  }
-                />
-              </div>
-            </div>
-          ))}
+            ))}
 
-          <button className={styles.btn} onClick={() => addAnswer(qIdx)}>
-            {t("onboarding.admin.addAnswerBtn")}
-          </button>
-        </div>
+            <button className={styles.ghostBtn} onClick={() => addAnswer(qIdx)}>
+              <PlusIcon width={15} height={15} /> {t("onboarding.admin.addAnswerBtn")}
+            </button>
+          </div>
+        </section>
       ))}
 
       {draft.questions.length < MAX_QUESTIONS ? (
-        <button className={styles.btn} onClick={addQuestion}>
-          {t("onboarding.admin.addQuestionBtn")}
+        <button className={styles.addQuestionBtn} onClick={addQuestion}>
+          <PlusIcon width={16} height={16} /> {t("onboarding.admin.addQuestionBtn")}
         </button>
       ) : null}
 
       {error ? <div className={styles.error}>{error}</div> : null}
 
       <div className={styles.actions}>
-        <button
-          className={`${styles.btn} ${styles.btnPrimary}`}
-          onClick={handleSave}
-          disabled={busy}
-        >
+        <button className={styles.saveBtn} onClick={handleSave} disabled={busy}>
           {busy ? t("onboarding.admin.savingBtn") : t("onboarding.admin.saveBroadcastBtn")}
         </button>
       </div>
