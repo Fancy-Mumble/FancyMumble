@@ -392,7 +392,17 @@ jobs:
       - name: Install Qt 6
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.11.1'
+          # Pinned to 6.10.3 (newest version aqtinstall can install here).
+          # Qt reorganised the Windows online repository at 6.11.0: the desktop
+          # packages moved from one Updates.xml per version (qt6_<ver>/qt6_<ver>/
+          # Updates.xml) to per-arch subdirs nested under that version dir, e.g.
+          # qt6_6111/qt6_6111_mingw/Updates.xml. aqtinstall 3.3.0 (latest) still
+          # looks for qt6_6111/qt6_6111/Updates.xml (404) -> the install fails
+          # with "Failed to locate XML data for Qt version 6.11.1". Only the
+          # Windows repo migrated, so the Linux job happened to pass on 6.11.1.
+          # Bump back to 6.11.x once aqtinstall supports the new layout.
+          # See crates/qt6ui/README.md.
+          version: '6.10.3'
           arch: ${{ matrix.target.qt-arch }}
           tools: ${{ matrix.target.qt-tools }}
           cache: true
