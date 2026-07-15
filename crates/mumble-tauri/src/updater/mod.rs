@@ -85,8 +85,15 @@ fn spawn_startup_check(app: tauri::AppHandle) {
         // `updater_set_auto_install` and `updater_set_skipped_version`
         // preferences before we open the window.
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-        match commands::run_check(&app).await {
-            Ok(true) => {
+        // Bound the update check: it hits GitHub over HTTPS, and on a slow,
+        // captive or offline network `updater.check()` can hang indefinitely.
+        // The main window is `visible: false` and is only revealed after this
+        // returns, so an unbounded check would leave the app (and the
+        // onboarding flow) permanently invisible. Always fall through to
+        // showing the window.
+        const STARTUP_CHECK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(6);
+        match tokio::time::timeout(STARTUP_CHECK_TIMEOUT, commands::run_check(&app)).await {
+            Ok(Ok(true)) => {
                 let auto = app
                     .try_state::<UpdaterState>()
                     .map(|s| s.auto_install())
@@ -96,12 +103,19 @@ fn spawn_startup_check(app: tauri::AppHandle) {
                     show_main_window(&app);
                 }
             }
-            Ok(false) => {
+            Ok(Ok(false)) => {
                 tracing::debug!("Updater: no update available");
                 show_main_window(&app);
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 tracing::info!("Updater: startup check failed: {e}");
+                show_main_window(&app);
+            }
+            Err(_) => {
+                tracing::warn!(
+                    "Updater: startup check timed out after {}s; showing main window",
+                    STARTUP_CHECK_TIMEOUT.as_secs()
+                );
                 show_main_window(&app);
             }
         }
