@@ -139,6 +139,24 @@ on `PATH` or run `windeployqt` against `target\release\qt6ui.exe`.
 
 Logging: set `RUST_LOG` (e.g. `RUST_LOG=qt6ui=debug,mumble_protocol=info`).
 
+## CI note: Qt version pin
+
+The Windows CI job (`.github/workflows/ci.yml`) installs Qt with
+`jurplel/install-qt-action`, which drives `aqtinstall`. Qt reorganised its
+Windows online repository at **6.11.0**: the desktop packages moved from a
+single `Updates.xml` per version (`qt6_<ver>/qt6_<ver>/Updates.xml`) to
+per-arch subdirs nested under the version dir
+(`qt6_6111/qt6_6111_mingw/Updates.xml`, `.../qt6_6111_msvc2022_64/…`, …).
+`aqtinstall` 3.3.0 (latest) still looks for the old
+`qt6_6111/qt6_6111/Updates.xml` (404) and fails with *"Failed to locate XML
+data for Qt version 6.11.1"*. Only the Windows repo migrated, so the Linux Qt
+job still passes on 6.11.x.
+
+CI is therefore **pinned to 6.10.3** — the newest version served under the old
+layout that still provides the `win64_mingw` kit + `tools_mingw1310`. Local dev
+installs (via Qt's own maintenance tool / offline installer) are unaffected and
+can use 6.11.x. Bump the CI pin back once `aqtinstall` gains new-layout support.
+
 ## License
 
 This crate — **and only this crate** — is licensed **LGPL-3.0-or-later**
