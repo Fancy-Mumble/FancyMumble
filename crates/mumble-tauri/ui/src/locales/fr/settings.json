@@ -813,6 +813,14 @@
     "MANAGE_EMOTES": {
       "title": "Gérer les émotes",
       "description": "Gérer les émotes personnalisées du serveur."
+    },
+    "READ_REGISTER": {
+      "title": "Lister les utilisateurs enregistrés",
+      "description": "Consulter la liste des utilisateurs enregistrés du serveur."
+    },
+    "SEE_CHANNEL": {
+      "title": "Voir le salon caché",
+      "description": "Voir ce salon même lorsqu'il est masqué aux utilisateurs sans accès."
     }
   },
   "onboarding": {

@@ -823,6 +823,14 @@
     "MANAGE_EMOTES": {
       "title": "Manage emotes",
       "description": "Manage custom server emotes."
+    },
+    "READ_REGISTER": {
+      "title": "List registered users",
+      "description": "View the server's list of registered users."
+    },
+    "SEE_CHANNEL": {
+      "title": "See hidden channel",
+      "description": "See this channel even when it's hidden from users without access."
     }
   },
   "onboarding": {
