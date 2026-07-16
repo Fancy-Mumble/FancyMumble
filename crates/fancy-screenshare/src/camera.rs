@@ -80,7 +80,10 @@ pub(crate) const DSHOW_ID_BASE: u32 = 0x1000_0000;
 /// listed once, via its native entry (see [`list_devices`]).
 fn backends() -> Vec<Box<dyn CameraBackend>> {
     // `mut` is only exercised on Windows, where a DirectShow backend is pushed.
-    #[cfg_attr(not(windows), allow(unused_mut))]
+    #[cfg_attr(
+        not(windows),
+        allow(unused_mut, reason = "only the Windows DirectShow push mutates `v`")
+    )]
     let mut v: Vec<Box<dyn CameraBackend>> = vec![Box::new(NativeCameraBackend)];
     #[cfg(windows)]
     v.push(Box::new(crate::camera_directshow::DirectShowBackend));

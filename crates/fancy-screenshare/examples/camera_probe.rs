@@ -25,9 +25,15 @@ use tokio as _;
 use tracing as _;
 use tracing_subscriber as _;
 use webrtc as _;
-use windows as _;
-use windows_core as _;
 use xcap as _;
+// Windows-only deps: only acknowledge them there.
+#[cfg(windows)]
+use windows as _;
+#[cfg(windows)]
+use windows_core as _;
+// Linux GPU-pipeline deps, present only with the default `gpu` feature.
+#[cfg(all(target_os = "linux", feature = "gpu"))]
+use {ashpd as _, cros_codecs as _, libloading as _, pipewire as _};
 
 use fancy_screenshare::{sources, SourceKind};
 

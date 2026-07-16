@@ -1,4 +1,4 @@
-//! VA-API H.264 encoding through cros-codecs - the ChromeOS media team's
+//! VA-API H.264 encoding through cros-codecs - the `ChromeOS` media team's
 //! encoder stack, i.e. the same lineage as Chromium's
 //! `VaapiVideoEncodeAccelerator` (and the crate Discord forks for its Linux
 //! client).
@@ -410,7 +410,7 @@ fn rgba_to_nv12(src_width: usize, w: usize, h: usize, rgba: &[u8], out: &mut Vec
 
     let pairs = h / 2;
     let threads = std::thread::available_parallelism()
-        .map(|n| n.get())
+        .map(std::num::NonZero::get)
         .unwrap_or(4)
         .min(8);
     let band = pairs.div_ceil(threads.max(1)).max(1);

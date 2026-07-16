@@ -11,12 +11,34 @@
 //! ```
 //! Pass a device-name substring (default: the default capture device).
 
-#![cfg(target_os = "windows")]
-#![allow(
+// On non-Windows targets (e.g. CI clippy on Linux) the WASAPI probe can't be
+// built, so the crate's dev-deps look unused. Silence that there.
+#![cfg_attr(
+    not(target_os = "windows"),
+    allow(
+        unused_crate_dependencies,
+        reason = "WASAPI probe is Windows-only; its dev-deps are unused elsewhere"
+    )
+)]
+
+// The probe only makes sense on Windows; provide a stub main elsewhere so the
+// example still compiles (and clippy passes) on other platforms.
+#[cfg(not(target_os = "windows"))]
+fn main() {
+    eprintln!("wasapi_probe only runs on Windows (WASAPI).");
+}
+
+#[cfg(target_os = "windows")]
+fn main() {
+    probe::main();
+}
+
+#[cfg(target_os = "windows")]
+#[allow(
     unsafe_code,
     reason = "raw WASAPI COM to mirror the official Mumble client's device open"
 )]
-
+mod probe {
 // The example inherits the crate's deps; acknowledge the ones it doesn't use
 // directly (else `unused_crate_dependencies` fires).
 use cpal as _;
@@ -37,7 +59,7 @@ use windows::Win32::System::Com::{
 use windows::Win32::System::Com::StructuredStorage::PropVariantClear;
 use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
 
-fn main() {
+pub fn main() {
     let want = std::env::args().nth(1);
     if want.as_deref() == Some("--users") {
         let users = fancy_audio_device::capture_device_users();
@@ -239,4 +261,5 @@ unsafe fn friendly_name(dev: &IMMDevice) -> Option<String> {
     } else {
         Some(s)
     }
+}
 }

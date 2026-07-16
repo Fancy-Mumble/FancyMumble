@@ -26,6 +26,8 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fancy_audio_device as _;
 use mumble_protocol as _;
 use tracing as _;
+// `windows` is a Windows-only dependency; only acknowledge it there.
+#[cfg(target_os = "windows")]
 use windows as _;
 
 struct Args {
