@@ -2,7 +2,7 @@
  * Pure (React-free) model helpers for the Channels / ACL admin view, kept here
  * so they can be unit-tested without rendering.
  */
-import type { AclEntry, AclGroup, ChannelEntry } from "../../types";
+import type { AclData, AclEntry, AclGroup, ChannelEntry } from "../../types";
 import { PERM_ENTER } from "../../utils/permissions";
 
 export interface TreeNode {
@@ -46,6 +46,31 @@ export function buildChannelTree(channels: ChannelEntry[]): TreeNode[] {
   for (const ch of detached) nodes.push({ channel: ch, children: [] });
 
   return nodes;
+}
+
+/**
+ * Truncate every node's descendants beyond `maxDepth` (root nodes are depth
+ * 0). Used by the "Top-level channels only" filter to flatten a deep tree
+ * without having to re-derive it from a filtered channel array (which would
+ * either orphan grandchildren or need the same ancestor-reattachment logic
+ * `filterVisibleChannels` already does for the "hide empty" filter).
+ */
+export function limitTreeDepth(nodes: TreeNode[], maxDepth: number, depth = 0): TreeNode[] {
+  return nodes.map((n) => ({
+    channel: n.channel,
+    children: depth >= maxDepth ? [] : limitTreeDepth(n.children, maxDepth, depth + 1),
+  }));
+}
+
+/** Whether an ACL response indicates the channel doesn't just inherit its
+ *  parent's ACL - i.e. it has its own inheritance override or explicit
+ *  (non-inherited) rules/groups of its own. */
+export function hasCustomAcl(acl: AclData): boolean {
+  return (
+    !acl.inherit_acls ||
+    acl.acls.some((a) => !a.inherited) ||
+    acl.groups.some((g) => !g.inherited)
+  );
 }
 
 export interface ChannelAccess {

@@ -576,6 +576,13 @@
   "channelAcl": {
     "title": "Canaux / ACL",
     "searchChannels": "Rechercher des canaux...",
+    "hideDmChannels": "Masquer les canaux MP",
+    "filtersTitle": "Filtres",
+    "hideEmptyChannels": "Masquer les canaux vides",
+    "privateOnly": "Canaux privés uniquement",
+    "topLevelOnly": "Premier niveau uniquement",
+    "customAclOnly": "ACL personnalisée uniquement",
+    "customAclLoading": "Vérification des canaux…",
     "selectChannel": "Sélectionner un canal pour modifier ses ACL",
     "loadingAcl": "Chargement des ACL...",
     "saveChanges": "Enregistrer les modifications",

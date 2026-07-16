@@ -63,6 +63,21 @@ export const TID = {
    *  and `data-channel-name`; right-click opens the delete context menu. Detached
    *  (private) channels carry `data-private="true"`. */
   aclChannelItem: "acl-channel-item",
+  /** Checkbox on the "Channels / ACL" tab that hides `__dm:` (friend-chat /
+   *  self-notepad) channels from the tree. */
+  aclHideDmChannels: "acl-hide-dm-channels",
+  /** Checkbox in the ACL tab's filters panel that hides channels with no
+   *  online members. */
+  aclHideEmptyChannels: "acl-hide-empty-channels",
+  /** Checkbox in the ACL tab's filters panel that shows only detached
+   *  (private/meeting-room/DM) channels. */
+  aclPrivateOnly: "acl-private-only",
+  /** Checkbox in the ACL tab's filters panel that flattens the tree to the
+   *  root channel and its direct children. */
+  aclTopLevelOnly: "acl-top-level-only",
+  /** Checkbox in the ACL tab's filters panel that shows only channels with
+   *  a non-inherited ACL override (triggers a bulk `request_acl` fetch). */
+  aclCustomAclOnly: "acl-custom-acl-only",
   /** The "Delete channel" item in the ACL tree's right-click context menu. */
   aclDeleteChannel: "acl-delete-channel",
   /** The confirm button shown after clicking {@link aclDeleteChannel}. */

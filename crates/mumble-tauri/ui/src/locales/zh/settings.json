@@ -710,6 +710,13 @@
   "channelAcl": {
     "title": "频道 / ACL",
     "searchChannels": "搜索频道…",
+    "hideDmChannels": "隐藏私信频道",
+    "filtersTitle": "筛选",
+    "hideEmptyChannels": "隐藏空频道",
+    "privateOnly": "仅私密频道",
+    "topLevelOnly": "仅顶级频道",
+    "customAclOnly": "仅自定义 ACL",
+    "customAclLoading": "正在检查频道…",
     "selectChannel": "选择一个频道以编辑其 ACL",
     "loadingAcl": "正在加载 ACL…",
     "saveChanges": "保存修改",

@@ -576,6 +576,13 @@
   "channelAcl": {
     "title": "Channels / ACL",
     "searchChannels": "Search channels...",
+    "hideDmChannels": "Hide DM channels",
+    "filtersTitle": "Filters",
+    "hideEmptyChannels": "Hide empty channels",
+    "privateOnly": "Private channels only",
+    "topLevelOnly": "Top-level channels only",
+    "customAclOnly": "Custom ACL only",
+    "customAclLoading": "checking channels…",
     "selectChannel": "Select a channel to edit its ACL",
     "loadingAcl": "Loading ACL...",
     "saveChanges": "Save Changes",
