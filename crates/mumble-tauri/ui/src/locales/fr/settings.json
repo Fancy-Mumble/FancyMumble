@@ -604,7 +604,12 @@
     "notFound": "Rôle {{name}} introuvable.",
     "saving": "Enregistrement...",
     "saveChanges": "Enregistrer les modifications",
-    "deleteRole": "Supprimer le rôle"
+    "deleteRole": "Supprimer le rôle",
+    "newHeadingPrefix": "Nouveau rôle : {{name}}",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "createRole": "Créer le rôle",
+    "cancel": "Annuler"
   },
   "roleDisplay": {
     "fieldName": "Nom du rôle",

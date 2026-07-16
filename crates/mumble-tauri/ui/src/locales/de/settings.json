@@ -604,7 +604,12 @@
     "notFound": "Rolle {{name}} nicht gefunden.",
     "saving": "Speichern...",
     "saveChanges": "Änderungen speichern",
-    "deleteRole": "Rolle löschen"
+    "deleteRole": "Rolle löschen",
+    "newHeadingPrefix": "Neue Rolle: {{name}}",
+    "previous": "Zurück",
+    "next": "Weiter",
+    "createRole": "Rolle erstellen",
+    "cancel": "Abbrechen"
   },
   "roleDisplay": {
     "fieldName": "Rollenname",

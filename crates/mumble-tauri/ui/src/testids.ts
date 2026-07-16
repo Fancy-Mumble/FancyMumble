@@ -67,6 +67,25 @@ export const TID = {
   aclDeleteChannel: "acl-delete-channel",
   /** The confirm button shown after clicking {@link aclDeleteChannel}. */
   aclDeleteConfirm: "acl-delete-confirm",
+  /** The "+ Create role" button on the admin "Roles" tab. */
+  rolesCreateButton: "roles-create-button",
+  /** A role row on the admin "Roles" tab list. Carries `data-role-name`. */
+  roleListRow: "role-list-row",
+  /** The "Role {{name}} not found." message body shown on `/admin/role/:name`
+   *  when the requested role isn't in the fetched ACL's group list. Carries
+   *  `data-role-name`. */
+  roleEditorNotFound: "role-editor-not-found",
+  /** The role-name text input on the role editor's "Display" sub-tab. */
+  roleNameInput: "role-name-input",
+  /** The new-role wizard's "Previous" step button (`/admin/roles/new`). */
+  roleWizardPrev: "role-wizard-prev",
+  /** The new-role wizard's "Next" step button. */
+  roleWizardNext: "role-wizard-next",
+  /** The new-role wizard's final-step "Create role" button - only this
+   *  actually persists the draft role to the server. */
+  roleWizardCreate: "role-wizard-create",
+  /** The new-role wizard's "Cancel" button; discards the draft. */
+  roleWizardCancel: "role-wizard-cancel",
   /** The chat header's title (`<h2>`). Carries the channel/peer display name -
    *  e.g. a friend chat shows the peer's name and a self-chat shows your own
    *  name (it is listed as "yourself", not a special "Notepad"). */

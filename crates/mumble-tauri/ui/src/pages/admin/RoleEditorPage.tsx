@@ -8,6 +8,7 @@ import { useAppStore } from "../../store";
 import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
 import { PaletteIcon, LockIcon, UsersGroupIcon } from "../../icons";
 import type { AclGroup, RegisteredUser } from "../../types";
+import { TID } from "../../testids";
 import { useChannelAcl } from "./useChannelAcl";
 import { rootChannelId } from "./rootChannel";
 import { RoleDisplayPanel } from "./RoleDisplayPanel";
@@ -57,8 +58,8 @@ export default function RoleEditorPage() {
     if (!acl || roleIdx === -1) return;
     const next = { ...acl, groups: acl.groups.filter((_, i) => i !== roleIdx) };
     setAcl(next);
-    await save();
-    navigate("/admin");
+    await save(next);
+    navigate("/admin?tab=roles");
   };
 
   let body: React.ReactNode;
@@ -66,7 +67,7 @@ export default function RoleEditorPage() {
     body = <div className={styles.dimText}>{t("roleEditor.loadingRole")}</div>;
   } else if (!role) {
     body = (
-      <div className={styles.dimText}>
+      <div className={styles.dimText} data-testid={TID.roleEditorNotFound} data-role-name={roleName}>
         {t("roleEditor.notFound", { name: roleName })}
       </div>
     );
@@ -96,7 +97,7 @@ export default function RoleEditorPage() {
       tabs={subTabs}
       activeTab={tab}
       onTabChange={setTab}
-      onBack={() => navigate("/admin")}
+      onBack={() => navigate("/admin?tab=roles")}
     >
       <div className={styles.content}>
         <div className={styles.editorActions}>

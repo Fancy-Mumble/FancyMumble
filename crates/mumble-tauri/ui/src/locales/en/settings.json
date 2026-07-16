@@ -614,7 +614,12 @@
     "notFound": "Role {{name}} not found.",
     "saving": "Saving...",
     "saveChanges": "Save changes",
-    "deleteRole": "Delete role"
+    "deleteRole": "Delete role",
+    "newHeadingPrefix": "New role: {{name}}",
+    "previous": "Previous",
+    "next": "Next",
+    "createRole": "Create role",
+    "cancel": "Cancel"
   },
   "roleDisplay": {
     "fieldName": "Role name",

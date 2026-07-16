@@ -738,7 +738,12 @@
     "notFound": "未找到身份组 {{name}}。",
     "saving": "保存中…",
     "saveChanges": "保存修改",
-    "deleteRole": "删除身份组"
+    "deleteRole": "删除身份组",
+    "newHeadingPrefix": "新建身份组：{{name}}",
+    "previous": "上一步",
+    "next": "下一步",
+    "createRole": "创建身份组",
+    "cancel": "取消"
   },
   "roleDisplay": {
     "fieldName": "身份组名称",
