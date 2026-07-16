@@ -229,6 +229,15 @@ jobs:
           # platform config files (tauri.linux/windows/macos.conf.json),
           # which Tauri v2 auto-merges. (The old TAURI_CONFIG env var was a
           # Tauri v1 feature and is ignored by Tauri v2.)
+          #
+          # Skip the nested qt6ui build (build.rs -> build_qt6ui). This job
+          # deliberately doesn't install the MinGW Qt kit, so on Windows the
+          # probe only ever emits "qt6ui skipped: Qt MinGW kit not found"
+          # warnings. The minimal Qt client is built and packaged by the
+          # dedicated "Build (Minimal Qt client)" job below, and the full
+          # client bundles only signal-bridge (not qt6ui), so there is
+          # nothing for this build to gain from it.
+          SKIP_QT6UI: "1"
         run: cargo tauri build
 
       - name: Upload build artifacts
