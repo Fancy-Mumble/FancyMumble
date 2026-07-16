@@ -88,11 +88,16 @@ jobs:
           # libpipewire-0.3-dev provides libpipewire-0.3.pc, which xcap (via
           # fancy-screenshare) links against on Linux - libspa-sys' build
           # script panics without it.
+          # libva-dev/libdrm-dev/libgbm-dev back fancy-screenshare's `gpu`
+          # feature (default-on): cros-codecs -> cros-libva does the VA-API
+          # H.264 encode and needs libva.pc; its cros-codecs deps drm/gbm-sys
+          # pkg-config against libdrm/libgbm in turn.
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
             libasound2-dev libgtk-3-dev libglib2.0-dev libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev protobuf-compiler libpipewire-0.3-dev
+            libjavascriptcoregtk-4.1-dev protobuf-compiler libpipewire-0.3-dev \
+            libva-dev libdrm-dev libgbm-dev
 
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
@@ -191,11 +196,16 @@ jobs:
           # libpipewire-0.3-dev provides libpipewire-0.3.pc, which xcap (via
           # fancy-screenshare) links against on Linux - libspa-sys' build
           # script panics without it.
+          # libva-dev/libdrm-dev/libgbm-dev back fancy-screenshare's `gpu`
+          # feature (default-on): cros-codecs -> cros-libva does the VA-API
+          # H.264 encode and needs libva.pc; its cros-codecs deps drm/gbm-sys
+          # pkg-config against libdrm/libgbm in turn.
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
             libasound2-dev libgtk-3-dev libglib2.0-dev libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev protobuf-compiler libpipewire-0.3-dev
+            libjavascriptcoregtk-4.1-dev protobuf-compiler libpipewire-0.3-dev \
+            libva-dev libdrm-dev libgbm-dev
 
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
