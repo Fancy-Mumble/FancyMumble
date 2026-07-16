@@ -813,6 +813,14 @@
     "MANAGE_EMOTES": {
       "title": "Emotes verwalten",
       "description": "Benutzerdefinierte Server-Emotes verwalten."
+    },
+    "READ_REGISTER": {
+      "title": "Registrierte Benutzer auflisten",
+      "description": "Die Liste der registrierten Benutzer des Servers einsehen."
+    },
+    "SEE_CHANNEL": {
+      "title": "Versteckten Kanal sehen",
+      "description": "Diesen Kanal auch dann sehen, wenn er für Benutzer ohne Zugriff verborgen ist."
     }
   },
   "onboarding": {

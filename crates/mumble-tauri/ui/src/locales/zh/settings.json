@@ -923,6 +923,14 @@
     "MANAGE_EMOTES": {
       "title": "管理表情",
       "description": "管理服务器自定义表情。"
+    },
+    "READ_REGISTER": {
+      "title": "查看注册用户列表",
+      "description": "查看服务器的注册用户列表。"
+    },
+    "SEE_CHANNEL": {
+      "title": "查看隐藏频道",
+      "description": "即使该频道对无权限用户隐藏，仍可查看该频道。"
     }
   },
   "onboarding": {
