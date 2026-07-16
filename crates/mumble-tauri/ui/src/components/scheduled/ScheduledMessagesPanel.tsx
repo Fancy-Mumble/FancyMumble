@@ -33,7 +33,7 @@ function defaultLocalDateTime(): string {
 export default function ScheduledMessagesPanel({ channelId }: ScheduledMessagesPanelProps) {
   const { t } = useTranslation("chat");
   const channels = useAppStore((s) => s.channels);
-  const channelName = channels.get(channelId)?.name;
+  const channelName = channels.find((c) => c.id === channelId)?.name;
 
   const messages = useScheduledStore((s) => s.messages);
   const loading = useScheduledStore((s) => s.loading);
@@ -75,7 +75,7 @@ export default function ScheduledMessagesPanel({ channelId }: ScheduledMessagesP
   const targetName = useCallback(
     (m: ScheduledMessage): string => {
       const ids = [...m.channelIds, ...m.treeIds];
-      return ids.map((id) => channels.get(id)?.name ?? `#${id}`).join(", ");
+      return ids.map((id) => channels.find((c) => c.id === id)?.name ?? `#${id}`).join(", ");
     },
     [channels],
   );

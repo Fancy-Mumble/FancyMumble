@@ -192,7 +192,15 @@
     "edited": "edited",
     "delete": "Delete",
     "threadRemoved": "This thread was removed.",
-    "backToThreadsAriaLabel": "Back to thread list"
+    "backToThreadsAriaLabel": "Back to thread list",
+    "back": "Back",
+    "newThread": "New Thread",
+    "threadCount_one": "{{count}} thread",
+    "threadCount_other": "{{count}} threads",
+    "noThreadsInTopic": "No threads in this topic yet — start the first one.",
+    "by": "by {{name}}",
+    "noPosts": "No threads yet",
+    "op": "OP"
   },
   "scheduled": {
     "title": "Scheduled messages",

@@ -4123,7 +4123,7 @@ checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
 
 [[package]]
 name = "mumble-protocol"
-version = "0.3.0"
+version = "0.3.3"
 dependencies = [
  "aes",
  "bytes",
@@ -4162,7 +4162,7 @@ dependencies = [
 
 [[package]]
 name = "mumble-tauri"
-version = "0.3.0"
+version = "0.3.3"
 dependencies = [
  "arc-swap",
  "base64 0.22.1",

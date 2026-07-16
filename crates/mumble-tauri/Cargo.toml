@@ -1,6 +1,6 @@
 [package]
 name = "mumble-tauri"
-version = "0.3.0"
+version = "0.3.3"
 edition = "2021"
 description = "Tauri desktop & mobile GUI for mumble-protocol"
 license = "MIT"
