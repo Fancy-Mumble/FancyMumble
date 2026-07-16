@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useAppStore } from "../../store";
@@ -11,6 +11,12 @@ import { Autocomplete, type AutocompleteOption } from "../elements/Autocomplete"
 import { PlusIcon, TrashIcon, HashIcon, SparklesIcon } from "../../icons";
 import { isOnboardingSupported, useOnboardingStore } from "./onboardingStore";
 import styles from "./OnboardingAdminPanel.module.css";
+import tabStyles from "../elements/TabbedPage.module.css";
+
+export interface OnboardingAdminPanelProps {
+  /** Hands the panel's Save bar up to `AdminPanel`'s shared pinned footer. */
+  readonly setFooter?: (footer: ReactNode) => void;
+}
 
 const MAX_QUESTIONS = 5;
 
@@ -70,7 +76,7 @@ function Toggle({
  * Admin editor for the server onboarding workflow.  Pre-populates from the
  * server-broadcast config and persists changes via `save_onboarding_config`.
  */
-export default function OnboardingAdminPanel() {
+export default function OnboardingAdminPanel({ setFooter }: Readonly<OnboardingAdminPanelProps>) {
   const remote = useOnboardingStore((s) => s.config);
   const busy = useOnboardingStore((s) => s.busy);
   const error = useOnboardingStore((s) => s.error);
@@ -145,6 +151,33 @@ export default function OnboardingAdminPanel() {
     };
     saveConfig(sanitized).catch(() => {});
   };
+
+  const footerNode = useMemo(() => {
+    if (!supported) return null;
+    return (
+      <>
+        {error ? <span className={styles.error}>{error}</span> : null}
+        <div className={tabStyles.actionBtnGroup}>
+          <button
+            type="button"
+            className={`${tabStyles.actionBtn} ${tabStyles.actionBtnPrimary}`}
+            onClick={handleSave}
+            disabled={busy}
+          >
+            {busy ? t("onboarding.admin.savingBtn") : t("onboarding.admin.saveBroadcastBtn")}
+          </button>
+        </div>
+      </>
+    );
+    // `handleSave` closes over `draft`, so depending on `draft` here (rather
+    // than on `handleSave` itself, which is a new closure every render) is
+    // what keeps this memoized button from firing a stale save.
+  }, [supported, draft, error, busy, t]);
+
+  useEffect(() => {
+    setFooter?.(footerNode);
+    return () => setFooter?.(null);
+  }, [footerNode, setFooter]);
 
   if (!supported) {
     return (
@@ -319,13 +352,6 @@ export default function OnboardingAdminPanel() {
         </button>
       ) : null}
 
-      {error ? <div className={styles.error}>{error}</div> : null}
-
-      <div className={styles.actions}>
-        <button className={styles.saveBtn} onClick={handleSave} disabled={busy}>
-          {busy ? t("onboarding.admin.savingBtn") : t("onboarding.admin.saveBroadcastBtn")}
-        </button>
-      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AclGroup } from "../../types";
+import { TID } from "../../testids";
 import { RoleColorPicker } from "../../components/elements/role/RoleColorPicker";
 import { RoleIconPicker } from "../../components/elements/role/RoleIconPicker";
 import { RolePreviewCard } from "../../components/elements/role/RolePreviewCard";
@@ -49,6 +50,7 @@ export function RoleDisplayPanel({ role, onPatch, disabled }: RoleDisplayPanelPr
             value={role.name}
             onChange={(e) => onPatch({ name: e.target.value })}
             disabled={disabled || role.inherited}
+            data-testid={TID.roleNameInput}
           />
         </label>
 

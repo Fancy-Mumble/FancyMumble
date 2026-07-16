@@ -104,7 +104,97 @@
 .mainArea {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.mainScroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+}
+
+/* Pinned footer (e.g. wizard step nav, a persistent save bar): a real flex
+   row below the scrollable area, not `position: sticky` - sticky only
+   engages once the content scrolls past it, so short content (e.g. the
+   first wizard step) would leave it stranded right under the content
+   instead of at the bottom of the panel. */
+.mainFooter {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 40px;
+  border-top: 1px solid var(--color-glass-border);
+  background: var(--color-surface-action-bar);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+@media (max-width: 768px) {
+  .mainFooter {
+    padding: 12px 16px;
+  }
+}
+
+/* --- Action-bar buttons ------------------------------------------
+   Shared by every `footer` consumer (wizard step nav, a persistent save
+   bar) so they read as one system instead of each page picking its own
+   button size/color. Deliberately larger than the toolbar's `.addBtn` /
+   `.saveBtn` (AdminPanel.module.css) - these are the primary action for
+   the page, not a secondary toolbar control. */
+
+.actionBtnGroup {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.actionBtn {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-family: inherit;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid var(--color-glass-border);
+  background: var(--color-glass);
+  color: var(--color-text-secondary);
+}
+
+.actionBtn:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  background: var(--color-glass-hover);
+  border-color: var(--color-glass-border-hover);
+}
+
+.actionBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.actionBtnPrimary {
+  color: var(--color-accent);
+  border-color: var(--color-accent-glow);
+  background: var(--color-accent-subtle);
+}
+
+.actionBtnPrimary:hover:not(:disabled) {
+  background: var(--color-accent-medium);
+  border-color: rgba(42, 171, 238, 0.4);
+}
+
+.actionBtnDanger {
+  color: var(--color-danger);
+  border-color: var(--color-danger-border);
+  background: transparent;
+}
+
+.actionBtnDanger:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border-strong);
 }
 
 /* --- Responsive (mobile) ---------------------------------------- */

@@ -8,13 +8,13 @@
 
 .empty {
   padding: 32px 8px;
-  color: var(--text-secondary, #9aa6b8);
+  color: var(--color-text-secondary, #9aa6b8);
   font-size: 0.9rem;
 }
 
 .intro {
   font-size: 0.85rem;
-  color: var(--text-secondary, #9aa6b8);
+  color: var(--color-text-secondary, #9aa6b8);
   line-height: 1.4;
 }
 
@@ -28,8 +28,8 @@
   margin: 0;
   font-size: 0.95rem;
   font-weight: 600;
-  color: var(--text-primary, #fff);
-  border-bottom: 1px solid var(--border-color, #3a3c43);
+  color: var(--color-text-primary, #fff);
+  border-bottom: 1px solid var(--color-border, #3a3c43);
   padding-bottom: 6px;
 }
 
@@ -56,12 +56,12 @@
 .label {
   font-size: 0.85rem;
   font-weight: 500;
-  color: var(--text-primary, #e7ecf3);
+  color: var(--color-text-primary, #e7ecf3);
 }
 
 .help {
   font-size: 0.76rem;
-  color: var(--text-secondary, #9aa6b8);
+  color: var(--color-text-secondary, #9aa6b8);
   line-height: 1.35;
 }
 
@@ -73,26 +73,26 @@
   width: 100%;
   box-sizing: border-box;
   padding: 8px 10px;
-  background: var(--bg-input, #1e1f22);
-  border: 1px solid var(--border-color, #3a3c43);
+  background: var(--color-bg-secondary, #1e1f22);
+  border: 1px solid var(--color-border, #3a3c43);
   border-radius: 5px;
-  color: var(--text-primary, #fff);
+  color: var(--color-text-primary, #fff);
   font-size: 0.85rem;
 }
 
 .input:focus {
   outline: none;
-  border-color: var(--accent-color, #5865f2);
+  border-color: var(--color-accent, #5865f2);
 }
 
 .code {
   width: 100%;
   box-sizing: border-box;
   padding: 10px 12px;
-  background: var(--bg-input, #1e1f22);
-  border: 1px solid var(--border-color, #3a3c43);
+  background: var(--color-bg-secondary, #1e1f22);
+  border: 1px solid var(--color-border, #3a3c43);
   border-radius: 5px;
-  color: var(--text-primary, #fff);
+  color: var(--color-text-primary, #fff);
   font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.82rem;
   line-height: 1.5;
@@ -102,7 +102,7 @@
 
 .code:focus {
   outline: none;
-  border-color: var(--accent-color, #5865f2);
+  border-color: var(--color-accent, #5865f2);
 }
 
 .checkboxLabel {
@@ -117,44 +117,12 @@
   gap: 10px;
 }
 
-.footer {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-color, #3a3c43);
-  background: var(--bg-primary, #141821);
-}
-
 .error {
-  color: #ff8a8a;
+  color: var(--color-danger, #ff8a8a);
   font-size: 0.82rem;
 }
 
 .saved {
-  color: #69d28a;
+  color: var(--color-success, #69d28a);
   font-size: 0.82rem;
-}
-
-.saveBtn {
-  padding: 8px 18px;
-  border: none;
-  border-radius: 6px;
-  background: var(--accent-color, #5865f2);
-  color: #fff;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.saveBtn:hover:not(:disabled) {
-  background: var(--accent-hover, #4752c4);
-}
-
-.saveBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }

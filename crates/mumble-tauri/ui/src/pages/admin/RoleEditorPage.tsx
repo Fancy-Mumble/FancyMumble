@@ -8,12 +8,14 @@ import { useAppStore } from "../../store";
 import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
 import { PaletteIcon, LockIcon, UsersGroupIcon } from "../../icons";
 import type { AclGroup, RegisteredUser } from "../../types";
+import { TID } from "../../testids";
 import { useChannelAcl } from "./useChannelAcl";
 import { rootChannelId } from "./rootChannel";
 import { RoleDisplayPanel } from "./RoleDisplayPanel";
 import { RolePermissionsPanel } from "./RolePermissionsPanel";
 import { RoleMembersPanel } from "./RoleMembersPanel";
 import styles from "./AdminPanel.module.css";
+import tabStyles from "../../components/elements/TabbedPage.module.css";
 
 type SubTab = "display" | "permissions" | "members";
 
@@ -57,8 +59,8 @@ export default function RoleEditorPage() {
     if (!acl || roleIdx === -1) return;
     const next = { ...acl, groups: acl.groups.filter((_, i) => i !== roleIdx) };
     setAcl(next);
-    await save();
-    navigate("/admin");
+    await save(next);
+    navigate("/admin?tab=roles");
   };
 
   let body: React.ReactNode;
@@ -66,7 +68,7 @@ export default function RoleEditorPage() {
     body = <div className={styles.dimText}>{t("roleEditor.loadingRole")}</div>;
   } else if (!role) {
     body = (
-      <div className={styles.dimText}>
+      <div className={styles.dimText} data-testid={TID.roleEditorNotFound} data-role-name={roleName}>
         {t("roleEditor.notFound", { name: roleName })}
       </div>
     );
@@ -90,40 +92,45 @@ export default function RoleEditorPage() {
     );
   }
 
+  const canDelete = role != null && !role.inherited;
+  const footer = canDelete || dirty ? (
+    <>
+      {canDelete && (
+        <button
+          type="button"
+          className={`${tabStyles.actionBtn} ${tabStyles.actionBtnDanger}`}
+          onClick={handleDelete}
+          disabled={saving}
+        >
+          {t("roleEditor.deleteRole")}
+        </button>
+      )}
+      <div className={tabStyles.actionBtnGroup}>
+        {dirty && (
+          <button
+            type="button"
+            className={`${tabStyles.actionBtn} ${tabStyles.actionBtnPrimary}`}
+            onClick={() => save()}
+            disabled={saving}
+          >
+            {saving ? t("roleEditor.saving") : t("roleEditor.saveChanges")}
+          </button>
+        )}
+      </div>
+    </>
+  ) : undefined;
+
   return (
     <TabbedPage
       heading={t("roleEditor.headingPrefix", { name: roleName })}
       tabs={subTabs}
       activeTab={tab}
       onTabChange={setTab}
-      onBack={() => navigate("/admin")}
+      onBack={() => navigate("/admin?tab=roles")}
+      footer={footer}
     >
       <div className={styles.content}>
-        <div className={styles.editorActions}>
-          {dirty && (
-            <button
-              type="button"
-              className={styles.saveBtn}
-              onClick={() => save()}
-              disabled={saving}
-            >
-              {saving ? t("roleEditor.saving") : t("roleEditor.saveChanges")}
-            </button>
-          )}
-        </div>
         {body}
-        {role && !role.inherited && (
-          <div className={styles.editorDangerZone}>
-            <button
-              type="button"
-              className={`${styles.dangerBtn} ${styles.dangerBtnFull}`}
-              onClick={handleDelete}
-              disabled={saving}
-            >
-              {t("roleEditor.deleteRole")}
-            </button>
-          </div>
-        )}
       </div>
     </TabbedPage>
   );

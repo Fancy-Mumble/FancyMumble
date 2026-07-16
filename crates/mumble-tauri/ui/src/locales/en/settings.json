@@ -576,6 +576,13 @@
   "channelAcl": {
     "title": "Channels / ACL",
     "searchChannels": "Search channels...",
+    "hideDmChannels": "Hide DM channels",
+    "filtersTitle": "Filters",
+    "hideEmptyChannels": "Hide empty channels",
+    "privateOnly": "Private channels only",
+    "topLevelOnly": "Top-level channels only",
+    "customAclOnly": "Custom ACL only",
+    "customAclLoading": "checking channels…",
     "selectChannel": "Select a channel to edit its ACL",
     "loadingAcl": "Loading ACL...",
     "saveChanges": "Save Changes",
@@ -614,7 +621,12 @@
     "notFound": "Role {{name}} not found.",
     "saving": "Saving...",
     "saveChanges": "Save changes",
-    "deleteRole": "Delete role"
+    "deleteRole": "Delete role",
+    "newHeadingPrefix": "New role: {{name}}",
+    "previous": "Previous",
+    "next": "Next",
+    "createRole": "Create role",
+    "cancel": "Cancel"
   },
   "roleDisplay": {
     "fieldName": "Role name",
@@ -818,6 +830,14 @@
     "MANAGE_EMOTES": {
       "title": "Manage emotes",
       "description": "Manage custom server emotes."
+    },
+    "READ_REGISTER": {
+      "title": "List registered users",
+      "description": "View the server's list of registered users."
+    },
+    "SEE_CHANNEL": {
+      "title": "See hidden channel",
+      "description": "See this channel even when it's hidden from users without access."
     }
   },
   "onboarding": {

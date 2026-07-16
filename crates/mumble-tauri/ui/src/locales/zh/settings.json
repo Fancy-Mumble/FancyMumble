@@ -710,6 +710,13 @@
   "channelAcl": {
     "title": "频道 / ACL",
     "searchChannels": "搜索频道…",
+    "hideDmChannels": "隐藏私信频道",
+    "filtersTitle": "筛选",
+    "hideEmptyChannels": "隐藏空频道",
+    "privateOnly": "仅私密频道",
+    "topLevelOnly": "仅顶级频道",
+    "customAclOnly": "仅自定义 ACL",
+    "customAclLoading": "正在检查频道…",
     "selectChannel": "选择一个频道以编辑其 ACL",
     "loadingAcl": "正在加载 ACL…",
     "saveChanges": "保存修改",
@@ -738,7 +745,12 @@
     "notFound": "未找到身份组 {{name}}。",
     "saving": "保存中…",
     "saveChanges": "保存修改",
-    "deleteRole": "删除身份组"
+    "deleteRole": "删除身份组",
+    "newHeadingPrefix": "新建身份组：{{name}}",
+    "previous": "上一步",
+    "next": "下一步",
+    "createRole": "创建身份组",
+    "cancel": "取消"
   },
   "roleDisplay": {
     "fieldName": "身份组名称",
@@ -918,6 +930,14 @@
     "MANAGE_EMOTES": {
       "title": "管理表情",
       "description": "管理服务器自定义表情。"
+    },
+    "READ_REGISTER": {
+      "title": "查看注册用户列表",
+      "description": "查看服务器的注册用户列表。"
+    },
+    "SEE_CHANNEL": {
+      "title": "查看隐藏频道",
+      "description": "即使该频道对无权限用户隐藏，仍可查看该频道。"
     }
   },
   "onboarding": {

@@ -311,39 +311,6 @@
   align-self: flex-start;
 }
 
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 4px;
-}
-
-.saveBtn {
-  padding: 11px 22px;
-  background: linear-gradient(135deg, var(--color-accent), var(--color-accent-hover));
-  border: none;
-  border-radius: var(--radius-md);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.2s, box-shadow 0.2s, transform 0.1s;
-  box-shadow: 0 4px 16px var(--color-accent-glow);
-}
-
-.saveBtn:hover:not(:disabled) {
-  opacity: 0.92;
-  box-shadow: 0 6px 24px var(--color-accent-glow);
-}
-
-.saveBtn:active:not(:disabled) {
-  transform: scale(0.98);
-}
-
-.saveBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .error {
   padding: 10px 12px;
   background: var(--color-danger-soft, rgba(239, 68, 68, 0.12));

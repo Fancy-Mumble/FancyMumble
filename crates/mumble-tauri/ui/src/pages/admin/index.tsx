@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
@@ -50,6 +50,15 @@ export default function AdminPanel() {
     return "users";
   })();
   const [tab, setTab] = useState<Tab>(initialTab);
+  // A pinned footer (e.g. Server Settings' / Onboarding's Save bar) is owned
+  // by whichever tab is active - it hands its footer content up here via a
+  // `setFooter` callback prop so it can render in `TabbedPage`'s real
+  // bottom-pinned footer slot instead of scrolling away with the tab's own
+  // content. Cleared on every tab switch so a stale footer never lingers.
+  const [tabFooter, setTabFooter] = useState<ReactNode>(null);
+  useEffect(() => {
+    setTabFooter(null);
+  }, [tab]);
   const customEmotesSupported = useAppStore((s) => s.fileServerCapabilities?.features.custom_emotes ?? false);
   const fileServerEnabled = useAppStore((s) => s.fileServerConfig != null);
   const rootChannelPerms = useAppStore((s) => s.channels.find((c) => c.id === 0)?.permissions ?? 0);
@@ -98,18 +107,19 @@ export default function AdminPanel() {
       activeTab={tab}
       onTabChange={setTab}
       onBack={() => navigate("/chat")}
+      footer={tabFooter}
     >
-      <div className={`${styles.content}${tab === "fileServer" ? ` ${styles.contentWide}` : ""}`}>
+      <div className={`${styles.content}${tab === "fileServer" || tab === "acl" ? ` ${styles.contentWide}` : ""}`}>
         {tab === "users" && <RegisteredUsersTab />}
         {tab === "roles" && <RolesListPanel />}
         {tab === "bans" && <BanListTab />}
         {tab === "acl" && <ChannelAclTab />}
         {tab === "emotes" && <CustomEmotesTab />}
-        {tab === "onboarding" && <OnboardingAdminPanel />}
+        {tab === "onboarding" && <OnboardingAdminPanel setFooter={setTabFooter} />}
         {tab === "serverPlugins" && <ServerPluginsTab />}
         {tab === "marketplace" && <MarketplaceTab />}
         {tab === "fileServer" && <FileServerTab />}
-        {tab === "serverSettings" && <ServerSettingsTab />}
+        {tab === "serverSettings" && <ServerSettingsTab setFooter={setTabFooter} />}
       </div>
     </TabbedPage>
   );
