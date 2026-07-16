@@ -533,8 +533,10 @@ fn variant_with(vt: VARENUM, value: VARIANT_0_0_0) -> VARIANT {
 /// desktop apps); anywhere else the OS border simply stays.
 pub(crate) fn disable_capture_border(session: &GraphicsCaptureSession) {
     use windows::Graphics::Capture::{GraphicsCaptureAccess, GraphicsCaptureAccessKind};
+    // windows 0.62 (windows-future 0.3) renamed the blocking wait on
+    // IAsyncOperation from `get()` to `join()`.
     let granted = GraphicsCaptureAccess::RequestAccessAsync(GraphicsCaptureAccessKind::Borderless)
-        .and_then(|op| op.get());
+        .and_then(|op| op.join());
     match granted {
         Ok(_) => {
             if let Err(e) = session.SetIsBorderRequired(false) {

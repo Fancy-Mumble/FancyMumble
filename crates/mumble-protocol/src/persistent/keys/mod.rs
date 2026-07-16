@@ -210,7 +210,8 @@ impl KeyManager {
     ///
     /// Returns `None` if no archive key is stored for `channel_id`.
     pub fn compute_challenge_proof(&self, channel_id: u32, challenge: &[u8]) -> Option<[u8; 32]> {
-        use hmac::{Hmac, Mac};
+        // hmac 0.13 moved `new_from_slice` off `Mac` onto `KeyInit`.
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
 
         let (key, _trust) = self.archive_keys.get(&channel_id)?;
@@ -369,7 +370,8 @@ mod tests {
     /// the server could not verify.
     #[test]
     fn challenge_proof_is_hmac_sha256_of_archive_key() {
-        use hmac::{Hmac, Mac};
+        // hmac 0.13 moved `new_from_slice` off `Mac` onto `KeyInit`.
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
 
         let archive_key = [0x99; 32];

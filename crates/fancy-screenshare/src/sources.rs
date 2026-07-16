@@ -82,7 +82,11 @@ fn native_sources() -> Result<Vec<CaptureSource>, String> {
 
     for (index, monitor) in Monitor::all().map_err(|e| e.to_string())?.iter().enumerate() {
         let Ok(id) = monitor.id() else { continue };
-        let name = monitor.name().unwrap_or_default();
+        // xcap 0.9 repurposed `name()` to return the device path (`\\.\DISPLAY1`)
+        // and moved the human-readable monitor name to `friendly_name()`. Both
+        // return String, so this compiled fine while silently degrading the
+        // picker's labels - keep using the friendly name here.
+        let name = monitor.friendly_name().unwrap_or_default();
         let width = monitor.width().unwrap_or(0);
         let height = monitor.height().unwrap_or(0);
         let title = if name.is_empty() {

@@ -7,23 +7,23 @@ description = "Frontend-agnostic screen sharing core: source enumeration, captur
 
 [dependencies]
 # Screen / window enumeration + frame capture (Windows, macOS, Linux).
-xcap = "0.6"
+xcap = "0.9"
 # Thumbnail JPEG encoding (xcap already returns image::RgbaImage).
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 # SIMD frame downscaling for the capture->encode path. image's own
 # imageops::resize is scalar and needs hundreds of ms per 4K frame - it
 # alone pushed real screen shares below 1 fps.
-fast_image_resize = "5"
+fast_image_resize = "6"
 # H.264 encoder (Cisco openh264, compiled from vendored source with cc -
 # builds on MSVC and MinGW alike, unlike libvpx).
-openh264 = "0.8"
+openh264 = "0.9"
 # Webcam capture for the "Device" source kind (Media Foundation on Windows,
 # V4L2 on Linux, AVFoundation on macOS - per-OS backends behind one API,
 # mirroring the screen pipelines' layering). `decoding` pulls the MJPEG
 # decoder; most UVC cameras deliver MJPEG at 720p and above.
 nokhwa = { version = "0.10", features = ["input-native", "decoding"] }
 # WebRTC peer (ICE, DTLS, SRTP, RTP packetization).
-webrtc = "0.13"
+webrtc = "0.17"
 # Async runtime for the webrtc peer; the broadcaster owns a small dedicated
 # runtime so embedders (Tauri today, the Qt client later) need no ambient one.
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
@@ -53,18 +53,21 @@ gpu = ["dep:ashpd", "dep:pipewire", "dep:cros-codecs", "dep:libloading"]
 [target.'cfg(target_os = "linux")'.dependencies]
 ashpd = { version = "0.13", default-features = false, features = ["tokio", "screencast"], optional = true }
 # 0.8 to stay on xcap's pipewire-sys (Cargo permits one links="pipewire-0.3").
-pipewire = { version = "0.8", optional = true }
+# Held at 0.9 to match xcap 0.9's own `pipewire ^0.9`: pipewire-sys declares
+# `links = "pipewire-0.3"`, and cargo permits only one package linking a given
+# native library, so 0.10 here would conflict with xcap's copy.
+pipewire = { version = "0.9", optional = true }
 cros-codecs = { version = "0.0.6", features = ["vaapi"], optional = true }
 # dlopen for the NVENC tier (libcuda/libnvidia-encode load at runtime;
 # the binary must start on machines without an NVIDIA driver).
-libloading = { version = "0.8", optional = true }
+libloading = { version = "0.9", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 # Direct dependency (besides the `windows` umbrella) so the `#[interface]`
 # macro's generated `windows_core::` paths resolve for the hand-declared
 # DirectShow `ISampleGrabber` interface.
-windows-core = "0.61"
-windows = { version = "0.61", features = [
+windows-core = "0.62"
+windows = { version = "0.62", features = [
     "Foundation",
     "Graphics_Capture",
     "Security_Authorization_AppCapabilityAccess",

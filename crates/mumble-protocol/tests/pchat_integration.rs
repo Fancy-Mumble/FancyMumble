@@ -80,7 +80,8 @@ fn generate_test_cert(username: &str) -> (Vec<u8>, Vec<u8>) {
     let certified = rcgen::generate_simple_self_signed(vec![username.to_string()])
         .expect("failed to generate test certificate");
     let cert_pem = certified.cert.pem().into_bytes();
-    let key_pem = certified.key_pair.serialize_pem().into_bytes();
+    // rcgen 0.14 renamed CertifiedKey::key_pair to ::signing_key.
+    let key_pem = certified.signing_key.serialize_pem().into_bytes();
     (cert_pem, key_pem)
 }
 

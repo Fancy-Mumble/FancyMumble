@@ -7,14 +7,14 @@ license = "MIT"
 
 [dependencies]
 mumble-protocol = { path = "../mumble-protocol" }
-cpal = "0.17.3"
+cpal = "0.17.3"  # held: rodio 0.22 (latest) still requires cpal 0.17
 tracing = "0.1"
 
 # Native WASAPI capture that mirrors the official Mumble client's device
 # open (shared mode + GetMixFormat), so we succeed on drivers/interfaces
 # where cpal's own-format open is rejected as "device in use".
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.61", features = [
+windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_Media_Audio",
     "Win32_Media_KernelStreaming",

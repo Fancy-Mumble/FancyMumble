@@ -47,22 +47,22 @@ realfft = "3"
 fancy-denoiser-deepfilter = { path = "../fancy-denoiser-deepfilter", optional = true }
 
 # OCB2-AES128 encryption for Mumble UDP
-aes = "0.8"
+aes = "0.9"
 
 # Persistent chat - encryption and key management
-chacha20poly1305 = { version = "0.10", optional = true }
-x25519-dalek = { version = "2", features = ["static_secrets"], optional = true }
-ed25519-dalek = { version = "2", features = ["rand_core"], optional = true }
-hkdf = { version = "0.12", optional = true }
-sha2 = { version = "0.10", optional = true }
-hmac = { version = "0.12", optional = true }
+chacha20poly1305 = { version = "0.11", optional = true }
+x25519-dalek = { version = "3", features = ["static_secrets"], optional = true }
+ed25519-dalek = { version = "3", features = ["rand_core"], optional = true }
+hkdf = { version = "0.13", optional = true }
+sha2 = { version = "0.11", optional = true }
+hmac = { version = "0.13", optional = true }
 rand = { version = "0.10.2", optional = true }
 zeroize = { version = "1", features = ["zeroize_derive"], optional = true }
 rmp-serde = { version = "1", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_bytes = { version = "0.11", optional = true }
 uuid = { version = "1", features = ["v4"], optional = true }
-libloading = { version = "0.8", optional = true }
+libloading = { version = "0.9", optional = true }
 
 [features]
 default = []
@@ -96,7 +96,7 @@ minimp3 = "0.6.1"
 hound = "3.5"
 uuid = { version = "1", features = ["v4"] }
 rand = "0.10"
-rcgen = "0.13"
+rcgen = "0.14"
 serde_json = "1"
 
 [lints]

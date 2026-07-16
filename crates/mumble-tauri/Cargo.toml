@@ -53,9 +53,13 @@ arc-swap = "1"
 base64 = "0.22"
 prost = "0.14"
 zstd = "0.13"
-sha2 = "0.10"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "brotli", "deflate", "multipart", "stream", "json"] }
-quick-xml = { version = "0.39.4", features = ["serialize"] }
+sha2 = "0.11"
+# reqwest 0.13 split 0.12's `rustls-tls` into the TLS backend (`rustls`) and an
+# explicit root-cert source; `webpki-roots` keeps 0.12's bundled-Mozilla-roots
+# behaviour (and matches what mumble-protocol already trusts). `query` also
+# became an opt-in feature (RequestBuilder::query).
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "webpki-roots", "gzip", "brotli", "deflate", "multipart", "stream", "json", "query"] }
+quick-xml = { version = "0.41.0", features = ["serialize"] }
 tauri-plugin-notification = "2.3.3"
 tauri-plugin-dialog = "2"
 tauri-plugin-deep-link = "2"
@@ -72,7 +76,7 @@ mimalloc = { version = "0.1", default-features = false }
 dhat = { version = "0.3", optional = true }
 png = "0.18"
 mumble-protocol = { path = "../mumble-protocol", features = ["opus-codec", "persistent-chat", "rnnoise-denoiser"] }
-cpal = "0.17.3"
+cpal = "0.17.3"  # held: rodio 0.22 (latest) still requires cpal 0.17
 # Screen sharing core (source enumeration, capture, encode, WebRTC broadcast).
 fancy-screenshare = { path = "../fancy-screenshare" }
 rodio = { version = "0.22", features = ["recording"] }
@@ -103,6 +107,9 @@ windows-sys = { version = "0.61", features = [
 # WebView2 COM bindings for ICoreWebView2_19::SetMemoryUsageTargetLevel
 # (trim browser memory while minimized).  Versions must match the ones
 # tauri/wry pull in so the COM interface types are identical.
+# Held back deliberately: wry 0.54 (via tauri 2.11) still pulls webview2-com 0.38
+# / windows 0.61. Bumping these to 0.39 / 0.62 puts two ICoreWebView2 types in the
+# graph and the `cast()` below stops resolving. Bump together with wry, not before.
 webview2-com = "0.38"
 windows-core = "0.61"
 
@@ -111,8 +118,8 @@ windows-core = "0.61"
 # objc2-foundation gives us NSRect / NSSize; we send AppKit messages
 # through raw `AnyObject` pointers so objc2-app-kit is not needed.
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.5"
-objc2-foundation = { version = "0.2", features = ["NSGeometry"] }
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSGeometry"] }
 
 # Linux-only: gtk_window_set_geometry_hints for native aspect-ratio
 # constraints (see crates/mumble-tauri/src/platform/window/linux.rs).

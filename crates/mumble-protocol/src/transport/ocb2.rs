@@ -14,7 +14,10 @@
 
 use std::sync::{Arc, Mutex};
 
-use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
+// aes 0.9 (cipher 0.5) renamed the block-cipher traits: BlockEncrypt/BlockDecrypt
+// became BlockCipherEncrypt/BlockCipherDecrypt. The `encrypt_block`/`decrypt_block`
+// signatures are unchanged.
+use aes::cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
 use aes::Aes128;
 
 use super::udp::CryptState;
@@ -114,7 +117,9 @@ impl Ocb2CryptState {
         self.raw_key.copy_from_slice(key);
         self.encrypt_iv.copy_from_slice(client_nonce);
         self.decrypt_iv.copy_from_slice(server_nonce);
-        self.cipher = Aes128::new(key.into());
+        // cipher 0.5 dropped `From<&[u8]>` for the key type (GenericArray -> Array);
+        // build it from the fixed-size copy we just made, whose length is checked above.
+        self.cipher = Aes128::new(&self.raw_key.into());
         // Initialize history so it cannot match decrypt_iv[1] on the first packet.
         // Use the bitwise complement of server_nonce[1] so the first check always passes.
         self.decrypt_history = [!server_nonce[1]; 256];

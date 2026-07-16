@@ -53,11 +53,13 @@ impl Encryptor for XChaChaEncryptor {
 
         let mut nonce_bytes = [0u8; NONCE_LEN];
         rand::rng().fill_bytes(&mut nonce_bytes);
-        let nonce = XNonce::from_slice(&nonce_bytes);
+        // `Array::from_slice` is deprecated in favour of TryFrom; the length is
+        // static here, so the infallible array conversion is enough.
+        let nonce = XNonce::from(nonce_bytes);
 
         let ciphertext = cipher
             .encrypt(
-                nonce,
+                &nonce,
                 chacha20poly1305::aead::Payload {
                     msg: &padded,
                     aad,
@@ -93,7 +95,11 @@ impl Encryptor for XChaChaEncryptor {
             )));
         }
 
-        let nonce = XNonce::from_slice(&payload[1..1 + NONCE_LEN]);
+        // `Array::from_slice` is deprecated in favour of TryFrom. The `min_len`
+        // check above already guarantees the slice is exactly NONCE_LEN, so this
+        // conversion cannot fail - map it to an error rather than unwrap.
+        let nonce = XNonce::try_from(&payload[1..1 + NONCE_LEN])
+            .map_err(|_| Error::InvalidState("invalid nonce length".into()))?;
         let ciphertext = &payload[1 + NONCE_LEN..];
 
         let cipher =
@@ -101,7 +107,7 @@ impl Encryptor for XChaChaEncryptor {
 
         let padded = cipher
             .decrypt(
-                nonce,
+                &nonce,
                 chacha20poly1305::aead::Payload {
                     msg: ciphertext,
                     aad,
