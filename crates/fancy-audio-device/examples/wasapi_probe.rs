@@ -59,7 +59,7 @@ use windows::Win32::System::Com::{
 use windows::Win32::System::Com::StructuredStorage::PropVariantClear;
 use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
 
-pub fn main() {
+pub(crate) fn main() {
     let want = std::env::args().nth(1);
     if want.as_deref() == Some("--users") {
         let users = fancy_audio_device::capture_device_users();
