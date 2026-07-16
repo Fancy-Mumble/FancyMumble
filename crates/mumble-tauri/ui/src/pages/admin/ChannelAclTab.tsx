@@ -8,12 +8,16 @@ import { useSearchParams } from "react-router-dom";
 import { useAppStore } from "../../store";
 import { TID } from "../../testids";
 import { PERM_ENTER } from "../../utils/permissions";
+import { filterVisibleChannels, isDmChannel } from "../../utils/channelVisibility";
 import type { AclData, AclEntry, AclGroup, ChannelEntry, RegisteredUser } from "../../types";
 import { AclRulesPanel } from "./AclRulesPanel";
 import { GroupsPanel } from "./GroupsPanel";
 import { AccessUsersPanel } from "./AccessUsersPanel";
-import { buildChannelTree, type TreeNode } from "./channelAclModel";
+import { ChannelFiltersPanel } from "./ChannelFiltersPanel";
+import { buildChannelTree, hasCustomAcl, limitTreeDepth, type TreeNode } from "./channelAclModel";
 import styles from "./AdminPanel.module.css";
+
+const NO_LISTENED_CHANNELS: ReadonlySet<number> = new Set();
 
 type AclTab = "groups" | "rules" | "users";
 
@@ -52,6 +56,14 @@ export function ChannelAclTab() {
   const [loading, setLoading] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [search, setSearch] = useState("");
+  const [hideDmChannels, setHideDmChannels] = useState(false);
+  const [hideEmptyChannels, setHideEmptyChannels] = useState(false);
+  const [privateOnly, setPrivateOnly] = useState(false);
+  const [topLevelOnly, setTopLevelOnly] = useState(false);
+  const [customAclOnly, setCustomAclOnly] = useState(false);
+  // Populated by a bulk `request_acl` sweep the first time `customAclOnly`
+  // is turned on (there's no batch ACL endpoint - see the effect below).
+  const [customAclCache, setCustomAclCache] = useState<Map<number, boolean>>(new Map());
   const [activeTab, setActiveTab] = useState<AclTab>("rules");
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
   const [registeredNames, setRegisteredNames] = useState<Map<number, string>>(new Map());
@@ -60,11 +72,47 @@ export function ChannelAclTab() {
     { x: number; y: number; channel: ChannelEntry; confirming?: boolean } | null
   >(null);
 
-  const tree = useMemo(() => buildChannelTree(channels), [channels]);
+  const visibleChannels = useMemo(() => {
+    let base = channels;
+    if (hideDmChannels) base = base.filter((c) => !isDmChannel(c));
+    if (privateOnly) base = base.filter((c) => c.detached);
+    if (customAclOnly) base = base.filter((c) => customAclCache.get(c.id) === true);
+    if (hideEmptyChannels) {
+      base = filterVisibleChannels(base, users, {
+        currentChannel: null,
+        selectedChannel,
+        listenedChannels: NO_LISTENED_CHANNELS,
+      });
+    }
+    return base;
+  }, [channels, users, hideDmChannels, privateOnly, customAclOnly, customAclCache, hideEmptyChannels, selectedChannel]);
+  const tree = useMemo(() => {
+    const built = buildChannelTree(visibleChannels);
+    return topLevelOnly ? limitTreeDepth(built, 1) : built;
+  }, [visibleChannels, topLevelOnly]);
   const matchedIds = useMemo(
     () => (search ? filterTree(tree, search) : null),
     [tree, search],
   );
+
+  // "Custom ACL only": no batch endpoint exists, so sweep `request_acl` for
+  // every channel not yet requested once the filter is turned on. The
+  // shared "acl" listener below feeds results back into `customAclCache` as
+  // they arrive. Tracked in a ref (not state) so a response arriving mid-sweep
+  // doesn't re-run this effect and re-request every other still-pending
+  // channel - each channel is asked for exactly once per session.
+  const requestedCustomAclRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    if (!customAclOnly) return;
+    for (const c of channels) {
+      if (!requestedCustomAclRef.current.has(c.id)) {
+        requestedCustomAclRef.current.add(c.id);
+        invoke("request_acl", { channelId: c.id }).catch(() => {});
+      }
+    }
+  }, [customAclOnly, channels]);
+  const customAclLoading =
+    customAclOnly && channels.some((c) => !customAclCache.has(c.id));
 
   // Auto-expand root on first render.
   useEffect(() => {
@@ -90,10 +138,30 @@ export function ChannelAclTab() {
     };
   }, []);
 
-  // Listen for ACL events from the backend.
+  // Listen for ACL events from the backend. Subscribed once for the whole
+  // component lifetime, and the "is this for the selected channel?" check
+  // reads a ref, not state. Both halves matter: re-subscribing per selection
+  // (`[selectedChannel]` deps) loses responses on a fast server two ways -
+  // the response can arrive before the effect re-runs, so the live listener
+  // still compares against the *previous* selection and drops it; and
+  // `listen`/`unlisten` are async IPC round-trips, so re-registration has a
+  // window with no listener at all. Either way the pane sticks on "Loading
+  // ACL...". The ref is written synchronously in `handleChannelSelect`
+  // BEFORE `request_acl` is sent, so it can never lag the response.
+  const selectedChannelRef = useRef<number | null>(null);
+
   useEffect(() => {
     const unlisten = listen<AclData>("acl", (event) => {
-      setAclData(event.payload);
+      const data = event.payload;
+      // Feeds the "custom ACL" filter's cache regardless of selection;
+      // harmless when no bulk sweep is running (see the effect above it).
+      setCustomAclCache((prev) => {
+        const next = new Map(prev);
+        next.set(data.channel_id, hasCustomAcl(data));
+        return next;
+      });
+      if (data.channel_id !== selectedChannelRef.current) return;
+      setAclData(data);
       setLoading(false);
       setDirty(false);
     });
@@ -101,6 +169,7 @@ export function ChannelAclTab() {
   }, []);
 
   const handleChannelSelect = useCallback((channelId: number) => {
+    selectedChannelRef.current = channelId;
     setSelectedChannel(channelId);
     setLoading(true);
     setAclData(null);
@@ -177,6 +246,7 @@ export function ChannelAclTab() {
       try {
         await deleteChannel(channel.id);
         if (selectedChannel === channel.id) {
+          selectedChannelRef.current = null;
           setSelectedChannel(null);
           setAclData(null);
         }
@@ -424,6 +494,21 @@ export function ChannelAclTab() {
             </>
           )}
         </div>
+
+        {/* Right: Filters */}
+        <ChannelFiltersPanel
+          hideDmChannels={hideDmChannels}
+          onHideDmChannelsChange={setHideDmChannels}
+          hideEmptyChannels={hideEmptyChannels}
+          onHideEmptyChannelsChange={setHideEmptyChannels}
+          privateOnly={privateOnly}
+          onPrivateOnlyChange={setPrivateOnly}
+          topLevelOnly={topLevelOnly}
+          onTopLevelOnlyChange={setTopLevelOnly}
+          customAclOnly={customAclOnly}
+          onCustomAclOnlyChange={setCustomAclOnly}
+          customAclLoading={customAclLoading}
+        />
       </div>
 
       {/* Channel context menu (right-click in the tree) */}
