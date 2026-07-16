@@ -1,5 +1,5 @@
-//! xdg-desktop-portal ScreenCast session - the Linux analogue of Chromium's
-//! `ScreenCastPortal` (modules/desktop_capture/linux/wayland).
+//! xdg-desktop-portal `ScreenCast` session - the Linux analogue of Chromium's
+//! `ScreenCastPortal` (`modules/desktop_capture/linux/wayland`).
 //!
 //! The portal is the only capture entry point Wayland permits, and modern
 //! Chromium prefers it on X11 sessions too. The D-Bus dance is:

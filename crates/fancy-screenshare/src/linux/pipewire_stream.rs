@@ -1,5 +1,5 @@
 //! PipeWire video-stream consumer - the analogue of Chromium's
-//! `SharedScreenCastStream` (modules/desktop_capture/linux/wayland).
+//! `SharedScreenCastStream` (`modules/desktop_capture/linux/wayland`).
 //!
 //! A dedicated thread runs the PipeWire main loop (libwebrtc uses
 //! `pw_thread_loop`; a plain `MainLoop` on our own thread is the same thing
@@ -146,6 +146,11 @@ impl Drop for PwCaptureStream {
 }
 
 /// The loop thread body: connect, negotiate, pump frames until quit/error.
+#[allow(
+    clippy::too_many_lines,
+    reason = "single PipeWire loop lifecycle (connect, negotiate, pump); the \
+              callbacks capture shared loop state and don't factor out cleanly"
+)]
 fn run_loop(
     fd: std::os::fd::OwnedFd,
     node_id: u32,
@@ -290,7 +295,7 @@ fn run_loop(
     Ok(())
 }
 
-/// EnumFormat pod: video/raw, the linear RGB layouts we can swizzle, any
+/// `EnumFormat` pod: video/raw, the linear RGB layouts we can swizzle, any
 /// size, any rate. No `VideoModifier` property = shared-memory buffers.
 fn build_format_pod() -> Result<Vec<u8>, String> {
     let object = pw::spa::pod::object!(

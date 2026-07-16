@@ -299,7 +299,6 @@ fn total_memory_mb() -> u64 {
         .and_then(|s| {
             s.lines().find_map(|l| {
                 l.strip_prefix("MemTotal:")?
-                    .trim()
                     .split_whitespace()
                     .next()?
                     .parse::<u64>()
