@@ -1,4 +1,4 @@
-﻿import { CheckIcon } from "../../icons";
+﻿import { CheckIcon, SparklesIcon } from "../../icons";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -122,6 +122,9 @@ export default function OnboardingModal() {
         aria-labelledby="onboarding-title"
       >
         <div className={styles.header}>
+          <span className={styles.headerIcon} aria-hidden="true">
+            <SparklesIcon width={18} height={18} />
+          </span>
           <h2 id="onboarding-title" className={styles.title}>
             {isPreview ? t("onboarding.modal.welcomeTitle") : question?.text}
           </h2>

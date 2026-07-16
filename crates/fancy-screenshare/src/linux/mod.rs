@@ -46,7 +46,7 @@ use crate::sources::SourceKind;
 enum EncoderTier {
     Vaapi(vaapi::VaapiEncoder),
     Nvenc(nvenc::NvencEncoder),
-    Cpu(H264Encoder),
+    Cpu(Box<H264Encoder>),
 }
 
 /// Portal + PipeWire capture with VA-API (preferred) or openh264 encode.
@@ -97,7 +97,7 @@ impl GpuPipelineLinux {
                         "screenshare: no GPU encoder (VA-API: {va_err}; NVENC: {nv_err}); \
                          encoding with openh264 instead"
                     );
-                    EncoderTier::Cpu(H264Encoder::new(settings))
+                    EncoderTier::Cpu(Box::new(H264Encoder::new(settings)))
                 }
             },
         };
@@ -142,7 +142,7 @@ impl GpuPipelineLinux {
         );
         let mut cpu = H264Encoder::new(self.settings);
         let encoded = cpu.encode_rgba(w, h, img.as_raw(), true);
-        self.encoder = EncoderTier::Cpu(cpu);
+        self.encoder = EncoderTier::Cpu(Box::new(cpu));
         encoded
     }
 }

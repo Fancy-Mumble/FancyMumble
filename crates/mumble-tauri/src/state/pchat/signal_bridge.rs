@@ -55,6 +55,14 @@ pub(crate) fn load_signal_bridge(
                 dir.join("../lib/fancy-mumble/signal-bridge")
                     .join(lib_name),
             );
+            // Tauri's Linux .deb/AppImage install bundled resources under the
+            // PRODUCT name from tauri.conf.json (productName = "FancyMumble"),
+            // which is case-sensitive and differs from the /usr/bin binary
+            // name (mumble-tauri). The resource lands at
+            // /usr/lib/FancyMumble/signal-bridge/<lib>, so the /usr/bin binary
+            // resolves it via ../lib/FancyMumble/signal-bridge/.
+            candidates.push(dir.join("../lib/FancyMumble/signal-bridge").join(lib_name));
+            candidates.push(dir.join("../lib/FancyMumble").join(lib_name));
         }
     }
 

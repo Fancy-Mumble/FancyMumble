@@ -130,7 +130,7 @@ const _: () = assert!(size_of::<EncConfig>() == 3584);
 
 /// Byte offsets inside `NV_ENC_CONFIG` (verified against the 12.1 header:
 /// version 0, profileGUID 4, gopLength 20, frameIntervalP 24, then
-/// rcParams at 40 whose prefix is version, rateControlMode, NV_ENC_QP
+/// `rcParams` at 40 whose prefix is version, `rateControlMode`, `NV_ENC_QP`
 /// constQP[12], averageBitRate, maxBitRate).
 mod cfg_off {
     pub(super) const PROFILE_GUID: usize = 4;
@@ -602,6 +602,11 @@ impl NvencEncoder {
         })
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one linear NVENC session bring-up (open, buffers, config, init); \
+                  splitting it would scatter the ordered FFI init sequence"
+    )]
     fn create_session(&self, libs: &NvLibs, w: u32, h: u32) -> Result<Session, String> {
         let open = libs
             .fns
@@ -882,6 +887,11 @@ fn guid_bytes(g: Guid) -> [u8; 16] {
 /// `row * pitch`, interleaved UV rows at `pitch * h + row * pitch`), same
 /// BT.601 fixed-point math as the other tiers, threaded in bands of
 /// source-row pairs.
+#[allow(
+    clippy::excessive_nesting,
+    reason = "tight per-pixel BT.601 conversion loops inside a thread scope; \
+              hoisting them out would only obscure the hot inner arithmetic"
+)]
 fn rgba_to_nv12_pitched(
     src_width: usize,
     w: usize,
@@ -893,7 +903,7 @@ fn rgba_to_nv12_pitched(
     let (y_plane, uv_plane) = dst.split_at_mut(pitch * h);
     let pairs = h / 2;
     let threads = std::thread::available_parallelism()
-        .map(|n| n.get())
+        .map(std::num::NonZero::get)
         .unwrap_or(4)
         .min(8);
     let band = pairs.div_ceil(threads.max(1)).max(1);
