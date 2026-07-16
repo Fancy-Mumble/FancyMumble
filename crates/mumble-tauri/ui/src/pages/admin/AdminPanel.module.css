@@ -829,7 +829,7 @@ button.aclCardHeader:hover {
   border-radius: 0.5rem;
   padding: 0.65rem 0.85rem;
   cursor: pointer;
-  color: var(--text-primary, #e7e9ec);
+  color: var(--color-text-primary, #e7e9ec);
   transition: background 120ms ease;
 }
 
@@ -839,7 +839,7 @@ button.aclCardHeader:hover {
 
 .roleMeta {
   font-size: 0.78rem;
-  color: var(--text-tertiary, #7a7d83);
+  color: var(--color-text-muted, #7a7d83);
   margin-left: auto;
 }
 
@@ -847,7 +847,7 @@ button.aclCardHeader:hover {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-tertiary, #7a7d83);
+  color: var(--color-text-muted, #7a7d83);
 }
 
 /* --- Role editor ----------------------------------------------- */
@@ -877,12 +877,6 @@ button.aclCardHeader:hover {
   align-self: flex-start;
 }
 
-.editorActions {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
 .fieldset {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0.45rem;
@@ -898,7 +892,7 @@ button.aclCardHeader:hover {
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-tertiary, #7a7d83);
+  color: var(--color-text-muted, #7a7d83);
 }
 
 .input {
@@ -906,7 +900,7 @@ button.aclCardHeader:hover {
   border-radius: 0.35rem;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(0, 0, 0, 0.25);
-  color: var(--text-primary, #e7e9ec);
+  color: var(--color-text-primary, #e7e9ec);
   font-size: 0.85rem;
   width: 100%;
   box-sizing: border-box;
@@ -931,7 +925,7 @@ button.aclCardHeader:hover {
 .metadataKey {
   font-family: monospace;
   font-size: 0.85rem;
-  color: var(--text-secondary, #b6b9bf);
+  color: var(--color-text-secondary, #b6b9bf);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -962,20 +956,6 @@ button.aclCardHeader:hover {
   font-size: 0.78rem;
 }
 
-.dangerBtn {
-  background: rgba(255, 80, 80, 0.12);
-  border: 1px solid rgba(255, 80, 80, 0.4);
-  color: #ff7e7e;
-  border-radius: 0.4rem;
-  padding: 0.4rem 0.75rem;
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-
-.dangerBtn:hover {
-  background: rgba(255, 80, 80, 0.2);
-}
-
 .userRoleChips {
   display: inline-flex;
   flex-wrap: wrap;
@@ -993,7 +973,7 @@ button.aclCardHeader:hover {
   border-radius: 0.35rem;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background-color: rgba(0, 0, 0, 0.25);
-  color: var(--text-primary, #e7e9ec);
+  color: var(--color-text-primary, #e7e9ec);
   font-size: 0.85rem;
   width: 100%;
   box-sizing: border-box;
@@ -1005,19 +985,6 @@ button.aclCardHeader:hover {
 
 .select::-ms-expand {
   display: none;
-}
-
-.editorDangerZone {
-  margin-top: 1.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid rgba(255, 80, 80, 0.18);
-}
-
-.dangerBtnFull {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  font-size: 0.9rem;
-  font-weight: 600;
 }
 
 /* --- Permissions list (single toggle per permission) ---------- */
@@ -1059,14 +1026,14 @@ button.aclCardHeader:hover {
   display: block;
   font-size: 0.88rem;
   font-weight: 500;
-  color: var(--text-primary, #e7e9ec);
+  color: var(--color-text-primary, #e7e9ec);
   cursor: pointer;
 }
 
 .permDesc {
   margin: 0.15rem 0 0;
   font-size: 0.75rem;
-  color: var(--text-tertiary, #7a7d83);
+  color: var(--color-text-muted, #7a7d83);
   line-height: 1.35;
 }
 

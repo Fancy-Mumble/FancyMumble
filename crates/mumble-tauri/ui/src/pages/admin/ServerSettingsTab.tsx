@@ -9,7 +9,7 @@
  * server applies them at runtime and re-broadcasts the updated snapshot.
  */
 
-import { useEffect, useMemo, useState, type CSSProperties, type ComponentType, type ReactElement } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ComponentType, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import * as Flags from "country-flag-icons/react/3x2";
@@ -17,6 +17,12 @@ import type { ServerSetting, ServerSettingsEvent } from "../../types";
 import { COUNTRIES, countryName } from "../../utils/countries";
 import { useServerSettingsStore } from "./serverSettingsStore";
 import styles from "./ServerSettingsTab.module.css";
+import tabStyles from "../../components/elements/TabbedPage.module.css";
+
+export interface ServerSettingsTabProps {
+  /** Hands the tab's Save bar up to `AdminPanel`'s shared pinned footer. */
+  readonly setFooter?: (footer: ReactNode) => void;
+}
 
 interface FieldProps {
   readonly setting: ServerSetting;
@@ -149,7 +155,7 @@ function originalValue(s: ServerSetting): string {
   return s.value ?? "";
 }
 
-export function ServerSettingsTab() {
+export function ServerSettingsTab({ setFooter }: Readonly<ServerSettingsTabProps>) {
   const { t } = useTranslation("settings");
   const snapshot = useServerSettingsStore((s) => s.snapshot);
   const busy = useServerSettingsStore((s) => s.busy);
@@ -210,6 +216,41 @@ export function ServerSettingsTab() {
     }
   };
 
+  const footerNode = useMemo(() => {
+    if (!snapshot) return null;
+    return (
+      <>
+        {error && <span className={styles.error}>{error}</span>}
+        {!error && savedAt > 0 && changed.length === 0 && (
+          <span className={styles.saved}>{t("serverSettings.saved", { defaultValue: "Saved" })}</span>
+        )}
+        <div className={tabStyles.actionBtnGroup}>
+          <button
+            type="button"
+            className={`${tabStyles.actionBtn} ${tabStyles.actionBtnPrimary}`}
+            disabled={busy || changed.length === 0}
+            onClick={() => void onSave()}
+          >
+            {busy
+              ? t("serverSettings.saving", { defaultValue: "Saving…" })
+              : t("serverSettings.save", { defaultValue: "Save changes" })}
+            {changed.length > 0 ? ` (${changed.length})` : ""}
+          </button>
+        </div>
+      </>
+    );
+    // `changed` is derived fresh from `snapshot`+`edits` every render, so
+    // depending on those two (not `changed`/`onSave` themselves) is what
+    // keeps the memoized button's `onClick` from closing over a stale
+    // `edits` snapshot - the same stale-closure trap as useChannelAcl's
+    // `save`, just one level removed via a derived variable.
+  }, [snapshot, edits, error, savedAt, busy, t]);
+
+  useEffect(() => {
+    setFooter?.(footerNode);
+    return () => setFooter?.(null);
+  }, [footerNode, setFooter]);
+
   if (!snapshot) {
     return (
       <div className={styles.empty}>
@@ -253,24 +294,6 @@ export function ServerSettingsTab() {
           </div>
         </section>
       ))}
-
-      <div className={styles.footer}>
-        {error && <span className={styles.error}>{error}</span>}
-        {!error && savedAt > 0 && changed.length === 0 && (
-          <span className={styles.saved}>{t("serverSettings.saved", { defaultValue: "Saved" })}</span>
-        )}
-        <button
-          type="button"
-          className={styles.saveBtn}
-          disabled={busy || changed.length === 0}
-          onClick={() => void onSave()}
-        >
-          {busy
-            ? t("serverSettings.saving", { defaultValue: "Saving…" })
-            : t("serverSettings.save", { defaultValue: "Save changes" })}
-          {changed.length > 0 ? ` (${changed.length})` : ""}
-        </button>
-      </div>
     </div>
   );
 }
