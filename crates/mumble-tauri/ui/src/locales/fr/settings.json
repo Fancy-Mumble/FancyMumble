@@ -576,6 +576,13 @@
   "channelAcl": {
     "title": "Canaux / ACL",
     "searchChannels": "Rechercher des canaux...",
+    "hideDmChannels": "Masquer les canaux MP",
+    "filtersTitle": "Filtres",
+    "hideEmptyChannels": "Masquer les canaux vides",
+    "privateOnly": "Canaux privés uniquement",
+    "topLevelOnly": "Premier niveau uniquement",
+    "customAclOnly": "ACL personnalisée uniquement",
+    "customAclLoading": "Vérification des canaux…",
     "selectChannel": "Sélectionner un canal pour modifier ses ACL",
     "loadingAcl": "Chargement des ACL...",
     "saveChanges": "Enregistrer les modifications",
@@ -604,7 +611,12 @@
     "notFound": "Rôle {{name}} introuvable.",
     "saving": "Enregistrement...",
     "saveChanges": "Enregistrer les modifications",
-    "deleteRole": "Supprimer le rôle"
+    "deleteRole": "Supprimer le rôle",
+    "newHeadingPrefix": "Nouveau rôle : {{name}}",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "createRole": "Créer le rôle",
+    "cancel": "Annuler"
   },
   "roleDisplay": {
     "fieldName": "Nom du rôle",
@@ -808,6 +820,14 @@
     "MANAGE_EMOTES": {
       "title": "Gérer les émotes",
       "description": "Gérer les émotes personnalisées du serveur."
+    },
+    "READ_REGISTER": {
+      "title": "Lister les utilisateurs enregistrés",
+      "description": "Consulter la liste des utilisateurs enregistrés du serveur."
+    },
+    "SEE_CHANNEL": {
+      "title": "Voir le salon caché",
+      "description": "Voir ce salon même lorsqu'il est masqué aux utilisateurs sans accès."
     }
   },
   "onboarding": {

@@ -6,9 +6,22 @@ use crate::state::{self, AppState, AudioDevice, AudioSettings, VoiceState};
 
 /// List available audio input devices (microphones).
 /// Only available on desktop (cpal is not supported on Android).
+///
+/// Runs the enumeration on the blocking pool: WASAPI/COM device enumeration
+/// takes tens of milliseconds, and the Settings page fires this (plus
+/// [`get_output_devices`]) on every mount. Done inline it ties up runtime
+/// workers the protocol event loop needs, which starves `mixer.feed()` and
+/// surfaces as bursts of "dropped oldest samples" playback glitches.
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-pub(crate) fn get_audio_devices() -> Vec<AudioDevice> {
+pub(crate) async fn get_audio_devices() -> Vec<AudioDevice> {
+    tauri::async_runtime::spawn_blocking(enumerate_input_devices)
+        .await
+        .unwrap_or_default()
+}
+
+#[cfg(not(target_os = "android"))]
+fn enumerate_input_devices() -> Vec<AudioDevice> {
     use cpal::traits::{DeviceTrait, HostTrait};
 
     let host = cpal::default_host();
@@ -41,15 +54,24 @@ pub(crate) fn get_audio_devices() -> Vec<AudioDevice> {
 /// Stub: on Android, return an empty device list.
 #[cfg(target_os = "android")]
 #[tauri::command]
-pub(crate) fn get_audio_devices() -> Vec<AudioDevice> {
+pub(crate) async fn get_audio_devices() -> Vec<AudioDevice> {
     Vec::new()
 }
 
 /// List available audio output devices (speakers/headphones).
 /// Only available on desktop (cpal is not supported on Android).
+///
+/// Blocking-pool for the same reason as [`get_audio_devices`].
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-pub(crate) fn get_output_devices() -> Vec<AudioDevice> {
+pub(crate) async fn get_output_devices() -> Vec<AudioDevice> {
+    tauri::async_runtime::spawn_blocking(enumerate_output_devices)
+        .await
+        .unwrap_or_default()
+}
+
+#[cfg(not(target_os = "android"))]
+fn enumerate_output_devices() -> Vec<AudioDevice> {
     use cpal::traits::{DeviceTrait, HostTrait};
 
     let host = cpal::default_host();
@@ -82,7 +104,7 @@ pub(crate) fn get_output_devices() -> Vec<AudioDevice> {
 /// Stub: on Android, return an empty device list.
 #[cfg(target_os = "android")]
 #[tauri::command]
-pub(crate) fn get_output_devices() -> Vec<AudioDevice> {
+pub(crate) async fn get_output_devices() -> Vec<AudioDevice> {
     Vec::new()
 }
 

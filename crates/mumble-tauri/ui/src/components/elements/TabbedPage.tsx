@@ -15,11 +15,20 @@ interface TabbedPageProps<T extends string> {
   activeTab: T;
   onTabChange: (tab: T) => void;
   onBack: () => void;
-  /** Extra CSS class applied to `.mainArea` (e.g. grid layout for preview pane). */
+  /** Extra CSS class applied to the scrollable content area (e.g. grid
+   *  layout for a preview pane). */
   mainAreaClassName?: string;
   /** Optional content rendered in the sidebar between the heading and the tab
    *  list (e.g. a settings search box). */
   sidebarExtra?: ReactNode;
+  /**
+   * Optional non-scrolling bar pinned to the bottom of the main area (e.g.
+   * wizard step navigation, a persistent save bar). Unlike `position:
+   * sticky`, this stays at the bottom of the panel even when `children`
+   * don't fill the viewport - it's a fixed flex row below the scrollable
+   * content, not a scroll-dependent offset.
+   */
+  footer?: ReactNode;
   children: ReactNode;
 }
 
@@ -33,12 +42,13 @@ export function TabbedPage<T extends string>({
   onBack,
   mainAreaClassName,
   sidebarExtra,
+  footer,
   children,
 }: Readonly<TabbedPageProps<T>>) {
   const { t } = useTranslation("common");
-  const mainCls = mainAreaClassName
-    ? `${styles.mainArea} ${mainAreaClassName}`
-    : styles.mainArea;
+  const scrollCls = mainAreaClassName
+    ? `${styles.mainScroll} ${mainAreaClassName}`
+    : styles.mainScroll;
 
   return (
     <div className={styles.page}>
@@ -71,8 +81,11 @@ export function TabbedPage<T extends string>({
         </ul>
       </nav>
 
-      <div className={mainCls}>
-        {children}
+      <div className={styles.mainArea}>
+        <div className={scrollCls}>
+          {children}
+        </div>
+        {footer && <div className={styles.mainFooter}>{footer}</div>}
       </div>
     </div>
   );

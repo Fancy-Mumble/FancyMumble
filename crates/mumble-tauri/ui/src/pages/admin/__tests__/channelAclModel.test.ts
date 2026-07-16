@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { buildChannelTree, computeChannelAccess } from "../channelAclModel";
-import type { AclEntry, AclGroup, ChannelEntry } from "../../../types";
+import {
+  buildChannelTree,
+  computeChannelAccess,
+  hasCustomAcl,
+  limitTreeDepth,
+} from "../channelAclModel";
+import type { AclData, AclEntry, AclGroup, ChannelEntry } from "../../../types";
 import { PERM_ENTER, PERM_SPEAK } from "../../../utils/permissions";
 
 function chan(partial: Partial<ChannelEntry> & { id: number }): ChannelEntry {
@@ -77,6 +82,73 @@ describe("buildChannelTree", () => {
       chan({ id: 7, parent_id: 7, name: "Private", detached: true }),
     ]);
     expect(tree.map((n) => n.channel.name)).toEqual(["Private"]);
+  });
+});
+
+describe("limitTreeDepth", () => {
+  const deepTree = () =>
+    buildChannelTree([
+      chan({ id: 0, parent_id: null, name: "Root" }),
+      chan({ id: 1, parent_id: 0, name: "Lobby" }),
+      chan({ id: 2, parent_id: 1, name: "Sub" }),
+      chan({ id: 3, parent_id: 2, name: "SubSub" }),
+    ]);
+
+  it("keeps the root and its direct children, dropping deeper levels", () => {
+    const limited = limitTreeDepth(deepTree(), 1);
+    expect(limited.map((n) => n.channel.name)).toEqual(["Root"]);
+    expect(limited[0].children.map((c) => c.channel.name)).toEqual(["Lobby"]);
+    // "Sub" is depth 2, so it and everything under it is cut.
+    expect(limited[0].children[0].children).toEqual([]);
+  });
+
+  it("leaves only top-level nodes at depth 0", () => {
+    const limited = limitTreeDepth(deepTree(), 0);
+    expect(limited).toHaveLength(1);
+    expect(limited[0].children).toEqual([]);
+  });
+
+  it("returns the tree unchanged when the limit exceeds its depth", () => {
+    expect(limitTreeDepth(deepTree(), 99)).toEqual(deepTree());
+  });
+
+  it("does not mutate the input tree", () => {
+    const tree = deepTree();
+    limitTreeDepth(tree, 0);
+    // The original must still have its full depth: Root > Lobby > Sub > SubSub.
+    expect(tree[0].children[0].children[0].children[0].channel.name).toBe("SubSub");
+  });
+});
+
+describe("hasCustomAcl", () => {
+  function aclData(partial: Partial<AclData>): AclData {
+    return { channel_id: 1, inherit_acls: true, groups: [], acls: [], ...partial };
+  }
+
+  it("is false for a channel that purely inherits", () => {
+    expect(
+      hasCustomAcl(
+        aclData({
+          inherit_acls: true,
+          acls: [acl({ group: "all", grant: PERM_ENTER, inherited: true })],
+          groups: [group({ name: "admin", inherited: true })],
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("is true when inheritance is switched off", () => {
+    expect(hasCustomAcl(aclData({ inherit_acls: false }))).toBe(true);
+  });
+
+  it("is true when the channel has a rule of its own", () => {
+    expect(
+      hasCustomAcl(aclData({ acls: [acl({ group: "mods", grant: PERM_ENTER, inherited: false })] })),
+    ).toBe(true);
+  });
+
+  it("is true when the channel defines a group of its own", () => {
+    expect(hasCustomAcl(aclData({ groups: [group({ name: "mods", inherited: false })] }))).toBe(true);
   });
 });
 

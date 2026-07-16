@@ -33,6 +33,7 @@ const ChatPage = lazy(() => import("./pages/ChatPage"));
 const SettingsPage = lazy(() => import("./pages/settings"));
 const AdminPanel = lazy(() => import("./pages/admin"));
 const RoleEditorPage = lazy(() => import("./pages/admin/RoleEditorPage"));
+const NewRolePage = lazy(() => import("./pages/admin/NewRolePage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const FriendsPage = lazy(() => import("./pages/FriendsPage"));
 const MarketplacePluginPage = lazy(() => import("./pages/marketplace/PluginPage"));
@@ -370,6 +371,7 @@ function MainApp() {
               <Route path="/friends" element={<FriendsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/admin" element={<AdminPanel />} />
+              <Route path="/admin/roles/new" element={<NewRolePage />} />
               <Route path="/admin/role/:groupName" element={<RoleEditorPage />} />
               <Route path="/marketplace/plugin/:id" element={<MarketplacePluginPage />} />
             </>
