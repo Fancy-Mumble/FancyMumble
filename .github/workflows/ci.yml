@@ -238,7 +238,22 @@ jobs:
           # client bundles only signal-bridge (not qt6ui), so there is
           # nothing for this build to gain from it.
           SKIP_QT6UI: "1"
-        run: cargo tauri build
+        shell: bash
+        run: |
+          # createUpdaterArtifacts is enabled in tauri.conf.json, so Tauri
+          # signs the bundles for the auto-updater. That needs a valid
+          # TAURI_SIGNING_PRIVATE_KEY. On fork builds the repo secrets are not
+          # exposed, so the key is empty and Tauri aborts with
+          # "failed to decode secret key ... Missing comment in secret key".
+          # When no key is present, disable updater-artifact signing so the
+          # bundle still builds; signed release artifacts are produced only on
+          # the upstream repo where the secret is available.
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            cargo tauri build
+          else
+            echo "::warning::No TAURI_SIGNING_PRIVATE_KEY (fork build); building without signed updater artifacts."
+            cargo tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          fi
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
