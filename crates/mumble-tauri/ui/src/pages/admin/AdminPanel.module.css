@@ -501,11 +501,35 @@
 
 .aclSplitView {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 260px 1fr 240px;
   gap: 16px;
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+.aclFiltersPane {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-left: 1px solid var(--color-border);
+  padding-left: 16px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.aclFiltersTitle {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.aclFiltersHint {
+  color: var(--color-text-muted);
+  font-style: italic;
 }
 
 .aclTreePane {
@@ -531,6 +555,20 @@
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
+}
+
+.aclTreeFilterRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 8px 10px;
+  flex-shrink: 0;
+}
+
+.aclTreeFilterLabel {
+  font-size: 13px;
+  color: var(--color-text-secondary);
 }
 
 .aclTreeList {
@@ -781,6 +819,13 @@ button.aclCardHeader:hover {
     border-right: none;
     border-bottom: 1px solid var(--color-border);
     max-height: 200px;
+  }
+
+  .aclFiltersPane {
+    border-left: none;
+    border-top: 1px solid var(--color-border);
+    padding-left: 0;
+    padding-top: 12px;
   }
 }
 
@@ -1421,3 +1466,4 @@ button.aclCardHeader:hover {
   flex-direction: column;
   gap: 4px;
 }
+
