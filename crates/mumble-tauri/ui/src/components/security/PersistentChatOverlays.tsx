@@ -1,15 +1,20 @@
 ﻿import { KeyIcon, WarningIcon } from "../../icons";
 import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../../store";
 import type { KeyTrustLevel, PendingKeyShareRequest, PersistenceMode, UserMode } from "../../types";
 import { getPreferences } from "../../preferencesStorage";
+import { PERM_KEY_OWNER } from "../../utils/permissions";
+import { hasPermission } from "../sidebar/channel/ChannelEditorDialog";
+import { TID } from "../../testids";
 import PersistenceBanner from "./PersistenceBanner";
 import { InfoBanner } from "./InfoBanner";
 import infoBannerStyles from "./InfoBanner.module.css";
 import KeyVerificationDialog from "./KeyVerificationDialog";
 import CustodianPrompt from "./CustodianPrompt";
 import KeyShareWarningDialog from "./KeyShareWarningDialog";
+import ConfirmDialog from "../elements/ConfirmDialog";
 interface PersistentChatResult {
   trustLevel: KeyTrustLevel | undefined;
   onVerifyClick: (() => void) | undefined;
@@ -106,10 +111,12 @@ export function usePersistentChat(
   const dismissKeyShare = useAppStore((s) => s.dismissKeyShare);
   const pchatKeyRevoked = useAppStore((s) => s.pchatKeyRevoked);
   const signalBridgeError = useAppStore((s) => s.signalBridgeError);
+  const channels = useAppStore((s) => s.channels);
 
   const [showVerifyDialog, setShowVerifyDialog] = useState(false);
   const [showCustodianPrompt, setShowCustodianPrompt] = useState(false);
   const [keyShareConfirm, setKeyShareConfirm] = useState<{ hash: string; name: string } | null>(null);
+  const [confirmTakeover, setConfirmTakeover] = useState(false);
   const [userMode, setUserMode] = useState<UserMode>("normal");
   const { t } = useTranslation("sidebar");
   const tStr = t as (k: string) => string;
@@ -125,6 +132,22 @@ export function usePersistentChat(
   const dispute = channelId === null ? undefined : pendingDisputes[channelId];
   const keyRevoked = channelId !== null && pchatKeyRevoked.has(channelId);
   const persistenceMode: PersistenceMode = persistence?.mode ?? "NONE";
+
+  // A KeyOwner admin can un-brick a channel whose key challenge failed by
+  // taking over key ownership (fresh key, keeps the stored - now
+  // unreadable - history). Without this the failure banner was a dead end
+  // even for the one user able to recover the channel.
+  const channel = channelId === null ? undefined : channels.find((c) => c.id === channelId);
+  const canTakeover = keyRevoked && hasPermission(channel, PERM_KEY_OWNER);
+
+  const handleTakeover = useCallback(() => {
+    setConfirmTakeover(false);
+    if (channelId !== null) {
+      invoke("key_takeover", { channelId, mode: "key_only" }).catch((e: unknown) =>
+        console.error("key_takeover failed:", e),
+      );
+    }
+  }, [channelId]);
 
   const handleShareClick = useCallback((peerCertHash: string, peerName: string) => {
     setKeyShareConfirm({ hash: peerCertHash, name: peerName });
@@ -165,7 +188,19 @@ export function usePersistentChat(
       ? null
       : buildKeyShareBanner(channelId, keyShareRequests, handleShareClick, dismissKeyShare, tStr),
     revokedBanner: keyRevoked ? (
-      <InfoBanner variant="danger" icon={warningIcon}>
+      <InfoBanner
+        variant="danger"
+        icon={warningIcon}
+        actions={canTakeover ? (
+          <button
+            className={infoBannerStyles.dangerAction}
+            data-testid={TID.pchatResetKey}
+            onClick={() => setConfirmTakeover(true)}
+          >
+            {t("overlays.resetChannelKey")}
+          </button>
+        ) : undefined}
+      >
         {userMode === "normal" ? (
           <p className={infoBannerStyles.description}>
             {t("overlays.revokedNormal")}
@@ -245,6 +280,16 @@ export function usePersistentChat(
           onConfirm={handleShareConfirm}
           onCancel={() => setKeyShareConfirm(null)}
         />
+        {confirmTakeover && channelId !== null && (
+          <ConfirmDialog
+            title={t("overlays.resetChannelKeyTitle")}
+            body={t("overlays.resetChannelKeyBody", { channel: channelName })}
+            confirmLabel={t("overlays.resetChannelKeyConfirm")}
+            danger
+            onConfirm={handleTakeover}
+            onCancel={() => setConfirmTakeover(false)}
+          />
+        )}
       </>
     ),
   };

@@ -85,6 +85,9 @@ export const TID = {
   /** A row in the admin "Users" (registered users) table. Carries
    *  `data-user-name` ({@link MEMBER_NAME_ATTR}). */
   registeredUserRow: "registered-user-row",
+  /** The "Reset channel key" action on the key-challenge-failed banner
+   *  (shown to KeyOwner admins; performs a key takeover). */
+  pchatResetKey: "pchat-reset-key",
   /** Root of the generic ConfirmDialog modal (register/unregister user,
    *  delete messages, ...). */
   confirmDialog: "confirm-dialog",

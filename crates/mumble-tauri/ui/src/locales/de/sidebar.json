@@ -369,6 +369,10 @@
     "keyChallengeFailed": "Schlüssel-Challenge fehlgeschlagen",
     "keyRejected": "Dein Verschlüsselungsschlüssel wurde vom Server abgelehnt.",
     "keyMaterialPurged": "Alle lokalen Schlüsseldaten für diesen Kanal wurden entfernt. Du kannst keine Nachrichten senden oder lesen, bis ein verifizierter Schlüsselinhaber dir den richtigen Schlüssel zukommen lässt.",
+    "resetChannelKey": "Kanalschlüssel zurücksetzen",
+    "resetChannelKeyTitle": "Kanalschlüssel zurücksetzen",
+    "resetChannelKeyBody": "Schlüsselinhaberschaft für „{{channel}}“ übernehmen und einen neuen Verschlüsselungsschlüssel einrichten? Mit dem verlorenen Schlüssel verschlüsselte Nachrichten bleiben unlesbar, aber der Kanal ist wieder nutzbar. Andere Mitglieder benötigen anschließend den neuen Schlüssel.",
+    "resetChannelKeyConfirm": "Schlüssel zurücksetzen",
     "encryptionUnavailable": "Verschlüsselung nicht verfügbar",
     "encryptionUnavailableDetail": "Du wirst keine verschlüsselten Nachrichten in diesem Kanal senden oder lesen können."
   },
