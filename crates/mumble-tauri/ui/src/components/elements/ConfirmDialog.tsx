@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Modal } from "./Modal";
+import { TID } from "../../testids";
 import styles from "./ConfirmDialog.module.css";
 
 interface ConfirmDialogProps {
@@ -37,7 +38,7 @@ export default function ConfirmDialog({
   const resolvedCancel = cancelLabel ?? t("confirmDialog.cancelLabel");
   return (
     <Modal onClose={onCancel} zIndex={9999}>
-      <div className={styles.dialog} role="alertdialog" aria-labelledby="confirm-title" aria-describedby="confirm-body">
+      <div className={styles.dialog} role="alertdialog" data-testid={TID.confirmDialog} aria-labelledby="confirm-title" aria-describedby="confirm-body">
         <h3 id="confirm-title" className={`${styles.title} ${danger ? styles.titleDanger : ""}`}>
           {title}
         </h3>
@@ -55,11 +56,12 @@ export default function ConfirmDialog({
           </label>
         )}
         <div className={styles.actions}>
-          <button className={styles.cancelBtn} onClick={onCancel}>
+          <button className={styles.cancelBtn} data-testid={TID.confirmDialogCancel} onClick={onCancel}>
             {resolvedCancel}
           </button>
           <button
             className={`${styles.confirmBtn} ${danger ? styles.confirmBtnDanger : ""}`}
+            data-testid={TID.confirmDialogConfirm}
             onClick={onConfirm}
             disabled={isConfirming}
           >

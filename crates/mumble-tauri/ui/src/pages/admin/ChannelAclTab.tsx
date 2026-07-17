@@ -121,19 +121,32 @@ export function ChannelAclTab() {
     }
   }, [tree, expanded.size]);
 
-  // Fetch registered user names for ID resolution.
+  // Fetch registered user names for ID resolution. The listener must be
+  // registered before the request goes out (async IPC; a fast server's
+  // answer beats an un-awaited registration and Tauri does not replay
+  // events - user ACL entries would then show raw ids instead of names).
   useEffect(() => {
-    const unlisten = listen<RegisteredUser[]>("user-list", (event) => {
-      const map = new Map<number, string>();
-      for (const u of event.payload) {
-        map.set(u.user_id, u.name);
-      }
-      setRegisteredNames(map);
-    });
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
     acquireRegisteredTextures();
-    invoke("request_user_list").catch(() => {});
+    (async () => {
+      const un = await listen<RegisteredUser[]>("user-list", (event) => {
+        const map = new Map<number, string>();
+        for (const u of event.payload) {
+          map.set(u.user_id, u.name);
+        }
+        setRegisteredNames(map);
+      });
+      if (cancelled) {
+        un();
+        return;
+      }
+      unlisten = un;
+      invoke("request_user_list").catch(() => {});
+    })();
     return () => {
-      unlisten.then((f) => f());
+      cancelled = true;
+      unlisten?.();
       releaseRegisteredTextures();
     };
   }, []);
@@ -150,22 +163,40 @@ export function ChannelAclTab() {
   // BEFORE `request_acl` is sent, so it can never lag the response.
   const selectedChannelRef = useRef<number | null>(null);
 
+  // Flipped once the mount-time `acl` listener registration has committed.
+  // Requests triggered by human clicks land long after that, but the
+  // deep-link effect below fires on mount and must not race the listener.
+  const [aclListenerReady, setAclListenerReady] = useState(false);
+
   useEffect(() => {
-    const unlisten = listen<AclData>("acl", (event) => {
-      const data = event.payload;
-      // Feeds the "custom ACL" filter's cache regardless of selection;
-      // harmless when no bulk sweep is running (see the effect above it).
-      setCustomAclCache((prev) => {
-        const next = new Map(prev);
-        next.set(data.channel_id, hasCustomAcl(data));
-        return next;
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    (async () => {
+      const un = await listen<AclData>("acl", (event) => {
+        const data = event.payload;
+        // Feeds the "custom ACL" filter's cache regardless of selection;
+        // harmless when no bulk sweep is running (see the effect above it).
+        setCustomAclCache((prev) => {
+          const next = new Map(prev);
+          next.set(data.channel_id, hasCustomAcl(data));
+          return next;
+        });
+        if (data.channel_id !== selectedChannelRef.current) return;
+        setAclData(data);
+        setLoading(false);
+        setDirty(false);
       });
-      if (data.channel_id !== selectedChannelRef.current) return;
-      setAclData(data);
-      setLoading(false);
-      setDirty(false);
-    });
-    return () => { unlisten.then((f) => f()); };
+      if (cancelled) {
+        un();
+        return;
+      }
+      unlisten = un;
+      setAclListenerReady(true);
+    })();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, []);
 
   const handleChannelSelect = useCallback((channelId: number) => {
@@ -185,6 +216,10 @@ export function ChannelAclTab() {
     if (!channelParam) return;
     if (consumedChannelParamRef.current === channelParam) return;
     if (channels.length === 0) return;
+    // Don't fire the deep-linked request until the acl listener is live,
+    // or a fast server's response would be dropped and the pane would
+    // stick on "Loading ACL...".
+    if (!aclListenerReady) return;
     const targetId = Number.parseInt(channelParam, 10);
     if (!Number.isFinite(targetId)) {
       consumedChannelParamRef.current = channelParam;
@@ -224,7 +259,7 @@ export function ChannelAclTab() {
       next.delete("channel");
       return next;
     }, { replace: true });
-  }, [channelParam, channels, handleChannelSelect, setSearchParams]);
+  }, [channelParam, channels, handleChannelSelect, setSearchParams, aclListenerReady]);
 
   const toggleExpand = useCallback((id: number) => {
     setExpanded((prev) => {

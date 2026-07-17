@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { AclData } from "../../types";
@@ -14,35 +14,39 @@ export function useChannelAcl(channelId: number | null) {
   const [loading, setLoading] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const requestedFor = useRef<number | null>(null);
 
-  useEffect(() => {
-    let unlisten: UnlistenFn | null = null;
-    listen<AclData>("acl", (event) => {
-      if (channelId !== null && event.payload.channel_id === channelId) {
-        setAcl(event.payload);
-        setDirty(false);
-        setLoading(false);
-      }
-    }).then((u) => {
-      unlisten = u;
-    });
-    return () => {
-      unlisten?.();
-    };
-  }, [channelId]);
-
+  // The listener must be registered before the request goes out: `listen()`
+  // is an async IPC round-trip, and a fast (local) server can answer before
+  // an un-awaited registration commits. Tauri does not replay events, so
+  // losing that race left the pane on "Loading ACL..." forever.
   useEffect(() => {
     if (channelId === null) {
       setAcl(null);
-      requestedFor.current = null;
       return;
     }
-    if (requestedFor.current === channelId && acl !== null) return;
-    requestedFor.current = channelId;
-    setLoading(true);
-    invoke("request_acl", { channelId }).catch(() => setLoading(false));
-  }, [channelId, acl]);
+    let cancelled = false;
+    let unlisten: UnlistenFn | null = null;
+    (async () => {
+      const un = await listen<AclData>("acl", (event) => {
+        if (event.payload.channel_id === channelId) {
+          setAcl(event.payload);
+          setDirty(false);
+          setLoading(false);
+        }
+      });
+      if (cancelled) {
+        un();
+        return;
+      }
+      unlisten = un;
+      setLoading(true);
+      invoke("request_acl", { channelId }).catch(() => setLoading(false));
+    })();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [channelId]);
 
   const update = useCallback((next: AclData) => {
     setAcl(next);
