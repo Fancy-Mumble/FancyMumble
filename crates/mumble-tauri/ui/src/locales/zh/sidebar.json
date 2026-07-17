@@ -369,6 +369,10 @@
     "keyChallengeFailed": "密钥挑战失败",
     "keyRejected": "你的加密密钥被服务器拒绝。",
     "keyMaterialPurged": "本频道的全部本地密钥材料已被清除。在已验证的密钥持有者与你共享正确密钥之前，你都无法收发消息。",
+    "resetChannelKey": "重置频道密钥",
+    "resetChannelKeyTitle": "重置频道密钥",
+    "resetChannelKeyBody": "接管“{{channel}}”的密钥所有权并建立新的加密密钥？使用旧密钥加密的消息将无法读取，但频道可以恢复使用。其他成员之后需要获得新密钥的共享。",
+    "resetChannelKeyConfirm": "重置密钥",
     "encryptionUnavailable": "加密不可用",
     "encryptionUnavailableDetail": "你将无法在此频道中收发加密消息。"
   },

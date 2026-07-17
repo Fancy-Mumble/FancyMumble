@@ -381,6 +381,10 @@
     "keyChallengeFailed": "Key challenge failed",
     "keyRejected": "your encryption key was rejected by the server.",
     "keyMaterialPurged": "All local keying material for this channel has been purged. You cannot send or read messages until a verified key holder shares the correct key with you.",
+    "resetChannelKey": "Reset channel key",
+    "resetChannelKeyTitle": "Reset channel key",
+    "resetChannelKeyBody": "Take over key ownership of \"{{channel}}\" and establish a fresh encryption key? Messages encrypted with the lost key remain unreadable, but the channel becomes usable again. Other members will need the new key shared with them.",
+    "resetChannelKeyConfirm": "Reset key",
     "encryptionUnavailable": "Encryption unavailable",
     "encryptionUnavailableDetail": "You will not be able to send or read encrypted messages in this channel."
   },

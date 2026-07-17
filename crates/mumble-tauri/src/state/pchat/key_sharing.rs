@@ -235,21 +235,62 @@ pub(crate) fn send_key_holder_report(
 
 /// Request a key-ownership takeover for a channel (requires `KeyOwner`
 /// permission).
+///
+/// The takeover makes us the channel's sole key authority, and the server
+/// immediately re-challenges us to prove possession. After a failed key
+/// challenge the local keying material was purged, so without a key the
+/// post-takeover challenge could never be answered and the channel stayed
+/// dead. Re-derive our deterministic archive key (and clear the revoked
+/// state) BEFORE reporting, so the fresh challenge verifies against it.
 pub(crate) fn send_key_takeover(
     shared: &Arc<Mutex<SharedState>>,
     channel_id: u32,
     mode: mumble_tcp::pchat_key_holder_report::KeyTakeoverMode,
 ) {
-    let (handle, hash) = {
-        let s = shared.lock().ok();
+    let (handle, hash, app, persist_info) = {
+        let mut s = shared.lock().ok();
         let h = s.as_ref().and_then(|s| s.conn.client_handle.clone());
-        let hash = s
-            .as_ref()
-            .and_then(|s| s.pchat_ctx.pchat.as_ref().map(|p| p.own_cert_hash.clone()));
-        (h, hash)
+        let app = s.as_ref().and_then(|s| s.conn.tauri_app_handle.clone());
+        let mut hash = None;
+        let mut persist_info = None;
+        if let Some(ref mut s) = s {
+            if let Some(ref mut p) = s.pchat_ctx.pchat {
+                hash = Some(p.own_cert_hash.clone());
+                if !p
+                    .key_manager
+                    .has_key(channel_id, crate::state::pchat::PchatProtocol::FancyV1FullArchive)
+                {
+                    let key = mumble_protocol::persistent::encryption::derive_archive_key(
+                        &p.seed, channel_id,
+                    );
+                    p.key_manager.store_archive_key(
+                        channel_id,
+                        key,
+                        mumble_protocol::persistent::KeyTrustLevel::Verified,
+                    );
+                    p.key_manager
+                        .set_channel_originator(channel_id, p.own_cert_hash.clone());
+                    persist_info = p.identity_dir.clone().map(|dir| (dir, key));
+                }
+            }
+        }
+        (h, hash, app, persist_info)
     };
     let Some(handle) = handle else { return };
     let Some(hash) = hash else { return };
+
+    if let Some((dir, key)) = persist_info {
+        super::persistence::persist_archive_key(&dir, channel_id, &key, Some(&hash));
+        // The channel had no key (post-purge takeover): tell the UI the key
+        // is re-established so the revoked banner clears once verified.
+        if let Some(app) = app {
+            use tauri::Emitter;
+            let _ = app.emit(
+                "pchat-key-restored",
+                types::PchatKeyRevokedPayload { channel_id },
+            );
+        }
+    }
 
     let report = mumble_tcp::PchatKeyHolderReport {
         channel_id: Some(channel_id),

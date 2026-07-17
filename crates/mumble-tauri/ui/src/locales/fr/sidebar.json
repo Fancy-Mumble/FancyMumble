@@ -369,6 +369,10 @@
     "keyChallengeFailed": "Échec du défi de clé",
     "keyRejected": "votre clé de chiffrement a été rejetée par le serveur.",
     "keyMaterialPurged": "Toutes les données de clé locales pour ce canal ont été supprimées. Vous ne pourrez ni envoyer ni lire de messages tant qu'un détenteur de clé vérifié ne vous aura pas partagé la bonne clé.",
+    "resetChannelKey": "Réinitialiser la clé du canal",
+    "resetChannelKeyTitle": "Réinitialiser la clé du canal",
+    "resetChannelKeyBody": "Prendre possession de la clé de « {{channel}} » et établir une nouvelle clé de chiffrement ? Les messages chiffrés avec la clé perdue resteront illisibles, mais le canal redeviendra utilisable. Les autres membres devront recevoir la nouvelle clé.",
+    "resetChannelKeyConfirm": "Réinitialiser la clé",
     "encryptionUnavailable": "Chiffrement indisponible",
     "encryptionUnavailableDetail": "Vous ne pourrez pas envoyer ou lire des messages chiffrés dans ce canal."
   },
