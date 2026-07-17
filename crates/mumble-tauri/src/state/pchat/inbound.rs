@@ -81,6 +81,7 @@ pub(crate) fn handle_proto_msg_deliver(
         message_id: Some(message_id.clone()),
         timestamp: Some(timestamp),
         is_legacy: false,
+        send_failed: false,
         edited_at: None,
         pinned: false,
         pinned_by: None,
@@ -141,7 +142,7 @@ fn insert_or_replace_message(
     channel_id: u32,
     message_id: &str,
     replaces_id: Option<&str>,
-    chat_msg: ChatMessage,
+    mut chat_msg: ChatMessage,
 ) {
     if let Some(replaces_id) = replaces_id {
         if let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id) {
@@ -149,8 +150,22 @@ fn insert_or_replace_message(
                 .iter()
                 .position(|m| m.message_id.as_deref() == Some(replaces_id))
             {
-                msgs[pos] = chat_msg;
-                return;
+                // Only the original author may replace their message. The
+                // server can't vouch for replaces_id on protocols without
+                // server-side storage (SignalV1), so an unmatched sender here
+                // is a forged edit - keep the original and fall through to a
+                // plain insert of the new message instead.
+                if msgs[pos].sender_hash == chat_msg.sender_hash {
+                    chat_msg.edited_at = Some(chat_msg.timestamp.unwrap_or(0));
+                    msgs[pos] = chat_msg;
+                    return;
+                }
+                warn!(
+                    channel_id,
+                    message_id = %message_id,
+                    replaces_id = %replaces_id,
+                    "rejected cross-sender replaces_id (forged edit); inserting as new message"
+                );
             }
         }
     }
@@ -308,6 +323,7 @@ fn decrypt_fetched_messages(
             message_id: Some(msg_id),
             timestamp: Some(msg_timestamp),
             is_legacy: false,
+            send_failed: false,
             edited_at: None,
             pinned: false,
             pinned_by: None,
@@ -365,17 +381,57 @@ fn merge_decrypted_messages(
 
 // -- Ack --------------------------------------------------------------
 
-pub(crate) fn handle_proto_ack(msg: &mumble_tcp::PchatAck) {
+/// Process a server ack. For REJECTED/QUOTA acks, mark the matching
+/// optimistically-shown own messages as failed and return a payload the
+/// caller must emit as "pchat-send-rejected" - without this the message
+/// looked delivered to the sender while nobody else ever received it.
+pub(crate) fn handle_proto_ack(
+    shared: &Arc<Mutex<SharedState>>,
+    msg: &mumble_tcp::PchatAck,
+) -> Option<crate::state::types::PchatSendRejectedPayload> {
     let message_ids = &msg.message_ids;
     let status = msg.status.unwrap_or(0);
     let reason = msg.reason.as_deref();
 
-    if status == mumble_tcp::PchatAckStatus::PchatAckRejected as i32
-        || status == mumble_tcp::PchatAckStatus::PchatAckQuotaExceeded as i32
-    {
-        warn!(?message_ids, status, reason = ?reason, "pchat message rejected by server");
-    } else {
+    let rejected = status == mumble_tcp::PchatAckStatus::PchatAckRejected as i32
+        || status == mumble_tcp::PchatAckStatus::PchatAckQuotaExceeded as i32;
+    if !rejected {
         debug!(?message_ids, status, "received pchat ack");
+        return None;
+    }
+
+    warn!(?message_ids, status, reason = ?reason, "pchat message rejected by server");
+
+    if message_ids.is_empty() {
+        return None;
+    }
+
+    let mut marked: Vec<String> = Vec::new();
+    if let Ok(mut state) = shared.lock() {
+        for msgs in state.msgs.by_channel.values_mut() {
+            for m in msgs.iter_mut() {
+                if m.is_own
+                    && !m.send_failed
+                    && m.message_id
+                        .as_deref()
+                        .is_some_and(|id| message_ids.iter().any(|x| x == id))
+                {
+                    m.send_failed = true;
+                    if let Some(ref id) = m.message_id {
+                        marked.push(id.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    if marked.is_empty() {
+        None
+    } else {
+        Some(crate::state::types::PchatSendRejectedPayload {
+            message_ids: marked,
+            reason: msg.reason.clone(),
+        })
     }
 }
 
@@ -591,6 +647,7 @@ fn insert_offline_messages(
             message_id: Some(dm.message_id.clone()),
             timestamp: Some(dm.timestamp),
             is_legacy: false,
+            send_failed: false,
             edited_at: None,
             pinned: false,
             pinned_by: None,

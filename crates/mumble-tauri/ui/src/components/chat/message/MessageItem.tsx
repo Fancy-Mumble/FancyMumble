@@ -434,6 +434,7 @@ export default memo(function MessageItem({
               {formatTimestamp(displayTimestamp, timeFormat, convertToLocalTime, systemUses24h)}
             </time>
             {msg.edited_at != null && <span className={styles.editedBadge}>{t("message.editedBadge")}</span>}
+            {msg.send_failed && <span className={styles.sendFailedBadge}>{t("message.sendFailedBadge")}</span>}
             {msg.pinned && <span className={styles.pinnedBadge}>{t("message.pinnedBadge")}</span>}
             {inlineActions}
             {msg.is_own && readReceiptIndicator}
@@ -445,6 +446,7 @@ export default memo(function MessageItem({
               {formatTimestamp(displayTimestamp, timeFormat, convertToLocalTime, systemUses24h)}
             </time>
             {msg.edited_at != null && <span className={styles.editedBadge}>{t("message.editedBadge")}</span>}
+            {msg.send_failed && <span className={styles.sendFailedBadge}>{t("message.sendFailedBadge")}</span>}
             {msg.pinned && <span className={styles.pinnedBadge}>{t("message.pinnedBadge")}</span>}
             {inlineActions}
             {msg.is_own && readReceiptIndicator}

@@ -110,12 +110,16 @@ async fn connect_and_authenticate(username: &str) -> (TcpTransport, ServerState,
     connect_and_authenticate_with_password(username, None).await
 }
 
-/// `SuperUser` password for the dev Docker container.
-const SUPERUSER_PASSWORD: &str = "mumble123";
+/// `SuperUser` password for the dev Docker container. Overridable via
+/// `MUMBLE_TEST_SU_PW` so the same tests can run against the e2e fixture
+/// image (which uses a different SuperUser password).
+fn superuser_password() -> String {
+    std::env::var("MUMBLE_TEST_SU_PW").unwrap_or_else(|_| "mumble123".to_string())
+}
 
 /// Connect as `SuperUser` with admin privileges.
 async fn connect_as_superuser() -> (TcpTransport, ServerState, String) {
-    connect_and_authenticate_with_password("SuperUser", Some(SUPERUSER_PASSWORD)).await
+    connect_and_authenticate_with_password("SuperUser", Some(&superuser_password())).await
 }
 
 /// Connect with optional password.
@@ -2953,4 +2957,244 @@ fn test_send_key_challenge_response_command_output() {
         }
         other => panic!("expected PchatKeyChallengeResponse, got {other:?}"),
     }
+}
+
+// ===========================================================================
+// replaces_id spoofing regression (Fancy-Mumble/FancyMumble security audit)
+// ===========================================================================
+//
+// A message's `replaces_id` marks it as an edit of an earlier message. The
+// server must only honour - and only relay - a replaces_id that names a
+// message the SAME sender stored in that channel. A malicious client that
+// puts a VICTIM's message id in replaces_id must not be able to make other
+// clients visually replace the victim's message: the relayed
+// PchatMessageDeliver must carry no replaces_id in that case.
+//
+// These act as spoofing "demo clients": they craft the raw PchatMessage
+// proto with an arbitrary replaces_id, which the real UI never does.
+
+/// Send an encrypted pchat message with an explicit `replaces_id` and return
+/// its `message_id`. Mirrors `send_pchat_msg` but exposes the replaces field
+/// so a test can forge a cross-sender edit.
+#[allow(clippy::too_many_arguments, reason = "mirrors the full pchat message surface")]
+async fn send_pchat_msg_replacing(
+    transport: &mut TcpTransport,
+    key_manager: &mut KeyManager,
+    cert_hash: &str,
+    channel_id: u32,
+    mode: PchatProtocol,
+    body: &str,
+    sender_name: &str,
+    sender_session: u32,
+    replaces_id: Option<String>,
+) -> String {
+    let c = codec();
+    let message_id = uuid::Uuid::new_v4().to_string();
+
+    let envelope = MessageEnvelope {
+        body: body.to_string(),
+        sender_name: sender_name.to_string(),
+        sender_session,
+        attachments: vec![],
+    };
+    let envelope_bytes = c.encode(&envelope).unwrap();
+
+    let now = now_millis();
+    let payload = key_manager
+        .encrypt(mode, channel_id, &message_id, now, &envelope_bytes)
+        .expect("encryption should succeed");
+
+    let proto_msg = mumble_tcp::PchatMessage {
+        message_id: Some(message_id.clone()),
+        channel_id: Some(channel_id),
+        timestamp: Some(now),
+        sender_hash: Some(cert_hash.to_string()),
+        protocol: Some(persistence_mode_to_proto(mode)),
+        envelope: Some(payload.ciphertext),
+        epoch: payload.epoch,
+        chain_index: payload.chain_index,
+        epoch_fingerprint: Some(payload.epoch_fingerprint.to_vec()),
+        replaces_id,
+    };
+
+    transport
+        .send(&ControlMessage::PchatMessage(proto_msg))
+        .await
+        .unwrap();
+
+    message_id
+}
+
+/// Wait for a relayed `PchatMessageDeliver` whose `message_id` matches.
+async fn wait_for_pchat_deliver(
+    transport: &mut TcpTransport,
+    message_id: &str,
+    timeout: Duration,
+) -> Option<mumble_tcp::PchatMessageDeliver> {
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        match tokio::time::timeout_at(deadline, transport.recv()).await {
+            Ok(Ok(ControlMessage::PchatMessageDeliver(d)))
+                if d.message_id.as_deref() == Some(message_id) =>
+            {
+                return Some(d);
+            }
+            Ok(Ok(_)) => continue,
+            _ => return None,
+        }
+    }
+}
+
+/// Report as a key holder and complete the challenge so this session becomes
+/// verified for the channel (required to send and to receive relays). Both
+/// clients use the same archive key so both proofs verify.
+async fn become_verified_holder(
+    transport: &mut TcpTransport,
+    key_manager: &mut KeyManager,
+    channel_id: u32,
+    archive_key: [u8; 32],
+    cert_hash: &str,
+) {
+    key_manager.store_archive_key(channel_id, archive_key, KeyTrustLevel::Verified);
+    send_key_holder_report(transport, channel_id, cert_hash).await;
+    let challenge = wait_for_key_challenge(transport, Duration::from_secs(5))
+        .await
+        .expect("server must send a key challenge");
+    let proof = key_manager
+        .compute_challenge_proof(channel_id, challenge.challenge.as_ref().unwrap())
+        .expect("must compute proof");
+    send_key_challenge_response(transport, channel_id, &proof).await;
+    let result = wait_for_key_challenge_result(transport, Duration::from_secs(5))
+        .await
+        .expect("server must send a challenge result");
+    assert_eq!(result.passed, Some(true), "challenge must pass with the shared key");
+}
+
+/// SECURITY: an attacker who sets `replaces_id` to a VICTIM's message id must
+/// not cause other clients to replace the victim's message. The relayed
+/// deliver of the attacker's message must carry no replaces_id.
+#[tokio::test]
+async fn test_replaces_id_cross_sender_not_relayed() {
+    if !ensure_server_available().await {
+        return;
+    }
+
+    let channel_id: u32 = 0;
+    let mode = PchatProtocol::FancyV1FullArchive;
+    let archive_key = [0x42; 32];
+
+    let (mut su_transport, su_state, _su) = connect_as_superuser().await;
+    set_pchat_protocol(&mut su_transport, &su_state, channel_id, mode).await;
+
+    // Victim and attacker both join and become verified holders of the SAME key.
+    let (mut victim, victim_state, victim_hash) = connect_and_authenticate("SpoofVictim").await;
+    drain(&mut victim).await;
+    let mut victim_km = make_key_manager();
+    become_verified_holder(&mut victim, &mut victim_km, channel_id, archive_key, &victim_hash).await;
+
+    let (mut attacker, attacker_state, attacker_hash) = connect_and_authenticate("SpoofAttacker").await;
+    drain(&mut attacker).await;
+    let mut attacker_km = make_key_manager();
+    become_verified_holder(&mut attacker, &mut attacker_km, channel_id, archive_key, &attacker_hash).await;
+
+    let victim_session = victim_state.own_session().unwrap_or(0);
+    let attacker_session = attacker_state.own_session().unwrap_or(0);
+
+    // Victim sends a legitimate message.
+    let victim_msg_id = send_pchat_msg(
+        &mut victim, &victim_state, &mut victim_km, &victim_hash,
+        channel_id, mode, "victim original", "SpoofVictim", victim_session,
+    ).await;
+    let ack = wait_for_pchat_ack(&mut victim, Duration::from_secs(5)).await;
+    assert_eq!(
+        ack.and_then(|a| a.status),
+        Some(mumble_tcp::PchatAckStatus::PchatAckStored as i32),
+        "victim's message must be stored",
+    );
+    // Attacker receives the relayed victim message (drains it).
+    let _ = wait_for_pchat_deliver(&mut attacker, &victim_msg_id, Duration::from_secs(5)).await;
+
+    // Attacker forges an edit of the VICTIM's message.
+    let attacker_msg_id = send_pchat_msg_replacing(
+        &mut attacker, &mut attacker_km, &attacker_hash,
+        channel_id, mode, "ATTACKER REPLACEMENT", "SpoofAttacker", attacker_session,
+        Some(victim_msg_id.clone()),
+    ).await;
+
+    // The attacker's own message is still accepted (only the forged replaces
+    // is dropped, not the whole message).
+    let ack = wait_for_pchat_ack(&mut attacker, Duration::from_secs(5)).await;
+    assert_eq!(
+        ack.and_then(|a| a.status),
+        Some(mumble_tcp::PchatAckStatus::PchatAckStored as i32),
+        "attacker's own message is still stored",
+    );
+
+    // The victim receives the attacker's message - but with NO replaces_id, so
+    // it appears as a new message, not a replacement of the victim's own.
+    let deliver = wait_for_pchat_deliver(&mut victim, &attacker_msg_id, Duration::from_secs(5))
+        .await
+        .expect("victim must receive the attacker's relayed message");
+    assert!(
+        deliver.replaces_id.as_deref().unwrap_or("").is_empty(),
+        "SECURITY: server relayed a cross-sender replaces_id ({:?}) - the victim's \
+         message would be silently overwritten in every client",
+        deliver.replaces_id,
+    );
+
+    set_pchat_protocol(&mut su_transport, &su_state, channel_id, PchatProtocol::None).await;
+}
+
+/// The fix must NOT break legitimate edits: when the SAME sender replaces their
+/// own earlier message, the relay carries the replaces_id through.
+#[tokio::test]
+async fn test_replaces_id_same_sender_relayed() {
+    if !ensure_server_available().await {
+        return;
+    }
+
+    let channel_id: u32 = 0;
+    let mode = PchatProtocol::FancyV1FullArchive;
+    let archive_key = [0x42; 32];
+
+    let (mut su_transport, su_state, _su) = connect_as_superuser().await;
+    set_pchat_protocol(&mut su_transport, &su_state, channel_id, mode).await;
+
+    let (mut author, author_state, author_hash) = connect_and_authenticate("EditAuthor").await;
+    drain(&mut author).await;
+    let mut author_km = make_key_manager();
+    become_verified_holder(&mut author, &mut author_km, channel_id, archive_key, &author_hash).await;
+
+    let (mut viewer, _viewer_state, viewer_hash) = connect_and_authenticate("EditViewer").await;
+    drain(&mut viewer).await;
+    let mut viewer_km = make_key_manager();
+    become_verified_holder(&mut viewer, &mut viewer_km, channel_id, archive_key, &viewer_hash).await;
+
+    let author_session = author_state.own_session().unwrap_or(0);
+
+    // Author sends the original, then an edit that replaces it.
+    let original_id = send_pchat_msg(
+        &mut author, &author_state, &mut author_km, &author_hash,
+        channel_id, mode, "first draft", "EditAuthor", author_session,
+    ).await;
+    let _ = wait_for_pchat_ack(&mut author, Duration::from_secs(5)).await;
+    let _ = wait_for_pchat_deliver(&mut viewer, &original_id, Duration::from_secs(5)).await;
+
+    let edit_id = send_pchat_msg_replacing(
+        &mut author, &mut author_km, &author_hash,
+        channel_id, mode, "edited text", "EditAuthor", author_session,
+        Some(original_id.clone()),
+    ).await;
+    let _ = wait_for_pchat_ack(&mut author, Duration::from_secs(5)).await;
+
+    let deliver = wait_for_pchat_deliver(&mut viewer, &edit_id, Duration::from_secs(5))
+        .await
+        .expect("viewer must receive the author's edit");
+    assert_eq!(
+        deliver.replaces_id.as_deref(),
+        Some(original_id.as_str()),
+        "a legitimate same-sender edit must relay its replaces_id",
+    );
+
+    set_pchat_protocol(&mut su_transport, &su_state, channel_id, PchatProtocol::None).await;
 }

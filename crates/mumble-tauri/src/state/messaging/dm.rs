@@ -59,6 +59,7 @@ impl AppState {
                 message_id,
                 timestamp,
                 is_legacy: false,
+                send_failed: false,
                 edited_at: None,
                 pinned: false,
                 pinned_by: None,

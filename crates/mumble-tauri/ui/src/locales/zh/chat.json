@@ -329,6 +329,7 @@
   "message": {
     "legacyBadge": "旧版",
     "editedBadge": "（已编辑）",
+    "sendFailedBadge": "（未送达）",
     "pinnedBadge": "📌 已置顶",
     "viewProfile": "查看 {{name}} 的资料"
   },

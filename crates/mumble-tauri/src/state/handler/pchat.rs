@@ -168,7 +168,9 @@ impl HandleMessage for mumble_tcp::PchatAck {
             }
         }
 
-        pchat::handle_proto_ack(self);
+        if let Some(payload) = pchat::handle_proto_ack(&ctx.shared, self) {
+            ctx.emit("pchat-send-rejected", payload);
+        }
     }
 }
 

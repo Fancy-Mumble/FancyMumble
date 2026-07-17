@@ -97,6 +97,9 @@ export interface ChatMessage {
   is_legacy?: boolean;
   /** Unix epoch millis when the message was edited. Absent if never edited. */
   edited_at?: number | null;
+  /** True when the server rejected this own message - it was never
+   *  stored or delivered to anyone else. */
+  send_failed?: boolean;
   /** Whether this message is pinned to the channel. */
   pinned?: boolean;
   /** Display name of the user who pinned this message. */

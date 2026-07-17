@@ -31,6 +31,7 @@ export enum TauriEvent {
   PchatKeyHoldersChanged = "pchat-key-holders-changed",
   PchatKeyRestored = "pchat-key-restored",
   PchatKeyRevoked = "pchat-key-revoked",
+  PchatSendRejected = "pchat-send-rejected",
   PchatKeyShareRequest = "pchat-key-share-request",
   PchatKeyShareRequestsChanged = "pchat-key-share-requests-changed",
   PchatPinDeliver = "pchat-pin-deliver",

@@ -153,6 +153,7 @@ impl LocalMessageCache {
                         message_id: Some(m.message_id.clone()),
                         timestamp: Some(m.timestamp),
                         is_legacy: false,
+                        send_failed: false,
                         edited_at: None,
                         pinned: false,
                         pinned_by: None,
