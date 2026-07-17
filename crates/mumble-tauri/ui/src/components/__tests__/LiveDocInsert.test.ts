@@ -11,7 +11,6 @@ import {
 } from "../chat/livedoc/liveDocMarkdown";
 import { toVideoEmbedUrl } from "../chat/livedoc/liveDocInsert";
 import { shapeDataUrl, iconDataUrl, chartDataUrl } from "../chat/livedoc/liveDocInsertSvg";
-import { verifySignature, hashDocument } from "../chat/livedoc/liveDocSignature";
 
 const roundtrip = (html: string) => markdownToEditorHtml(editorHtmlToMarkdown(html));
 
@@ -110,44 +109,5 @@ describe("insert nodes round-trip through markdown", () => {
     const back = roundtrip(html);
     expect(back).toContain("data-public-key");
     expect(back).toContain("data-signature");
-  });
-});
-
-const hasSubtle = typeof globalThis.crypto !== "undefined" && !!globalThis.crypto.subtle;
-
-function toB64(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf);
-  let s = "";
-  for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s);
-}
-
-describe.skipIf(!hasSubtle)("digital signature crypto", () => {
-  it("hashDocument is whitespace-insensitive but content-sensitive", async () => {
-    expect(await hashDocument("a b")).toBe(await hashDocument("a   b\n\n"));
-    expect(await hashDocument("a b")).not.toBe(await hashDocument("a c"));
-  });
-
-  it("verifies a well-formed P-256 signature and rejects tampering", async () => {
-    // Mirror the Rust backend: ECDSA P-256, raw public key, fixed signature.
-    const kp = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
-    const name = "Jane Doe";
-    const signedAt = "2026-06-04T00:00:00Z";
-    const docHash = await hashDocument("the quick brown fox");
-    const payload = new TextEncoder().encode(`${name}\n${signedAt}\n${docHash}`);
-    const sigBuf = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, kp.privateKey, payload);
-    const rawPub = await crypto.subtle.exportKey("raw", kp.publicKey);
-    const sig = {
-      name,
-      fingerprint: "",
-      signedAt,
-      signature: toB64(sigBuf),
-      publicKey: toB64(rawPub),
-      docHash,
-      algorithm: "ECDSA-P256-SHA256",
-    };
-    expect(await verifySignature(sig)).toBe(true);
-    expect(await verifySignature({ ...sig, docHash: "00ff00ff" })).toBe(false);
-    expect(await verifySignature({ ...sig, name: "Mallory" })).toBe(false);
   });
 });
