@@ -329,6 +329,7 @@
   "message": {
     "legacyBadge": "veraltet",
     "editedBadge": "(bearbeitet)",
+    "sendFailedBadge": "(nicht zugestellt)",
     "pinnedBadge": "📌 angeheftet",
     "viewProfile": "Profil von {{name}} anzeigen"
   },

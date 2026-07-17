@@ -462,6 +462,7 @@ mod tests {
             message_id: Some(format!("id-{idx}")),
             timestamp: Some(idx as u64),
             is_legacy: false,
+            send_failed: false,
             edited_at: None,
             pinned: false,
             pinned_by: None,

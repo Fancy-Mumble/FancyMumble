@@ -2815,6 +2815,23 @@ export async function initEventListeners(
     }),
   );
 
+  // The server rejected one of our (optimistically shown) messages -
+  // flag it as not delivered so the sender isn't misled.
+  unlisteners.push(
+    await listen<{ message_ids: string[]; reason?: string | null }>(
+      TauriEvent.PchatSendRejected,
+      (event) => {
+        const ids = new Set(event.payload.message_ids);
+        if (ids.size === 0) return;
+        useAppStore.setState((prev) => ({
+          messages: prev.messages.map((m) =>
+            m.message_id && ids.has(m.message_id) ? { ...m, send_failed: true } : m,
+          ),
+        }));
+      },
+    ),
+  );
+
   // Messages, unreads, groups, connection events.
   unlisteners.push(
     // Server activity log entry.

@@ -907,6 +907,14 @@
 
 /* --- Edited message indicator ----------------------------------- */
 
+.sendFailedBadge {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--color-danger, #e5484d);
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
 .editedBadge {
   font-size: 10px;
   font-weight: 400;

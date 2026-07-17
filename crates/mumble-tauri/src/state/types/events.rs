@@ -236,6 +236,15 @@ pub(crate) struct PchatKeyRevokedPayload {
     pub channel_id: u32,
 }
 
+/// Payload for the "pchat-send-rejected" event: the server refused to
+/// store/deliver these (optimistically shown) messages, so the UI must
+/// mark them as not delivered.
+#[derive(Clone, Serialize)]
+pub(crate) struct PchatSendRejectedPayload {
+    pub message_ids: Vec<String>,
+    pub reason: Option<String>,
+}
+
 /// Payload for the "pchat-signal-bridge-error" event.
 /// Sent when the signal bridge library fails to load, making `SignalV1`
 /// encryption unavailable.
