@@ -101,6 +101,9 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
   const hasRegisterPerm = (rootPerms & PERM_REGISTER) !== 0;
   const isUnregistered = user.user_id == null || user.user_id === 0;
   const canRegister = !isSelf && hasRegisterPerm && isUnregistered;
+  // Deregistering deletes the account's server-side data; never offered for
+  // SuperUser (user_id 0, treated as unregistered above).
+  const canUnregister = !isSelf && hasRegisterPerm && !isUnregistered;
 
   // Mute / Deafen / Priority Speaker - MUTE_DEAFEN on the user's channel.
   const userChannelPerms = channels.find((c) => c.id === user.channel_id)?.permissions ?? 0;
@@ -119,13 +122,15 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
   const canResetContent = !isSelf && (rootPerms & PERM_RESET_USER_CONTENT) !== 0;
 
   const hasAnyAdminAction =
-    canMuteDeafen || canMoveUser || canKick || canBan || canRegister || canResetContent;
+    canMuteDeafen || canMoveUser || canKick || canBan || canRegister || canUnregister || canResetContent;
 
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<MenuPosition | null>(null);
   const [volume, setVolume] = useState(() => storedVolume);
   const [toast, setToast] = useState<ToastData | null>(null);
   const [deleteUserConfirm, setDeleteUserConfirm] = useState(false);
+  const [registerConfirm, setRegisterConfirm] = useState(false);
+  const [unregisterConfirm, setUnregisterConfirm] = useState(false);
   const [showMoveSheet, setShowMoveSheet] = useState(false);
   const [friendEntry, setFriendEntry] = useState<Friend | null>(null);
 
@@ -264,6 +269,17 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
               setToast({ message: t("userMenu.toastRegisterFailed"), variant: "error" });
             }
             break;
+          case "unregister":
+            try {
+              await invoke("update_user_list", {
+                users: [{ user_id: user.user_id, name: null }],
+              });
+              setToast({ message: t("userMenu.toastUnregistered", { name: user.name }), variant: "success" });
+            } catch (unregErr) {
+              console.error("unregister (update_user_list) failed:", unregErr);
+              setToast({ message: t("userMenu.toastUnregisterFailed"), variant: "error" });
+            }
+            break;
         }
       } catch (err) {
         console.error(`Admin action "${action}" failed:`, err);
@@ -386,11 +402,23 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
               </button>
             )}
             {canRegister && (
-              <button type="button" className={styles.menuItem} onClick={() => handleAction("register")}>
+              <button type="button" className={styles.menuItem} onClick={() => setRegisterConfirm(true)}>
                 <span className={styles.menuIcon}>
                   <UserPlusIcon width={14} height={14} />
                 </span>
                 {t("userMenu.register")}
+              </button>
+            )}
+            {canUnregister && (
+              <button
+                type="button"
+                className={`${styles.menuItem} ${styles.menuItemDanger}`}
+                onClick={() => setUnregisterConfirm(true)}
+              >
+                <span className={styles.menuIcon}>
+                  <UserXIcon width={14} height={14} />
+                </span>
+                {t("userMenu.unregister")}
               </button>
             )}
             {canResetContent && (
@@ -467,6 +495,35 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
             onClose();
           }}
           onCancel={() => setDeleteUserConfirm(false)}
+        />
+      )}
+
+      {/* Register confirmation dialog */}
+      {registerConfirm && (
+        <ConfirmDialog
+          title={t("userMenu.registerConfirmTitle")}
+          body={t("userMenu.registerConfirmBody", { name: user.name })}
+          confirmLabel={t("userMenu.registerConfirm")}
+          onConfirm={() => {
+            setRegisterConfirm(false);
+            void handleAction("register");
+          }}
+          onCancel={() => setRegisterConfirm(false)}
+        />
+      )}
+
+      {/* Unregister confirmation dialog */}
+      {unregisterConfirm && (
+        <ConfirmDialog
+          title={t("userMenu.unregisterConfirmTitle")}
+          body={t("userMenu.unregisterConfirmBody", { name: user.name })}
+          confirmLabel={t("userMenu.unregisterConfirm")}
+          danger
+          onConfirm={() => {
+            setUnregisterConfirm(false);
+            void handleAction("unregister");
+          }}
+          onCancel={() => setUnregisterConfirm(false)}
         />
       )}
 

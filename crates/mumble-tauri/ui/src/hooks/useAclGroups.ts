@@ -25,21 +25,33 @@ export function useAclGroups(): readonly AclGroup[] {
   const rootId = useMemo(() => rootChannelId(channels), [channels]);
   const [groups, setGroups] = useState<readonly AclGroup[]>(() => aclCache.get(rootId) ?? []);
 
+  // The listener must be registered before the request goes out: `listen()`
+  // is an async IPC round-trip, and a fast (local) server can answer before
+  // an un-awaited registration commits. Tauri does not replay events, so
+  // losing that race left the roles list empty until the next acl broadcast.
   useEffect(() => {
     let cancelled = false;
+    let unlisten: (() => void) | null = null;
     const cached = aclCache.get(rootId);
     if (cached) setGroups(cached);
-    const unlisten = listen<AclData>("acl", (event) => {
-      if (cancelled || event.payload.channel_id !== rootId) return;
-      aclCache.set(rootId, event.payload.groups);
-      setGroups(event.payload.groups);
-    });
-    if (!cached) {
-      invoke("request_acl", { channelId: rootId }).catch(() => {});
-    }
+    (async () => {
+      const un = await listen<AclData>("acl", (event) => {
+        if (cancelled || event.payload.channel_id !== rootId) return;
+        aclCache.set(rootId, event.payload.groups);
+        setGroups(event.payload.groups);
+      });
+      if (cancelled) {
+        un();
+        return;
+      }
+      unlisten = un;
+      if (!cached) {
+        invoke("request_acl", { channelId: rootId }).catch(() => {});
+      }
+    })();
     return () => {
       cancelled = true;
-      unlisten.then((f) => f());
+      unlisten?.();
     };
   }, [rootId]);
 

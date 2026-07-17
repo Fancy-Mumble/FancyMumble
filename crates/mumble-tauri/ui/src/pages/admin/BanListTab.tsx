@@ -23,22 +23,34 @@ export function BanListTab() {
   const [editing, setEditing] = useState<BanEntry | null>(null);
   const [dirty, setDirty] = useState(false);
 
-  // Listen for ban-list events from the backend.
+  // Listen for ban-list events and request the list on mount. The listener
+  // registration must complete BEFORE the request goes out: `listen()` is an
+  // async IPC round-trip, and a fast (local) server can answer before an
+  // un-awaited registration commits. Tauri does not replay events to late
+  // subscribers, so losing that race left the tab on "Loading..." forever.
   useEffect(() => {
-    const unlisten = listen<BanEntry[]>("ban-list", (event) => {
-      setBans(event.payload);
-      setLoading(false);
-      setSelectedIdx(null);
-      setEditing(null);
-      setDirty(false);
-    });
-    return () => { unlisten.then((f) => f()); };
-  }, []);
-
-  // Request the ban list on mount.
-  useEffect(() => {
-    setLoading(true);
-    invoke("request_ban_list").catch(() => setLoading(false));
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    (async () => {
+      const un = await listen<BanEntry[]>("ban-list", (event) => {
+        setBans(event.payload);
+        setLoading(false);
+        setSelectedIdx(null);
+        setEditing(null);
+        setDirty(false);
+      });
+      if (cancelled) {
+        un();
+        return;
+      }
+      unlisten = un;
+      setLoading(true);
+      invoke("request_ban_list").catch(() => setLoading(false));
+    })();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, []);
 
   const handleRefresh = useCallback(() => {

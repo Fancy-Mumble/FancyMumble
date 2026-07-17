@@ -68,12 +68,25 @@ export default function NewRolePage() {
   const [creating, setCreating] = useState(false);
   const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>([]);
 
+  // Listener before request: a fast server's answer can beat an un-awaited
+  // listen() registration and Tauri does not replay events - the Members
+  // step's user picker would then stay empty.
   useEffect(() => {
-    const unlisten = listen<RegisteredUser[]>("user-list", (e) => setRegisteredUsers(e.payload));
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
     acquireRegisteredTextures();
-    invoke("request_user_list").catch(() => {});
+    (async () => {
+      const un = await listen<RegisteredUser[]>("user-list", (e) => setRegisteredUsers(e.payload));
+      if (cancelled) {
+        un();
+        return;
+      }
+      unlisten = un;
+      invoke("request_user_list").catch(() => {});
+    })();
     return () => {
-      unlisten.then((f) => f());
+      cancelled = true;
+      unlisten?.();
       releaseRegisteredTextures();
     };
   }, []);

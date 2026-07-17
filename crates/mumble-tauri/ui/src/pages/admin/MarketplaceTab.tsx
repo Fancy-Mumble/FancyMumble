@@ -120,12 +120,27 @@ export function MarketplaceTab() {
   // opened this session.
   useEffect(() => {
     if (!canInstall) return;
-    const off = listen<{ plugins: ServerPluginEntry[]; host_abi_version: number | null }>("plugin-admin-list", (e) => {
-      useAppStore.setState({ serverHostAbiVersion: e.payload.host_abi_version ?? null });
-      setInstalledPlugins(e.payload.plugins);
-    });
-    invoke("request_server_plugins").catch(() => { /* surfaced elsewhere */ });
-    return () => { off.then((f) => f()); };
+    let cancelled = false;
+    let off: (() => void) | null = null;
+    // Listener before request (same rule as ServerPluginsTab): a fast
+    // server's answer can beat an un-awaited listen() registration and
+    // Tauri does not replay events.
+    (async () => {
+      const un = await listen<{ plugins: ServerPluginEntry[]; host_abi_version: number | null }>("plugin-admin-list", (e) => {
+        useAppStore.setState({ serverHostAbiVersion: e.payload.host_abi_version ?? null });
+        setInstalledPlugins(e.payload.plugins);
+      });
+      if (cancelled) {
+        un();
+        return;
+      }
+      off = un;
+      invoke("request_server_plugins").catch(() => { /* surfaced elsewhere */ });
+    })();
+    return () => {
+      cancelled = true;
+      off?.();
+    };
   }, [canInstall]);
 
   const fetchIndex = useCallback(async () => {

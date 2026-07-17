@@ -82,6 +82,16 @@ export const TID = {
   aclDeleteChannel: "acl-delete-channel",
   /** The confirm button shown after clicking {@link aclDeleteChannel}. */
   aclDeleteConfirm: "acl-delete-confirm",
+  /** A row in the admin "Users" (registered users) table. Carries
+   *  `data-user-name` ({@link MEMBER_NAME_ATTR}). */
+  registeredUserRow: "registered-user-row",
+  /** Root of the generic ConfirmDialog modal (register/unregister user,
+   *  delete messages, ...). */
+  confirmDialog: "confirm-dialog",
+  /** The ConfirmDialog's confirm (primary/danger) button. */
+  confirmDialogConfirm: "confirm-dialog-confirm",
+  /** The ConfirmDialog's cancel button. */
+  confirmDialogCancel: "confirm-dialog-cancel",
   /** The "+ Create role" button on the admin "Roles" tab. */
   rolesCreateButton: "roles-create-button",
   /** A role row on the admin "Roles" tab list. Carries `data-role-name`. */

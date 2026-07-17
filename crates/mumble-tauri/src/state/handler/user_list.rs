@@ -5,17 +5,24 @@ use crate::state::types::{RegisteredUserPayload, UserCommentPayload};
 
 impl HandleMessage for mumble_tcp::UserList {
     fn handle(&self, ctx: &HandlerContext) {
-        // A blob response is a single-user message with the full comment set.
-        // Emit it as a targeted "user-comment" event rather than replacing the
-        // whole registered-user list in the UI.
+        // A comment-blob reply (RequestBlob user_id_comment) is a single-user
+        // message carrying ONLY user_id + comment - the server never sets a
+        // name on it. A genuine directory listing always names every entry,
+        // so `name` is the discriminator. Matching on "one user with a
+        // comment" alone misrouted a real one-entry directory (fresh server,
+        // exactly one registered user whose client auto-published a profile
+        // comment) to "user-comment", and the admin Users tab spun on
+        // "Loading..." forever waiting for a "user-list" that never came.
         if self.users.len() == 1 {
             let u = &self.users[0];
-            if let Some(comment) = u.comment.as_deref().filter(|c| !c.is_empty()) {
-                ctx.emit("user-comment", UserCommentPayload {
-                    user_id: u.user_id,
-                    comment: comment.to_owned(),
-                });
-                return;
+            if u.name.is_none() {
+                if let Some(comment) = u.comment.as_deref().filter(|c| !c.is_empty()) {
+                    ctx.emit("user-comment", UserCommentPayload {
+                        user_id: u.user_id,
+                        comment: comment.to_owned(),
+                    });
+                    return;
+                }
             }
         }
 

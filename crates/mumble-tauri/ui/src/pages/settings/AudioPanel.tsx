@@ -151,15 +151,34 @@ export function AudioPanel({
 
   // Microphone capture-start errors, surfaced from the backend so the user
   // sees an actionable banner instead of only a console log. Cleared when
-  // the microphone opens successfully.
+  // the microphone opens successfully. Await the listener registration and
+  // then seed from the backend's last known state: the probe below can
+  // answer before an un-awaited listen() commits (Tauri does not replay
+  // events), and a busy state detected at startup - while this panel was
+  // unmounted - must still show here.
   const [captureError, setCaptureError] = useState<{ kind: string; message: string; holders?: string[] } | null>(null);
   useEffect(() => {
-    const unlisten = listen<{ kind: string; message: string; holders?: string[] } | null>(
-      "capture-error",
-      (event) => setCaptureError(event.payload ?? null),
-    );
+    let active = true;
+    let unlisten: (() => void) | null = null;
+    (async () => {
+      const un = await listen<{ kind: string; message: string; holders?: string[] } | null>(
+        "capture-error",
+        (event) => setCaptureError(event.payload ?? null),
+      );
+      if (!active) {
+        un();
+        return;
+      }
+      unlisten = un;
+      invoke<{ kind: string; message: string; holders?: string[] } | null>("get_capture_state")
+        .then((s) => {
+          if (active) setCaptureError(s ?? null);
+        })
+        .catch(() => { /* command unavailable (non-desktop) */ });
+    })();
     return () => {
-      unlisten.then((f) => f());
+      active = false;
+      unlisten?.();
     };
   }, []);
   const captureHolderText = (captureError?.holders ?? []).filter(Boolean).join(", ");

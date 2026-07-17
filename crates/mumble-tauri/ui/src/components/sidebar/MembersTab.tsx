@@ -416,42 +416,57 @@ function MembersTabImpl({
         .catch(() => {});
     }
 
-    const unlistenList = listen<RegisteredUser[]>("user-list", (event) => {
-      pendingPayload = event.payload;
-      if (serverKey) {
-        saveCachedRegisteredUsers(serverKey, event.payload).catch(() => {});
-      }
-      if (minElapsed || Date.now() - startedAt >= MIN_SPINNER_MS) {
-        flush();
-      } else {
-        scheduleFlush();
-      }
-    });
-    const unlistenComment = listen<UserCommentPayload>("user-comment", (event) => {
-      const { user_id, comment } = event.payload;
-      setFetchedComments((prev) => {
-        if (prev.get(user_id) === comment) return prev;
-        const next = new Map(prev);
-        next.set(user_id, comment);
-        return next;
-      });
-    });
-    // If the server denies the user-list request (user lacks the Register
-    // permission), the `user-list` event never fires and the skeleton
-    // would spin forever.  Dismiss it immediately on any permission-denied.
-    const unlistenPermDenied = listen("permission-denied", () => {
-      flush();
-    });
+    // Register all listeners BEFORE sending the request: `listen()` is an
+    // async IPC round-trip, and a fast (local) server can answer before an
+    // un-awaited registration commits. Tauri does not replay events to late
+    // subscribers, so losing that race would leave the skeleton up until the
+    // next refresh.
+    const unlisteners: (() => void)[] = [];
     acquireRegisteredTextures();
-    invoke("request_user_list").catch(() => {
-      scheduleFlush();
-    });
+    (async () => {
+      const [unList, unComment, unPermDenied] = await Promise.all([
+        listen<RegisteredUser[]>("user-list", (event) => {
+          pendingPayload = event.payload;
+          if (serverKey) {
+            saveCachedRegisteredUsers(serverKey, event.payload).catch(() => {});
+          }
+          if (minElapsed || Date.now() - startedAt >= MIN_SPINNER_MS) {
+            flush();
+          } else {
+            scheduleFlush();
+          }
+        }),
+        listen<UserCommentPayload>("user-comment", (event) => {
+          const { user_id, comment } = event.payload;
+          setFetchedComments((prev) => {
+            if (prev.get(user_id) === comment) return prev;
+            const next = new Map(prev);
+            next.set(user_id, comment);
+            return next;
+          });
+        }),
+        // If the server denies the user-list request (user lacks the Register
+        // permission), the `user-list` event never fires and the skeleton
+        // would spin forever.  Dismiss it immediately on any permission-denied.
+        listen("permission-denied", () => {
+          flush();
+        }),
+      ]);
+      if (cancelled) {
+        unList();
+        unComment();
+        unPermDenied();
+        return;
+      }
+      unlisteners.push(unList, unComment, unPermDenied);
+      invoke("request_user_list").catch(() => {
+        scheduleFlush();
+      });
+    })();
     return () => {
       cancelled = true;
       if (minTimer !== null) window.clearTimeout(minTimer);
-      unlistenList.then((f) => f());
-      unlistenComment.then((f) => f());
-      unlistenPermDenied.then((f) => f());
+      for (const un of unlisteners) un();
       releaseRegisteredTextures();
     };
   }, [serverKey]);

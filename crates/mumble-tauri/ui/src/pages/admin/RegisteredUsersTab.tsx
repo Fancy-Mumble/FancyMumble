@@ -8,6 +8,8 @@ import { useNavigate } from "react-router-dom";
 import type { AclData, AclGroup, RegisteredUser, RegisteredUserUpdate, UserEntry } from "../../types";
 import { formatRelativeDate } from "../../utils/format";
 import KebabMenu, { type KebabMenuItem } from "../../components/elements/KebabMenu";
+import ConfirmDialog from "../../components/elements/ConfirmDialog";
+import { TID } from "../../testids";
 import { RoleChip } from "../../components/elements/role/RoleChip";
 import UserHoverCard from "../../components/sidebar/user/UserHoverCard";
 import { useAppStore } from "../../store";
@@ -58,8 +60,8 @@ function buildUserActions({ user, isEditing, onRename, onDelete, onManageRoles, 
       onClick: onManageRoles,
     },
     {
-      id: "delete",
-      label: t("registeredUsers.actionDelete", { name: user.name }),
+      id: "unregister",
+      label: t("registeredUsers.actionUnregister", { name: user.name }),
       danger: true,
       onClick: onDelete,
     },
@@ -98,49 +100,69 @@ export function RegisteredUsersTab() {
   const [editName, setEditName] = useState("");
   const editRef = useRef<HTMLInputElement>(null);
 
-  // Pending delete confirmation.
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  // Pending unregister confirmation (the user whose registration is being deleted).
+  const [deletingUser, setDeletingUser] = useState<RegisteredUser | null>(null);
 
-  // Listen for user-list events from the backend.  Also clear the loading
-  // state on permission-denied so the table doesn't show "Loading..." forever
-  // when the server denies the request.
+  // Listen for user-list events and request the list on mount. The request
+  // must only go out AFTER the listeners are registered: `listen()` is an
+  // async IPC round-trip, and against a fast (local) server the user-list
+  // response can arrive before an un-awaited registration commits. Tauri does
+  // not replay events to late subscribers, so losing that race left the tab
+  // on "Loading..." forever. `permission-denied` clears the loading state so
+  // a denied request doesn't hang the table either.
+  // Also release the backend avatar cache on unmount (the response makes
+  // Rust cache every registered avatar).
   useEffect(() => {
-    const unlistenList = listen<RegisteredUser[]>("user-list", (event) => {
-      setUsers(event.payload);
-      setLoading(false);
-    });
-    const unlistenDenied = listen("permission-denied", () => {
-      setLoading(false);
-    });
-    return () => {
-      unlistenList.then((f) => f());
-      unlistenDenied.then((f) => f());
-    };
-  }, []);
-
-  // Request the user list on mount; release the backend avatar cache on
-  // unmount (the response makes Rust cache every registered avatar).
-  useEffect(() => {
-    setLoading(true);
+    let cancelled = false;
+    const unlisteners: (() => void)[] = [];
     acquireRegisteredTextures();
-    invoke("request_user_list").catch(() => setLoading(false));
+    (async () => {
+      const [unList, unDenied] = await Promise.all([
+        listen<RegisteredUser[]>("user-list", (event) => {
+          setUsers(event.payload);
+          setLoading(false);
+        }),
+        listen("permission-denied", () => {
+          setLoading(false);
+        }),
+      ]);
+      if (cancelled) {
+        unList();
+        unDenied();
+        return;
+      }
+      unlisteners.push(unList, unDenied);
+      setLoading(true);
+      invoke("request_user_list").catch(() => setLoading(false));
+    })();
     return () => {
+      cancelled = true;
+      for (const un of unlisteners) un();
       releaseRegisteredTextures();
     };
   }, []);
 
   // Subscribe to root-channel ACL so we can show role chips per user.
+  // Same ordering rule as above: register the listener before requesting.
   useEffect(() => {
     let cancelled = false;
-    const unlisten = listen<AclData>("acl", (event) => {
-      if (!cancelled && event.payload.channel_id === rootId) {
-        setRootAcl(event.payload);
+    let unlisten: (() => void) | null = null;
+    (async () => {
+      const un = await listen<AclData>("acl", (event) => {
+        if (!cancelled && event.payload.channel_id === rootId) {
+          setRootAcl(event.payload);
+        }
+      });
+      if (cancelled) {
+        un();
+        return;
       }
-    });
-    invoke("request_acl", { channelId: rootId }).catch(() => {});
+      unlisten = un;
+      invoke("request_acl", { channelId: rootId }).catch(() => {});
+    })();
     return () => {
       cancelled = true;
-      unlisten.then((f) => f());
+      unlisten?.();
     };
   }, [rootId]);
 
@@ -172,7 +194,7 @@ export function RegisteredUsersTab() {
   const startRename = useCallback((user: RegisteredUser) => {
     setEditingId(user.user_id);
     setEditName(user.name);
-    setDeletingId(null);
+    setDeletingUser(null);
     // Focus the input on next render.
     setTimeout(() => editRef.current?.focus(), 0);
   }, []);
@@ -195,22 +217,22 @@ export function RegisteredUsersTab() {
     invoke("request_user_list").catch(() => setLoading(false));
   }, [editingId, editName]);
 
-  // --- Delete ---
-  const confirmDelete = useCallback((userId: number) => {
-    setDeletingId(userId);
+  // --- Unregister (delete registration + all server-side user data) ---
+  const confirmDelete = useCallback((user: RegisteredUser) => {
+    setDeletingUser(user);
     setEditingId(null);
   }, []);
 
-  const cancelDelete = useCallback(() => setDeletingId(null), []);
+  const cancelDelete = useCallback(() => setDeletingUser(null), []);
 
   const submitDelete = useCallback(async () => {
-    if (deletingId === null) return;
-    const update: RegisteredUserUpdate = { user_id: deletingId, name: null };
+    if (deletingUser === null) return;
+    const update: RegisteredUserUpdate = { user_id: deletingUser.user_id, name: null };
     await invoke("update_user_list", { users: [update] });
-    setDeletingId(null);
+    setDeletingUser(null);
     setLoading(true);
     invoke("request_user_list").catch(() => setLoading(false));
-  }, [deletingId]);
+  }, [deletingUser]);
 
   // Filter + sort users.
   const filtered = users
@@ -300,7 +322,7 @@ export function RegisteredUsersTab() {
               </tr>
             ) : (
               filtered.map((u) => (
-                <tr key={u.user_id}>
+                <tr key={u.user_id} data-testid={TID.registeredUserRow} data-user-name={u.name}>
                   <td>
                     {editingId === u.user_id ? (
                       <span className={styles.inlineEdit}>
@@ -343,28 +365,20 @@ export function RegisteredUsersTab() {
                     </span>
                   </td>
                   <td>
-                    {deletingId === u.user_id ? (
-                      <span className={styles.inlineEdit}>
-                        <span className={styles.confirmText}>{t("registeredUsers.deleteConfirmLabel")}</span>
-                        <button type="button" className={styles.removeBtn} onClick={submitDelete}>{t("registeredUsers.deleteConfirmYes")}</button>
-                        <button type="button" className={styles.refreshBtn} onClick={cancelDelete}>{t("registeredUsers.deleteConfirmNo")}</button>
-                      </span>
-                    ) : (
-                      <KebabMenu
-                        ariaLabel={tFn("registeredUsers.actionsAriaLabel", { name: u.name })}
-                        items={buildUserActions({
-                          user: u,
-                          isEditing: editingId === u.user_id,
-                          onRename: () => startRename(u),
-                          onDelete: () => confirmDelete(u.user_id),
-                          onManageRoles: () => {
-                            setRoleDialogUser(u);
-                            refetchAcl();
-                          },
-                          t: tFn,
-                        })}
-                      />
-                    )}
+                    <KebabMenu
+                      ariaLabel={tFn("registeredUsers.actionsAriaLabel", { name: u.name })}
+                      items={buildUserActions({
+                        user: u,
+                        isEditing: editingId === u.user_id,
+                        onRename: () => startRename(u),
+                        onDelete: () => confirmDelete(u),
+                        onManageRoles: () => {
+                          setRoleDialogUser(u);
+                          refetchAcl();
+                        },
+                        t: tFn,
+                      })}
+                    />
                   </td>
                 </tr>
               ))
@@ -383,6 +397,17 @@ export function RegisteredUsersTab() {
           acl={rootAcl}
           onClose={() => setRoleDialogUser(null)}
           onSaved={refetchAcl}
+        />
+      )}
+
+      {deletingUser && (
+        <ConfirmDialog
+          title={t("registeredUsers.unregisterTitle")}
+          body={tFn("registeredUsers.unregisterBody", { name: deletingUser.name })}
+          confirmLabel={t("registeredUsers.unregisterConfirm")}
+          danger
+          onConfirm={() => { void submitDelete(); }}
+          onCancel={cancelDelete}
         />
       )}
     </>
