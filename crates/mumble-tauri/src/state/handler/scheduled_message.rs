@@ -16,7 +16,7 @@ struct ScheduledMessagePayload {
     creator_hash: Option<String>,
     creator_name: Option<String>,
     created_at: Option<u64>,
-    /// Raw FancyScheduledStatus enum value (0=pending,1=delivered,2=cancelled,3=rejected).
+    /// Raw `FancyScheduledStatus` enum value (0=pending,1=delivered,2=cancelled,3=rejected).
     status: i32,
 }
 
