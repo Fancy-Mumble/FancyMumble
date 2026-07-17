@@ -12,6 +12,8 @@ pub struct Authenticate {
     pub password: Option<String>,
     /// Access tokens for permission-gated channels.
     pub tokens: Vec<String>,
+    /// Optional TOTP code for accounts with 2FA enabled (Fancy extension).
+    pub totp: Option<String>,
 }
 
 impl CommandAction for Authenticate {
@@ -21,6 +23,7 @@ impl CommandAction for Authenticate {
             password: self.password.clone(),
             tokens: self.tokens.clone(),
             opus: Some(true),
+            totp_code: self.totp.clone(),
             ..Default::default()
         };
         CommandOutput {

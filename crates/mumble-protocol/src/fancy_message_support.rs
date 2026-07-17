@@ -142,6 +142,11 @@ fancy_message_support! {
     // -- Runtime server settings (server-processed) -- 0.4.x ---------
     (0, 4, 0) FancyServerSettings            => ServerOnly,
     (0, 4, 0) FancyServerSettingsUpdate      => ServerOnly,
+
+    // -- Self-service account settings (server-processed) -- 0.4.1 ---
+    (0, 4, 1) FancyAccountSettings           => ServerOnly,
+    (0, 4, 1) FancyAccountSettingsUpdate     => ServerOnly,
+    (0, 4, 1) FancyAccountAck                => ServerOnly,
 }
 
 #[cfg(test)]

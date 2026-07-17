@@ -433,6 +433,7 @@
   },
   "tabs": {
     "profile": "Profil",
+    "account": "Konto",
     "voice": "Sprache",
     "shortcuts": "Tastenkürzel",
     "identities": "Identitäten",
@@ -443,6 +444,92 @@
     "localization": "Sprache & Format",
     "channelsRoles": "Kanäle & Rollen",
     "plugins": "Plugins"
+  },
+  "account": {
+    "panelTitle": "Konto",
+    "loading": "Kontoinformationen werden geladen…",
+    "notRegistered": "Kein registriertes Konto",
+    "notRegisteredPara": "Diese Sitzung ist nicht mehr mit einem registrierten Konto verknüpft. Verbinde dich neu, um die Änderung abzuschließen.",
+    "saved": "Gespeichert.",
+    "copy": "Kopieren",
+    "copied": "Kopiert!",
+    "overview": {
+      "title": "Übersicht",
+      "identity": "Registriert als {{name}} (Benutzer-ID {{id}})",
+      "authPassword": "Anmeldung: Passwort",
+      "authCert": "Anmeldung: Zertifikat",
+      "totpOn": "Zwei-Faktor-Authentifizierung: an",
+      "totpOff": "Zwei-Faktor-Authentifizierung: aus"
+    },
+    "password": {
+      "title": "Passwort-Anmeldung",
+      "hintEnabled": "Die Passwort-Anmeldung ist aktiv. Du musst dein Passwort bei jeder Verbindung unter diesem Namen eingeben.",
+      "hintDisabled": "Du meldest dich derzeit nur mit dem Zertifikat dieses Geräts an. Mit einem Passwort kannst du dich von jedem Gerät aus anmelden.",
+      "enableWarning": "Ein Passwort ersetzt die reine Zertifikats-Anmeldung",
+      "enableWarningPara": "Sobald ein Passwort gesetzt ist, funktioniert die Verbindung mit dem Zertifikat allein nicht mehr - das Passwort wird dann bei jeder Verbindung verlangt. Bewahre es sicher auf.",
+      "newLabel": "Neues Passwort",
+      "confirmLabel": "Passwort wiederholen",
+      "placeholder": "Mindestens {{min}} Zeichen",
+      "tooShort": "Das Passwort muss mindestens {{min}} Zeichen lang sein.",
+      "mismatch": "Die Passwörter stimmen nicht überein.",
+      "enable": "Passwort-Anmeldung aktivieren",
+      "change": "Passwort ändern",
+      "disable": "Zurück zur Zertifikats-Anmeldung",
+      "disableHint": "Entfernt das Passwort; du meldest dich wieder mit dem Zertifikat dieses Geräts an.",
+      "disableBlocked": "Das Zurückwechseln ist nur von dem Gerät möglich, dessen Zertifikat mit diesem Konto verknüpft ist (sonst könntest du ausgesperrt werden)."
+    },
+    "rename": {
+      "title": "Konto umbenennen",
+      "hint": "Ändert deinen registrierten Benutzernamen auf diesem Server. Dein Anzeigename wird sofort für alle aktualisiert.",
+      "apply": "Umbenennen"
+    },
+    "email": {
+      "title": "Kontakt-E-Mail",
+      "hint": "Wird auf dem Server als Kontaktadresse des Kontos gespeichert. Leer lassen, um sie zu entfernen.",
+      "warning": "Mit Vorsicht verwenden",
+      "warningPara": "Die E-Mail dient auch der Kontowiederherstellung: Verbindest du dich mit einem erneuerten, CA-verifizierten Zertifikat mit dieser Adresse, ordnet der Server es deinem Konto zu. Trage nur eine Adresse ein, die dir gehört - eine falsche Adresse könnte anderen dein Konto zugänglich machen.",
+      "placeholder": "du@example.com",
+      "apply": "E-Mail speichern"
+    },
+    "totp": {
+      "title": "Zwei-Faktor-Authentifizierung (2FA)",
+      "disabledHint": "Schütze dein Konto mit zeitbasierten Einmalpasswörtern (TOTP). Funktioniert mit Google Authenticator, Microsoft Authenticator, Authy, Aegis, 1Password und anderen Authenticator-Apps.",
+      "begin": "2FA einrichten",
+      "enrollHint": "Füge den Schlüssel unten deiner Authenticator-App hinzu (manuell eingeben oder Einrichtungslink einfügen) und bestätige mit einem generierten Code. Der Schlüssel wird nur einmal angezeigt.",
+      "secretLabel": "Geheimer Schlüssel (Base32)",
+      "secretHint": "Wähle in deiner Authenticator-App \"Schlüssel manuell eingeben\" und dort zeitbasiert (TOTP).",
+      "uriLabel": "Einrichtungslink (otpauth://)",
+      "codeLabel": "6-stelliger Code",
+      "verify": "Bestätigen & aktivieren",
+      "enabledHint": "2FA ist aktiv. Bei jeder Anmeldung wirst du nach einem Code aus deiner Authenticator-App gefragt. Zum Deaktivieren gib einen aktuellen Code ein.",
+      "disable": "2FA deaktivieren"
+    },
+    "unregister": {
+      "title": "Registrierung löschen",
+      "warning": "Das kann nicht rückgängig gemacht werden",
+      "warningPara": "Das Löschen der Registrierung entfernt dein Konto von diesem Server: Deine Benutzer-ID, deinem Konto gewährte Berechtigungen, Rollen-Zuordnungen und gespeicherte Einstellungen gehen verloren. Von dir gepostete Inhalte bleiben erhalten. Du bleibst bis zum nächsten Verbinden als unregistrierter Gast verbunden.",
+      "begin": "Meine Registrierung löschen…",
+      "confirmPrompt": "Gib zur Bestätigung deinen Kontonamen ({{name}}) ein:",
+      "cancel": "Abbrechen",
+      "confirm": "Registrierung endgültig löschen"
+    },
+    "errors": {
+      "not_registered": "Diese Sitzung hat kein registriertes Konto (oder es wurde bereits entfernt).",
+      "password_too_short": "Das Passwort ist zu kurz.",
+      "password_too_long": "Das Passwort ist zu lang.",
+      "no_certificate": "Mit dem Konto ist kein Zertifikat verknüpft - das Passwort kann nicht entfernt werden.",
+      "cert_mismatch": "Das kann nur das Gerät, dessen Zertifikat mit diesem Konto verknüpft ist.",
+      "invalid_name": "Dieser Benutzername ist auf diesem Server nicht erlaubt.",
+      "name_taken": "Dieser Name ist bereits vergeben.",
+      "invalid_email": "Das sieht nicht nach einer gültigen E-Mail-Adresse aus.",
+      "unregister_failed": "Die Registrierung konnte nicht gelöscht werden.",
+      "totp_disabled_by_admin": "Der Server-Administrator hat 2FA auf diesem Server deaktiviert.",
+      "totp_not_pending": "Es läuft keine 2FA-Einrichtung - starte erneut.",
+      "totp_not_enabled": "2FA ist nicht aktiviert.",
+      "totp_wrong_code": "Der Code ist ungültig. Prüfe deine Authenticator-App und die Geräteuhr.",
+      "totp_generation_failed": "Der Server konnte keinen 2FA-Schlüssel erzeugen.",
+      "unknown": "Der Vorgang ist fehlgeschlagen: {{code}}"
+    }
   },
   "avatarEditor": {
     "title": "Avatar bearbeiten",

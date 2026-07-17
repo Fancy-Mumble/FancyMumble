@@ -51,6 +51,11 @@ pub struct Authenticate {
     /// 0 = REGULAR, 1 = BOT
     #[prost(int32, optional, tag = "6", default = "0")]
     pub client_type: ::core::option::Option<i32>,
+    /// Client extension (FancyMumble): time-based one-time password (RFC 6238)
+    /// for accounts with two-factor authentication enabled. The server rejects
+    /// with RejectType TOTPRequired / TOTPInvalid when missing or wrong.
+    #[prost(string, optional, tag = "100")]
+    pub totp_code: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Sent by the client to notify the server that the client is still alive.
 /// Server must reply to the packet with the same timestamp and its own
@@ -138,6 +143,11 @@ pub mod reject {
         AuthenticatorFail = 8,
         /// The server is currently not accepting new connections
         NoNewConnections = 9,
+        /// Fancy extension: the account has two-factor authentication enabled
+        /// and the client must retry with Authenticate.totp_code set.
+        TotpRequired = 10,
+        /// Fancy extension: the provided TOTP code was wrong.
+        TotpInvalid = 11,
     }
     impl RejectType {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -156,6 +166,8 @@ pub mod reject {
                 Self::NoCertificate => "NoCertificate",
                 Self::AuthenticatorFail => "AuthenticatorFail",
                 Self::NoNewConnections => "NoNewConnections",
+                Self::TotpRequired => "TOTPRequired",
+                Self::TotpInvalid => "TOTPInvalid",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -171,6 +183,8 @@ pub mod reject {
                 "NoCertificate" => Some(Self::NoCertificate),
                 "AuthenticatorFail" => Some(Self::AuthenticatorFail),
                 "NoNewConnections" => Some(Self::NoNewConnections),
+                "TOTPRequired" => Some(Self::TotpRequired),
+                "TOTPInvalid" => Some(Self::TotpInvalid),
                 _ => None,
             }
         }
@@ -2779,6 +2793,148 @@ pub struct FancyServerSettings {
 pub struct FancyServerSettingsUpdate {
     #[prost(message, repeated, tag = "1")]
     pub settings: ::prost::alloc::vec::Vec<Setting>,
+}
+/// Server -> Client: snapshot of the sending user's own account state.
+/// Sent in response to a QUERY action and after every successful update.
+/// Wire type ID = 154.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyAccountSettings {
+    /// True while the sending session belongs to a registered (non-SuperUser)
+    /// account.  False after a successful self-unregister.
+    #[prost(bool, optional, tag = "1")]
+    pub registered: ::core::option::Option<bool>,
+    /// Registered user ID of the account.
+    #[prost(uint32, optional, tag = "2")]
+    pub user_id: ::core::option::Option<u32>,
+    /// Registered user name (DB casing).
+    #[prost(string, optional, tag = "3")]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    /// Contact email stored for the account (also used by the CA-verified
+    /// certificate-renewal fallback during authentication).
+    #[prost(string, optional, tag = "4")]
+    pub email: ::core::option::Option<::prost::alloc::string::String>,
+    /// True when password authentication is enabled.  While set, a password is
+    /// REQUIRED to log in under this name - a certificate alone no longer works.
+    #[prost(bool, optional, tag = "5")]
+    pub has_password: ::core::option::Option<bool>,
+    /// True when a TOTP second factor is enrolled for the account.
+    #[prost(bool, optional, tag = "6")]
+    pub totp_enabled: ::core::option::Option<bool>,
+    /// Hex SHA-1 hash of the certificate bound to the account (empty = none).
+    #[prost(string, optional, tag = "7")]
+    pub cert_hash: ::core::option::Option<::prost::alloc::string::String>,
+    /// True when the connecting session's certificate matches cert_hash.
+    /// Clearing the password (cert-only auth) is only allowed in that case.
+    #[prost(bool, optional, tag = "8")]
+    pub cert_matches_session: ::core::option::Option<bool>,
+}
+/// Client -> Server: perform one self-service account operation.
+/// The server answers every action with a FancyAccountAck and - on success -
+/// a fresh FancyAccountSettings snapshot.
+/// Wire type ID = 155.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyAccountSettingsUpdate {
+    #[prost(enumeration = "fancy_account_settings_update::Action", required, tag = "1")]
+    pub action: i32,
+    /// Action-specific payload (see Action comments).
+    #[prost(string, optional, tag = "2")]
+    pub value: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Nested message and enum types in `FancyAccountSettingsUpdate`.
+pub mod fancy_account_settings_update {
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration
+    )]
+    #[repr(i32)]
+    pub enum Action {
+        /// Request the current FancyAccountSettings snapshot.
+        Query = 0,
+        /// Enable password auth / change the password.  value = new password.
+        SetPassword = 1,
+        /// Disable password auth (back to certificate-only login).  Only allowed
+        /// when the session's certificate matches the one bound to the account,
+        /// otherwise the account could be locked out.
+        ClearPassword = 2,
+        /// Rename the own registered account.  value = new user name.
+        Rename = 3,
+        /// Set / change the contact email.  value = new email (empty clears).
+        SetEmail = 4,
+        /// Destructive: delete the own registration (ACL entries, stored
+        /// properties and the account itself).  Takes full effect on reconnect.
+        Unregister = 5,
+        /// Begin TOTP enrolment.  The server generates a secret and returns it
+        /// (plus an otpauth:// URI) in the ack; nothing is persisted yet.
+        TotpBegin = 6,
+        /// Prove possession of the enrolment secret.  value = current 6-digit
+        /// code.  On success the secret is persisted and 2FA becomes active.
+        TotpVerify = 7,
+        /// Disable 2FA.  value = current 6-digit code (proof of possession).
+        TotpDisable = 8,
+    }
+    impl Action {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::Query => "QUERY",
+                Self::SetPassword => "SET_PASSWORD",
+                Self::ClearPassword => "CLEAR_PASSWORD",
+                Self::Rename => "RENAME",
+                Self::SetEmail => "SET_EMAIL",
+                Self::Unregister => "UNREGISTER",
+                Self::TotpBegin => "TOTP_BEGIN",
+                Self::TotpVerify => "TOTP_VERIFY",
+                Self::TotpDisable => "TOTP_DISABLE",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "QUERY" => Some(Self::Query),
+                "SET_PASSWORD" => Some(Self::SetPassword),
+                "CLEAR_PASSWORD" => Some(Self::ClearPassword),
+                "RENAME" => Some(Self::Rename),
+                "SET_EMAIL" => Some(Self::SetEmail),
+                "UNREGISTER" => Some(Self::Unregister),
+                "TOTP_BEGIN" => Some(Self::TotpBegin),
+                "TOTP_VERIFY" => Some(Self::TotpVerify),
+                "TOTP_DISABLE" => Some(Self::TotpDisable),
+                _ => None,
+            }
+        }
+    }
+}
+/// Server -> Client: result of a FancyAccountSettingsUpdate action.
+/// Wire type ID = 156.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyAccountAck {
+    /// Echo of FancyAccountSettingsUpdate.Action this ack belongs to.
+    #[prost(uint32, required, tag = "1")]
+    pub action: u32,
+    #[prost(bool, required, tag = "2")]
+    pub ok: bool,
+    /// Machine-readable error code when ok = false (e.g. "not_registered",
+    /// "password_too_short", "name_taken", "cert_mismatch", "totp_wrong_code").
+    #[prost(string, optional, tag = "3")]
+    pub error: ::core::option::Option<::prost::alloc::string::String>,
+    /// TOTP_BEGIN response: base32-encoded shared secret (RFC 3548) for manual
+    /// entry into an authenticator app.  Never sent again after enrolment.
+    #[prost(string, optional, tag = "4")]
+    pub totp_secret: ::core::option::Option<::prost::alloc::string::String>,
+    /// TOTP_BEGIN response: otpauth://totp/... provisioning URI containing the
+    /// secret, account label and issuer.
+    #[prost(string, optional, tag = "5")]
+    pub totp_uri: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Fancy Mumble extension: a single channel attribute flag. ChannelState carries
 /// a repeated set of these (its `attributes` field), describing the channel from

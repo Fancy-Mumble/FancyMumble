@@ -245,6 +245,38 @@ export const TID = {
   streamStatsResolution: "stream-stats-resolution",
   /** Per-track "Freezes" row in the stats panel ("n (x.x s total)"). */
   streamStatsFreezes: "stream-stats-freezes",
+
+  // -- Settings: Account (self-service registration) ------------------------
+  /** Overview block showing name / user id / auth mode / 2FA state. */
+  accountOverview: "account-overview",
+  accountPasswordInput: "account-password-input",
+  accountPasswordConfirmInput: "account-password-confirm-input",
+  /** Enables password auth / changes the password. */
+  accountPasswordSave: "account-password-save",
+  /** Switches back to certificate-only login (clears the password). */
+  accountPasswordClear: "account-password-clear",
+  accountRenameInput: "account-rename-input",
+  accountRenameSave: "account-rename-save",
+  accountEmailInput: "account-email-input",
+  accountEmailSave: "account-email-save",
+  /** Starts TOTP enrolment (server replies with the shared secret). */
+  accountTotpBegin: "account-totp-begin",
+  /** Read-only input holding the base32 TOTP secret during enrolment. */
+  accountTotpSecret: "account-totp-secret",
+  /** 6-digit code input during enrolment. */
+  accountTotpCodeInput: "account-totp-code-input",
+  accountTotpVerify: "account-totp-verify",
+  /** 6-digit code input required to disable 2FA. */
+  accountTotpDisableInput: "account-totp-disable-input",
+  accountTotpDisable: "account-totp-disable",
+  /** Opens the type-name-to-confirm unregister flow. */
+  accountUnregisterBegin: "account-unregister-begin",
+  accountUnregisterConfirmInput: "account-unregister-confirm-input",
+  accountUnregisterConfirm: "account-unregister-confirm",
+  /** TOTP code input on the login (connect) dialog. */
+  connectTotpInput: "connect-totp-input",
+  /** Submit button of the login TOTP dialog. */
+  connectTotpSubmit: "connect-totp-submit",
 } as const;
 
 export type TestId = (typeof TID)[keyof typeof TID];

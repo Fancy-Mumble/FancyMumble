@@ -107,6 +107,7 @@ async fn connect_and_authenticate(
         username: username.into(),
         password: None,
         tokens: vec![],
+        totp: None,
     };
     let auth_output = auth.execute(&ServerState::new());
     for msg in &auth_output.tcp_messages {
@@ -497,6 +498,7 @@ async fn test_server_config_has_large_limits() {
         username: "ConfigCheckUser".into(),
         password: None,
         tokens: vec![],
+        totp: None,
     };
     for msg in &auth.execute(&ServerState::new()).tcp_messages {
         transport.send(msg).await.unwrap();
@@ -577,6 +579,7 @@ async fn test_channel_description_blob_request() {
         username: "SuperUser".into(),
         password: Some("testpassword".into()),
         tokens: vec![],
+        totp: None,
     };
     for msg in &auth.execute(&ServerState::new()).tcp_messages {
         su.send(msg).await.unwrap();

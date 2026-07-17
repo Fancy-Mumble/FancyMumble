@@ -23,6 +23,7 @@ impl AppState {
         username: String,
         cert_label: Option<String>,
         password: Option<String>,
+        totp: Option<String>,
     ) -> Result<(), String> {
         let app_handle = self.app_handle().ok_or("App not initialized")?;
 
@@ -113,6 +114,7 @@ impl AppState {
                     app_handle: &app_handle,
                     username,
                     password,
+                    totp,
                     registry: &registry,
                     server_id,
                     active_handle: &active_handle,
@@ -360,6 +362,7 @@ struct ConnectResultCtx<'a> {
     app_handle: &'a AppHandle,
     username: String,
     password: Option<String>,
+    totp: Option<String>,
     registry: &'a super::registry::Registry,
     server_id: ServerId,
     active_handle: &'a super::shared_handle::SharedHandle,
@@ -379,6 +382,7 @@ async fn handle_connect_result(
         app_handle,
         username,
         password,
+        totp,
         registry,
         server_id,
         active_handle,
@@ -397,6 +401,7 @@ async fn handle_connect_result(
                     username,
                     password,
                     tokens: vec![],
+                    totp,
                 })
                 .await
             {

@@ -417,9 +417,9 @@ pub(crate) fn handle_proto_ack(
                         .is_some_and(|id| message_ids.iter().any(|x| x == id))
                 {
                     m.send_failed = true;
-                    if let Some(ref id) = m.message_id {
-                        marked.push(id.clone());
-                    }
+                    // The filter above proved message_id is Some; extend()
+                    // keeps this arm flat (clippy::excessive_nesting).
+                    marked.extend(m.message_id.iter().cloned());
                 }
             }
         }

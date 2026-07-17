@@ -20,6 +20,12 @@
     "savePassword": "保存密码",
     "connect": "连接"
   },
+  "totp": {
+    "title": "需要双重验证码",
+    "enterMessage": "账户 <strong>{{target}}</strong> 已启用双重验证。请输入验证器应用中的 6 位验证码。",
+    "codeLabel": "6 位验证码",
+    "connect": "连接"
+  },
   "edit": {
     "title": "编辑服务器",
     "labelField": "标签",

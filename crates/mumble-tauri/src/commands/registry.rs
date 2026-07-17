@@ -188,6 +188,9 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         // -- server settings / plugin admin ----------------------------
         super::server_settings::get_server_settings,
         super::server_settings::save_server_settings,
+        // -- account (self-service) ------------------------------------
+        super::account::get_account_settings,
+        super::account::update_account_settings,
         super::plugin_admin::get_plugin_registry,
         super::plugin_admin::get_plugin_broadcasts,
         super::plugin_admin::request_server_plugins,

@@ -20,6 +20,12 @@
     "savePassword": "Save password",
     "connect": "Connect"
   },
+  "totp": {
+    "title": "Two-Factor Code Required",
+    "enterMessage": "The account <strong>{{target}}</strong> is protected with two-factor authentication. Enter the 6-digit code from your authenticator app.",
+    "codeLabel": "6-digit code",
+    "connect": "Connect"
+  },
   "edit": {
     "title": "Edit Server",
     "labelField": "Label",

@@ -6,6 +6,7 @@
 //! submodule (or a new one), not to this file - it should only ever list
 //! module declarations and re-exports.
 
+mod account;
 mod admin;
 mod audio;
 mod events;
@@ -20,6 +21,7 @@ mod ui;
 // internally by the submodules' `#[serde(...)]` attributes).
 pub(crate) use serde_helpers::{blob_marker, serialize_bytes_base64};
 
+pub use account::*;
 pub use admin::*;
 pub use audio::*;
 pub use events::*;

@@ -17,6 +17,7 @@ import ServerEditSheet from "../components/server/ServerEditSheet";
 import PublicServerList from "../components/server/PublicServerList";
 import BrandLogo from "../components/elements/BrandLogo";
 import PasswordDialog from "../components/server/PasswordDialog";
+import TotpDialog from "../components/server/TotpDialog";
 import { TID } from "../testids";
 import styles from "./ConnectPage.module.css";
 
@@ -36,6 +37,7 @@ export default function ConnectPage() {
   const {
     connect, disconnect, status, error, passwordRequired, pendingConnect,
     retryWithPassword, dismissPasswordPrompt, bootstrapStage,
+    totpRequired, retryWithTotp,
   } = useAppStore();
   // Keep the loading bar up not just while the TLS handshake runs, but
   // through the post-connect data bootstrap (channels, users, own session,
@@ -659,6 +661,14 @@ export default function ConnectPage() {
         error={error}
         showSaveOption={matchingServerId !== null}
         onChangeUsername={handleChangeUsername}
+      />
+      <TotpDialog
+        open={totpRequired}
+        onSubmit={(code) => void retryWithTotp(code)}
+        onCancel={dismissPasswordPrompt}
+        serverHost={pendingConnect?.host}
+        username={pendingConnect?.username}
+        error={error}
       />
     </div>
   );

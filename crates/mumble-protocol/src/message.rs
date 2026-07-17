@@ -167,6 +167,12 @@ pub enum TcpMessageType {
     FancyServerSettings = 152,
     /// Fancy Mumble: admin submits changed server settings.
     FancyServerSettingsUpdate = 153,
+    /// Fancy Mumble: server snapshot of the own registered account's settings.
+    FancyAccountSettings = 154,
+    /// Fancy Mumble: user submits a self-service account operation.
+    FancyAccountSettingsUpdate = 155,
+    /// Fancy Mumble: server status reply for an account operation.
+    FancyAccountAck = 156,
     /// Fancy Mumble: generic plugin envelope (bidirectional).
     PluginMessage = 200,
     /// Fancy Mumble: server enumerates loaded plugins after `ServerSync`.
@@ -364,6 +370,12 @@ pub enum ControlMessage {
     FancyServerSettings(mumble_tcp::FancyServerSettings),
     /// Fancy: admin submits changed server settings.
     FancyServerSettingsUpdate(mumble_tcp::FancyServerSettingsUpdate),
+    /// Fancy: server snapshot of the own registered account's settings.
+    FancyAccountSettings(mumble_tcp::FancyAccountSettings),
+    /// Fancy: user submits a self-service account operation.
+    FancyAccountSettingsUpdate(mumble_tcp::FancyAccountSettingsUpdate),
+    /// Fancy: server status reply for an account operation.
+    FancyAccountAck(mumble_tcp::FancyAccountAck),
     /// Fancy: generic plugin envelope (bidirectional).
     PluginMessage(mumble_tcp::PluginMessage),
     /// Fancy: server enumerates loaded plugins.
@@ -404,6 +416,7 @@ message_type_mapping! {
     FancyPluginAdminSetEnabled, FancyPluginAdminInstall,
     FancyPluginAdminUninstall, FancyPluginAdminAck,
     FancyServerSettings, FancyServerSettingsUpdate,
+    FancyAccountSettings, FancyAccountSettingsUpdate, FancyAccountAck,
     PluginMessage, PluginRegistry,
 }
 
@@ -486,6 +499,9 @@ mod tests {
             (128, TcpMessageType::PchatPin),
             (129, TcpMessageType::PchatPinDeliver),
             (130, TcpMessageType::PchatPinFetchResponse),
+            (154, TcpMessageType::FancyAccountSettings),
+            (155, TcpMessageType::FancyAccountSettingsUpdate),
+            (156, TcpMessageType::FancyAccountAck),
         ];
 
         for (id, expected_type) in &expected {
@@ -565,7 +581,7 @@ mod tests {
         assert!(TcpMessageType::try_from(141u16).is_err());
         assert!(TcpMessageType::try_from(142u16).is_err());
         assert!(TcpMessageType::try_from(143u16).is_err());
-        assert!(TcpMessageType::try_from(154u16).is_err());
+        assert!(TcpMessageType::try_from(157u16).is_err());
         assert!(TcpMessageType::try_from(199u16).is_err());
         assert!(TcpMessageType::try_from(202u16).is_err());
         assert!(TcpMessageType::try_from(u16::MAX).is_err());
