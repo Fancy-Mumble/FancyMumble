@@ -156,7 +156,9 @@ jobs:
 
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
-        run: choco install protoc -y
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       # -- Frontend ------------------------------------------------
       - name: Install npm dependencies
@@ -352,7 +354,9 @@ jobs:
 
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
-        run: choco install protoc -y
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install npm dependencies
         working-directory: crates/mumble-tauri/ui
@@ -644,9 +648,15 @@ jobs:
           sudo apt-get install -y \
             libasound2-dev protobuf-compiler libgl1-mesa-dev libxkbcommon-dev ninja-build
 
-      - name: Install protoc and ninja (Windows)
+      - name: Install protoc (Windows)
         if: runner.os == 'Windows'
-        run: choco install protoc ninja -y
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install ninja (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja -y
 
       - name: Build qt6ui (Windows)
         if: runner.os == 'Windows'
