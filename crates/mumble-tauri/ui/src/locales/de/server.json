@@ -20,6 +20,12 @@
     "savePassword": "Passwort speichern",
     "connect": "Verbinden"
   },
+  "totp": {
+    "title": "Zwei-Faktor-Code erforderlich",
+    "enterMessage": "Das Konto <strong>{{target}}</strong> ist mit Zwei-Faktor-Authentifizierung geschützt. Gib den 6-stelligen Code aus deiner Authenticator-App ein.",
+    "codeLabel": "6-stelliger Code",
+    "connect": "Verbinden"
+  },
   "edit": {
     "title": "Server bearbeiten",
     "labelField": "Bezeichnung",

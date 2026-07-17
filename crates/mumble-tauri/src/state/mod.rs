@@ -33,6 +33,7 @@ pub use file_server::{
 mod handler;
 pub(crate) mod hash_names;
 pub(crate) mod local_cache;
+mod account;
 mod messaging;
 mod onboarding;
 mod server_settings;
@@ -220,6 +221,9 @@ pub(super) struct SharedState {
     /// Latest editable server-settings snapshot (`None` until a
     /// `FancyServerSettings` arrives; only admins receive it).
     pub server_settings: Option<ServerSettingsSnapshot>,
+    /// Latest own-account snapshot (`None` until a `FancyAccountSettings`
+    /// arrives in response to an account query/update).
+    pub account_settings: Option<AccountSettings>,
     /// Cached snapshot of the most recent `PluginRegistry` the server
     /// has broadcast.  The protobuf message is delivered once after
     /// `ServerSync` and never resent, so we cache it here to let the

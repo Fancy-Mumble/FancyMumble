@@ -34,7 +34,10 @@ import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
 import {
   UserIcon, MicIcon, KeyboardIcon, KeyIcon, BellIcon, LockIcon,
   PaletteIcon, GlobeIcon, PuzzleIcon, SlidersIcon, UsersGroupIcon,
+  ShieldIcon,
 } from "../../icons";
+import { AccountPanel } from "./AccountPanel";
+import { isAccountSettingsSupported } from "./accountStore";
 import ChannelsAndRolesPanel from "../../components/onboarding/ChannelsAndRolesPanel";
 import { isOnboardingSupported } from "../../components/onboarding/onboardingStore";
 import PluginsPanel from "./PluginsPanel";
@@ -43,7 +46,7 @@ import styles from "./SettingsPage.module.css";
 
 // -- Types & constants ----------------------------------------------
 
-type Tab = "profile" | "voice" | "shortcuts" | "identities" | "advanced" | "personalize" | "localization" | "notifications" | "privacy" | "channels-roles" | "plugins";
+type Tab = "profile" | "account" | "voice" | "shortcuts" | "identities" | "advanced" | "personalize" | "localization" | "notifications" | "privacy" | "channels-roles" | "plugins";
 
 const DEFAULT_AUDIO: AudioSettings = {
   selected_device: null,
@@ -152,13 +155,41 @@ export default function SettingsPage() {
   const BASE_TABS = buildTabs(t as (key: string) => string, hasPlugins).filter(
     (tab) => !isMobile || tab.id !== "shortcuts",
   );
-  const TABS: TabDef<Tab>[] = onboardingSupported
+  // "Account" (self-service server registration) is only meaningful while
+  // connected as a registered user, and only on servers that understand the
+  // account-settings messages (Fancy >= 0.4.1). Legacy Mumble servers and
+  // older Fancy servers would silently drop them, so hide the tab there.
+  const ownUserId = useAppStore((s) => {
+    const own = s.users.find((u) => u.session === s.ownSession);
+    return own?.user_id ?? null;
+  });
+  const showAccountTab =
+    isConnected
+    && ownUserId != null
+    && ownUserId > 0
+    && isAccountSettingsSupported(serverFancyVersion);
+  const WITH_ACCOUNT: TabDef<Tab>[] = showAccountTab
     ? [
-        ...BASE_TABS.slice(0, BASE_TABS.length - 1),
-        { id: "channels-roles", label: t("tabs.channelsRoles"), icon: <UsersGroupIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
-        BASE_TABS[BASE_TABS.length - 1],
+        BASE_TABS[0],
+        { id: "account", label: t("tabs.account"), icon: <ShieldIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+        ...BASE_TABS.slice(1),
       ]
     : BASE_TABS;
+  const TABS: TabDef<Tab>[] = onboardingSupported
+    ? [
+        ...WITH_ACCOUNT.slice(0, WITH_ACCOUNT.length - 1),
+        { id: "channels-roles", label: t("tabs.channelsRoles"), icon: <UsersGroupIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+        WITH_ACCOUNT[WITH_ACCOUNT.length - 1],
+      ]
+    : WITH_ACCOUNT;
+
+  // If the account tab disappears (disconnect / unregister elsewhere) while
+  // it is active, fall back to the profile tab.
+  useEffect(() => {
+    if (tab === "account" && !showAccountTab) {
+      setTab("profile");
+    }
+  }, [tab, showAccountTab]);
 
   // Audio
   const [devices, setDevices] = useState<AudioDevice[]>([]);
@@ -782,6 +813,8 @@ export default function SettingsPage() {
               onGoToIdentities={() => setTab("identities")}
             />
           )}
+
+          {tab === "account" && <AccountPanel />}
 
           {tab === "voice" && (
             <AudioPanel

@@ -162,6 +162,10 @@ if (typeof window !== "undefined") {
 
 let autoReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let manualDisconnectRequested = false;
+/** Password sent with the most recent connect attempt. Kept module-local (not
+ *  in the store) so a follow-up 2FA prompt can retry with password + code
+ *  without persisting the secret in devtools-inspectable state. */
+let lastAttemptedPassword: string | null = null;
 /** Sessions whose disconnect was triggered by the user (e.g. via the
  *  tab close button).  The `server-disconnected` listener consults this
  *  set so it does not surface a "Connection lost" overlay for what the
@@ -489,6 +493,8 @@ export interface AppState extends PersistentChatSlice, DmSlice, VoiceSlice, Noti
   passwordRequired: boolean;
   /** True after the user has submitted a password at least once (so we can show rejection errors on retries). */
   passwordAttempted: boolean;
+  /** Set when the server rejects with TOTPRequired/TOTPInvalid - prompts the UI for a 2FA code. */
+  totpRequired: boolean;
   /** Connection params stored when a password prompt is needed so the user can retry. */
   pendingConnect: { host: string; port: number; username: string; certLabel: string | null } | null;
   /** Certificate label used for the active connection. Stays set until explicit disconnect. */
@@ -516,7 +522,7 @@ export interface AppState extends PersistentChatSlice, DmSlice, VoiceSlice, Noti
   nextReconnectAt: number | null;
 
   // Actions
-  connect: (host: string, port: number, username: string, certLabel?: string | null, password?: string | null) => Promise<void>;
+  connect: (host: string, port: number, username: string, certLabel?: string | null, password?: string | null, totp?: string | null) => Promise<void>;
   disconnect: () => Promise<void>;
   selectChannel: (id: number) => Promise<void>;
   joinChannel: (id: number) => Promise<void>;
@@ -657,7 +663,10 @@ export interface AppState extends PersistentChatSlice, DmSlice, VoiceSlice, Noti
   reset: () => void;
   /** Retry connection with a password after a WrongUserPW/WrongServerPW rejection. */
   retryWithPassword: (password: string) => Promise<void>;
-  /** Dismiss the password prompt without retrying. */
+  /** Retry connection with a 2FA code after a TOTPRequired/TOTPInvalid rejection.
+   *  Re-uses the password from the last connect attempt (if any). */
+  retryWithTotp: (code: string) => Promise<void>;
+  /** Dismiss the password / 2FA prompt without retrying. */
   dismissPasswordPrompt: () => void;
 
   // Plugin lifecycle
@@ -816,6 +825,7 @@ const INITIAL: Pick<
   | "serverLog"
   | "passwordRequired"
   | "passwordAttempted"
+  | "totpRequired"
   | "pendingConnect"
   | "connectedCertLabel"
   | "bootstrapStage"
@@ -890,6 +900,7 @@ const INITIAL: Pick<
   serverLog: [],
   passwordRequired: false,
   passwordAttempted: false,
+  totpRequired: false,
   pendingConnect: null,
   connectedCertLabel: null,
   bootstrapStage: null,
@@ -1103,13 +1114,16 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     intentionallyClosingSessions.delete(id);
   },
 
-  connect: async (host, port, username, certLabel, password) => {
+  connect: async (host, port, username, certLabel, password, totp) => {
     manualDisconnectRequested = false;
     clearAutoReconnectTimer();
+    // Remembered so a follow-up TOTP prompt can re-send the same password.
+    lastAttemptedPassword = password ?? null;
     set({
       status: "connecting",
       error: null,
       passwordRequired: false,
+      totpRequired: false,
       pendingConnect: { host, port, username, certLabel: certLabel ?? null },
       connectedCertLabel: certLabel ?? null,
       bootstrapStage: "Negotiating with server...",
@@ -1121,6 +1135,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
         username,
         certLabel: certLabel ?? null,
         password: password ?? null,
+        totp: totp ?? null,
       });
       // Sync activeServerId before rejection events arrive, so listener
       // routing works even if the new session id isn't known yet.
@@ -1616,8 +1631,22 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     await get().connect(pending.host, pending.port, pending.username, pending.certLabel, password);
   },
 
+  retryWithTotp: async (code) => {
+    const pending = get().pendingConnect;
+    if (!pending) return;
+    set({ totpRequired: false, passwordAttempted: true, pendingConnect: null });
+    await get().connect(
+      pending.host,
+      pending.port,
+      pending.username,
+      pending.certLabel,
+      lastAttemptedPassword,
+      code,
+    );
+  },
+
   dismissPasswordPrompt: () => {
-    set({ passwordRequired: false, passwordAttempted: false, pendingConnect: null, connectedCertLabel: null });
+    set({ passwordRequired: false, passwordAttempted: false, totpRequired: false, pendingConnect: null, connectedCertLabel: null });
   },
 
   // -- Plugin lifecycle -------------------------------------------
@@ -2970,16 +2999,27 @@ export async function initEventListeners(
       // password prompt still appears instead of silently retrying with
       // the wrong credentials.
       const reasonText = event.payload.reason ?? "";
+      // TOTPRequired = 10, TOTPInvalid = 11 (Fancy extension: the account
+      // has 2FA enabled and needs a code from the authenticator app).
+      const isTotpError =
+        rt === 10 || rt === 11
+        || (rt == null && /two-factor|authentication code/i.test(reasonText));
       const reasonLooksLikePwError =
         /password|wrong\s+(?:user|server)|certificate/i.test(reasonText);
       const isPasswordError =
-        rt === 3 || rt === 4 || (rt == null && reasonLooksLikePwError);
-      if (isPasswordError) {
+        !isTotpError && (rt === 3 || rt === 4 || (rt == null && reasonLooksLikePwError));
+      if (isPasswordError || isTotpError) {
         const { passwordAttempted } = useAppStore.getState();
+        // For 2FA: only surface an error when the code was actually wrong
+        // (rt 11), not on the initial "code required" round-trip.
+        const credError = isTotpError
+          ? (rt === 11 ? event.payload.reason : null)
+          : (passwordAttempted ? event.payload.reason : null);
         useAppStore.setState({
           status: "disconnected",
-          error: passwordAttempted ? event.payload.reason : null,
-          passwordRequired: true,
+          error: credError,
+          passwordRequired: isPasswordError,
+          totpRequired: isTotpError,
           bootstrapStage: null,
           // pendingConnect was set by the connect action - keep it
           // so the dialog can re-issue the connect with the password.
@@ -2997,8 +3037,9 @@ export async function initEventListeners(
           // metadata, which would clobber passwordRequired.  Restore.
           useAppStore.setState({
             status: "disconnected",
-            passwordRequired: true,
-            error: passwordAttempted ? event.payload.reason : null,
+            passwordRequired: isPasswordError,
+            totpRequired: isTotpError,
+            error: credError,
             pendingConnect: useAppStore.getState().pendingConnect,
           });
           navigate("/chat");

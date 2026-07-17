@@ -4,6 +4,7 @@
 //! implements `HandleMessage` for the corresponding protobuf struct.
 //! This keeps each handler focused and testable in isolation.
 
+mod account;
 mod acl;
 mod ban_list;
 mod channel_remove;
@@ -173,6 +174,8 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::FancyOnboardingConfig(m) => m.handle(ctx),
         ControlMessage::FancyOnboardingResponseDeliver(m) => m.handle(ctx),
         ControlMessage::FancyServerSettings(m) => m.handle(ctx),
+        ControlMessage::FancyAccountSettings(m) => m.handle(ctx),
+        ControlMessage::FancyAccountAck(m) => m.handle(ctx),
         ControlMessage::FancyPluginAdminList(m) => m.handle(ctx),
         ControlMessage::FancyPluginAdminAck(m) => m.handle(ctx),
         ControlMessage::PluginMessage(m) => m.handle(ctx),

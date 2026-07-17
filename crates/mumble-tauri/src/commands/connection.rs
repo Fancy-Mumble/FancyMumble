@@ -30,9 +30,10 @@ pub(crate) async fn connect(
     username: String,
     cert_label: Option<String>,
     password: Option<String>,
+    totp: Option<String>,
 ) -> Result<(), String> {
     validate_cert_label(cert_label.as_deref())?;
-    state.connect(host, port, username, cert_label, password).await
+    state.connect(host, port, username, cert_label, password, totp).await
 }
 
 #[tauri::command]

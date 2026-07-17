@@ -21,3 +21,4 @@ export * from "./pchat";
 export * from "./admin";
 export * from "./onboarding";
 export * from "./serversettings";
+export * from "./account";

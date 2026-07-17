@@ -20,6 +20,12 @@
     "savePassword": "Enregistrer le mot de passe",
     "connect": "Se connecter"
   },
+  "totp": {
+    "title": "Code à deux facteurs requis",
+    "enterMessage": "Le compte <strong>{{target}}</strong> est protégé par l'authentification à deux facteurs. Saisissez le code à 6 chiffres de votre application d'authentification.",
+    "codeLabel": "Code à 6 chiffres",
+    "connect": "Se connecter"
+  },
   "edit": {
     "title": "Modifier le serveur",
     "labelField": "Libellé",

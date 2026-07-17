@@ -177,7 +177,7 @@ impl AppCore {
         match client::run(config, handler).await {
             Ok((client, join)) => {
                 let _ = client
-                    .send(Authenticate { username, password, tokens: vec![] })
+                    .send(Authenticate { username, password, tokens: vec![], totp: None })
                     .await;
                 // Start muted (don't transmit) but NOT deafened, so the user
                 // hears others immediately.  Enabling voice unmutes.

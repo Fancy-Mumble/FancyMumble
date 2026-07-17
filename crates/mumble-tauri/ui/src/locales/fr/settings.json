@@ -433,6 +433,7 @@
   },
   "tabs": {
     "profile": "Profil",
+    "account": "Compte",
     "voice": "Voix",
     "shortcuts": "Raccourcis",
     "identities": "Identités",
@@ -443,6 +444,92 @@
     "localization": "Langue & Format",
     "channelsRoles": "Canaux & Rôles",
     "plugins": "Plugins"
+  },
+  "account": {
+    "panelTitle": "Compte",
+    "loading": "Chargement des informations du compte…",
+    "notRegistered": "Aucun compte enregistré",
+    "notRegisteredPara": "Cette session n'est plus liée à un compte enregistré. Reconnectez-vous pour finaliser le changement.",
+    "saved": "Enregistré.",
+    "copy": "Copier",
+    "copied": "Copié !",
+    "overview": {
+      "title": "Aperçu",
+      "identity": "Enregistré comme {{name}} (ID utilisateur {{id}})",
+      "authPassword": "Connexion : mot de passe",
+      "authCert": "Connexion : certificat",
+      "totpOn": "Authentification à deux facteurs : activée",
+      "totpOff": "Authentification à deux facteurs : désactivée"
+    },
+    "password": {
+      "title": "Connexion par mot de passe",
+      "hintEnabled": "La connexion par mot de passe est activée. Vous devez saisir votre mot de passe à chaque connexion sous ce nom.",
+      "hintDisabled": "Vous vous connectez actuellement uniquement avec le certificat de cet appareil. Définir un mot de passe permet de se connecter depuis n'importe quel appareil.",
+      "enableWarning": "Un mot de passe remplace la connexion par certificat seul",
+      "enableWarningPara": "Dès qu'un mot de passe est défini, la connexion avec le seul certificat ne fonctionne plus - le mot de passe est alors exigé à chaque connexion. Conservez-le en lieu sûr.",
+      "newLabel": "Nouveau mot de passe",
+      "confirmLabel": "Répéter le mot de passe",
+      "placeholder": "Au moins {{min}} caractères",
+      "tooShort": "Le mot de passe doit contenir au moins {{min}} caractères.",
+      "mismatch": "Les mots de passe ne correspondent pas.",
+      "enable": "Activer la connexion par mot de passe",
+      "change": "Changer le mot de passe",
+      "disable": "Revenir à la connexion par certificat",
+      "disableHint": "Supprime le mot de passe ; vous vous reconnecterez avec le certificat de cet appareil.",
+      "disableBlocked": "Le retour n'est possible que depuis l'appareil dont le certificat est lié à ce compte (sinon vous pourriez être bloqué)."
+    },
+    "rename": {
+      "title": "Renommer le compte",
+      "hint": "Change votre nom d'utilisateur enregistré sur ce serveur. Votre nom affiché est mis à jour immédiatement pour tout le monde.",
+      "apply": "Renommer"
+    },
+    "email": {
+      "title": "E-mail de contact",
+      "hint": "Stocké sur le serveur comme adresse de contact du compte. Laissez vide pour la supprimer.",
+      "warning": "À manier avec précaution",
+      "warningPara": "L'e-mail sert aussi de facteur de récupération : si vous vous connectez avec un certificat renouvelé et vérifié par une AC portant cette adresse, le serveur l'associe à votre compte. N'indiquez qu'une adresse qui vous appartient - une adresse erronée pourrait permettre à autrui de récupérer votre compte.",
+      "placeholder": "vous@example.com",
+      "apply": "Enregistrer l'e-mail"
+    },
+    "totp": {
+      "title": "Authentification à deux facteurs (2FA)",
+      "disabledHint": "Protégez votre compte avec des mots de passe à usage unique basés sur le temps (TOTP). Compatible avec Google Authenticator, Microsoft Authenticator, Authy, Aegis, 1Password et d'autres applications.",
+      "begin": "Configurer la 2FA",
+      "enrollHint": "Ajoutez la clé ci-dessous à votre application d'authentification (saisie manuelle ou lien de configuration), puis confirmez avec un code généré. La clé n'est affichée qu'une seule fois.",
+      "secretLabel": "Clé secrète (base32)",
+      "secretHint": "Dans votre application, choisissez « Saisir une clé manuellement » et sélectionnez « basé sur le temps » (TOTP).",
+      "uriLabel": "Lien de configuration (otpauth://)",
+      "codeLabel": "Code à 6 chiffres",
+      "verify": "Confirmer & activer",
+      "enabledHint": "La 2FA est activée. À chaque connexion, un code de votre application d'authentification vous sera demandé. Pour la désactiver, saisissez un code actuel.",
+      "disable": "Désactiver la 2FA"
+    },
+    "unregister": {
+      "title": "Supprimer l'enregistrement",
+      "warning": "Action irréversible",
+      "warningPara": "Supprimer votre enregistrement retire votre compte de ce serveur : votre ID utilisateur, les permissions accordées à votre compte, les attributions de rôles et vos réglages stockés sont perdus. Vos contenus publiés restent. Vous restez connecté comme invité non enregistré jusqu'à la prochaine reconnexion.",
+      "begin": "Supprimer mon enregistrement…",
+      "confirmPrompt": "Saisissez le nom de votre compte ({{name}}) pour confirmer :",
+      "cancel": "Annuler",
+      "confirm": "Supprimer définitivement l'enregistrement"
+    },
+    "errors": {
+      "not_registered": "Cette session n'a pas de compte enregistré (ou il a déjà été supprimé).",
+      "password_too_short": "Le mot de passe est trop court.",
+      "password_too_long": "Le mot de passe est trop long.",
+      "no_certificate": "Aucun certificat n'est lié au compte - le mot de passe ne peut pas être supprimé.",
+      "cert_mismatch": "Seul l'appareil dont le certificat est lié à ce compte peut faire cela.",
+      "invalid_name": "Ce nom d'utilisateur n'est pas autorisé sur ce serveur.",
+      "name_taken": "Ce nom est déjà pris.",
+      "invalid_email": "Cela ne ressemble pas à une adresse e-mail valide.",
+      "unregister_failed": "L'enregistrement n'a pas pu être supprimé.",
+      "totp_disabled_by_admin": "L'administrateur du serveur a désactivé la 2FA sur ce serveur.",
+      "totp_not_pending": "Aucune configuration 2FA en cours - recommencez.",
+      "totp_not_enabled": "La 2FA n'est pas activée.",
+      "totp_wrong_code": "Le code n'est pas valide. Vérifiez votre application et l'horloge de l'appareil.",
+      "totp_generation_failed": "Le serveur n'a pas pu générer de clé 2FA.",
+      "unknown": "L'opération a échoué : {{code}}"
+    }
   },
   "avatarEditor": {
     "title": "Modifier l'avatar",

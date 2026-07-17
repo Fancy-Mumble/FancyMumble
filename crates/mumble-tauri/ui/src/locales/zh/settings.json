@@ -439,6 +439,7 @@
   },
   "tabs": {
     "profile": "资料",
+    "account": "账户",
     "voice": "语音",
     "shortcuts": "快捷键",
     "identities": "身份",
@@ -449,6 +450,92 @@
     "localization": "语言与格式",
     "channelsRoles": "频道与身份组",
     "plugins": "插件"
+  },
+  "account": {
+    "panelTitle": "账户",
+    "loading": "正在加载账户信息…",
+    "notRegistered": "没有已注册的账户",
+    "notRegisteredPara": "此会话已不再关联任何已注册账户。请重新连接以完成更改。",
+    "saved": "已保存。",
+    "copy": "复制",
+    "copied": "已复制！",
+    "overview": {
+      "title": "概览",
+      "identity": "已注册为 {{name}}（用户 ID {{id}}）",
+      "authPassword": "登录方式：密码",
+      "authCert": "登录方式：证书",
+      "totpOn": "双重验证：已开启",
+      "totpOff": "双重验证：已关闭"
+    },
+    "password": {
+      "title": "密码登录",
+      "hintEnabled": "密码登录已启用。使用此名称连接时必须输入密码。",
+      "hintDisabled": "当前仅使用本设备的证书登录。设置密码后可以在任何设备上登录。",
+      "enableWarning": "设置密码将取代纯证书登录",
+      "enableWarningPara": "一旦设置了密码，仅凭证书将无法连接——之后每次连接都需要输入密码。请妥善保管。",
+      "newLabel": "新密码",
+      "confirmLabel": "重复密码",
+      "placeholder": "至少 {{min}} 个字符",
+      "tooShort": "密码长度至少为 {{min}} 个字符。",
+      "mismatch": "两次输入的密码不一致。",
+      "enable": "启用密码登录",
+      "change": "修改密码",
+      "disable": "切换回证书登录",
+      "disableHint": "移除密码；之后将使用本设备的证书登录。",
+      "disableBlocked": "只能在证书与此账户绑定的设备上切换回证书登录（否则可能被锁定在账户之外）。"
+    },
+    "rename": {
+      "title": "重命名账户",
+      "hint": "更改你在此服务器上注册的用户名。所有人看到的显示名称会立即更新。",
+      "apply": "重命名"
+    },
+    "email": {
+      "title": "联系邮箱",
+      "hint": "作为账户的联系地址保存在服务器上。留空即可删除。",
+      "warning": "请谨慎操作",
+      "warningPara": "该邮箱同时是账户恢复因子：当你使用经 CA 验证、包含此地址的续期证书连接时，服务器会将其关联到你的账户。请只填写你本人拥有的地址——错误的地址可能让他人获得你的账户。",
+      "placeholder": "you@example.com",
+      "apply": "保存邮箱"
+    },
+    "totp": {
+      "title": "双重验证（2FA）",
+      "disabledHint": "使用基于时间的一次性密码（TOTP）保护你的账户。支持 Google Authenticator、Microsoft Authenticator、Authy、Aegis、1Password 等验证器应用。",
+      "begin": "设置 2FA",
+      "enrollHint": "将下方密钥添加到验证器应用（手动输入或粘贴设置链接），然后输入生成的验证码确认。密钥只显示一次。",
+      "secretLabel": "密钥（base32）",
+      "secretHint": "在验证器应用中选择\"手动输入密钥\"，并选择基于时间（TOTP）。",
+      "uriLabel": "设置链接（otpauth://）",
+      "codeLabel": "6 位验证码",
+      "verify": "确认并启用",
+      "enabledHint": "2FA 已启用。每次登录都需要输入验证器应用生成的验证码。要停用，请输入当前验证码。",
+      "disable": "停用 2FA"
+    },
+    "unregister": {
+      "title": "删除注册",
+      "warning": "此操作无法撤销",
+      "warningPara": "删除注册会将你的账户从此服务器移除：你的用户 ID、授予账户的权限、频道身份组分配以及存储的设置都会丢失。你发布的内容会保留。在重新连接之前，你将以未注册访客身份保持连接。",
+      "begin": "删除我的注册…",
+      "confirmPrompt": "输入你的账户名（{{name}}）以确认：",
+      "cancel": "取消",
+      "confirm": "永久删除注册"
+    },
+    "errors": {
+      "not_registered": "此会话没有已注册账户（或已被移除）。",
+      "password_too_short": "密码太短。",
+      "password_too_long": "密码太长。",
+      "no_certificate": "账户未绑定证书——无法移除密码。",
+      "cert_mismatch": "只有证书与此账户绑定的设备才能执行此操作。",
+      "invalid_name": "此服务器不允许使用该用户名。",
+      "name_taken": "该名称已被占用。",
+      "invalid_email": "这看起来不是有效的邮箱地址。",
+      "unregister_failed": "无法删除注册。",
+      "totp_disabled_by_admin": "服务器管理员已在此服务器上停用 2FA。",
+      "totp_not_pending": "没有正在进行的 2FA 设置——请重新开始。",
+      "totp_not_enabled": "2FA 未启用。",
+      "totp_wrong_code": "验证码无效。请检查验证器应用和设备时钟。",
+      "totp_generation_failed": "服务器无法生成 2FA 密钥。",
+      "unknown": "操作失败：{{code}}"
+    }
   },
   "bioEditor": {
     "bold": "加粗",

@@ -6,6 +6,7 @@
 
 pub(crate) mod registry;
 
+pub(crate) mod account;
 pub(crate) mod admin;
 pub(crate) mod audio;
 pub(crate) mod certificates;

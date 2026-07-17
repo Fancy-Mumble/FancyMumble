@@ -27,6 +27,7 @@ import ChatView from "../components/chat/ChatView";
 // The component is ~2 kB minified, so there is nothing to win by splitting.
 import MobileBottomSheet from "../components/elements/MobileBottomSheet";
 import PasswordDialog from "../components/server/PasswordDialog";
+import TotpDialog from "../components/server/TotpDialog";
 import { SuperSearch } from "../components/layout/SuperSearch";
 import styles from "./ChatPage.module.css";
 
@@ -65,6 +66,8 @@ export default function ChatPage() {
   const reconnectScheduled = useAppStore((s) => s.reconnectScheduled);
   const nextReconnectAt = useAppStore((s) => s.nextReconnectAt);
   const passwordRequired = useAppStore((s) => s.passwordRequired);
+  const totpRequired = useAppStore((s) => s.totpRequired);
+  const retryWithTotp = useAppStore((s) => s.retryWithTotp);
   const pendingConnect = useAppStore((s) => s.pendingConnect);
   const dismissPasswordPrompt = useAppStore((s) => s.dismissPasswordPrompt);
   const connect = useAppStore((s) => s.connect);
@@ -404,6 +407,14 @@ export default function ChatPage() {
           error={error}
           showSaveOption={showSaveOption}
           onChangeUsername={handleChangeUsername}
+        />
+        <TotpDialog
+          open={totpRequired}
+          onSubmit={(code) => void retryWithTotp(code)}
+          onCancel={dismissPasswordPrompt}
+          serverHost={pendingConnect?.host}
+          username={pendingConnect?.username}
+          error={error}
         />
       </div>
     );
