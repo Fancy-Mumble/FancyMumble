@@ -149,7 +149,6 @@ export {
   Calendar as CalendarIcon,
   CalendarPlus as CalendarPlusIcon,
   CalendarClock as CalendarClockIcon,
-  Clock as ClockIcon,
   MapPin as MapPinIcon,
   Repeat as RepeatIcon,
   Bold as BoldIcon,
