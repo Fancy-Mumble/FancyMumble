@@ -110,6 +110,8 @@
     "stopListening": "Arrêter l'écoute",
     "enableNotifications": "Activer les notifications",
     "muteNotifications": "Désactiver les notifications",
+    "leaveMeeting": "Quitter la réunion",
+    "leaveMeetingTitle": "Retirer ce salon de réunion de votre liste. Vous pouvez le rejoindre depuis l'événement du calendrier.",
     "editChannel": "Modifier le canal",
     "editPermissions": "Modifier les permissions",
     "createSubchannel": "Créer un sous-canal",

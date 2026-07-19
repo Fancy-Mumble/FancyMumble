@@ -110,6 +110,8 @@
     "stopListening": "停止收听",
     "enableNotifications": "启用通知",
     "muteNotifications": "静音通知",
+    "leaveMeeting": "退出会议",
+    "leaveMeetingTitle": "从你的列表中移除此会议室。你可以从日历事件中重新加入。",
     "editChannel": "编辑频道",
     "editPermissions": "编辑权限",
     "createSubchannel": "创建子频道",

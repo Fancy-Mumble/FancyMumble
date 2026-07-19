@@ -110,6 +110,8 @@
     "stopListening": "Mithören beenden",
     "enableNotifications": "Benachrichtigungen aktivieren",
     "muteNotifications": "Benachrichtigungen stummschalten",
+    "leaveMeeting": "Meeting verlassen",
+    "leaveMeetingTitle": "Diesen Meeting-Raum aus deiner Liste entfernen. Über den Kalendereintrag kannst du wieder beitreten.",
     "editChannel": "Kanal bearbeiten",
     "editPermissions": "Berechtigungen bearbeiten",
     "createSubchannel": "Unterkanal erstellen",

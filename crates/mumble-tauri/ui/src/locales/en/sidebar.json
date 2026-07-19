@@ -122,6 +122,8 @@
     "stopListening": "Stop listening",
     "enableNotifications": "Enable notifications",
     "muteNotifications": "Mute notifications",
+    "leaveMeeting": "Leave meeting",
+    "leaveMeetingTitle": "Remove this meeting room from your list. You can rejoin from the calendar event.",
     "editChannel": "Edit Channel",
     "editPermissions": "Edit Permissions",
     "createSubchannel": "Create Sub-channel",
