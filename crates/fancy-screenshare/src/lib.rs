@@ -22,9 +22,10 @@
 
 pub mod broadcast;
 mod camera;
-/// Native SFU stream viewer for the one platform whose webview cannot run
-/// WebRTC (Linux WebKitGTK); Windows keeps its webview viewer untouched.
-#[cfg(target_os = "linux")]
+/// Native SFU stream viewer: required on Linux (distro WebKitGTK has no
+/// WebRTC), selectable on Windows (an advanced setting switches the webview
+/// between this Rust peer and its own `RTCPeerConnection` viewers).
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub mod viewer;
 #[cfg(windows)]
 mod camera_directshow;

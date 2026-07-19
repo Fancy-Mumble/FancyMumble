@@ -55,6 +55,7 @@ import {
 import {
   activeStreamViewerStrategy,
   registerStreamViewerStrategy,
+  StreamViewerStrategyId,
 } from "./viewerStrategy";
 // Side-effect import: the NATIVE viewer strategy registers at that module's
 // tail, and this hook's effects (channel auto-connect) consult the registry
@@ -1105,9 +1106,10 @@ export function useScreenShare(): ScreenShareHook {
       // replacing (viewer already exists) and under the native strategy
       // (its viewport owns the receive path).
       console.info("[screenshare] broadcast started; opening loopback preview");
-      activeStreamViewerStrategy().watch(ownSession).catch((e) =>
-        console.error("[screenshare] loopback preview failed:", e),
-      );
+      activeStreamViewerStrategy()
+        .createReceiveTransport(ownSession)
+        .open()
+        .catch((e) => console.error("[screenshare] loopback preview failed:", e));
     },
     [ownSession],
   );
@@ -1177,15 +1179,20 @@ export function useScreenShare(): ScreenShareHook {
     if (!ownSession) return;
     const strategy = activeStreamViewerStrategy();
     for (const session of broadcastingSessions) {
-      if (session !== ownSession && !strategy.isWatching(session)) {
-        strategy.watch(session).catch((e) =>
+      if (session === ownSession) continue;
+      const transport = strategy.createReceiveTransport(session);
+      if (!transport.isOpen()) {
+        transport.open().catch((e) =>
           console.error("[screenshare] auto-connect failed for session", session, e),
         );
       }
     }
+    // Enumerating stale sessions needs the webview family's internal map;
+    // fine here (same module as that concrete factory), and empty under the
+    // native strategy, whose viewports own their receive paths.
     for (const [session] of viewerPcs) {
       if (!broadcastingSessions.has(session)) {
-        strategy.unwatch(session);
+        strategy.createReceiveTransport(session).close();
       }
     }
   }, [broadcastingSessions, ownSession]);
@@ -1197,9 +1204,10 @@ export function useScreenShare(): ScreenShareHook {
     });
     // A no-op if already connected (auto-connect above) or under the
     // native strategy (viewport-owned).
-    activeStreamViewerStrategy().watch(session).catch((e) =>
-      console.error("[screenshare] startWatching failed:", e),
-    );
+    activeStreamViewerStrategy()
+      .createReceiveTransport(session)
+      .open()
+      .catch((e) => console.error("[screenshare] startWatching failed:", e));
   }, [ownSession]);
 
   const stopWatchingCb = useCallback(() => {
@@ -1320,13 +1328,18 @@ export function useRemoteStream(session: number): MediaStream | null {
 // ---------------------------------------------------------------------------
 
 // The shipped webview family: RTCPeerConnection viewers decoding in the
-// webview (Windows/WebView2 route). Preferred whenever the webview has
-// WebRTC; the runtime flag in viewerStrategy.ts can override.
+// webview (browser signaling; the Windows/WebView2 default). Preferred
+// whenever the webview has WebRTC; the Settings -> Advanced backend switch
+// (persisted via viewerStrategy.ts) can override. Concrete factory: its
+// per-session products are thin facades over this module's session-keyed
+// viewer state, so transports created for the same session always agree.
 registerStreamViewerStrategy({
-  id: "webview",
+  id: StreamViewerStrategyId.Webview,
   isAvailable: () => typeof RTCPeerConnection !== "undefined",
-  watch: (session) => startWatching(session),
-  isWatching: (session) => viewerPcs.has(session),
-  unwatch: (session) => closeViewer(session),
+  createReceiveTransport: (session) => ({
+    open: () => startWatching(session),
+    isOpen: () => viewerPcs.has(session),
+    close: () => closeViewer(session),
+  }),
   createStatsSampler: (session) => createPcStatsSampler(() => getViewerPc(session)),
 });

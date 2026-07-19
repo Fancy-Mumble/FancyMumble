@@ -1,4 +1,4 @@
-//! Native stream-viewer commands - Linux only.
+//! Native stream-viewer commands - Linux and Windows.
 //!
 //! On Linux the webview cannot run the SFU viewer layer (distro `WebKitGTK`
 //! ships without `WebRTC`), so the frontend drives a Rust-side
@@ -6,8 +6,12 @@
 //! instead: same signaling contract as the webview viewer (recvonly offer
 //! targeted at the broadcaster session, answer claimed from the
 //! `WebRtcSignal` stream), with the video payloads streamed back over a
-//! Tauri IPC [`Channel`]. Windows keeps the webview viewer untouched - the
-//! commands exist there only as stubs so a stray invoke fails loudly.
+//! Tauri IPC [`Channel`]. On Windows the same commands back the "native"
+//! viewer family as an OPT-IN alternative (the frontend's viewer-strategy
+//! setting in Settings -> Advanced; the webview `RTCPeerConnection` route
+//! stays the default, and nothing here runs unless that strategy is
+//! selected). Elsewhere the commands exist only as stubs so a stray invoke
+//! fails loudly.
 //!
 //! `mode` picks the payload ("h264" preferred): compressed Annex-B access
 //! units for the webview's `WebCodecs` decoder (GStreamer, NVDEC/VA-API
@@ -31,36 +35,36 @@
 //! stops draining, the batch is dropped wholesale and delivery resyncs on
 //! the next keyframe instead of queueing unbounded lag.
 
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 use std::collections::HashMap;
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 use std::sync::{Mutex, OnceLock};
 
 use tauri::ipc::{Channel, InvokeResponseBody};
 
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 use fancy_screenshare::viewer::{DeliveryMode, StreamViewer, ViewerFrame, ViewerSink, ViewerState};
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 use tauri::{AppHandle, Emitter, Manager};
 
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 use crate::state::AppState;
 
 /// `WebRtcSignal.signal_type` for an SDP offer (matches Mumble.proto).
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 const SIGNAL_SDP_OFFER: i32 = 2;
 
 /// Active native viewers, keyed by the watched broadcaster's session.
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 static VIEWERS: OnceLock<Mutex<HashMap<u32, StreamViewer>>> = OnceLock::new();
 
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 fn viewers() -> &'static Mutex<HashMap<u32, StreamViewer>> {
     VIEWERS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 /// Lifecycle event payload emitted as `native-stream-view-state`.
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 #[derive(Debug, Clone, serde::Serialize)]
 struct ViewerStateEvent {
     /// The watched broadcaster's session.
@@ -74,20 +78,20 @@ struct ViewerStateEvent {
 /// Coalesce records for at most this long before flushing one channel
 /// message (a timer task enforces the bound, so latency never exceeds it
 /// regardless of when - or whether - the next frame arrives).
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 const BATCH_FLUSH_AGE: std::time::Duration = std::time::Duration::from_millis(50);
 
 /// Flush early once a batch holds this many payload bytes (keyframes).
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 const BATCH_FLUSH_BYTES: usize = 256 * 1024;
 
 /// A batch growing past this means the webview stopped draining: drop it
 /// and resync on the next keyframe instead of queueing unbounded lag.
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 const BATCH_OVERFLOW_BYTES: usize = 1_500_000;
 
 /// Pending coalesced records (see the module doc's wire format).
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 #[derive(Default)]
 struct FrameBatch {
     buf: Vec<u8>,
@@ -101,7 +105,7 @@ struct FrameBatch {
 
 /// Routes one viewer's signaling onto the owning Mumble connection and its
 /// frames onto the frontend IPC channel.
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 struct NativeViewerSink {
     app: AppHandle,
     /// Connection that owns this view (multi-tab safety; see screenshare.rs).
@@ -123,7 +127,7 @@ struct NativeViewerSink {
 }
 
 /// One length-prefixed wire record (see the module doc).
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 fn encode_record(
     mid_index: u8,
     flags: u8,
@@ -148,7 +152,7 @@ fn encode_record(
     record
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 impl NativeViewerSink {
     /// Append one record to the batch; flush when it is old/large enough
     /// (or `force`, for decoder configs). Overflow drops the backlog and
@@ -243,7 +247,7 @@ impl NativeViewerSink {
 }
 
 /// Drain the pending batch, resetting it for the next window.
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 fn take_batch(batch: &mut FrameBatch) -> (Vec<u8>, u64, u64) {
     let buf = std::mem::take(&mut batch.buf);
     let records = std::mem::take(&mut batch.records);
@@ -252,7 +256,7 @@ fn take_batch(batch: &mut FrameBatch) -> (Vec<u8>, u64, u64) {
     (buf, records, keyframes)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 impl ViewerSink for NativeViewerSink {
     fn send_offer(&self, sdp: String) {
         let app = self.app.clone();
@@ -316,7 +320,7 @@ impl ViewerSink for NativeViewerSink {
 /// `recvonly`) answer to our sendonly broadcast offer - a viewer's answer
 /// always carries `a=sendonly` m-lines (the SFU sends to us), which is the
 /// shape required here so the two can never steal each other's answer.
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 pub(crate) fn try_intercept_viewer_answer(
     sender_session: Option<u32>,
     signal_type: i32,
@@ -348,22 +352,20 @@ pub(crate) fn try_intercept_viewer_answer(
 
 /// Start (or replace) the native viewer for one broadcaster session. Frames
 /// arrive on `on_frame` (see the module doc for the wire format); lifecycle
-/// changes are emitted as `native-stream-view-state` events. `mode` is
-/// "h264" (webview decodes via `WebCodecs`; preferred) or "jpeg" (fallback;
-/// also the default when absent).
-#[cfg(target_os = "linux")]
+/// changes are emitted as `native-stream-view-state` events. `mode`
+/// deserializes into [`DeliveryMode`] ("h264" - webview decodes via
+/// `WebCodecs`, preferred - or "jpeg"; absent defaults to jpeg, anything
+/// else is an invoke error rather than a silent fallback).
+#[cfg(native_stream_viewer)]
 #[tauri::command]
 pub(crate) async fn start_native_stream_view(
     app: AppHandle,
     session: u32,
     server_id: Option<String>,
-    mode: Option<String>,
+    mode: Option<DeliveryMode>,
     on_frame: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
-    let mode = match mode.as_deref() {
-        Some("h264") => DeliveryMode::H264,
-        _ => DeliveryMode::Jpeg,
-    };
+    let mode = mode.unwrap_or(DeliveryMode::Jpeg);
     let sink = std::sync::Arc::new(NativeViewerSink {
         app,
         server_id,
@@ -408,7 +410,7 @@ pub(crate) async fn start_native_stream_view(
     .map_err(|e| e.to_string())?
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(native_stream_viewer))]
 #[tauri::command]
 pub(crate) async fn start_native_stream_view(
     _session: u32,
@@ -422,7 +424,7 @@ pub(crate) async fn start_native_stream_view(
 /// Receive-side stats of one viewed session's native peer (RTP counters per
 /// track, RTT, ICE path) for the "Stats for Nerds" panel. `Ok(None)` when no
 /// viewer runs for that session.
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 #[tauri::command]
 pub(crate) async fn native_stream_view_stats(
     session: u32,
@@ -441,7 +443,7 @@ pub(crate) async fn native_stream_view_stats(
     .map_err(|e| e.to_string())?
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(native_stream_viewer))]
 #[tauri::command]
 pub(crate) async fn native_stream_view_stats(
     _session: u32,
@@ -452,7 +454,7 @@ pub(crate) async fn native_stream_view_stats(
 /// Ask the SFU for a fresh keyframe on every video track of one viewed
 /// session (rate-limited in the viewer). The webview's `WebCodecs` decoder
 /// calls this when it needs an IDR (joined before one, decode error).
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 #[tauri::command]
 pub(crate) async fn request_stream_keyframe(session: u32) -> Result<(), String> {
     let map = viewers().lock().map_err(|_| "viewer registry poisoned")?;
@@ -462,7 +464,7 @@ pub(crate) async fn request_stream_keyframe(session: u32) -> Result<(), String> 
     Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(native_stream_viewer))]
 #[tauri::command]
 pub(crate) async fn request_stream_keyframe(_session: u32) -> Result<(), String> {
     Ok(())
@@ -470,7 +472,7 @@ pub(crate) async fn request_stream_keyframe(_session: u32) -> Result<(), String>
 
 /// Stop and drop the native viewer for one broadcaster session (no-op when
 /// none is running).
-#[cfg(target_os = "linux")]
+#[cfg(native_stream_viewer)]
 #[tauri::command]
 pub(crate) async fn stop_native_stream_view(session: u32) -> Result<(), String> {
     let old = {
@@ -487,7 +489,7 @@ pub(crate) async fn stop_native_stream_view(session: u32) -> Result<(), String> 
     Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(native_stream_viewer))]
 #[tauri::command]
 pub(crate) async fn stop_native_stream_view(_session: u32) -> Result<(), String> {
     Ok(())

@@ -18,6 +18,17 @@ include!("../fancy-utils/src/permissions.rs");
 fn main() {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
 
+    // Semantic cfg alias for the platforms whose builds carry the native
+    // (Rust-peer) stream viewer (`fancy_screenshare::viewer`): gates in
+    // commands/stream_view.rs and the signal handler say WHAT they need
+    // (`#[cfg(native_stream_viewer)]`) instead of repeating the platform
+    // list. There is no shorter built-in form - bare `linux` does not
+    // exist as a cfg, and `unix` would drag in macOS/Android/BSD.
+    println!("cargo:rustc-check-cfg=cfg(native_stream_viewer)");
+    if matches!(target_os.as_str(), "linux" | "windows") {
+        println!("cargo:rustc-cfg=native_stream_viewer");
+    }
+
     generate_permissions_ts();
     generate_shared_constants();
 

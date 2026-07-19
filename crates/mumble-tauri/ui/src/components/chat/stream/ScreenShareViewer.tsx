@@ -17,7 +17,7 @@ import { useAppStore } from "../../../store";
 import { getBroadcastContent, getTrackContentMap, useRemoteStreams } from "./useScreenShare";
 import { TID } from "../../../testids";
 import { useNativeStreamView } from "./nativeStreamView";
-import { activeStreamViewerStrategy } from "./viewerStrategy";
+import { activeStreamViewerStrategy, StreamViewerStrategyId } from "./viewerStrategy";
 import styles from "./ScreenShareViewer.module.css";
 
 // ---------------------------------------------------------------------------
@@ -385,7 +385,7 @@ interface OwnPreviewProps {
  *  per page load (the strategy is latched), so branching on it inside
  *  components never changes hook order. */
 function usesNativeSurface(): boolean {
-  return activeStreamViewerStrategy().id === "native";
+  return activeStreamViewerStrategy().id === StreamViewerStrategyId.Native;
 }
 
 function OwnBroadcastPreview({ stream, channelId, ownSession, missingSourceKind, onAddSource, onEndCamera }: OwnPreviewProps) {
