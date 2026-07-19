@@ -3,7 +3,7 @@
 //! Reads and writes the **same** Tauri-store JSON files as the full client
 //! (`preferences.json`, `servers.json`, `passwords.json` in the app config
 //! dir), so a setting or server saved in one client is immediately visible
-//! in the other — no drifting copies. A store file is a flat JSON object of
+//! in the other - no drifting copies. A store file is a flat JSON object of
 //! `key -> value` (see `mumble-tauri/ui/src/serverStorage.ts` and
 //! `preferencesStorage.ts` for the canonical shapes).
 //!

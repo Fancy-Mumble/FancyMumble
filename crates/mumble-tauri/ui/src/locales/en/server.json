@@ -322,7 +322,7 @@
     },
     "appearance": {
       "title": "Pick a theme",
-      "hint": "Make it yours — plenty more in Settings."
+      "hint": "Make it yours - plenty more in Settings."
     },
     "ready": {
       "title": "You're all set, {{name}}!",

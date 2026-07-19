@@ -638,7 +638,7 @@
     "never": "Never",
     "unknown": "Unknown",
     "unregisterTitle": "Unregister user",
-    "unregisterBody": "Unregister \"{{name}}\"? This permanently deletes all of their data on this server — registration, comment, avatar and role/ACL memberships. This cannot be undone.",
+    "unregisterBody": "Unregister \"{{name}}\"? This permanently deletes all of their data on this server - registration, comment, avatar and role/ACL memberships. This cannot be undone.",
     "unregisterConfirm": "Unregister",
     "actionEditing": "Editing...",
     "actionRename": "Rename",

@@ -1,4 +1,4 @@
-# qt6ui — minimal native Qt 6 Mumble client
+# qt6ui - minimal native Qt 6 Mumble client
 
 A small, low-RAM native GUI for `mumble-protocol`, built with
 [cxx-qt](https://github.com/KDAB/cxx-qt) + QML. It exists to prove that the
@@ -11,7 +11,7 @@ workspace crates **without** the Tauri/WebView stack.
 - **Saved servers** (start screen, mirroring the web client's ConnectPage):
   the list, search, favourites and "Connect & Save" all operate on the
   **same** store files the full client uses (`servers.json`,
-  `passwords.json` in the shared config dir — see
+  `passwords.json` in the shared config dir - see
   [`src/store.rs`](src/store.rs)), so servers saved in either client appear
   in both. Connecting to a saved entry uses its stored password and TLS
   identity (`identities/{label}/tls.{cert,key}.pem`). Preferences are
@@ -50,7 +50,7 @@ workspace crates **without** the Tauri/WebView stack.
   `theme.css` into the `theme` object at the top of the QML; icons use the
   system "Segoe Fluent Icons" font.
 
-All of that logic lives in the reused crates — this crate is only the UI glue:
+All of that logic lives in the reused crates - this crate is only the UI glue:
 
 | Layer | Crate |
 |-------|-------|
@@ -82,7 +82,7 @@ binary share a `ui-mode` marker file (`full`/`minimal`) in the app config dir
 
 - Integration constants (app identifier, marker file name, binary names,
   env-var names, default port, weak-PC thresholds, locale list) live in the
-  repo-root **`constants.json`** — the single source of truth. `build.rs`
+  repo-root **`constants.json`** - the single source of truth. `build.rs`
   bakes them into `src/constants.rs` at compile time (the full client and
   the React UI generate their own copies the same way), so changing a value
   means editing one file and rebuilding.
@@ -152,20 +152,20 @@ per-arch subdirs nested under the version dir
 data for Qt version 6.11.1"*. Only the Windows repo migrated, so the Linux Qt
 job still passes on 6.11.x.
 
-CI is therefore **pinned to 6.10.3** — the newest version served under the old
+CI is therefore **pinned to 6.10.3** - the newest version served under the old
 layout that still provides the `win64_mingw` kit + `tools_mingw1310`. Local dev
 installs (via Qt's own maintenance tool / offline installer) are unaffected and
 can use 6.11.x. Bump the CI pin back once `aqtinstall` gains new-layout support.
 
 ## License
 
-This crate — **and only this crate** — is licensed **LGPL-3.0-or-later**
+This crate - **and only this crate** - is licensed **LGPL-3.0-or-later**
 (see [`COPYING.LESSER`](COPYING.LESSER) and [`COPYING`](COPYING)): it is the
 Qt-facing front-end and links dynamically against the open-source
 (LGPL-3.0) Qt 6 libraries. Because `qt6ui` is a separate executable, the
 rest of the repository remains MIT-licensed, including the shared crates
 this binary consumes (`mumble-protocol`, `fancy-audio-device`,
-`fancy-utils` — MIT code may be incorporated into an LGPL work).
+`fancy-utils` - MIT code may be incorporated into an LGPL work).
 
 Qt itself is © The Qt Company, used under LGPL-3.0; sources are available
 at <https://code.qt.io>. Keep Qt dynamically linked (the default here) so
@@ -177,7 +177,7 @@ users can swap in their own Qt build, as the LGPL requires.
 must stay under 200 MB.** Every feature has to fit inside this envelope;
 anything unbounded has to be offloaded to disk and streamed back on demand.
 Chat images follow this rule: message bodies never carry base64 payloads
-into the UI — images are spilled to `{temp}/qt6ui-chat-images/{pid}` (large
+into the UI - images are spilled to `{temp}/qt6ui-chat-images/{pid}` (large
 ones with an extra `.thumb.jpg`), the model holds only file paths, bubbles
 decode just the thumbnail while the message is on screen (`sourceSize`-capped,
 uncached), and the full-size file is decoded only while the lightbox is open.
@@ -193,7 +193,7 @@ Measured RSS of the release build on Windows (Qt 6.10, idle after load):
 The binary itself is ~3.6 MB (`opt-level = "z"`, LTO, `strip`, `panic =
 "abort"`), and the runtime uses a single tokio worker thread, so the Rust side
 is small. The cost is Qt: **QtQuick pulls in the scene-graph and the V4 QML/JS
-engine, which alone floor at ~40 MB** — sub-30 MB is not reachable with QtQuick.
+engine, which alone floor at ~40 MB** - sub-30 MB is not reachable with QtQuick.
 
 The app keeps the full hardware-accelerated GPU backend by default (users who
 want to trade rendering quality for ~40 MB less RAM can set
@@ -204,5 +204,5 @@ want to trade rendering quality for ~40 MB less RAM can set
 
 If sub-30 MB is a hard requirement, the same `AppCore` + `fancy-audio-device`
 back-end can be driven by a **QtWidgets** front-end (no QML/JS engine, ~15-25 MB
-floor) with zero changes to the connection/chat/channel/audio logic — only the
+floor) with zero changes to the connection/chat/channel/audio logic - only the
 `Backend` bridge + QML would be replaced.

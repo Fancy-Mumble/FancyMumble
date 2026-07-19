@@ -17,7 +17,7 @@
     "registerConfirmBody": "Inscrire {{name}} sur ce serveur avec son certificat actuel ?",
     "registerConfirm": "Inscrire",
     "unregisterConfirmTitle": "Désinscrire l'utilisateur",
-    "unregisterConfirmBody": "Désinscrire {{name}} ? Toutes ses données sur ce serveur seront définitivement supprimées — inscription, commentaire, avatar et appartenances aux rôles/ACL. Cette action est irréversible.",
+    "unregisterConfirmBody": "Désinscrire {{name}} ? Toutes ses données sur ce serveur seront définitivement supprimées - inscription, commentaire, avatar et appartenances aux rôles/ACL. Cette action est irréversible.",
     "unregisterConfirm": "Désinscrire",
     "resetComment": "Réinitialiser le commentaire",
     "removeAvatar": "Supprimer l'avatar",

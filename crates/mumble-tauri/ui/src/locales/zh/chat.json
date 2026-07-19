@@ -430,7 +430,7 @@
     "fullscreen": "全屏",
     "exitFullscreen": "退出全屏",
     "settingUp": "正在准备直播…",
-    "liveNoPreview": "直播已开始。此系统不支持本地预览——其他人仍可观看。",
+    "liveNoPreview": "直播已开始。此系统不支持本地预览--其他人仍可观看。",
     "captureStalledHint": "共享显示器上的全屏内容未被捕获（已知的 GNOME/NVIDIA 问题）。请改为共享窗口，或移动鼠标以恢复。",
     "connecting": "正在连接…",
     "waitingForStream": "等待直播开始",

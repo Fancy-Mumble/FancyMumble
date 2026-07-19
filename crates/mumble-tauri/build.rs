@@ -462,10 +462,10 @@ fn install_qt6ui_binary(qt6ui_dir: &std::path::Path, profile: &str) {
 /// Parse the repo-root `constants.json` (single source of truth for
 /// cross-client integration constants) and emit:
 ///
-/// 1. `$OUT_DIR/fancy_constants.rs` — `pub const` items included by
+/// 1. `$OUT_DIR/fancy_constants.rs` - `pub const` items included by
 ///    `src/constants.rs`, so the values are baked in at compile time with
 ///    zero runtime overhead;
-/// 2. `ui/src/utils/appConstants.ts` — the same values for the React UI
+/// 2. `ui/src/utils/appConstants.ts` - the same values for the React UI
 ///    (same generate-and-commit flow as `permissions.ts` above).
 ///
 /// The minimal `qt6ui` client runs the same codegen from its own build.rs

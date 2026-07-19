@@ -7,7 +7,7 @@
     "voiceOff": "语音关闭",
     "me": "（我）",
     "switchToFull": "切换到完整界面",
-    "fullClientNotFound": "未找到完整客户端——继续使用极简模式。"
+    "fullClientNotFound": "未找到完整客户端--继续使用极简模式。"
   },
   "actions": {
     "minimize": "最小化",
