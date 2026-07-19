@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../../../store";
 import { getBroadcastContent, getTrackContentMap, useRemoteStreams } from "./useScreenShare";
+import { isMobile } from "../../../utils/platform";
 import { TID } from "../../../testids";
 import { useNativeStreamView } from "./nativeStreamView";
 import { activeStreamViewerStrategy, StreamViewerStrategyId } from "./viewerStrategy";
@@ -656,7 +657,9 @@ function RemoteViewer({ session, channelId, ownSession }: { readonly session: nu
           drawChannelId={channelId}
           // The popout window still builds a webview viewer PC; give it a
           // native path before offering the button under this strategy.
-          onPopout={nativeSurface ? undefined : handlePopout}
+          // Mobile has no separate windows (open_stream_popout is a loud
+          // Android stub), so the button is desktop-only.
+          onPopout={nativeSurface || isMobile ? undefined : handlePopout}
           statsOn={statsOn}
           onToggleStats={() => setStatsOn((v) => !v)}
         />
