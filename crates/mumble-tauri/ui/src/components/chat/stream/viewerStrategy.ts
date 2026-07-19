@@ -3,20 +3,26 @@
  *
  * Two families exist today, each registering itself here at module load:
  *
- * - "webview" (useScreenShare.ts): RTCPeerConnection viewers decoding in the
- *   webview, rendered into `<video>` - the shipped Windows/WebView2 route.
- * - "native" (nativeStreamView.ts): a Rust-side peer per session with the
- *   webview only decoding (WebCodecs) / painting - the Linux route, where
- *   WebKitGTK has no WebRTC.
+ * - Webview (useScreenShare.ts): RTCPeerConnection viewers decoding in the
+ *   webview, rendered into `<video>` - the browser-signaling route and the
+ *   Windows/WebView2 default.
+ * - Native (nativeStreamView.ts): a Rust-side peer per session with the
+ *   webview only decoding (WebCodecs) / painting - mandatory on Linux, where
+ *   WebKitGTK has no WebRTC, and selectable on Windows.
  *
- * Each strategy is also the ABSTRACT FACTORY for its per-session objects:
- * the receive transport (watch/unwatch) and the Stats-for-Nerds sampler.
- * The viewport component family is selected by `id` in ScreenShareViewer.
+ * Each strategy is the ABSTRACT FACTORY for its per-session product family:
+ * the receive transport ({@link ReceiveTransport}) and the Stats-for-Nerds
+ * sampler ({@link StatsSampler}). Consumers only ever hold the abstract
+ * product interfaces, so a family can never be half-selected: every product
+ * for a session comes from the same concrete factory. The viewport component
+ * family is selected by `id` in ScreenShareViewer.
  *
- * Selection is capability-driven (webview when `RTCPeerConnection` exists)
- * with a RUNTIME feature-flag override, so e.g. a Windows build can be
- * switched to the native family without code changes once its backend
- * compiles there:
+ * Selection is capability-driven (webview preferred when `RTCPeerConnection`
+ * exists) with a persisted user override - the "Stream viewer backend"
+ * setting in Settings -> Advanced (shown wherever both families are
+ * available, i.e. Windows). The override is stored under the same
+ * `localStorage` key that always served as the runtime flag, so the manual
+ * escape hatch still works and older flags stay honoured:
  *
  *     localStorage.setItem("fancy.streamViewerStrategy", "native")  // or "webview"
  *     localStorage.removeItem("fancy.streamViewerStrategy")        // back to auto
@@ -26,8 +32,32 @@
  */
 import type { StatsSample } from "./StreamStatsPanel";
 
-/** Registered strategy families. */
-export type StreamViewerStrategyId = "webview" | "native";
+/** Registered strategy families. String-valued so the enum members double
+ *  as the persisted wire/storage values; compare against the members, never
+ *  raw literals. */
+export enum StreamViewerStrategyId {
+  Webview = "webview",
+  Native = "native",
+}
+
+/** The "no explicit choice" preference: capability picks the family. */
+export const STRATEGY_AUTO = "auto";
+
+/** The persisted selection: a concrete family, or automatic. Narrowing away
+ *  {@link STRATEGY_AUTO} leaves a plain {@link StreamViewerStrategyId}. */
+export type StreamViewerStrategyPreference =
+  | StreamViewerStrategyId
+  | typeof STRATEGY_AUTO;
+
+/** The member of {@link StreamViewerStrategyId} a raw (storage/DOM) string
+ *  denotes, or null. The single place raw strings become enum values. */
+export function parseStreamViewerStrategyId(
+  value: string | null | undefined,
+): StreamViewerStrategyId | null {
+  return Object.values(StreamViewerStrategyId).includes(value as StreamViewerStrategyId)
+    ? (value as StreamViewerStrategyId)
+    : null;
+}
 
 /** One Stats-for-Nerds probe, created per open panel by its strategy. */
 export interface StatsSampler {
@@ -35,19 +65,26 @@ export interface StatsSampler {
   sample(): Promise<{ sample: StatsSample; connectionState: string } | null>;
 }
 
-/** A stream-viewing family: receive transport + stats, per session. */
+/** The non-viewport receive path for one broadcaster session - loopback
+ *  preview, channel auto-connect. Families whose viewports own their
+ *  transport lifecycle (the native family) return a no-op product. */
+export interface ReceiveTransport {
+  /** Open the receive path ahead of (or outside) a mounted viewport. */
+  open(): Promise<void>;
+  /** Whether the session currently has an open non-viewport receive path. */
+  isOpen(): boolean;
+  /** Close the receive path (no-op when none). */
+  close(): void;
+}
+
+/** A stream-viewing family: strategy (how streams are received) and
+ *  abstract factory (creates the family's per-session products). */
 export interface StreamViewerStrategy {
   readonly id: StreamViewerStrategyId;
   /** Whether this strategy can work in this webview/build at all. */
   isAvailable(): boolean;
-  /** Open the receive path for a broadcaster session ahead of (or outside)
-   *  a mounted viewport - loopback preview, channel auto-connect. Families
-   *  whose viewports own their transport lifecycle no-op here. */
-  watch(session: number): Promise<void>;
-  /** Whether `session` currently has an open non-viewport receive path. */
-  isWatching(session: number): boolean;
-  /** Close the non-viewport receive path for `session` (no-op when none). */
-  unwatch(session: number): void;
+  /** Factory: the receive transport for one broadcaster session. */
+  createReceiveTransport(session: number): ReceiveTransport;
   /** Factory: the Stats-for-Nerds sampler for one session. */
   createStatsSampler(session: number): StatsSampler;
 }
@@ -84,36 +121,68 @@ if (import.meta.hot) {
   });
 }
 
-/** The runtime override flag, when set to a valid family name. */
-function flaggedStrategyId(): StreamViewerStrategyId | null {
+/** `localStorage` key holding the persisted preference (absent = auto).
+ *  Same key as the original runtime feature flag - see the module doc. */
+const PREFERENCE_KEY = "fancy.streamViewerStrategy";
+
+/** The persisted strategy preference (auto when unset or unreadable). */
+export function getStreamViewerStrategyPreference(): StreamViewerStrategyPreference {
   try {
-    const value = globalThis.localStorage?.getItem("fancy.streamViewerStrategy");
-    return value === "webview" || value === "native" ? value : null;
+    const stored = globalThis.localStorage?.getItem(PREFERENCE_KEY);
+    return parseStreamViewerStrategyId(stored) ?? STRATEGY_AUTO;
   } catch {
-    return null; // storage disabled
+    return STRATEGY_AUTO; // storage disabled
   }
 }
 
+/** Persist the strategy preference (the Settings -> Advanced switch).
+ *  Takes effect on the next page load - the active strategy is latched at
+ *  first use, so mid-session consumers all stay in one family. */
+export function setStreamViewerStrategyPreference(
+  preference: StreamViewerStrategyPreference,
+): void {
+  try {
+    if (preference === STRATEGY_AUTO) {
+      globalThis.localStorage?.removeItem(PREFERENCE_KEY);
+    } else {
+      globalThis.localStorage?.setItem(PREFERENCE_KEY, preference);
+    }
+  } catch {
+    // Storage disabled: the preference simply cannot persist.
+  }
+}
+
+/** Families a user could select here (registered AND available) - drives
+ *  whether the settings switch is offered at all (it needs >= 2). */
+export function selectableStreamViewerStrategyIds(): StreamViewerStrategyId[] {
+  return [...globals.registry.values()]
+    .filter((s) => s.isAvailable())
+    .map((s) => s.id);
+}
+
+/** Auto-selection order: webview (browser WebRTC) first, then native. */
+const AUTO_ORDER = [StreamViewerStrategyId.Webview, StreamViewerStrategyId.Native] as const;
+
 /**
  * The strategy every stream consumer must use, chosen once per page load:
- * the flagged family when it is registered and available, else the first
- * available in preference order (webview, then native).
+ * the preferred family when it is registered and available, else the first
+ * available in {@link AUTO_ORDER}.
  */
 export function activeStreamViewerStrategy(): StreamViewerStrategy {
   if (globals.active) return globals.active;
 
-  const flagged = flaggedStrategyId();
-  if (flagged) {
-    const strategy = globals.registry.get(flagged);
+  const preferred = getStreamViewerStrategyPreference();
+  if (preferred !== STRATEGY_AUTO) {
+    const strategy = globals.registry.get(preferred);
     if (strategy?.isAvailable()) {
-      console.info(`[stream] viewer strategy forced by flag: ${flagged}`);
+      console.info(`[stream] viewer strategy selected by preference: ${preferred}`);
       globals.active = strategy;
       return strategy;
     }
-    console.warn(`[stream] flagged viewer strategy "${flagged}" unavailable; using auto selection`);
+    console.warn(`[stream] preferred viewer strategy "${preferred}" unavailable; using auto selection`);
   }
 
-  for (const id of ["webview", "native"] as const) {
+  for (const id of AUTO_ORDER) {
     const strategy = globals.registry.get(id);
     if (strategy?.isAvailable()) {
       globals.active = strategy;
@@ -123,7 +192,9 @@ export function activeStreamViewerStrategy(): StreamViewerStrategy {
   // Nothing claims availability (e.g. a webview without WebRTC on a
   // platform the native heuristic does not recognise): degrade to whatever
   // is registered rather than crashing the component tree from an effect.
-  const fallback = globals.registry.get("native") ?? globals.registry.get("webview");
+  const fallback =
+    globals.registry.get(StreamViewerStrategyId.Native) ??
+    globals.registry.get(StreamViewerStrategyId.Webview);
   if (fallback) {
     console.warn(`[stream] no viewer strategy reports available; falling back to ${fallback.id}`);
     globals.active = fallback;

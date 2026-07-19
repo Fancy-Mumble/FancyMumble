@@ -1,12 +1,14 @@
 /**
- * Native (Rust-peer) stream viewing for webviews without WebRTC.
+ * Native (Rust-peer) stream viewing: the "native" viewer-strategy family.
  *
  * Distro WebKitGTK builds (Ubuntu's included) compile WebRTC out, so on
  * Linux the webview has no `RTCPeerConnection` and the normal viewer layer
  * (`startWatching` in useScreenShare) cannot exist. Where that is the case
  * ({@link WEBVIEW_HAS_RTC} false) the Rust side runs the SFU viewer peer
  * instead (`start_native_stream_view`) and streams the video payload over a
- * Tauri IPC channel.
+ * Tauri IPC channel. On Windows the same Rust route is available as an
+ * opt-in alternative to the webview's WebRTC (the "Stream viewer backend"
+ * switch in Settings -> Advanced).
  *
  * Delivery is chosen for maximum hardware use:
  *
@@ -24,8 +26,9 @@
  * Painting bypasses React entirely - state flips once per slot when the
  * first frame arrives (to drop placeholders), never per frame.
  *
- * Windows (WebView2 = Chromium, full WebRTC) never takes any of this - the
- * webview `<video>` viewer stays exactly as it is.
+ * Windows (WebView2 = Chromium, full WebRTC) defaults to the webview
+ * `<video>` viewer and only takes this path when the user selects the
+ * native backend in the advanced settings.
  *
  * Channel wire format: each message is a BATCH of records (Rust coalesces
  * ~50 ms per message so the GTK main thread pays one eval/fetch per batch,
@@ -40,7 +43,11 @@ import { invoke, Channel } from "@tauri-apps/api/core";
 import { useAppStore } from "../../../store";
 import { getTrackContentMap } from "./trackContent";
 import type { StatsSample, VideoTrackStats } from "./StreamStatsPanel";
-import { registerStreamViewerStrategy, type StatsSampler } from "./viewerStrategy";
+import {
+  registerStreamViewerStrategy,
+  StreamViewerStrategyId,
+  type StatsSampler,
+} from "./viewerStrategy";
 
 // Singleton state (running viewers keyed per session, live IPC channels,
 // the strategy registration): a hot-swap must reload the page like
@@ -56,6 +63,13 @@ export const WEBVIEW_HAS_RTC = typeof RTCPeerConnection !== "undefined";
 
 /** Whether this webview can decode H.264 itself (drives the delivery mode). */
 const WEBVIEW_HAS_WEBCODECS = typeof VideoDecoder === "function";
+
+/** Serde values of `fancy_screenshare::viewer::DeliveryMode` - the payload
+ *  kind `start_native_stream_view` streams (see the module doc). */
+enum NativeDeliveryMode {
+  H264 = "h264",
+  Jpeg = "jpeg",
+}
 
 const HEADER_LEN = 14;
 
@@ -427,7 +441,7 @@ export function useNativeStreamView(
     invoke("start_native_stream_view", {
       session,
       serverId,
-      mode: WEBVIEW_HAS_WEBCODECS ? "h264" : "jpeg",
+      mode: WEBVIEW_HAS_WEBCODECS ? NativeDeliveryMode.H264 : NativeDeliveryMode.Jpeg,
       onFrame: channel,
     }).catch((e) => {
       console.error("[stream-view] start_native_stream_view failed:", e);
@@ -540,20 +554,26 @@ function createNativeStatsSampler(session: number): StatsSampler {
   };
 }
 
-// The native family: a Rust peer per session, the webview only decoding
-// (WebCodecs) and painting. The default wherever the webview lacks WebRTC;
-// the runtime flag in viewerStrategy.ts can force it elsewhere once the
-// backend compiles there.
+// The native family: a Rust peer per session (Rust-side signaling), the
+// webview only decoding (WebCodecs) and painting. The default wherever the
+// webview lacks WebRTC; on Windows it is selectable via the Settings ->
+// Advanced backend switch (persisted through viewerStrategy.ts). Concrete
+// factory: viewports own their receive-path lifecycle on mount/unmount, so
+// the transport product is a coherent no-op - there is no pre-connect
+// outside them.
 registerStreamViewerStrategy({
-  id: "native",
+  id: StreamViewerStrategyId.Native,
   // The backing commands (start/stop/stats/keyframe) and the Rust viewer
-  // are compiled for Linux only today.
-  isAvailable: () => /linux/i.test(navigator.userAgent),
-  // Native viewports own their receive-path lifecycle on mount/unmount;
-  // there is no pre-connect outside them.
-  watch: async () => {},
-  isWatching: () => false,
-  unwatch: () => {},
+  // compile on Linux and Windows. Android's webview UA also claims "Linux",
+  // but its commands are stubs - keep it excluded.
+  isAvailable: () =>
+    /windows nt/i.test(navigator.userAgent) ||
+    (/linux/i.test(navigator.userAgent) && !/android/i.test(navigator.userAgent)),
+  createReceiveTransport: () => ({
+    open: async () => {},
+    isOpen: () => false,
+    close: () => {},
+  }),
   createStatsSampler: createNativeStatsSampler,
 });
 

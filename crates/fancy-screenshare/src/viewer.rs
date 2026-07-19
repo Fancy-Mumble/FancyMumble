@@ -1,10 +1,12 @@
-//! Native (Rust-side) SFU stream viewer - Linux only.
+//! Native (Rust-side) SFU stream viewer.
 //!
 //! Distro `WebKitGTK` builds compile `WebRTC` out, so on Linux the webview
 //! cannot run the SFU viewer layer (remote streams and the broadcaster's own
 //! loopback preview) that WebView2 provides on Windows. This module is the
-//! native replacement for exactly that layer, and ONLY on Linux - the
-//! Windows/webview route is untouched.
+//! native replacement for exactly that layer: mandatory on Linux, and on
+//! Windows an opt-in alternative to the webview's `RTCPeerConnection`
+//! viewers (the embedder's viewer-strategy setting picks the family; the
+//! webview route stays the default there).
 //!
 //! One [`StreamViewer`] is the Rust analogue of the webview's per-broadcaster
 //! `RTCPeerConnection`: it offers the same m-line shape (two recvonly video
@@ -71,7 +73,12 @@ const PLI_INTERVAL: Duration = Duration::from_secs(1);
 const JPEG_QUALITY: u8 = 70;
 
 /// What [`ViewerFrame::data`] carries (see the module doc).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// Serde speaks the lowercase names ("h264" / "jpeg") so embedder IPC
+/// (e.g. a Tauri command argument) deserializes straight into the enum
+/// instead of matching strings by hand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum DeliveryMode {
     /// Compressed H.264 access units (AVCC); the embedder's UI decodes.
     H264,
