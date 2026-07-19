@@ -73,7 +73,9 @@
     "join": "加入",
     "joinChannel": "加入频道",
     "popOutDm": "弹出私信",
-    "changeSharing": "更改共享内容"
+    "changeSharing": "更改共享内容",
+    "shareCamera": "共享摄像头",
+    "changeCamera": "更改摄像头共享"
   },
   "calendar": {
     "title": "日历",
@@ -365,6 +367,8 @@
     "alreadySharingOtherServer": "你正在另一台服务器上共享屏幕，请先停止该共享。",
     "picker": {
       "title": "选择要分享的内容",
+      "cameraTitle": "选择摄像头",
+      "systemPickedDisplay": "共享的屏幕（通过系统对话框选择）",
       "tabScreens": "整个屏幕",
       "tabWindows": "窗口",
       "tabDevices": "设备",
@@ -426,6 +430,8 @@
     "fullscreen": "全屏",
     "exitFullscreen": "退出全屏",
     "settingUp": "正在准备直播…",
+    "liveNoPreview": "直播已开始。此系统不支持本地预览——其他人仍可观看。",
+    "captureStalledHint": "共享显示器上的全屏内容未被捕获（已知的 GNOME/NVIDIA 问题）。请改为共享窗口，或移动鼠标以恢复。",
     "connecting": "正在连接…",
     "waitingForStream": "等待直播开始",
     "share": "共享屏幕",
@@ -443,6 +449,7 @@
       "currentRes": "当前分辨率",
       "volume": "音量",
       "muted": "已静音",
+      "fps": "帧率",
       "codecs": "编解码器",
       "connection": "连接",
       "connectionSpeed": "连接速度",

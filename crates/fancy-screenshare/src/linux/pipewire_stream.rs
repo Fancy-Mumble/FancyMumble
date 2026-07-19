@@ -58,6 +58,18 @@ struct LoopState {
     info: VideoInfoRaw,
     have_format: bool,
     was_streaming: bool,
+    /// Whether the connect offered DMA-BUF (EGL runtime present); gates the
+    /// modifier fixation / buffers-answer steps in `param_changed`.
+    dmabuf_offered: bool,
+    /// Lazily created on the first DMA-BUF frame, on this loop thread (GL
+    /// contexts are thread-affine). `Some(None)` = creation failed; stop
+    /// retrying and drop dmabuf frames (logged).
+    importer: Option<Option<super::egl_import::DmabufImporter>>,
+    /// Log the first buffer's data type once - the ground truth for whether
+    /// the stream actually negotiated DMA-BUF or fell back to shared memory.
+    logged_data_type: bool,
+    /// Failed dmabuf imports, for rate-limited logging.
+    import_errors: u32,
 }
 
 /// Consumes the portal's PipeWire node on a dedicated loop thread.
@@ -183,11 +195,33 @@ fn run_loop(
     )
     .map_err(|e| format!("pw stream: {e}"))?;
 
+    let shm_pod = build_format_pod(&SHM_FORMATS, &ModifierSpec::None)?;
+    // EGL-enumerated modifiers (empty when EGL/the extension is missing) -
+    // generic guesses like LINEAR intersect to nothing on NVIDIA, which is
+    // why anything less than real enumeration falls back to shared memory.
+    let modifiers: &[u64] =
+        super::egl_modifiers::dmabuf_modifiers(super::egl_modifiers::DRM_FOURCC_XRGB8888);
+    let dmabuf_pod = if modifiers.is_empty() {
+        None
+    } else {
+        Some(build_format_pod(
+            &DMABUF_FORMATS,
+            &ModifierSpec::Offer(modifiers),
+        )?)
+    };
+    // The fixation answer keeps SHM as the fallback so a failed dmabuf
+    // test-allocation degrades to working shared memory, not an error.
+    let fixation_shm = shm_pod.clone();
+
     let state = LoopState {
         shared,
         info: VideoInfoRaw::new(),
         have_format: false,
         was_streaming: false,
+        dmabuf_offered: dmabuf_pod.is_some(),
+        importer: None,
+        logged_data_type: false,
+        import_errors: 0,
     };
 
     let loop_weak_state = mainloop.downgrade();
@@ -221,7 +255,7 @@ fn run_loop(
                 }
             }
         })
-        .param_changed(|_stream, state, id, param| {
+        .param_changed(move |stream, state, id, param| {
             let Some(param) = param else { return };
             if id != pw::spa::param::ParamType::Format.as_raw() {
                 return;
@@ -235,12 +269,17 @@ fn run_loop(
             }
             if state.info.parse(param).is_ok() {
                 state.have_format = true;
+                state.logged_data_type = false;
                 tracing::info!(
                     format = ?state.info.format(),
                     width = state.info.size().width,
                     height = state.info.size().height,
+                    modifier = state.info.modifier(),
                     "screenshare: pipewire format negotiated",
                 );
+                if state.dmabuf_offered {
+                    negotiate_dmabuf_step(stream, state.info.format(), param, &fixation_shm);
+                }
             }
         })
         .process(|stream, state| {
@@ -261,13 +300,28 @@ fn run_loop(
             let Some(data) = datas.first_mut() else {
                 return;
             };
-            let chunk_size = data.chunk().size() as usize;
-            let chunk_stride = data.chunk().stride();
-            let Some(bytes) = data.data() else { return };
-            let Some(frame) =
-                convert_to_rgba(format, width, height, chunk_stride, chunk_size, bytes)
-            else {
-                return;
+            if !state.logged_data_type {
+                state.logged_data_type = true;
+                tracing::info!(
+                    data_type = ?data.type_(),
+                    "screenshare: pipewire buffer type (DmaBuf = scanout-capable)",
+                );
+            }
+            let frame = if data.type_() == pw::spa::buffer::DataType::DmaBuf {
+                let Some(frame) = import_dmabuf_frame(state, data, width, height) else {
+                    return;
+                };
+                frame
+            } else {
+                let chunk_size = data.chunk().size() as usize;
+                let chunk_stride = data.chunk().stride();
+                let Some(bytes) = data.data() else { return };
+                let Some(frame) =
+                    convert_to_rgba(format, width, height, chunk_stride, chunk_size, bytes)
+                else {
+                    return;
+                };
+                frame
             };
             if let Ok(mut slot) = state.shared.slot.lock() {
                 slot.frame = Some(frame);
@@ -277,15 +331,26 @@ fn run_loop(
         .register()
         .map_err(|e| format!("pw stream listener: {e}"))?;
 
-    let format_pod = build_format_pod()?;
-    let mut params = [pw::spa::pod::Pod::from_bytes(&format_pod)
-        .ok_or_else(|| "format pod rejected".to_owned())?];
+    fn as_pod(bytes: &[u8]) -> Result<&pw::spa::pod::Pod, String> {
+        pw::spa::pod::Pod::from_bytes(bytes).ok_or_else(|| "format pod rejected".to_owned())
+    }
+    // DMA-BUF offered first so the producer prefers it; SHM stays as the
+    // fallback for producers that cannot export dmabufs.
+    let mut probe_params;
+    let mut shm_params;
+    let params: &mut [&pw::spa::pod::Pod] = if let Some(dmabuf_pod) = &dmabuf_pod {
+        probe_params = [as_pod(dmabuf_pod)?, as_pod(&shm_pod)?];
+        &mut probe_params
+    } else {
+        shm_params = [as_pod(&shm_pod)?];
+        &mut shm_params
+    };
     stream
         .connect(
             pw::spa::utils::Direction::Input,
             Some(node_id),
             pw::stream::StreamFlags::AUTOCONNECT | pw::stream::StreamFlags::MAP_BUFFERS,
-            &mut params,
+            params,
         )
         .map_err(|e| format!("pw stream connect: {e}"))?;
 
@@ -295,72 +360,338 @@ fn run_loop(
     Ok(())
 }
 
-/// `EnumFormat` pod: video/raw, the linear RGB layouts we can swizzle, any
-/// size, any rate. No `VideoModifier` property = shared-memory buffers.
-fn build_format_pod() -> Result<Vec<u8>, String> {
-    let object = pw::spa::pod::object!(
-        pw::spa::utils::SpaTypes::ObjectParamFormat,
-        pw::spa::param::ParamType::EnumFormat,
-        pw::spa::pod::property!(
-            pw::spa::param::format::FormatProperties::MediaType,
-            Id,
-            MediaType::Video
-        ),
-        pw::spa::pod::property!(
-            pw::spa::param::format::FormatProperties::MediaSubtype,
-            Id,
-            MediaSubtype::Raw
-        ),
-        pw::spa::pod::property!(
-            pw::spa::param::format::FormatProperties::VideoFormat,
-            Choice,
-            Enum,
-            Id,
-            VideoFormat::BGRx,
-            VideoFormat::BGRx,
-            VideoFormat::BGRA,
-            VideoFormat::RGBx,
-            VideoFormat::RGBA,
-            VideoFormat::BGR,
-            VideoFormat::RGB
-        ),
-        pw::spa::pod::property!(
-            pw::spa::param::format::FormatProperties::VideoSize,
-            Choice,
-            Range,
-            Rectangle,
-            pw::spa::utils::Rectangle {
-                width: 1920,
-                height: 1080
-            },
-            pw::spa::utils::Rectangle {
-                width: 1,
-                height: 1
-            },
-            pw::spa::utils::Rectangle {
-                width: 16384,
-                height: 16384
-            }
-        ),
-        pw::spa::pod::property!(
-            pw::spa::param::format::FormatProperties::VideoFramerate,
-            Choice,
-            Range,
-            Fraction,
-            pw::spa::utils::Fraction { num: 30, denom: 1 },
-            pw::spa::utils::Fraction { num: 0, denom: 1 },
-            pw::spa::utils::Fraction {
-                num: 1000,
-                denom: 1
-            }
-        )
-    );
+/// `SPA_PARAM_Buffers` answer pod (sent after Format negotiation): the data
+/// types this consumer accepts, as a flags choice of `1 << SPA_DATA_*` bits.
+/// Announcing `DmaBuf` alongside the shared-memory types lets the producer
+/// allocate GPU buffers - the prerequisite for Mutter's scanout recording.
+fn build_buffers_pod() -> Result<Vec<u8>, String> {
+    let data_types: i32 = (1 << pw::spa::sys::SPA_DATA_DmaBuf)
+        | (1 << pw::spa::sys::SPA_DATA_MemFd)
+        | (1 << pw::spa::sys::SPA_DATA_MemPtr);
+    let object = pw::spa::pod::Object {
+        type_: pw::spa::utils::SpaTypes::ObjectParamBuffers.as_raw(),
+        id: pw::spa::param::ParamType::Buffers.as_raw(),
+        properties: vec![pw::spa::pod::Property {
+            key: pw::spa::sys::SPA_PARAM_BUFFERS_dataType,
+            flags: pw::spa::pod::PropertyFlags::empty(),
+            value: pw::spa::pod::Value::Choice(pw::spa::pod::ChoiceValue::Int(
+                pw::spa::utils::Choice(
+                    pw::spa::utils::ChoiceFlags::empty(),
+                    pw::spa::utils::ChoiceEnum::Flags {
+                        default: data_types,
+                        flags: vec![data_types],
+                    },
+                ),
+            )),
+        }],
+    };
     let (cursor, _size) = pw::spa::pod::serialize::PodSerializer::serialize(
         std::io::Cursor::new(Vec::new()),
         &pw::spa::pod::Value::Object(object),
     )
+    .map_err(|e| format!("buffers pod serialize: {e:?}"))?;
+    Ok(cursor.into_inner())
+}
+
+/// How an `EnumFormat` pod constrains DRM modifiers (= buffer memory).
+enum ModifierSpec<'a> {
+    /// No `VideoModifier` property: the producer allocates shared memory.
+    None,
+    /// A `MANDATORY | DONT_FIXATE` choice of EGL-enumerated modifiers: asks
+    /// for DMA-BUF and invites the producer's fixation dance (the OBS flow).
+    Offer(&'a [u64]),
+    /// A single `MANDATORY` modifier: our fixation answer.
+    Fixed(u64),
+}
+
+/// `EnumFormat` pod: video/raw in the given layouts, any size, any rate,
+/// with modifiers per `spec`. DMA-BUF negotiation (the modifier dance plus a
+/// DmaBuf-capable `SPA_PARAM_Buffers` answer) is what unlocks Mutter's
+/// direct-scanout recording - SHM monitor streams freeze on fullscreen
+/// surfaces (mutter#3074).
+fn build_format_pod(formats: &[VideoFormat], spec: &ModifierSpec<'_>) -> Result<Vec<u8>, String> {
+    use pw::spa::pod::{ChoiceValue, Property, PropertyFlags, Value};
+    use pw::spa::utils::{Choice, ChoiceEnum, ChoiceFlags, Id, SpaTypes};
+
+    let fmt_key = pw::spa::param::format::FormatProperties::VideoFormat.as_raw();
+    let format_prop = match formats {
+        [] => return Err("empty format list".to_owned()),
+        [only] => Property {
+            key: fmt_key,
+            flags: PropertyFlags::empty(),
+            value: Value::Id(Id(only.as_raw())),
+        },
+        [first, ..] => Property {
+            key: fmt_key,
+            flags: PropertyFlags::empty(),
+            value: Value::Choice(ChoiceValue::Id(Choice(
+                ChoiceFlags::empty(),
+                ChoiceEnum::Enum {
+                    default: Id(first.as_raw()),
+                    alternatives: formats.iter().map(|f| Id(f.as_raw())).collect(),
+                },
+            ))),
+        },
+    };
+
+    let mut properties = vec![
+        Property {
+            key: pw::spa::param::format::FormatProperties::MediaType.as_raw(),
+            flags: PropertyFlags::empty(),
+            value: Value::Id(Id(MediaType::Video.as_raw())),
+        },
+        Property {
+            key: pw::spa::param::format::FormatProperties::MediaSubtype.as_raw(),
+            flags: PropertyFlags::empty(),
+            value: Value::Id(Id(MediaSubtype::Raw.as_raw())),
+        },
+        format_prop,
+    ];
+    // DONT_FIXATE (1 << 4, spa pod.h) is behind libspa's v0_3_33 feature
+    // gate; use the raw bit rather than widening the dependency surface.
+    let dont_fixate = PropertyFlags::from_bits_retain(1 << 4);
+    let modifier_key = pw::spa::param::format::FormatProperties::VideoModifier.as_raw();
+    #[allow(
+        clippy::cast_possible_wrap,
+        reason = "DRM modifiers are opaque u64 bit patterns carried in spa Long"
+    )]
+    match *spec {
+        ModifierSpec::None => {}
+        ModifierSpec::Offer(mods) => {
+            let alternatives: Vec<i64> = mods.iter().map(|&m| m as i64).collect();
+            properties.push(Property {
+                key: modifier_key,
+                flags: PropertyFlags::MANDATORY | dont_fixate,
+                value: Value::Choice(ChoiceValue::Long(Choice(
+                    ChoiceFlags::empty(),
+                    ChoiceEnum::Enum {
+                        default: *alternatives.first().unwrap_or(&0),
+                        alternatives,
+                    },
+                ))),
+            });
+        }
+        ModifierSpec::Fixed(modifier) => {
+            properties.push(Property {
+                key: modifier_key,
+                flags: PropertyFlags::MANDATORY,
+                value: Value::Long(modifier as i64),
+            });
+        }
+    }
+    properties.extend(size_and_framerate_props());
+
+    let object = pw::spa::pod::Object {
+        type_: SpaTypes::ObjectParamFormat.as_raw(),
+        id: pw::spa::param::ParamType::EnumFormat.as_raw(),
+        properties,
+    };
+    let (cursor, _size) = pw::spa::pod::serialize::PodSerializer::serialize(
+        std::io::Cursor::new(Vec::new()),
+        &Value::Object(object),
+    )
     .map_err(|e| format!("format pod serialize: {e:?}"))?;
     Ok(cursor.into_inner())
+}
+
+/// Any-size / any-rate constraints shared by every `EnumFormat` pod.
+fn size_and_framerate_props() -> [pw::spa::pod::Property; 2] {
+    use pw::spa::pod::{ChoiceValue, Property, PropertyFlags, Value};
+    use pw::spa::utils::{Choice, ChoiceEnum, ChoiceFlags, Fraction, Rectangle};
+    [
+        Property {
+            key: pw::spa::param::format::FormatProperties::VideoSize.as_raw(),
+            flags: PropertyFlags::empty(),
+            value: Value::Choice(ChoiceValue::Rectangle(Choice(
+                ChoiceFlags::empty(),
+                ChoiceEnum::Range {
+                    default: Rectangle {
+                        width: 1920,
+                        height: 1080,
+                    },
+                    min: Rectangle {
+                        width: 1,
+                        height: 1,
+                    },
+                    max: Rectangle {
+                        width: 16384,
+                        height: 16384,
+                    },
+                },
+            ))),
+        },
+        Property {
+            key: pw::spa::param::format::FormatProperties::VideoFramerate.as_raw(),
+            flags: PropertyFlags::empty(),
+            value: Value::Choice(ChoiceValue::Fraction(Choice(
+                ChoiceFlags::empty(),
+                ChoiceEnum::Range {
+                    default: Fraction { num: 30, denom: 1 },
+                    min: Fraction { num: 0, denom: 1 },
+                    max: Fraction {
+                        num: 1000,
+                        denom: 1,
+                    },
+                },
+            ))),
+        },
+    ]
+}
+
+/// All linear RGB layouts `convert_to_rgba` can swizzle (shared-memory pod).
+const SHM_FORMATS: [VideoFormat; 6] = [
+    VideoFormat::BGRx,
+    VideoFormat::BGRA,
+    VideoFormat::RGBx,
+    VideoFormat::RGBA,
+    VideoFormat::BGR,
+    VideoFormat::RGB,
+];
+
+/// Layouts offered on the DMA-BUF pod (the ones with EGL-queried modifiers).
+const DMABUF_FORMATS: [VideoFormat; 2] = [VideoFormat::BGRx, VideoFormat::BGRA];
+
+/// Turn one DMA-BUF buffer into an RGBA frame via the stream's lazily
+/// created GL importer. `None` (logged, rate-limited) on failure - dropping
+/// a frame costs smoothness, never correctness.
+fn import_dmabuf_frame(
+    state: &mut LoopState,
+    data: &pw::spa::buffer::Data,
+    width: u32,
+    height: u32,
+) -> Option<RawFrame> {
+    let fourcc = match state.info.format() {
+        VideoFormat::BGRx => super::egl_modifiers::DRM_FOURCC_XRGB8888,
+        VideoFormat::BGRA => super::egl_modifiers::DRM_FOURCC_ARGB8888,
+        other => {
+            tracing::warn!(?other, "screenshare: dmabuf in unexpected format");
+            return None;
+        }
+    };
+    let modifier = state.info.modifier();
+    if state.importer.is_none() {
+        let importer = super::egl_modifiers::runtime()
+            .ok_or_else(|| "EGL runtime unavailable".to_owned())
+            .and_then(super::egl_import::DmabufImporter::new);
+        state.importer = Some(match importer {
+            Ok(importer) => {
+                tracing::info!("screenshare: dmabuf GL importer ready");
+                Some(importer)
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "screenshare: dmabuf importer init failed ({e}); dmabuf frames dropped"
+                );
+                None
+            }
+        });
+    }
+    let importer = state.importer.as_ref()?.as_ref()?;
+    let plane = super::egl_import::DmabufPlane {
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "spa carries the dmabuf fd widened to i64; it is an fd"
+        )]
+        fd: data.as_raw().fd as std::os::fd::RawFd,
+        offset: data.chunk().offset(),
+        stride: data.chunk().stride(),
+    };
+    match importer.read_frame(&plane, fourcc, modifier, width, height) {
+        Ok(rgba) => Some(RawFrame {
+            width,
+            height,
+            rgba,
+        }),
+        Err(e) => {
+            state.import_errors += 1;
+            if state.import_errors <= 3 || state.import_errors.is_multiple_of(300) {
+                tracing::warn!(
+                    errors = state.import_errors,
+                    fd = plane.fd,
+                    offset = plane.offset,
+                    stride = plane.stride,
+                    modifier,
+                    width,
+                    height,
+                    "screenshare: dmabuf import failed: {e}"
+                );
+            }
+            None
+        }
+    }
+}
+
+/// Parse each pod and push one params update, logging (not failing) on
+/// rejection - negotiation glitches must degrade, never kill the stream.
+fn send_params(stream: &pw::stream::StreamRef, pods: &[&[u8]], what: &str) {
+    let parsed: Option<Vec<&pw::spa::pod::Pod>> =
+        pods.iter().map(|b| pw::spa::pod::Pod::from_bytes(b)).collect();
+    let Some(mut parsed) = parsed else {
+        tracing::warn!("screenshare: {what}: pod rejected");
+        return;
+    };
+    if let Err(e) = stream.update_params(&mut parsed) {
+        tracing::warn!("screenshare: {what} failed: {e}");
+    }
+}
+
+/// One step of the OBS-style DMA-BUF negotiation, run on every `Format`
+/// param change. An unfixated modifier CHOICE from the producer gets our
+/// fixation answer (one modifier, MANDATORY, SHM fallback appended); once
+/// the format is final we answer `SPA_PARAM_Buffers` advertising `DmaBuf`
+/// support - without that bit the producer allocates shared memory, and
+/// Mutter's direct-scanout recording feeds ONLY dmabuf streams
+/// (mutter#3074), which is why SHM monitor captures freeze on fullscreen
+/// surfaces.
+fn negotiate_dmabuf_step(
+    stream: &pw::stream::StreamRef,
+    format: VideoFormat,
+    param: &pw::spa::pod::Pod,
+    fixation_shm: &[u8],
+) {
+    match modifier_prop(param) {
+        Some((modifier, true)) => {
+            tracing::info!(modifier, "screenshare: fixating dmabuf modifier");
+            match build_format_pod(&[format], &ModifierSpec::Fixed(modifier)) {
+                Ok(fixated) => {
+                    send_params(stream, &[&fixated, fixation_shm], "modifier fixation");
+                }
+                Err(e) => tracing::warn!("screenshare: fixated pod: {e}"),
+            }
+        }
+        other => {
+            if let Some((modifier, false)) = other {
+                tracing::info!(modifier, "screenshare: dmabuf modifier fixed by producer");
+            }
+            match build_buffers_pod() {
+                Ok(pod_bytes) => send_params(stream, &[&pod_bytes], "buffers param update"),
+                Err(e) => tracing::warn!("screenshare: buffers pod: {e}"),
+            }
+        }
+    }
+}
+
+/// The producer's `Format` param's `VideoModifier`, if any: the modifier
+/// value plus whether it is still an unfixated choice (needing our
+/// fixation answer) or already final.
+fn modifier_prop(param: &pw::spa::pod::Pod) -> Option<(u64, bool)> {
+    use pw::spa::pod::{deserialize::PodDeserializer, ChoiceValue, Value};
+    let (_, value) = PodDeserializer::deserialize_from::<Value>(param.as_bytes()).ok()?;
+    let Value::Object(obj) = value else { return None };
+    let key = pw::spa::param::format::FormatProperties::VideoModifier.as_raw();
+    let prop = obj.properties.iter().find(|p| p.key == key)?;
+    #[allow(
+        clippy::cast_sign_loss,
+        reason = "DRM modifiers are opaque u64 bit patterns carried in spa Long"
+    )]
+    match &prop.value {
+        Value::Long(v) => Some((*v as u64, false)),
+        Value::Choice(ChoiceValue::Long(pw::spa::utils::Choice(
+            _,
+            pw::spa::utils::ChoiceEnum::Enum { default, .. },
+        ))) => Some((*default as u64, true)),
+        _ => None,
+    }
 }
 
 /// Swizzle one negotiated-layout frame into tightly packed opaque RGBA.

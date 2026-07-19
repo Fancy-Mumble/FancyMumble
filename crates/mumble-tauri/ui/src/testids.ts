@@ -189,6 +189,10 @@ export const TID = {
   /** Chat-header "Share screen" / "Stop sharing" toggle. Opens the source
    *  picker (when not sharing) or stops the broadcast. */
   screenShareToggle: "screen-share-toggle",
+  /** Chat-header camera share button (GNOME portal flow only, where the
+   *  in-app picker is hidden): system camera consent, then the camera-only
+   *  picker. */
+  cameraShareToggle: "camera-share-toggle",
   /** Root of the source-picker dialog (the Entire Screen / Window / Device
    *  chooser). Its presence means the picker is open. */
   screenSharePicker: "screen-share-picker",
@@ -213,6 +217,12 @@ export const TID = {
    *  `data-own` attributes as {@link streamViewerVideo}. A camera-ONLY share
    *  renders in the main {@link streamViewerVideo} element instead. */
   streamCameraVideo: "stream-camera-video",
+  /** The native-viewer `<canvas>` frame sink used where the webview has no
+   *  WebRTC (Linux WebKitGTK): the Rust peer receives the stream and the
+   *  frames are painted here (WebCodecs-decoded H.264, or the JPEG
+   *  fallback). Carries `data-session` / `data-own` like
+   *  {@link streamViewerVideo}. */
+  streamNativeView: "stream-native-view",
   /** A "someone is sharing" banner row; carries `data-broadcaster-name`. */
   broadcastBanner: "broadcast-banner",
   /** The "Watch" button inside a {@link broadcastBanner}; carries
@@ -245,6 +255,11 @@ export const TID = {
   streamStatsResolution: "stream-stats-resolution",
   /** Per-track "Freezes" row in the stats panel ("n (x.x s total)"). */
   streamStatsFreezes: "stream-stats-freezes",
+  /** Connection-level "FPS" row in the stats panel (decoded frames/s). */
+  streamStatsFps: "stream-stats-fps",
+  /** Advisory banner on the own-broadcast preview when the Linux/GNOME
+   *  compositor stops delivering fresh monitor frames (fullscreen scanout). */
+  streamCaptureStallHint: "stream-capture-stall-hint",
 
   // -- Settings: Account (self-service registration) ------------------------
   /** Overview block showing name / user id / auth mode / 2FA state. */
