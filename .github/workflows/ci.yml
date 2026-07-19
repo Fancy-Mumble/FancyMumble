@@ -145,6 +145,79 @@ jobs:
         run: docker compose -f docker-compose.test.yml down
 
   # ----------------------------------------------------------------
+  # 1b. Dependency policy: RUSTSEC advisories, licences, banned and
+  #     duplicate crates (policy lives in deny.toml at the repo root).
+  #     Mirrors the plugin-host gates in the server tree.
+  # ----------------------------------------------------------------
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # All four checks block: the lockfile was brought current (anyhow,
+      # aws-lc-sys, rustls-webpki, rand, yanked spin/uds_windows) and the
+      # residual advisories are per-ID ignores in deny.toml, each with its
+      # own one-line reason. A new advisory therefore fails the build until
+      # it is either fixed by an upgrade or explicitly triaged there.
+      - name: cargo-deny (advisories, bans, licenses, sources)
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories bans licenses sources
+
+  # ----------------------------------------------------------------
+  # 1c. Miri: real UB detection for the unsafe surface.
+  #
+  #     Scope: mumble-protocol (default features), skipping modules
+  #     Miri cannot or must not execute:
+  #       transport/client/work_queue - sockets, TLS FFI, the tokio
+  #         reactor;
+  #       audio - Miri's first run found real UB there (the AudioFrame
+  #         Vec<u8> -> &mut [f32] reinterpret in audio/sample.rs is
+  #         unaligned); the fix is aligned sample storage, a cross-
+  #         crate refactor tracked separately. Un-skip it once fixed.
+  #     FFI crates (tauri/screenshare/audio-device) can never run
+  #     under Miri; fancy-utils has no unsafe and its image-decoding
+  #     tests take hours under interpretation.
+  # ----------------------------------------------------------------
+
+  miri:
+    name: Miri (unsafe UB check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: miri
+
+      # mumble-protocol's build.rs compiles the .proto files via prost.
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Miri setup
+        run: cargo +nightly miri setup
+
+      - name: Miri (mumble-protocol, non-socket modules)
+        # -Zmiri-disable-isolation lets tests read the clock; without it
+        # anything touching time aborts under Miri. Skips are module-
+        # anchored (see the job comment for why each is skipped);
+        # inclusion filters match substrings and silently over-select.
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation
+        run: >
+          cargo +nightly miri test -p mumble-protocol --lib --
+          --skip "audio::" --skip "transport::" --skip "client::"
+          --skip "work_queue::"
+
+  # ----------------------------------------------------------------
   # 2. Build Tauri app (runs on every push / PR, parallel with test)
   # ----------------------------------------------------------------
 
