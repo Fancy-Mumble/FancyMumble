@@ -10,9 +10,10 @@
  * survives round-trips without any protocol change.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../store";
+import { PERM_WRITE } from "../../utils/permissions";
 import {
   ForumIcon,
   SendIcon,
@@ -23,14 +24,26 @@ import {
   FolderIcon,
   MessageCircleIcon,
   PlusIcon,
+  EditIcon,
+  QuoteIcon,
+  SearchIcon,
+  PinIcon,
+  LockIcon,
+  CloseIcon,
 } from "../../icons";
 import { useForumStore, isThreadRoot, type ForumPost } from "./forumStore";
 import {
   buildBoard,
   encodeThreadTitle,
   parseThreadTitle,
+  isPinned,
+  isLocked,
+  withFlag,
+  FLAG_PINNED,
+  FLAG_LOCKED,
   type TopicView,
 } from "./forumTaxonomy";
+import { isThreadUnread, markThreadSeen } from "./forumUnread";
 import styles from "./ForumsPanel.module.css";
 
 interface ForumsPanelProps {
@@ -90,20 +103,29 @@ function Avatar({ name, size = 34 }: { readonly name?: string; readonly size?: n
 export default function ForumsPanel({ channelId }: ForumsPanelProps) {
   const { t } = useTranslation("chat");
   const ownSession = useAppStore((s) => s.ownSession);
-  const channelName = useAppStore((s) => s.channels.find((c) => c.id === channelId)?.name);
+  const channel = useAppStore((s) => s.channels.find((c) => c.id === channelId));
+  const channelName = channel?.name;
+
+  // Server allows editing/deleting someone else's post only with Write on the
+  // channel (channel admin); pin/lock reuse that same bar since they're
+  // implemented as a title edit under the hood.
+  const canModerate = channel?.permissions != null && (channel.permissions & PERM_WRITE) !== 0;
 
   const threadsByChannel = useForumStore((s) => s.threadsByChannel);
   const postsByThread = useForumStore((s) => s.postsByThread);
+  const hasMoreByChannel = useForumStore((s) => s.hasMoreByChannel);
   const loadingChannel = useForumStore((s) => s.loadingChannel);
   const loadingThread = useForumStore((s) => s.loadingThread);
   const fetchForumThreads = useForumStore((s) => s.fetchForumThreads);
   const fetchForumThread = useForumStore((s) => s.fetchForumThread);
   const createForumThread = useForumStore((s) => s.createForumThread);
   const replyForumPost = useForumStore((s) => s.replyForumPost);
+  const editForumPost = useForumStore((s) => s.editForumPost);
   const deleteForumPost = useForumStore((s) => s.deleteForumPost);
 
   const roots = useMemo(() => threadsByChannel.get(channelId) ?? [], [threadsByChannel, channelId]);
   const board = useMemo(() => buildBoard(roots), [roots]);
+  const hasMoreThreads = hasMoreByChannel.get(channelId) ?? false;
 
   // Navigation: a selected topic (category + topic name) and, within it, an
   // open thread. `openThreadId` implies a topic is selected.
@@ -117,6 +139,19 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
   const [posting, setPosting] = useState(false);
   const [replyBody, setReplyBody] = useState("");
   const [replying, setReplying] = useState(false);
+  const replyRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Inline post editing.
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editBody, setEditBody] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Loading more (older) thread roots.
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // In-topic search.
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     void fetchForumThreads(channelId);
@@ -127,6 +162,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
     setSelected(null);
     setOpenThreadId(null);
     setShowNewThread(false);
+    setSearchQuery("");
   }, [channelId]);
 
   const currentTopic: TopicView | undefined = useMemo(() => {
@@ -135,16 +171,29 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
     return cat?.topics.find((tp) => tp.name === selected.topic);
   }, [board, selected]);
 
+  const visibleThreads = useMemo(() => {
+    if (!currentTopic) return [];
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return currentTopic.threads;
+    return currentTopic.threads.filter((thread) => {
+      const { title } = parseThreadTitle(thread.title);
+      return title.toLowerCase().includes(q) || (thread.authorName ?? "").toLowerCase().includes(q);
+    });
+  }, [currentTopic, searchQuery]);
+
   const openTopic = useCallback((category: string, topic: string) => {
     setSelected({ category, topic });
     setOpenThreadId(null);
     setShowNewThread(false);
+    setSearchQuery("");
   }, []);
 
   const openThread = useCallback(
-    (threadId: string) => {
+    (threadId: string, activityAt?: number) => {
       setOpenThreadId(threadId);
       setReplyBody("");
+      setEditingPostId(null);
+      if (activityAt) markThreadSeen(threadId, activityAt);
       void fetchForumThread(channelId, threadId);
     },
     [channelId, fetchForumThread],
@@ -181,9 +230,9 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
     }
   }, [channelId, openThreadId, replyBody, replying, replyForumPost]);
 
-  const canDelete = useCallback(
-    (post: ForumPost) => ownSession != null && post.authorSession === ownSession,
-    [ownSession],
+  const canModify = useCallback(
+    (post: ForumPost) => (ownSession != null && post.authorSession === ownSession) || canModerate,
+    [ownSession, canModerate],
   );
 
   const onDelete = useCallback(
@@ -198,9 +247,84 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
     [channelId, deleteForumPost],
   );
 
+  const startEdit = useCallback((post: ForumPost) => {
+    setEditingPostId(post.postId);
+    setEditBody(post.body ?? "");
+    setEditTitle(isThreadRoot(post) ? parseThreadTitle(post.title).title : "");
+  }, []);
+
+  const cancelEdit = useCallback(() => {
+    setEditingPostId(null);
+  }, []);
+
+  const submitEdit = useCallback(
+    async (post: ForumPost) => {
+      const body = editBody.trim();
+      if (!body || savingEdit) return;
+      setSavingEdit(true);
+      try {
+        let title: string | undefined;
+        if (isThreadRoot(post)) {
+          const coords = parseThreadTitle(post.title);
+          title = encodeThreadTitle(coords.category, coords.topic, editTitle.trim() || coords.title, coords.flags);
+        }
+        await editForumPost(channelId, post.postId, body, title);
+        setEditingPostId(null);
+      } catch (e) {
+        console.error("[forum] edit failed:", e);
+      } finally {
+        setSavingEdit(false);
+      }
+    },
+    [channelId, editBody, editTitle, savingEdit, editForumPost],
+  );
+
+  // Pin/lock are just a re-encoded root title carrying a different flag set;
+  // the server treats them as an ordinary edit (author or channel admin only).
+  const toggleThreadFlag = useCallback(
+    async (root: ForumPost, flag: string) => {
+      const coords = parseThreadTitle(root.title);
+      const nextFlags = withFlag(coords.flags, flag, !coords.flags.includes(flag));
+      const nextTitle = encodeThreadTitle(coords.category, coords.topic, coords.title, nextFlags);
+      try {
+        await editForumPost(channelId, root.postId, root.body ?? "", nextTitle);
+      } catch (e) {
+        console.error("[forum] toggle flag failed:", e);
+      }
+    },
+    [channelId, editForumPost],
+  );
+
+  const quotePost = useCallback((post: ForumPost) => {
+    const author = post.authorName || "";
+    const quoted = (post.body ?? "")
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n");
+    setReplyBody((prev) => {
+      const attribution = author ? `${author} wrote:\n` : "";
+      const block = `${attribution}${quoted}\n\n`;
+      return prev ? `${prev}\n${block}` : block;
+    });
+    requestAnimationFrame(() => replyRef.current?.focus());
+  }, []);
+
+  const loadMoreThreads = useCallback(async () => {
+    if (loadingMore || !hasMoreThreads || roots.length === 0) return;
+    setLoadingMore(true);
+    try {
+      const oldest = roots[roots.length - 1];
+      await fetchForumThreads(channelId, oldest.postId);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [channelId, roots, hasMoreThreads, loadingMore, fetchForumThreads]);
+
   const openPosts = openThreadId ? postsByThread.get(openThreadId) : undefined;
   const openRoot = openThreadId ? roots.find((r) => r.threadId === openThreadId) : undefined;
-  const openThreadTitle = openRoot ? parseThreadTitle(openRoot.title).title : "";
+  const openCoords = openRoot ? parseThreadTitle(openRoot.title) : undefined;
+  const openThreadTitle = openCoords?.title ?? "";
+  const openThreadLocked = openCoords ? isLocked(openCoords.flags) : false;
 
   // ---- Breadcrumb ------------------------------------------------------
 
@@ -287,6 +411,11 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
           </div>
         </section>
       ))}
+      {hasMoreThreads && (
+        <button type="button" className={styles.loadMoreBtn} onClick={() => void loadMoreThreads()} disabled={loadingMore}>
+          {loadingMore ? t("forum.loading") : t("forum.loadMore")}
+        </button>
+      )}
     </div>
   );
 
@@ -303,6 +432,30 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
           {t("forum.newThread")}
         </button>
       </div>
+
+      {currentTopic.threads.length > 0 && (
+        <div className={styles.searchBar}>
+          <SearchIcon width={14} height={14} className={styles.searchIcon} />
+          <input
+            className={styles.searchInput}
+            type="text"
+            placeholder={t("forum.searchThreads")}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              className={styles.iconBtn}
+              onClick={() => setSearchQuery("")}
+              title={t("forum.clearSearch")}
+              aria-label={t("forum.clearSearch")}
+            >
+              <CloseIcon width={13} height={13} />
+            </button>
+          )}
+        </div>
+      )}
 
       {showNewThread && (
         <div className={styles.composer}>
@@ -334,22 +487,34 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
       )}
 
       <div className={styles.scroll}>
-        {currentTopic.threads.length === 0 ? (
-          <div className={styles.empty}>{t("forum.noThreadsInTopic")}</div>
+        {visibleThreads.length === 0 ? (
+          <div className={styles.empty}>
+            {searchQuery ? t("forum.noSearchResults") : t("forum.noThreadsInTopic")}
+          </div>
         ) : (
           <div className={styles.threadTable}>
-            {currentTopic.threads.map((thread) => {
-              const { title } = parseThreadTitle(thread.title);
+            {visibleThreads.map((thread) => {
+              const coords = parseThreadTitle(thread.title);
+              const pinned = isPinned(coords.flags);
+              const locked = isLocked(coords.flags);
+              const activityAt = thread.editedAt ?? thread.createdAt ?? 0;
+              const unread = isThreadUnread(thread.threadId, activityAt);
               return (
                 <button
                   type="button"
                   key={thread.postId}
                   className={styles.threadRow}
-                  onClick={() => openThread(thread.threadId)}
+                  data-pinned={pinned}
+                  onClick={() => openThread(thread.threadId, activityAt)}
                 >
                   <Avatar name={thread.authorName} size={34} />
                   <span className={styles.threadMain}>
-                    <span className={styles.threadTitle}>{title || t("forum.untitled")}</span>
+                    <span className={styles.threadTitle}>
+                      {unread && <span className={styles.unreadDot} title={t("forum.newActivity")} />}
+                      {pinned && <PinIcon width={13} height={13} className={styles.pinIcon} title={t("forum.pinned")} />}
+                      {locked && <LockIcon width={13} height={13} className={styles.lockIcon} title={t("forum.locked")} />}
+                      {coords.title || t("forum.untitled")}
+                    </span>
                     <span className={styles.threadSub}>
                       {t("forum.by", { name: thread.authorName || t("forum.unknownAuthor") })}
                       {" · "}
@@ -373,9 +538,32 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
     <>
       <div className={styles.scroll}>
         {loadingThread === openThreadId && !openPosts && <div className={styles.empty}>{t("forum.loading")}</div>}
+        {openRoot && canModerate && (
+          <div className={styles.modBar}>
+            <button
+              type="button"
+              className={styles.modBtn}
+              data-active={isPinned(openCoords?.flags ?? "")}
+              onClick={() => void toggleThreadFlag(openRoot, FLAG_PINNED)}
+            >
+              <PinIcon width={13} height={13} />
+              {isPinned(openCoords?.flags ?? "") ? t("forum.unpin") : t("forum.pin")}
+            </button>
+            <button
+              type="button"
+              className={styles.modBtn}
+              data-active={isLocked(openCoords?.flags ?? "")}
+              onClick={() => void toggleThreadFlag(openRoot, FLAG_LOCKED)}
+            >
+              <LockIcon width={13} height={13} />
+              {isLocked(openCoords?.flags ?? "") ? t("forum.unlock") : t("forum.lock")}
+            </button>
+          </div>
+        )}
         <div className={styles.postList}>
           {openPosts?.map((post) => {
             const root = isThreadRoot(post);
+            const editing = editingPostId === post.postId;
             return (
               <article key={post.postId} className={styles.post} data-op={root}>
                 <div className={styles.postAside}>
@@ -390,7 +578,29 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
                       {formatTime(post.createdAt)}
                       {post.editedAt ? ` · ${t("forum.edited")}` : ""}
                     </span>
-                    {canDelete(post) && (
+                    {!editing && (
+                      <button
+                        type="button"
+                        className={styles.iconBtn}
+                        onClick={() => quotePost(post)}
+                        title={t("forum.quote")}
+                        aria-label={t("forum.quote")}
+                      >
+                        <QuoteIcon width={14} height={14} />
+                      </button>
+                    )}
+                    {!editing && canModify(post) && (
+                      <button
+                        type="button"
+                        className={styles.iconBtn}
+                        onClick={() => startEdit(post)}
+                        title={t("forum.edit")}
+                        aria-label={t("forum.edit")}
+                      >
+                        <EditIcon width={14} height={14} />
+                      </button>
+                    )}
+                    {!editing && canModify(post) && (
                       <button
                         type="button"
                         className={styles.iconBtn}
@@ -402,7 +612,40 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
                       </button>
                     )}
                   </div>
-                  <div className={styles.postBody}>{post.body}</div>
+                  {editing ? (
+                    <div className={styles.editBox}>
+                      {root && (
+                        <input
+                          className={styles.input}
+                          type="text"
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          maxLength={180}
+                        />
+                      )}
+                      <textarea
+                        className={styles.textarea}
+                        value={editBody}
+                        onChange={(e) => setEditBody(e.target.value)}
+                        rows={3}
+                      />
+                      <div className={styles.editActions}>
+                        <button type="button" className={styles.iconBtn} onClick={cancelEdit}>
+                          {t("forum.cancel")}
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.primaryBtn}
+                          onClick={() => void submitEdit(post)}
+                          disabled={savingEdit || !editBody.trim()}
+                        >
+                          {t("forum.save")}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={styles.postBody}>{post.body}</div>
+                  )}
                 </div>
               </article>
             );
@@ -411,30 +654,38 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
         </div>
       </div>
 
-      <div className={styles.composer}>
-        <textarea
-          className={styles.textarea}
-          placeholder={t("forum.replyPlaceholder")}
-          value={replyBody}
-          onChange={(e) => setReplyBody(e.target.value)}
-          rows={2}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-              e.preventDefault();
-              void submitReply();
-            }
-          }}
-        />
-        <button
-          type="button"
-          className={styles.primaryBtn}
-          onClick={() => void submitReply()}
-          disabled={replying || !replyBody.trim()}
-        >
-          <SendIcon width={15} height={15} />
-          {t("forum.reply")}
-        </button>
-      </div>
+      {openThreadLocked && !canModerate ? (
+        <div className={styles.lockedBanner}>
+          <LockIcon width={14} height={14} />
+          {t("forum.threadLocked")}
+        </div>
+      ) : (
+        <div className={styles.composer}>
+          <textarea
+            ref={replyRef}
+            className={styles.textarea}
+            placeholder={t("forum.replyPlaceholder")}
+            value={replyBody}
+            onChange={(e) => setReplyBody(e.target.value)}
+            rows={2}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                void submitReply();
+              }
+            }}
+          />
+          <button
+            type="button"
+            className={styles.primaryBtn}
+            onClick={() => void submitReply()}
+            disabled={replying || !replyBody.trim()}
+          >
+            <SendIcon width={15} height={15} />
+            {t("forum.reply")}
+          </button>
+        </div>
+      )}
     </>
   );
 

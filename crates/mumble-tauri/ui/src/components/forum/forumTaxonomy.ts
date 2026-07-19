@@ -21,7 +21,31 @@ export const FORUM_SEP = "\u001F";
 export interface ThreadCoords {
   category: string;
   topic: string;
+  /** Compact flag string, e.g. "PL" for pinned+locked. See FLAG_* below. */
+  flags: string;
   title: string;
+}
+
+/** Thread is pinned (sorted first, shown with a pin badge). */
+export const FLAG_PINNED = "P";
+/** Thread is locked: no new replies (moderator-enforced client-side only). */
+export const FLAG_LOCKED = "L";
+
+export function isPinned(flags: string): boolean {
+  return flags.includes(FLAG_PINNED);
+}
+
+export function isLocked(flags: string): boolean {
+  return flags.includes(FLAG_LOCKED);
+}
+
+/** Add or remove a single-character flag from a flag string, keeping it deterministic. */
+export function withFlag(flags: string, flag: string, on: boolean): string {
+  const set = new Set(flags.split("").filter(Boolean));
+  if (on) set.add(flag);
+  else set.delete(flag);
+  // Stable order: pinned before locked, regardless of toggle order.
+  return [FLAG_PINNED, FLAG_LOCKED].filter((f) => set.has(f)).join("");
 }
 
 export interface TopicDef {
@@ -67,23 +91,36 @@ export const DEFAULT_TAXONOMY: readonly CategoryDef[] = [
 const DEFAULT_CATEGORY = DEFAULT_TAXONOMY[0].name; // "Community"
 const DEFAULT_TOPIC = DEFAULT_TAXONOMY[0].topics[1].name; // "General Discussion"
 
-/** Pack board coordinates into a thread root title for a new thread. */
-export function encodeThreadTitle(category: string, topic: string, title: string): string {
-  return [category, topic, title].join(FORUM_SEP);
+/**
+ * Pack board coordinates into a thread root title for a new thread.
+ *
+ * Always emits the 4-segment "category<SEP>topic<SEP>flags<SEP>title" form,
+ * which `parseThreadTitle` distinguishes from the legacy 3-segment
+ * "category<SEP>topic<SEP>title" form (no flags) written before pin/lock
+ * existed - both forms are stable since user text never contains the raw
+ * unit-separator byte.
+ */
+export function encodeThreadTitle(category: string, topic: string, title: string, flags = ""): string {
+  return [category, topic, flags, title].join(FORUM_SEP);
 }
 
 /** Unpack a thread root title into its board coordinates + display title. */
 export function parseThreadTitle(raw: string | undefined): ThreadCoords {
   const parts = (raw ?? "").split(FORUM_SEP);
-  if (parts.length >= 3) {
+  if (parts.length >= 4) {
     return {
       category: parts[0] || DEFAULT_CATEGORY,
       topic: parts[1] || DEFAULT_TOPIC,
-      title: parts.slice(2).join(FORUM_SEP) || "",
+      flags: parts[2] || "",
+      title: parts.slice(3).join(FORUM_SEP) || "",
     };
   }
+  if (parts.length === 3) {
+    // Pre-pin/lock thread: category + topic, no flags segment.
+    return { category: parts[0] || DEFAULT_CATEGORY, topic: parts[1] || DEFAULT_TOPIC, flags: "", title: parts[2] || "" };
+  }
   // Legacy / plain thread: file it under the default board so it stays visible.
-  return { category: DEFAULT_CATEGORY, topic: DEFAULT_TOPIC, title: raw ?? "" };
+  return { category: DEFAULT_CATEGORY, topic: DEFAULT_TOPIC, flags: "", title: raw ?? "" };
 }
 
 function activity(p: ForumPost): number {
@@ -132,8 +169,14 @@ export function buildBoard(roots: ForumPost[]): CategoryView[] {
     const k = key(category, name);
     if (seen.has(k)) return;
     seen.add(k);
-    const threads = (threadsByKey.get(k) ?? []).slice().sort((a, b) => activity(b) - activity(a));
-    const last = threads[0];
+    const byActivity = (threadsByKey.get(k) ?? []).slice().sort((a, b) => activity(b) - activity(a));
+    const last = byActivity[0];
+    // Pinned threads float to the top of the topic; ties keep activity order.
+    const threads = byActivity.slice().sort((a, b) => {
+      const ap = isPinned(parseThreadTitle(a.title).flags) ? 1 : 0;
+      const bp = isPinned(parseThreadTitle(b.title).flags) ? 1 : 0;
+      return ap !== bp ? bp - ap : activity(b) - activity(a);
+    });
     if (!topicsByCat.has(category)) {
       topicsByCat.set(category, []);
       catOrder.push(category);
