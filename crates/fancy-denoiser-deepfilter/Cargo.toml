@@ -2,6 +2,9 @@
 name = "fancy-denoiser-deepfilter"
 version = "0.1.0"
 edition = "2021"
+# Internal workspace crate - never published to crates.io (this also lets
+# cargo-deny's wildcard gate exempt the path dependencies).
+publish = false
 description = "DeepFilterNet3 (Schroeter et al., 2023) noise suppression backend"
 license = "MIT OR Apache-2.0"
 
