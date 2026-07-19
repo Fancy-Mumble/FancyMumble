@@ -549,7 +549,14 @@ impl GpuFrontD3D12 {
         // that work - the 11On12 layer signals internally, but a cross-queue
         // fence makes the ordering explicit and debuggable.
 
-        // Record + run the video processor.
+        self.run_video_processor()?;
+        Ok(true)
+    }
+
+    /// Record and submit the D3D12 video-processor blit that converts the
+    /// captured BGRA staging texture into the NV12 output. Split out of
+    /// [`Self::acquire_nv12`] to keep that method within clippy's line budget.
+    fn run_video_processor(&mut self) -> Result<(), String> {
         unsafe { self.video_alloc.Reset() }.map_err(|e| format!("alloc reset: {e}"))?;
         unsafe { self.video_list.Reset(&self.video_alloc) }
             .map_err(|e| format!("list reset: {e}"))?;
@@ -627,7 +634,7 @@ impl GpuFrontD3D12 {
         unsafe { std::mem::ManuallyDrop::drop(&mut s.InputStream[0].pTexture2D) };
         let mut out = output_args;
         unsafe { std::mem::ManuallyDrop::drop(&mut out.OutputStream[0].pTexture2D) };
-        Ok(true)
+        Ok(())
     }
 
     /// Block until the video queue drained its submitted work.
