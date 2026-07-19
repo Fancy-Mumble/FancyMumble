@@ -48,7 +48,9 @@ fn decode(proto: &mumble_tcp::FancyServerSettings) -> ServerSettingsSnapshot {
     }
 }
 
-fn decode_setting(p: &mumble_tcp::Setting) -> ServerSetting {
+/// Decode one generic schema row (shared with the audit-config handler,
+/// which reuses the `Setting` message for its own schema).
+pub(super) fn decode_setting(p: &mumble_tcp::Setting) -> ServerSetting {
     ServerSetting {
         key: p.key.clone().unwrap_or_default(),
         r#type: p.r#type.clone().unwrap_or_else(|| "string".to_owned()),

@@ -295,6 +295,34 @@ export const TID = {
   connectTotpInput: "connect-totp-input",
   /** Submit button of the login TOTP dialog. */
   connectTotpSubmit: "connect-totp-submit",
+
+  // -- Admin: Audit Log tab --------------------------------------------------
+  /** Root container of the Audit Log admin tab. */
+  auditTab: "audit-tab",
+  /** Dual-mode search input (DSL text box, or SQL editor in advanced mode). */
+  auditQueryInput: "audit-query-input",
+  /** Runs the current search. */
+  auditRunQuery: "audit-run-query",
+  /** Live-tail toggle; carries `data-live`. */
+  auditLiveToggle: "audit-live-toggle",
+  /** Inline parse / server rejection message. */
+  auditQueryError: "audit-query-error",
+  /** KPI stat-tile row. */
+  auditKpiRow: "audit-kpi-row",
+  /** Results table; rows are {@link TID.auditRow}. */
+  auditTable: "audit-table",
+  /** One result row; carries `data-entry-id`. */
+  auditRow: "audit-row",
+  /** Detail drawer opened by clicking a row. */
+  auditDetailDrawer: "audit-detail-drawer",
+  /** Switch to the Configuration half. */
+  auditConfigHalf: "audit-config-half",
+  /** Chain-status card in the Configuration half. */
+  auditChainCard: "audit-chain-card",
+  /** Runs the hash-chain verification. */
+  auditVerifyChain: "audit-verify-chain",
+  /** Saves changed audit configuration. */
+  auditConfigSave: "audit-config-save",
 } as const;
 
 export type TestId = (typeof TID)[keyof typeof TID];

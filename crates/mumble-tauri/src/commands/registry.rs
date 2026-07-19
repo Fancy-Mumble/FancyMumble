@@ -189,6 +189,9 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::onboarding::submit_onboarding_response,
         super::onboarding::request_onboarding_response,
         // -- server settings / plugin admin ----------------------------
+        super::audit::get_audit_config,
+        super::audit::query_audit_log,
+        super::audit::save_audit_config,
         super::server_settings::get_server_settings,
         super::server_settings::save_server_settings,
         // -- account (self-service) ------------------------------------

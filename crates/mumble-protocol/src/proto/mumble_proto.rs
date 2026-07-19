@@ -2936,6 +2936,175 @@ pub struct FancyAccountAck {
     #[prost(string, optional, tag = "5")]
     pub totp_uri: ::core::option::Option<::prost::alloc::string::String>,
 }
+/// A single audit entry (spec section 4).  Identity fields are snapshots taken
+/// at record time - a renamed or deleted user must not rewrite history.
+/// Server -> Client only; embedded in FancyAuditResponse / FancyAuditEvent.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AuditEntry {
+    /// Monotonic per virtual server; the keyset-pagination cursor.
+    #[prost(uint64, optional, tag = "1")]
+    pub id: ::core::option::Option<u64>,
+    /// Unix epoch milliseconds, server clock.
+    #[prost(uint64, optional, tag = "2")]
+    pub ts: ::core::option::Option<u64>,
+    /// 'server' (authoritative) | 'client' (reported claim) | 'plugin'.
+    /// The UI must render these differently and never conflate them.
+    #[prost(string, optional, tag = "3")]
+    pub source: ::core::option::Option<::prost::alloc::string::String>,
+    /// 'ban','kick','mute','acl','channel','register','config','plugin',
+    /// 'pchat','audit.access','flag','signal.report', ...
+    #[prost(string, optional, tag = "4")]
+    pub category: ::core::option::Option<::prost::alloc::string::String>,
+    /// 'info' | 'notice' | 'warning' | 'critical'.
+    #[prost(string, optional, tag = "5")]
+    pub severity: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(uint32, optional, tag = "6")]
+    pub actor_user_id: ::core::option::Option<u32>,
+    #[prost(string, optional, tag = "7")]
+    pub actor_hash: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "8")]
+    pub actor_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(uint32, optional, tag = "9")]
+    pub target_user_id: ::core::option::Option<u32>,
+    #[prost(string, optional, tag = "10")]
+    pub target_hash: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "11")]
+    pub target_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(uint32, optional, tag = "12")]
+    pub channel_id: ::core::option::Option<u32>,
+    #[prost(string, optional, tag = "13")]
+    pub reason: ::core::option::Option<::prost::alloc::string::String>,
+    /// Category-specific structured payload (before/after, CIDR, duration, ...).
+    /// Known categories render richly; unknown ones as key/value.
+    #[prost(string, optional, tag = "14")]
+    pub detail_json: ::core::option::Option<::prost::alloc::string::String>,
+    /// Id of a related earlier entry (an unban points at its ban - spec 7.4).
+    #[prost(uint64, optional, tag = "15")]
+    pub relates_to: ::core::option::Option<u64>,
+    /// This entry's chain hash (spec 7.1), for display and offline verification.
+    #[prost(bytes = "vec", optional, tag = "16")]
+    pub entry_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+/// Client -> Server: search the audit log, or subscribe to a live tail.
+/// Requires ViewAudit (today: Write on the root channel).  Unauthorized
+/// queries receive an empty response, never a partial leak.
+/// Wire type ID = 166.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyAuditQuery {
+    /// Correlation id, echoed on the response.
+    #[prost(string, optional, tag = "1")]
+    pub query_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Empty = all categories.
+    #[prost(string, repeated, tag = "2")]
+    pub categories: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// 'server' | 'client' | 'plugin'.
+    #[prost(string, optional, tag = "3")]
+    pub source: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(uint32, optional, tag = "4")]
+    pub actor_user_id: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag = "5")]
+    pub target_user_id: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag = "6")]
+    pub channel_id: ::core::option::Option<u32>,
+    /// Free-text match on reason / detail (per-backend FTS strategy, spec 4).
+    #[prost(string, optional, tag = "7")]
+    pub text: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(uint64, optional, tag = "8")]
+    pub since_ms: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "9")]
+    pub until_ms: ::core::option::Option<u64>,
+    /// Capped server-side (e.g. 200).
+    #[prost(uint32, optional, tag = "10")]
+    pub limit: ::core::option::Option<u32>,
+    /// Keyset pagination: only entries with id < before_id.
+    #[prost(uint64, optional, tag = "11")]
+    pub before_id: ::core::option::Option<u64>,
+    /// Stream matching entries as FancyAuditEvent until the session ends or a
+    /// new query with subscribe=false replaces the subscription.
+    #[prost(bool, optional, tag = "12")]
+    pub subscribe: ::core::option::Option<bool>,
+    /// 'info' | 'notice' | 'warning' | 'critical'.
+    #[prost(string, optional, tag = "13")]
+    pub severity: ::core::option::Option<::prost::alloc::string::String>,
+    /// Advanced mode (spec 10.4): a full read-only SELECT executed against the
+    /// permission-scoped views, engine-enforced.  When set, the structured
+    /// filters above are ignored.  Rejected with FancyAuditResponse.error when
+    /// advanced SQL is unavailable (sandbox self-test failed) or disabled.
+    #[prost(string, optional, tag = "14")]
+    pub sql: ::core::option::Option<::prost::alloc::string::String>,
+    /// Run the chain verification (spec 7.1) and report via chain_* fields.
+    #[prost(bool, optional, tag = "15")]
+    pub verify_chain: ::core::option::Option<bool>,
+}
+/// Server -> Client: response to a FancyAuditQuery.  Entries newest-first.
+/// Wire type ID = 167.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FancyAuditResponse {
+    #[prost(string, optional, tag = "1")]
+    pub query_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, repeated, tag = "2")]
+    pub entries: ::prost::alloc::vec::Vec<AuditEntry>,
+    #[prost(bool, optional, tag = "3")]
+    pub has_more: ::core::option::Option<bool>,
+    /// Pass as before_id of the next page query.
+    #[prost(uint64, optional, tag = "4")]
+    pub next_before_id: ::core::option::Option<u64>,
+    /// Human-readable rejection (bad SQL, advanced mode unavailable, ...).
+    #[prost(string, optional, tag = "5")]
+    pub error: ::core::option::Option<::prost::alloc::string::String>,
+    /// Chain verification result (only when verify_chain was requested).
+    #[prost(bool, optional, tag = "6")]
+    pub chain_ok: ::core::option::Option<bool>,
+    #[prost(uint64, optional, tag = "7")]
+    pub chain_height: ::core::option::Option<u64>,
+    /// First detected break, empty when chain_ok.
+    #[prost(string, optional, tag = "8")]
+    pub chain_error: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Server -> Client: pushed to live subscribers for entries matching their
+/// subscribed filter (spec 5).
+/// Wire type ID = 168.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyAuditEvent {
+    #[prost(message, optional, tag = "1")]
+    pub entry: ::core::option::Option<AuditEntry>,
+}
+/// Server -> Client: snapshot of the audit plugin's configuration schema -
+/// the per-part collect/export toggles, retention, OTLP settings and the
+/// disclosure switch (spec 9.2), encoded as the same generic `Setting` rows
+/// the runtime server settings use so the plugin owns the schema and new
+/// parts render automatically.  Sent to ConfigureAudit holders (today: Write
+/// on root) after ServerSync and re-broadcast after every accepted update.
+/// Wire type ID = 170.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FancyAuditConfig {
+    #[prost(message, repeated, tag = "1")]
+    pub settings: ::prost::alloc::vec::Vec<Setting>,
+    /// Monotonic revision so the client can drop stale snapshots.
+    #[prost(uint64, optional, tag = "2")]
+    pub revision: ::core::option::Option<u64>,
+    /// Whether advanced SQL mode is available (the startup sandbox self-test
+    /// passed - spec 10.4).  The client hides the SQL editor otherwise.
+    #[prost(bool, optional, tag = "3")]
+    pub advanced_sql_available: ::core::option::Option<bool>,
+    /// Current chain height, shown in the config half's chain-status card.
+    #[prost(uint64, optional, tag = "4")]
+    pub chain_height: ::core::option::Option<u64>,
+    /// JSON schema of the queryable views + enum domains for editor
+    /// autocomplete (spec 10.5), e.g. {"audit_entries":\["id","ts",...\],...}.
+    #[prost(string, optional, tag = "5")]
+    pub sql_schema_json: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Admin -> Server: apply changed audit configuration.  Server validates
+/// ConfigureAudit, applies, records the change as an audit entry itself
+/// (spec 9.2 - the toggle change is the first thing the log shows), then
+/// re-broadcasts FancyAuditConfig.
+/// Wire type ID = 171.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FancyAuditConfigUpdate {
+    #[prost(message, repeated, tag = "1")]
+    pub settings: ::prost::alloc::vec::Vec<Setting>,
+}
 /// Fancy Mumble extension: a single channel attribute flag. ChannelState carries
 /// a repeated set of these (its `attributes` field), describing the channel from
 /// the receiving user's perspective. This supersedes the individual `can_enter` /
