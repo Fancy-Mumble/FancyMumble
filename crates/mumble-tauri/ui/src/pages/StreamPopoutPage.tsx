@@ -17,7 +17,7 @@
  *    redundant in-chat viewer / "Watch" banner for the broadcaster
  *    we are already showing here.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, emit } from "@tauri-apps/api/event";
@@ -25,7 +25,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import styles from "./PopoutPage.module.css";
 import PopoutShell from "./PopoutShell";
 import DrawingOverlay from "../components/chat/drawing/DrawingOverlay";
-import StreamStatsPanel from "../components/chat/stream/StreamStatsPanel";
+import StreamStatsPanel, { createPcStatsSampler } from "../components/chat/stream/StreamStatsPanel";
 
 // SignalType enum values from Mumble.proto WebRtcSignal.
 const SIGNAL_SDP_OFFER = 2;
@@ -147,7 +147,9 @@ export default function StreamPopoutPage() {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const pendingIceRef = useRef<RTCIceCandidateInit[]>([]);
   const startedRef = useRef(false);
-  const getStatsPc = useCallback(() => pcRef.current, []);
+  // The popout owns a standalone viewer PC (not the main window's registry),
+  // so its stats sampler wraps that PC directly.
+  const statsSampler = useMemo(() => createPcStatsSampler(() => pcRef.current), []);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -267,7 +269,7 @@ export default function StreamPopoutPage() {
         />
       )}
       {statsOn && (
-        <StreamStatsPanel getPc={getStatsPc} videoRef={videoRef} onClose={() => setStatsOn(false)} />
+        <StreamStatsPanel sampler={statsSampler} videoRef={videoRef} onClose={() => setStatsOn(false)} />
       )}
     </PopoutShell>
   );

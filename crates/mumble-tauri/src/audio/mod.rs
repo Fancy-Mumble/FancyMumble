@@ -80,7 +80,6 @@ pub fn set_exclusive_input(exclusive: bool) {
     EXCLUSIVE_INPUT.store(exclusive, Ordering::Relaxed);
 }
 
-
 /// On Android there is only one capture path; exclusive mode is a no-op.
 #[cfg(target_os = "android")]
 pub fn set_exclusive_input(_exclusive: bool) {}
@@ -199,7 +198,12 @@ impl AudioDeviceFactory for PlatformAudioFactory {
                 desktop::CpalAudioFactory::create_capture(device.as_deref(), PUMP_FRAME, neutral)
             }
         });
-        Ok(shared_capture::acquire(device_name, frame_size, volume, factory))
+        Ok(shared_capture::acquire(
+            device_name,
+            frame_size,
+            volume,
+            factory,
+        ))
     }
 
     fn create_mixing_playback(
@@ -210,11 +214,17 @@ impl AudioDeviceFactory for PlatformAudioFactory {
     ) -> std::result::Result<Box<dyn MixingPlayback>, String> {
         if USE_RODIO_BACKEND.load(Ordering::Relaxed) {
             rodio_desktop::RodioAudioFactory::create_mixing_playback(
-                device_name, volume, buffers, speaker_volumes,
+                device_name,
+                volume,
+                buffers,
+                speaker_volumes,
             )
         } else {
             desktop::CpalAudioFactory::create_mixing_playback(
-                device_name, volume, buffers, speaker_volumes,
+                device_name,
+                volume,
+                buffers,
+                speaker_volumes,
             )
         }
     }
@@ -268,14 +278,14 @@ mod tests {
         let v2 = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
 
         // Consumer 1 = voice pipeline (960-sample frames).
-        let mut voice = PlatformAudioFactory::create_capture(None, 960, v1)
-            .expect("create voice capture");
+        let mut voice =
+            PlatformAudioFactory::create_capture(None, 960, v1).expect("create voice capture");
         voice.start().expect("voice start");
         println!("voice capture started");
 
         // Consumer 2 = mic test, same device, WHILE voice is active.
-        let mut mic_test = PlatformAudioFactory::create_capture(None, 960, v2)
-            .expect("create mic-test capture");
+        let mut mic_test =
+            PlatformAudioFactory::create_capture(None, 960, v2).expect("create mic-test capture");
         match mic_test.start() {
             Ok(()) => println!("mic-test capture started (shared) - OK"),
             Err(e) => panic!("mic-test start collided with voice: {e}"),
@@ -333,7 +343,8 @@ mod tests {
             let neg = soft_clip(-v);
             assert!(
                 (pos + neg).abs() < 1e-6,
-                "asymmetric: soft_clip({v})={pos}, soft_clip({})={neg}", -v
+                "asymmetric: soft_clip({v})={pos}, soft_clip({})={neg}",
+                -v
             );
         }
     }

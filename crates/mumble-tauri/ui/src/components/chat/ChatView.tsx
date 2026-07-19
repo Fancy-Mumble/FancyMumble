@@ -1132,6 +1132,16 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
               ? screenShare.startSharing
               : undefined
           }
+          isCameraSharing={screenShare.activeSources?.some((s) => s.kind === "device") ?? false}
+          onToggleCameraShare={
+            // Only where the portal replaces the in-app picker (GNOME): the
+            // picker's Devices tab is gone there, so cameras get their own
+            // button (system consent dialog, then a camera-only picker).
+            screenShare.portalPicker
+              && !inPopout && !isMobile && serverFancyVersion != null && serverFancyVersion >= SCREEN_SHARE_MIN_VERSION
+              ? screenShare.startCameraSharing
+              : undefined
+          }
           screenShareDisabledReason={
             screenShare.isBroadcastingFromOtherTab
               ? t("screenShare.alreadySharingOtherServer")
@@ -1620,7 +1630,13 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           <ScreenSharePickerDialog
             initialSettings={screenShare.settings}
             initialSelection={screenShare.activeSources ?? undefined}
-            onConfirm={(sources, settings) => void screenShare.confirmSource(sources, settings)}
+            deviceOnly={screenShare.pickerDeviceOnly}
+            onConfirm={(sources, settings) =>
+              // Camera-only picks keep the display source untouched, so the
+              // portal may restore it silently instead of re-prompting.
+              void screenShare.confirmSource(sources, settings, {
+                reuseDisplay: screenShare.pickerDeviceOnly,
+              })}
             onCancel={screenShare.cancelPicker}
           />
         </Suspense>

@@ -29,13 +29,19 @@ pub(crate) enum WatchSyncEvent {
         host_session: Option<u32>,
     },
     #[serde(rename_all = "camelCase")]
-    Join { session: Option<u32> },
+    Join {
+        session: Option<u32>,
+    },
     #[serde(rename_all = "camelCase")]
-    Leave { session: Option<u32> },
+    Leave {
+        session: Option<u32>,
+    },
     StateRequest,
     End,
     #[serde(rename_all = "camelCase")]
-    HostTransfer { new_host_session: Option<u32> },
+    HostTransfer {
+        new_host_session: Option<u32>,
+    },
 }
 
 #[derive(Serialize, Clone)]
@@ -75,16 +81,16 @@ fn into_payload(
         Event::Start(s) => WatchSyncEvent::Start {
             channel_id: s.channel_id,
             source_url: s.source_url.clone(),
-            source_kind: s.source_kind.and_then(|v| {
-                SourceKind::try_from(v).ok().map(source_kind_to_str)
-            }),
+            source_kind: s
+                .source_kind
+                .and_then(|v| SourceKind::try_from(v).ok().map(source_kind_to_str)),
             title: s.title.clone(),
             host_session: s.host_session,
         },
         Event::State(s) => WatchSyncEvent::State {
-            state: s.state.and_then(|v| {
-                PlaybackState::try_from(v).ok().map(playback_state_to_str)
-            }),
+            state: s
+                .state
+                .and_then(|v| PlaybackState::try_from(v).ok().map(playback_state_to_str)),
             current_time: s.current_time,
             updated_at_ms: s.updated_at_ms,
             host_session: s.host_session,

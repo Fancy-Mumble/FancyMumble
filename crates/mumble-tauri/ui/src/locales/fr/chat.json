@@ -73,7 +73,9 @@
     "join": "Rejoindre",
     "joinChannel": "Rejoindre le canal",
     "popOutDm": "Détacher la conversation",
-    "changeSharing": "Modifier ce que vous partagez"
+    "changeSharing": "Modifier ce que vous partagez",
+    "shareCamera": "Partager une caméra",
+    "changeCamera": "Modifier le partage de caméra"
   },
   "calendar": {
     "title": "Calendrier",
@@ -365,6 +367,8 @@
     "alreadySharingOtherServer": "Vous partagez déjà votre écran sur un autre serveur. Arrêtez d'abord ce partage.",
     "picker": {
       "title": "Choisissez ce que vous voulez partager",
+      "cameraTitle": "Choisir une caméra",
+      "systemPickedDisplay": "Écran partagé (choisi via la boîte de dialogue système)",
       "tabScreens": "Écran entier",
       "tabWindows": "Fenêtre",
       "tabDevices": "Appareil",
@@ -426,6 +430,8 @@
     "fullscreen": "Plein écran",
     "exitFullscreen": "Quitter le plein écran",
     "settingUp": "Préparation du stream...",
+    "liveNoPreview": "Le stream est en direct. L'aperçu local n'est pas disponible sur ce système - les autres peuvent quand même regarder.",
+    "captureStalledHint": "Le contenu en plein écran de l'écran partagé n'est pas capturé (problème connu GNOME/NVIDIA). Partagez plutôt la fenêtre ou déplacez la souris pour reprendre.",
     "connecting": "Connexion en cours...",
     "waitingForStream": "En attente du stream",
     "share": "Partager l'écran",
@@ -443,6 +449,7 @@
       "currentRes": "Résolution actuelle",
       "volume": "Volume",
       "muted": "muet",
+      "fps": "FPS",
       "codecs": "Codecs",
       "connection": "Connexion",
       "connectionSpeed": "Vitesse de connexion",

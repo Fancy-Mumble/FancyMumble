@@ -97,7 +97,9 @@ pub(crate) async fn move_channel_users(
     from_channel_id: u32,
     to_channel_id: u32,
 ) -> Result<(), String> {
-    state.move_channel_users(from_channel_id, to_channel_id).await
+    state
+        .move_channel_users(from_channel_id, to_channel_id)
+        .await
 }
 
 /// Request ping/connection statistics for a specific user.
@@ -114,9 +116,7 @@ pub(crate) async fn request_user_stats(
 
 /// Request the registered user list from the server.
 #[tauri::command]
-pub(crate) async fn request_user_list(
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
+pub(crate) async fn request_user_list(state: tauri::State<'_, AppState>) -> Result<(), String> {
     state.request_user_list().await
 }
 
@@ -141,9 +141,7 @@ pub(crate) async fn request_user_comment(
 
 /// Request the ban list from the server.
 #[tauri::command]
-pub(crate) async fn request_ban_list(
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
+pub(crate) async fn request_ban_list(state: tauri::State<'_, AppState>) -> Result<(), String> {
     state.request_ban_list().await
 }
 

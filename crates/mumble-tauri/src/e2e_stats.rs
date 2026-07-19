@@ -79,7 +79,9 @@ fn inner() -> Option<&'static StatsInner> {
 pub fn record_packet(session: u32, frame_number: u64, opus: &[u8], is_terminator: bool) {
     let Some(inner) = inner() else { return };
     {
-        let Ok(mut sessions) = inner.sessions.lock() else { return };
+        let Ok(mut sessions) = inner.sessions.lock() else {
+            return;
+        };
         let s = sessions.entry(session).or_default();
         if s.packets == 0 {
             s.first_frame_number = frame_number;
@@ -116,9 +118,15 @@ fn writer_loop(inner: &'static StatsInner) {
         // (empty when the buffers are unavailable this tick).
         let mut tone: HashMap<u32, (usize, f64)> = HashMap::new();
         'tone: {
-            let Ok(slot) = inner.buffers.lock() else { break 'tone };
-            let Some(buffers) = slot.as_ref() else { break 'tone };
-            let Ok(bufs) = buffers.lock() else { break 'tone };
+            let Ok(slot) = inner.buffers.lock() else {
+                break 'tone;
+            };
+            let Some(buffers) = slot.as_ref() else {
+                break 'tone;
+            };
+            let Ok(bufs) = buffers.lock() else {
+                break 'tone;
+            };
             for (&session, buf) in bufs.iter() {
                 let take = buf.len().min(TONE_WINDOW);
                 let window: Vec<f32> = buf.iter().skip(buf.len() - take).copied().collect();
@@ -127,7 +135,9 @@ fn writer_loop(inner: &'static StatsInner) {
         }
 
         let snapshot = {
-            let Ok(mut sessions) = inner.sessions.lock() else { continue };
+            let Ok(mut sessions) = inner.sessions.lock() else {
+                continue;
+            };
             for (session, (buffered, ratio)) in &tone {
                 if let Some(s) = sessions.get_mut(session) {
                     s.buffered = *buffered;

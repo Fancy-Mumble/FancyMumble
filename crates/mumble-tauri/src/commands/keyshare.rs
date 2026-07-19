@@ -48,7 +48,8 @@ pub(crate) async fn approve_key_share(
 
         // Remove the pending entry and capture its request_id.
         let idx = shared
-            .pchat_ctx.pending_key_shares
+            .pchat_ctx
+            .pending_key_shares
             .iter()
             .position(|p| p.channel_id == channel_id && p.peer_cert_hash == peer_cert_hash)
             .ok_or("no pending key share for this channel/peer")?;
@@ -58,7 +59,8 @@ pub(crate) async fn approve_key_share(
         // Collect payload for deferred emit outside the lock.
         let share_requests_emit = shared.conn.tauri_app_handle.as_ref().map(|app| {
             let remaining: Vec<_> = shared
-                .pchat_ctx.pending_key_shares
+                .pchat_ctx
+                .pending_key_shares
                 .iter()
                 .filter(|p| p.channel_id == channel_id)
                 .cloned()
@@ -72,7 +74,11 @@ pub(crate) async fn approve_key_share(
             )
         });
 
-        let pchat = shared.pchat_ctx.pchat.as_ref().ok_or("pchat not initialised")?;
+        let pchat = shared
+            .pchat_ctx
+            .pchat
+            .as_ref()
+            .ok_or("pchat not initialised")?;
 
         let peer_record = pchat
             .key_manager
@@ -100,13 +106,9 @@ pub(crate) async fn approve_key_share(
 
         wire_exchange.sender_hash = pchat.own_cert_hash.clone();
 
-        let proto =
-            state::pchat::wire_key_exchange_to_proto(&wire_exchange);
+        let proto = state::pchat::wire_key_exchange_to_proto(&wire_exchange);
 
-        let handle = shared
-            .conn.client_handle
-            .clone()
-            .ok_or("not connected")?;
+        let handle = shared.conn.client_handle.clone().ok_or("not connected")?;
 
         (handle, proto, share_requests_emit)
     };
@@ -158,13 +160,15 @@ pub(crate) fn dismiss_key_share(
         let mut shared = __session.lock().map_err(|e| e.to_string())?;
 
         shared
-            .pchat_ctx.pending_key_shares
+            .pchat_ctx
+            .pending_key_shares
             .retain(|p| !(p.channel_id == channel_id && p.peer_cert_hash == peer_cert_hash));
 
         // Collect payload for deferred emit outside the lock.
         shared.conn.tauri_app_handle.as_ref().map(|app| {
             let remaining: Vec<_> = shared
-                .pchat_ctx.pending_key_shares
+                .pchat_ctx
+                .pending_key_shares
                 .iter()
                 .filter(|p| p.channel_id == channel_id)
                 .cloned()
@@ -215,8 +219,15 @@ pub(crate) fn get_key_holders(
     channel_id: u32,
 ) -> Vec<state::types::KeyHolderEntry> {
     let __session = state.inner.snapshot();
-    let shared = __session.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    shared.pchat_ctx.key_holders.get(&channel_id).cloned().unwrap_or_default()
+    let shared = __session
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    shared
+        .pchat_ctx
+        .key_holders
+        .get(&channel_id)
+        .cloned()
+        .unwrap_or_default()
 }
 
 /// Request a key-ownership takeover for a channel (requires `KeyOwner` permission).

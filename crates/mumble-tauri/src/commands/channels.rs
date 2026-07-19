@@ -138,7 +138,10 @@ pub(crate) fn mark_channel_read(state: tauri::State<'_, AppState>, channel_id: u
 
 /// Update a channel on the server.
 #[tauri::command]
-#[allow(clippy::too_many_arguments, reason = "Tauri command mirrors the full channel update parameter surface")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Tauri command mirrors the full channel update parameter surface"
+)]
 pub(crate) async fn update_channel(
     state: tauri::State<'_, AppState>,
     channel_id: u32,
@@ -185,7 +188,10 @@ pub(crate) async fn delete_channel(
 
 /// Create a new sub-channel on the server.
 #[tauri::command]
-#[allow(clippy::too_many_arguments, reason = "Tauri command mirrors the full channel creation parameter surface")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Tauri command mirrors the full channel creation parameter surface"
+)]
 pub(crate) async fn create_channel(
     state: tauri::State<'_, AppState>,
     parent_id: u32,

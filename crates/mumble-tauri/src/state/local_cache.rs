@@ -128,8 +128,7 @@ impl LocalMessageCache {
             .messages
             .iter()
             .map(|(&channel_id, msgs)| {
-                let ids: HashSet<String> =
-                    msgs.iter().map(|m| m.message_id.clone()).collect();
+                let ids: HashSet<String> = msgs.iter().map(|m| m.message_id.clone()).collect();
                 (channel_id, ids)
             })
             .collect();
@@ -194,9 +193,7 @@ impl LocalMessageCache {
     ) {
         if let Some(channel) = self.reactions.get_mut(&channel_id) {
             channel.retain(|r| {
-                !(r.message_id == message_id
-                    && r.emoji == emoji
-                    && r.sender_hash == sender_hash)
+                !(r.message_id == message_id && r.emoji == emoji && r.sender_hash == sender_hash)
             });
             if channel.is_empty() {
                 let _ = self.reactions.remove(&channel_id);
@@ -216,8 +213,7 @@ impl LocalMessageCache {
         let json =
             serde_json::to_vec(&self.messages).map_err(|e| format!("serialize cache: {e}"))?;
         let encrypted = self.encrypt(&json)?;
-        std::fs::write(&self.cache_path, &encrypted)
-            .map_err(|e| format!("write cache: {e}"))?;
+        std::fs::write(&self.cache_path, &encrypted).map_err(|e| format!("write cache: {e}"))?;
         debug!(
             path = ?self.cache_path,
             messages = self.total_count(),
@@ -247,8 +243,7 @@ impl LocalMessageCache {
             debug!(path = ?self.cache_path, "no local message cache found");
             return Ok(());
         }
-        let encrypted =
-            std::fs::read(&self.cache_path).map_err(|e| format!("read cache: {e}"))?;
+        let encrypted = std::fs::read(&self.cache_path).map_err(|e| format!("read cache: {e}"))?;
         let json = self.decrypt(&encrypted)?;
         self.messages =
             serde_json::from_slice(&json).map_err(|e| format!("deserialize cache: {e}"))?;

@@ -67,8 +67,7 @@ pub(crate) async fn process_background(
 
         if transforms.is_empty() {
             // No processing needed, but re-encode to JPEG for consistency.
-            let result = process_pipeline(&image_bytes, &[], false)
-                .map_err(|e| e.to_string())?;
+            let result = process_pipeline(&image_bytes, &[], false).map_err(|e| e.to_string())?;
             return Ok(STANDARD.encode(result));
         }
 

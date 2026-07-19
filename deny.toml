@@ -1,0 +1,104 @@
+# cargo-deny policy for the client workspace.
+#
+# Mirrors the plugin-host policy in the server tree: RUSTSEC advisories,
+# licence allow-list, banned/duplicate crates and registry sources. Run
+# locally with:
+#
+#     cargo deny check advisories bans licenses sources
+
+[graph]
+all-features = true
+
+# ---------------------------------------------------------------------------
+# Security advisories (RUSTSEC)
+# ---------------------------------------------------------------------------
+[advisories]
+yanked = "deny"
+# Every entry carries its own reason; add new ones the same way. Everything
+# upgradeable was upgraded instead (anyhow, aws-lc-sys, rustls-webpki, rand).
+ignore = [
+    # Tauri v2's Linux stack (wry/tao) renders through webkit2gtk/GTK3; these
+    # clear together when upstream moves off GTK3.
+    { id = "RUSTSEC-2024-0411", reason = "gtk3-bindings: structural to Tauri v2 Linux (wry/tao)" },
+    { id = "RUSTSEC-2024-0412", reason = "gtk3-bindings: structural to Tauri v2 Linux (wry/tao)" },
+    { id = "RUSTSEC-2024-0413", reason = "gtk3-bindings: structural to Tauri v2 Linux (wry/tao)" },
+    { id = "RUSTSEC-2024-0414", reason = "gtk3-bindings: structural to Tauri v2 Linux (wry/tao)" },
+    { id = "RUSTSEC-2024-0415", reason = "gtk3-bindings: structural to Tauri v2 Linux (wry/tao)" },
+    { id = "RUSTSEC-2024-0416", reason = "gtk3-bindings: structural to Tauri v2 Linux (wry/tao)" },
+    { id = "RUSTSEC-2024-0417", reason = "gtk3-bindings: structural to Tauri v2 Linux (wry/tao)" },
+    { id = "RUSTSEC-2024-0418", reason = "gtk3-bindings: structural to Tauri v2 Linux (wry/tao)" },
+    { id = "RUSTSEC-2024-0419", reason = "gtk3-bindings: structural to Tauri v2 Linux (wry/tao)" },
+    { id = "RUSTSEC-2024-0420", reason = "gtk3-bindings: structural to Tauri v2 Linux (wry/tao)" },
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error (unmaintained): pulled by the same GTK3 macro stack" },
+    { id = "RUSTSEC-2024-0436", reason = "paste (unmaintained): proc-macro via nokhwa camera capture" },
+    { id = "RUSTSEC-2025-0044", reason = "slice-ring-buffer: dev-only (minimp3 test fixtures), never shipped" },
+    { id = "RUSTSEC-2025-0057", reason = "fxhash (unmaintained): via selectors in the Tauri toolchain" },
+    { id = "RUSTSEC-2025-0075", reason = "unic-* (unmaintained): via urlpattern in tauri deep-link" },
+    { id = "RUSTSEC-2025-0080", reason = "unic-* (unmaintained): via urlpattern in tauri deep-link" },
+    { id = "RUSTSEC-2025-0081", reason = "unic-* (unmaintained): via urlpattern in tauri deep-link" },
+    { id = "RUSTSEC-2025-0098", reason = "unic-* (unmaintained): via urlpattern in tauri deep-link" },
+    { id = "RUSTSEC-2025-0100", reason = "unic-* (unmaintained): via urlpattern in tauri deep-link" },
+    { id = "RUSTSEC-2025-0134", reason = "rustls-pemfile (unmaintained): direct dep; migrate to rustls-pki-types pem API" },
+    { id = "RUSTSEC-2025-0141", reason = "bincode (unmaintained): via webrtc-dtls in the screenshare stack" },
+    { id = "RUSTSEC-2026-0150", reason = "audiopus_sys (unmaintained): the opus voice codec FFI" },
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml DoS: four parent-pinned versions < 0.41; clears as parents bump" },
+    { id = "RUSTSEC-2026-0195", reason = "quick-xml DoS: four parent-pinned versions < 0.41; clears as parents bump" },
+]
+
+# ---------------------------------------------------------------------------
+# Licences
+# ---------------------------------------------------------------------------
+[licenses]
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.8
+
+# Permissive licences that only enter through specific native-code wrappers;
+# scoped as exceptions so a new crate can't ride in on them unnoticed.
+#   IJG: the classic libjpeg licence (mozjpeg, via the DeepFilterNet stack).
+#   OpenSSL: aws-lc-sys carries the historic OpenSSL licence alongside
+#   ISC/Apache-2.0; it backs rustls' aws-lc-rs default crypto provider.
+exceptions = [
+    { name = "mozjpeg", allow = ["IJG"] },
+    { name = "mozjpeg-sys", allow = ["IJG"] },
+    { name = "aws-lc-sys", allow = ["OpenSSL"] },
+]
+
+# ---------------------------------------------------------------------------
+# Banned / duplicate crates
+# ---------------------------------------------------------------------------
+[bans]
+# Duplicate versions are common in a graph this size; the value here is
+# visibility of the drift, not a hard gate.
+multiple-versions = "warn"
+# Wildcard requirements from crates.io are a real hazard; the workspace's own
+# path dependencies legitimately use `*`.
+wildcards = "deny"
+allow-wildcard-paths = true
+
+# ---------------------------------------------------------------------------
+# Sources
+# ---------------------------------------------------------------------------
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# deep_filter has no crates.io release at the revision the denoiser needs;
+# fancy-denoiser-deepfilter pins an exact rev, so the source is reproducible.
+# (signal-bridge's libsignal git dependency lives in its own AGPL-isolated
+# workspace and is not part of this graph.)
+allow-git = ["https://github.com/Rikorose/DeepFilterNet.git"]

@@ -175,7 +175,8 @@ pub struct AudioSettings {
     pub input_volume: f32,
     /// Speaker volume multiplier (0.0-2.0, default 1.0).
     #[serde(default = "AudioSettings::default_volume")]
-    pub output_volume: f32,    /// Automatically adjust input sensitivity based on ambient noise floor.
+    pub output_volume: f32,
+    /// Automatically adjust input sensitivity based on ambient noise floor.
     #[serde(default)]
     pub auto_input_sensitivity: bool,
     /// Force audio to use TCP tunnel instead of UDP (e.g. behind strict NAT).

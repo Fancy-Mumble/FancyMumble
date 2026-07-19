@@ -16,14 +16,14 @@
 //! - `key_sharing`   -- key challenges, holder reporting, takeover
 //! - `signal_bridge` -- Signal Protocol bridge loading and distribution
 
-mod settings;
 mod conversion;
 pub(crate) mod identity;
-mod persistence;
-mod outbound;
 mod inbound;
 mod key_exchange;
 mod key_sharing;
+mod outbound;
+mod persistence;
+mod settings;
 mod signal_bridge;
 
 // -- Re-exports -------------------------------------------------------
@@ -35,35 +35,34 @@ pub(crate) use conversion::{wire_key_announce_to_proto, wire_key_exchange_to_pro
 pub(crate) use identity::IdentityStore;
 
 // Persistence
-pub(crate) use persistence::{persist_archive_key, delete_persisted_archive_key, load_persisted_archive_keys};
+pub(crate) use persistence::{
+    delete_persisted_archive_key, load_persisted_archive_keys, persist_archive_key,
+};
 
 // Outbound
 pub(crate) use outbound::{send_fetch, OutboundMessage};
 
 // Inbound
 pub(crate) use inbound::{
-    handle_proto_msg_deliver, handle_proto_fetch_resp, handle_proto_ack,
-    handle_proto_delete_messages, handle_proto_offline_queue_drain,
+    handle_proto_ack, handle_proto_delete_messages, handle_proto_fetch_resp,
+    handle_proto_msg_deliver, handle_proto_offline_queue_drain,
 };
 
 // Key exchange
 pub(crate) use key_exchange::{
-    handle_proto_key_announce, handle_proto_key_request,
-    handle_proto_key_exchange, check_key_share_for_channel,
+    check_key_share_for_channel, handle_proto_key_announce, handle_proto_key_exchange,
+    handle_proto_key_request,
 };
 
 // Key sharing
 pub(crate) use key_sharing::{
-    handle_proto_key_challenge, handle_proto_key_challenge_result,
-    send_key_holder_report_async,
-    send_key_takeover, query_key_holders,
+    handle_proto_key_challenge, handle_proto_key_challenge_result, query_key_holders,
+    send_key_holder_report_async, send_key_takeover,
 };
 
 // Signal bridge
 pub(crate) use signal_bridge::{
-    ensure_signal_bridge_unlocked,
-    send_signal_distribution,
-    handle_signal_sender_key_by_hash,
+    ensure_signal_bridge_unlocked, handle_signal_sender_key_by_hash, send_signal_distribution,
 };
 
 // -- Core types -------------------------------------------------------
@@ -141,12 +140,10 @@ impl InboundEnvelope<'_> {
     ///
     /// Works for both `FancyV1` and `SignalV1` protocols, dispatching to
     /// the appropriate decryption path inside `KeyManager`.
-    pub(crate) fn decrypt(
-        &self,
-        pchat: &mut PchatState,
-    ) -> Result<MessageEnvelope, String> {
+    pub(crate) fn decrypt(&self, pchat: &mut PchatState) -> Result<MessageEnvelope, String> {
         let plaintext = if self.protocol == PchatProtocol::SignalV1 {
-            pchat.key_manager
+            pchat
+                .key_manager
                 .decrypt_signal(self.sender_hash, self.channel_id, self.envelope_bytes)
                 .map_err(|e| format!("{e}"))?
         } else {
@@ -156,12 +153,20 @@ impl InboundEnvelope<'_> {
                 chain_index: self.chain_index,
                 epoch_fingerprint: self.epoch_fingerprint,
             };
-            pchat.key_manager
-                .decrypt(self.protocol, self.channel_id, self.message_id, self.timestamp, &payload)
+            pchat
+                .key_manager
+                .decrypt(
+                    self.protocol,
+                    self.channel_id,
+                    self.message_id,
+                    self.timestamp,
+                    &payload,
+                )
                 .map_err(|e| format!("{e}"))?
         };
 
-        pchat.codec
+        pchat
+            .codec
             .decode::<MessageEnvelope>(&plaintext)
             .map_err(|e| format!("decode envelope: {e}"))
     }
@@ -258,10 +263,7 @@ pub(crate) fn emit_history_loading(
 }
 
 /// Emit a `pchat-signal-bridge-error` event to the frontend.
-pub(crate) fn emit_signal_bridge_error(
-    shared: &Arc<Mutex<SharedState>>,
-    message: &str,
-) {
+pub(crate) fn emit_signal_bridge_error(shared: &Arc<Mutex<SharedState>>, message: &str) {
     use tauri::Emitter;
 
     let app = shared

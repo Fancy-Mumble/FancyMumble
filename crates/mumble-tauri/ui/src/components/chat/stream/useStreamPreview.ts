@@ -10,6 +10,7 @@
  */
 import { useState, useEffect, useRef } from "react";
 import { useAppStore } from "../../../store";
+import { activeStreamViewerStrategy, StreamViewerStrategyId } from "./viewerStrategy";
 
 const SIGNAL_SDP_OFFER = 2;
 const SIGNAL_ICE_CANDIDATE = 4;
@@ -259,6 +260,12 @@ export function useStreamThumbnail(session: number, isHovering: boolean): string
       // Never attempt a WebRTC preview fetch for the local session - the
       // thumbnail is populated directly via storeLocalThumbnail.
       if (session === ownSession) return;
+      // The preview PC is a webview-family object. Under the native
+      // strategy the Rust viewer's answer interception cannot tell the
+      // preview's (equally sendonly-shaped) answer from its own, so a
+      // hover fetch could cross-wire the two peers - skip it, matching
+      // Linux, where the native family never had hover fetches.
+      if (activeStreamViewerStrategy().id === StreamViewerStrategyId.Native) return;
       inFlight.current = true;
       requestThumbnail(session).then((url) => {
         inFlight.current = false;

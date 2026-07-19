@@ -66,10 +66,7 @@ impl HandleMessage for mumble_tcp::FancyReadReceiptDeliver {
                         cert_hash,
                         name,
                         is_online,
-                        last_read_message_id: rs
-                            .last_read_message_id
-                            .clone()
-                            .unwrap_or_default(),
+                        last_read_message_id: rs.last_read_message_id.clone().unwrap_or_default(),
                         timestamp: rs.timestamp.unwrap_or(0),
                     })
                 })

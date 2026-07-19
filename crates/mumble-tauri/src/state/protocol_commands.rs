@@ -59,20 +59,25 @@ pub enum WatchSyncEventArg {
         host_session: Option<u32>,
     },
     #[serde(rename_all = "camelCase")]
-    Join { session: Option<u32> },
+    Join {
+        session: Option<u32>,
+    },
     #[serde(rename_all = "camelCase")]
-    Leave { session: Option<u32> },
+    Leave {
+        session: Option<u32>,
+    },
     StateRequest,
     End,
     #[serde(rename_all = "camelCase")]
-    HostTransfer { new_host_session: Option<u32> },
+    HostTransfer {
+        new_host_session: Option<u32>,
+    },
 }
 
 impl WatchSyncEventArg {
     fn into_proto(self) -> mumble_tcp::fancy_watch_sync::Event {
         use mumble_tcp::fancy_watch_sync::{
-            Event, HostTransfer, Member, Start, State,
-            StateRequest as PStateRequest, End as PEnd,
+            End as PEnd, Event, HostTransfer, Member, Start, State, StateRequest as PStateRequest,
         };
         match self {
             Self::Start {
@@ -200,7 +205,11 @@ impl AppState {
     fn client_handle(&self) -> Result<mumble_protocol::client::ClientHandle, String> {
         let __session = self.inner.snapshot();
         let state = __session.lock().map_err(|e| e.to_string())?;
-        state.conn.client_handle.clone().ok_or_else(|| "Not connected".to_string())
+        state
+            .conn
+            .client_handle
+            .clone()
+            .ok_or_else(|| "Not connected".to_string())
     }
 
     pub async fn send_push_update(&self, muted_channels: Vec<u32>) -> Result<(), String> {
@@ -220,19 +229,14 @@ impl AppState {
             .map_err(|e| format!("Failed to send push update: {e}"))?;
 
         handle
-            .send(command::SendFancySubscribePush {
-                muted_channels,
-            })
+            .send(command::SendFancySubscribePush { muted_channels })
             .await
             .map_err(|e| format!("Failed to send subscribe push update: {e}"))?;
 
         Ok(())
     }
 
-    pub async fn send_subscribe_push(
-        &self,
-        muted_channels: Vec<u32>,
-    ) -> Result<(), String> {
+    pub async fn send_subscribe_push(&self, muted_channels: Vec<u32>) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
             let state = __session.lock().map_err(|e| e.to_string())?;
@@ -467,21 +471,17 @@ impl AppState {
 
         let emoji_oneof = if emoji.starts_with(':') && emoji.ends_with(':') && emoji.len() > 2 {
             let shortcode = emoji[1..emoji.len() - 1].to_owned();
-            Some(
-                mumble_tcp::pchat_reaction::Emoji::ServerEmoji(
-                    mumble_tcp::ServerEmoji {
-                        shortcode: Some(shortcode.into_bytes()),
-                    },
-                ),
-            )
+            Some(mumble_tcp::pchat_reaction::Emoji::ServerEmoji(
+                mumble_tcp::ServerEmoji {
+                    shortcode: Some(shortcode.into_bytes()),
+                },
+            ))
         } else {
-            Some(
-                mumble_tcp::pchat_reaction::Emoji::UnicodeEmoji(
-                    mumble_tcp::UnicodeEmoji {
-                        grapheme: Some(emoji),
-                    },
-                ),
-            )
+            Some(mumble_tcp::pchat_reaction::Emoji::UnicodeEmoji(
+                mumble_tcp::UnicodeEmoji {
+                    grapheme: Some(emoji),
+                },
+            ))
         };
 
         let msg = mumble_tcp::PchatReaction {
@@ -574,7 +574,8 @@ impl AppState {
             Ok(Ok(ack)) if ack.success => Ok(()),
             Ok(Ok(ack)) => Err(format!(
                 "Server rejected deletion: {}",
-                ack.reason.unwrap_or_else(|| "permission denied".to_string())
+                ack.reason
+                    .unwrap_or_else(|| "permission denied".to_string())
             )),
             Ok(Err(_)) => Err("Delete acknowledgement channel closed".to_string()),
             Err(_) => Err("Delete request timed out".to_string()),

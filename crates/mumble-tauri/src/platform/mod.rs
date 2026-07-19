@@ -7,16 +7,16 @@
 //! - [`desktop`]  - system tray icon (all desktop OSes).
 //! - [`badge`]    - taskbar badge overlay and system clock detection.
 
-pub(crate) mod badge;
-#[cfg(target_os = "linux")]
-mod linux;
-#[cfg(target_os = "windows")]
-mod windows;
 #[cfg(target_os = "android")]
 pub(crate) mod android;
+pub(crate) mod badge;
 #[cfg(not(target_os = "android"))]
 pub(crate) mod desktop;
+#[cfg(target_os = "linux")]
+mod linux;
 pub(crate) mod window;
+#[cfg(target_os = "windows")]
+mod windows;
 
 /// Lifecycle hooks invoked at fixed points in the application startup sequence.
 ///

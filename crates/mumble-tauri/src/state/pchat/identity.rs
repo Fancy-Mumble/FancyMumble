@@ -74,7 +74,9 @@ impl IdentityStore {
         }
 
         let global_seed: Option<[u8; 32]> = std::fs::read(
-            self.app_data_dir.join(LEGACY_PCHAT_DIR).join(LEGACY_SEED_FILE),
+            self.app_data_dir
+                .join(LEGACY_PCHAT_DIR)
+                .join(LEGACY_SEED_FILE),
         )
         .ok()
         .and_then(|data| <[u8; 32]>::try_from(data.as_slice()).ok());
@@ -140,8 +142,7 @@ impl IdentityStore {
         }
 
         let seed: [u8; 32] = rand::random();
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("Failed to create identity dir: {e}"))?;
+        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create identity dir: {e}"))?;
         std::fs::write(&seed_path, seed).map_err(|e| format!("Failed to write seed: {e}"))?;
         info!(label, "generated new pchat identity seed");
         Ok(seed)
@@ -156,8 +157,7 @@ impl IdentityStore {
             return Ok(());
         }
 
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("Failed to create identity dir: {e}"))?;
+        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create identity dir: {e}"))?;
 
         let certified = rcgen::generate_simple_self_signed(vec![label.to_string()])
             .map_err(|e| e.to_string())?;
@@ -260,8 +260,8 @@ impl IdentityStore {
 
         let seed_path = dir.join(SEED_FILE);
         if seed_path.exists() {
-            let data = std::fs::read(&seed_path)
-                .map_err(|e| format!("Failed to read seed: {e}"))?;
+            let data =
+                std::fs::read(&seed_path).map_err(|e| format!("Failed to read seed: {e}"))?;
             let hex: String = bytes_to_hex(&data);
             let _ = bundle.insert(SEED_FILE.to_string(), Value::String(hex));
         }
@@ -278,8 +278,8 @@ impl IdentityStore {
     pub fn import(&self, src: &Path) -> Result<String, String> {
         use serde_json::Value;
 
-        let json = std::fs::read_to_string(src)
-            .map_err(|e| format!("Failed to read import file: {e}"))?;
+        let json =
+            std::fs::read_to_string(src).map_err(|e| format!("Failed to read import file: {e}"))?;
         let bundle: serde_json::Map<String, Value> =
             serde_json::from_str(&json).map_err(|e| format!("Invalid identity file: {e}"))?;
 
@@ -290,8 +290,7 @@ impl IdentityStore {
             .to_string();
 
         let dir = self.identity_dir(&label);
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("Failed to create identity dir: {e}"))?;
+        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create identity dir: {e}"))?;
 
         for name in [TLS_CERT_FILE, TLS_KEY_FILE] {
             if let Some(text) = bundle.get(name).and_then(Value::as_str) {

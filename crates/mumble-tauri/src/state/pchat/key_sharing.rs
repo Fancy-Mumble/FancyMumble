@@ -95,9 +95,7 @@ pub(crate) fn handle_proto_key_challenge_result(
             .as_ref()
             .and_then(|s| s.pchat_ctx.pchat.as_ref())
             .and_then(|p| p.identity_dir.clone());
-        let app_handle = s
-            .as_ref()
-            .and_then(|s| s.conn.tauri_app_handle.clone());
+        let app_handle = s.as_ref().and_then(|s| s.conn.tauri_app_handle.clone());
         // Remove all keying material for the channel from memory.
         let mut should_emit_shares = false;
         if let Some(ref mut s) = s {
@@ -105,7 +103,8 @@ pub(crate) fn handle_proto_key_challenge_result(
                 pchat.key_manager.remove_channel(channel_id);
             }
             let before_len = s.pchat_ctx.pending_key_shares.len();
-            s.pchat_ctx.pending_key_shares
+            s.pchat_ctx
+                .pending_key_shares
                 .retain(|p| p.channel_id != channel_id);
             should_emit_shares = s.pchat_ctx.pending_key_shares.len() != before_len;
         }
@@ -159,15 +158,17 @@ fn prepare_key_holder_report(
             .as_ref()
             .and_then(|s| s.pchat_ctx.pchat.as_ref().map(|p| p.own_cert_hash.clone()));
 
-        let mode = s.as_ref().and_then(|s| {
-            s.channels
-                .get(&channel_id)
-                .and_then(|c| c.pchat_protocol)
-        });
+        let mode = s
+            .as_ref()
+            .and_then(|s| s.channels.get(&channel_id).and_then(|c| c.pchat_protocol));
         if let (Some(ref s), Some(mode)) = (&s, mode) {
             if let Some(ref pchat) = s.pchat_ctx.pchat {
                 if !pchat.key_manager.has_key(channel_id, mode) {
-                    warn!(channel_id, ?mode, "not reporting as key holder: no usable key");
+                    warn!(
+                        channel_id,
+                        ?mode,
+                        "not reporting as key holder: no usable key"
+                    );
                     return None;
                 }
             }
@@ -213,10 +214,7 @@ pub(crate) async fn send_key_holder_report_async(
 }
 
 /// Report that we hold the E2EE key for a channel (fire-and-forget).
-pub(crate) fn send_key_holder_report(
-    shared: &Arc<Mutex<SharedState>>,
-    channel_id: u32,
-) {
+pub(crate) fn send_key_holder_report(shared: &Arc<Mutex<SharedState>>, channel_id: u32) {
     if let Some((handle, report)) = prepare_key_holder_report(shared, channel_id) {
         let _key_holder_report_task = tokio::spawn(async move {
             if let Err(e) = handle
@@ -256,10 +254,10 @@ pub(crate) fn send_key_takeover(
         if let Some(ref mut s) = s {
             if let Some(ref mut p) = s.pchat_ctx.pchat {
                 hash = Some(p.own_cert_hash.clone());
-                if !p
-                    .key_manager
-                    .has_key(channel_id, crate::state::pchat::PchatProtocol::FancyV1FullArchive)
-                {
+                if !p.key_manager.has_key(
+                    channel_id,
+                    crate::state::pchat::PchatProtocol::FancyV1FullArchive,
+                ) {
                     let key = mumble_protocol::persistent::encryption::derive_archive_key(
                         &p.seed, channel_id,
                     );
@@ -313,10 +311,7 @@ pub(crate) fn send_key_takeover(
 // -- Key holders query ------------------------------------------------
 
 /// Ask the server for the latest key holders of a channel.
-pub(crate) fn query_key_holders(
-    shared: &Arc<Mutex<SharedState>>,
-    channel_id: u32,
-) {
+pub(crate) fn query_key_holders(shared: &Arc<Mutex<SharedState>>, channel_id: u32) {
     let handle = {
         let Ok(state) = shared.lock() else { return };
         state.conn.client_handle.clone()

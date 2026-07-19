@@ -1,8 +1,8 @@
 //! Channel chat message commands: read/write/edit, reactions, pins,
 //! deletes, search, photos, typing/read receipts and link previews.
 
-use crate::state::{self, AppState, ChatMessage, PhotoEntry, SearchResult};
 use crate::state::protocol_commands::{DrawStrokeArgs, WatchSyncEventArg};
+use crate::state::{self, AppState, ChatMessage, PhotoEntry, SearchResult};
 
 #[tauri::command]
 pub(crate) fn super_search(
@@ -11,7 +11,11 @@ pub(crate) fn super_search(
     filter: Option<state::types::SearchFilter>,
     channel_id: Option<u32>,
 ) -> Vec<SearchResult> {
-    state.super_search(&query, filter.unwrap_or(state::types::SearchFilter::All), channel_id)
+    state.super_search(
+        &query,
+        filter.unwrap_or(state::types::SearchFilter::All),
+        channel_id,
+    )
 }
 
 #[tauri::command]
@@ -116,7 +120,9 @@ pub(crate) async fn send_reaction(
     emoji: String,
     action: String,
 ) -> Result<(), String> {
-    state.send_reaction(channel_id, message_id, emoji, action).await
+    state
+        .send_reaction(channel_id, message_id, emoji, action)
+        .await
 }
 
 /// Inject a plugin-authored chat message into the local channel

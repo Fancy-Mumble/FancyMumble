@@ -322,8 +322,7 @@ fn compress_file_zstd(path: &Path) -> Result<(), String> {
     let zst_path = path.with_extension("log.zst");
     let source = File::open(path).map_err(|e| format!("open log: {e}"))?;
     let dest = File::create(&zst_path).map_err(|e| format!("create zst: {e}"))?;
-    zstd::stream::copy_encode(source, dest, ZSTD_LEVEL)
-        .map_err(|e| format!("zstd encode: {e}"))?;
+    zstd::stream::copy_encode(source, dest, ZSTD_LEVEL).map_err(|e| format!("zstd encode: {e}"))?;
     Ok(())
 }
 

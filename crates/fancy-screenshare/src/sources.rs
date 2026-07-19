@@ -80,7 +80,11 @@ pub fn list_sources() -> Result<Vec<CaptureSource>, String> {
 fn native_sources() -> Result<Vec<CaptureSource>, String> {
     let mut out = Vec::new();
 
-    for (index, monitor) in Monitor::all().map_err(|e| e.to_string())?.iter().enumerate() {
+    for (index, monitor) in Monitor::all()
+        .map_err(|e| e.to_string())?
+        .iter()
+        .enumerate()
+    {
         let Ok(id) = monitor.id() else { continue };
         let name = monitor.name().unwrap_or_default();
         let width = monitor.width().unwrap_or(0);
@@ -90,7 +94,13 @@ fn native_sources() -> Result<Vec<CaptureSource>, String> {
         } else {
             format!("Screen {} ({name})", index + 1)
         };
-        out.push(CaptureSource { id, kind: SourceKind::Screen, title, width, height });
+        out.push(CaptureSource {
+            id,
+            kind: SourceKind::Screen,
+            title,
+            width,
+            height,
+        });
     }
 
     for window in Window::all().map_err(|e| e.to_string())? {
@@ -108,7 +118,13 @@ fn native_sources() -> Result<Vec<CaptureSource>, String> {
         if width == 0 || height == 0 {
             continue;
         }
-        out.push(CaptureSource { id, kind: SourceKind::Window, title, width, height });
+        out.push(CaptureSource {
+            id,
+            kind: SourceKind::Window,
+            title,
+            width,
+            height,
+        });
     }
 
     Ok(out)
@@ -219,6 +235,15 @@ pub(crate) fn capture_frame(kind: SourceKind, id: u32) -> Result<RgbaImage, Stri
         return crate::camera::capture_device_frame(id);
     }
     CaptureTarget::resolve(kind, id)?.capture()
+}
+
+/// Confirm a screen/window source still resolves to a live OS handle WITHOUT
+/// capturing any pixels. A full frame grab as an existence check is a portal
+/// round-trip on Wayland (and redundant with the capture pipeline that opens
+/// right after), so the broadcaster uses this to fail fast on a vanished
+/// source instead - the screen/window analogue of `camera::device_exists`.
+pub(crate) fn ensure_present(kind: SourceKind, id: u32) -> Result<(), String> {
+    CaptureTarget::resolve(kind, id).map(|_| ())
 }
 
 /// Change-driven whole-screen capture through the OS recorder (WGC on

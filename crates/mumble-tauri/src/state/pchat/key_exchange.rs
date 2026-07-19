@@ -12,7 +12,9 @@ use mumble_protocol::proto::mumble_tcp;
 use crate::state::types;
 use crate::state::SharedState;
 
-use super::conversion::{proto_to_wire_key_announce, proto_to_wire_key_exchange, proto_to_wire_key_request};
+use super::conversion::{
+    proto_to_wire_key_announce, proto_to_wire_key_exchange, proto_to_wire_key_request,
+};
 use super::key_sharing::{query_key_holders, send_key_holder_report};
 use super::persistence::persist_archive_key;
 use super::settings::PLACEHOLDER_BODY;
@@ -93,10 +95,7 @@ fn find_shareable_channels(state: &SharedState, peer_cert_hash: &str) -> Vec<u32
     peer_channel_ids
         .into_iter()
         .filter(|&ch_id| {
-            let is_full_archive = state
-                .channels
-                .get(&ch_id)
-                .and_then(|ch| ch.pchat_protocol)
+            let is_full_archive = state.channels.get(&ch_id).and_then(|ch| ch.pchat_protocol)
                 == Some(PchatProtocol::FancyV1FullArchive);
             let has_key = pchat
                 .key_manager
@@ -117,10 +116,7 @@ fn find_shareable_channels(state: &SharedState, peer_cert_hash: &str) -> Vec<u32
 /// Checks whether we hold the archive key for the given `FullArchive`
 /// channel and whether any peers have known public keys. For each
 /// qualifying peer, a consent request is queued (if not already pending).
-pub(crate) fn check_key_share_for_channel(
-    shared: &Arc<Mutex<SharedState>>,
-    channel_id: u32,
-) {
+pub(crate) fn check_key_share_for_channel(shared: &Arc<Mutex<SharedState>>, channel_id: u32) {
     let Ok(mut state) = shared.lock() else { return };
 
     let is_full_archive = state
@@ -132,7 +128,9 @@ pub(crate) fn check_key_share_for_channel(
         return;
     }
 
-    let Some(ref pchat) = state.pchat_ctx.pchat else { return };
+    let Some(ref pchat) = state.pchat_ctx.pchat else {
+        return;
+    };
 
     if !pchat
         .key_manager
@@ -188,7 +186,9 @@ pub(crate) fn handle_proto_key_request(
 
     let Ok(mut state) = shared.lock() else { return };
 
-    let Some(ref pchat) = state.pchat_ctx.pchat else { return };
+    let Some(ref pchat) = state.pchat_ctx.pchat else {
+        return;
+    };
 
     if !pchat
         .key_manager
@@ -216,13 +216,23 @@ pub(crate) fn handle_proto_key_request(
     }
 
     // Skip requests from users who are already known key holders.
-    if pchat.key_manager.key_holders(ch_id).contains(&peer_cert_hash) {
+    if pchat
+        .key_manager
+        .key_holders(ch_id)
+        .contains(&peer_cert_hash)
+    {
         debug!(channel_id = ch_id, peer = %peer_cert_hash, "ignoring key-request from existing holder");
         return;
     }
 
     let peer_name = resolve_peer_name(&state, &peer_cert_hash);
-    queue_key_share_consent(&mut state, ch_id, &peer_cert_hash, &peer_name, Some(request_id));
+    queue_key_share_consent(
+        &mut state,
+        ch_id,
+        &peer_cert_hash,
+        &peer_name,
+        Some(request_id),
+    );
 }
 
 // -- Key exchange -----------------------------------------------------
@@ -333,9 +343,10 @@ fn finalize_key_acceptance(
 
     // Remove stale consent prompts for a sender who already has the key.
     let before_len = state.pchat_ctx.pending_key_shares.len();
-    state.pchat_ctx.pending_key_shares.retain(|p| {
-        !(p.channel_id == channel_id && p.peer_cert_hash == sender_hash)
-    });
+    state
+        .pchat_ctx
+        .pending_key_shares
+        .retain(|p| !(p.channel_id == channel_id && p.peer_cert_hash == sender_hash));
 
     if state.pchat_ctx.pending_key_shares.len() != before_len {
         emit_key_share_requests_changed(&state, channel_id);
@@ -386,7 +397,8 @@ fn retry_decrypt_pending_messages(
     _protocol: PchatProtocol,
 ) {
     let has_placeholders = state
-        .msgs.by_channel
+        .msgs
+        .by_channel
         .get(&channel_id)
         .is_some_and(|msgs| msgs.iter().any(|m| m.body == PLACEHOLDER_BODY));
 
@@ -440,7 +452,8 @@ fn queue_key_share_consent(
 ) {
     // Avoid duplicate pending requests.
     let already_pending = state
-        .pchat_ctx.pending_key_shares
+        .pchat_ctx
+        .pending_key_shares
         .iter()
         .any(|p| p.channel_id == channel_id && p.peer_cert_hash == peer_cert_hash);
     if already_pending {
@@ -494,7 +507,8 @@ fn emit_key_share_requests_changed(state: &SharedState, channel_id: u32) {
     if let Some(ref app) = state.conn.tauri_app_handle {
         use tauri::Emitter;
         let remaining: Vec<_> = state
-            .pchat_ctx.pending_key_shares
+            .pchat_ctx
+            .pending_key_shares
             .iter()
             .filter(|p| p.channel_id == channel_id)
             .cloned()

@@ -99,10 +99,7 @@ impl AppState {
     }
 
     /// Admin: remove a plugin from disk and unload it.
-    pub async fn uninstall_server_plugin(
-        &self,
-        plugin_name: String,
-    ) -> Result<(), String> {
+    pub async fn uninstall_server_plugin(&self, plugin_name: String) -> Result<(), String> {
         let handle = {
             let session = self.inner.snapshot();
             let state = session.lock().map_err(|e| e.to_string())?;

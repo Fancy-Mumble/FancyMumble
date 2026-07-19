@@ -14,8 +14,11 @@ import { useRef, useEffect, useMemo, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../../../store";
-import { getBroadcastContent, getTrackContentMap, getViewerPc, useRemoteStreams } from "./useScreenShare";
+import { getBroadcastContent, getTrackContentMap, useRemoteStreams } from "./useScreenShare";
+import { isMobile } from "../../../utils/platform";
 import { TID } from "../../../testids";
+import { useNativeStreamView } from "./nativeStreamView";
+import { activeStreamViewerStrategy, StreamViewerStrategyId } from "./viewerStrategy";
 import styles from "./ScreenShareViewer.module.css";
 
 // ---------------------------------------------------------------------------
@@ -24,9 +27,14 @@ import styles from "./ScreenShareViewer.module.css";
 
 /** The broadcaster's camera, floating over the stream viewport when they
  *  share screen + camera together. Purely presentational; a camera-only
- *  share renders in the main viewport instead (no tile). */
-function CameraPipTile({ stream, session, own, onEnd }: {
-  readonly stream: MediaStream;
+ *  share renders in the main viewport instead (no tile). The media surface
+ *  follows the viewer strategy: a MediaStream `<video>` (webview family) or
+ *  a `<canvas>` the native Rust viewer paints into. */
+function CameraPipTile({ stream, canvasRef, session, own, onEnd }: {
+  /** Webview family: the camera MediaStream. */
+  readonly stream?: MediaStream | null;
+  /** Native family: the canvas the viewer paints camera frames into. */
+  readonly canvasRef?: React.RefObject<HTMLCanvasElement | null>;
   readonly session: number;
   readonly own: boolean;
   /** When provided (own broadcast), render an × that ends just the camera
@@ -38,7 +46,7 @@ function CameraPipTile({ stream, session, own, onEnd }: {
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !stream) return;
     video.srcObject = stream;
     video.play().catch(() => {});
     return () => { video.srcObject = null; };
@@ -46,16 +54,26 @@ function CameraPipTile({ stream, session, own, onEnd }: {
 
   return (
     <div className={styles.cameraPipWrap}>
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        className={styles.cameraPip}
-        data-testid={TID.streamCameraVideo}
-        data-own={own ? "true" : "false"}
-        data-session={session}
-      />
+      {canvasRef ? (
+        <canvas
+          ref={canvasRef}
+          className={styles.cameraPip}
+          data-testid={TID.streamCameraVideo}
+          data-own={own ? "true" : "false"}
+          data-session={session}
+        />
+      ) : (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className={styles.cameraPip}
+          data-testid={TID.streamCameraVideo}
+          data-own={own ? "true" : "false"}
+          data-session={session}
+        />
+      )}
       {onEnd && (
         <button
           type="button"
@@ -77,7 +95,10 @@ function CameraPipTile({ stream, session, own, onEnd }: {
 // ---------------------------------------------------------------------------
 
 interface StreamControlsProps {
-  readonly videoRef: React.RefObject<HTMLVideoElement | null>;
+  /** The media surface: a `<video>` (webview family) or the native
+   *  viewer's `<canvas>`. Video-only controls (pause, volume) no-op on a
+   *  canvas; geometry consumers (fullscreen target, drawing) work on both. */
+  readonly videoRef: React.RefObject<HTMLVideoElement | HTMLCanvasElement | null>;
   readonly containerRef: React.RefObject<HTMLDivElement | null>;
   /** Whether this is the own preview (volume/pause disabled). */
   readonly isOwnPreview?: boolean;
@@ -161,7 +182,7 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
 
   const togglePause = useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!(video instanceof HTMLVideoElement)) return;
     if (video.paused) {
       video.play().catch(() => {});
       setPaused(false);
@@ -173,14 +194,14 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
 
   const toggleMute = useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!(video instanceof HTMLVideoElement)) return;
     video.muted = !video.muted;
     setMuted(video.muted);
   }, [videoRef]);
 
   const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!(video instanceof HTMLVideoElement)) return;
     const val = Number(e.target.value);
     setVolume(val);
     video.volume = val / 100;
@@ -360,14 +381,45 @@ interface OwnPreviewProps {
   readonly onEndCamera?: () => void;
 }
 
+/** Whether the active strategy paints onto canvases (native Rust viewer)
+ *  instead of binding MediaStreams to `<video>` (webview viewer). Constant
+ *  per page load (the strategy is latched), so branching on it inside
+ *  components never changes hook order. */
+function usesNativeSurface(): boolean {
+  return activeStreamViewerStrategy().id === StreamViewerStrategyId.Native;
+}
+
 function OwnBroadcastPreview({ stream, channelId, ownSession, missingSourceKind, onAddSource, onEndCamera }: OwnPreviewProps) {
+  const nativeSurface = usesNativeSurface();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const displayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const cameraCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const webrtcConnecting = useAppStore((s) => s.webrtcConnecting);
+  // Linux/GNOME fullscreen direct-scanout capture stall (see StallWatch +
+  // useScreenShare). Advisory only - the broadcast keeps running.
+  const captureStalled = useAppStore((s) => s.captureStalled);
   // The loopback camera PiP (screen + camera shares). Gated on `stream`
   // below so tabs that don't own the broadcast (stream = null) never
   // render it.
   const { camera: cameraStream } = useRemoteStreams(ownSession);
+  // Native surface: the Rust-side viewer paints into the canvases. Held
+  // back until the Rust broadcaster reports connected - signal ordering on
+  // the shared Mumble channel requires START and the broadcaster's offer on
+  // the wire before any viewer offer, and this panel mounts the instant the
+  // share is confirmed, earlier than both. (A replace toggles this too,
+  // restarting the loopback viewer on the rebuilt broadcast.)
+  const native = useNativeStreamView(
+    ownSession,
+    nativeSurface && !webrtcConnecting,
+    displayCanvasRef,
+    cameraCanvasRef,
+  );
+  /** Surface-independent "the viewport shows media" signals. */
+  const hasMedia = nativeSurface ? native.hasDisplay : stream !== null;
+  const hasCameraMedia = nativeSurface ? native.hasCamera : cameraStream !== null;
+  /** The element the shared chrome measures/targets (controls, drawing). */
+  const mediaRef = nativeSurface ? displayCanvasRef : videoRef;
   const { t } = useTranslation(["chat", "common"]);
   // Persisted in the global store so the overlay stays open when the user
   // switches to a different server tab (which unmounts this component).
@@ -375,9 +427,12 @@ function OwnBroadcastPreview({ stream, channelId, ownSession, missingSourceKind,
   // when the broadcast actually ends.
   const desktopOverlayOn = useAppStore((s) => s.desktopDrawingOverlayOpen);
   const [statsOn, setStatsOn] = useState(false);
-  // The own preview is served by the loopback viewer PC (keyed by our own
-  // session), so the stats panel polls it like any remote viewer's PC.
-  const getStatsPc = useCallback(() => getViewerPc(ownSession), [ownSession]);
+  // The own preview is served by the loopback viewer (keyed by our own
+  // session), so the stats sampler probes it like any remote view.
+  const statsSampler = useMemo(
+    () => activeStreamViewerStrategy().createStatsSampler(ownSession),
+    [ownSession],
+  );
 
   useEffect(() => {
     const video = videoRef.current;
@@ -422,31 +477,63 @@ function OwnBroadcastPreview({ stream, channelId, ownSession, missingSourceKind,
 
   return (
     <div ref={containerRef} className={styles.streamViewport}>
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        className={styles.videoElement}
-        data-testid={TID.streamViewerVideo}
-        data-own="true"
-        data-session={ownSession}
-      />
-      {stream !== null && cameraStream !== null && (
-        <CameraPipTile stream={cameraStream} session={ownSession} own onEnd={onEndCamera} />
+      {/* Media surface: the ONLY strategy-dependent part of this viewport.
+          Everything around it (controls, PiP, overlays, stats) is shared. */}
+      {nativeSurface ? (
+        <canvas
+          ref={displayCanvasRef}
+          className={styles.videoElement}
+          style={{ display: native.hasDisplay ? "block" : "none" }}
+          data-testid={TID.streamNativeView}
+          data-own="true"
+          data-session={ownSession}
+        />
+      ) : (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className={styles.videoElement}
+          data-testid={TID.streamViewerVideo}
+          data-own="true"
+          data-session={ownSession}
+        />
       )}
-      {(webrtcConnecting || !stream) && (
+      {hasMedia && hasCameraMedia && (
+        <CameraPipTile
+          stream={nativeSurface ? null : cameraStream}
+          canvasRef={nativeSurface ? cameraCanvasRef : undefined}
+          session={ownSession}
+          own
+          onEnd={onEndCamera}
+        />
+      )}
+      {(webrtcConnecting || !hasMedia) && (
         <div className={styles.connectingOverlay}>
-          <div className={styles.connectingDots}>
-            <span className={styles.connectingDot} />
-            <span className={styles.connectingDot} />
-            <span className={styles.connectingDot} />
-          </div>
-          <span className={styles.connectingText}>{t("screenShare.settingUp")}</span>
+          {nativeSurface && native.failed && !webrtcConnecting ? (
+            // The broadcast itself runs in the Rust broadcaster; only the
+            // local preview path failed.
+            <span className={styles.connectingText}>{t("screenShare.liveNoPreview")}</span>
+          ) : (
+            <>
+              <div className={styles.connectingDots}>
+                <span className={styles.connectingDot} />
+                <span className={styles.connectingDot} />
+                <span className={styles.connectingDot} />
+              </div>
+              <span className={styles.connectingText}>{t("screenShare.settingUp")}</span>
+            </>
+          )}
+        </div>
+      )}
+      {captureStalled && hasMedia && !webrtcConnecting && (
+        <div className={styles.stallHint} data-testid={TID.streamCaptureStallHint} role="status">
+          {t("screenShare.captureStalledHint")}
         </div>
       )}
       <StreamControls
-        videoRef={videoRef}
+        videoRef={mediaRef}
         containerRef={containerRef}
         isOwnPreview
         drawChannelId={channelId}
@@ -457,11 +544,11 @@ function OwnBroadcastPreview({ stream, channelId, ownSession, missingSourceKind,
         statsOn={statsOn}
         onToggleStats={() => setStatsOn((v) => !v)}
       />
-      <DrawingOverlay channelId={channelId} ownSession={ownSession} videoRef={videoRef} />
+      <DrawingOverlay channelId={channelId} ownSession={ownSession} videoRef={mediaRef} />
       {statsOn && (
         <StreamStatsPanel
-          getPc={getStatsPc}
-          videoRef={videoRef}
+          sampler={statsSampler}
+          videoRef={nativeSurface ? undefined : videoRef}
           contentByMid={getTrackContentMap(ownSession)}
           onClose={() => setStatsOn(false)}
         />
@@ -475,14 +562,26 @@ function OwnBroadcastPreview({ stream, channelId, ownSession, missingSourceKind,
 // ---------------------------------------------------------------------------
 
 function RemoteViewer({ session, channelId, ownSession }: { readonly session: number; readonly channelId: number; readonly ownSession: number }) {
+  const nativeSurface = usesNativeSurface();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const displayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const cameraCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { primary: remoteStream, camera: cameraStream } = useRemoteStreams(session);
+  // Native surface: the Rust-side viewer opens the receive path on mount
+  // and paints into the canvases (remote broadcasts are already live).
+  const native = useNativeStreamView(session, nativeSurface, displayCanvasRef, cameraCanvasRef);
+  const hasMedia = nativeSurface ? native.hasDisplay : remoteStream !== null;
+  const hasCameraMedia = nativeSurface ? native.hasCamera : cameraStream !== null;
+  const mediaRef = nativeSurface ? displayCanvasRef : videoRef;
   const broadcaster = useAppStore((s) => s.users.find((u) => u.session === session));
   const activeServerId = useAppStore((s) => s.activeServerId);
   const { t } = useTranslation(["chat", "common"]);
   const [statsOn, setStatsOn] = useState(false);
-  const getStatsPc = useCallback(() => getViewerPc(session), [session]);
+  const statsSampler = useMemo(
+    () => activeStreamViewerStrategy().createStatsSampler(session),
+    [session],
+  );
 
   const handlePopout = useCallback(() => {
     if (!ownSession || !activeServerId) return;
@@ -510,7 +609,7 @@ function RemoteViewer({ session, channelId, ownSession }: { readonly session: nu
 
   return (
     <div ref={containerRef} className={styles.streamViewport}>
-      {!remoteStream && (
+      {!hasMedia && (
         <div className={styles.streamPlaceholder}>
           <ScreenShareIcon className={styles.streamPlaceholderIcon} />
           <div className={styles.streamPlaceholderText}>
@@ -519,35 +618,57 @@ function RemoteViewer({ session, channelId, ownSession }: { readonly session: nu
           </div>
         </div>
       )}
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        className={styles.videoElement}
-        style={{ display: remoteStream ? "block" : "none" }}
-        data-testid={TID.streamViewerVideo}
-        data-own="false"
-        data-session={session}
-      />
-      {remoteStream !== null && cameraStream !== null && (
-        <CameraPipTile stream={cameraStream} session={session} own={false} />
+      {/* Media surface: the only strategy-dependent part (see the own
+          preview above); the chrome around it is identical per family. */}
+      {nativeSurface ? (
+        <canvas
+          ref={displayCanvasRef}
+          className={styles.videoElement}
+          style={{ display: hasMedia ? "block" : "none" }}
+          data-testid={TID.streamNativeView}
+          data-own="false"
+          data-session={session}
+        />
+      ) : (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className={styles.videoElement}
+          style={{ display: hasMedia ? "block" : "none" }}
+          data-testid={TID.streamViewerVideo}
+          data-own="false"
+          data-session={session}
+        />
       )}
-      {remoteStream && (
+      {hasMedia && hasCameraMedia && (
+        <CameraPipTile
+          stream={nativeSurface ? null : cameraStream}
+          canvasRef={nativeSurface ? cameraCanvasRef : undefined}
+          session={session}
+          own={false}
+        />
+      )}
+      {hasMedia && (
         <StreamControls
-          videoRef={videoRef}
+          videoRef={mediaRef}
           containerRef={containerRef}
           drawChannelId={channelId}
-          onPopout={handlePopout}
+          // The popout window still builds a webview viewer PC; give it a
+          // native path before offering the button under this strategy.
+          // Mobile has no separate windows (open_stream_popout is a loud
+          // Android stub), so the button is desktop-only.
+          onPopout={nativeSurface || isMobile ? undefined : handlePopout}
           statsOn={statsOn}
           onToggleStats={() => setStatsOn((v) => !v)}
         />
       )}
-      <DrawingOverlay channelId={channelId} ownSession={ownSession} videoRef={videoRef} />
+      <DrawingOverlay channelId={channelId} ownSession={ownSession} videoRef={mediaRef} />
       {statsOn && (
         <StreamStatsPanel
-          getPc={getStatsPc}
-          videoRef={videoRef}
+          sampler={statsSampler}
+          videoRef={nativeSurface ? undefined : videoRef}
           contentByMid={getTrackContentMap(session)}
           onClose={() => setStatsOn(false)}
         />

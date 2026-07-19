@@ -10,128 +10,146 @@ impl HandleMessage for mumble_tcp::UserRemove {
             let state = ctx.shared.lock().ok();
             state.and_then(|s| s.conn.own_session) == Some(self.session)
         };
-
         if is_self_kicked {
-            // We got kicked/banned - clean up and notify frontend.
-            let reason = self
-                .reason
-                .clone()
-                .unwrap_or_else(|| "Disconnected by server".into());
-            info!("Kicked from server: {reason}");
-            if let Ok(mut state) = ctx.shared.lock() {
-                state.conn.status = ConnectionStatus::Disconnected;
-                state.conn.client_handle = None;
-                state.conn.event_loop_handle = None;
-                // Mark this disconnect as user-initiated from the protocol
-                // layer's point of view: the upcoming `on_disconnected`
-                // callback (triggered when the TCP connection drops) must
-                // NOT emit its own generic "Connection to server was lost."
-                // reason that would clobber the kick reason we emit below.
-                state.conn.user_initiated_disconnect = true;
-                state.users.clear();
-                state.channels.clear();
-                state.msgs.by_channel.clear();
-                state.conn.own_session = None;
-                state.conn.synced = false;
-                state.permanently_listened.clear();
-                state.selected_channel = None;
-                state.current_channel = None;
-                state.msgs.channel_unread.clear();
-                state.server.config = ServerConfig::default();
-                state.audio.voice_state = VoiceState::Inactive;
-                state.server.fancy_version = None;
-                state.server.version_info = ServerVersionInfo::default();
-                state.server.max_users = None;
-                state.server.max_bandwidth = None;
-                state.server.opus = false;
-                // Stop audio pipelines (desktop only).
-                #[cfg(not(target_os = "android"))]
-                stop_audio_pipelines(&mut state);
-            }
-            ctx.emit("connection-rejected", RejectedPayload { server_id: None, reason: reason.clone(), reject_type: None });
-            // server_id stays set on shared state until the connect helper
-            // tears the session down; the TauriEmitter will stamp `serverId`
-            // onto the object payload so the frontend can route the event.
-            ctx.emit(
-                "server-disconnected",
-                DisconnectedPayload { server_id: None, reason: Some(reason) },
-            );
+            handle_self_kicked(self, ctx);
         } else {
-            // Look up the departing user's name for the activity log.
-            let departing_name = ctx
-                .shared
-                .lock()
-                .ok()
-                .and_then(|s| s.users.get(&self.session).map(|u| u.name.clone()));
+            handle_user_departed(self, ctx);
+        }
+    }
+}
 
-            let mut was_talking = false;
-            let deferred_share_events: Vec<(u32, Vec<PendingKeyShare>)> =
-                if let Ok(mut state) = ctx.shared.lock() {
-                    // Look up the departing user's cert hash before removing them.
-                    let cert_hash = state
-                        .users
-                        .get(&self.session)
-                        .and_then(|u| u.hash.clone());
+/// We were kicked or banned: tear the whole session down and surface the
+/// server's reason to the frontend.
+fn handle_self_kicked(msg: &mumble_tcp::UserRemove, ctx: &HandlerContext) {
+    let reason = msg
+        .reason
+        .clone()
+        .unwrap_or_else(|| "Disconnected by server".into());
+    info!("Kicked from server: {reason}");
+    if let Ok(mut state) = ctx.shared.lock() {
+        state.conn.status = ConnectionStatus::Disconnected;
+        state.conn.client_handle = None;
+        state.conn.event_loop_handle = None;
+        // Mark this disconnect as user-initiated from the protocol layer's
+        // point of view: the upcoming `on_disconnected` callback (triggered
+        // when the TCP connection drops) must NOT emit its own generic
+        // "Connection to server was lost." reason that would clobber the
+        // kick reason we emit below.
+        state.conn.user_initiated_disconnect = true;
+        state.users.clear();
+        state.channels.clear();
+        state.msgs.by_channel.clear();
+        state.conn.own_session = None;
+        state.conn.synced = false;
+        state.permanently_listened.clear();
+        state.selected_channel = None;
+        state.current_channel = None;
+        state.msgs.channel_unread.clear();
+        state.server.config = ServerConfig::default();
+        state.audio.voice_state = VoiceState::Inactive;
+        state.server.fancy_version = None;
+        state.server.version_info = ServerVersionInfo::default();
+        state.server.max_users = None;
+        state.server.max_bandwidth = None;
+        state.server.opus = false;
+        // Stop audio pipelines (desktop only).
+        #[cfg(not(target_os = "android"))]
+        stop_audio_pipelines(&mut state);
+    }
+    ctx.emit(
+        "connection-rejected",
+        RejectedPayload {
+            server_id: None,
+            reason: reason.clone(),
+            reject_type: None,
+        },
+    );
+    // server_id stays set on shared state until the connect helper tears the
+    // session down; the TauriEmitter will stamp `serverId` onto the object
+    // payload so the frontend can route the event.
+    ctx.emit(
+        "server-disconnected",
+        DisconnectedPayload {
+            server_id: None,
+            reason: Some(reason),
+        },
+    );
+}
 
-                    let _ = state.users.remove(&self.session);
+/// Another user left: drop their per-session state (audio, pending key
+/// shares) and emit the resulting changes outside the lock.
+fn handle_user_departed(msg: &mumble_tcp::UserRemove, ctx: &HandlerContext) {
+    // Look up the departing user's name for the activity log.
+    let departing_name = ctx
+        .shared
+        .lock()
+        .ok()
+        .and_then(|s| s.users.get(&msg.session).map(|u| u.name.clone()));
 
-                    // Free the departing user's audio state: decoder +
-                    // sample buffer (~100 KB per speaker) and the
-                    // per-session volume override.  Session IDs are
-                    // reused by the server, so a stale volume override
-                    // would otherwise apply to the next user assigned
-                    // this session.
-                    if let Some(ref mut mixer) = state.audio.mixer {
-                        mixer.remove_speaker(self.session);
-                    }
-                    if let Ok(mut volumes) = state.audio.speaker_volumes.lock() {
-                        let _ = volumes.remove(&self.session);
-                    }
-                    was_talking = state.audio.talking_sessions.remove(&self.session);
+    let mut was_talking = false;
+    let deferred_share_events: Vec<(u32, Vec<PendingKeyShare>)> =
+        if let Ok(mut state) = ctx.shared.lock() {
+            // Look up the departing user's cert hash before removing them.
+            let cert_hash = state.users.get(&msg.session).and_then(|u| u.hash.clone());
 
-                    // Remove any pending key-share requests from the departing user.
-                    if let Some(ref hash) = cert_hash {
-                        let before_len = state.pchat_ctx.pending_key_shares.len();
-                        let removed: Vec<_> = state
-                            .pchat_ctx.pending_key_shares
-                            .iter()
-                            .filter(|p| p.peer_cert_hash == *hash)
-                            .map(|p| p.channel_id)
-                            .collect();
-                        state
-                            .pchat_ctx.pending_key_shares
-                            .retain(|p| p.peer_cert_hash != *hash);
-                        collect_affected_channels(&state, before_len, removed)
-                    } else {
-                        Vec::new()
-                    }
-                } else {
-                    Vec::new()
-                };
+            let _ = state.users.remove(&msg.session);
 
-            // Emit outside the lock to avoid deadlock with Tauri IPC.
-            if was_talking {
-                ctx.emit("user-talking", (self.session, false));
+            // Free the departing user's audio state: decoder + sample buffer
+            // (~100 KB per speaker) and the per-session volume override.
+            // Session IDs are reused by the server, so a stale volume
+            // override would otherwise apply to the next user assigned this
+            // session.
+            if let Some(ref mut mixer) = state.audio.mixer {
+                mixer.remove_speaker(msg.session);
             }
-            for (ch_id, remaining) in deferred_share_events {
-                ctx.emit(
-                    "pchat-key-share-requests-changed",
-                    KeyShareRequestsChangedPayload {
-                        channel_id: ch_id,
-                        pending: remaining,
-                    },
-                );
+            if let Ok(mut volumes) = state.audio.speaker_volumes.lock() {
+                let _ = volumes.remove(&msg.session);
             }
-            ctx.emit_empty("state-changed");
+            was_talking = state.audio.talking_sessions.remove(&msg.session);
 
-            if let Some(name) = departing_name {
-                if !name.is_empty() {
-                    ctx.emit(
-                        "server-log",
-                        ServerLogEntry::now(format!("{name} disconnected")),
-                    );
-                }
+            // Remove any pending key-share requests from the departing user.
+            if let Some(ref hash) = cert_hash {
+                let before_len = state.pchat_ctx.pending_key_shares.len();
+                let removed: Vec<_> = state
+                    .pchat_ctx
+                    .pending_key_shares
+                    .iter()
+                    .filter(|p| p.peer_cert_hash == *hash)
+                    .map(|p| p.channel_id)
+                    .collect();
+                state
+                    .pchat_ctx
+                    .pending_key_shares
+                    .retain(|p| p.peer_cert_hash != *hash);
+                collect_affected_channels(&state, before_len, removed)
+            } else {
+                Vec::new()
             }
+        } else {
+            Vec::new()
+        };
+
+    // Emit outside the lock to avoid deadlock with Tauri IPC.
+    if was_talking {
+        ctx.emit("user-talking", (msg.session, false));
+    }
+    for (ch_id, remaining) in deferred_share_events {
+        ctx.emit(
+            "pchat-key-share-requests-changed",
+            KeyShareRequestsChangedPayload {
+                channel_id: ch_id,
+                pending: remaining,
+            },
+        );
+    }
+    ctx.emit_empty("state-changed");
+
+    if let Some(name) = departing_name {
+        if !name.is_empty() {
+            ctx.emit(
+                "server-log",
+                ServerLogEntry::now(format!("{name} disconnected")),
+            );
         }
     }
 }
@@ -160,7 +178,8 @@ fn collect_affected_channels(
         .into_iter()
         .map(|ch_id| {
             let remaining: Vec<_> = state
-                .pchat_ctx.pending_key_shares
+                .pchat_ctx
+                .pending_key_shares
                 .iter()
                 .filter(|p| p.channel_id == ch_id)
                 .cloned()

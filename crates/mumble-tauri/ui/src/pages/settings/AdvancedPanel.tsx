@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { UserMode } from "../../types";
 import { Toggle } from "./SharedControls";
 import { registerSettings } from "./settingsSearchRegistry";
+import { StreamViewerBackendSetting } from "./StreamViewerBackendSetting";
 import styles from "./SettingsPage.module.css";
 
 registerSettings("advanced")
@@ -197,6 +198,9 @@ export function AdvancedPanel({
           </div>
         )}
       </section>
+
+      {/* Stream viewer backend (renders only where >= 2 families exist). */}
+      <StreamViewerBackendSetting />
 
       {userMode !== "normal" && (
         <section className={styles.section}>

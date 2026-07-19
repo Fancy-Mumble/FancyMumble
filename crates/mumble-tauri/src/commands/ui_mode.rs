@@ -29,7 +29,7 @@ pub(crate) fn get_system_specs() -> ui_mode::SystemSpecs {
 
 /// Launch the minimal qt6ui client and exit this (full) app.
 ///
-/// Errors — typically "binary not found" — leave the full app running so
+/// Errors - typically "binary not found" - leave the full app running so
 /// the caller can surface the problem instead of stranding the user.
 #[tauri::command]
 pub(crate) fn relaunch_in_minimal_mode(app: tauri::AppHandle) -> Result<(), String> {

@@ -32,7 +32,10 @@ pub use serversettings::*;
 pub use ui::*;
 
 #[cfg(test)]
-#[allow(clippy::expect_used, reason = "test code: panicking on failure is the intended behaviour")]
+#[allow(
+    clippy::expect_used,
+    reason = "test code: panicking on failure is the intended behaviour"
+)]
 mod tests {
     use super::*;
     use mumble_protocol::state::PchatProtocol;
@@ -74,8 +77,13 @@ mod tests {
             pchat_protocol: Some(PchatProtocol::SignalV1),
             pchat_max_history: Some(1000),
             pchat_retention_days: Some(7),
-            pchat_key_custodians: Vec::new(), is_enter_restricted: false,
-            hidden: false, detached: false, expiry_mode: 0, expiry_duration_secs: 0, expires_at: 0,
+            pchat_key_custodians: Vec::new(),
+            is_enter_restricted: false,
+            hidden: false,
+            detached: false,
+            expiry_mode: 0,
+            expiry_duration_secs: 0,
+            expires_at: 0,
         };
         let json = serde_json::to_string(&entry).expect("serialize");
         assert!(

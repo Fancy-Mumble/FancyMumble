@@ -9,9 +9,9 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use oboe::{
-    AudioInputCallback, AudioOutputCallback, AudioOutputStreamSafe, AudioStream,
-    AudioStreamAsync, AudioStreamBuilder, ContentType, DataCallbackResult, Input,
-    InputPreset, Mono, Output, PerformanceMode, SessionId, SharingMode, Usage,
+    AudioInputCallback, AudioOutputCallback, AudioOutputStreamSafe, AudioStream, AudioStreamAsync,
+    AudioStreamBuilder, ContentType, DataCallbackResult, Input, InputPreset, Mono, Output,
+    PerformanceMode, SessionId, SharingMode, Usage,
 };
 use tracing::{error, warn};
 
@@ -76,7 +76,10 @@ pub struct OboeCapture {
 // SAFETY: The oboe stream is only accessed from the pipeline thread
 // after construction. The audio callback thread communicates solely
 // through the `Arc<Mutex<VecDeque>>` buffer.
-#[allow(unsafe_code, reason = "oboe stream accessed from single pipeline thread; callback uses Arc<Mutex>")]
+#[allow(
+    unsafe_code,
+    reason = "oboe stream accessed from single pipeline thread; callback uses Arc<Mutex>"
+)]
 unsafe impl Send for OboeCapture {}
 
 impl OboeCapture {
@@ -263,7 +266,8 @@ impl AudioOutputCallback for MixingPlaybackCallback {
 
         if let Ok(mut bufs) = self.buffers.lock() {
             for sample in frames.iter_mut() {
-                *sample = Self::next_sample(&mut self.last_sample, Self::mix_buffers(&mut bufs), vol);
+                *sample =
+                    Self::next_sample(&mut self.last_sample, Self::mix_buffers(&mut bufs), vol);
             }
             bufs.retain(|_, b| !b.is_empty());
         } else {
@@ -273,11 +277,7 @@ impl AudioOutputCallback for MixingPlaybackCallback {
         DataCallbackResult::Continue
     }
 
-    fn on_error_before_close(
-        &mut self,
-        _stream: &mut dyn AudioOutputStreamSafe,
-        e: oboe::Error,
-    ) {
+    fn on_error_before_close(&mut self, _stream: &mut dyn AudioOutputStreamSafe, e: oboe::Error) {
         error!("oboe mixing playback error: {e:?}");
     }
 }
@@ -290,7 +290,10 @@ pub struct OboeMixingPlayback {
 }
 
 // SAFETY: Same justification as OboeCapture.
-#[allow(unsafe_code, reason = "oboe stream accessed from single pipeline thread; callback uses Arc<Mutex>")]
+#[allow(
+    unsafe_code,
+    reason = "oboe stream accessed from single pipeline thread; callback uses Arc<Mutex>"
+)]
 unsafe impl Send for OboeMixingPlayback {}
 
 impl OboeMixingPlayback {

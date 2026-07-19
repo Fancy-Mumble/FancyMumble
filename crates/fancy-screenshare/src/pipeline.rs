@@ -108,8 +108,18 @@ pub(crate) fn create_pipeline(
         // CPU pipeline below takes over - the same ladder Chromium walks.
         match crate::linux::GpuPipelineLinux::new(kind, source_id, settings) {
             Ok(p) => {
-                tracing::info!(encoder = p.name(), "screenshare: Linux portal pipeline active");
+                tracing::info!(
+                    encoder = p.name(),
+                    "screenshare: Linux portal pipeline active"
+                );
                 return Ok(Box::new(p));
+            }
+            Err(e) if source_id == 0 => {
+                // Advisory portal id (the compositor's dialog picks the real
+                // source): no OS handle exists for the CPU fallback to
+                // resolve, so falling through would bury this real failure
+                // under a nonsense "screen 0 not found".
+                return Err(e);
             }
             Err(e) => {
                 tracing::info!(
@@ -141,7 +151,9 @@ pub(crate) struct CpuPipeline {
 
 impl std::fmt::Debug for CpuPipeline {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CpuPipeline").field("kind", &self.kind).finish_non_exhaustive()
+        f.debug_struct("CpuPipeline")
+            .field("kind", &self.kind)
+            .finish_non_exhaustive()
     }
 }
 
@@ -238,7 +250,8 @@ impl EncodePipeline for CpuPipeline {
 
         let encode_start = Instant::now();
         let encoded =
-            self.encoder.encode_rgba(img.width(), img.height(), img.as_raw(), force_keyframe)?;
+            self.encoder
+                .encode_rgba(img.width(), img.height(), img.as_raw(), force_keyframe)?;
         self.timings.encode += encode_start.elapsed();
         if encoded.is_some() {
             self.timings.frames += 1;
@@ -252,7 +265,8 @@ impl EncodePipeline for CpuPipeline {
             return Ok(None);
         };
         // Same input again = a minimal P-frame (no keyframe).
-        self.encoder.encode_rgba(img.width(), img.height(), img.as_raw(), false)
+        self.encoder
+            .encode_rgba(img.width(), img.height(), img.as_raw(), false)
     }
 
     fn shutdown(&mut self) {
@@ -304,13 +318,18 @@ pub(crate) struct FrameScaler {
 
 impl std::fmt::Debug for FrameScaler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("FrameScaler").field("max_dim", &self.max_dim).finish_non_exhaustive()
+        f.debug_struct("FrameScaler")
+            .field("max_dim", &self.max_dim)
+            .finish_non_exhaustive()
     }
 }
 
 impl FrameScaler {
     pub(crate) fn new(max_dim: u32) -> Self {
-        Self { max_dim, resizer: fast_image_resize::Resizer::new() }
+        Self {
+            max_dim,
+            resizer: fast_image_resize::Resizer::new(),
+        }
     }
 
     /// Downscale `img` so its longest edge is at most `max_dim` (0 = no cap);
@@ -432,10 +451,19 @@ mod tests {
         pipeline.shutdown();
 
         gaps_ms.sort_unstable();
-        let p = |q: f64| gaps_ms.get(((gaps_ms.len() as f64 * q) as usize).min(gaps_ms.len() - 1)).copied().unwrap_or(0);
+        let p = |q: f64| {
+            gaps_ms
+                .get(((gaps_ms.len() as f64 * q) as usize).min(gaps_ms.len() - 1))
+                .copied()
+                .unwrap_or(0)
+        };
         let over200 = gaps_ms.iter().filter(|&&g| g > 200).count();
         let max_size = sizes.iter().copied().max().unwrap_or(0);
-        let avg_size = if sizes.is_empty() { 0 } else { sizes.iter().sum::<usize>() / sizes.len() };
+        let avg_size = if sizes.is_empty() {
+            0
+        } else {
+            sizes.iter().sum::<usize>() / sizes.len()
+        };
         let over150 = gaps_ms.iter().filter(|&&g| g > 150).count();
         println!(
             "frames={frames} ({repeats} repeats) over 20s = {:.1} fps | gap p50={}ms p95={}ms p99={}ms max={}ms | gaps>150ms: {over150} >200ms: {over200} | frame size avg={avg_size}B max={max_size}B",

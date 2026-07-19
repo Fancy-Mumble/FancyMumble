@@ -232,7 +232,11 @@ impl AppState {
         // `inner` to whichever session (if any) becomes active next.
         let _ = self.registry.remove(id);
         if is_active {
-            match self.registry.active_id().and_then(|nid| self.registry.session(nid)) {
+            match self
+                .registry
+                .active_id()
+                .and_then(|nid| self.registry.session(nid))
+            {
                 Some(next_arc) => {
                     let _ = self.inner.swap(next_arc);
                 }
@@ -246,8 +250,14 @@ impl AppState {
     #[cfg(target_os = "android")]
     fn stop_android_foreground_service(&self) {
         use tauri::Manager; // brings `try_state` into scope (android-only path)
-        let Some(app_handle) = self.app_handle() else { return };
-        let Some(handle) = app_handle.try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>() else { return };
+        let Some(app_handle) = self.app_handle() else {
+            return;
+        };
+        let Some(handle) = app_handle
+            .try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>(
+        ) else {
+            return;
+        };
         crate::platform::android::connection_service::stop_service(&handle);
     }
 }
@@ -317,11 +327,7 @@ fn reset_state_for_connect(
 
 /// Initialise the cert-hash resolver, migrate legacy storage, and load
 /// the identity seed for the given certificate label.
-fn init_identity(
-    inner: &SharedInner,
-    app_handle: &AppHandle,
-    cert_label: &Option<String>,
-) {
+fn init_identity(inner: &SharedInner, app_handle: &AppHandle, cert_label: &Option<String>) {
     // Cert-hash-to-username resolver (persisted across sessions).
     if let Ok(data_dir) = crate::e2e_data_dir(app_handle) {
         let hash_names_path = data_dir.join("hash_names.json");
@@ -372,7 +378,10 @@ struct ConnectResultCtx<'a> {
 /// send Authenticate, or emit rejection events on failure.
 async fn handle_connect_result(
     result: Result<
-        (mumble_protocol::client::ClientHandle, tokio::task::JoinHandle<()>),
+        (
+            mumble_protocol::client::ClientHandle,
+            tokio::task::JoinHandle<()>,
+        ),
         mumble_protocol::error::Error,
     >,
     ctx: ConnectResultCtx<'_>,
@@ -425,10 +434,7 @@ async fn handle_connect_result(
             // Start deaf+muted so the user does not transmit or
             // hear audio until they explicitly enable voice calling.
             // (SetSelfDeaf already carries self_mute=true.)
-            if let Err(e) = handle
-                .send(command::SetSelfDeaf { deafened: true })
-                .await
-            {
+            if let Err(e) = handle.send(command::SetSelfDeaf { deafened: true }).await {
                 tracing::warn!("failed to send initial self-deaf: {e}");
             }
         }
@@ -462,7 +468,10 @@ fn emit_session_rejected(app_handle: &AppHandle, server_id: ServerId, reason: St
     );
     let _ = app_handle.emit(
         "server-disconnected",
-        DisconnectedPayload { server_id: Some(id), reason: Some(reason) },
+        DisconnectedPayload {
+            server_id: Some(id),
+            reason: Some(reason),
+        },
     );
 }
 
@@ -485,10 +494,7 @@ fn rebind_active(
     active_handle: &super::shared_handle::SharedHandle,
     registry: &super::registry::Registry,
 ) {
-    if let Some(arc) = registry
-        .active_id()
-        .and_then(|id| registry.session(id))
-    {
+    if let Some(arc) = registry.active_id().and_then(|id| registry.session(id)) {
         let _ = active_handle.swap(arc);
     }
 }

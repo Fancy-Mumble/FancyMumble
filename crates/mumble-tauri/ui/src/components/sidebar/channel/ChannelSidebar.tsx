@@ -28,7 +28,8 @@ const MembersTab = lazy(() => import("../MembersTab").then((m) => ({ default: m.
 const RecordingModal = lazy(() => import("../RecordingModal"));
 import { SidebarTabs } from "../SidebarTabs";
 import { PERM_LISTEN, PERM_WRITE } from "../../../utils/permissions";
-import { filterVisibleChannels, channelDisplayName, filterMeetingChannels, meetingRooms, dmPeerUserId, usersForChannelTree } from "../../../utils/channelVisibility";
+import { filterVisibleChannels, channelDisplayName, filterMeetingChannels, isDmChannel, meetingRooms, dmPeerUserId, usersForChannelTree } from "../../../utils/channelVisibility";
+import { requestLeaveMeeting } from "../../chat/calendar/meetings";
 import { TID } from "../../../testids";
 
 /** Check whether a channel's cached permissions include the Listen bit. */
@@ -810,6 +811,9 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
         const showDelete = canDeleteChannel(ctxChannel);
         const showPurge = canDeleteMessages(ctxChannel) && !!ctxChannel?.pchat_protocol;
         const channelUserCount = users.filter((u) => u.channel_id === ctxMenu.channelId).length;
+        // Meeting rooms (detached, non-DM) offer "leave": the server revokes
+        // this user's access and the room drops out of their Meetings list.
+        const showLeaveMeeting = !!ctxChannel?.detached && !isDmChannel(ctxChannel);
 
         return createPortal(
           <div
@@ -858,6 +862,21 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
                 </>
               )}
             </button>
+
+            {showLeaveMeeting && (
+              <button
+                className={`${styles.contextMenuItem} ${styles.contextMenuItemDanger}`}
+                data-testid={TID.leaveMeeting}
+                title={t("channelSidebar.leaveMeetingTitle")}
+                onClick={() => {
+                  requestLeaveMeeting(ctxMenu.channelId);
+                  setCtxMenu(null);
+                }}
+              >
+                <LogoutIcon width={14} height={14} />
+                {t("channelSidebar.leaveMeeting")}
+              </button>
+            )}
 
             {showEdit && (
               <button

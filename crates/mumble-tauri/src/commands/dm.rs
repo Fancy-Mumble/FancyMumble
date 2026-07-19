@@ -22,7 +22,10 @@ pub(crate) fn get_dm_messages(state: tauri::State<'_, AppState>, session: u32) -
 
 /// Select a DM conversation for viewing.
 #[tauri::command]
-pub(crate) fn select_dm_user(state: tauri::State<'_, AppState>, session: u32) -> Result<(), String> {
+pub(crate) fn select_dm_user(
+    state: tauri::State<'_, AppState>,
+    session: u32,
+) -> Result<(), String> {
     state.select_dm_user(session)
 }
 

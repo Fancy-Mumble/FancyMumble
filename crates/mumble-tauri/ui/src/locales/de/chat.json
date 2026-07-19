@@ -73,7 +73,9 @@
     "join": "Beitreten",
     "joinChannel": "Kanal beitreten",
     "popOutDm": "Direktnachricht ausklinken",
-    "changeSharing": "Freigabe ändern"
+    "changeSharing": "Freigabe ändern",
+    "shareCamera": "Kamera teilen",
+    "changeCamera": "Kamera-Freigabe ändern"
   },
   "calendar": {
     "title": "Kalender",
@@ -365,6 +367,8 @@
     "alreadySharingOtherServer": "Du teilst deinen Bildschirm bereits auf einem anderen Server. Beende diese Freigabe zuerst.",
     "picker": {
       "title": "Wähle aus, was du teilen möchtest",
+      "cameraTitle": "Kamera auswählen",
+      "systemPickedDisplay": "Geteilter Bildschirm (über den Systemdialog gewählt)",
       "tabScreens": "Gesamter Bildschirm",
       "tabWindows": "Fenster",
       "tabDevices": "Gerät",
@@ -426,6 +430,8 @@
     "fullscreen": "Vollbild",
     "exitFullscreen": "Vollbild beenden",
     "settingUp": "Stream wird eingerichtet...",
+    "liveNoPreview": "Stream läuft. Eine lokale Vorschau ist auf diesem System nicht verfügbar - andere können trotzdem zuschauen.",
+    "captureStalledHint": "Vollbild-Inhalte auf dem geteilten Bildschirm werden nicht erfasst (bekanntes GNOME/NVIDIA-Problem). Teile stattdessen das Fenster oder bewege die Maus, um fortzufahren.",
     "connecting": "Verbindung wird hergestellt...",
     "waitingForStream": "Warte auf Stream",
     "share": "Bildschirm teilen",
@@ -443,6 +449,7 @@
       "currentRes": "Aktuelle Auflösung",
       "volume": "Lautstärke",
       "muted": "stumm",
+      "fps": "FPS",
       "codecs": "Codecs",
       "connection": "Verbindung",
       "connectionSpeed": "Verbindungsgeschwindigkeit",

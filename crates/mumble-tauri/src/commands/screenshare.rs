@@ -51,7 +51,10 @@ impl MumbleSignalSink {
         let server_id = self.server_id.clone();
         let _detached = tauri::async_runtime::spawn(async move {
             let state = app.state::<AppState>();
-            if let Err(e) = state.send_webrtc_signal(0, signal_type, payload, server_id).await {
+            if let Err(e) = state
+                .send_webrtc_signal(0, signal_type, payload, server_id)
+                .await
+            {
                 tracing::warn!("screenshare: sending signal {signal_type} failed: {e}");
             }
         });
@@ -84,11 +87,19 @@ impl SignalSink for MumbleSignalSink {
             BroadcastState::Connected => ("connected", None),
             BroadcastState::Failed(m) => ("failed", Some(m)),
             BroadcastState::Stopped => ("stopped", None),
+            // Advisory: the broadcast keeps running; the frontend shows a
+            // dismissible hint about fullscreen/scanout capture on the shared
+            // monitor. Cleared by `captureResumed`.
+            BroadcastState::CaptureStalled => ("captureStalled", None),
+            BroadcastState::CaptureResumed => ("captureResumed", None),
         };
-        if let Err(e) = self
-            .app
-            .emit("screen-broadcast-state", BroadcastStateEvent { state: name, message })
-        {
+        if let Err(e) = self.app.emit(
+            "screen-broadcast-state",
+            BroadcastStateEvent {
+                state: name,
+                message,
+            },
+        ) {
             tracing::warn!("screenshare: emitting broadcast state failed: {e}");
         }
     }
@@ -108,12 +119,19 @@ pub(crate) fn try_intercept_answer(signal_type: i32, payload: &str) -> bool {
     if signal_type != 3 {
         return false; // not an SDP_ANSWER
     }
-    // This lock is held by `start_screen_broadcast` for the whole broadcaster
-    // construction, which sends the SDP offer before returning: blocking here
-    // for those few milliseconds is what guarantees an answer racing back
-    // from the SFU finds the broadcaster already registered.
-    let Ok(slot) = broadcaster_slot().lock() else { return false };
-    let Some(broadcaster) = slot.as_ref() else { return false };
+    // try_lock, NEVER lock: this runs on the Mumble receive thread, and the
+    // slot is held across broadcaster construction. Blocking here once froze
+    // the entire receive path when a teardown wedged under the lock (leaked
+    // portal capture threads). On contention the answer simply falls through
+    // to the webview dispatcher unclaimed; the broadcaster's unanswered-offer
+    // retry gets it re-answered within 1.5 s.
+    let Ok(slot) = broadcaster_slot().try_lock() else {
+        tracing::debug!("screenshare: answer not claimed (broadcaster slot busy)");
+        return false;
+    };
+    let Some(broadcaster) = slot.as_ref() else {
+        return false;
+    };
     let m_sections = payload.matches("\nm=").count();
     if !broadcaster.awaiting_answer() {
         tracing::debug!(m_sections, "screenshare: answer not claimed (not awaiting)");
@@ -146,7 +164,11 @@ pub(crate) fn try_intercept_answer(signal_type: i32, payload: &str) -> bool {
 /// shared content instead of guessing a monitor from capture dimensions.
 /// Camera tracks have no desktop location and are ignored here.
 pub(crate) fn active_broadcast_source() -> Option<(SourceKind, u32)> {
-    broadcaster_slot().lock().ok()?.as_ref().and_then(ScreenBroadcaster::display_source)
+    broadcaster_slot()
+        .lock()
+        .ok()?
+        .as_ref()
+        .and_then(ScreenBroadcaster::display_source)
 }
 
 /// List all capturable screens and windows for the source picker.
@@ -205,7 +227,10 @@ pub(crate) struct SourceSpec {
 /// `server_id` pins all signaling to the connection that starts the
 /// broadcast (multi-tab safety, mirroring the webview's `broadcasterServerId`).
 /// `max_dimension` (longest edge, 0 = source) and `max_fps` set the encoder
-/// resolution/frame-rate. Replaces any previous broadcast.
+/// resolution/frame-rate. `reuse_portal_source` marks a replace that keeps
+/// the display source (quality change, camera toggled), letting the Linux
+/// portal restore the previous pick instead of prompting again; ignored
+/// elsewhere. Replaces any previous broadcast.
 #[tauri::command]
 pub(crate) async fn start_screen_broadcast(
     app: AppHandle,
@@ -213,7 +238,12 @@ pub(crate) async fn start_screen_broadcast(
     server_id: Option<String>,
     max_dimension: Option<u32>,
     max_fps: Option<f32>,
+    reuse_portal_source: Option<bool>,
 ) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    fancy_screenshare::set_restore_last_pick(reuse_portal_source.unwrap_or(false));
+    #[cfg(not(target_os = "linux"))]
+    let _ = reuse_portal_source;
     // SCREEN shares must not capture this app itself: the live own-preview
     // inside the captured screen forms a delayed video feedback loop that
     // self-oscillates (delivery stall -> static screen -> capture pause ->
@@ -227,18 +257,28 @@ pub(crate) async fn start_screen_broadcast(
 
     let sink = std::sync::Arc::new(MumbleSignalSink { app, server_id });
     let settings = encode_settings_for(max_dimension, max_fps);
-    let broadcast_sources: Vec<BroadcastSource> =
-        sources.iter().map(|s| BroadcastSource { kind: s.kind, id: s.id }).collect();
+    let broadcast_sources: Vec<BroadcastSource> = sources
+        .iter()
+        .map(|s| BroadcastSource {
+            kind: s.kind,
+            id: s.id,
+        })
+        .collect();
     tauri::async_runtime::spawn_blocking(move || {
-        // Hold the slot lock across construction: `ScreenBroadcaster::start`
-        // sends the SDP offer before returning and the SFU answers within
-        // milliseconds. `try_intercept_answer` blocks on this lock, so the
-        // racing answer waits until the broadcaster is registered - without
-        // this it leaks to the webview and poisons the loopback viewer's
-        // peer connection ("m-line order doesn't match").
-        let mut slot = broadcaster_slot().lock().map_err(|_| "broadcaster mutex poisoned")?;
-        let broadcaster = ScreenBroadcaster::start(broadcast_sources, settings, sink)?;
-        if let Some(mut old) = slot.replace(broadcaster) {
+        // Hold the slot lock across construction so the answer racing back
+        // from the SFU finds the broadcaster registered (the intercept uses
+        // try_lock and a missed race is healed by the offer retry). The OLD
+        // broadcaster stops OUTSIDE the lock: stopping joins capture threads,
+        // and a capture teardown wedged in the portal once held this lock
+        // forever - freezing the receive thread and every later share.
+        let old = {
+            let mut slot = broadcaster_slot()
+                .lock()
+                .map_err(|_| "broadcaster mutex poisoned")?;
+            let broadcaster = ScreenBroadcaster::start(broadcast_sources, settings, sink)?;
+            slot.replace(broadcaster)
+        };
+        if let Some(mut old) = old {
             old.stop();
         }
         Ok::<(), String>(())
@@ -265,12 +305,62 @@ fn set_own_windows_excluded_from_capture(app: &AppHandle, excluded: bool) {
 #[cfg(target_os = "android")]
 fn set_own_windows_excluded_from_capture(_app: &AppHandle, _excluded: bool) {}
 
+/// Platform traits of the share flow, queried once by the frontend to shape
+/// its UI.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ScreenShareCapabilities {
+    /// The compositor's portal dialog replaces the in-app source picker
+    /// (GNOME): the share button starts the portal flow directly, cameras
+    /// get their own header button, and every custom screen/window
+    /// selection UI stays hidden.
+    portal_picker: bool,
+}
+
+/// How this platform wants sources picked (see [`ScreenShareCapabilities`]).
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub(crate) fn screen_share_capabilities() -> ScreenShareCapabilities {
+    ScreenShareCapabilities {
+        portal_picker: fancy_screenshare::native_portal_picker(),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub(crate) fn screen_share_capabilities() -> ScreenShareCapabilities {
+    ScreenShareCapabilities {
+        portal_picker: false,
+    }
+}
+
+/// Run the `org.freedesktop.portal.Camera` consent flow (GNOME's native
+/// camera dialog) before a camera share. Blocks until the user answers when
+/// no grant is stored yet; `Ok(false)` only on an explicit denial.
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub(crate) async fn request_camera_access() -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(fancy_screenshare::camera_portal::request_access)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub(crate) async fn request_camera_access() -> Result<bool, String> {
+    // No consent portal outside Linux; the OS prompts on device open where
+    // it cares (macOS TCC).
+    Ok(true)
+}
+
 /// Stop the active broadcast (no-op when none is running).
 #[tauri::command]
 pub(crate) async fn stop_screen_broadcast(app: AppHandle) -> Result<(), String> {
     set_own_windows_excluded_from_capture(&app, false);
     let old = {
-        let mut slot = broadcaster_slot().lock().map_err(|_| "broadcaster mutex poisoned")?;
+        let mut slot = broadcaster_slot()
+            .lock()
+            .map_err(|_| "broadcaster mutex poisoned")?;
         slot.take()
     };
     if let Some(mut broadcaster) = old {

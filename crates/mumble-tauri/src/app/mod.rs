@@ -14,6 +14,9 @@ pub(crate) mod dev_server;
 #[cfg(target_os = "windows")]
 pub(crate) mod webview;
 
+#[cfg(target_os = "linux")]
+pub(crate) mod webview_linux;
+
 use tauri::Manager;
 
 use crate::state::AppState;

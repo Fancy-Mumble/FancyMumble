@@ -164,8 +164,7 @@ fn convert_embed(embed: &mumble_tcp::fancy_link_preview_response::Embed) -> Link
 /// tiny job (the whole point of inlining the preview is to keep the IPC
 /// simple).
 fn base64_encode(input: &[u8]) -> String {
-    const TABLE: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
     let mut i = 0;
     while i + 3 <= input.len() {
@@ -209,10 +208,7 @@ impl HandleMessage for mumble_tcp::FancyLinkPreviewResponse {
 
         ctx.emit(
             "link-preview-response",
-            LinkPreviewResponsePayload {
-                request_id,
-                embeds,
-            },
+            LinkPreviewResponsePayload { request_id, embeds },
         );
     }
 }

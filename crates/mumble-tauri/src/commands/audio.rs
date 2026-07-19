@@ -27,20 +27,13 @@ fn enumerate_input_devices() -> Vec<AudioDevice> {
     let host = cpal::default_host();
     let default_name = host
         .default_input_device()
-        .and_then(|d| {
-            d.description()
-                .ok()
-                .map(|desc| desc.name().to_string())
-        });
+        .and_then(|d| d.description().ok().map(|desc| desc.name().to_string()));
 
     host.input_devices()
         .map(|devices| {
             devices
                 .filter_map(|d| {
-                    let name = d
-                        .description()
-                        .ok()
-                        .map(|desc| desc.name().to_string())?;
+                    let name = d.description().ok().map(|desc| desc.name().to_string())?;
                     Some(AudioDevice {
                         name: name.clone(),
                         is_default: default_name.as_deref() == Some(&name),
@@ -77,20 +70,13 @@ fn enumerate_output_devices() -> Vec<AudioDevice> {
     let host = cpal::default_host();
     let default_name = host
         .default_output_device()
-        .and_then(|d| {
-            d.description()
-                .ok()
-                .map(|desc| desc.name().to_string())
-        });
+        .and_then(|d| d.description().ok().map(|desc| desc.name().to_string()));
 
     host.output_devices()
         .map(|devices| {
             devices
                 .filter_map(|d| {
-                    let name = d
-                        .description()
-                        .ok()
-                        .map(|desc| desc.name().to_string())?;
+                    let name = d.description().ok().map(|desc| desc.name().to_string())?;
                     Some(AudioDevice {
                         name: name.clone(),
                         is_default: default_name.as_deref() == Some(&name),
@@ -128,9 +114,8 @@ pub(crate) fn get_denoiser_param_specs(
 /// List the noise-suppression algorithms whose backends are actually
 /// compiled into this build.
 #[tauri::command]
-pub(crate) fn get_available_denoiser_algorithms()
- -> Vec<mumble_protocol::audio::filter::denoiser::NoiseSuppressionAlgorithm>
-{
+pub(crate) fn get_available_denoiser_algorithms(
+) -> Vec<mumble_protocol::audio::filter::denoiser::NoiseSuppressionAlgorithm> {
     mumble_protocol::audio::filter::denoiser::NoiseSuppressionAlgorithm::available()
 }
 
@@ -292,7 +277,9 @@ pub(crate) fn stop_mic_test(state: tauri::State<'_, AppState>) {
 /// Calibrate the voice activation threshold by measuring the ambient
 /// noise floor for ~2 seconds (with AGC applied).  Returns the new threshold.
 #[tauri::command]
-pub(crate) async fn calibrate_voice_threshold(state: tauri::State<'_, AppState>) -> Result<f32, String> {
+pub(crate) async fn calibrate_voice_threshold(
+    state: tauri::State<'_, AppState>,
+) -> Result<f32, String> {
     state.calibrate_voice_threshold().await
 }
 
@@ -344,6 +331,8 @@ pub(crate) fn stop_recording(state: tauri::State<'_, AppState>) -> Result<String
 
 /// Get the current recording state.
 #[tauri::command]
-pub(crate) fn get_recording_state(state: tauri::State<'_, AppState>) -> state::recording::RecordingState {
+pub(crate) fn get_recording_state(
+    state: tauri::State<'_, AppState>,
+) -> state::recording::RecordingState {
     state.recording_state()
 }

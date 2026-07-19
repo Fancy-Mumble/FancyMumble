@@ -8,8 +8,7 @@ use std::sync::OnceLock;
 
 use tauri::image::Image;
 use tauri::menu::{
-    CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItem, MenuItemBuilder,
-    PredefinedMenuItem,
+    CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItem, MenuItemBuilder, PredefinedMenuItem,
 };
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Listener, Manager};
@@ -266,9 +265,9 @@ fn render_talking_icon_inner() -> Option<Vec<u8>> {
             if dist <= radius {
                 let i = (y * width + x) * 4;
                 if i + 3 < buf.len() {
-                    buf[i] = 76;      // R
+                    buf[i] = 76; // R
                     buf[i + 1] = 175; // G
-                    buf[i + 2] = 80;  // B
+                    buf[i + 2] = 80; // B
                     buf[i + 3] = 255; // A
                 }
             } else if dist <= radius + 1.5 {
