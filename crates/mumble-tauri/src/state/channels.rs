@@ -20,9 +20,7 @@ impl AppState {
         self.emit_unreads();
 
         if let Some(handle) = handle {
-            let _ = handle
-                .send(command::PermissionQuery { channel_id })
-                .await;
+            let _ = handle.send(command::PermissionQuery { channel_id }).await;
         }
 
         Ok(())
@@ -38,7 +36,11 @@ impl AppState {
         crate::state::handler::user_state::ensure_pchat_history(&self.inner.snapshot(), channel_id);
     }
 
-    pub async fn join_channel(&self, channel_id: u32, password: Option<String>) -> Result<(), String> {
+    pub async fn join_channel(
+        &self,
+        channel_id: u32,
+        password: Option<String>,
+    ) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
             let state = __session.lock().map_err(|e| e.to_string())?;
@@ -47,7 +49,10 @@ impl AppState {
 
         if let Some(handle) = handle {
             let _ = handle
-                .send(command::JoinChannel { channel_id, password })
+                .send(command::JoinChannel {
+                    channel_id,
+                    password,
+                })
                 .await;
         }
 
@@ -55,7 +60,8 @@ impl AppState {
     }
 
     pub fn current_channel(&self) -> Option<u32> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .ok()
             .and_then(|s| s.current_channel)
@@ -75,9 +81,7 @@ impl AppState {
                     .and_then(|ch| ch.permissions)
                     .is_some_and(|p| p & 0x800 == 0);
                 if no_listen_perm {
-                    return Err(
-                        "You do not have permission to listen to this channel".into(),
-                    );
+                    return Err("You do not have permission to listen to this channel".into());
                 }
             }
 
@@ -126,13 +130,17 @@ impl AppState {
     }
 
     pub fn listened_channels(&self) -> Vec<u32> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .map(|s| s.permanently_listened.iter().copied().collect())
             .unwrap_or_default()
     }
 
-    #[allow(clippy::too_many_arguments, reason = "channel update mirrors the full server-side parameter surface as optional fields")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "channel update mirrors the full server-side parameter surface as optional fields"
+    )]
     pub async fn update_channel(
         &self,
         channel_id: u32,
@@ -206,7 +214,10 @@ impl AppState {
         }
     }
 
-    #[allow(clippy::too_many_arguments, reason = "channel creation mirrors the full server-side parameter surface as optional fields")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "channel creation mirrors the full server-side parameter surface as optional fields"
+    )]
     pub async fn create_channel(
         &self,
         parent_id: u32,
@@ -230,8 +241,8 @@ impl AppState {
             state.conn.client_handle.clone()
         };
         match handle {
-            Some(h) => {
-                h.send(command::SetChannelState {
+            Some(h) => h
+                .send(command::SetChannelState {
                     channel_id: None,
                     parent: Some(parent_id),
                     name: Some(name),
@@ -249,8 +260,7 @@ impl AppState {
                     invitee_user_ids: invitees,
                 })
                 .await
-                .map_err(|e| e.to_string())
-            }
+                .map_err(|e| e.to_string()),
             None => Err("Not connected".into()),
         }
     }

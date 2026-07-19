@@ -60,8 +60,11 @@ pub(crate) fn current_capture_state() -> Option<CaptureState> {
 pub(crate) fn emit_capture_error(app: Option<&tauri::AppHandle>, err: &str) {
     let busy = is_device_busy(err);
     #[cfg(target_os = "windows")]
-    let holders: Vec<String> =
-        if busy { fancy_audio_device::capture_device_users() } else { Vec::new() };
+    let holders: Vec<String> = if busy {
+        fancy_audio_device::capture_device_users()
+    } else {
+        Vec::new()
+    };
     #[cfg(not(target_os = "windows"))]
     let holders: Vec<String> = Vec::new();
     let state = CaptureState {
@@ -92,7 +95,8 @@ pub(crate) fn clear_capture_error(app: Option<&tauri::AppHandle>) {
 impl AppState {
     /// Get current audio settings.
     pub fn audio_settings(&self) -> super::types::AudioSettings {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .map(|s| s.audio.settings.clone())
             .unwrap_or_default()
@@ -103,7 +107,10 @@ impl AppState {
     /// If any pipeline-relevant setting changed while voice is active,
     /// the outbound pipeline is automatically restarted.
     /// Volume changes are applied live via atomic handles (no restart).
-    pub fn set_audio_settings(&self, settings: super::types::AudioSettings) -> Option<(bool, bool, bool)> {
+    pub fn set_audio_settings(
+        &self,
+        settings: super::types::AudioSettings,
+    ) -> Option<(bool, bool, bool)> {
         let (old_settings, voice_active) = {
             let __session = self.inner.snapshot();
             let state = __session.lock().ok()?;
@@ -137,7 +144,8 @@ impl AppState {
 
     /// Get current voice state.
     pub fn voice_state(&self) -> VoiceState {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .map(|s| s.audio.voice_state)
             .unwrap_or_default()
@@ -205,7 +213,10 @@ mod voice_pipeline {
             let (handle, audio_settings) = {
                 let __session = self.inner.snapshot();
                 let state = __session.lock().map_err(|e| e.to_string())?;
-                (state.conn.client_handle.clone(), state.audio.settings.clone())
+                (
+                    state.conn.client_handle.clone(),
+                    state.audio.settings.clone(),
+                )
             };
 
             info!("enable_voice: starting audio pipelines");
@@ -215,9 +226,8 @@ mod voice_pipeline {
             let output_vol = Arc::new(AtomicU32::new(audio_settings.output_volume.to_bits()));
 
             // Inbound: per-speaker decoders + mixing playback.
-            let speaker_buffers: SpeakerBuffers = Arc::new(
-                std::sync::Mutex::new(std::collections::HashMap::new()),
-            );
+            let speaker_buffers: SpeakerBuffers =
+                Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
             let speaker_volumes = {
                 let __session = self.inner.snapshot();
                 let state = __session.lock().map_err(|e| e.to_string())?;
@@ -322,10 +332,18 @@ mod voice_pipeline {
 
                 // Collect sessions to notify OUTSIDE the lock.
                 let sessions: Vec<(u32, tauri::AppHandle)> = state
-                    .conn.tauri_app_handle
+                    .conn
+                    .tauri_app_handle
                     .as_ref()
                     .filter(|_| !state.audio.talking_sessions.is_empty())
-                    .map(|app| state.audio.talking_sessions.iter().map(|&s| (s, app.clone())).collect())
+                    .map(|app| {
+                        state
+                            .audio
+                            .talking_sessions
+                            .iter()
+                            .map(|&s| (s, app.clone()))
+                            .collect()
+                    })
                     .unwrap_or_default();
                 state.audio.talking_sessions.clear();
                 sessions
@@ -359,7 +377,10 @@ mod voice_pipeline {
             let (audio_settings, client_handle) = {
                 let __session = self.inner.snapshot();
                 let state = __session.lock().map_err(|e| e.to_string())?;
-                (state.audio.settings.clone(), state.conn.client_handle.clone())
+                (
+                    state.audio.settings.clone(),
+                    state.conn.client_handle.clone(),
+                )
             };
 
             self.start_outbound_pipeline(&audio_settings, &client_handle)
@@ -387,9 +408,8 @@ mod voice_pipeline {
 
             let output_vol = Arc::new(AtomicU32::new(audio_settings.output_volume.to_bits()));
 
-            let speaker_buffers: SpeakerBuffers = Arc::new(
-                std::sync::Mutex::new(std::collections::HashMap::new()),
-            );
+            let speaker_buffers: SpeakerBuffers =
+                Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
             let speaker_volumes = {
                 let __session = self.inner.snapshot();
                 let state = __session.lock().map_err(|e| e.to_string())?;
@@ -433,8 +453,8 @@ mod voice_pipeline {
                     state.server.max_bandwidth,
                 )
             };
-            let input_vol =
-                input_vol.unwrap_or_else(|| Arc::new(AtomicU32::new(audio_settings.input_volume.to_bits())));
+            let input_vol = input_vol
+                .unwrap_or_else(|| Arc::new(AtomicU32::new(audio_settings.input_volume.to_bits())));
 
             let (bitrate_bps, frame_size_ms) = adjust_to_server_bandwidth(
                 audio_settings.bitrate_bps,
@@ -479,11 +499,7 @@ mod voice_pipeline {
                 audio_settings.vad_threshold,
             );
 
-            let outbound = OutboundPipeline::new(
-                capture,
-                outbound_filters,
-                Box::new(encoder),
-            );
+            let outbound = OutboundPipeline::new(capture, outbound_filters, Box::new(encoder));
             // capture.start() is deferred to outbound_audio_loop so the
             // cpal stream only begins producing samples once the encoding
             // loop is ready to consume them, avoiding buffer overflow on
@@ -515,16 +531,18 @@ mod voice_pipeline {
             let (handle, audio_settings) = {
                 let __session = self.inner.snapshot();
                 let state = __session.lock().map_err(|e| e.to_string())?;
-                (state.conn.client_handle.clone(), state.audio.settings.clone())
+                (
+                    state.conn.client_handle.clone(),
+                    state.audio.settings.clone(),
+                )
             };
 
             info!("enable_voice_muted: starting inbound pipeline only");
 
             let output_vol = Arc::new(AtomicU32::new(audio_settings.output_volume.to_bits()));
 
-            let speaker_buffers: SpeakerBuffers = Arc::new(
-                std::sync::Mutex::new(std::collections::HashMap::new()),
-            );
+            let speaker_buffers: SpeakerBuffers =
+                Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
             let speaker_volumes = {
                 let __session = self.inner.snapshot();
                 let state = __session.lock().map_err(|e| e.to_string())?;
@@ -723,7 +741,6 @@ mod voice_pipeline {
             Ok(())
         }
 
-
         /// `mic-amplitude` events to the frontend at ~30 Hz.
         ///
         /// When `auto_input_sensitivity` is enabled, the measured
@@ -851,11 +868,12 @@ mod voice_pipeline {
                 input_vol,
             )?;
             let filters = build_outbound_filters(&audio_settings);
-            let (playback, speaker_buffers) = super::super::voice_replay::make_voice_replay_playback(
-                &audio_settings,
-                output_vol,
-                speaker_volumes,
-            )?;
+            let (playback, speaker_buffers) =
+                super::super::voice_replay::make_voice_replay_playback(
+                    &audio_settings,
+                    output_vol,
+                    speaker_volumes,
+                )?;
 
             let app = self.app_handle().ok_or("No app handle")?;
             let (stop_tx, stop_rx) = tokio::sync::watch::channel(true);
@@ -908,7 +926,8 @@ mod voice_pipeline {
                 let __session = self.inner.snapshot();
                 let state = __session.lock().map_err(|e| e.to_string())?;
                 state
-                    .conn.client_handle
+                    .conn
+                    .client_handle
                     .clone()
                     .ok_or_else(|| "Not connected".to_string())?
             };
@@ -960,7 +979,9 @@ mod voice_pipeline {
                 960,
                 input_vol,
             )?;
-            capture.start().map_err(|e| format!("Calibration capture start: {e}"))?;
+            capture
+                .start()
+                .map_err(|e| format!("Calibration capture start: {e}"))?;
 
             let mut agc_filter = build_agc_filter(&audio_settings);
 
@@ -1137,10 +1158,7 @@ mod voice_pipeline {
 
         #[test]
         fn bandwidth_unknown_keeps_settings() {
-            assert_eq!(
-                adjust_to_server_bandwidth(128_000, 10, None),
-                (128_000, 10)
-            );
+            assert_eq!(adjust_to_server_bandwidth(128_000, 10, None), (128_000, 10));
         }
 
         #[test]
@@ -1196,31 +1214,28 @@ mod voice_pipeline {
             use mumble_protocol::audio::pipeline::OutboundPipeline;
 
             let vol = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
-            let Ok(capture) = PlatformAudioFactory::create_capture(None, 960, vol) else { return };
-
-            let Ok(encoder) = OpusEncoder::new(
-                OpusEncoderConfig::default(),
-                AudioFormat::MONO_48KHZ_F32,
-            ) else {
+            let Ok(capture) = PlatformAudioFactory::create_capture(None, 960, vol) else {
                 return;
             };
 
-            let _pipeline = OutboundPipeline::new(
-                capture,
-                FilterChain::new(),
-                Box::new(encoder),
-            );
+            let Ok(encoder) =
+                OpusEncoder::new(OpusEncoderConfig::default(), AudioFormat::MONO_48KHZ_F32)
+            else {
+                return;
+            };
+
+            let _pipeline = OutboundPipeline::new(capture, FilterChain::new(), Box::new(encoder));
         }
 
         #[test]
         #[ignore = "requires audio hardware - run with --ignored"]
         fn factory_mixing_playback_can_be_started() {
             let vol = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
-            let bufs: SpeakerBuffers = Arc::new(
-                std::sync::Mutex::new(std::collections::HashMap::new()),
-            );
+            let bufs: SpeakerBuffers =
+                Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
             let sv: mumble_protocol::audio::mixer::SpeakerVolumes = Default::default();
-            let Ok(mut playback) = PlatformAudioFactory::create_mixing_playback(None, vol, bufs, sv)
+            let Ok(mut playback) =
+                PlatformAudioFactory::create_mixing_playback(None, vol, bufs, sv)
             else {
                 eprintln!("Skipping: no audio output device available");
                 return;

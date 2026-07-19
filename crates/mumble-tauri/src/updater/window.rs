@@ -30,10 +30,7 @@ pub(crate) fn show_main_window(app: &tauri::AppHandle) {
 ///
 /// When `auto_install` is true the window URL gets a `&auto=1` flag so
 /// the React bootstrapper starts the download/install immediately.
-pub(crate) fn open_updater_window(
-    app: &tauri::AppHandle,
-    auto_install: bool,
-) -> tauri::Result<()> {
+pub(crate) fn open_updater_window(app: &tauri::AppHandle, auto_install: bool) -> tauri::Result<()> {
     if let Some(existing) = app.get_webview_window(UPDATER_WINDOW_LABEL) {
         let _ = existing.set_focus();
         return Ok(());
@@ -45,22 +42,18 @@ pub(crate) fn open_updater_window(
         "index.html?updater=1"
     };
 
-    let _ = WebviewWindowBuilder::new(
-        app,
-        UPDATER_WINDOW_LABEL,
-        WebviewUrl::App(url.into()),
-    )
-    .title("Fancy Mumble Updater")
-    .inner_size(UPDATER_WINDOW_WIDTH, UPDATER_WINDOW_HEIGHT)
-    .min_inner_size(UPDATER_WINDOW_WIDTH, UPDATER_WINDOW_HEIGHT)
-    .resizable(false)
-    .maximizable(false)
-    .minimizable(true)
-    .decorations(false)
-    .transparent(false)
-    .center()
-    .always_on_top(false)
-    .skip_taskbar(false)
-    .build()?;
+    let _ = WebviewWindowBuilder::new(app, UPDATER_WINDOW_LABEL, WebviewUrl::App(url.into()))
+        .title("Fancy Mumble Updater")
+        .inner_size(UPDATER_WINDOW_WIDTH, UPDATER_WINDOW_HEIGHT)
+        .min_inner_size(UPDATER_WINDOW_WIDTH, UPDATER_WINDOW_HEIGHT)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(true)
+        .decorations(false)
+        .transparent(false)
+        .center()
+        .always_on_top(false)
+        .skip_taskbar(false)
+        .build()?;
     Ok(())
 }

@@ -2,6 +2,9 @@
 name = "fancy-screenshare"
 version = "0.1.0"
 edition = "2021"
+# Internal workspace crate - never published to crates.io (this also lets
+# cargo-deny's wildcard gate exempt the path dependencies).
+publish = false
 license = "MIT"
 description = "Frontend-agnostic screen sharing core: source enumeration, capture, encode, WebRTC broadcast"
 
@@ -43,6 +46,9 @@ default = ["gpu"]
 # the portal (ashpd) and VA-API (cros-codecs -> libva) dependencies; note
 # xcap itself still links libpipewire/xcb there for its own capture paths.
 gpu = ["dep:ashpd", "dep:pipewire", "dep:cros-codecs", "dep:libloading"]
+# Debug instrument (portal_fps_probe example): the real portal+PipeWire
+# consumer printing per-second frame counts. Never enabled by the app.
+portal-probe = ["gpu"]
 
 # The Linux capture+encode stack mirrors Chromium's: the xdg-desktop-portal
 # ScreenCast API hands us a PipeWire stream (the only capture path Wayland
@@ -51,7 +57,10 @@ gpu = ["dep:ashpd", "dep:pipewire", "dep:cros-codecs", "dep:libloading"]
 # lineage as Chromium's VaapiVideoEncodeAccelerator (and what Discord forks
 # for their Linux client).
 [target.'cfg(target_os = "linux")'.dependencies]
-ashpd = { version = "0.13", default-features = false, features = ["tokio", "screencast"], optional = true }
+# screencast: the compositor's ScreenCast portal (capture + GNOME's native
+# source picker); camera: the AccessCamera consent dialog for the
+# GNOME-native camera share button.
+ashpd = { version = "0.13", default-features = false, features = ["tokio", "screencast", "camera"], optional = true }
 # 0.8 to stay on xcap's pipewire-sys (Cargo permits one links="pipewire-0.3").
 pipewire = { version = "0.8", optional = true }
 cros-codecs = { version = "0.0.6", features = ["vaapi"], optional = true }
@@ -93,6 +102,10 @@ windows = { version = "0.61", features = [
 [dev-dependencies]
 # Manual pipeline diagnostics print StageTimings via tracing.
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[[example]]
+name = "portal_fps_probe"
+required-features = ["portal-probe"]
 
 [lints]
 workspace = true

@@ -1,4 +1,4 @@
-import { ArrowRightIcon, BellIcon, BellOffIcon, CalendarIcon, DatabaseIcon, FileTextIcon, FolderIcon, PinIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, ShieldCheckIcon, ShieldIcon, UsersGroupIcon } from "../../icons";
+import { ArrowRightIcon, BellIcon, BellOffIcon, CalendarIcon, DatabaseIcon, FileTextIcon, FolderIcon, PinIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, ShieldCheckIcon, ShieldIcon, UsersGroupIcon, WebcamIcon } from "../../icons";
 import { useTranslation } from "react-i18next";
 import { isMobile } from "../../utils/platform";
 import type { KeyTrustLevel } from "../../types";
@@ -44,6 +44,11 @@ interface ChatHeaderProps {
   readonly onToggleSilence?: () => void;
   readonly isScreenSharing?: boolean;
   readonly onToggleScreenShare?: () => void;
+  /** Whether the active broadcast carries a camera track (camera button state). */
+  readonly isCameraSharing?: boolean;
+  /** Camera share button next to the screen share one (GNOME portal flow,
+   *  where the in-app picker - and with it the Devices tab - is hidden). */
+  readonly onToggleCameraShare?: () => void;
   /** When set, the share button is shown but disabled with this tooltip. */
   readonly screenShareDisabledReason?: string;
   /** True when the server has a WebRTC SFU module for server-relayed screen sharing. */
@@ -172,6 +177,8 @@ export default function ChatHeader({
   onToggleSilence,
   isScreenSharing,
   onToggleScreenShare,
+  isCameraSharing,
+  onToggleCameraShare,
   screenShareDisabledReason,
   sfuAvailable,
   broadcastInfo,
@@ -350,6 +357,22 @@ export default function ChatHeader({
             }
           >
             <ScreenShareIcon width={18} height={18} />
+          </button>
+        )}
+        {onToggleCameraShare && !privateBadge && (
+          <button
+            className={`${styles.serverInfoBtn} ${isCameraSharing ? styles.screenShareActive : ""}`}
+            onClick={onToggleCameraShare}
+            disabled={!!screenShareDisabledReason}
+            data-testid={TID.cameraShareToggle}
+            aria-label={isCameraSharing ? t("header.changeCamera") : t("header.shareCamera")}
+            title={
+              screenShareDisabledReason ?? (
+                isCameraSharing ? t("header.changeCamera") : t("header.shareCamera")
+              )
+            }
+          >
+            <WebcamIcon width={18} height={18} />
           </button>
         )}
         {/* The stream close (×) now lives on the stream panel itself (top-right),

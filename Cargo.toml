@@ -76,6 +76,13 @@ panic = "abort"           # Abort on panic (smaller binary, no unwind overhead)
 # while dev video behaves like release.
 [profile.dev.package.fancy-screenshare]
 opt-level = 3
+# No incremental for THIS crate: opt-level 3 + incremental intermittently
+# mixed codegen sessions inside the rlib (undefined hidden `.llvm.*`
+# symbols at link time, failing every other rebuild once the crate started
+# being edited frequently). Incremental reuse is near-zero at opt-level 3
+# anyway; codegen stays fully parallel, and the crate only rebuilds when
+# its own files change.
+incremental = false
 [profile.dev.package.image]
 opt-level = 3
 [profile.dev.package.fast_image_resize]
@@ -101,7 +108,7 @@ inherits = "release"
 # behaviour, but tuned for FAST builds (the retained heap we profile is the
 # same at any opt level). Overrides release's fat LTO + codegen-units = 1,
 # which together cost ~30 min for no profiling benefit.
-lto = false               # no LTO — the single biggest build-time win
+lto = false               # no LTO - the single biggest build-time win
 codegen-units = 256       # parallel codegen
 debug = true              # full debug info so dhat/perf symbolicate stacks
 strip = false             # keep symbols

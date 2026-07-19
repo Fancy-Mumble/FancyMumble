@@ -26,14 +26,12 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use tauri::WebviewWindow;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
-use windows_sys::Win32::UI::Shell::{
-    DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass,
-};
+use windows_sys::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     GetClientRect, GetWindowRect, SetWindowDisplayAffinity, SetWindowPos, SWP_NOACTIVATE,
     SWP_NOMOVE, SWP_NOZORDER, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WMSZ_BOTTOM, WMSZ_BOTTOMLEFT,
-    WMSZ_BOTTOMRIGHT, WMSZ_LEFT, WMSZ_RIGHT, WMSZ_TOP, WMSZ_TOPLEFT, WMSZ_TOPRIGHT,
-    WM_NCDESTROY, WM_SIZING,
+    WMSZ_BOTTOMRIGHT, WMSZ_LEFT, WMSZ_RIGHT, WMSZ_TOP, WMSZ_TOPLEFT, WMSZ_TOPRIGHT, WM_NCDESTROY,
+    WM_SIZING,
 };
 
 use super::{AspectRatioConstraint, WindowExtError};
@@ -52,7 +50,9 @@ fn registry() -> &'static Mutex<HashMap<isize, f64>> {
 fn lock_registry() -> MutexGuard<'static, HashMap<isize, f64>> {
     // Recover from poisoning: failing the resize hook is worse than
     // continuing with a (single) corrupted entry.
-    registry().lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    registry()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Windows backend for [`AspectRatioConstraint`].  Stateless - all
@@ -117,8 +117,7 @@ impl WindowsAspectRatio {
         let removed = lock_registry().remove(&key).is_some();
         if removed {
             // SAFETY: see `install_hook`.
-            let _ok =
-                unsafe { RemoveWindowSubclass(hwnd, Some(Self::subclass_proc), SUBCLASS_ID) };
+            let _ok = unsafe { RemoveWindowSubclass(hwnd, Some(Self::subclass_proc), SUBCLASS_ID) };
         }
     }
 
@@ -285,7 +284,11 @@ pub(super) fn set_excluded_from_capture(
         .hwnd()
         .map_err(|e| WindowExtError::NoHandle(e.to_string()))?;
     let raw = hwnd.0 as HWND;
-    let affinity = if excluded { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE };
+    let affinity = if excluded {
+        WDA_EXCLUDEFROMCAPTURE
+    } else {
+        WDA_NONE
+    };
     // SAFETY: SetWindowDisplayAffinity accepts any valid HWND and
     // validates it internally.  We are on the UI thread (Tauri command).
     let ok = unsafe { SetWindowDisplayAffinity(raw, affinity) };

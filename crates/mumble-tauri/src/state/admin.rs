@@ -82,11 +82,7 @@ impl AppState {
         }
     }
 
-    pub async fn set_priority_speaker(
-        &self,
-        session: u32,
-        priority: bool,
-    ) -> Result<(), String> {
+    pub async fn set_priority_speaker(&self, session: u32, priority: bool) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
             let state = __session.lock().map_err(|e| e.to_string())?;
@@ -142,7 +138,10 @@ impl AppState {
         };
         match handle {
             Some(h) => h
-                .send(command::MoveUser { session, channel_id })
+                .send(command::MoveUser {
+                    session,
+                    channel_id,
+                })
                 .await
                 .map_err(|e| e.to_string()),
             None => Err("Not connected".into()),
@@ -226,10 +225,7 @@ impl AppState {
             .map_err(|e| e.to_string())
     }
 
-    pub async fn update_user_list(
-        &self,
-        users: Vec<RegisteredUserUpdate>,
-    ) -> Result<(), String> {
+    pub async fn update_user_list(&self, users: Vec<RegisteredUserUpdate>) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
             let state = __session.lock().map_err(|e| e.to_string())?;
@@ -266,10 +262,7 @@ impl AppState {
         }
     }
 
-    pub async fn update_ban_list(
-        &self,
-        bans: Vec<BanEntryInput>,
-    ) -> Result<(), String> {
+    pub async fn update_ban_list(&self, bans: Vec<BanEntryInput>) -> Result<(), String> {
         use mumble_protocol::proto::mumble_tcp;
 
         let entries: Result<Vec<_>, String> = bans
@@ -279,11 +272,31 @@ impl AppState {
                 Ok(mumble_tcp::ban_list::BanEntry {
                     address,
                     mask: b.mask,
-                    name: if b.name.is_empty() { None } else { Some(b.name) },
-                    hash: if b.hash.is_empty() { None } else { Some(b.hash) },
-                    reason: if b.reason.is_empty() { None } else { Some(b.reason) },
-                    start: if b.start.is_empty() { None } else { Some(b.start) },
-                    duration: if b.duration == 0 { None } else { Some(b.duration) },
+                    name: if b.name.is_empty() {
+                        None
+                    } else {
+                        Some(b.name)
+                    },
+                    hash: if b.hash.is_empty() {
+                        None
+                    } else {
+                        Some(b.hash)
+                    },
+                    reason: if b.reason.is_empty() {
+                        None
+                    } else {
+                        Some(b.reason)
+                    },
+                    start: if b.start.is_empty() {
+                        None
+                    } else {
+                        Some(b.start)
+                    },
+                    duration: if b.duration == 0 {
+                        None
+                    } else {
+                        Some(b.duration)
+                    },
                 })
             })
             .collect();

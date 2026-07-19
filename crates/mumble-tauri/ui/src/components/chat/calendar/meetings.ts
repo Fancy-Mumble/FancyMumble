@@ -18,6 +18,7 @@ import { sendCalendar } from "./calendarSync";
 
 /** Plugin message types exchanged with the `fancy-calendar` relay. */
 export const MSG_MEETING_JOIN = "calendar.join";
+export const MSG_MEETING_LEAVE = "calendar.leave";
 export const MSG_MEETING_ROOM = "calendar.room";
 export const MSG_MEETING_INVITE_LINK = "calendar.inviteLink";
 
@@ -44,6 +45,14 @@ export function requestJoinMeeting(eventId: string, token?: string): void {
 /** Ask the server (organiser only) to mint a shareable invite link. */
 export function requestMeetingInviteLink(eventId: string): void {
   sendCalendar(MSG_MEETING_INVITE_LINK, { eventId });
+}
+
+/** Ask the server to revoke our access to a meeting room, removing it from
+ *  our channel list (the server answers with a per-user `ChannelRemove`).
+ *  Event participation is untouched: the meeting stays on the calendar and
+ *  {@link requestJoinMeeting} re-admits us. */
+export function requestLeaveMeeting(channelId: number): void {
+  sendCalendar(MSG_MEETING_LEAVE, { channelId });
 }
 
 /** Dispatch the inbound `calendar.room` as a DOM event. Returns false when the

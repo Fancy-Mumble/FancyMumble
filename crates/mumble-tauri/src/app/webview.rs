@@ -29,7 +29,10 @@ pub(crate) fn update_webview_memory_target(window: &tauri::Window, event: &tauri
 ///
 /// `COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW` makes the renderer release
 /// caches and unused pages back to the OS.
-#[allow(unsafe_code, reason = "WebView2 COM calls on the controller's own event-loop thread, as required by the API")]
+#[allow(
+    unsafe_code,
+    reason = "WebView2 COM calls on the controller's own event-loop thread, as required by the API"
+)]
 fn set_webview_memory_target(window: &tauri::Window, low: bool) {
     use std::sync::atomic::{AtomicBool, Ordering};
     use tauri::Manager;

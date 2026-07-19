@@ -1,6 +1,6 @@
 use fancy_utils::html::strip_html_tags;
-use mumble_protocol::proto::mumble_tcp;
 use mumble_protocol::persistent::PchatProtocol;
+use mumble_protocol::proto::mumble_tcp;
 
 use super::{HandleMessage, HandlerContext};
 use crate::state::types::*;
@@ -74,8 +74,17 @@ impl<'a> DeferredEmitter<'a> {
                     self.emit_direct_message(*sender_session, sender_name, body);
                 }
                 DeferredEvent::DmUnreads => self.emit_dm_unreads(),
-                DeferredEvent::NewMessage { channel_id, sender_session } => {
-                    self.ctx.emit("new-message", NewMessagePayload { channel_id: *channel_id, sender_session: *sender_session });
+                DeferredEvent::NewMessage {
+                    channel_id,
+                    sender_session,
+                } => {
+                    self.ctx.emit(
+                        "new-message",
+                        NewMessagePayload {
+                            channel_id: *channel_id,
+                            sender_session: *sender_session,
+                        },
+                    );
                 }
                 DeferredEvent::RequestUserAttention => {
                     self.ctx.request_user_attention();
@@ -85,7 +94,9 @@ impl<'a> DeferredEmitter<'a> {
                     sender_name,
                     body,
                     sender_session,
-                } => self.emit_channel_notification(*channel_id, sender_name, body, *sender_session),
+                } => {
+                    self.emit_channel_notification(*channel_id, sender_name, body, *sender_session)
+                }
                 DeferredEvent::ChannelUnreads => self.emit_channel_unreads(),
             }
         }
@@ -100,8 +111,12 @@ impl<'a> DeferredEmitter<'a> {
         );
         self.ctx.request_user_attention();
         let icon = self.lookup_texture(Some(sender_session));
-        self.ctx
-            .send_notification_with_icon(sender_name, &strip_html_tags(body), icon.as_deref(), None);
+        self.ctx.send_notification_with_icon(
+            sender_name,
+            &strip_html_tags(body),
+            icon.as_deref(),
+            None,
+        );
     }
 
     fn emit_dm_unreads(&self) {
@@ -122,8 +137,7 @@ impl<'a> DeferredEmitter<'a> {
             .lock()
             .map(|s| s.msgs.channel_unread.clone())
             .unwrap_or_default();
-        self.ctx
-            .emit("unread-changed", UnreadPayload { unreads });
+        self.ctx.emit("unread-changed", UnreadPayload { unreads });
     }
 
     fn emit_channel_notification(
@@ -149,8 +163,12 @@ impl<'a> DeferredEmitter<'a> {
             Some(name) => format!("{sender_name} in #{name}"),
             None => sender_name.to_owned(),
         };
-        self.ctx
-            .send_notification_with_icon(&title, &strip_html_tags(body), icon.as_deref(), Some(channel_id));
+        self.ctx.send_notification_with_icon(
+            &title,
+            &strip_html_tags(body),
+            icon.as_deref(),
+            Some(channel_id),
+        );
     }
 
     fn lookup_texture(&self, session: Option<u32>) -> Option<Vec<u8>> {
@@ -170,7 +188,10 @@ impl<'a> DeferredEmitter<'a> {
 
 /// Apply an edit to a message list, returning `true` if the target was found.
 fn apply_edit(messages: &mut [ChatMessage], edit_id: &str, new_body: &str, edited_at: u64) -> bool {
-    if let Some(msg) = messages.iter_mut().find(|m| m.message_id.as_deref() == Some(edit_id)) {
+    if let Some(msg) = messages
+        .iter_mut()
+        .find(|m| m.message_id.as_deref() == Some(edit_id))
+    {
         msg.body = new_body.to_owned();
         msg.edited_at = Some(edited_at);
         true
@@ -193,9 +214,16 @@ fn emit_edit_events(
             }
         }
         MessageKind::Channel => {
-            let ids = if tm.channel_id.is_empty() { &[0u32][..] } else { &tm.channel_id };
+            let ids = if tm.channel_id.is_empty() {
+                &[0u32][..]
+            } else {
+                &tm.channel_id
+            };
             for &ch_id in ids {
-                deferred.push(DeferredEvent::NewMessage { channel_id: ch_id, sender_session: tm.actor });
+                deferred.push(DeferredEvent::NewMessage {
+                    channel_id: ch_id,
+                    sender_session: tm.actor,
+                });
             }
         }
     }
@@ -214,15 +242,21 @@ fn try_apply_edit(
             .as_millis() as u64
     });
     match kind {
-        MessageKind::DirectMessage => {
-            tm.actor
-                .and_then(|sid| state.msgs.by_dm.get_mut(&sid))
-                .is_some_and(|msgs| apply_edit(msgs, edit_id, &tm.message, edited_at))
-        }
+        MessageKind::DirectMessage => tm
+            .actor
+            .and_then(|sid| state.msgs.by_dm.get_mut(&sid))
+            .is_some_and(|msgs| apply_edit(msgs, edit_id, &tm.message, edited_at)),
         MessageKind::Channel => {
-            let channel_ids = if tm.channel_id.is_empty() { vec![0u32] } else { tm.channel_id.clone() };
+            let channel_ids = if tm.channel_id.is_empty() {
+                vec![0u32]
+            } else {
+                tm.channel_id.clone()
+            };
             channel_ids.iter().any(|ch_id| {
-                state.msgs.by_channel.get_mut(ch_id)
+                state
+                    .msgs
+                    .by_channel
+                    .get_mut(ch_id)
                     .is_some_and(|msgs| apply_edit(msgs, edit_id, &tm.message, edited_at))
             })
         }
@@ -275,16 +309,14 @@ fn handle_direct_message(
     };
     msg.ensure_id();
     state
-        .msgs.by_dm
+        .msgs
+        .by_dm
         .entry(sender_session)
         .or_default()
         .push(msg);
 
     if state.msgs.selected_dm_user != Some(sender_session) {
-        *state
-            .msgs.dm_unread
-            .entry(sender_session)
-            .or_insert(0) += 1;
+        *state.msgs.dm_unread.entry(sender_session).or_insert(0) += 1;
         deferred.push(DeferredEvent::DmUnreads);
     }
 
@@ -362,7 +394,10 @@ fn handle_channel_message(
             unreads_changed = true;
         }
 
-        deferred.push(DeferredEvent::NewMessage { channel_id: ch_id, sender_session: tm.actor });
+        deferred.push(DeferredEvent::NewMessage {
+            channel_id: ch_id,
+            sender_session: tm.actor,
+        });
 
         // Flash the taskbar when a permanently-listened channel gets a
         // message while it is not the viewed channel.
@@ -399,7 +434,10 @@ impl HandleMessage for mumble_tcp::TextMessage {
             // For edits from ourselves, we *do* need to process them because
             // the local edit_message path already applied the change locally,
             // and the server won't echo edits back to us.
-            if self.actor == state.conn.own_session && self.actor.is_some() && self.edit_id.is_none() {
+            if self.actor == state.conn.own_session
+                && self.actor.is_some()
+                && self.edit_id.is_none()
+            {
                 return;
             }
 

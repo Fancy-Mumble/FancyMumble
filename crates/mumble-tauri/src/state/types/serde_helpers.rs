@@ -4,7 +4,10 @@ use serde::Serializer;
 
 use mumble_protocol::state::PchatProtocol;
 
-pub(crate) fn serialize_pchat_protocol<S: Serializer>(protocol: &Option<PchatProtocol>, s: S) -> Result<S::Ok, S::Error> {
+pub(crate) fn serialize_pchat_protocol<S: Serializer>(
+    protocol: &Option<PchatProtocol>,
+    s: S,
+) -> Result<S::Ok, S::Error> {
     match protocol {
         Some(p) => s.serialize_str(match p {
             PchatProtocol::None => "none",
@@ -30,7 +33,10 @@ pub(crate) fn blob_marker(bytes: &[u8]) -> u32 {
 /// Emit only the byte length of a `String` (used for channel
 /// `description`).  The frontend fetches the actual text on demand via
 /// `get_channel_description`.
-pub(crate) fn serialize_string_len_owned<S: Serializer>(text: &str, s: S) -> Result<S::Ok, S::Error> {
+pub(crate) fn serialize_string_len_owned<S: Serializer>(
+    text: &str,
+    s: S,
+) -> Result<S::Ok, S::Error> {
     if text.is_empty() {
         s.serialize_none()
     } else {

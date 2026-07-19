@@ -8,9 +8,9 @@
 
 use std::sync::{Arc, Mutex};
 
-use tauri::{AppHandle, Emitter};
 #[cfg(target_os = "windows")]
 use tauri::Manager;
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_notification::NotificationExt;
 use tracing::{debug, info, warn};
 
@@ -53,9 +53,7 @@ impl EventEmitter for TauriEmitter {
     fn request_user_attention(&self) {
         #[cfg(target_os = "windows")]
         if let Some(window) = self.app.get_webview_window("main") {
-            let _ = window.request_user_attention(Some(
-                tauri::UserAttentionType::Informational,
-            ));
+            let _ = window.request_user_attention(Some(tauri::UserAttentionType::Informational));
         }
     }
 
@@ -128,7 +126,12 @@ impl EventHandler for TauriEventHandler {
         // this, in-flight messages from a dying TCP stream could mutate the
         // reused `SharedState` and emit events stamped with the new server's
         // id. Mirrors the guard in `on_disconnected`.
-        if self.shared.lock().map(|s| s.conn.epoch != self.epoch).unwrap_or(true) {
+        if self
+            .shared
+            .lock()
+            .map(|s| s.conn.epoch != self.epoch)
+            .unwrap_or(true)
+        {
             return;
         }
         let ctx = HandlerContext {
@@ -212,7 +215,11 @@ impl EventHandler for TauriEventHandler {
                     // moment to free decoders with lost terminators and
                     // drained buffers of past streams (~77 KB each).
                     mixer.remove_inactive_speakers();
-                    state.audio.talking_sessions.remove(&session).then_some(false)
+                    state
+                        .audio
+                        .talking_sessions
+                        .remove(&session)
+                        .then_some(false)
                 } else {
                     state.audio.talking_sessions.insert(session).then_some(true)
                 }
@@ -280,7 +287,10 @@ impl EventHandler for TauriEventHandler {
         };
         let _ = self.app.emit(
             "server-disconnected",
-            DisconnectedPayload { server_id: Some(self.server_id.to_string()), reason },
+            DisconnectedPayload {
+                server_id: Some(self.server_id.to_string()),
+                reason,
+            },
         );
 
         // Stop Android foreground service now that we are disconnected.
@@ -302,9 +312,7 @@ impl EventHandler for TauriEventHandler {
 
     fn on_audio_transport_changed(&mut self, udp_active: bool) {
         info!(udp_active, "audio transport changed");
-        let _ = self
-            .app
-            .emit("audio-transport-changed", udp_active);
+        let _ = self.app.emit("audio-transport-changed", udp_active);
     }
 
     fn on_ping_stats(
@@ -345,7 +353,10 @@ fn stamp_server_id(payload: &mut serde_json::Value, id: &str) {
         .map(serde_json::Value::is_null)
         .unwrap_or(true);
     if needs_stamp {
-        let _ = obj.insert("serverId".to_string(), serde_json::Value::String(id.to_string()));
+        let _ = obj.insert(
+            "serverId".to_string(),
+            serde_json::Value::String(id.to_string()),
+        );
     }
 }
 

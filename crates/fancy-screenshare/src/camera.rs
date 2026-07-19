@@ -129,7 +129,11 @@ fn open_source(id: u32) -> Result<Box<dyn FrameSource>, String> {
     // simply has no active session (DroidCam without its phone connected
     // fails BOTH backends with "cannot open").
     let mut errors = vec![format!("{}: {primary_err}", owner.name())];
-    let title = owner.list().into_iter().find(|c| c.id == id).map(|c| c.title);
+    let title = owner
+        .list()
+        .into_iter()
+        .find(|c| c.id == id)
+        .map(|c| c.title);
     if let Some(title) = title {
         for other in all.iter().filter(|b| !b.owns(id)) {
             let twin = other
@@ -285,8 +289,13 @@ impl NokhwaSource {
 
 impl FrameSource for NokhwaSource {
     fn next_frame(&mut self) -> Result<RgbaImage, String> {
-        let buffer = self.camera.frame().map_err(|e| format!("camera frame: {e}"))?;
-        buffer.decode_image::<RgbAFormat>().map_err(|e| format!("camera decode: {e}"))
+        let buffer = self
+            .camera
+            .frame()
+            .map_err(|e| format!("camera frame: {e}"))?;
+        buffer
+            .decode_image::<RgbAFormat>()
+            .map_err(|e| format!("camera decode: {e}"))
     }
 
     fn describe(&self) -> String {
@@ -312,7 +321,9 @@ pub(crate) struct CameraPipeline {
 
 impl std::fmt::Debug for CameraPipeline {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CameraPipeline").field("id", &self.id).finish_non_exhaustive()
+        f.debug_struct("CameraPipeline")
+            .field("id", &self.id)
+            .finish_non_exhaustive()
     }
 }
 
@@ -389,7 +400,8 @@ impl EncodePipeline for CameraPipeline {
 
         let encode_start = std::time::Instant::now();
         let encoded =
-            self.encoder.encode_rgba(img.width(), img.height(), img.as_raw(), force_keyframe)?;
+            self.encoder
+                .encode_rgba(img.width(), img.height(), img.as_raw(), force_keyframe)?;
         self.timings.encode += encode_start.elapsed();
         if encoded.is_some() {
             self.timings.frames += 1;

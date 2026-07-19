@@ -44,13 +44,16 @@
     non_upper_case_globals,
     reason = "mirrors the Win32/DirectShow C names (CLSID_*, IID_*) verbatim"
 )]
-#![allow(unsafe_code, reason = "FFI with DirectShow/COM; every unsafe block is a COM call")]
+#![allow(
+    unsafe_code,
+    reason = "FFI with DirectShow/COM; every unsafe block is a COM call"
+)]
 
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use image::RgbaImage;
-use windows::core::{implement, interface, w, Interface, GUID, HRESULT, IUnknown, IUnknown_Vtbl};
+use windows::core::{implement, interface, w, IUnknown, IUnknown_Vtbl, Interface, GUID, HRESULT};
 use windows::Win32::Foundation::S_OK;
 use windows::Win32::Media::DirectShow::{
     IBaseFilter, ICreateDevEnum, IGraphBuilder, IMediaControl, IMediaFilter, IPin, PINDIR_INPUT,
@@ -70,7 +73,8 @@ use crate::sources::{CaptureSource, SourceKind};
 // DirectShow class/interface GUIDs that the `windows` crate does not ship
 // (they live in the legacy `strmiids`/`qedit` import libraries).
 const CLSID_SystemDeviceEnum: GUID = GUID::from_u128(0x62BE5D10_60EB_11D0_BD3B_00A0C911CE86);
-const CLSID_VideoInputDeviceCategory: GUID = GUID::from_u128(0x860BB310_5D01_11D0_BD3B_00A0C911CE86);
+const CLSID_VideoInputDeviceCategory: GUID =
+    GUID::from_u128(0x860BB310_5D01_11D0_BD3B_00A0C911CE86);
 const CLSID_FilterGraph: GUID = GUID::from_u128(0xE436EBB3_524F_11CE_9F53_0020AF0BA770);
 const CLSID_SampleGrabber: GUID = GUID::from_u128(0xC1F400A0_3F08_11D3_9F0B_006008039E37);
 const CLSID_NullRenderer: GUID = GUID::from_u128(0xC1F400A4_3F08_11D3_9F0B_006008039E37);
@@ -133,7 +137,10 @@ struct SharedFrame {
 }
 
 fn lock_slot(shared: &SharedFrame) -> std::sync::MutexGuard<'_, FrameSlot> {
-    shared.slot.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    shared
+        .slot
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// COM object handed to `ISampleGrabber::SetCallback`; copies each sample into
@@ -376,10 +383,9 @@ impl DirectShowSource {
         // The device source filter for the requested index.
         let source = unsafe { source_filter(index) }?;
 
-        let graph: IGraphBuilder = unsafe {
-            CoCreateInstance(&CLSID_FilterGraph, None, CLSCTX_INPROC_SERVER)
-        }
-        .map_err(|e| format!("directshow FilterGraph: {e}"))?;
+        let graph: IGraphBuilder =
+            unsafe { CoCreateInstance(&CLSID_FilterGraph, None, CLSCTX_INPROC_SERVER) }
+                .map_err(|e| format!("directshow FilterGraph: {e}"))?;
         unsafe { graph.AddFilter(&source, w!("Source")) }
             .map_err(|e| format!("directshow AddFilter(source): {e}"))?;
 
@@ -388,16 +394,18 @@ impl DirectShowSource {
         // direct connection and the pixel conversion happens in Rust. Forcing a
         // subtype here is what previously dragged intelligent connect (and with
         // it arbitrary registry codecs - lvcod64.dll) into the process.
-        let grabber_filter: IBaseFilter = unsafe {
-            CoCreateInstance(&CLSID_SampleGrabber, None, CLSCTX_INPROC_SERVER)
-        }
-        .map_err(|e| format!("directshow SampleGrabber: {e}"))?;
+        let grabber_filter: IBaseFilter =
+            unsafe { CoCreateInstance(&CLSID_SampleGrabber, None, CLSCTX_INPROC_SERVER) }
+                .map_err(|e| format!("directshow SampleGrabber: {e}"))?;
         let grabber: ISampleGrabber = grabber_filter
             .cast()
             .map_err(|e| format!("directshow ISampleGrabber: {e}"))?;
         // No owned COM/heap fields (pUnk/pbFormat stay null), so `want` needs no
         // FreeMediaType - a plain drop is correct.
-        let want = AM_MEDIA_TYPE { majortype: MEDIATYPE_Video, ..Default::default() };
+        let want = AM_MEDIA_TYPE {
+            majortype: MEDIATYPE_Video,
+            ..Default::default()
+        };
         unsafe { grabber.SetMediaType(&want) }
             .ok()
             .map_err(|e| format!("directshow SetMediaType: {e}"))?;
@@ -406,8 +414,14 @@ impl DirectShowSource {
             .map_err(|e| format!("directshow SetOneShot: {e}"))?;
         // Frames arrive via BufferCB pushes into `shared`; the grabber's own
         // buffering (`SetBufferSamples`) would only add a second copy.
-        let shared = Arc::new(SharedFrame { slot: Mutex::new(FrameSlot::default()), cond: Condvar::new() });
-        let callback: ISampleGrabberCB = GrabberCallback { shared: Arc::clone(&shared) }.into();
+        let shared = Arc::new(SharedFrame {
+            slot: Mutex::new(FrameSlot::default()),
+            cond: Condvar::new(),
+        });
+        let callback: ISampleGrabberCB = GrabberCallback {
+            shared: Arc::clone(&shared),
+        }
+        .into();
         unsafe { grabber.SetCallback(callback.as_raw(), 1) }
             .ok()
             .map_err(|e| format!("directshow SetCallback: {e}"))?;
@@ -415,10 +429,9 @@ impl DirectShowSource {
             .map_err(|e| format!("directshow AddFilter(grabber): {e}"))?;
 
         // Null Renderer: we consume frames via the grabber, not by rendering.
-        let null_renderer: IBaseFilter = unsafe {
-            CoCreateInstance(&CLSID_NullRenderer, None, CLSCTX_INPROC_SERVER)
-        }
-        .map_err(|e| format!("directshow NullRenderer: {e}"))?;
+        let null_renderer: IBaseFilter =
+            unsafe { CoCreateInstance(&CLSID_NullRenderer, None, CLSCTX_INPROC_SERVER) }
+                .map_err(|e| format!("directshow NullRenderer: {e}"))?;
         unsafe { graph.AddFilter(&null_renderer, w!("NullRenderer")) }
             .map_err(|e| format!("directshow AddFilter(null): {e}"))?;
 
@@ -438,7 +451,10 @@ impl DirectShowSource {
             .ok_or("directshow: grabber has no input pin")?;
         let mut connected = false;
         let mut attempts: Vec<String> = Vec::new();
-        for (pi, src_pin) in unsafe { pins_of(&source, PINDIR_OUTPUT) }.iter().enumerate() {
+        for (pi, src_pin) in unsafe { pins_of(&source, PINDIR_OUTPUT) }
+            .iter()
+            .enumerate()
+        {
             if unsafe { connect_pin_to_grabber(&graph, src_pin, &grabber_in, pi, &mut attempts) } {
                 connected = true;
                 break;
@@ -470,13 +486,15 @@ impl DirectShowSource {
         // camera stamping from its own epoch then wedges the streaming thread
         // on sample #2 - the "first frame, then frozen" failure. Clockless
         // graphs render (here: discard) samples on arrival.
-        let media_filter: IMediaFilter =
-            graph.cast().map_err(|e| format!("directshow IMediaFilter: {e}"))?;
+        let media_filter: IMediaFilter = graph
+            .cast()
+            .map_err(|e| format!("directshow IMediaFilter: {e}"))?;
         unsafe { media_filter.SetSyncSource(None) }
             .map_err(|e| format!("directshow SetSyncSource(none): {e}"))?;
 
-        let control: IMediaControl =
-            graph.cast().map_err(|e| format!("directshow IMediaControl: {e}"))?;
+        let control: IMediaControl = graph
+            .cast()
+            .map_err(|e| format!("directshow IMediaControl: {e}"))?;
         unsafe { control.Run() }.map_err(|e| format!("directshow Run: {e}"))?;
 
         tracing::info!(
@@ -553,7 +571,12 @@ impl FrameSource for DirectShowSource {
     }
 
     fn describe(&self) -> String {
-        format!("{}x{} {} (DirectShow)", self.width, self.height, self.layout.name())
+        format!(
+            "{}x{} {} (DirectShow)",
+            self.width,
+            self.height,
+            self.layout.name()
+        )
     }
 }
 
@@ -684,14 +707,15 @@ unsafe fn pin_of(filter: &IBaseFilter, dir: PIN_DIRECTION) -> Option<IPin> {
 
 /// Bind the video-input device at `index` (moniker order) to an `IBaseFilter`.
 unsafe fn source_filter(index: usize) -> Result<IBaseFilter, String> {
-    let dev_enum: ICreateDevEnum = unsafe {
-        CoCreateInstance(&CLSID_SystemDeviceEnum, None, CLSCTX_INPROC_SERVER)
-    }
-    .map_err(|e| format!("directshow SystemDeviceEnum: {e}"))?;
+    let dev_enum: ICreateDevEnum =
+        unsafe { CoCreateInstance(&CLSID_SystemDeviceEnum, None, CLSCTX_INPROC_SERVER) }
+            .map_err(|e| format!("directshow SystemDeviceEnum: {e}"))?;
 
     let mut moniker_enum: Option<IEnumMoniker> = None;
-    unsafe { dev_enum.CreateClassEnumerator(&CLSID_VideoInputDeviceCategory, &mut moniker_enum, 0) }
-        .map_err(|e| format!("directshow CreateClassEnumerator: {e}"))?;
+    unsafe {
+        dev_enum.CreateClassEnumerator(&CLSID_VideoInputDeviceCategory, &mut moniker_enum, 0)
+    }
+    .map_err(|e| format!("directshow CreateClassEnumerator: {e}"))?;
     let moniker_enum = moniker_enum.ok_or_else(|| "directshow: no video devices".to_owned())?;
 
     let mut pos = 0usize;
@@ -722,9 +746,7 @@ unsafe fn negotiated_format(grabber: &ISampleGrabber) -> Result<(u32, u32, Pixel
         .ok()
         .map_err(|e| format!("directshow GetConnectedMediaType: {e}"))?;
 
-    let result = if mt.pbFormat.is_null()
-        || (mt.cbFormat as usize) < size_of::<VIDEOINFOHEADER>()
-    {
+    let result = if mt.pbFormat.is_null() || (mt.cbFormat as usize) < size_of::<VIDEOINFOHEADER>() {
         Err("directshow: missing VIDEOINFOHEADER".to_owned())
     } else {
         // SAFETY: pbFormat points to a VIDEOINFOHEADER (the Sample Grabber only
@@ -783,7 +805,10 @@ fn convert_rows_parallel(
     let bands = if w * h < 512 * 1024 {
         1
     } else {
-        std::thread::available_parallelism().map(std::num::NonZero::get).unwrap_or(4).clamp(1, 8)
+        std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(4)
+            .clamp(1, 8)
     };
     let rows_per_band = (h / bands).max(2) & !1;
     if bands == 1 || rows_per_band >= h {
@@ -795,7 +820,8 @@ fn convert_rows_parallel(
             for (band, chunk) in out.chunks_mut(rows_per_band * w * 4).enumerate() {
                 let convert_row = &convert_row;
                 // Threads join at scope exit; the handle itself is unused.
-                let _job = scope.spawn(move || convert_band(chunk, w, band * rows_per_band, convert_row));
+                let _job =
+                    scope.spawn(move || convert_band(chunk, w, band * rows_per_band, convert_row));
             }
         });
     }
@@ -806,7 +832,12 @@ fn convert_rows_parallel(
 /// Convert one horizontal band of `dst_rows` (each `w` RGBA pixels), starting
 /// at output row `first_row`, via `convert_row`. Split out of the parallel
 /// scope so the spawned closure stays a single call.
-fn convert_band(chunk: &mut [u8], w: usize, first_row: usize, convert_row: &(impl Fn(usize, &mut [u8]) + Sync)) {
+fn convert_band(
+    chunk: &mut [u8],
+    w: usize,
+    first_row: usize,
+    convert_row: &(impl Fn(usize, &mut [u8]) + Sync),
+) {
     for (i, dst) in chunk.chunks_mut(w * 4).enumerate() {
         convert_row(first_row + i, dst);
     }
@@ -841,7 +872,13 @@ fn convert_nv12(buf: &[u8], w: u32, h: u32) -> RgbaImage {
         for x2 in 0..wu / 2 {
             let (rc, gc, bc) = chroma_terms(uv_row[x2 * 2], uv_row[x2 * 2 + 1]);
             write_yuv_px(&mut dst[x2 * 8..x2 * 8 + 4], y_row[x2 * 2], rc, gc, bc);
-            write_yuv_px(&mut dst[x2 * 8 + 4..x2 * 8 + 8], y_row[x2 * 2 + 1], rc, gc, bc);
+            write_yuv_px(
+                &mut dst[x2 * 8 + 4..x2 * 8 + 8],
+                y_row[x2 * 2 + 1],
+                rc,
+                gc,
+                bc,
+            );
         }
         if wu % 2 == 1 {
             let (rc, gc, bc) = chroma_terms(uv_row[wu - 1], uv_row[wu]);
@@ -886,7 +923,13 @@ fn convert_planar_420(buf: &[u8], w: u32, h: u32, u_first: bool) -> RgbaImage {
             let (rc, gc, bc) = chroma_terms(u_row[x2], v_row[x2]);
             write_yuv_px(&mut dst[x2 * 8..x2 * 8 + 4], y_row[x2 * 2], rc, gc, bc);
             if x2 * 2 + 1 < wu {
-                write_yuv_px(&mut dst[x2 * 8 + 4..x2 * 8 + 8], y_row[x2 * 2 + 1], rc, gc, bc);
+                write_yuv_px(
+                    &mut dst[x2 * 8 + 4..x2 * 8 + 8],
+                    y_row[x2 * 2 + 1],
+                    rc,
+                    gc,
+                    bc,
+                );
             }
         }
     })
@@ -899,9 +942,18 @@ mod tests {
     /// The FOURCC->GUID mapping must produce the canonical registered GUIDs.
     #[test]
     fn fourcc_guids_match_canonical_values() {
-        assert_eq!(MEDIASUBTYPE_NV12, GUID::from_u128(0x3231564E_0000_0010_8000_00AA00389B71));
-        assert_eq!(MEDIASUBTYPE_YUY2, GUID::from_u128(0x32595559_0000_0010_8000_00AA00389B71));
-        assert_eq!(MEDIASUBTYPE_MJPG, GUID::from_u128(0x47504A4D_0000_0010_8000_00AA00389B71));
+        assert_eq!(
+            MEDIASUBTYPE_NV12,
+            GUID::from_u128(0x3231564E_0000_0010_8000_00AA00389B71)
+        );
+        assert_eq!(
+            MEDIASUBTYPE_YUY2,
+            GUID::from_u128(0x32595559_0000_0010_8000_00AA00389B71)
+        );
+        assert_eq!(
+            MEDIASUBTYPE_MJPG,
+            GUID::from_u128(0x47504A4D_0000_0010_8000_00AA00389B71)
+        );
     }
 
     /// Grey NV12 (Y=128, U=V=128) must convert to mid-grey RGBA.
@@ -911,8 +963,14 @@ mod tests {
         let buf = vec![128u8; (w * h + w * h / 2) as usize];
         let img = convert_nv12(&buf, w, h);
         let px = img.get_pixel(1, 1).0;
-        assert!(px[0] == px[1] && px[1] == px[2], "grey in, grey out: {px:?}");
-        assert!((px[0] as i32 - 130).abs() <= 2, "Y=128 is ~130 sRGB: {px:?}");
+        assert!(
+            px[0] == px[1] && px[1] == px[2],
+            "grey in, grey out: {px:?}"
+        );
+        assert!(
+            (px[0] as i32 - 130).abs() <= 2,
+            "Y=128 is ~130 sRGB: {px:?}"
+        );
     }
 
     /// White YUY2 (Y=235, U=V=128) must clamp-convert to near-white.
@@ -922,7 +980,10 @@ mod tests {
         let buf = vec![235, 128, 235, 128];
         let img = convert_packed_422(&buf, w, h, true);
         let px = img.get_pixel(0, 0).0;
-        assert!(px[0] >= 253 && px[1] >= 253 && px[2] >= 253, "white: {px:?}");
+        assert!(
+            px[0] >= 253 && px[1] >= 253 && px[2] >= 253,
+            "white: {px:?}"
+        );
     }
 
     /// Bottom-up RGB24: the DIB's FIRST row must land at the image's BOTTOM.
@@ -933,7 +994,15 @@ mod tests {
         // 1px rows padded to 4 bytes.
         let buf = vec![255, 0, 0, 0, /* row 1 */ 0, 0, 255, 0];
         let img = convert_rgb(&buf, w, h, 3, true);
-        assert_eq!(img.get_pixel(0, 1).0, [0, 0, 255, 255], "bottom = stored row 0 (blue)");
-        assert_eq!(img.get_pixel(0, 0).0, [255, 0, 0, 255], "top = stored row 1 (red)");
+        assert_eq!(
+            img.get_pixel(0, 1).0,
+            [0, 0, 255, 255],
+            "bottom = stored row 0 (blue)"
+        );
+        assert_eq!(
+            img.get_pixel(0, 0).0,
+            [255, 0, 0, 255],
+            "top = stored row 1 (red)"
+        );
     }
 }

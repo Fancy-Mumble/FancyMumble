@@ -21,23 +21,27 @@ pub struct ConnectionServiceHandle(pub PluginHandle<Wry>);
 ///
 /// The channel callback spawns an async task to call `AppState::disconnect()`.
 pub fn register_disconnect_listener(handle: &ConnectionServiceHandle, app: tauri::AppHandle) {
-    let channel: tauri::ipc::Channel<tauri::ipc::InvokeBody> = tauri::ipc::Channel::new(move |_body| {
-        let app = app.clone();
-        drop(tauri::async_runtime::spawn(async move {
-            if let Some(state) = app.try_state::<AppState>() {
-                if let Err(e) = state.disconnect().await {
-                    tracing::warn!("notification disconnect failed: {e}");
+    let channel: tauri::ipc::Channel<tauri::ipc::InvokeBody> =
+        tauri::ipc::Channel::new(move |_body| {
+            let app = app.clone();
+            drop(tauri::async_runtime::spawn(async move {
+                if let Some(state) = app.try_state::<AppState>() {
+                    if let Err(e) = state.disconnect().await {
+                        tracing::warn!("notification disconnect failed: {e}");
+                    }
                 }
-            }
-        }));
-        Ok(())
-    });
+            }));
+            Ok(())
+        });
 
     let payload = serde_json::json!({
         "event": "disconnect-requested",
         "handler": channel,
     });
-    if let Err(e) = handle.0.run_mobile_plugin::<()>("registerListener", payload) {
+    if let Err(e) = handle
+        .0
+        .run_mobile_plugin::<()>("registerListener", payload)
+    {
         tracing::warn!("failed to register disconnect listener: {e}");
     }
 }
@@ -53,7 +57,9 @@ pub fn register_navigate_listener(handle: &ConnectionServiceHandle, app: tauri::
         tauri::ipc::Channel::new(move |body| {
             if let tauri::ipc::InvokeResponseBody::Json(ref json_str) = body {
                 if let Ok(val) = serde_json::from_str::<serde_json::Value>(json_str) {
-                    if let Some(channel_id) = val.get("channelId").and_then(serde_json::Value::as_u64) {
+                    if let Some(channel_id) =
+                        val.get("channelId").and_then(serde_json::Value::as_u64)
+                    {
                         let _ = app.emit(
                             "navigate-to-channel",
                             serde_json::json!({ "channel_id": channel_id }),
@@ -68,7 +74,10 @@ pub fn register_navigate_listener(handle: &ConnectionServiceHandle, app: tauri::
         "event": "navigate-to-channel",
         "handler": channel,
     });
-    if let Err(e) = handle.0.run_mobile_plugin::<()>("registerListener", payload) {
+    if let Err(e) = handle
+        .0
+        .run_mobile_plugin::<()>("registerListener", payload)
+    {
         tracing::warn!("failed to register navigate listener: {e}");
     }
 }
@@ -90,17 +99,26 @@ pub fn update_service_channel(
     server_name: &str,
     channel_name: &str,
 ) {
-    tracing::info!(server_name, channel_name, "updating service channel notification");
-    let payload =
-        serde_json::json!({ "serverName": server_name, "channelName": channel_name });
-    if let Err(e) = handle.0.run_mobile_plugin::<()>("updateServiceChannel", payload) {
+    tracing::info!(
+        server_name,
+        channel_name,
+        "updating service channel notification"
+    );
+    let payload = serde_json::json!({ "serverName": server_name, "channelName": channel_name });
+    if let Err(e) = handle
+        .0
+        .run_mobile_plugin::<()>("updateServiceChannel", payload)
+    {
         tracing::warn!("failed to update connection service notification: {e}");
     }
 }
 
 /// Stop the foreground service (called on disconnect).
 pub fn stop_service(handle: &ConnectionServiceHandle) {
-    if let Err(e) = handle.0.run_mobile_plugin::<()>("stopService", serde_json::json!({})) {
+    if let Err(e) = handle
+        .0
+        .run_mobile_plugin::<()>("stopService", serde_json::json!({}))
+    {
         tracing::warn!("failed to stop connection service: {e}");
     }
 }
@@ -131,7 +149,10 @@ pub fn show_chat_notification(
         "iconBase64": icon_b64,
         "channelId": channel_id,
     });
-    if let Err(e) = handle.0.run_mobile_plugin::<()>("showChatNotification", payload) {
+    if let Err(e) = handle
+        .0
+        .run_mobile_plugin::<()>("showChatNotification", payload)
+    {
         tracing::warn!("failed to show chat notification: {e}");
     }
 }

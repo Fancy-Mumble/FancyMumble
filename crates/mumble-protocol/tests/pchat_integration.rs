@@ -112,7 +112,7 @@ async fn connect_and_authenticate(username: &str) -> (TcpTransport, ServerState,
 
 /// `SuperUser` password for the dev Docker container. Overridable via
 /// `MUMBLE_TEST_SU_PW` so the same tests can run against the e2e fixture
-/// image (which uses a different SuperUser password).
+/// image (which uses a different `SuperUser` password).
 fn superuser_password() -> String {
     std::env::var("MUMBLE_TEST_SU_PW").unwrap_or_else(|_| "mumble123".to_string())
 }
@@ -327,7 +327,7 @@ async fn set_pchat_protocol(
 }
 
 /// Create a fresh, uniquely-named persistent sub-channel under Root and return
-/// its server-assigned id. `transport`/`state` must be an admin (SuperUser)
+/// its server-assigned id. `transport`/`state` must be an admin (`SuperUser`)
 /// session.
 ///
 /// Prefer this over reusing Root (channel 0) for any test that sends messages
@@ -3172,7 +3172,7 @@ async fn become_verified_holder(
 
 /// SECURITY: an attacker who sets `replaces_id` to a VICTIM's message id must
 /// not cause other clients to replace the victim's message. The relayed
-/// deliver of the attacker's message must carry no replaces_id.
+/// deliver of the attacker's message must carry no `replaces_id`.
 #[tokio::test]
 async fn test_replaces_id_cross_sender_not_relayed() {
     if !ensure_server_available().await {
@@ -3246,7 +3246,7 @@ async fn test_replaces_id_cross_sender_not_relayed() {
 }
 
 /// The fix must NOT break legitimate edits: when the SAME sender replaces their
-/// own earlier message, the relay carries the replaces_id through.
+/// own earlier message, the relay carries the `replaces_id` through.
 #[tokio::test]
 async fn test_replaces_id_same_sender_relayed() {
     if !ensure_server_available().await {

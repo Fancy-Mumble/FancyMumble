@@ -18,10 +18,10 @@ mod admin;
 pub(crate) mod audio;
 mod audio_tasks;
 mod calibration;
-mod voice_replay;
 mod channels;
 mod connection;
 mod emotes;
+mod voice_replay;
 pub use emotes::{AddEmoteRequest, AddEmoteResponse, RemoveEmoteRequest};
 mod event_handler;
 mod file_server;
@@ -35,12 +35,11 @@ pub(crate) mod hash_names;
 pub(crate) mod local_cache;
 mod account;
 mod messaging;
-mod onboarding;
-mod server_settings;
-mod plugin_admin;
 pub mod offload;
 mod offload_ops;
+mod onboarding;
 pub(crate) mod pchat;
+mod plugin_admin;
 mod profile;
 pub(crate) mod protocol_commands;
 mod query;
@@ -48,6 +47,7 @@ mod query;
 pub(crate) mod recording;
 mod registry;
 mod search;
+mod server_settings;
 mod sessions;
 mod shared_handle;
 pub mod types;
@@ -354,10 +354,7 @@ impl AppState {
     /// the previously-active session, it is stopped there and started
     /// on the new active session in the same mode.  Voice always
     /// follows the active server.
-    pub(crate) async fn switch_active_with_voice(
-        &self,
-        target: ServerId,
-    ) -> Result<(), String> {
+    pub(crate) async fn switch_active_with_voice(&self, target: ServerId) -> Result<(), String> {
         use crate::state::types::VoiceState;
 
         let prev_arc = self.inner.snapshot();
@@ -394,9 +391,7 @@ impl AppState {
             }
             VoiceState::Muted => {
                 if let Err(e) = self.enable_voice_muted().await {
-                    tracing::warn!(
-                        "voice migration: enable_voice_muted on new active failed: {e}"
-                    );
+                    tracing::warn!("voice migration: enable_voice_muted on new active failed: {e}");
                 }
             }
         }
@@ -413,7 +408,10 @@ impl AppState {
 
     /// Inject the Tauri `AppHandle` during setup.
     pub fn set_app_handle(&self, handle: AppHandle) {
-        *self.app_handle.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(handle);
+        *self
+            .app_handle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(handle);
     }
 
     pub(super) fn app_handle(&self) -> Option<AppHandle> {
@@ -513,7 +511,6 @@ mod tests {
         let _ = state.registry.register_active(id, arc);
         id
     }
-
 
     #[tokio::test]
     async fn switch_active_with_voice_unknown_target_errors() {

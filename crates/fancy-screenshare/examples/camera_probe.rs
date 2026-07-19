@@ -39,8 +39,14 @@ use fancy_screenshare::{sources, SourceKind};
 
 fn main() -> Result<(), String> {
     let list = sources::list_sources()?;
-    let cams: Vec<_> = list.into_iter().filter(|s| s.kind == SourceKind::Device).collect();
-    println!("devices: {:?}", cams.iter().map(|c| (c.id, &c.title)).collect::<Vec<_>>());
+    let cams: Vec<_> = list
+        .into_iter()
+        .filter(|s| s.kind == SourceKind::Device)
+        .collect();
+    println!(
+        "devices: {:?}",
+        cams.iter().map(|c| (c.id, &c.title)).collect::<Vec<_>>()
+    );
 
     for cam in &cams {
         println!("--- thumbnail id={} ({}) ...", cam.id, cam.title);

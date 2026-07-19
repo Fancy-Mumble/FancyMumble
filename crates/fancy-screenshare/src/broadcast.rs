@@ -44,6 +44,7 @@ use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtcp::payload_feedbacks::full_intra_request::FullIntraRequest;
 use webrtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
+use webrtc::rtp_transceiver::rtp_sender::RTCRtpSender;
 use webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection;
 use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
 use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
@@ -71,6 +72,17 @@ pub enum BroadcastState {
     Failed(String),
     /// The broadcast was stopped by the embedder.
     Stopped,
+    /// The compositor stopped delivering fresh frames while the broadcast is
+    /// otherwise healthy (media still flowing as keep-alive repeats). On
+    /// GNOME/NVIDIA a fullscreen surface on the shared MONITOR triggers this:
+    /// direct scanout bypasses compositing and the monitor screencast goes to
+    /// zero fresh frames until the surface leaves fullscreen (or the cursor
+    /// moves). A window share is immune. Advisory only - the broadcast keeps
+    /// running - and self-clears via [`Self::CaptureResumed`] when fresh
+    /// frames return. Emitted only for Linux monitor shares.
+    CaptureStalled,
+    /// Fresh frames resumed after a [`Self::CaptureStalled`]; clears the hint.
+    CaptureResumed,
 }
 
 /// Outbound signaling + lifecycle events, implemented by the embedder.
@@ -112,7 +124,10 @@ impl std::fmt::Debug for ScreenBroadcaster {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ScreenBroadcaster")
             .field("sources", &self.sources)
-            .field("awaiting_answer", &self.awaiting_answer.load(Ordering::SeqCst))
+            .field(
+                "awaiting_answer",
+                &self.awaiting_answer.load(Ordering::SeqCst),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -138,8 +153,20 @@ impl ScreenBroadcaster {
         for source in &sources {
             match source.kind {
                 SourceKind::Device => crate::camera::device_exists(source.id)?,
+                // Existence check only: capturing a full frame here was a
+                // redundant screenshot (a portal round-trip on Wayland) of a
+                // source the pipeline is about to capture anyway.
                 _ => {
-                    let _probe = sources::capture_frame(source.kind, source.id)?;
+                    // Advisory id from a portal-first flow (GNOME's native
+                    // picker, or the synthetic Wayland picker entries): the
+                    // compositor chooses the real source in its own dialog,
+                    // so there is no OS handle to pre-check - resolving id 0
+                    // through xcap would fail a share that is about to work.
+                    #[cfg(all(target_os = "linux", feature = "gpu"))]
+                    if source.id == 0 {
+                        continue;
+                    }
+                    sources::ensure_present(source.kind, source.id)?;
                 }
             }
         }
@@ -205,7 +232,10 @@ impl ScreenBroadcaster {
                 // so floor camera tracks at 30 fps - a camera can't exceed its
                 // own delivery rate anyway, and user-chosen HIGHER caps stay.
                 let settings = if source.kind == SourceKind::Device {
-                    EncodeSettings { max_fps: settings.max_fps.max(30.0), ..settings }
+                    EncodeSettings {
+                        max_fps: settings.max_fps.max(30.0),
+                        ..settings
+                    }
                 } else {
                     settings
                 };
@@ -275,7 +305,9 @@ impl ScreenBroadcaster {
                     }
                 };
                 if let Err(e) = pc.set_remote_description(answer).await {
-                    sink.on_state(BroadcastState::Failed(format!("set_remote_description: {e}")));
+                    sink.on_state(BroadcastState::Failed(format!(
+                        "set_remote_description: {e}"
+                    )));
                 }
             });
         }
@@ -440,8 +472,7 @@ impl ScreenBroadcaster {
                     RTCPeerConnectionState::Failed | RTCPeerConnectionState::Disconnected
                         if !stopped =>
                     {
-                        state_sink
-                            .on_state(BroadcastState::Failed(format!("connection {state}")));
+                        state_sink.on_state(BroadcastState::Failed(format!("connection {state}")));
                     }
                     _ => {}
                 }
@@ -454,33 +485,20 @@ impl ScreenBroadcaster {
     /// Listen for RTCP PLI/FIR from the SFU and flag keyframe requests.
     /// Returns one flag per track (sender order == transceiver add order ==
     /// source order), each polled by its own capture loop.
-    #[allow(
-        clippy::excessive_nesting,
-        reason = "spawn -> per-sender task -> RTCP read loop -> packet demux is the natural shape"
-    )]
     fn spawn_keyframe_listener(
         runtime: &Runtime,
         pc: &Arc<RTCPeerConnection>,
         track_count: usize,
     ) -> Vec<Arc<AtomicBool>> {
-        let flags: Vec<Arc<AtomicBool>> =
-            (0..track_count).map(|_| Arc::new(AtomicBool::new(false))).collect();
+        let flags: Vec<Arc<AtomicBool>> = (0..track_count)
+            .map(|_| Arc::new(AtomicBool::new(false)))
+            .collect();
         let senders_pc = Arc::clone(pc);
         let listener_flags = flags.clone();
         let _detached = runtime.spawn(async move {
-            for (sender, flag) in senders_pc.get_senders().await.into_iter().zip(listener_flags) {
-                let _detached = tokio::spawn(async move {
-                    while let Ok((packets, _)) = sender.read_rtcp().await {
-                        for packet in packets {
-                            let any = packet.as_any();
-                            if any.downcast_ref::<PictureLossIndication>().is_some()
-                                || any.downcast_ref::<FullIntraRequest>().is_some()
-                            {
-                                flag.store(true, Ordering::SeqCst);
-                            }
-                        }
-                    }
-                });
+            let paired = senders_pc.get_senders().await.into_iter().zip(listener_flags);
+            for (sender, flag) in paired {
+                let _detached = tokio::spawn(watch_sender_keyframes(sender, flag));
             }
         });
         flags
@@ -501,7 +519,15 @@ impl ScreenBroadcaster {
         std::thread::Builder::new()
             .name("screenshare-capture".into())
             .spawn(move || {
-                capture_loop(source, settings, &track, &stop, &thread_sink, &rt, &keyframe_flag);
+                capture_loop(
+                    source,
+                    settings,
+                    &track,
+                    &stop,
+                    &thread_sink,
+                    &rt,
+                    &keyframe_flag,
+                );
             })
             .unwrap_or_else(|e| {
                 // Spawning a thread only fails under resource exhaustion; the
@@ -587,7 +613,11 @@ impl SendLeg {
             None => self.frame_interval,
         };
         let bytes = frame.data.len();
-        let sample = Sample { data: frame.data.into(), duration, ..Default::default() };
+        let sample = Sample {
+            data: frame.data.into(),
+            duration,
+            ..Default::default()
+        };
         let write_start = Instant::now();
         if rt.block_on(track.write_sample(&sample)).is_err() && !stop.load(Ordering::SeqCst) {
             tracing::warn!("screenshare: write_sample failed");
@@ -597,7 +627,11 @@ impl SendLeg {
         self.write_max = self.write_max.max(took);
         self.write_count += 1;
         if took > Duration::from_millis(100) {
-            tracing::debug!(ms = took.as_millis() as u64, bytes, "screenshare: write_sample stalled");
+            tracing::debug!(
+                ms = took.as_millis() as u64,
+                bytes,
+                "screenshare: write_sample stalled"
+            );
         }
         if self.write_window.elapsed() >= Duration::from_secs(5) {
             tracing::debug!(
@@ -627,6 +661,21 @@ impl SendLeg {
 /// decided by [`create_pipeline`]. A failing source fails the WHOLE
 /// broadcast (the embedder tears down and reports), keeping partial-share
 /// states out of the UI.
+/// One sender's RTCP read loop: set `flag` whenever the SFU asks for a
+/// keyframe (PLI or FIR), until the sender closes. One task per track.
+async fn watch_sender_keyframes(sender: Arc<RTCRtpSender>, flag: Arc<AtomicBool>) {
+    while let Ok((packets, _)) = sender.read_rtcp().await {
+        for packet in packets {
+            let any = packet.as_any();
+            let is_keyframe_request = any.downcast_ref::<PictureLossIndication>().is_some()
+                || any.downcast_ref::<FullIntraRequest>().is_some();
+            if is_keyframe_request {
+                flag.store(true, Ordering::SeqCst);
+            }
+        }
+    }
+}
+
 fn capture_loop(
     source: BroadcastSource,
     settings: EncodeSettings,
@@ -640,11 +689,16 @@ fn capture_loop(
         match create_pipeline(source.kind, source.id, settings) {
             Ok(p) => p,
             Err(e) => {
-                sink.on_state(BroadcastState::Failed(format!("capture source vanished: {e}")));
+                sink.on_state(BroadcastState::Failed(format!(
+                    "capture source vanished: {e}"
+                )));
                 return;
             }
         };
-    tracing::info!(backend = pipeline.name(), "screenshare: capture pipeline selected");
+    tracing::info!(
+        backend = pipeline.name(),
+        "screenshare: capture pipeline selected"
+    );
 
     let frame_interval = Duration::from_secs_f32(1.0 / settings.max_fps.max(1.0));
     let mut last_keyframe = Instant::now();
@@ -668,6 +722,7 @@ fn capture_loop(
     // there is no double-submit into a busy encoder.
     const IDLE_REPEAT: Duration = Duration::from_millis(90);
     let mut last_emit = Instant::now();
+    let mut stall = StallWatch::new(source.kind);
 
     while !stop.load(Ordering::SeqCst) {
         let tick_start = Instant::now();
@@ -675,10 +730,17 @@ fn capture_loop(
         let force = keyframe_flag.swap(false, Ordering::SeqCst)
             || last_keyframe.elapsed() >= PERIODIC_KEYFRAME;
         let produce_start = Instant::now();
+        // Distinguish a FRESH compositor frame from a keep-alive repeat: only
+        // the former proves the screencast is still delivering. `fresh` gates
+        // the stall detector below.
+        let mut fresh = false;
         let produced = pipeline
             .next_frame(frame_interval.max(Duration::from_millis(100)), force)
             .and_then(|frame| match frame {
-                Some(f) => Ok(Some(f)),
+                Some(f) => {
+                    fresh = true;
+                    Ok(Some(f))
+                }
                 // Idle gap: hold cadence with a repeat so it is not a freeze.
                 None if last_emit.elapsed() >= IDLE_REPEAT => pipeline.encode_repeat(),
                 None => Ok(None),
@@ -700,6 +762,11 @@ fn capture_loop(
                 break;
             }
         }
+        if fresh {
+            stall.saw_fresh_frame(sink);
+        } else {
+            stall.tick(sink);
+        }
 
         let elapsed = tick_start.elapsed();
         if elapsed < frame_interval {
@@ -708,4 +775,77 @@ fn capture_loop(
     }
 
     pipeline.shutdown();
+}
+
+/// Detects the GNOME/NVIDIA fullscreen direct-scanout stall (see
+/// [`BroadcastState::CaptureStalled`]) and drives the advisory hint.
+///
+/// Known upstream Mutter bug (not ours): a fullscreen surface that gets
+/// direct-scanned-out is no longer composited, so the monitor screencast
+/// stops receiving fresh frames until it leaves fullscreen (or the cursor
+/// forces a composite). Window shares record from the window actor and are
+/// immune. Tracked upstream at
+/// <https://gitlab.gnome.org/GNOME/mutter/-/issues/3074> ("Pipewire Screen
+/// Capture Broken on Unredirected Windows [Wayland][Nvidia]") and
+/// <https://gitlab.gnome.org/GNOME/mutter/-/work_items/3903> (same, fullscreen
+/// apps stop after a few seconds on NVIDIA).
+///
+/// A monitor screencast that stops delivering fresh frames looks identical
+/// whether the screen is genuinely static (fine - keep-alive shows the real,
+/// unchanged picture) or scanout-starved (bad - the picture is moving but
+/// viewers are stuck on a stale frame). The capture side cannot tell them
+/// apart, so the hint is deliberately advisory ("if the shared content is
+/// changing but looks frozen, share the window instead") and self-clearing.
+///
+/// Gated to Linux monitor shares: window shares are immune, cameras and the
+/// Windows WGC path do not have this bug, so they never raise the hint.
+struct StallWatch {
+    /// True only for the case that can starve (Linux + monitor source).
+    armed: bool,
+    /// When the current run of no-fresh-frames began; `None` while fresh.
+    dry_since: Option<Instant>,
+    /// Whether the hint is currently shown (latched, so it fires once).
+    stalled: bool,
+}
+
+impl StallWatch {
+    /// No fresh frames for this long on an armed source raises the hint. Long
+    /// enough that a brief pause (reading a static screen for a moment) does
+    /// not flap the banner; short enough to catch a real freeze quickly.
+    const STALL_AFTER: Duration = Duration::from_secs(5);
+
+    fn new(kind: SourceKind) -> Self {
+        Self {
+            armed: cfg!(target_os = "linux") && kind == SourceKind::Screen,
+            dry_since: None,
+            stalled: false,
+        }
+    }
+
+    /// A fresh compositor frame arrived: clear any raised hint.
+    fn saw_fresh_frame(&mut self, sink: &Arc<dyn SignalSink>) {
+        self.dry_since = None;
+        if self.stalled {
+            self.stalled = false;
+            sink.on_state(BroadcastState::CaptureResumed);
+        }
+    }
+
+    /// A tick produced no fresh frame: raise the hint once the dry spell
+    /// passes [`Self::STALL_AFTER`].
+    fn tick(&mut self, sink: &Arc<dyn SignalSink>) {
+        if !self.armed || self.stalled {
+            return;
+        }
+        let since = *self.dry_since.get_or_insert_with(Instant::now);
+        if since.elapsed() >= Self::STALL_AFTER {
+            self.stalled = true;
+            tracing::info!(
+                "screenshare: no fresh monitor frames for {}s; raising capture-stall hint \
+                 (likely a fullscreen surface bypassing capture via direct scanout)",
+                Self::STALL_AFTER.as_secs(),
+            );
+            sink.on_state(BroadcastState::CaptureStalled);
+        }
+    }
 }

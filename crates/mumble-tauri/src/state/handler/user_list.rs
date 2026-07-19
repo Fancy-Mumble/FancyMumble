@@ -17,10 +17,13 @@ impl HandleMessage for mumble_tcp::UserList {
             let u = &self.users[0];
             if u.name.is_none() {
                 if let Some(comment) = u.comment.as_deref().filter(|c| !c.is_empty()) {
-                    ctx.emit("user-comment", UserCommentPayload {
-                        user_id: u.user_id,
-                        comment: comment.to_owned(),
-                    });
+                    ctx.emit(
+                        "user-comment",
+                        UserCommentPayload {
+                            user_id: u.user_id,
+                            comment: comment.to_owned(),
+                        },
+                    );
                     return;
                 }
             }

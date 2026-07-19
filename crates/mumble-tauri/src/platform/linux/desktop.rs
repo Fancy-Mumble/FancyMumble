@@ -166,7 +166,10 @@ pub fn set_gtk_identifiers() {
     // Safety: g_set_prgname / g_set_application_name are thread-safe glib
     // functions that take a NUL-terminated C string.  We call them before
     // any GTK/GLib threads are spawned.
-    #[allow(unsafe_code, reason = "calling well-defined glib C API before GTK init")]
+    #[allow(
+        unsafe_code,
+        reason = "calling well-defined glib C API before GTK init"
+    )]
     {
         use std::ffi::CString;
         extern "C" {
@@ -249,10 +252,7 @@ pub fn try_send_quick_action() -> bool {
 /// Read a single incoming connection and dispatch the action it carries.
 ///
 /// Returns `true` to keep listening, `false` to stop.
-fn handle_incoming(
-    app_handle: &tauri::AppHandle,
-    stream: std::io::Result<UnixStream>,
-) -> bool {
+fn handle_incoming(app_handle: &tauri::AppHandle, stream: std::io::Result<UnixStream>) -> bool {
     let mut s = match stream {
         Ok(s) => s,
         Err(e) => {

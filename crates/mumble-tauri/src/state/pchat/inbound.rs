@@ -33,7 +33,10 @@ pub(crate) fn handle_proto_msg_deliver(
     let envelope_bytes = msg.envelope.clone().unwrap_or_default();
     let replaces_id = msg.replaces_id.clone();
 
-    debug!(data_len = envelope_bytes.len(), "pchat: handle_proto_msg_deliver entry");
+    debug!(
+        data_len = envelope_bytes.len(),
+        "pchat: handle_proto_msg_deliver entry"
+    );
     debug!(
         message_id = %message_id,
         channel_id,
@@ -48,7 +51,13 @@ pub(crate) fn handle_proto_msg_deliver(
     };
 
     let (body, sender_name, decrypted) = decrypt_or_stash(
-        pchat, protocol, &sender_hash, channel_id, &message_id, timestamp, envelope_bytes,
+        pchat,
+        protocol,
+        &sender_hash,
+        channel_id,
+        &message_id,
+        timestamp,
+        envelope_bytes,
     );
 
     if protocol == PchatProtocol::SignalV1 && decrypted {
@@ -90,7 +99,13 @@ pub(crate) fn handle_proto_msg_deliver(
         plugin_components: None,
     };
 
-    insert_or_replace_message(&mut state, channel_id, &message_id, replaces_id.as_deref(), chat_msg);
+    insert_or_replace_message(
+        &mut state,
+        channel_id,
+        &message_id,
+        replaces_id.as_deref(),
+        chat_msg,
+    );
 }
 
 /// Decrypt an envelope, stashing it for later retry on `SignalV1` failure.
@@ -104,10 +119,18 @@ fn decrypt_or_stash(
     envelope_bytes: Vec<u8>,
 ) -> (String, String, bool) {
     match (super::InboundEnvelope {
-        protocol, sender_hash, channel_id, message_id, timestamp,
-        envelope_bytes: &envelope_bytes, epoch: None, chain_index: None,
+        protocol,
+        sender_hash,
+        channel_id,
+        message_id,
+        timestamp,
+        envelope_bytes: &envelope_bytes,
+        epoch: None,
+        chain_index: None,
         epoch_fingerprint: [0u8; 8],
-    }).decrypt(pchat) {
+    })
+    .decrypt(pchat)
+    {
         Ok(env) => {
             debug!(message_id = %message_id, "pchat msg-deliver: decrypted OK");
             (env.body, env.sender_name, true)
@@ -193,7 +216,10 @@ pub(crate) fn handle_proto_fetch_resp(
     let has_more = msg.has_more.unwrap_or(false);
     let total_stored = msg.total_stored.unwrap_or(0);
 
-    debug!(data_len = msg.messages.len(), "pchat: handle_proto_fetch_resp entry");
+    debug!(
+        data_len = msg.messages.len(),
+        "pchat: handle_proto_fetch_resp entry"
+    );
     debug!(
         channel_id,
         count = msg.messages.len(),
@@ -275,7 +301,9 @@ fn decrypt_fetched_messages(
             epoch: proto_msg.epoch,
             chain_index: proto_msg.chain_index,
             epoch_fingerprint: epoch_fp,
-        }).decrypt(pchat) {
+        })
+        .decrypt(pchat)
+        {
             Ok(env) => {
                 debug!(message_id = %msg_id, "pchat fetch-resp: decrypted OK");
                 (env.body, env.sender_name, true)
@@ -286,8 +314,9 @@ fn decrypt_fetched_messages(
             }
         };
 
-        let is_own =
-            !msg_sender_hash.is_empty() && !own_cert_hash.is_empty() && msg_sender_hash == own_cert_hash;
+        let is_own = !msg_sender_hash.is_empty()
+            && !own_cert_hash.is_empty()
+            && msg_sender_hash == own_cert_hash;
 
         if protocol == PchatProtocol::SignalV1 && decrypted {
             pchat.cache_signal_message(CachedMessage {
@@ -344,7 +373,10 @@ fn merge_decrypted_messages(
     decrypted_msgs: Vec<ChatMessage>,
 ) {
     if decrypted_msgs.is_empty() {
-        debug!(channel_id, "pchat fetch-resp: no messages to insert (all filtered/empty)");
+        debug!(
+            channel_id,
+            "pchat fetch-resp: no messages to insert (all filtered/empty)"
+        );
         return;
     }
 
@@ -406,24 +438,10 @@ pub(crate) fn handle_proto_ack(
         return None;
     }
 
-    let mut marked: Vec<String> = Vec::new();
-    if let Ok(mut state) = shared.lock() {
-        for msgs in state.msgs.by_channel.values_mut() {
-            for m in msgs.iter_mut() {
-                if m.is_own
-                    && !m.send_failed
-                    && m.message_id
-                        .as_deref()
-                        .is_some_and(|id| message_ids.iter().any(|x| x == id))
-                {
-                    m.send_failed = true;
-                    // The filter above proved message_id is Some; extend()
-                    // keeps this arm flat (clippy::excessive_nesting).
-                    marked.extend(m.message_id.iter().cloned());
-                }
-            }
-        }
-    }
+    let marked = match shared.lock() {
+        Ok(mut state) => mark_own_messages_failed(&mut state, message_ids),
+        Err(_) => Vec::new(),
+    };
 
     if marked.is_empty() {
         None
@@ -433,6 +451,28 @@ pub(crate) fn handle_proto_ack(
             reason: msg.reason.clone(),
         })
     }
+}
+
+/// Flag every own, not-yet-failed cached message whose id is in
+/// `message_ids` as `send_failed`, returning the ids actually marked.
+fn mark_own_messages_failed(state: &mut SharedState, message_ids: &[String]) -> Vec<String> {
+    let mut marked = Vec::new();
+    for msgs in state.msgs.by_channel.values_mut() {
+        for m in msgs.iter_mut() {
+            let matches = m.is_own
+                && !m.send_failed
+                && m.message_id
+                    .as_deref()
+                    .is_some_and(|id| message_ids.iter().any(|x| x == id));
+            if matches {
+                m.send_failed = true;
+                if let Some(ref id) = m.message_id {
+                    marked.push(id.clone());
+                }
+            }
+        }
+    }
+    marked
 }
 
 // -- Delete -----------------------------------------------------------
@@ -482,7 +522,10 @@ pub(crate) fn handle_proto_delete_messages(
     });
 
     let removed = before - messages.len();
-    debug!(channel_id, removed, "pchat delete: evicted messages from local store");
+    debug!(
+        channel_id,
+        removed, "pchat delete: evicted messages from local store"
+    );
 }
 
 // -- Offline queue drain ----------------------------------------------
@@ -508,7 +551,8 @@ pub(crate) fn handle_proto_offline_queue_drain(
         let dist_channel = dist.channel_id.unwrap_or(channel_id);
         let data = dist.distribution.clone().unwrap_or_default();
         if !data.is_empty() {
-            let _ = super::handle_signal_sender_key_by_hash(shared, &sender_hash, dist_channel, &data);
+            let _ =
+                super::handle_signal_sender_key_by_hash(shared, &sender_hash, dist_channel, &data);
         }
     }
 
@@ -568,7 +612,9 @@ fn decrypt_offline_batch(
             epoch: None,
             chain_index: None,
             epoch_fingerprint: [0u8; 8],
-        }).decrypt(pchat) {
+        })
+        .decrypt(pchat)
+        {
             Ok(env) => {
                 debug!(message_id = %message_id, "offline drain: decrypted OK");
                 (env.body, env.sender_name, true)
@@ -679,7 +725,11 @@ fn send_offline_queue_ack(state: &SharedState, channel_id: u32, acked_ids: Vec<S
         if let Err(e) = handle.send(command::SendPchatAck { ack }).await {
             warn!(channel_id, "failed to send offline queue ack: {e}");
         } else {
-            debug!(channel_id, count = acked_ids.len(), "sent offline queue ack");
+            debug!(
+                channel_id,
+                count = acked_ids.len(),
+                "sent offline queue ack"
+            );
         }
     });
 }

@@ -9,9 +9,8 @@ use crate::state::local_cache::{CachedReaction, LocalMessageCache};
 use crate::state::pchat;
 use crate::state::types::{
     ChatMessage, KeyHoldersChangedPayload, NewMessagePayload, PchatFetchCompletePayload,
-    PchatHistoryLoadingPayload, PinDeliverPayload, PinFetchResponsePayload,
-    ReactionDeliverPayload, ReactionFetchResponsePayload, StoredPinPayload,
-    StoredReactionPayload, UnreadPayload,
+    PchatHistoryLoadingPayload, PinDeliverPayload, PinFetchResponsePayload, ReactionDeliverPayload,
+    ReactionFetchResponsePayload, StoredPinPayload, StoredReactionPayload, UnreadPayload,
 };
 
 impl HandleMessage for mumble_tcp::PchatMessageDeliver {
@@ -48,16 +47,30 @@ impl HandleMessage for mumble_tcp::PchatMessageDeliver {
                 .unwrap_or_else(|| "Unknown".into());
 
             let body = state
-                .msgs.by_channel
+                .msgs
+                .by_channel
                 .get(&channel_id)
                 .and_then(|msgs| msgs.last())
                 .map(|m| m.body.clone())
                 .unwrap_or_default();
 
-            (selected, app_focused, unreads_changed, sender_name, body, sender_session)
+            (
+                selected,
+                app_focused,
+                unreads_changed,
+                sender_name,
+                body,
+                sender_session,
+            )
         };
 
-        ctx.emit("new-message", NewMessagePayload { channel_id, sender_session });
+        ctx.emit(
+            "new-message",
+            NewMessagePayload {
+                channel_id,
+                sender_session,
+            },
+        );
 
         if unreads_changed {
             let unreads = ctx
@@ -78,15 +91,8 @@ impl HandleMessage for mumble_tcp::PchatMessageDeliver {
                 Some(name) => format!("{sender_name} in #{name}"),
                 None => sender_name,
             };
-            let icon = sender_session.and_then(|sid| {
-                ctx.shared
-                    .lock()
-                    .ok()?
-                    .users
-                    .get(&sid)?
-                    .texture
-                    .clone()
-            });
+            let icon = sender_session
+                .and_then(|sid| ctx.shared.lock().ok()?.users.get(&sid)?.texture.clone());
             ctx.send_notification_with_icon(
                 &title,
                 &strip_html_tags(&body),
@@ -96,7 +102,10 @@ impl HandleMessage for mumble_tcp::PchatMessageDeliver {
         }
 
         if selected != Some(channel_id)
-            && ctx.shared.lock().is_ok_and(|s| s.permanently_listened.contains(&channel_id))
+            && ctx
+                .shared
+                .lock()
+                .is_ok_and(|s| s.permanently_listened.contains(&channel_id))
         {
             ctx.request_user_attention();
         }
@@ -113,9 +122,28 @@ impl HandleMessage for mumble_tcp::PchatFetchResponse {
         let total_stored = self.total_stored.unwrap_or(0);
         pchat::handle_proto_fetch_resp(&ctx.shared, self);
         // Signal that history loading is complete for this channel.
-        ctx.emit("pchat-history-loading", PchatHistoryLoadingPayload { channel_id, loading: false });
-        ctx.emit("pchat-fetch-complete", PchatFetchCompletePayload { channel_id, has_more, total_stored });
-        ctx.emit("new-message", NewMessagePayload { channel_id, sender_session: None });
+        ctx.emit(
+            "pchat-history-loading",
+            PchatHistoryLoadingPayload {
+                channel_id,
+                loading: false,
+            },
+        );
+        ctx.emit(
+            "pchat-fetch-complete",
+            PchatFetchCompletePayload {
+                channel_id,
+                has_more,
+                total_stored,
+            },
+        );
+        ctx.emit(
+            "new-message",
+            NewMessagePayload {
+                channel_id,
+                sender_session: None,
+            },
+        );
         ctx.emit_empty("state-changed");
     }
 }
@@ -206,11 +234,13 @@ impl HandleMessage for mumble_tcp::PchatKeyHoldersList {
                     let online_name = online_name_by_hash
                         .get(cert_hash.as_str())
                         .map(|n| (*n).to_owned());
-                    let name = online_name.unwrap_or_else(|| resolve_entry_name(
-                        &cert_hash,
-                        entry.name.as_deref().unwrap_or_default(),
-                        state.pchat_ctx.hash_name_resolver.as_deref(),
-                    ));
+                    let name = online_name.unwrap_or_else(|| {
+                        resolve_entry_name(
+                            &cert_hash,
+                            entry.name.as_deref().unwrap_or_default(),
+                            state.pchat_ctx.hash_name_resolver.as_deref(),
+                        )
+                    });
                     let is_online = online_name_by_hash.contains_key(cert_hash.as_str());
                     crate::state::types::KeyHolderEntry {
                         cert_hash,
@@ -220,7 +250,10 @@ impl HandleMessage for mumble_tcp::PchatKeyHoldersList {
                 })
                 .collect();
 
-            let _ = state.pchat_ctx.key_holders.insert(channel_id, holders.clone());
+            let _ = state
+                .pchat_ctx
+                .key_holders
+                .insert(channel_id, holders.clone());
 
             // Sync server-provided holder list into key_manager so that
             // consent checks can skip peers who already hold the key.
@@ -248,7 +281,8 @@ impl HandleMessage for mumble_tcp::PchatKeyHoldersList {
             let share_requests_payload = if state.pchat_ctx.pending_key_shares.len() != before_len {
                 state.conn.tauri_app_handle.as_ref().map(|app| {
                     let remaining: Vec<_> = state
-                        .pchat_ctx.pending_key_shares
+                        .pchat_ctx
+                        .pending_key_shares
                         .iter()
                         .filter(|p| p.channel_id == channel_id)
                         .cloned()
@@ -304,7 +338,13 @@ impl HandleMessage for mumble_tcp::PchatDeleteMessages {
         debug!("received PchatDeleteMessages");
         let channel_id = self.channel_id.unwrap_or(0);
         pchat::handle_proto_delete_messages(&ctx.shared, self);
-        ctx.emit("new-message", NewMessagePayload { channel_id, sender_session: None });
+        ctx.emit(
+            "new-message",
+            NewMessagePayload {
+                channel_id,
+                sender_session: None,
+            },
+        );
     }
 }
 
@@ -313,7 +353,13 @@ impl HandleMessage for mumble_tcp::PchatOfflineQueueDrain {
         debug!("received PchatOfflineQueueDrain");
         let channel_id = self.channel_id.unwrap_or(0);
         pchat::handle_proto_offline_queue_drain(&ctx.shared, self);
-        ctx.emit("new-message", NewMessagePayload { channel_id, sender_session: None });
+        ctx.emit(
+            "new-message",
+            NewMessagePayload {
+                channel_id,
+                sender_session: None,
+            },
+        );
         ctx.emit_empty("state-changed");
     }
 }
@@ -487,7 +533,14 @@ impl HandleMessage for mumble_tcp::PchatPinDeliver {
 
         if let Ok(mut state) = ctx.shared.lock() {
             let resolved_name = resolve_name_by_hash(&state, &pinner_hash, &pinner_name);
-            apply_pin_to_message(&mut state, channel_id, &message_id, pinned, &resolved_name, timestamp);
+            apply_pin_to_message(
+                &mut state,
+                channel_id,
+                &message_id,
+                pinned,
+                &resolved_name,
+                timestamp,
+            );
         }
 
         ctx.emit(
@@ -522,16 +575,20 @@ impl HandleMessage for mumble_tcp::PchatPinFetchResponse {
 
         if let Ok(mut state) = ctx.shared.lock() {
             for pin in &pins {
-                apply_pin_to_message(&mut state, channel_id, &pin.message_id, true, &pin.pinner_name, pin.timestamp);
+                apply_pin_to_message(
+                    &mut state,
+                    channel_id,
+                    &pin.message_id,
+                    true,
+                    &pin.pinner_name,
+                    pin.timestamp,
+                );
             }
         }
 
         ctx.emit(
             "pchat-pin-fetch-response",
-            PinFetchResponsePayload {
-                channel_id,
-                pins,
-            },
+            PinFetchResponsePayload { channel_id, pins },
         );
     }
 }
@@ -553,10 +610,21 @@ fn apply_pin_to_message(
     pinner_name: &str,
     timestamp: u64,
 ) {
-    let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id) else { return };
-    let Some(msg) = msgs.iter_mut().find(|m: &&mut ChatMessage| m.message_id.as_deref() == Some(message_id)) else { return };
+    let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id) else {
+        return;
+    };
+    let Some(msg) = msgs
+        .iter_mut()
+        .find(|m: &&mut ChatMessage| m.message_id.as_deref() == Some(message_id))
+    else {
+        return;
+    };
     msg.pinned = pinned;
-    msg.pinned_by = if pinned { Some(pinner_name.to_owned()) } else { None };
+    msg.pinned_by = if pinned {
+        Some(pinner_name.to_owned())
+    } else {
+        None
+    };
     msg.pinned_at = if pinned { Some(timestamp) } else { None };
 }
 

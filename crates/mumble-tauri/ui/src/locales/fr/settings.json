@@ -124,6 +124,13 @@
     "uiModeConfirmText": "Passer à l'interface minimale maintenant ? L'application va se fermer et le client léger va démarrer.",
     "uiModeConfirmBtn": "Changer et redémarrer",
     "uiModeError": "Impossible de démarrer le client minimal : {{error}}",
+    "streamBackend": "Backend du lecteur de flux",
+    "streamBackendHint": "Comment les partages d'écran entrants sont reçus et décodés. Auto choisit le meilleur backend pour ce système ; Navigateur utilise le WebRTC intégré de la webview ; Natif exécute le pair WebRTC en Rust et décode via WebCodecs.",
+    "streamBackendAuto": "Auto (recommandé)",
+    "streamBackendWebview": "Navigateur (WebRTC de la webview)",
+    "streamBackendNative": "Natif (Rust)",
+    "streamBackendReloadHint": "Le changement prend effet après le rechargement de l'interface.",
+    "streamBackendReloadBtn": "Recharger maintenant",
     "expertMode": "Mode expert",
     "expertModeHintNormal": "Simplifié - on s'occupe des détails techniques pour vous.",
     "expertModeHintExpert": "Contrôle total - options audio avancées, ports personnalisés et libellés sont visibles.",
@@ -631,7 +638,7 @@
     "never": "Jamais",
     "unknown": "Inconnu",
     "unregisterTitle": "Désinscrire l'utilisateur",
-    "unregisterBody": "Désinscrire « {{name}} » ? Toutes ses données sur ce serveur seront définitivement supprimées — inscription, commentaire, avatar et appartenances aux rôles/ACL. Cette action est irréversible.",
+    "unregisterBody": "Désinscrire « {{name}} » ? Toutes ses données sur ce serveur seront définitivement supprimées - inscription, commentaire, avatar et appartenances aux rôles/ACL. Cette action est irréversible.",
     "unregisterConfirm": "Désinscrire",
     "actionEditing": "Modification...",
     "actionRename": "Renommer",
@@ -991,7 +998,7 @@
     "confirmUninstall": "Désinstaller le plugin \"{{name}}\" ? Il sera supprimé du serveur.",
     "unknownError": "Erreur inconnue",
     "incompatible": "Incompatible",
-    "incompatibleTitle": "Incompatible avec ce serveur — ne peut pas être activé."
+    "incompatibleTitle": "Incompatible avec ce serveur - ne peut pas être activé."
   },
   "marketplace": {
     "title": "Marketplace de plugins",
@@ -1126,7 +1133,7 @@
       "empty": "Aucun document conservé pour l'instant.",
       "noMatch": "Aucun document ne correspond à votre recherche.",
       "error": "Impossible de charger les documents",
-      "noExpiry": "Les documents sont conservés jusqu'à leur suppression — contrairement aux fichiers téléversés, ils n'expirent pas automatiquement.",
+      "noExpiry": "Les documents sont conservés jusqu'à leur suppression - contrairement aux fichiers téléversés, ils n'expirent pas automatiquement.",
       "delete": "Supprimer le document",
       "deleteConfirm": "Supprimer le document « {{name}} » ? Cela supprime toutes ses révisions et est irréversible.",
       "col": {

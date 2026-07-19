@@ -14,7 +14,10 @@
 //! Everything here is best-effort: [`GpuPipeline::new`] returns `Err` on any
 //! missing capability (no hardware encoder, RDP session, old driver, ...)
 //! and the caller falls back to the CPU pipeline.
-#![allow(unsafe_code, reason = "FFI with D3D11/MF/WGC; every unsafe block is a COM call")]
+#![allow(
+    unsafe_code,
+    reason = "FFI with D3D11/MF/WGC; every unsafe block is a COM call"
+)]
 
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -26,39 +29,40 @@ use windows::Graphics::Capture::{
 use windows::Graphics::DirectX::Direct3D11::IDirect3DDevice;
 use windows::Graphics::DirectX::DirectXPixelFormat;
 use windows::Win32::Foundation::HMODULE;
+use windows::Win32::Foundation::VARIANT_BOOL;
 use windows::Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL};
 use windows::Win32::Graphics::Direct3D11::{
     D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Multithread, ID3D11Texture2D,
-    ID3D11VideoContext, ID3D11VideoDevice, ID3D11VideoProcessor,
-    ID3D11VideoProcessorEnumerator, ID3D11VideoProcessorInputView,
-    ID3D11VideoProcessorOutputView, D3D11_BIND_RENDER_TARGET, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-    D3D11_CREATE_DEVICE_VIDEO_SUPPORT, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT,
-    D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE, D3D11_VIDEO_PROCESSOR_CONTENT_DESC,
-    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC, D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC,
-    D3D11_VIDEO_PROCESSOR_STREAM, D3D11_VIDEO_USAGE_PLAYBACK_NORMAL, D3D11_VPIV_DIMENSION_TEXTURE2D,
+    ID3D11VideoContext, ID3D11VideoDevice, ID3D11VideoProcessor, ID3D11VideoProcessorEnumerator,
+    ID3D11VideoProcessorInputView, ID3D11VideoProcessorOutputView, D3D11_BIND_RENDER_TARGET,
+    D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_CREATE_DEVICE_VIDEO_SUPPORT, D3D11_SDK_VERSION,
+    D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT, D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE,
+    D3D11_VIDEO_PROCESSOR_CONTENT_DESC, D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC,
+    D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC, D3D11_VIDEO_PROCESSOR_STREAM,
+    D3D11_VIDEO_USAGE_PLAYBACK_NORMAL, D3D11_VPIV_DIMENSION_TEXTURE2D,
     D3D11_VPOV_DIMENSION_TEXTURE2D,
 };
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_NV12;
 use windows::Win32::Graphics::Dxgi::IDXGIDevice;
 use windows::Win32::Graphics::Gdi::HMONITOR;
-use windows::Win32::Foundation::VARIANT_BOOL;
 use windows::Win32::Media::MediaFoundation::{
-    ICodecAPI, IMFDXGIDeviceManager, IMFMediaEvent, IMFMediaEventGenerator,
-    IMFTransform, MFCreateDXGIDeviceManager, MFCreateDXGISurfaceBuffer, MFCreateMediaType,
-    MFCreateSample, MFStartup, MFTEnumEx, CODECAPI_AVEncCommonMeanBitRate,
-    CODECAPI_AVEncCommonRateControlMode, CODECAPI_AVEncMPVDefaultBPictureCount,
-    CODECAPI_AVEncVideoForceKeyFrame, CODECAPI_AVLowLatencyMode, MFMediaType_Video,
+    CODECAPI_AVEncCommonMeanBitRate, CODECAPI_AVEncCommonRateControlMode,
+    CODECAPI_AVEncMPVDefaultBPictureCount, CODECAPI_AVEncVideoForceKeyFrame,
+    CODECAPI_AVLowLatencyMode, ICodecAPI, IMFDXGIDeviceManager, IMFMediaEvent,
+    IMFMediaEventGenerator, IMFTransform, METransformHaveOutput, METransformNeedInput,
+    MFCreateDXGIDeviceManager, MFCreateDXGISurfaceBuffer, MFCreateMediaType, MFCreateSample,
+    MFMediaType_Video, MFSampleExtension_CleanPoint, MFStartup, MFTEnumEx, MFVideoFormat_H264,
+    MFVideoFormat_NV12, MFVideoInterlace_Progressive, MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS,
     MFSTARTUP_LITE, MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE,
     MFT_ENUM_FLAG_SORTANDFILTER, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING,
-    MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFT_MESSAGE_SET_D3D_MANAGER, MFT_REGISTER_TYPE_INFO,
-    MFVideoFormat_H264, MFVideoFormat_NV12, MFVideoInterlace_Progressive,
-    MFSampleExtension_CleanPoint, METransformHaveOutput, METransformNeedInput,
-    MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS, MF_E_NO_EVENTS_AVAILABLE,
-    MF_E_TRANSFORM_NEED_MORE_INPUT, MF_MT_AVG_BITRATE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE,
-    MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE, MF_MT_SUBTYPE, MF_TRANSFORM_ASYNC_UNLOCK,
-    MFT_OUTPUT_DATA_BUFFER,
+    MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFT_MESSAGE_SET_D3D_MANAGER, MFT_OUTPUT_DATA_BUFFER,
+    MFT_REGISTER_TYPE_INFO, MF_E_NO_EVENTS_AVAILABLE, MF_E_TRANSFORM_NEED_MORE_INPUT,
+    MF_MT_AVG_BITRATE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE,
+    MF_MT_SUBTYPE, MF_TRANSFORM_ASYNC_UNLOCK,
 };
-use windows::Win32::System::Variant::{VARENUM, VARIANT, VARIANT_0, VARIANT_0_0, VARIANT_0_0_0, VT_BOOL, VT_UI4};
+use windows::Win32::System::Variant::{
+    VARENUM, VARIANT, VARIANT_0, VARIANT_0_0, VARIANT_0_0_0, VT_BOOL, VT_UI4,
+};
 use windows::Win32::System::WinRT::Direct3D11::{
     CreateDirect3D11DeviceFromDXGIDevice, IDirect3DDxgiInterfaceAccess,
 };
@@ -152,7 +156,9 @@ impl GpuPipeline {
         let winrt_device: IDirect3DDevice = {
             let inspectable = unsafe { CreateDirect3D11DeviceFromDXGIDevice(&dxgi) }
                 .map_err(|e| format!("CreateDirect3D11DeviceFromDXGIDevice: {e}"))?;
-            inspectable.cast().map_err(|e| format!("IDirect3DDevice: {e}"))?
+            inspectable
+                .cast()
+                .map_err(|e| format!("IDirect3DDevice: {e}"))?
         };
 
         let interop = windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()
@@ -174,20 +180,28 @@ impl GpuPipeline {
             .CreateCaptureSession(&item)
             .map_err(|e| format!("capture session: {e}"))?;
         disable_capture_border(&session);
-        session.StartCapture().map_err(|e| format!("StartCapture: {e}"))?;
+        session
+            .StartCapture()
+            .map_err(|e| format!("StartCapture: {e}"))?;
 
         // -- D3D11 video processor: scale + BGRA -> NV12 --------------------
         let (out_width, out_height) = output_dims(in_width, in_height, settings.max_dimension);
-        let VideoProcessor { video_device, video_context, processor, processor_enum, nv12_pool } =
-            create_video_processor(&device, &context, (in_width, in_height), (out_width, out_height))?;
+        let VideoProcessor {
+            video_device,
+            video_context,
+            processor,
+            processor_enum,
+            nv12_pool,
+        } = create_video_processor(
+            &device,
+            &context,
+            (in_width, in_height),
+            (out_width, out_height),
+        )?;
 
         // -- Hardware H.264 encoder MFT -------------------------------------
-        let (encoder, codec_api, encoder_events) = create_hardware_encoder(
-            &device,
-            out_width,
-            out_height,
-            settings,
-        )?;
+        let (encoder, codec_api, encoder_events) =
+            create_hardware_encoder(&device, out_width, out_height, settings)?;
 
         let fps = settings.max_fps.clamp(1.0, 60.0);
         Ok(Self {
@@ -246,10 +260,10 @@ impl GpuPipeline {
             if let Some(frame) = newest {
                 let texture: ID3D11Texture2D = {
                     let surface = frame.Surface().map_err(|e| format!("frame surface: {e}"))?;
-                    let access: IDirect3DDxgiInterfaceAccess =
-                        surface.cast().map_err(|e| format!("surface interop: {e}"))?;
-                    unsafe { access.GetInterface() }
-                        .map_err(|e| format!("surface texture: {e}"))?
+                    let access: IDirect3DDxgiInterfaceAccess = surface
+                        .cast()
+                        .map_err(|e| format!("surface interop: {e}"))?;
+                    unsafe { access.GetInterface() }.map_err(|e| format!("surface texture: {e}"))?
                 };
                 let nv12 = self.convert(&texture)?;
                 self.submit(&nv12, force_keyframe)?;
@@ -348,14 +362,15 @@ impl GpuPipeline {
 
         if force_keyframe {
             let one = variant_u32(1);
-            unsafe { self.codec_api.SetValue(&CODECAPI_AVEncVideoForceKeyFrame, &one) }
-                .map_err(|e| format!("force keyframe: {e}"))?;
+            unsafe {
+                self.codec_api
+                    .SetValue(&CODECAPI_AVEncVideoForceKeyFrame, &one)
+            }
+            .map_err(|e| format!("force keyframe: {e}"))?;
         }
 
-        let buffer = unsafe {
-            MFCreateDXGISurfaceBuffer(&ID3D11Texture2D::IID, nv12, 0, false)
-        }
-        .map_err(|e| format!("MFCreateDXGISurfaceBuffer: {e}"))?;
+        let buffer = unsafe { MFCreateDXGISurfaceBuffer(&ID3D11Texture2D::IID, nv12, 0, false) }
+            .map_err(|e| format!("MFCreateDXGISurfaceBuffer: {e}"))?;
         let sample = unsafe { MFCreateSample() }.map_err(|e| format!("MFCreateSample: {e}"))?;
         unsafe { sample.AddBuffer(&buffer) }.map_err(|e| format!("AddBuffer: {e}"))?;
         let pts = self.started_at.elapsed().as_nanos() as i64 / 100;
@@ -421,7 +436,10 @@ impl GpuPipeline {
         }
         self.have_output -= 1;
 
-        let mut out_buffer = MFT_OUTPUT_DATA_BUFFER { dwStreamID: 0, ..Default::default() };
+        let mut out_buffer = MFT_OUTPUT_DATA_BUFFER {
+            dwStreamID: 0,
+            ..Default::default()
+        };
         let mut status = 0u32;
         let result = unsafe {
             self.encoder
@@ -509,7 +527,9 @@ fn variant_u32(value: u32) -> VARIANT {
 fn variant_bool(value: bool) -> VARIANT {
     variant_with(
         VT_BOOL,
-        VARIANT_0_0_0 { boolVal: VARIANT_BOOL(if value { -1 } else { 0 }) },
+        VARIANT_0_0_0 {
+            boolVal: VARIANT_BOOL(if value { -1 } else { 0 }),
+        },
     )
 }
 
@@ -608,8 +628,9 @@ fn create_d3d11_device() -> Result<(ID3D11Device, ID3D11DeviceContext), String> 
     .map_err(|e| format!("D3D11CreateDevice: {e}"))?;
     let device = device.ok_or("no D3D11 device")?;
     let context = context.ok_or("no D3D11 context")?;
-    let multithread: ID3D11Multithread =
-        device.cast().map_err(|e| format!("ID3D11Multithread: {e}"))?;
+    let multithread: ID3D11Multithread = device
+        .cast()
+        .map_err(|e| format!("ID3D11Multithread: {e}"))?;
     let _ = unsafe { multithread.SetMultithreadProtected(true) };
     Ok((device, context))
 }
@@ -631,10 +652,12 @@ fn create_video_processor(
     (in_width, in_height): (u32, u32),
     (out_width, out_height): (u32, u32),
 ) -> Result<VideoProcessor, String> {
-    let video_device: ID3D11VideoDevice =
-        device.cast().map_err(|e| format!("ID3D11VideoDevice: {e}"))?;
-    let video_context: ID3D11VideoContext =
-        context.cast().map_err(|e| format!("ID3D11VideoContext: {e}"))?;
+    let video_device: ID3D11VideoDevice = device
+        .cast()
+        .map_err(|e| format!("ID3D11VideoDevice: {e}"))?;
+    let video_context: ID3D11VideoContext = context
+        .cast()
+        .map_err(|e| format!("ID3D11VideoContext: {e}"))?;
 
     let content_desc = D3D11_VIDEO_PROCESSOR_CONTENT_DESC {
         InputFrameFormat: D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE,
@@ -656,7 +679,10 @@ fn create_video_processor(
         MipLevels: 1,
         ArraySize: 1,
         Format: DXGI_FORMAT_NV12,
-        SampleDesc: windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+        SampleDesc: windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC {
+            Count: 1,
+            Quality: 0,
+        },
         Usage: D3D11_USAGE_DEFAULT,
         BindFlags: D3D11_BIND_RENDER_TARGET.0 as u32,
         ..Default::default()
@@ -668,7 +694,13 @@ fn create_video_processor(
             .map_err(|e| format!("CreateTexture2D(NV12): {e}"))?;
         nv12_pool.push(tex.ok_or("no NV12 texture")?);
     }
-    Ok(VideoProcessor { video_device, video_context, processor, processor_enum, nv12_pool })
+    Ok(VideoProcessor {
+        video_device,
+        video_context,
+        processor,
+        processor_enum,
+        nv12_pool,
+    })
 }
 
 /// Find and configure a hardware H.264 encoder MFT bound to `device`.
@@ -732,7 +764,10 @@ fn create_hardware_encoder(
             let out_type = MFCreateMediaType()?;
             out_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
             out_type.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_H264)?;
-            out_type.SetUINT64(&MF_MT_FRAME_SIZE, (u64::from(width) << 32) | u64::from(height))?;
+            out_type.SetUINT64(
+                &MF_MT_FRAME_SIZE,
+                (u64::from(width) << 32) | u64::from(height),
+            )?;
             out_type.SetUINT64(&MF_MT_FRAME_RATE, (u64::from(fps) << 32) | 1)?;
             out_type.SetUINT32(&MF_MT_AVG_BITRATE, bitrate)?;
             out_type.SetUINT32(&MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive.0 as u32)?;
@@ -746,7 +781,10 @@ fn create_hardware_encoder(
             let in_type = MFCreateMediaType()?;
             in_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
             in_type.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_NV12)?;
-            in_type.SetUINT64(&MF_MT_FRAME_SIZE, (u64::from(width) << 32) | u64::from(height))?;
+            in_type.SetUINT64(
+                &MF_MT_FRAME_SIZE,
+                (u64::from(width) << 32) | u64::from(height),
+            )?;
             in_type.SetUINT64(&MF_MT_FRAME_RATE, (u64::from(fps) << 32) | 1)?;
             in_type.SetUINT32(&MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive.0 as u32)?;
             encoder.SetInputType(0, &in_type, 0)
@@ -768,8 +806,9 @@ fn create_hardware_encoder(
         let _ = codec_api.SetValue(&CODECAPI_AVEncCommonMeanBitRate, &rate);
     }
 
-    let events: IMFMediaEventGenerator =
-        encoder.cast().map_err(|e| format!("IMFMediaEventGenerator: {e}"))?;
+    let events: IMFMediaEventGenerator = encoder
+        .cast()
+        .map_err(|e| format!("IMFMediaEventGenerator: {e}"))?;
 
     (|| -> windows::core::Result<()> {
         unsafe {
@@ -807,7 +846,10 @@ mod tests {
         let (mw, mh) = (monitor.width().unwrap_or(0), monitor.height().unwrap_or(0));
 
         // Encode at native size to measure the true 4K-class budget.
-        let settings = EncodeSettings { max_dimension: 0, ..EncodeSettings::default() };
+        let settings = EncodeSettings {
+            max_dimension: 0,
+            ..EncodeSettings::default()
+        };
         let mut gpu = match GpuPipeline::new(id, &settings) {
             Ok(g) => g,
             Err(e) => panic!("GPU pipeline unavailable on this machine: {e}"),

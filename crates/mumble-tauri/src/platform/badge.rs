@@ -12,7 +12,10 @@ extern "system" {
 ///
 /// Reads `LOCALE_ITIME` ("0" = 12-hour, "1" = 24-hour) via `GetLocaleInfoW`.
 #[cfg(target_os = "windows")]
-#[allow(unsafe_code, reason = "GetLocaleInfoW is a safe Windows API call wrapped with an unsafe extern block")]
+#[allow(
+    unsafe_code,
+    reason = "GetLocaleInfoW is a safe Windows API call wrapped with an unsafe extern block"
+)]
 fn system_uses_24h() -> Option<bool> {
     const LOCALE_USER_DEFAULT: u32 = 0x0400;
     const LOCALE_ITIME: u32 = 0x0019;
@@ -68,9 +71,9 @@ fn render_badge_icon(count: u32) -> Vec<u8> {
             let dy = y as f64 - cy;
             if dx * dx + dy * dy <= r * r {
                 let i = (y * SIZE + x) * 4;
-                rgba[i] = 220;     // R
-                rgba[i + 1] = 38;  // G
-                rgba[i + 2] = 38;  // B
+                rgba[i] = 220; // R
+                rgba[i + 1] = 38; // G
+                rgba[i + 2] = 38; // B
                 rgba[i + 3] = 255; // A
             }
         }
@@ -101,7 +104,7 @@ fn glyph(ch: char) -> [u8; 5] {
         '8' => [0b111, 0b101, 0b111, 0b101, 0b111],
         '9' => [0b111, 0b101, 0b111, 0b001, 0b111],
         '!' => [0b010, 0b010, 0b010, 0b000, 0b010],
-        _   => [0b000; 5],
+        _ => [0b000; 5],
     }
 }
 
@@ -149,7 +152,9 @@ pub fn set_badge(window: &tauri::Window, count: Option<u32>) -> Result<(), Strin
         Some(c) => {
             let rgba = render_badge_icon(c);
             let image = tauri::image::Image::new_owned(rgba, 16, 16);
-            window.set_overlay_icon(Some(image)).map_err(|e| e.to_string())
+            window
+                .set_overlay_icon(Some(image))
+                .map_err(|e| e.to_string())
         }
         None => window.set_overlay_icon(None).map_err(|e| e.to_string()),
     }

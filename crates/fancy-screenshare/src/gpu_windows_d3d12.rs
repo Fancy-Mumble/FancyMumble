@@ -19,10 +19,16 @@
 //! D3D11/MediaFoundation tier, then CPU. The H.264 SPS/PPS writer Stage B
 //! needs is already here (and unit-tested) - the D3D12 encoder emits slice
 //! NALs only, parameter sets are the application's job.
-#![allow(unsafe_code, reason = "FFI with D3D12/D3D11On12/WGC; every unsafe block is a COM call")]
+#![allow(
+    unsafe_code,
+    reason = "FFI with D3D12/D3D11On12/WGC; every unsafe block is a COM call"
+)]
 // The D3D12 capture+encode front is staged (Stage B mounts it once the encoder
 // lands); several helpers are wired up but not yet called from a live path.
-#![allow(dead_code, reason = "staged D3D12 pipeline; called once Stage B mounts the encoder")]
+#![allow(
+    dead_code,
+    reason = "staged D3D12 pipeline; called once Stage B mounts the encoder"
+)]
 
 use std::time::Duration;
 
@@ -42,47 +48,49 @@ use windows::Win32::Graphics::Direct3D11on12::{
 };
 use windows::Win32::Graphics::Direct3D12::{
     D3D12CreateDevice, ID3D12CommandAllocator, ID3D12CommandQueue, ID3D12Device, ID3D12Fence,
-    ID3D12Resource, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_QUEUE_DESC,
-    D3D12_FENCE_FLAG_NONE, D3D12_HEAP_FLAG_NONE, D3D12_HEAP_PROPERTIES, D3D12_HEAP_TYPE_DEFAULT,
-    D3D12_RESOURCE_BARRIER, D3D12_RESOURCE_BARRIER_0, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
-    D3D12_RESOURCE_BARRIER_FLAG_NONE, D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
-    D3D12_RESOURCE_DESC, D3D12_RESOURCE_DIMENSION_TEXTURE2D, D3D12_RESOURCE_FLAG_NONE,
-    D3D12_RESOURCE_STATES, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST,
+    ID3D12Resource, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS,
+    D3D12_COMMAND_QUEUE_DESC, D3D12_FENCE_FLAG_NONE, D3D12_HEAP_FLAG_NONE, D3D12_HEAP_PROPERTIES,
+    D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_BARRIER, D3D12_RESOURCE_BARRIER_0,
+    D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_FLAG_NONE,
+    D3D12_RESOURCE_BARRIER_TYPE_TRANSITION, D3D12_RESOURCE_DESC,
+    D3D12_RESOURCE_DIMENSION_TEXTURE2D, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATES,
+    D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST,
+    D3D12_RESOURCE_STATE_VIDEO_PROCESS_READ, D3D12_RESOURCE_STATE_VIDEO_PROCESS_WRITE,
     D3D12_RESOURCE_TRANSITION_BARRIER, D3D12_TEXTURE_LAYOUT_UNKNOWN,
-    D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS, D3D12_RESOURCE_STATE_VIDEO_PROCESS_READ,
-    D3D12_RESOURCE_STATE_VIDEO_PROCESS_WRITE,
 };
 // windows-rs generates the d3d12video.h API surface into the MediaFoundation
 // module, not Direct3D12.
-use windows::Win32::Media::MediaFoundation::{
-    ID3D12VideoDevice, ID3D12VideoProcessCommandList, ID3D12VideoProcessor,
-    D3D12_VIDEO_FIELD_TYPE_NONE,
-    D3D12_VIDEO_FRAME_STEREO_FORMAT_NONE, D3D12_VIDEO_PROCESS_ALPHA_FILL_MODE_OPAQUE,
-    D3D12_VIDEO_PROCESS_FILTER_FLAG_NONE, D3D12_VIDEO_PROCESS_INPUT_STREAM,
-    D3D12_VIDEO_PROCESS_INPUT_STREAM_ARGUMENTS, D3D12_VIDEO_PROCESS_INPUT_STREAM_DESC,
-    D3D12_VIDEO_PROCESS_INPUT_STREAM_RATE, D3D12_VIDEO_PROCESS_OUTPUT_STREAM,
-    D3D12_VIDEO_PROCESS_OUTPUT_STREAM_ARGUMENTS, D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC,
-    D3D12_VIDEO_SIZE_RANGE,
-};
+use windows::Win32::Graphics::Dxgi::Common::DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+use windows::Win32::Graphics::Dxgi::Common::DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P709;
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_NV12, DXGI_RATIONAL, DXGI_SAMPLE_DESC,
 };
 use windows::Win32::Graphics::Dxgi::IDXGIDevice;
 use windows::Win32::Graphics::Gdi::HMONITOR;
+use windows::Win32::Media::MediaFoundation::{
+    ID3D12VideoDevice, ID3D12VideoProcessCommandList, ID3D12VideoProcessor,
+    D3D12_VIDEO_FIELD_TYPE_NONE, D3D12_VIDEO_FRAME_STEREO_FORMAT_NONE,
+    D3D12_VIDEO_PROCESS_ALPHA_FILL_MODE_OPAQUE, D3D12_VIDEO_PROCESS_FILTER_FLAG_NONE,
+    D3D12_VIDEO_PROCESS_INPUT_STREAM, D3D12_VIDEO_PROCESS_INPUT_STREAM_ARGUMENTS,
+    D3D12_VIDEO_PROCESS_INPUT_STREAM_DESC, D3D12_VIDEO_PROCESS_INPUT_STREAM_RATE,
+    D3D12_VIDEO_PROCESS_OUTPUT_STREAM, D3D12_VIDEO_PROCESS_OUTPUT_STREAM_ARGUMENTS,
+    D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC, D3D12_VIDEO_SIZE_RANGE,
+};
 use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject, INFINITE};
 use windows::Win32::System::WinRT::Direct3D11::{
     CreateDirect3D11DeviceFromDXGIDevice, IDirect3DDxgiInterfaceAccess,
 };
 use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop;
-use windows::Win32::Graphics::Dxgi::Common::DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
-use windows::Win32::Graphics::Dxgi::Common::DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P709;
 
 use crate::encode::EncodeSettings;
 
 /// The D3D12 capture + convert front half. Owns the device, the 11On12
 /// capture shim and the video-process stage; Stage B mounts the encoder on
 /// the NV12 output.
-#[allow(dead_code, reason = "constructed by the Stage-B encoder and the hardware bench")]
+#[allow(
+    dead_code,
+    reason = "constructed by the Stage-B encoder and the hardware bench"
+)]
 pub(crate) struct GpuFrontD3D12 {
     device: ID3D12Device,
     // -- 11On12 capture shim -------------------------------------------------
@@ -138,14 +146,22 @@ fn enable_debug_layer_if_requested() {
 /// and `VIDEO_PROCESS` command queues. Video-process support is queried
 /// implicitly: creating the video device/processor fails cleanly where
 /// unsupported.
-fn create_d3d12_devices(
-) -> Result<(ID3D12Device, ID3D12VideoDevice, ID3D12CommandQueue, ID3D12CommandQueue), String> {
+fn create_d3d12_devices() -> Result<
+    (
+        ID3D12Device,
+        ID3D12VideoDevice,
+        ID3D12CommandQueue,
+        ID3D12CommandQueue,
+    ),
+    String,
+> {
     let mut device: Option<ID3D12Device> = None;
     unsafe { D3D12CreateDevice(None, D3D_FEATURE_LEVEL_11_0, &mut device) }
         .map_err(|e| format!("D3D12CreateDevice: {e}"))?;
     let device = device.ok_or("no D3D12 device")?;
-    let video_device: ID3D12VideoDevice =
-        device.cast().map_err(|e| format!("ID3D12VideoDevice: {e}"))?;
+    let video_device: ID3D12VideoDevice = device
+        .cast()
+        .map_err(|e| format!("ID3D12VideoDevice: {e}"))?;
     let direct_queue: ID3D12CommandQueue = unsafe {
         device.CreateCommandQueue(&D3D12_COMMAND_QUEUE_DESC {
             Type: D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -184,8 +200,9 @@ fn create_capture_shim(
 ) -> Result<CaptureShim, String> {
     let mut d3d11_device: Option<ID3D11Device> = None;
     let mut d3d11_context: Option<ID3D11DeviceContext> = None;
-    let direct_queue_unk: windows::core::IUnknown =
-        direct_queue.cast().map_err(|e| format!("direct queue IUnknown: {e}"))?;
+    let direct_queue_unk: windows::core::IUnknown = direct_queue
+        .cast()
+        .map_err(|e| format!("direct queue IUnknown: {e}"))?;
     let queues: [Option<windows::core::IUnknown>; 1] = [Some(direct_queue_unk)];
     unsafe {
         D3D11On12CreateDevice(
@@ -202,14 +219,19 @@ fn create_capture_shim(
     .map_err(|e| format!("D3D11On12CreateDevice: {e}"))?;
     let d3d11_device = d3d11_device.ok_or("no 11On12 device")?;
     let d3d11_context = d3d11_context.ok_or("no 11On12 context")?;
-    let on12: ID3D11On12Device =
-        d3d11_device.cast().map_err(|e| format!("ID3D11On12Device: {e}"))?;
+    let on12: ID3D11On12Device = d3d11_device
+        .cast()
+        .map_err(|e| format!("ID3D11On12Device: {e}"))?;
 
-    let dxgi: IDXGIDevice = d3d11_device.cast().map_err(|e| format!("IDXGIDevice: {e}"))?;
+    let dxgi: IDXGIDevice = d3d11_device
+        .cast()
+        .map_err(|e| format!("IDXGIDevice: {e}"))?;
     let winrt_device: IDirect3DDevice = {
         let inspectable = unsafe { CreateDirect3D11DeviceFromDXGIDevice(&dxgi) }
             .map_err(|e| format!("CreateDirect3D11DeviceFromDXGIDevice: {e}"))?;
-        inspectable.cast().map_err(|e| format!("IDirect3DDevice: {e}"))?
+        inspectable
+            .cast()
+            .map_err(|e| format!("IDirect3DDevice: {e}"))?
     };
     let interop = windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()
         .map_err(|e| format!("capture interop factory: {e}"))?;
@@ -225,12 +247,23 @@ fn create_capture_shim(
         size,
     )
     .map_err(|e| format!("capture frame pool: {e}"))?;
-    let session =
-        frame_pool.CreateCaptureSession(&item).map_err(|e| format!("capture session: {e}"))?;
+    let session = frame_pool
+        .CreateCaptureSession(&item)
+        .map_err(|e| format!("capture session: {e}"))?;
     crate::gpu_windows::disable_capture_border(&session);
-    session.StartCapture().map_err(|e| format!("StartCapture: {e}"))?;
+    session
+        .StartCapture()
+        .map_err(|e| format!("StartCapture: {e}"))?;
 
-    Ok(CaptureShim { d3d11_device, d3d11_context, on12, frame_pool, session, in_width, in_height })
+    Ok(CaptureShim {
+        d3d11_device,
+        d3d11_context,
+        on12,
+        frame_pool,
+        session,
+        in_width,
+        in_height,
+    })
 }
 
 /// Create the BGRA staging texture (born D3D12, wrapped for the 11On12 copy).
@@ -241,7 +274,15 @@ fn create_staging_textures(
     on12: &ID3D11On12Device,
     in_width: u32,
     in_height: u32,
-) -> Result<(ID3D12Resource, ID3D11Texture2D, D3D12_RESOURCE_DESC, D3D12_HEAP_PROPERTIES), String> {
+) -> Result<
+    (
+        ID3D12Resource,
+        ID3D11Texture2D,
+        D3D12_RESOURCE_DESC,
+        D3D12_HEAP_PROPERTIES,
+    ),
+    String,
+> {
     let staging_desc = D3D12_RESOURCE_DESC {
         Dimension: D3D12_RESOURCE_DIMENSION_TEXTURE2D,
         Width: u64::from(in_width),
@@ -249,12 +290,18 @@ fn create_staging_textures(
         DepthOrArraySize: 1,
         MipLevels: 1,
         Format: DXGI_FORMAT_B8G8R8A8_UNORM,
-        SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+        SampleDesc: DXGI_SAMPLE_DESC {
+            Count: 1,
+            Quality: 0,
+        },
         Layout: D3D12_TEXTURE_LAYOUT_UNKNOWN,
         Flags: D3D12_RESOURCE_FLAG_NONE,
         ..Default::default()
     };
-    let heap = D3D12_HEAP_PROPERTIES { Type: D3D12_HEAP_TYPE_DEFAULT, ..Default::default() };
+    let heap = D3D12_HEAP_PROPERTIES {
+        Type: D3D12_HEAP_TYPE_DEFAULT,
+        ..Default::default()
+    };
     let mut staging12: Option<ID3D12Resource> = None;
     unsafe {
         device.CreateCommittedResource(
@@ -308,13 +355,22 @@ fn create_video_pipeline(
     settings: &EncodeSettings,
 ) -> Result<VideoPipeline, String> {
     let fps = settings.max_fps.clamp(1.0, 60.0) as u32;
-    let frame_rate = DXGI_RATIONAL { Numerator: fps, Denominator: 1 };
+    let frame_rate = DXGI_RATIONAL {
+        Numerator: fps,
+        Denominator: 1,
+    };
 
     let input_desc = D3D12_VIDEO_PROCESS_INPUT_STREAM_DESC {
         Format: DXGI_FORMAT_B8G8R8A8_UNORM,
         ColorSpace: DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709,
-        SourceAspectRatio: DXGI_RATIONAL { Numerator: 1, Denominator: 1 },
-        DestinationAspectRatio: DXGI_RATIONAL { Numerator: 1, Denominator: 1 },
+        SourceAspectRatio: DXGI_RATIONAL {
+            Numerator: 1,
+            Denominator: 1,
+        },
+        DestinationAspectRatio: DXGI_RATIONAL {
+            Numerator: 1,
+            Denominator: 1,
+        },
         FrameRate: frame_rate,
         SourceSizeRange: D3D12_VIDEO_SIZE_RANGE {
             MaxWidth: in_width,
@@ -384,10 +440,17 @@ fn create_video_pipeline(
 
     let fence: ID3D12Fence = unsafe { device.CreateFence(0, D3D12_FENCE_FLAG_NONE) }
         .map_err(|e| format!("fence: {e}"))?;
-    let fence_event =
-        unsafe { CreateEventW(None, false, false, None) }.map_err(|e| format!("fence event: {e}"))?;
+    let fence_event = unsafe { CreateEventW(None, false, false, None) }
+        .map_err(|e| format!("fence event: {e}"))?;
 
-    Ok(VideoPipeline { processor, nv12, video_alloc, video_list, fence, fence_event })
+    Ok(VideoPipeline {
+        processor,
+        nv12,
+        video_alloc,
+        video_list,
+        fence,
+        fence_event,
+    })
 }
 
 impl GpuFrontD3D12 {
@@ -464,16 +527,20 @@ impl GpuFrontD3D12 {
         // GPU copy capture -> wrapped staging through the 11On12 context.
         let capture_tex: ID3D11Texture2D = {
             let surface = frame.Surface().map_err(|e| format!("frame surface: {e}"))?;
-            let access: IDirect3DDxgiInterfaceAccess =
-                surface.cast().map_err(|e| format!("surface interop: {e}"))?;
+            let access: IDirect3DDxgiInterfaceAccess = surface
+                .cast()
+                .map_err(|e| format!("surface interop: {e}"))?;
             unsafe { access.GetInterface() }.map_err(|e| format!("surface texture: {e}"))?
         };
-        let staging11_res: ID3D11Resource =
-            self.staging11.cast().map_err(|e| format!("staging11 resource: {e}"))?;
+        let staging11_res: ID3D11Resource = self
+            .staging11
+            .cast()
+            .map_err(|e| format!("staging11 resource: {e}"))?;
         unsafe {
             let wrapped: [Option<ID3D11Resource>; 1] = [Some(staging11_res)];
             self.on12.AcquireWrappedResources(&wrapped);
-            self.d3d11_context.CopyResource(&self.staging11, &capture_tex);
+            self.d3d11_context
+                .CopyResource(&self.staging11, &capture_tex);
             self.on12.ReleaseWrappedResources(&wrapped);
             self.d3d11_context.Flush();
         }
@@ -482,13 +549,24 @@ impl GpuFrontD3D12 {
         // that work - the 11On12 layer signals internally, but a cross-queue
         // fence makes the ordering explicit and debuggable.
 
-        // Record + run the video processor.
+        self.run_video_processor()?;
+        Ok(true)
+    }
+
+    /// Record and submit the D3D12 video-processor blit that converts the
+    /// captured BGRA staging texture into the NV12 output. Split out of
+    /// [`Self::acquire_nv12`] to keep that method within clippy's line budget.
+    fn run_video_processor(&mut self) -> Result<(), String> {
         unsafe { self.video_alloc.Reset() }.map_err(|e| format!("alloc reset: {e}"))?;
         unsafe { self.video_list.Reset(&self.video_alloc) }
             .map_err(|e| format!("list reset: {e}"))?;
 
         if self.nv12_state != D3D12_RESOURCE_STATE_VIDEO_PROCESS_WRITE {
-            let barrier = transition(&self.nv12, self.nv12_state, D3D12_RESOURCE_STATE_VIDEO_PROCESS_WRITE);
+            let barrier = transition(
+                &self.nv12,
+                self.nv12_state,
+                D3D12_RESOURCE_STATE_VIDEO_PROCESS_WRITE,
+            );
             unsafe { self.video_list.ResourceBarrier(&[barrier]) };
             self.nv12_state = D3D12_RESOURCE_STATE_VIDEO_PROCESS_WRITE;
         }
@@ -543,8 +621,10 @@ impl GpuFrontD3D12 {
         unsafe { self.video_list.Close() }
             .map_err(|e| format!("list close: {e}{}", debug_messages(&self.device)))?;
 
-        let video_list: windows::Win32::Graphics::Direct3D12::ID3D12CommandList =
-            self.video_list.cast().map_err(|e| format!("video command list: {e}"))?;
+        let video_list: windows::Win32::Graphics::Direct3D12::ID3D12CommandList = self
+            .video_list
+            .cast()
+            .map_err(|e| format!("video command list: {e}"))?;
         let lists = [Some(video_list)];
         unsafe { self.video_queue.ExecuteCommandLists(&lists) };
         self.wait_video_queue()?;
@@ -554,7 +634,7 @@ impl GpuFrontD3D12 {
         unsafe { std::mem::ManuallyDrop::drop(&mut s.InputStream[0].pTexture2D) };
         let mut out = output_args;
         unsafe { std::mem::ManuallyDrop::drop(&mut out.OutputStream[0].pTexture2D) };
-        Ok(true)
+        Ok(())
     }
 
     /// Block until the video queue drained its submitted work.
@@ -682,7 +762,11 @@ impl BitWriter {
 
     /// Signed Exp-Golomb.
     fn put_se(&mut self, value: i32) {
-        let mapped = if value <= 0 { (-value as u32) * 2 } else { (value as u32) * 2 - 1 };
+        let mapped = if value <= 0 {
+            (-value as u32) * 2
+        } else {
+            (value as u32) * 2 - 1
+        };
         self.put_ue(mapped);
     }
 

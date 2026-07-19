@@ -436,6 +436,12 @@ export interface AppState extends PersistentChatSlice, DmSlice, VoiceSlice, Noti
   broadcastingOwnSession: number | null;
   /** Whether the broadcaster WebRTC connection is still negotiating. */
   webrtcConnecting: boolean;
+  /** Linux/GNOME only: the compositor stopped delivering fresh frames for
+   *  the shared MONITOR (a fullscreen surface is being direct-scanned-out,
+   *  bypassing the screencast). The broadcast is still live on keep-alive
+   *  repeats; the own-preview shows a "share the window instead" hint.
+   *  Self-clears when fresh frames resume. See fancy-screenshare StallWatch. */
+  captureStalled: boolean;
   /** Inline error message when a WebRTC operation fails (e.g. unreachable SFU). */
   webrtcError: string | null;
   /** Whether the click-through desktop drawing-overlay window is currently
@@ -808,6 +814,7 @@ const INITIAL: Pick<
   | "isSharingOwn"
   | "broadcastingOwnSession"
   | "webrtcConnecting"
+  | "captureStalled"
   | "webrtcError"
   | "desktopDrawingOverlayOpen"
   | "activeLiveDocs"
@@ -887,6 +894,7 @@ const INITIAL: Pick<
   isSharingOwn: false,
   broadcastingOwnSession: null,
   webrtcConnecting: false,
+  captureStalled: false,
   webrtcError: null,
   desktopDrawingOverlayOpen: false,
   activeLiveDocs: new Map(),

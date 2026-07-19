@@ -462,7 +462,10 @@ interface DrawingOverlayProps {
    * appropriate for the desktop overlay window where the window itself
    * is sized to match the source.
    */
-  readonly videoRef?: React.RefObject<HTMLVideoElement | null>;
+  /** The media surface the strokes align to: a `<video>` (webview viewer)
+   *  or the native viewer's `<canvas>`; intrinsic dimensions come from
+   *  whichever is present. */
+  readonly videoRef?: React.RefObject<HTMLVideoElement | HTMLCanvasElement | null>;
 }
 
 export default function DrawingOverlay({ channelId, ownSession, hideToolbar, viewOnly, videoRef }: DrawingOverlayProps) {
@@ -529,11 +532,13 @@ export default function DrawingOverlay({ channelId, ownSession, hideToolbar, vie
     if (!ctx) return;
 
     const recomputeContentRect = (canvasW: number, canvasH: number) => {
-      const video = videoRef?.current;
-      if (video && video.videoWidth > 0 && video.videoHeight > 0) {
-        contentRectRef.current = computeContentRect(
-          video.videoWidth, video.videoHeight, canvasW, canvasH,
-        );
+      const media = videoRef?.current;
+      // Intrinsic media size: videoWidth/Height for <video>, width/height
+      // (the painted frame size) for the native viewer's <canvas>.
+      const mediaW = media instanceof HTMLVideoElement ? media.videoWidth : media?.width ?? 0;
+      const mediaH = media instanceof HTMLVideoElement ? media.videoHeight : media?.height ?? 0;
+      if (mediaW > 0 && mediaH > 0) {
+        contentRectRef.current = computeContentRect(mediaW, mediaH, canvasW, canvasH);
       } else {
         contentRectRef.current = { x: 0, y: 0, w: canvasW, h: canvasH };
       }
@@ -555,8 +560,12 @@ export default function DrawingOverlay({ channelId, ownSession, hideToolbar, vie
     resize();
 
     // Also recompute when the video starts playing or its intrinsic
-    // dimensions change (the picker may negotiate a different size).
-    const video = videoRef?.current;
+    // dimensions change (the picker may negotiate a different size). The
+    // events exist on <video> only; the canvas surface is covered by the
+    // ResizeObserver above (its intrinsic size changes are rare and settle
+    // on the next layout pass).
+    const media = videoRef?.current;
+    const video = media instanceof HTMLVideoElement ? media : null;
     const onVideoChange = () => {
       const rect = canvas.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return;

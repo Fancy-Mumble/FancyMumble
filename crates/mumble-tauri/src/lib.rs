@@ -7,10 +7,16 @@
 //!
 // All public command functions receive `tauri::State` by value, which is
 // required by the `#[tauri::command]` macro - suppress the lint crate-wide.
-#![allow(clippy::needless_pass_by_value, reason = "tauri::command requires State<T> to be taken by value")]
+#![allow(
+    clippy::needless_pass_by_value,
+    reason = "tauri::command requires State<T> to be taken by value"
+)]
 // This is an application crate; pub items inside private modules are
 // intentional (proc-macro visibility, Tauri command system, internal APIs).
-#![allow(unreachable_pub, reason = "application crate: pub items in private modules are intentional for Tauri command system")]
+#![allow(
+    unreachable_pub,
+    reason = "application crate: pub items in private modules are intentional for Tauri command system"
+)]
 
 // --- Global allocator -------------------------------------------------
 //
@@ -79,7 +85,10 @@ pub(crate) fn e2e_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf,
 ///
 /// Initialises the TLS crypto provider, sets up logging, registers all Tauri
 /// commands ([`commands::registry`]), and starts the application event loop.
-#[allow(clippy::expect_used, reason = "Tauri builder failure during startup is unrecoverable")]
+#[allow(
+    clippy::expect_used,
+    reason = "Tauri builder failure during startup is unrecoverable"
+)]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Start heap profiling. Dropped in the `RunEvent::Exit` handler (see
@@ -123,6 +132,10 @@ pub fn run() {
         .manage(AppState::new())
         .setup(move |app| {
             app::init_app_state(app);
+            // WebKitGTK ships WebRTC off; without this no Linux webview has
+            // RTCPeerConnection and stream viewing/previews cannot work.
+            #[cfg(target_os = "linux")]
+            app::webview_linux::enable_webrtc_on_startup_windows(app);
             platform::setup(app.handle().clone());
             app::setup_deep_link_handler(app.handle().clone());
             #[cfg(not(target_os = "android"))]

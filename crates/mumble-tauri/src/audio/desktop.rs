@@ -1,4 +1,4 @@
-﻿//! Cpal-based audio capture and mixing playback implementations.
+//! Cpal-based audio capture and mixing playback implementations.
 //!
 //! Bridges the OS audio subsystem (via `cpal`) to the protocol
 //! library's [`AudioCapture`] trait and the [`MixingPlayback`] trait
@@ -48,7 +48,10 @@ pub struct CpalCapture {
 // SAFETY: On Windows / WASAPI the underlying COM objects use the MTA
 // model and are safe to send between threads.  The `!Send` marker in
 // cpal is a conservative cross-platform guard that does not apply here.
-#[allow(unsafe_code, reason = "WASAPI COM objects are MTA-safe; cpal's !Send is a conservative cross-platform guard")]
+#[allow(
+    unsafe_code,
+    reason = "WASAPI COM objects are MTA-safe; cpal's !Send is a conservative cross-platform guard"
+)]
 unsafe impl Send for CpalCapture {}
 
 impl CpalCapture {
@@ -57,7 +60,11 @@ impl CpalCapture {
     /// * `device_name` - choose a specific device, or `None` for default.
     /// * `frame_size` - samples per channel per frame (480 for Mumble).
     /// * `volume` - shared atomic volume multiplier (f32 bits as u32).
-    pub fn new(device_name: Option<&str>, frame_size: usize, volume: Arc<AtomicU32>) -> Result<Self> {
+    pub fn new(
+        device_name: Option<&str>,
+        frame_size: usize,
+        volume: Arc<AtomicU32>,
+    ) -> Result<Self> {
         let host = cpal::default_host();
 
         let device = if let Some(name) = device_name {
@@ -70,9 +77,7 @@ impl CpalCapture {
                         .as_deref()
                         == Some(name)
                 })
-                .ok_or_else(|| {
-                    Error::InvalidState(format!("Input device '{name}' not found"))
-                })?
+                .ok_or_else(|| Error::InvalidState(format!("Input device '{name}' not found")))?
         } else {
             host.default_input_device()
                 .ok_or_else(|| Error::InvalidState("No default input device".into()))?
@@ -357,7 +362,9 @@ fn try_drain_speakers_checked(
     mono_needed: usize,
 ) -> Option<(bool, usize, usize)> {
     const PRE_BUFFER_SAMPLES: usize = 4800;
-    let Ok(mut bufs) = buffers.lock() else { return None };
+    let Ok(mut bufs) = buffers.lock() else {
+        return None;
+    };
     if !primed_cb.load(Ordering::Relaxed) {
         let max_available = bufs.values().map(VecDeque::len).max().unwrap_or(0);
         if max_available < PRE_BUFFER_SAMPLES {
@@ -416,7 +423,11 @@ fn resample_linear(
     }
     let frac = (src_pos - idx as f64) as f32;
     let s0 = mixed_buf[idx];
-    let s1 = if idx + 1 < valid_count { mixed_buf[idx + 1] } else { s0 };
+    let s1 = if idx + 1 < valid_count {
+        mixed_buf[idx + 1]
+    } else {
+        s0
+    };
     Some(s0 + (s1 - s0) * frac)
 }
 
@@ -452,7 +463,10 @@ fn write_output_frame(
 }
 
 // SAFETY: See CpalCapture.
-#[allow(unsafe_code, reason = "WASAPI COM objects are MTA-safe; cpal's !Send is a conservative cross-platform guard")]
+#[allow(
+    unsafe_code,
+    reason = "WASAPI COM objects are MTA-safe; cpal's !Send is a conservative cross-platform guard"
+)]
 unsafe impl Send for CpalMixingPlayback {}
 
 impl CpalMixingPlayback {
@@ -472,9 +486,7 @@ impl CpalMixingPlayback {
                         .map(|desc| desc.name() == name)
                         .unwrap_or(false)
                 })
-                .ok_or_else(|| {
-                    Error::InvalidState(format!("Output device not found: {name}"))
-                })?
+                .ok_or_else(|| Error::InvalidState(format!("Output device not found: {name}")))?
         } else {
             host.default_output_device()
                 .ok_or_else(|| Error::InvalidState("No default output device".into()))?
@@ -507,9 +519,16 @@ impl CallbackDiag {
                 "audio diag: cb={}, none={}, underrun={}, partial={}, \
                  src_needed={}, valid={}, out_frames={}, ratio={:.4}, \
                  peak={:.4}, buf={}",
-                self.callbacks, self.none, self.underrun, self.partial,
-                src_needed, valid_count, out_frames, src_ratio,
-                self.peak, self.buf_depth,
+                self.callbacks,
+                self.none,
+                self.underrun,
+                self.partial,
+                src_needed,
+                valid_count,
+                out_frames,
+                src_ratio,
+                self.peak,
+                self.buf_depth,
             );
         }
     }
@@ -535,7 +554,9 @@ impl super::MixingPlayback for CpalMixingPlayback {
 
         warn!(
             "cpal output device: rate={} Hz, channels={}, format={:?}",
-            device_rate, device_channels, default_config.sample_format()
+            device_rate,
+            device_channels,
+            default_config.sample_format()
         );
 
         let stream_config = cpal::StreamConfig {
@@ -552,7 +573,14 @@ impl super::MixingPlayback for CpalMixingPlayback {
         let primed = Arc::new(AtomicBool::new(false));
         let primed_cb = primed.clone();
 
-        let mut diag = CallbackDiag { callbacks: 0, underrun: 0, partial: 0, none: 0, peak: 0.0, buf_depth: 0 };
+        let mut diag = CallbackDiag {
+            callbacks: 0,
+            underrun: 0,
+            partial: 0,
+            none: 0,
+            peak: 0.0,
+            buf_depth: 0,
+        };
         let mut pb_state = PlaybackState {
             last_sample: 0.0,
             in_underrun: false,
@@ -569,8 +597,7 @@ impl super::MixingPlayback for CpalMixingPlayback {
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     let vol = f32::from_bits(volume.load(Ordering::Relaxed));
                     let out_frames = data.len() / out_channels;
-                    let src_needed =
-                        ((out_frames as f64 * src_ratio).ceil() as usize).max(1);
+                    let src_needed = ((out_frames as f64 * src_ratio).ceil() as usize).max(1);
 
                     diag.callbacks += 1;
 
@@ -610,9 +637,8 @@ impl super::MixingPlayback for CpalMixingPlayback {
                     diag.log_if_due(src_needed, valid_count, out_frames, src_ratio);
 
                     for (i, frame) in data.chunks_exact_mut(out_channels).enumerate() {
-                        let sample_opt = resample_linear(
-                            &mixed_buf, valid_count, drained, i, src_ratio,
-                        );
+                        let sample_opt =
+                            resample_linear(&mixed_buf, valid_count, drained, i, src_ratio);
                         if let Some(s) = &sample_opt {
                             diag.peak = diag.peak.max(s.abs());
                         }
@@ -643,7 +669,11 @@ impl super::MixingPlayback for CpalMixingPlayback {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, unused_results, reason = "acceptable in test code")]
+    #![allow(
+        clippy::unwrap_used,
+        unused_results,
+        reason = "acceptable in test code"
+    )]
     use super::*;
     use mumble_protocol::audio::sample::AudioFormat;
 
@@ -662,9 +692,8 @@ mod tests {
     #[ignore = "requires audio hardware - run with --ignored"]
     fn mixing_playback_can_be_created() {
         let vol = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
-        let bufs: mumble_protocol::audio::mixer::SpeakerBuffers = Arc::new(
-            Mutex::new(HashMap::new()),
-        );
+        let bufs: mumble_protocol::audio::mixer::SpeakerBuffers =
+            Arc::new(Mutex::new(HashMap::new()));
         let svols: mumble_protocol::audio::mixer::SpeakerVolumes =
             Arc::new(Mutex::new(HashMap::new()));
         let Ok(_p) = CpalMixingPlayback::new(None, vol, bufs, svols) else {
@@ -677,7 +706,9 @@ mod tests {
     #[ignore = "requires audio hardware - run with --ignored"]
     fn capture_read_before_start_returns_error() {
         let vol = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
-        let Ok(mut capture) = CpalCapture::new(None, 960, vol) else { return };
+        let Ok(mut capture) = CpalCapture::new(None, 960, vol) else {
+            return;
+        };
         // Without calling start(), the buffer is empty so read_frame should fail.
         assert!(capture.read_frame().is_err());
     }
@@ -871,7 +902,11 @@ mod tests {
         let buf = vec![0.0, 0.25, 0.5, 0.75, 1.0];
         for i in 0..5 {
             let s = resample_linear(&buf, 5, true, i, 1.0).unwrap();
-            assert!((s - buf[i]).abs() < 1e-6, "index {i}: expected {}, got {s}", buf[i]);
+            assert!(
+                (s - buf[i]).abs() < 1e-6,
+                "index {i}: expected {}, got {s}",
+                buf[i]
+            );
         }
     }
 
