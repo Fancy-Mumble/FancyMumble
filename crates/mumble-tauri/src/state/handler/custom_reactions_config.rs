@@ -24,7 +24,10 @@ impl HandleMessage for mumble_tcp::FancyCustomReactionsConfig {
             })
             .collect();
 
-        debug!(count = reactions.len(), "received FancyCustomReactionsConfig");
+        debug!(
+            count = reactions.len(),
+            "received FancyCustomReactionsConfig"
+        );
 
         ctx.emit("custom-reactions-config", reactions);
     }

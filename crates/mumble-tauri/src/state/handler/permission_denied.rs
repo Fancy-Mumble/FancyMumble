@@ -19,14 +19,8 @@ impl HandleMessage for mumble_tcp::PermissionDenied {
                     info!(ch_id, "reverted permanent listen due to permission denied");
                 }
             }
-            ctx.emit(
-                "listen-denied",
-                ListenDeniedPayload { channel_id: ch_id },
-            );
-            ctx.emit(
-                "channel-denied",
-                ChannelDeniedPayload { channel_id: ch_id },
-            );
+            ctx.emit("listen-denied", ListenDeniedPayload { channel_id: ch_id });
+            ctx.emit("channel-denied", ChannelDeniedPayload { channel_id: ch_id });
         }
 
         // Always emit a general permission-denied event so the

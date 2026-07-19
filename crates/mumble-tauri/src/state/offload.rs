@@ -1,4 +1,4 @@
-﻿//! Encrypted temporary file storage for offloaded message content.
+//! Encrypted temporary file storage for offloaded message content.
 //!
 //! Provides an [`OffloadProvider`] trait that abstracts storage and
 //! retrieval of message bodies.  The default implementation,
@@ -46,16 +46,17 @@ pub trait OffloadProvider {
     /// in a loop.  Providers that benefit from batching (e.g. network
     /// round-trips) should override this.
     fn load_many(&self, keys: &[&str]) -> HashMap<String, Result<String, String>> {
-        keys.iter()
-            .map(|k| (k.to_string(), self.load(k)))
-            .collect()
+        keys.iter().map(|k| (k.to_string(), self.load(k))).collect()
     }
 
     /// Delete the stored content for a single key.
     fn remove(&mut self, key: &str);
 
     /// Whether `key` is currently stored.
-    #[allow(dead_code, reason = "utility method provided for completeness; not all callers need it")]
+    #[allow(
+        dead_code,
+        reason = "utility method provided for completeness; not all callers need it"
+    )]
     fn is_offloaded(&self, key: &str) -> bool;
 
     /// Number of keys currently offloaded.
@@ -113,8 +114,7 @@ impl EncryptedFileProvider {
             .map_err(|_| "Failed to create encryption key")?;
         let key = LessSafeKey::new(unbound);
 
-        fs::create_dir_all(&dir)
-            .map_err(|e| format!("Failed to create offload directory: {e}"))?;
+        fs::create_dir_all(&dir).map_err(|e| format!("Failed to create offload directory: {e}"))?;
 
         debug!("EncryptedFileProvider initialised at {}", dir.display());
 
@@ -193,16 +193,14 @@ impl OffloadProvider for EncryptedFileProvider {
     fn store(&mut self, key: &str, content: &str) -> Result<(), String> {
         let file_data = self.encrypt(content.as_bytes())?;
         let path = self.file_path(key);
-        fs::write(&path, &file_data)
-            .map_err(|e| format!("Failed to write offload file: {e}"))?;
+        fs::write(&path, &file_data).map_err(|e| format!("Failed to write offload file: {e}"))?;
         let _ = self.offloaded.insert(key.to_string());
         Ok(())
     }
 
     fn load(&self, key: &str) -> Result<String, String> {
         let path = self.file_path(key);
-        let file_data =
-            fs::read(&path).map_err(|e| format!("Failed to read offload file: {e}"))?;
+        let file_data = fs::read(&path).map_err(|e| format!("Failed to read offload file: {e}"))?;
         let plaintext = Self::decrypt(&self.key, &file_data)?;
         String::from_utf8(plaintext)
             .map_err(|e| format!("Decrypted content is not valid UTF-8: {e}"))
@@ -212,9 +210,7 @@ impl OffloadProvider for EncryptedFileProvider {
         // For local files there is no network latency to amortise, but we
         // still benefit from a single trait call that avoids repeated IPC
         // round-trips from the frontend.
-        keys.iter()
-            .map(|k| (k.to_string(), self.load(k)))
-            .collect()
+        keys.iter().map(|k| (k.to_string(), self.load(k))).collect()
     }
 
     fn remove(&mut self, key: &str) {
@@ -274,7 +270,10 @@ impl OffloadStore {
     }
 
     /// Create a store backed by a custom provider.
-    #[allow(dead_code, reason = "alternative constructor for testing with custom providers")]
+    #[allow(
+        dead_code,
+        reason = "alternative constructor for testing with custom providers"
+    )]
     pub fn with_provider(provider: Box<dyn OffloadProvider + Send>) -> Self {
         Self { provider }
     }
@@ -297,7 +296,10 @@ impl OffloadStore {
         self.provider.remove(key);
     }
 
-    #[allow(dead_code, reason = "utility method provided for completeness; not all callers need it")]
+    #[allow(
+        dead_code,
+        reason = "utility method provided for completeness; not all callers need it"
+    )]
     pub fn is_offloaded(&self, key: &str) -> bool {
         self.provider.is_offloaded(key)
     }
@@ -325,7 +327,11 @@ impl OffloadStore {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used, reason = "unwrap/expect acceptable in test code")]
+    #![allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        reason = "unwrap/expect acceptable in test code"
+    )]
     use super::*;
 
     /// Create an `OffloadStore` with an isolated temporary directory so

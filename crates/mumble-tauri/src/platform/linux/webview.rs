@@ -12,9 +12,7 @@ impl AppImageEnv {
     /// Returns `Some` when the process is running inside an `AppImage` bundle
     /// (either `APPIMAGE` or `APPDIR` env var is set).
     fn detect() -> Option<Self> {
-        let appdir = std::env::var("APPDIR")
-            .ok()
-            .filter(|v| !v.is_empty());
+        let appdir = std::env::var("APPDIR").ok().filter(|v| !v.is_empty());
         let in_appimage = appdir.is_some() || std::env::var_os("APPIMAGE").is_some();
         in_appimage.then(|| Self {
             appdir: appdir.unwrap_or_default(),
@@ -184,7 +182,11 @@ fn autodetect_plugin_available() -> bool {
         .iter()
         .map(String::as_str)
         .chain(standard_dirs.iter().copied())
-        .any(|dir| std::path::Path::new(dir).join("libgstautodetect.so").exists())
+        .any(|dir| {
+            std::path::Path::new(dir)
+                .join("libgstautodetect.so")
+                .exists()
+        })
 }
 
 /// Must be the very first call in `main()` on Linux.
@@ -307,7 +309,10 @@ mod tests {
         let Some(result) = env("").host_first_library_path() else {
             panic!("Some expected when LD_LIBRARY_PATH is set");
         };
-        assert!(result.contains("/usr/lib"), "entries must be preserved when appdir is empty");
+        assert!(
+            result.contains("/usr/lib"),
+            "entries must be preserved when appdir is empty"
+        );
         std::env::remove_var("LD_LIBRARY_PATH");
     }
 
@@ -330,7 +335,10 @@ mod tests {
         let Some(appdir_pos) = parts.iter().position(|p| p.starts_with("/tmp/app.AppDir")) else {
             panic!("AppDir entry missing from reordered path: {result}");
         };
-        assert!(host_pos < appdir_pos, "host dir must precede appdir: {result}");
+        assert!(
+            host_pos < appdir_pos,
+            "host dir must precede appdir: {result}"
+        );
 
         std::env::remove_var("LD_LIBRARY_PATH");
     }
@@ -346,8 +354,14 @@ mod tests {
         let Some(result) = env("/mnt/appdir").host_first_library_path() else {
             panic!("host_first_library_path should return Some");
         };
-        assert!(result.contains("/mnt/appdir/usr/lib"), "AppDir entry must be preserved");
-        assert!(result.contains("/opt/custom/lib"), "extra entry must be preserved");
+        assert!(
+            result.contains("/mnt/appdir/usr/lib"),
+            "AppDir entry must be preserved"
+        );
+        assert!(
+            result.contains("/opt/custom/lib"),
+            "extra entry must be preserved"
+        );
         assert!(result.contains("/usr/lib"), "host entry must be preserved");
 
         std::env::remove_var("LD_LIBRARY_PATH");
@@ -361,7 +375,10 @@ mod tests {
         let Some(result) = env("/tmp/a").host_first_library_path() else {
             panic!("host_first_library_path should return Some");
         };
-        assert!(!result.contains("::"), "empty segments must not appear in output: {result}");
+        assert!(
+            !result.contains("::"),
+            "empty segments must not appear in output: {result}"
+        );
 
         std::env::remove_var("LD_LIBRARY_PATH");
     }
@@ -465,7 +482,10 @@ mod tests {
         let found = autodetect_plugin_available();
         std::env::remove_var("GST_PLUGIN_SYSTEM_PATH_1_0");
         let _ = std::fs::remove_dir_all(&dir);
-        assert!(found, "plugin under GST_PLUGIN_SYSTEM_PATH_1_0 must be detected");
+        assert!(
+            found,
+            "plugin under GST_PLUGIN_SYSTEM_PATH_1_0 must be detected"
+        );
     }
 
     // -- set_webkit_exec_path ------------------------------------------------

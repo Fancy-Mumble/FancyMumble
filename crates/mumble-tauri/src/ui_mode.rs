@@ -158,7 +158,9 @@ pub(crate) fn dispatch_if_minimal() -> bool {
             true
         }
         Err(e) => {
-            tracing::warn!("ui-mode is 'minimal' but launching qt6ui failed ({e}); continuing in full mode");
+            tracing::warn!(
+                "ui-mode is 'minimal' but launching qt6ui failed ({e}); continuing in full mode"
+            );
             false
         }
     }
@@ -215,7 +217,10 @@ pub(crate) fn launch_minimal_client() -> Result<(), String> {
         path.push(";");
         path.push(std::env::var_os("PATH").unwrap_or_default());
         let _ = cmd.env("PATH", path);
-        tracing::info!("qt6ui: prepending Qt runtime {} to child PATH", qt_bin.display());
+        tracing::info!(
+            "qt6ui: prepending Qt runtime {} to child PATH",
+            qt_bin.display()
+        );
     }
 
     // Fully detach the child from any console this process is attached to
@@ -273,11 +278,12 @@ pub(crate) fn system_specs() -> SystemSpecs {
 }
 
 #[cfg(target_os = "windows")]
-#[allow(unsafe_code, reason = "GlobalMemoryStatusEx on a zero-initialised POD struct is a safe Windows API call")]
+#[allow(
+    unsafe_code,
+    reason = "GlobalMemoryStatusEx on a zero-initialised POD struct is a safe Windows API call"
+)]
 fn total_memory_mb() -> u64 {
-    use windows_sys::Win32::System::SystemInformation::{
-        GlobalMemoryStatusEx, MEMORYSTATUSEX,
-    };
+    use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
     // SAFETY: MEMORYSTATUSEX is plain-old-data; zeroed is a valid init and
     // GlobalMemoryStatusEx only requires dwLength to be set.
     unsafe {

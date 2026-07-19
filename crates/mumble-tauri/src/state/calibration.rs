@@ -251,8 +251,8 @@ fn compute_from_sorted_db(post_sorted: &[f32], pre_sorted: &[f32]) -> Calibratio
     let mid = post_sorted.len() / 2;
     let ambient = &post_sorted[..mid.max(1)];
     let mean: f32 = ambient.iter().sum::<f32>() / ambient.len() as f32;
-    let variance: f32 = ambient.iter().map(|&v| (v - mean).powi(2)).sum::<f32>()
-        / ambient.len() as f32;
+    let variance: f32 =
+        ambient.iter().map(|&v| (v - mean).powi(2)).sum::<f32>() / ambient.len() as f32;
     let sigma_db = variance.sqrt();
 
     let open_margin_db = (3.0 * sigma_db).max(AUTO_CALIBRATION_MIN_OPEN_MARGIN_DB);
@@ -315,9 +315,10 @@ fn derive_max_gain_db(pre_sorted: &[f32]) -> f32 {
     let max_amplified_noise_db = -36.0_f32;
     let gain_for_noise_db = max_amplified_noise_db - noise_pre_db;
 
-    gain_for_speech_db
-        .min(gain_for_noise_db)
-        .clamp(AUTO_CALIBRATION_MAX_GAIN_MIN_DB, AUTO_CALIBRATION_MAX_GAIN_MAX_DB)
+    gain_for_speech_db.min(gain_for_noise_db).clamp(
+        AUTO_CALIBRATION_MAX_GAIN_MIN_DB,
+        AUTO_CALIBRATION_MAX_GAIN_MAX_DB,
+    )
 }
 
 /// Minimum frames required above the noise floor before the
@@ -372,7 +373,10 @@ mod tests {
             // -80 dB is well below the digital-silence floor.
             push_both(&mut c, db_to_linear(-80.0));
         }
-        assert!(c.compute().is_none(), "silence-only buffer must not emit a calibration");
+        assert!(
+            c.compute().is_none(),
+            "silence-only buffer must not emit a calibration"
+        );
     }
 
     #[test]
@@ -416,7 +420,10 @@ mod tests {
         let sorted_db = to_db_vec(&samples);
         let result = compute_from_sorted_db(&sorted_db, &sorted_db);
         let ratio = result.noise_gate_close_ratio;
-        assert!(ratio > 0.6, "steady room should produce a high close ratio, got {ratio}");
+        assert!(
+            ratio > 0.6,
+            "steady room should produce a high close ratio, got {ratio}"
+        );
     }
 
     #[test]

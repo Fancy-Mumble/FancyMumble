@@ -110,8 +110,7 @@ async fn record(
     app: &tauri::AppHandle,
     stop_rx: &mut tokio::sync::watch::Receiver<bool>,
 ) -> Vec<f32> {
-    let capacity_samples =
-        VOICE_REPLAY_CAPACITY_SECS as usize * VOICE_REPLAY_SAMPLE_RATE as usize;
+    let capacity_samples = VOICE_REPLAY_CAPACITY_SECS as usize * VOICE_REPLAY_SAMPLE_RATE as usize;
     let mut buffer: Vec<f32> = Vec::with_capacity(capacity_samples);
 
     let mut interval = tokio::time::interval(Duration::from_millis(20));

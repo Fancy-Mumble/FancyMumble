@@ -56,18 +56,25 @@ fn apply_plugin_message_update(
 
 fn own_session_hash(state: &SharedState) -> Option<String> {
     state
-        .conn.own_session
+        .conn
+        .own_session
         .and_then(|sid| state.users.get(&sid))
         .and_then(|u| u.hash.clone())
 }
 
 fn cache_own_signal_message(state: &mut SharedState, msg: &ChatMessage, channel_id: u32) {
     let own_cert_hash = state
-        .pchat_ctx.pchat
+        .pchat_ctx
+        .pchat
         .as_ref()
         .map(|ps| ps.own_cert_hash.clone())
         .unwrap_or_default();
-    if let Some(cache) = state.pchat_ctx.pchat.as_mut().and_then(|ps| ps.local_cache.as_mut()) {
+    if let Some(cache) = state
+        .pchat_ctx
+        .pchat
+        .as_mut()
+        .and_then(|ps| ps.local_cache.as_mut())
+    {
         cache.insert(super::local_cache::CachedMessage {
             message_id: msg.message_id.clone().unwrap_or_default(),
             channel_id,
@@ -124,8 +131,7 @@ impl AppState {
         let message_id = is_fancy.then(|| uuid::Uuid::new_v4().to_string());
         let timestamp = is_fancy.then_some(now_ms);
 
-        let disable_dual = pchat_protocol
-            .is_some_and(|p| p.is_encrypted())
+        let disable_dual = pchat_protocol.is_some_and(|p| p.is_encrypted())
             && self
                 .inner
                 .snapshot()
@@ -139,7 +145,12 @@ impl AppState {
         };
 
         let prebuilt_pchat = self.prebuilt_pchat_message(
-            pchat_protocol, &message_id, channel_id, &body, &own_name, now_ms,
+            pchat_protocol,
+            &message_id,
+            channel_id,
+            &body,
+            &own_name,
+            now_ms,
         )?;
 
         handle
@@ -165,8 +176,14 @@ impl AppState {
         }
 
         self.store_own_message(OwnMessageData {
-            channel_id, own_session, own_name, own_hash,
-            body, message_id, timestamp, pchat_protocol,
+            channel_id,
+            own_session,
+            own_name,
+            own_hash,
+            body,
+            message_id,
+            timestamp,
+            pchat_protocol,
         });
         Ok(())
     }
@@ -179,7 +196,13 @@ impl AppState {
         body: &str,
         own_name: &str,
         now_ms: u64,
-    ) -> Result<Option<(mumble_protocol::proto::mumble_tcp::PchatMessage, ClientHandle)>, String> {
+    ) -> Result<
+        Option<(
+            mumble_protocol::proto::mumble_tcp::PchatMessage,
+            ClientHandle,
+        )>,
+        String,
+    > {
         let Some(protocol) = pchat_protocol.filter(PchatProtocol::is_encrypted) else {
             return Ok(None);
         };
@@ -187,7 +210,9 @@ impl AppState {
             return Ok(None);
         };
         let __session = self.inner.snapshot();
-        let session = __session.lock().ok()
+        let session = __session
+            .lock()
+            .ok()
             .and_then(|s| s.conn.own_session)
             .unwrap_or(0);
         self.build_pchat_encrypted(&pchat::OutboundMessage {
@@ -203,7 +228,9 @@ impl AppState {
 
     fn store_own_message(&self, msg_data: OwnMessageData) {
         let __session = self.inner.snapshot();
-        let Ok(mut state) = __session.lock() else { return };
+        let Ok(mut state) = __session.lock() else {
+            return;
+        };
         let mut msg = ChatMessage {
             sender_session: msg_data.own_session,
             sender_name: msg_data.own_name,
@@ -225,11 +252,18 @@ impl AppState {
         };
         msg.ensure_id();
 
-        if msg_data.pchat_protocol.is_some_and(|p| p == PchatProtocol::SignalV1) {
+        if msg_data
+            .pchat_protocol
+            .is_some_and(|p| p == PchatProtocol::SignalV1)
+        {
             cache_own_signal_message(&mut state, &msg, msg_data.channel_id);
         }
 
-        let bucket = state.msgs.by_channel.entry(msg_data.channel_id).or_default();
+        let bucket = state
+            .msgs
+            .by_channel
+            .entry(msg_data.channel_id)
+            .or_default();
         super::push_capped(bucket, msg);
     }
 
@@ -418,7 +452,10 @@ impl AppState {
 
         if let Ok(mut state) = self.inner.snapshot().lock() {
             if let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id) {
-                if let Some(msg) = msgs.iter_mut().find(|m| m.message_id.as_deref() == Some(&message_id)) {
+                if let Some(msg) = msgs
+                    .iter_mut()
+                    .find(|m| m.message_id.as_deref() == Some(&message_id))
+                {
                     msg.body = new_body;
                     msg.edited_at = Some(now_ms);
                 }
@@ -432,7 +469,13 @@ impl AppState {
     pub(super) fn build_pchat_encrypted(
         &self,
         outbound: &pchat::OutboundMessage<'_>,
-    ) -> Result<Option<(mumble_protocol::proto::mumble_tcp::PchatMessage, ClientHandle)>, String> {
+    ) -> Result<
+        Option<(
+            mumble_protocol::proto::mumble_tcp::PchatMessage,
+            ClientHandle,
+        )>,
+        String,
+    > {
         let __session = self.inner.snapshot();
         let mut state = __session.lock().map_err(|e| e.to_string())?;
         let client = state.conn.client_handle.clone();

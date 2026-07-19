@@ -75,7 +75,12 @@ pub(super) fn screen_rect_of(hwnd: isize) -> Option<ScreenRect> {
     if unsafe { IsWindow(h) } == 0 {
         return None;
     }
-    let mut client = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+    let mut client = RECT {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    };
     // SAFETY: client is a writable RECT; the OS fills it on success.
     if unsafe { GetClientRect(h, &raw mut client) } == 0 {
         return None;
@@ -90,7 +95,12 @@ pub(super) fn screen_rect_of(hwnd: isize) -> Option<ScreenRect> {
     if unsafe { ClientToScreen(h, &raw mut origin) } == 0 {
         return None;
     }
-    Some(ScreenRect { x: origin.x, y: origin.y, w, h: bh })
+    Some(ScreenRect {
+        x: origin.x,
+        y: origin.y,
+        w,
+        h: bh,
+    })
 }
 
 /// Spawn a background task that polls `hwnd`'s screen rect and keeps
@@ -149,7 +159,12 @@ unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
     if pid == ctx.own_pid {
         return 1;
     }
-    let mut client = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+    let mut client = RECT {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    };
     if unsafe { GetClientRect(hwnd, &raw mut client) } == 0 {
         return 1;
     }

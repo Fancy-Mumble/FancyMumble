@@ -51,10 +51,7 @@ pub(crate) fn load_signal_bridge(
             candidates.push(dir.join(lib_name));
             candidates.push(dir.join("signal-bridge").join(lib_name));
             candidates.push(dir.join("../lib/fancy-mumble").join(lib_name));
-            candidates.push(
-                dir.join("../lib/fancy-mumble/signal-bridge")
-                    .join(lib_name),
-            );
+            candidates.push(dir.join("../lib/fancy-mumble/signal-bridge").join(lib_name));
             // Tauri's Linux .deb/AppImage install bundled resources under the
             // PRODUCT name from tauri.conf.json (productName = "FancyMumble"),
             // which is case-sensitive and differs from the /usr/bin binary
@@ -221,10 +218,7 @@ pub(crate) fn ensure_signal_bridge_unlocked(shared: &Arc<Mutex<SharedState>>) ->
 /// The server stores the latest SKDM per (sender, channel) and relays
 /// it to online members.  On offline queue drain the server bundles the
 /// relevant distributions so reconnecting clients can decrypt.
-pub(crate) fn send_signal_distribution(
-    shared: &Arc<Mutex<SharedState>>,
-    channel_id: u32,
-) {
+pub(crate) fn send_signal_distribution(shared: &Arc<Mutex<SharedState>>, channel_id: u32) {
     {
         let s = shared.lock().ok();
         let bridge_unavailable = s
@@ -243,11 +237,17 @@ pub(crate) fn send_signal_distribution(
             return;
         };
         if !pchat.ensure_signal_bridge() {
-            warn!(channel_id, "cannot send signal distribution: bridge not loaded");
+            warn!(
+                channel_id,
+                "cannot send signal distribution: bridge not loaded"
+            );
             return;
         }
         let Some(ref bridge) = pchat.signal_bridge else {
-            warn!(channel_id, "cannot send signal distribution: bridge not loaded");
+            warn!(
+                channel_id,
+                "cannot send signal distribution: bridge not loaded"
+            );
             return;
         };
 
@@ -320,9 +320,11 @@ fn retry_stashed_signal_envelopes(
         let mut still_pending = Vec::new();
 
         for env in matched {
-            let decrypt_result = pchat
-                .key_manager
-                .decrypt_signal(&env.sender_hash, env.channel_id, &env.envelope_bytes);
+            let decrypt_result = pchat.key_manager.decrypt_signal(
+                &env.sender_hash,
+                env.channel_id,
+                &env.envelope_bytes,
+            );
 
             match decrypt_result {
                 Ok(plaintext) => match pchat.codec.decode::<MessageEnvelope>(&plaintext) {
@@ -463,8 +465,7 @@ mod tests {
 
     #[test]
     fn ensure_signal_bridge_caches_failure() {
-        let mut pchat =
-            PchatState::new([0u8; 32], "test_cert_hash".to_string(), None).unwrap();
+        let mut pchat = PchatState::new([0u8; 32], "test_cert_hash".to_string(), None).unwrap();
 
         assert!(!pchat.signal_bridge_load_failed);
         assert!(pchat.signal_bridge.is_none());

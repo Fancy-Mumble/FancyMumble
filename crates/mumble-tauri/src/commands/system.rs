@@ -17,7 +17,13 @@ pub(crate) fn set_notifications_enabled(
     state: tauri::State<'_, AppState>,
     enabled: bool,
 ) -> Result<(), String> {
-    state.inner.snapshot().lock().map_err(|e| e.to_string())?.prefs.notifications_enabled = enabled;
+    state
+        .inner
+        .snapshot()
+        .lock()
+        .map_err(|e| e.to_string())?
+        .prefs
+        .notifications_enabled = enabled;
     Ok(())
 }
 
@@ -30,7 +36,13 @@ pub(crate) fn set_disable_dual_path(
     state: tauri::State<'_, AppState>,
     disabled: bool,
 ) -> Result<(), String> {
-    state.inner.snapshot().lock().map_err(|e| e.to_string())?.prefs.disable_dual_path = disabled;
+    state
+        .inner
+        .snapshot()
+        .lock()
+        .map_err(|e| e.to_string())?
+        .prefs
+        .disable_dual_path = disabled;
     Ok(())
 }
 

@@ -32,10 +32,7 @@ pub(crate) async fn list_certificates(app: tauri::AppHandle) -> Result<Vec<Strin
 
 /// Delete an identity (TLS cert + pchat seed) by label.
 #[tauri::command]
-pub(crate) async fn delete_certificate(
-    app: tauri::AppHandle,
-    label: String,
-) -> Result<(), String> {
+pub(crate) async fn delete_certificate(app: tauri::AppHandle, label: String) -> Result<(), String> {
     let data_dir = crate::e2e_data_dir(&app)?;
     state::pchat::IdentityStore::new(data_dir).delete(&label)
 }

@@ -46,10 +46,7 @@ impl HandleMessage for mumble_tcp::ServerSync {
 impl HandlerContext {
     /// Apply the `ServerSync` fields to `SharedState` and return the
     /// collected user sessions plus the initial channel assignment.
-    fn apply_sync_state(
-        &self,
-        msg: &mumble_tcp::ServerSync,
-    ) -> Option<(Vec<u32>, Option<u32>)> {
+    fn apply_sync_state(&self, msg: &mumble_tcp::ServerSync) -> Option<(Vec<u32>, Option<u32>)> {
         let Ok(mut state) = self.shared.lock() else {
             return None;
         };
@@ -111,7 +108,9 @@ impl HandlerContext {
         {
             crate::platform::android::connection_service::start_service(&handle, &host);
             if let Some(ref ch_name) = channel_name {
-                crate::platform::android::connection_service::update_service_channel(&handle, &host, ch_name);
+                crate::platform::android::connection_service::update_service_channel(
+                    &handle, &host, ch_name,
+                );
             }
         }
 
@@ -122,7 +121,8 @@ impl HandlerContext {
     #[cfg(target_os = "android")]
     fn register_fcm_token(&self, app: &tauri::AppHandle) {
         use tauri::Manager;
-        let Some(fcm) = app.try_state::<crate::platform::android::fcm_service::FcmPluginHandle>() else {
+        let Some(fcm) = app.try_state::<crate::platform::android::fcm_service::FcmPluginHandle>()
+        else {
             info!("FCM: FcmPluginHandle not available (not Android?)");
             return;
         };
@@ -131,7 +131,10 @@ impl HandlerContext {
             warn!("FCM: no device token available, skipping push registration");
             return;
         };
-        info!(len = token.len(), "FCM: device token obtained, sending push registration");
+        info!(
+            len = token.len(),
+            "FCM: device token obtained, sending push registration"
+        );
         let client_handle = self
             .shared
             .lock()
@@ -183,7 +186,10 @@ impl HandlerContext {
         }
         let shared = Arc::clone(&self.shared);
         let _desc_blob_task = tokio::spawn(async move {
-            let handle = shared.lock().ok().and_then(|s| s.conn.client_handle.clone());
+            let handle = shared
+                .lock()
+                .ok()
+                .and_then(|s| s.conn.client_handle.clone());
             if let Some(handle) = handle {
                 let _ = handle
                     .send(command::RequestBlob {
@@ -209,7 +215,10 @@ impl HandlerContext {
 
         let shared = Arc::clone(&self.shared);
         let _permissions_task = tokio::spawn(async move {
-            let handle = shared.lock().ok().and_then(|s| s.conn.client_handle.clone());
+            let handle = shared
+                .lock()
+                .ok()
+                .and_then(|s| s.conn.client_handle.clone());
             if let Some(handle) = handle {
                 for ch_id in channel_ids {
                     let _ = handle
@@ -226,7 +235,12 @@ impl HandlerContext {
         let (handle, is_fancy) = {
             let state = self.shared.lock().ok();
             state
-                .map(|s| (s.conn.client_handle.clone(), s.server.fancy_version.is_some()))
+                .map(|s| {
+                    (
+                        s.conn.client_handle.clone(),
+                        s.server.fancy_version.is_some(),
+                    )
+                })
                 .unwrap_or_default()
         };
         if !is_fancy {
@@ -258,7 +272,8 @@ impl HandlerContext {
             let state = self.shared.lock().ok();
             if let Some(ref s) = state {
                 let own_hash = s
-                    .conn.own_session
+                    .conn
+                    .own_session
                     .and_then(|sess| s.users.get(&sess))
                     .and_then(|u| u.hash.clone());
                 (
@@ -316,10 +331,7 @@ impl HandlerContext {
 
     /// Emit `pchat-reaction-fetch-response` events for each channel so the
     /// frontend can populate reaction pills for messages restored from disk.
-    fn emit_cached_reactions(
-        &self,
-        cached_reactions: HashMap<u32, Vec<CachedReaction>>,
-    ) {
+    fn emit_cached_reactions(&self, cached_reactions: HashMap<u32, Vec<CachedReaction>>) {
         for (ch_id, reactions) in cached_reactions {
             if reactions.is_empty() {
                 continue;
@@ -406,7 +418,11 @@ impl PchatState {
             let cached = cache.all_chat_messages();
             for (ch_id, msgs) in &cached {
                 if !msgs.is_empty() {
-                    info!(channel_id = ch_id, count = msgs.len(), "restored cached messages");
+                    info!(
+                        channel_id = ch_id,
+                        count = msgs.len(),
+                        "restored cached messages"
+                    );
                 }
             }
             cached
@@ -418,7 +434,11 @@ impl PchatState {
         let rxns = cache.all_reactions().clone();
         for (ch_id, reactions) in &rxns {
             if !reactions.is_empty() {
-                info!(channel_id = ch_id, count = reactions.len(), "restored cached reactions");
+                info!(
+                    channel_id = ch_id,
+                    count = reactions.len(),
+                    "restored cached reactions"
+                );
             }
         }
 
@@ -472,8 +492,7 @@ fn resolve_initial_channel(
     let s = shared.lock().ok();
     if let Some(ref s) = s {
         let ch = s.current_channel;
-        let mode =
-            ch.and_then(|c| s.channels.get(&c).and_then(|ce| ce.pchat_protocol));
+        let mode = ch.and_then(|c| s.channels.get(&c).and_then(|ce| ce.pchat_protocol));
         (ch, mode)
     } else {
         (None, None)
@@ -482,11 +501,7 @@ fn resolve_initial_channel(
 
 /// Set up the encryption key for the initial channel and fetch message
 /// history from the server.
-async fn init_encrypted_channel(
-    shared: &Arc<Mutex<SharedState>>,
-    ch: u32,
-    mode: PchatProtocol,
-) {
+async fn init_encrypted_channel(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: PchatProtocol) {
     pchat::emit_history_loading(shared, ch, true);
 
     if !ensure_protocol_key(shared, ch, mode).await {
@@ -510,9 +525,8 @@ async fn ensure_protocol_key(
             if let Some(ref mut p) = s.pchat_ctx.pchat {
                 if !p.key_manager.has_key(ch, mode) {
                     let cert = p.own_cert_hash.clone();
-                    let key = mumble_protocol::persistent::encryption::derive_archive_key(
-                        &p.seed, ch,
-                    );
+                    let key =
+                        mumble_protocol::persistent::encryption::derive_archive_key(&p.seed, ch);
                     p.key_manager
                         .store_archive_key(ch, key, KeyTrustLevel::Verified);
                     p.key_manager.set_channel_originator(ch, cert.clone());
@@ -546,28 +560,41 @@ async fn ensure_protocol_key(
 }
 
 /// Wait for peers to provide a key, then self-generate one if still needed.
-async fn await_or_generate_key(
-    shared: &Arc<Mutex<SharedState>>,
-    ch: u32,
-    mode: PchatProtocol,
-) {
+async fn await_or_generate_key(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: PchatProtocol) {
     let already_has_key = shared
         .lock()
         .ok()
-        .and_then(|s| s.pchat_ctx.pchat.as_ref().map(|p| p.key_manager.has_key(ch, mode)))
+        .and_then(|s| {
+            s.pchat_ctx
+                .pchat
+                .as_ref()
+                .map(|p| p.key_manager.has_key(ch, mode))
+        })
         .unwrap_or(false);
 
     if already_has_key {
-        debug!(channel_id = ch, "pchat: key already exists, skipping 2s wait");
+        debug!(
+            channel_id = ch,
+            "pchat: key already exists, skipping 2s wait"
+        );
     } else {
-        debug!(channel_id = ch, ?mode, "pchat: waiting 2s for key-exchange before self-gen");
+        debug!(
+            channel_id = ch,
+            ?mode,
+            "pchat: waiting 2s for key-exchange before self-gen"
+        );
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     }
 
     let needs_key = shared
         .lock()
         .ok()
-        .and_then(|s| s.pchat_ctx.pchat.as_ref().map(|p| !p.key_manager.has_key(ch, mode)))
+        .and_then(|s| {
+            s.pchat_ctx
+                .pchat
+                .as_ref()
+                .map(|p| !p.key_manager.has_key(ch, mode))
+        })
         .unwrap_or(false);
 
     debug!(channel_id = ch, needs_key, "pchat: key check after 2s wait");
@@ -596,7 +623,10 @@ fn self_generate_key(shared: &Arc<Mutex<SharedState>>, ch: u32) {
                 }
                 Some(PchatProtocol::SignalV1) => {
                     signal_bridge_failed = !p.ensure_signal_bridge();
-                    info!(channel_id = ch, "signal bridge ensured on initial join (fallback)");
+                    info!(
+                        channel_id = ch,
+                        "signal bridge ensured on initial join (fallback)"
+                    );
                 }
                 _ => {}
             }
@@ -614,18 +644,18 @@ fn self_generate_key(shared: &Arc<Mutex<SharedState>>, ch: u32) {
 
 /// Mark the channel as fetched and send the `PchatFetch` request, then
 /// schedule a safety-net timeout to clear the loading indicator.
-async fn fetch_channel_history(
-    shared: &Arc<Mutex<SharedState>>,
-    ch: u32,
-    mode: PchatProtocol,
-) {
+async fn fetch_channel_history(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: PchatProtocol) {
     debug!(channel_id = ch, "pchat: about to send pchat-fetch");
     {
         let s = shared.lock().ok();
         if let Some(ref s) = s {
             if let Some(ref p) = s.pchat_ctx.pchat {
                 let has = p.key_manager.has_key(ch, mode);
-                debug!(channel_id = ch, has_key = has, "pchat: key state before fetch");
+                debug!(
+                    channel_id = ch,
+                    has_key = has,
+                    "pchat: key state before fetch"
+                );
             }
         }
     }
@@ -640,7 +670,10 @@ async fn fetch_channel_history(
         limit: Some(50),
         after_id: None,
     };
-    let handle = shared.lock().ok().and_then(|s| s.conn.client_handle.clone());
+    let handle = shared
+        .lock()
+        .ok()
+        .and_then(|s| s.conn.client_handle.clone());
     let fetch_sent = if let Some(handle) = handle {
         let _ = handle.send(command::SendPchatFetch { fetch }).await;
         info!(channel_id = ch, "sent initial pchat-fetch");

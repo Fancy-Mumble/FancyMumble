@@ -56,8 +56,9 @@ pub(crate) async fn ping_server(host: String, port: u16) -> PingResult {
     };
 
     // UDP ping for user count + version (best-effort, does not affect online status)
-    let (user_count, max_user_count, server_version) =
-        udp_ping_server_info(&addr).await.unwrap_or((None, None, None));
+    let (user_count, max_user_count, server_version) = udp_ping_server_info(&addr)
+        .await
+        .unwrap_or((None, None, None));
 
     PingResult {
         online,
@@ -99,7 +100,9 @@ fn format_version_legacy(v: u32) -> Option<String> {
 /// Returns `(user_count, max_user_count, server_version)` on success.
 /// Tries the protobuf format first; falls back to the legacy 12-byte
 /// format if the server doesn't respond to protobuf within the timeout.
-async fn udp_ping_server_info(addr: &str) -> Result<(Option<u32>, Option<u32>, Option<String>), ()> {
+async fn udp_ping_server_info(
+    addr: &str,
+) -> Result<(Option<u32>, Option<u32>, Option<String>), ()> {
     use prost::Message;
     use tokio::net::UdpSocket;
     use tokio::time::{timeout, Duration};
@@ -127,9 +130,7 @@ async fn udp_ping_server_info(addr: &str) -> Result<(Option<u32>, Option<u32>, O
     if let Ok(Ok(n)) = timeout(Duration::from_secs(2), sock.recv(&mut recv_buf)).await {
         if n > 1 && recv_buf[0] == 0x20 {
             // Protobuf response
-            if let Ok(resp) =
-                mumble_protocol::proto::mumble_udp::Ping::decode(&recv_buf[1..n])
-            {
+            if let Ok(resp) = mumble_protocol::proto::mumble_udp::Ping::decode(&recv_buf[1..n]) {
                 if resp.user_count > 0 || resp.max_user_count > 0 || resp.server_version_v2 > 0 {
                     let version = format_version_v2(resp.server_version_v2);
                     return Ok((Some(resp.user_count), Some(resp.max_user_count), version));
@@ -140,8 +141,10 @@ async fn udp_ping_server_info(addr: &str) -> Result<(Option<u32>, Option<u32>, O
         // [version, ts_hi, ts_lo, users, max_users, bandwidth]
         if n >= 24 {
             let ver = u32::from_be_bytes([recv_buf[0], recv_buf[1], recv_buf[2], recv_buf[3]]);
-            let users = u32::from_be_bytes([recv_buf[12], recv_buf[13], recv_buf[14], recv_buf[15]]);
-            let max_users = u32::from_be_bytes([recv_buf[16], recv_buf[17], recv_buf[18], recv_buf[19]]);
+            let users =
+                u32::from_be_bytes([recv_buf[12], recv_buf[13], recv_buf[14], recv_buf[15]]);
+            let max_users =
+                u32::from_be_bytes([recv_buf[16], recv_buf[17], recv_buf[18], recv_buf[19]]);
             return Ok((Some(users), Some(max_users), format_version_legacy(ver)));
         }
     }
@@ -154,8 +157,10 @@ async fn udp_ping_server_info(addr: &str) -> Result<(Option<u32>, Option<u32>, O
     if let Ok(Ok(n)) = timeout(Duration::from_secs(2), sock.recv(&mut recv_buf)).await {
         if n >= 24 {
             let ver = u32::from_be_bytes([recv_buf[0], recv_buf[1], recv_buf[2], recv_buf[3]]);
-            let users = u32::from_be_bytes([recv_buf[12], recv_buf[13], recv_buf[14], recv_buf[15]]);
-            let max_users = u32::from_be_bytes([recv_buf[16], recv_buf[17], recv_buf[18], recv_buf[19]]);
+            let users =
+                u32::from_be_bytes([recv_buf[12], recv_buf[13], recv_buf[14], recv_buf[15]]);
+            let max_users =
+                u32::from_be_bytes([recv_buf[16], recv_buf[17], recv_buf[18], recv_buf[19]]);
             return Ok((Some(users), Some(max_users), format_version_legacy(ver)));
         }
     }

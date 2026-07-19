@@ -381,7 +381,9 @@ fn build_progress_stream(
 ) -> impl futures_util::Stream<Item = Result<tokio_util::bytes::Bytes, std::io::Error>> {
     let tx = if !upload_id.is_empty() && file_size > 0 {
         let (tx, rx) = mpsc::unbounded_channel::<u64>();
-        drop(tokio::spawn(emit_progress_events(upload_id, file_size, app_handle, rx)));
+        drop(tokio::spawn(emit_progress_events(
+            upload_id, file_size, app_handle, rx,
+        )));
         Some(tx)
     } else {
         drop(upload_id);
@@ -392,23 +394,21 @@ fn build_progress_stream(
     // 64 KiB read chunks dramatically reduce spawn_blocking overhead on
     // Windows compared to ReaderStream's default 8 KiB.
     let mut bytes_accumulated: u64 = 0;
-    ReaderStream::with_capacity(file, 64 * 1024).inspect(move |r| {
-        match r {
-            Ok(chunk) => {
-                if let Some(tx) = tx.as_ref() {
-                    bytes_accumulated += chunk.len() as u64;
-                    let _ = tx.send(bytes_accumulated);
-                }
-                tracing::trace!(
-                    chunk_bytes = chunk.len(),
-                    sent = bytes_accumulated,
-                    total = file_size,
-                    "upload stream chunk"
-                );
+    ReaderStream::with_capacity(file, 64 * 1024).inspect(move |r| match r {
+        Ok(chunk) => {
+            if let Some(tx) = tx.as_ref() {
+                bytes_accumulated += chunk.len() as u64;
+                let _ = tx.send(bytes_accumulated);
             }
-            Err(e) => {
-                tracing::error!(error = %e, sent = bytes_accumulated, "upload stream read error");
-            }
+            tracing::trace!(
+                chunk_bytes = chunk.len(),
+                sent = bytes_accumulated,
+                total = file_size,
+                "upload stream chunk"
+            );
+        }
+        Err(e) => {
+            tracing::error!(error = %e, sent = bytes_accumulated, "upload stream read error");
         }
     })
 }
@@ -523,7 +523,7 @@ impl AppState {
 
         let resp = tokio::select! {
             result = send_fut => {
-                result.map_err(|e| format!("upload request failed: {e}"))?  
+                result.map_err(|e| format!("upload request failed: {e}"))?
             }
             () = cancel_token.cancelled() => {
                 return Err("upload cancelled".to_owned());
@@ -706,7 +706,10 @@ impl AppState {
             return Err(format!("forbidden: {}", read_error_body(resp).await));
         }
         if !resp.status().is_success() {
-            return Err(format!("private get failed: {}", read_error_body(resp).await));
+            return Err(format!(
+                "private get failed: {}",
+                read_error_body(resp).await
+            ));
         }
         resp.text()
             .await
@@ -731,7 +734,10 @@ impl AppState {
             .await
             .map_err(|e| format!("private put request failed: {e}"))?;
         if !resp.status().is_success() {
-            return Err(format!("private put failed: {}", read_error_body(resp).await));
+            return Err(format!(
+                "private put failed: {}",
+                read_error_body(resp).await
+            ));
         }
         Ok(())
     }
@@ -753,7 +759,10 @@ impl AppState {
             .await
             .map_err(|e| format!("admin list request failed: {e}"))?;
         if !resp.status().is_success() {
-            return Err(format!("admin list failed: {}", read_error_body(resp).await));
+            return Err(format!(
+                "admin list failed: {}",
+                read_error_body(resp).await
+            ));
         }
         resp.json::<serde_json::Value>()
             .await
@@ -963,7 +972,10 @@ impl AppState {
             .await
             .map_err(|e| format!("my preview request failed: {e}"))?;
         if !resp.status().is_success() {
-            return Err(format!("my preview failed: {}", read_error_body(resp).await));
+            return Err(format!(
+                "my preview failed: {}",
+                read_error_body(resp).await
+            ));
         }
 
         let mut buf: Vec<u8> = Vec::new();
