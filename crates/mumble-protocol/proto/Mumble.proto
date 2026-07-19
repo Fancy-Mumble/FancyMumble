@@ -2029,3 +2029,146 @@ message FancyAccountAck {
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Audit log & moderation signals (docs/audit-log.md in the server repo).
+//
+// The server-side record is owned by the mumble-audit plugin: an append-only,
+// hash-chained log of server-authoritative moderation actions (bans, kicks,
+// mutes, ACL/channel/config changes, plugin administration, pchat moderation)
+// plus opt-in client-reported signals.  The client surface below is the query/
+// search protocol (spec section 5) and the admin configuration snapshot
+// (spec sections 9.2 / 10.1).
+//
+// Design-doc deviation: the spec drafted the query trio at wire IDs 157-159,
+// but 157-165 are claimed by the forum / scheduled-message features, so the
+// audit messages live at 166-168 and 170-171 (169 stays reserved for
+// FancyModSignal, spec section 6.5).
+
+// A single audit entry (spec section 4).  Identity fields are snapshots taken
+// at record time - a renamed or deleted user must not rewrite history.
+// Server -> Client only; embedded in FancyAuditResponse / FancyAuditEvent.
+message AuditEntry {
+  // Monotonic per virtual server; the keyset-pagination cursor.
+  optional uint64 id = 1;
+  // Unix epoch milliseconds, server clock.
+  optional uint64 ts = 2;
+  // 'server' (authoritative) | 'client' (reported claim) | 'plugin'.
+  // The UI must render these differently and never conflate them.
+  optional string source = 3;
+  // 'ban','kick','mute','acl','channel','register','config','plugin',
+  // 'pchat','audit.access','flag','signal.report', ...
+  optional string category = 4;
+  // 'info' | 'notice' | 'warning' | 'critical'.
+  optional string severity = 5;
+
+  optional uint32 actor_user_id = 6;
+  optional string actor_hash = 7;
+  optional string actor_name = 8;
+
+  optional uint32 target_user_id = 9;
+  optional string target_hash = 10;
+  optional string target_name = 11;
+
+  optional uint32 channel_id = 12;
+  optional string reason = 13;
+  // Category-specific structured payload (before/after, CIDR, duration, ...).
+  // Known categories render richly; unknown ones as key/value.
+  optional string detail_json = 14;
+  // Id of a related earlier entry (an unban points at its ban - spec 7.4).
+  optional uint64 relates_to = 15;
+  // This entry's chain hash (spec 7.1), for display and offline verification.
+  optional bytes entry_hash = 16;
+}
+
+// Client -> Server: search the audit log, or subscribe to a live tail.
+// Requires ViewAudit (today: Write on the root channel).  Unauthorized
+// queries receive an empty response, never a partial leak.
+// Wire type ID = 166.
+message FancyAuditQuery {
+  // Correlation id, echoed on the response.
+  optional string query_id = 1;
+  // Empty = all categories.
+  repeated string categories = 2;
+  // 'server' | 'client' | 'plugin'.
+  optional string source = 3;
+  optional uint32 actor_user_id = 4;
+  optional uint32 target_user_id = 5;
+  optional uint32 channel_id = 6;
+  // Free-text match on reason / detail (per-backend FTS strategy, spec 4).
+  optional string text = 7;
+  optional uint64 since_ms = 8;
+  optional uint64 until_ms = 9;
+  // Capped server-side (e.g. 200).
+  optional uint32 limit = 10;
+  // Keyset pagination: only entries with id < before_id.
+  optional uint64 before_id = 11;
+  // Stream matching entries as FancyAuditEvent until the session ends or a
+  // new query with subscribe=false replaces the subscription.
+  optional bool subscribe = 12;
+  // 'info' | 'notice' | 'warning' | 'critical'.
+  optional string severity = 13;
+  // Advanced mode (spec 10.4): a full read-only SELECT executed against the
+  // permission-scoped views, engine-enforced.  When set, the structured
+  // filters above are ignored.  Rejected with FancyAuditResponse.error when
+  // advanced SQL is unavailable (sandbox self-test failed) or disabled.
+  optional string sql = 14;
+  // Run the chain verification (spec 7.1) and report via chain_* fields.
+  optional bool verify_chain = 15;
+}
+
+// Server -> Client: response to a FancyAuditQuery.  Entries newest-first.
+// Wire type ID = 167.
+message FancyAuditResponse {
+  optional string query_id = 1;
+  repeated AuditEntry entries = 2;
+  optional bool has_more = 3;
+  // Pass as before_id of the next page query.
+  optional uint64 next_before_id = 4;
+  // Human-readable rejection (bad SQL, advanced mode unavailable, ...).
+  optional string error = 5;
+  // Chain verification result (only when verify_chain was requested).
+  optional bool chain_ok = 6;
+  optional uint64 chain_height = 7;
+  // First detected break, empty when chain_ok.
+  optional string chain_error = 8;
+}
+
+// Server -> Client: pushed to live subscribers for entries matching their
+// subscribed filter (spec 5).
+// Wire type ID = 168.
+message FancyAuditEvent {
+  optional AuditEntry entry = 1;
+}
+
+// Wire type ID 169 is reserved for FancyModSignal (spec 6.5, not yet
+// implemented).
+
+// Server -> Client: snapshot of the audit plugin's configuration schema -
+// the per-part collect/export toggles, retention, OTLP settings and the
+// disclosure switch (spec 9.2), encoded as the same generic `Setting` rows
+// the runtime server settings use so the plugin owns the schema and new
+// parts render automatically.  Sent to ConfigureAudit holders (today: Write
+// on root) after ServerSync and re-broadcast after every accepted update.
+// Wire type ID = 170.
+message FancyAuditConfig {
+  repeated Setting settings = 1;
+  // Monotonic revision so the client can drop stale snapshots.
+  optional uint64 revision = 2;
+  // Whether advanced SQL mode is available (the startup sandbox self-test
+  // passed - spec 10.4).  The client hides the SQL editor otherwise.
+  optional bool advanced_sql_available = 3;
+  // Current chain height, shown in the config half's chain-status card.
+  optional uint64 chain_height = 4;
+  // JSON schema of the queryable views + enum domains for editor
+  // autocomplete (spec 10.5), e.g. {"audit_entries":["id","ts",...],...}.
+  optional string sql_schema_json = 5;
+}
+
+// Admin -> Server: apply changed audit configuration.  Server validates
+// ConfigureAudit, applies, records the change as an audit entry itself
+// (spec 9.2 - the toggle change is the first thing the log shows), then
+// re-broadcasts FancyAuditConfig.
+// Wire type ID = 171.
+message FancyAuditConfigUpdate {
+  repeated Setting settings = 1;
+}

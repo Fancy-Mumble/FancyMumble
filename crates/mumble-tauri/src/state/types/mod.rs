@@ -14,6 +14,7 @@ mod onboarding;
 mod search;
 mod serde_helpers;
 mod server;
+mod audit;
 mod serversettings;
 mod ui;
 
@@ -23,6 +24,7 @@ pub(crate) use serde_helpers::{blob_marker, serialize_bytes_base64};
 
 pub use account::*;
 pub use admin::*;
+pub use audit::*;
 pub use audio::*;
 pub use events::*;
 pub use onboarding::*;

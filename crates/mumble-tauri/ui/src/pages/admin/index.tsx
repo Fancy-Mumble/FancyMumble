@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
 import {
   UsersGroupIcon, ShieldIcon, BlockIcon, LockIcon, EmojiPlusIcon,
-  PuzzleIcon, StoreIcon, DatabaseIcon, SlidersIcon,
+  PuzzleIcon, StoreIcon, DatabaseIcon, SlidersIcon, HistoryIcon,
 } from "../../icons";
 import { useAppStore } from "../../store";
 import { RegisteredUsersTab } from "./RegisteredUsersTab";
@@ -16,6 +16,7 @@ import { ServerPluginsTab } from "./ServerPluginsTab";
 import { MarketplaceTab } from "./MarketplaceTab";
 import { FileServerTab } from "./FileServerTab";
 import { ServerSettingsTab } from "./ServerSettingsTab";
+import { AuditLogTab } from "./AuditLogTab";
 import OnboardingAdminPanel from "../../components/onboarding/OnboardingAdminPanel";
 import { isOnboardingSupported } from "../../components/onboarding/onboardingStore";
 import { PERM_MANAGE_EMOTES, PERM_WRITE } from "../../utils/permissions";
@@ -29,9 +30,17 @@ export function isPluginAdminSupported(v: number | null | undefined): boolean {
   return v != null && v >= PLUGIN_ADMIN_MIN_FANCY_VERSION;
 }
 
+/** Minimum server version for the audit-log protocol (0.4.2). */
+export const AUDIT_LOG_MIN_FANCY_VERSION = fancyVersionEncode(0, 4, 2);
+
+export function isAuditLogSupported(v: number | null | undefined): boolean {
+  return v != null && v >= AUDIT_LOG_MIN_FANCY_VERSION;
+}
+
 type Tab =
   | "users" | "roles" | "bans" | "acl" | "emotes" | "onboarding"
-  | "serverPlugins" | "marketplace" | "fileServer" | "serverSettings";
+  | "serverPlugins" | "marketplace" | "fileServer" | "serverSettings"
+  | "auditLog";
 
 export default function AdminPanel() {
   const navigate = useNavigate();
@@ -43,7 +52,7 @@ export default function AdminPanel() {
       t === "users" || t === "roles" || t === "bans" || t === "acl" ||
       t === "emotes" || t === "onboarding" ||
       t === "serverPlugins" || t === "marketplace" || t === "fileServer" ||
-      t === "serverSettings"
+      t === "serverSettings" || t === "auditLog"
     ) {
       return t;
     }
@@ -69,12 +78,16 @@ export default function AdminPanel() {
   // The file-server admin dashboard needs server-admin rights (Write on root,
   // the same gate the server enforces) and a connected file server.
   const canManageFileServer = fileServerEnabled && (rootChannelPerms & PERM_WRITE) !== 0;
+  // The audit page needs the audit protocol (0.4.2+) and the ViewAudit gate,
+  // which resolves to Write on root today (same as the other admin surfaces).
+  const canViewAudit = isAuditLogSupported(serverFancyVersion) && (rootChannelPerms & PERM_WRITE) !== 0;
   // If the file-server plugin is disabled at runtime while its tab is open,
   // its gate flips false - redirect back to a tab that still exists.
   useEffect(() => {
     if (tab === "fileServer" && !canManageFileServer) setTab("users");
     if (tab === "serverSettings" && !canAdminPlugins) setTab("users");
-  }, [tab, canManageFileServer, canAdminPlugins]);
+    if (tab === "auditLog" && !canViewAudit) setTab("users");
+  }, [tab, canManageFileServer, canAdminPlugins, canViewAudit]);
   const tabs: TabDef<Tab>[] = [
     { id: "users", label: t("adminTabs.users"), icon: <UsersGroupIcon width={16} height={16} /> },
     { id: "roles", label: t("adminTabs.roles"), icon: <ShieldIcon     width={16} height={16} /> },
@@ -98,6 +111,9 @@ export default function AdminPanel() {
     ...(canAdminPlugins
       ? [{ id: "serverSettings" as const, label: t("adminTabs.serverSettings", { defaultValue: "Server settings" }), icon: <SlidersIcon width={16} height={16} /> }]
       : []),
+    ...(canViewAudit
+      ? [{ id: "auditLog" as const, label: t("adminTabs.auditLog", { defaultValue: "Audit log" }), icon: <HistoryIcon width={16} height={16} /> }]
+      : []),
   ];
 
   return (
@@ -120,6 +136,7 @@ export default function AdminPanel() {
         {tab === "marketplace" && <MarketplaceTab />}
         {tab === "fileServer" && <FileServerTab />}
         {tab === "serverSettings" && <ServerSettingsTab setFooter={setTabFooter} />}
+        {tab === "auditLog" && <AuditLogTab />}
       </div>
     </TabbedPage>
   );

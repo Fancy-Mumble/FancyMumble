@@ -21,6 +21,7 @@ pub(crate) mod messaging;
 pub(crate) mod offload;
 pub(crate) mod onboarding;
 pub(crate) mod plugin_admin;
+pub(crate) mod audit;
 pub(crate) mod plugin_info;
 pub(crate) mod popout;
 pub(crate) mod profile;

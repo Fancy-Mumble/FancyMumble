@@ -6,6 +6,7 @@
 
 mod account;
 mod acl;
+mod audit;
 mod ban_list;
 mod channel_remove;
 mod channel_state;
@@ -176,6 +177,9 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::FancyServerSettings(m) => m.handle(ctx),
         ControlMessage::FancyAccountSettings(m) => m.handle(ctx),
         ControlMessage::FancyAccountAck(m) => m.handle(ctx),
+        ControlMessage::FancyAuditResponse(m) => m.handle(ctx),
+        ControlMessage::FancyAuditEvent(m) => m.handle(ctx),
+        ControlMessage::FancyAuditConfig(m) => m.handle(ctx),
         ControlMessage::FancyPluginAdminList(m) => m.handle(ctx),
         ControlMessage::FancyPluginAdminAck(m) => m.handle(ctx),
         ControlMessage::PluginMessage(m) => m.handle(ctx),

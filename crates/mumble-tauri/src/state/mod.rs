@@ -35,6 +35,7 @@ pub(crate) mod hash_names;
 pub(crate) mod local_cache;
 mod account;
 mod messaging;
+mod audit;
 pub mod offload;
 mod offload_ops;
 mod onboarding;
@@ -224,6 +225,9 @@ pub(super) struct SharedState {
     /// Latest own-account snapshot (`None` until a `FancyAccountSettings`
     /// arrives in response to an account query/update).
     pub account_settings: Option<AccountSettings>,
+    /// Latest audit-plugin configuration snapshot (`None` until a
+    /// `FancyAuditConfig` arrives; only audit admins receive it).
+    pub audit_config: Option<AuditConfigSnapshot>,
     /// Cached snapshot of the most recent `PluginRegistry` the server
     /// has broadcast.  The protobuf message is delivered once after
     /// `ServerSync` and never resent, so we cache it here to let the
