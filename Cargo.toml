@@ -108,7 +108,7 @@ inherits = "release"
 # behaviour, but tuned for FAST builds (the retained heap we profile is the
 # same at any opt level). Overrides release's fat LTO + codegen-units = 1,
 # which together cost ~30 min for no profiling benefit.
-lto = false               # no LTO — the single biggest build-time win
+lto = false               # no LTO - the single biggest build-time win
 codegen-units = 256       # parallel codegen
 debug = true              # full debug info so dhat/perf symbolicate stacks
 strip = false             # keep symbols

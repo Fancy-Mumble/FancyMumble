@@ -127,7 +127,7 @@ fn find_qt6ui_binary() -> Option<PathBuf> {
     // in the dev loop the freshly-rebuilt profile (usually debug) must win
     // over a stale one, otherwise the launcher runs old code. (This matters
     // more now that the mumble-tauri build script skips the nested qt6ui
-    // rebuild in dev — see its build.rs.)
+    // rebuild in dev - see its build.rs.)
     let mut dir = exe_dir.as_path();
     for _ in 0..4 {
         let base = dir.join("crates/qt6ui/target");
@@ -168,8 +168,8 @@ pub(crate) fn dispatch_if_minimal() -> bool {
 
 /// Locate the Qt kit's `bin` dir to prepend to the child's `PATH` when the
 /// qt6ui binary is not windeployqt'ed (dev layout). Without this, Windows
-/// resolves `Qt6*.dll` from whatever is on the ambient `PATH` — e.g. other
-/// installed software shipping its own (ABI-incompatible) Qt — and the
+/// resolves `Qt6*.dll` from whatever is on the ambient `PATH` - e.g. other
+/// installed software shipping its own (ABI-incompatible) Qt - and the
 /// child dies before `main` without any error output.
 #[cfg(target_os = "windows")]
 fn qt_runtime_bin(qt6ui_exe: &std::path::Path) -> Option<PathBuf> {

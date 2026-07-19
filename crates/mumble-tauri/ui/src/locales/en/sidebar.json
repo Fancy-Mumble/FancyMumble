@@ -17,7 +17,7 @@
     "registerConfirmBody": "Register {{name}} on this server using their current certificate?",
     "registerConfirm": "Register",
     "unregisterConfirmTitle": "Unregister user",
-    "unregisterConfirmBody": "Unregister {{name}}? This permanently deletes all of their data on this server — registration, comment, avatar and role/ACL memberships. This cannot be undone.",
+    "unregisterConfirmBody": "Unregister {{name}}? This permanently deletes all of their data on this server - registration, comment, avatar and role/ACL memberships. This cannot be undone.",
     "unregisterConfirm": "Unregister",
     "resetComment": "Reset comment",
     "removeAvatar": "Remove avatar",

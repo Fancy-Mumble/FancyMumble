@@ -40,7 +40,7 @@ interface SidebarState {
   available: boolean;
   /** Why the sidebar is unavailable, so the UI can tell a genuine guest
    *  ("register to keep documents") apart from a transient server error
-   *  ("couldn't load — try again"). `null` while available or before load. */
+   *  ("couldn't load - try again"). `null` while available or before load. */
   reason: "guest" | "error" | null;
   load: () => Promise<void>;
   addSection: (name: string) => void;
