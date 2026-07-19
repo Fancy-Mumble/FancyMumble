@@ -557,22 +557,11 @@ registerStreamViewerStrategy({
   createStatsSampler: createNativeStatsSampler,
 });
 
-// Warm WebKit's codec stack off the critical path: the first WebCodecs use
-// in a session scans the GStreamer plugin registry and probes decoders ON
-// THE MAIN THREAD, which surfaced as the whole window freezing at "Setting
-// up stream..." on the session's first share. Doing the probe shortly after
-// load moves that cost to idle app startup. (Timing log in newDecoder
-// verifies whether any residual first-share cost remains.)
-if (WEBVIEW_HAS_WEBCODECS) {
-  setTimeout(() => {
-    const t0 = performance.now();
-    void VideoDecoder.isConfigSupported({ codec: "avc1.42E01E" })
-      .then(() => {
-        const tookMs = performance.now() - t0;
-        if (tookMs > 50) {
-          console.info(`[stream-view] codec warmup took ${tookMs.toFixed(0)}ms`);
-        }
-      })
-      .catch(() => {});
-  }, 1500);
-}
+// NOTE: no synchronous codec "warmup" here. WebKitGTK runs the first
+// WebCodecs call's GStreamer plugin-registry scan ON THE MAIN THREAD
+// (~3s), so probing at startup froze the whole window shortly after
+// joining a server. The first real decoder creation still pays that cost
+// once - but only when the user starts a share, behind the existing
+// "Setting up stream..." overlay, and the timing log in newDecoder
+// surfaces it. Moving decode into a Worker/OffscreenCanvas is the proper
+// fix (keeps the scan off the main thread entirely).

@@ -158,11 +158,8 @@ impl Drop for PwCaptureStream {
 }
 
 /// The loop thread body: connect, negotiate, pump frames until quit/error.
-#[allow(
-    clippy::too_many_lines,
-    reason = "single PipeWire loop lifecycle (connect, negotiate, pump); the \
-              callbacks capture shared loop state and don't factor out cleanly"
-)]
+/// The three stream callbacks delegate to `on_state_changed`,
+/// `on_param_changed`, and `on_process` below.
 fn run_loop(
     fd: std::os::fd::OwnedFd,
     node_id: u32,
@@ -228,106 +225,12 @@ fn run_loop(
     let _listener = stream
         .add_local_listener_with_user_data(state)
         .state_changed(move |_stream, state, _old, new| {
-            use pw::stream::StreamState;
-            tracing::debug!(state = ?new, "screenshare: pipewire stream state");
-            let died = match &new {
-                StreamState::Error(e) => Some(format!("pipewire stream error: {e}")),
-                // The node disappearing after we streamed = the user hit the
-                // compositor's own "stop sharing", or the source went away.
-                StreamState::Unconnected if state.was_streaming => {
-                    Some("screencast stopped by compositor".to_owned())
-                }
-                StreamState::Streaming => {
-                    state.was_streaming = true;
-                    None
-                }
-                _ => None,
-            };
-            if let Some(reason) = died {
-                if let Ok(mut slot) = state.shared.slot.lock() {
-                    if slot.dead.is_none() {
-                        slot.dead = Some(reason);
-                    }
-                }
-                state.shared.cond.notify_all();
-                if let Some(mainloop) = loop_weak_state.upgrade() {
-                    mainloop.quit();
-                }
-            }
+            on_state_changed(state, &loop_weak_state, &new);
         })
         .param_changed(move |stream, state, id, param| {
-            let Some(param) = param else { return };
-            if id != pw::spa::param::ParamType::Format.as_raw() {
-                return;
-            }
-            let Ok((media_type, media_subtype)) = pw::spa::param::format_utils::parse_format(param)
-            else {
-                return;
-            };
-            if media_type != MediaType::Video || media_subtype != MediaSubtype::Raw {
-                return;
-            }
-            if state.info.parse(param).is_ok() {
-                state.have_format = true;
-                state.logged_data_type = false;
-                tracing::info!(
-                    format = ?state.info.format(),
-                    width = state.info.size().width,
-                    height = state.info.size().height,
-                    modifier = state.info.modifier(),
-                    "screenshare: pipewire format negotiated",
-                );
-                if state.dmabuf_offered {
-                    negotiate_dmabuf_step(stream, state.info.format(), param, &fixation_shm);
-                }
-            }
+            on_param_changed(stream, state, id, param, &fixation_shm);
         })
-        .process(|stream, state| {
-            if !state.have_format {
-                return;
-            }
-            // Drain to the newest buffer; dropping older ones requeues them
-            // to the compositor immediately (latest-frame semantics).
-            let mut newest = None;
-            while let Some(buffer) = stream.dequeue_buffer() {
-                newest = Some(buffer);
-            }
-            let Some(mut buffer) = newest else { return };
-            let width = state.info.size().width;
-            let height = state.info.size().height;
-            let format = state.info.format();
-            let datas = buffer.datas_mut();
-            let Some(data) = datas.first_mut() else {
-                return;
-            };
-            if !state.logged_data_type {
-                state.logged_data_type = true;
-                tracing::info!(
-                    data_type = ?data.type_(),
-                    "screenshare: pipewire buffer type (DmaBuf = scanout-capable)",
-                );
-            }
-            let frame = if data.type_() == pw::spa::buffer::DataType::DmaBuf {
-                let Some(frame) = import_dmabuf_frame(state, data, width, height) else {
-                    return;
-                };
-                frame
-            } else {
-                let chunk_size = data.chunk().size() as usize;
-                let chunk_stride = data.chunk().stride();
-                let Some(bytes) = data.data() else { return };
-                let Some(frame) =
-                    convert_to_rgba(format, width, height, chunk_stride, chunk_size, bytes)
-                else {
-                    return;
-                };
-                frame
-            };
-            if let Ok(mut slot) = state.shared.slot.lock() {
-                slot.frame = Some(frame);
-            }
-            state.shared.cond.notify_all();
-        })
+        .process(on_process)
         .register()
         .map_err(|e| format!("pw stream listener: {e}"))?;
 
@@ -358,6 +261,124 @@ fn run_loop(
 
     let _ = stream.disconnect();
     Ok(())
+}
+
+/// Stream `state_changed` callback: detect a compositor-side stop or error
+/// and tear the loop down (publishing the reason to the consumer).
+fn on_state_changed(
+    state: &mut LoopState,
+    loop_weak: &pw::main_loop::WeakMainLoop,
+    new: &pw::stream::StreamState,
+) {
+    use pw::stream::StreamState;
+    tracing::debug!(state = ?new, "screenshare: pipewire stream state");
+    let died = match new {
+        StreamState::Error(e) => Some(format!("pipewire stream error: {e}")),
+        // The node disappearing after we streamed = the user hit the
+        // compositor's own "stop sharing", or the source went away.
+        StreamState::Unconnected if state.was_streaming => {
+            Some("screencast stopped by compositor".to_owned())
+        }
+        StreamState::Streaming => {
+            state.was_streaming = true;
+            None
+        }
+        _ => None,
+    };
+    let Some(reason) = died else { return };
+    if let Ok(mut slot) = state.shared.slot.lock() {
+        if slot.dead.is_none() {
+            slot.dead = Some(reason);
+        }
+    }
+    state.shared.cond.notify_all();
+    if let Some(mainloop) = loop_weak.upgrade() {
+        mainloop.quit();
+    }
+}
+
+/// Stream `param_changed` callback: on a new negotiated `Format`, record it
+/// and drive the DMA-BUF negotiation (see `negotiate_dmabuf_step`).
+fn on_param_changed(
+    stream: &pw::stream::StreamRef,
+    state: &mut LoopState,
+    id: u32,
+    param: Option<&pw::spa::pod::Pod>,
+    fixation_shm: &[u8],
+) {
+    let Some(param) = param else { return };
+    if id != pw::spa::param::ParamType::Format.as_raw() {
+        return;
+    }
+    let Ok((media_type, media_subtype)) = pw::spa::param::format_utils::parse_format(param) else {
+        return;
+    };
+    if media_type != MediaType::Video || media_subtype != MediaSubtype::Raw {
+        return;
+    }
+    if state.info.parse(param).is_err() {
+        return;
+    }
+    state.have_format = true;
+    state.logged_data_type = false;
+    tracing::info!(
+        format = ?state.info.format(),
+        width = state.info.size().width,
+        height = state.info.size().height,
+        modifier = state.info.modifier(),
+        "screenshare: pipewire format negotiated",
+    );
+    if state.dmabuf_offered {
+        negotiate_dmabuf_step(stream, state.info.format(), param, fixation_shm);
+    }
+}
+
+/// Stream `process` callback: take the newest buffer, turn it into RGBA
+/// (GPU import for DMA-BUF, CPU swizzle for shared memory), and publish it.
+fn on_process(stream: &pw::stream::StreamRef, state: &mut LoopState) {
+    if !state.have_format {
+        return;
+    }
+    // Drain to the newest buffer; dropping older ones requeues them to the
+    // compositor immediately (latest-frame semantics).
+    let mut newest = None;
+    while let Some(buffer) = stream.dequeue_buffer() {
+        newest = Some(buffer);
+    }
+    let Some(mut buffer) = newest else { return };
+    let width = state.info.size().width;
+    let height = state.info.size().height;
+    let format = state.info.format();
+    let datas = buffer.datas_mut();
+    let Some(data) = datas.first_mut() else {
+        return;
+    };
+    if !state.logged_data_type {
+        state.logged_data_type = true;
+        tracing::info!(
+            data_type = ?data.type_(),
+            "screenshare: pipewire buffer type (DmaBuf = scanout-capable)",
+        );
+    }
+    let frame = if data.type_() == pw::spa::buffer::DataType::DmaBuf {
+        let Some(frame) = import_dmabuf_frame(state, data, width, height) else {
+            return;
+        };
+        frame
+    } else {
+        let chunk_size = data.chunk().size() as usize;
+        let chunk_stride = data.chunk().stride();
+        let Some(bytes) = data.data() else { return };
+        let Some(frame) = convert_to_rgba(format, width, height, chunk_stride, chunk_size, bytes)
+        else {
+            return;
+        };
+        frame
+    };
+    if let Ok(mut slot) = state.shared.slot.lock() {
+        slot.frame = Some(frame);
+    }
+    state.shared.cond.notify_all();
 }
 
 /// `SPA_PARAM_Buffers` answer pod (sent after Format negotiation): the data

@@ -73,9 +73,8 @@ fn main() {
             "darwin-x86_64"
         };
 
-        let sysroot_lib = format!(
-            "{ndk_home}/toolchains/llvm/prebuilt/{host}/sysroot/usr/lib/{ndk_triple}"
-        );
+        let sysroot_lib =
+            format!("{ndk_home}/toolchains/llvm/prebuilt/{host}/sysroot/usr/lib/{ndk_triple}");
 
         // Copy libc++_shared.so into OUT_DIR so we can add a clean search
         // path.  Adding {sysroot_lib} directly would also expose libc.a
@@ -83,10 +82,9 @@ fn main() {
         // libc.so (located in the API-level subdirectory).  That pulls in
         // pthread_create, __init_tcb and other internals whose static
         // versions crash with SEGV_ACCERR when loaded via dlopen.
-        let out_dir =
-            std::env::var("OUT_DIR").unwrap_or_else(|_| {
-                panic!("OUT_DIR must be set in build scripts");
-            });
+        let out_dir = std::env::var("OUT_DIR").unwrap_or_else(|_| {
+            panic!("OUT_DIR must be set in build scripts");
+        });
         let src = format!("{sysroot_lib}/libc++_shared.so");
         let dst = format!("{out_dir}/libc++_shared.so");
         let _bytes = std::fs::copy(&src, &dst).unwrap_or_else(|e| {
@@ -131,14 +129,20 @@ fn main() {
 /// `qt6ui/build.ps1`). Returns `(qt_dir, mingw_dir, qmake_path)`, or `None`
 /// after emitting a `cargo:warning` describing what is missing.
 fn qt6ui_prerequisites() -> Option<(String, String, std::path::PathBuf)> {
-    let qt = std::env::var("QT6_MINGW_DIR").unwrap_or_else(|_| "C:\\Qt\\6.11.1\\mingw_64".to_owned());
-    let mingw = std::env::var("QT6_MINGW_GCC").unwrap_or_else(|_| "C:\\Qt\\Tools\\mingw1310_64".to_owned());
+    let qt =
+        std::env::var("QT6_MINGW_DIR").unwrap_or_else(|_| "C:\\Qt\\6.11.1\\mingw_64".to_owned());
+    let mingw =
+        std::env::var("QT6_MINGW_GCC").unwrap_or_else(|_| "C:\\Qt\\Tools\\mingw1310_64".to_owned());
     let qmake = std::path::Path::new(&qt).join("bin").join("qmake.exe");
     if !qmake.is_file() {
         println!("cargo:warning=qt6ui skipped: Qt MinGW kit not found at {qt} (set QT6_MINGW_DIR)");
         return None;
     }
-    if !std::path::Path::new(&mingw).join("bin").join("g++.exe").is_file() {
+    if !std::path::Path::new(&mingw)
+        .join("bin")
+        .join("g++.exe")
+        .is_file()
+    {
         println!("cargo:warning=qt6ui skipped: MinGW g++ not found at {mingw} (set QT6_MINGW_GCC)");
         return None;
     }
@@ -174,16 +178,18 @@ fn copy_if_changed(src: &std::path::Path, dest: &std::path::Path) -> std::io::Re
 /// Build the signal-bridge cdylib from its separate workspace and copy
 /// the output library next to the mumble-tauri executable.
 fn build_signal_bridge() {
-    let manifest_dir =
-        std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| {
-            panic!("CARGO_MANIFEST_DIR must be set in build scripts");
-        });
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| {
+        panic!("CARGO_MANIFEST_DIR must be set in build scripts");
+    });
     let bridge_dir = std::path::Path::new(&manifest_dir).join("../signal-bridge");
 
     // If the signal-bridge crate is not present (e.g. shallow checkout),
     // skip silently.
     if !bridge_dir.join("Cargo.toml").exists() {
-        println!("cargo:warning=signal-bridge crate not found at {}, skipping", bridge_dir.display());
+        println!(
+            "cargo:warning=signal-bridge crate not found at {}, skipping",
+            bridge_dir.display()
+        );
         return;
     }
 
@@ -229,10 +235,9 @@ fn build_signal_bridge() {
     // Copy next to the mumble-tauri executable (workspace target/{profile}/).
     // OUT_DIR is inside target/{profile}/build/mumble-tauri-*/out/ -- walk
     // up to reach target/{profile}/.
-    let out_dir =
-        std::env::var("OUT_DIR").unwrap_or_else(|_| {
-            panic!("OUT_DIR must be set in build scripts");
-        });
+    let out_dir = std::env::var("OUT_DIR").unwrap_or_else(|_| {
+        panic!("OUT_DIR must be set in build scripts");
+    });
     let out_path = std::path::Path::new(&out_dir);
     // OUT_DIR is target/<profile>/build/<crate-hash>/out. The profile dir is
     // the parent of the `build/` component. Resolving it this way (rather than
@@ -300,7 +305,10 @@ fn build_qt6ui() {
     });
     let qt6ui_dir = std::path::Path::new(&manifest_dir).join("../qt6ui");
     if !qt6ui_dir.join("Cargo.toml").exists() {
-        println!("cargo:warning=qt6ui crate not found at {}, skipping", qt6ui_dir.display());
+        println!(
+            "cargo:warning=qt6ui crate not found at {}, skipping",
+            qt6ui_dir.display()
+        );
         return;
     }
 
@@ -314,35 +322,50 @@ fn build_qt6ui() {
     println!("cargo:rerun-if-env-changed=QT6_MINGW_GCC");
 
     let profile = std::env::var("PROFILE").unwrap_or_else(|_| "debug".to_owned());
-
-    // Dev-loop cost control: rebuilding the entire Qt client inside this
-    // build script stalls `cargo build`/`cargo tauri dev` for minutes at
-    // "Compiling mumble-tauri" every time any qt6ui source changed. In
-    // non-release builds, when a previously-built qt6ui binary exists in
-    // its own target dir, skip the nested build: the launcher's dev-layout
-    // fallback (ui_mode::find_qt6ui_binary) picks that binary up directly,
-    // and qt6ui developers build it themselves (crates/qt6ui/build.ps1).
-    // First runs (no binary yet) still build it, and release builds keep
-    // the always-fresh guarantee for bundling. Set FORCE_QT6UI_BUILD=1 to
-    // opt back into the nested build in dev.
-    if profile != "release" && std::env::var("FORCE_QT6UI_BUILD").is_err() {
-        let exe_name = if cfg!(windows) { "qt6ui.exe" } else { "qt6ui" };
-        let prebuilt = ["release", "debug"]
-            .iter()
-            .map(|p| qt6ui_dir.join("target").join(p).join(exe_name))
-            .find(|p| p.is_file());
-        if let Some(prebuilt) = prebuilt {
-            eprintln!(
-                "skipping nested qt6ui build (dev profile; launcher will use {})",
-                prebuilt.display()
-            );
-            return;
-        }
+    if qt6ui_dev_prebuilt_skips(&qt6ui_dir, &profile) {
+        return;
     }
-
     let Some((qt, mingw, qmake)) = qt6ui_prerequisites() else {
         return; // warnings already emitted
     };
+    run_nested_qt6ui_build(&qt6ui_dir, &qt, &mingw, &qmake, &profile);
+    install_qt6ui_binary(&qt6ui_dir, &profile);
+}
+
+/// In dev builds, skip the (minutes-long) nested qt6ui build when a binary
+/// already exists in its own target dir - the launcher's dev-layout fallback
+/// (`ui_mode::find_qt6ui_binary`) picks it up, and qt6ui devs rebuild it
+/// themselves. First runs and release builds always build. `FORCE_QT6UI_BUILD`
+/// opts back in.
+fn qt6ui_dev_prebuilt_skips(qt6ui_dir: &std::path::Path, profile: &str) -> bool {
+    if profile == "release" || std::env::var("FORCE_QT6UI_BUILD").is_ok() {
+        return false;
+    }
+    let exe_name = if cfg!(windows) { "qt6ui.exe" } else { "qt6ui" };
+    let prebuilt = ["release", "debug"]
+        .iter()
+        .map(|p| qt6ui_dir.join("target").join(p).join(exe_name))
+        .find(|p| p.is_file());
+    if let Some(prebuilt) = prebuilt {
+        eprintln!(
+            "skipping nested qt6ui build (dev profile; launcher will use {})",
+            prebuilt.display()
+        );
+        return true;
+    }
+    false
+}
+
+/// Run the `+gnu` nested `cargo build` for qt6ui with a scrubbed environment
+/// (so the parent MSVC toolchain does not leak in) and Qt/MinGW/Ninja on PATH.
+/// Panics on failure - a stale qt6ui must not build silently.
+fn run_nested_qt6ui_build(
+    qt6ui_dir: &std::path::Path,
+    qt: &str,
+    mingw: &str,
+    qmake: &std::path::Path,
+    profile: &str,
+) {
     let mut path = format!("{mingw}\\bin;{qt}\\bin");
     // CMake-based -sys crates (audiopus_sys) must not pick up a stray
     // `make`/`sh` from the ambient PATH; prefer Qt Tools' Ninja (see
@@ -351,8 +374,8 @@ fn build_qt6ui() {
     let mut cmd = std::process::Command::new("cargo");
     let _ = cmd
         .args(["+stable-x86_64-pc-windows-gnu", "build"])
-        .current_dir(&qt6ui_dir)
-        .env("QMAKE", &qmake);
+        .current_dir(qt6ui_dir)
+        .env("QMAKE", qmake);
     // The parent (MSVC) cargo exports its own toolchain to build scripts
     // (RUSTC, RUSTUP_TOOLCHAIN, ...), which would override the `+gnu`
     // selection above and link MinGW Qt with the MSVC linker. Scrub them
@@ -393,11 +416,13 @@ fn build_qt6ui() {
     if !status.success() {
         panic!("qt6ui build failed (exit code: {status}); set SKIP_QT6UI=1 to bypass");
     }
+}
 
-    // Copy the exe next to the mumble-tauri executable so the launcher's
-    // sibling lookup always sees the freshest build (qt6ui has its own
-    // target dir because it is workspace-excluded).
-    let built = qt6ui_dir.join("target").join(&profile).join("qt6ui.exe");
+/// Copy the freshly built qt6ui exe next to the mumble-tauri executable so
+/// the launcher's sibling lookup sees it (qt6ui has its own target dir
+/// because it is workspace-excluded).
+fn install_qt6ui_binary(qt6ui_dir: &std::path::Path, profile: &str) {
+    let built = qt6ui_dir.join("target").join(profile).join("qt6ui.exe");
     if !built.is_file() {
         panic!("qt6ui binary not found at {} after build", built.display());
     }
@@ -435,8 +460,6 @@ fn build_qt6ui() {
 /// The minimal `qt6ui` client runs the same codegen from its own build.rs
 /// (it is workspace-excluded, so the logic is mirrored there).
 fn generate_shared_constants() {
-    use std::fmt::Write as _;
-
     println!("cargo:rerun-if-changed=../../constants.json");
 
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| {
@@ -450,86 +473,155 @@ fn generate_shared_constants() {
         panic!("invalid JSON in {}: {e}", json_path.display());
     });
 
-    let s = |key: &str| -> String {
-        c[key]
-            .as_str()
-            .unwrap_or_else(|| panic!("constants.json: '{key}' must be a string"))
-            .to_owned()
-    };
-    let n = |key: &str| -> u64 {
-        c[key]
-            .as_u64()
-            .unwrap_or_else(|| panic!("constants.json: '{key}' must be a number"))
-    };
-    let list = |key: &str| -> Vec<String> {
-        c[key]
-            .as_array()
-            .unwrap_or_else(|| panic!("constants.json: '{key}' must be an array"))
-            .iter()
-            .map(|v| {
-                v.as_str()
-                    .unwrap_or_else(|| panic!("constants.json: '{key}' must contain only strings"))
-                    .to_owned()
-            })
-            .collect()
-    };
-
-    // ---- Rust constants (included by src/constants.rs) ------------------
-    let mut rs = String::new();
-    rs.push_str("// AUTO-GENERATED by build.rs from constants.json - DO NOT EDIT.\n");
-    let _ = writeln!(rs, "pub const APP_IDENTIFIER: &str = {:?};", s("appIdentifier"));
-    let _ = writeln!(rs, "pub const UI_MODE_MARKER_FILE: &str = {:?};", s("uiModeMarkerFile"));
-    let _ = writeln!(rs, "pub const ENV_E2E_DATA_DIR: &str = {:?};", s("envE2eDataDir"));
-    let _ = writeln!(rs, "pub const ENV_QT6UI_BIN: &str = {:?};", s("envQt6uiBin"));
-    let _ = writeln!(rs, "pub const ENV_FULL_CLIENT_BIN: &str = {:?};", s("envFullClientBin"));
-    let _ = writeln!(rs, "pub const QT6UI_BINARY_NAME: &str = {:?};", s("qt6uiBinaryName"));
-    let _ = writeln!(
-        rs,
-        "pub const FULL_CLIENT_BINARY_NAMES: &[&str] = &{:?};",
-        list("fullClientBinaryNames")
-    );
-    let _ = writeln!(rs, "pub const WEAK_PC_MAX_MEMORY_MB: u64 = {};", n("weakPcMaxMemoryMb"));
-    let _ = writeln!(rs, "pub const WEAK_PC_MAX_CPU_CORES: u32 = {};", n("weakPcMaxCpuCores"));
-    let _ = writeln!(rs, "pub const DEFAULT_SERVER_PORT: u16 = {};", n("defaultServerPort"));
-    let _ = writeln!(rs, "pub const DM_CHANNEL_PREFIX: &str = {:?};", s("dmChannelPrefix"));
-    let _ = writeln!(rs, "pub const LOCALES: &[&str] = &{:?};", list("locales"));
-    let _ = writeln!(rs, "pub const DEFAULT_LOCALE: &str = {:?};", s("defaultLocale"));
-
+    // Rust constants: included by src/constants.rs, always rewritten (OUT_DIR).
     let out_dir = std::env::var("OUT_DIR").unwrap_or_else(|_| {
         panic!("OUT_DIR must be set in build scripts");
     });
-    std::fs::write(std::path::Path::new(&out_dir).join("fancy_constants.rs"), rs)
-        .unwrap_or_else(|e| panic!("failed to write fancy_constants.rs: {e}"));
+    std::fs::write(
+        std::path::Path::new(&out_dir).join("fancy_constants.rs"),
+        build_rust_constants(&c),
+    )
+    .unwrap_or_else(|e| panic!("failed to write fancy_constants.rs: {e}"));
 
-    // ---- TypeScript constants (ui/src/utils/appConstants.ts) ------------
-    let mut ts = String::new();
-    ts.push_str("/* AUTO-GENERATED by mumble-tauri/build.rs from constants.json\n");
-    ts.push_str(" * (repo root) - DO NOT EDIT BY HAND. Change constants.json and\n");
-    ts.push_str(" * rebuild; this file will be regenerated automatically.\n */\n\n");
-    let _ = writeln!(ts, "export const APP_IDENTIFIER = {:?} as const;", s("appIdentifier"));
-    let _ = writeln!(ts, "export const UI_MODE_MARKER_FILE = {:?} as const;", s("uiModeMarkerFile"));
-    let _ = writeln!(ts, "export const WEAK_PC_MAX_MEMORY_MB = {};", n("weakPcMaxMemoryMb"));
-    let _ = writeln!(ts, "export const WEAK_PC_MAX_CPU_CORES = {};", n("weakPcMaxCpuCores"));
-    let _ = writeln!(ts, "export const DEFAULT_SERVER_PORT = {};", n("defaultServerPort"));
-    let _ = writeln!(ts, "export const DM_CHANNEL_PREFIX = {:?} as const;", s("dmChannelPrefix"));
-    let _ = writeln!(ts, "export const LOCALES = {:?} as const;", list("locales"));
-    let _ = writeln!(ts, "export const DEFAULT_LOCALE = {:?} as const;", s("defaultLocale"));
-
+    // TypeScript constants: write-if-changed so incremental rebuilds don't
+    // bump the mtime (which would trigger Vite HMR loops).
+    let ts = build_ts_constants(&c);
     let ts_path = std::path::Path::new(&manifest_dir)
         .join("ui")
         .join("src")
         .join("utils")
         .join("appConstants.ts");
-    let needs_write = match std::fs::read_to_string(&ts_path) {
-        Ok(existing) => existing != ts,
-        Err(_) => true,
-    };
-    if needs_write {
+    let up_to_date = std::fs::read_to_string(&ts_path).is_ok_and(|existing| existing == ts);
+    if !up_to_date {
         std::fs::write(&ts_path, ts).unwrap_or_else(|e| {
             panic!("failed to write {}: {e}", ts_path.display());
         });
         eprintln!("regenerated {}", ts_path.display());
     }
+}
+
+/// A required string field of `constants.json`.
+fn json_str(c: &serde_json::Value, key: &str) -> String {
+    c[key]
+        .as_str()
+        .unwrap_or_else(|| panic!("constants.json: '{key}' must be a string"))
+        .to_owned()
+}
+
+/// A required numeric field of `constants.json`.
+fn json_num(c: &serde_json::Value, key: &str) -> u64 {
+    c[key]
+        .as_u64()
+        .unwrap_or_else(|| panic!("constants.json: '{key}' must be a number"))
+}
+
+/// A required string-array field of `constants.json`.
+fn json_list(c: &serde_json::Value, key: &str) -> Vec<String> {
+    c[key]
+        .as_array()
+        .unwrap_or_else(|| panic!("constants.json: '{key}' must be an array"))
+        .iter()
+        .map(|v| {
+            v.as_str()
+                .unwrap_or_else(|| panic!("constants.json: '{key}' must contain only strings"))
+                .to_owned()
+        })
+        .collect()
+}
+
+/// The `pub const` items included by `src/constants.rs`.
+fn build_rust_constants(c: &serde_json::Value) -> String {
+    use std::fmt::Write as _;
+    let mut rs = String::new();
+    rs.push_str("// AUTO-GENERATED by build.rs from constants.json - DO NOT EDIT.\n");
+    let _ = writeln!(rs, "pub const APP_IDENTIFIER: &str = {:?};", json_str(c, "appIdentifier"));
+    let _ = writeln!(
+        rs,
+        "pub const UI_MODE_MARKER_FILE: &str = {:?};",
+        json_str(c, "uiModeMarkerFile")
+    );
+    let _ = writeln!(rs, "pub const ENV_E2E_DATA_DIR: &str = {:?};", json_str(c, "envE2eDataDir"));
+    let _ = writeln!(rs, "pub const ENV_QT6UI_BIN: &str = {:?};", json_str(c, "envQt6uiBin"));
+    let _ = writeln!(
+        rs,
+        "pub const ENV_FULL_CLIENT_BIN: &str = {:?};",
+        json_str(c, "envFullClientBin")
+    );
+    let _ = writeln!(
+        rs,
+        "pub const QT6UI_BINARY_NAME: &str = {:?};",
+        json_str(c, "qt6uiBinaryName")
+    );
+    let _ = writeln!(
+        rs,
+        "pub const FULL_CLIENT_BINARY_NAMES: &[&str] = &{:?};",
+        json_list(c, "fullClientBinaryNames")
+    );
+    let _ = writeln!(
+        rs,
+        "pub const WEAK_PC_MAX_MEMORY_MB: u64 = {};",
+        json_num(c, "weakPcMaxMemoryMb")
+    );
+    let _ = writeln!(
+        rs,
+        "pub const WEAK_PC_MAX_CPU_CORES: u32 = {};",
+        json_num(c, "weakPcMaxCpuCores")
+    );
+    let _ = writeln!(
+        rs,
+        "pub const DEFAULT_SERVER_PORT: u16 = {};",
+        json_num(c, "defaultServerPort")
+    );
+    let _ = writeln!(rs, "pub const DM_CHANNEL_PREFIX: &str = {:?};", json_str(c, "dmChannelPrefix"));
+    let _ = writeln!(rs, "pub const LOCALES: &[&str] = &{:?};", json_list(c, "locales"));
+    let _ = writeln!(rs, "pub const DEFAULT_LOCALE: &str = {:?};", json_str(c, "defaultLocale"));
+    rs
+}
+
+/// The `export const` items for `ui/src/utils/appConstants.ts`.
+fn build_ts_constants(c: &serde_json::Value) -> String {
+    use std::fmt::Write as _;
+    let mut ts = String::new();
+    ts.push_str("/* AUTO-GENERATED by mumble-tauri/build.rs from constants.json\n");
+    ts.push_str(" * (repo root) - DO NOT EDIT BY HAND. Change constants.json and\n");
+    ts.push_str(" * rebuild; this file will be regenerated automatically.\n */\n\n");
+    let _ = writeln!(
+        ts,
+        "export const APP_IDENTIFIER = {:?} as const;",
+        json_str(c, "appIdentifier")
+    );
+    let _ = writeln!(
+        ts,
+        "export const UI_MODE_MARKER_FILE = {:?} as const;",
+        json_str(c, "uiModeMarkerFile")
+    );
+    let _ = writeln!(
+        ts,
+        "export const WEAK_PC_MAX_MEMORY_MB = {};",
+        json_num(c, "weakPcMaxMemoryMb")
+    );
+    let _ = writeln!(
+        ts,
+        "export const WEAK_PC_MAX_CPU_CORES = {};",
+        json_num(c, "weakPcMaxCpuCores")
+    );
+    let _ = writeln!(
+        ts,
+        "export const DEFAULT_SERVER_PORT = {};",
+        json_num(c, "defaultServerPort")
+    );
+    let _ = writeln!(
+        ts,
+        "export const DM_CHANNEL_PREFIX = {:?} as const;",
+        json_str(c, "dmChannelPrefix")
+    );
+    let _ = writeln!(ts, "export const LOCALES = {:?} as const;", json_list(c, "locales"));
+    let _ = writeln!(
+        ts,
+        "export const DEFAULT_LOCALE = {:?} as const;",
+        json_str(c, "defaultLocale")
+    );
+    ts
 }
 
 /// Regenerate `ui/src/utils/permissions.ts` from the canonical Rust table.
@@ -541,10 +633,9 @@ fn generate_permissions_ts() {
 
     println!("cargo:rerun-if-changed=../fancy-utils/src/permissions.rs");
 
-    let manifest_dir =
-        std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| {
-            panic!("CARGO_MANIFEST_DIR must be set in build scripts");
-        });
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| {
+        panic!("CARGO_MANIFEST_DIR must be set in build scripts");
+    });
     let out_path = std::path::Path::new(&manifest_dir)
         .join("ui")
         .join("src")

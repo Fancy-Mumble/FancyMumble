@@ -44,6 +44,7 @@ use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtcp::payload_feedbacks::full_intra_request::FullIntraRequest;
 use webrtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
+use webrtc::rtp_transceiver::rtp_sender::RTCRtpSender;
 use webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection;
 use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
 use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
@@ -484,10 +485,6 @@ impl ScreenBroadcaster {
     /// Listen for RTCP PLI/FIR from the SFU and flag keyframe requests.
     /// Returns one flag per track (sender order == transceiver add order ==
     /// source order), each polled by its own capture loop.
-    #[allow(
-        clippy::excessive_nesting,
-        reason = "spawn -> per-sender task -> RTCP read loop -> packet demux is the natural shape"
-    )]
     fn spawn_keyframe_listener(
         runtime: &Runtime,
         pc: &Arc<RTCPeerConnection>,
@@ -499,24 +496,9 @@ impl ScreenBroadcaster {
         let senders_pc = Arc::clone(pc);
         let listener_flags = flags.clone();
         let _detached = runtime.spawn(async move {
-            for (sender, flag) in senders_pc
-                .get_senders()
-                .await
-                .into_iter()
-                .zip(listener_flags)
-            {
-                let _detached = tokio::spawn(async move {
-                    while let Ok((packets, _)) = sender.read_rtcp().await {
-                        for packet in packets {
-                            let any = packet.as_any();
-                            if any.downcast_ref::<PictureLossIndication>().is_some()
-                                || any.downcast_ref::<FullIntraRequest>().is_some()
-                            {
-                                flag.store(true, Ordering::SeqCst);
-                            }
-                        }
-                    }
-                });
+            let paired = senders_pc.get_senders().await.into_iter().zip(listener_flags);
+            for (sender, flag) in paired {
+                let _detached = tokio::spawn(watch_sender_keyframes(sender, flag));
             }
         });
         flags
@@ -679,6 +661,21 @@ impl SendLeg {
 /// decided by [`create_pipeline`]. A failing source fails the WHOLE
 /// broadcast (the embedder tears down and reports), keeping partial-share
 /// states out of the UI.
+/// One sender's RTCP read loop: set `flag` whenever the SFU asks for a
+/// keyframe (PLI or FIR), until the sender closes. One task per track.
+async fn watch_sender_keyframes(sender: Arc<RTCRtpSender>, flag: Arc<AtomicBool>) {
+    while let Ok((packets, _)) = sender.read_rtcp().await {
+        for packet in packets {
+            let any = packet.as_any();
+            let is_keyframe_request = any.downcast_ref::<PictureLossIndication>().is_some()
+                || any.downcast_ref::<FullIntraRequest>().is_some();
+            if is_keyframe_request {
+                flag.store(true, Ordering::SeqCst);
+            }
+        }
+    }
+}
+
 fn capture_loop(
     source: BroadcastSource,
     settings: EncodeSettings,
