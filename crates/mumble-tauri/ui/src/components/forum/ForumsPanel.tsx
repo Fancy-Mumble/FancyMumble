@@ -44,6 +44,7 @@ import {
   type TopicView,
 } from "./forumTaxonomy";
 import { isThreadUnread, markThreadSeen } from "./forumUnread";
+import { TID, FORUM_TOPIC_ATTR, FORUM_THREAD_TITLE_ATTR } from "../../testids";
 import styles from "./ForumsPanel.module.css";
 
 interface ForumsPanelProps {
@@ -383,6 +384,8 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
                 type="button"
                 key={tp.name}
                 className={styles.topicRow}
+                data-testid={TID.forumTopicRow}
+                {...{ [FORUM_TOPIC_ATTR]: tp.name }}
                 onClick={() => openTopic(tp.category, tp.name)}
               >
                 <span className={styles.topicIcon} data-active={tp.threadCount > 0}>
@@ -412,7 +415,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
         </section>
       ))}
       {hasMoreThreads && (
-        <button type="button" className={styles.loadMoreBtn} onClick={() => void loadMoreThreads()} disabled={loadingMore}>
+        <button type="button" className={styles.loadMoreBtn} data-testid={TID.forumLoadMore} onClick={() => void loadMoreThreads()} disabled={loadingMore}>
           {loadingMore ? t("forum.loading") : t("forum.loadMore")}
         </button>
       )}
@@ -427,7 +430,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
           <span>{currentTopic.name}</span>
           <span className={styles.toolbarCount}>{t("forum.threadCount", { count: currentTopic.threadCount })}</span>
         </div>
-        <button type="button" className={styles.primaryBtn} onClick={() => setShowNewThread((v) => !v)}>
+        <button type="button" className={styles.primaryBtn} data-testid={TID.forumNewThread} onClick={() => setShowNewThread((v) => !v)}>
           <PlusIcon width={15} height={15} />
           {t("forum.newThread")}
         </button>
@@ -439,6 +442,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
           <input
             className={styles.searchInput}
             type="text"
+            data-testid={TID.forumSearchInput}
             placeholder={t("forum.searchThreads")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -462,6 +466,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
           <input
             className={styles.input}
             type="text"
+            data-testid={TID.forumThreadTitleInput}
             placeholder={t("forum.threadTitlePlaceholder")}
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
@@ -469,6 +474,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
           />
           <textarea
             className={styles.textarea}
+            data-testid={TID.forumThreadBodyInput}
             placeholder={t("forum.threadBodyPlaceholder")}
             value={newBody}
             onChange={(e) => setNewBody(e.target.value)}
@@ -477,6 +483,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
           <button
             type="button"
             className={styles.primaryBtn}
+            data-testid={TID.forumThreadSubmit}
             onClick={() => void submitNewThread()}
             disabled={posting || !newTitle.trim() || !newBody.trim()}
           >
@@ -505,14 +512,25 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
                   key={thread.postId}
                   className={styles.threadRow}
                   data-pinned={pinned}
+                  data-reply-count={thread.replyCount ?? 0}
+                  data-testid={TID.forumThreadRow}
+                  {...{ [FORUM_THREAD_TITLE_ATTR]: coords.title }}
                   onClick={() => openThread(thread.threadId, activityAt)}
                 >
                   <Avatar name={thread.authorName} size={34} />
                   <span className={styles.threadMain}>
                     <span className={styles.threadTitle}>
                       {unread && <span className={styles.unreadDot} title={t("forum.newActivity")} />}
-                      {pinned && <PinIcon width={13} height={13} className={styles.pinIcon} title={t("forum.pinned")} />}
-                      {locked && <LockIcon width={13} height={13} className={styles.lockIcon} title={t("forum.locked")} />}
+                      {pinned && (
+                        <span title={t("forum.pinned")}>
+                          <PinIcon width={13} height={13} className={styles.pinIcon} />
+                        </span>
+                      )}
+                      {locked && (
+                        <span title={t("forum.locked")}>
+                          <LockIcon width={13} height={13} className={styles.lockIcon} />
+                        </span>
+                      )}
                       {coords.title || t("forum.untitled")}
                     </span>
                     <span className={styles.threadSub}>
@@ -544,6 +562,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
               type="button"
               className={styles.modBtn}
               data-active={isPinned(openCoords?.flags ?? "")}
+              data-testid={TID.forumPinToggle}
               onClick={() => void toggleThreadFlag(openRoot, FLAG_PINNED)}
             >
               <PinIcon width={13} height={13} />
@@ -553,6 +572,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
               type="button"
               className={styles.modBtn}
               data-active={isLocked(openCoords?.flags ?? "")}
+              data-testid={TID.forumLockToggle}
               onClick={() => void toggleThreadFlag(openRoot, FLAG_LOCKED)}
             >
               <LockIcon width={13} height={13} />
@@ -565,7 +585,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
             const root = isThreadRoot(post);
             const editing = editingPostId === post.postId;
             return (
-              <article key={post.postId} className={styles.post} data-op={root}>
+              <article key={post.postId} className={styles.post} data-op={root} data-testid={TID.forumPost}>
                 <div className={styles.postAside}>
                   <Avatar name={post.authorName} size={44} />
                   <span className={styles.postAsideName}>{post.authorName || t("forum.unknownAuthor")}</span>
@@ -582,6 +602,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
                       <button
                         type="button"
                         className={styles.iconBtn}
+                        data-testid={TID.forumPostQuote}
                         onClick={() => quotePost(post)}
                         title={t("forum.quote")}
                         aria-label={t("forum.quote")}
@@ -593,6 +614,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
                       <button
                         type="button"
                         className={styles.iconBtn}
+                        data-testid={TID.forumPostEdit}
                         onClick={() => startEdit(post)}
                         title={t("forum.edit")}
                         aria-label={t("forum.edit")}
@@ -604,6 +626,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
                       <button
                         type="button"
                         className={styles.iconBtn}
+                        data-testid={TID.forumPostDelete}
                         onClick={() => void onDelete(post)}
                         title={t("forum.delete")}
                         aria-label={t("forum.delete")}
@@ -618,6 +641,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
                         <input
                           className={styles.input}
                           type="text"
+                          data-testid={TID.forumEditTitleInput}
                           value={editTitle}
                           onChange={(e) => setEditTitle(e.target.value)}
                           maxLength={180}
@@ -625,6 +649,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
                       )}
                       <textarea
                         className={styles.textarea}
+                        data-testid={TID.forumEditBodyInput}
                         value={editBody}
                         onChange={(e) => setEditBody(e.target.value)}
                         rows={3}
@@ -636,6 +661,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
                         <button
                           type="button"
                           className={styles.primaryBtn}
+                          data-testid={TID.forumEditSave}
                           onClick={() => void submitEdit(post)}
                           disabled={savingEdit || !editBody.trim()}
                         >
@@ -655,7 +681,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
       </div>
 
       {openThreadLocked && !canModerate ? (
-        <div className={styles.lockedBanner}>
+        <div className={styles.lockedBanner} data-testid={TID.forumLockedBanner}>
           <LockIcon width={14} height={14} />
           {t("forum.threadLocked")}
         </div>
@@ -664,6 +690,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
           <textarea
             ref={replyRef}
             className={styles.textarea}
+            data-testid={TID.forumReplyInput}
             placeholder={t("forum.replyPlaceholder")}
             value={replyBody}
             onChange={(e) => setReplyBody(e.target.value)}
@@ -678,6 +705,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
           <button
             type="button"
             className={styles.primaryBtn}
+            data-testid={TID.forumReplySubmit}
             onClick={() => void submitReply()}
             disabled={replying || !replyBody.trim()}
           >
@@ -690,12 +718,13 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
   );
 
   return (
-    <div className={styles.panel}>
+    <div className={styles.panel} data-testid={TID.forumPanel}>
       <div className={styles.header}>
         {(selected || openThreadId) && (
           <button
             type="button"
             className={styles.iconBtn}
+            data-testid={TID.forumBack}
             onClick={() => (openThreadId ? setOpenThreadId(null) : setSelected(null))}
             title={t("forum.back")}
             aria-label={t("forum.back")}
@@ -707,6 +736,7 @@ export default function ForumsPanel({ channelId }: ForumsPanelProps) {
         <button
           type="button"
           className={styles.iconBtn}
+          data-testid={TID.forumRefresh}
           onClick={() => {
             void fetchForumThreads(channelId);
             if (openThreadId) void fetchForumThread(channelId, openThreadId);

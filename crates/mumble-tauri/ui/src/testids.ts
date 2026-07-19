@@ -277,6 +277,73 @@ export const TID = {
   connectTotpInput: "connect-totp-input",
   /** Submit button of the login TOTP dialog. */
   connectTotpSubmit: "connect-totp-submit",
+
+  // -- Chat header kebab menu -----------------------------------------------
+  /** The chat header's kebab (overflow) menu trigger. */
+  chatHeaderKebab: "chat-header-kebab",
+  /** An entry in an open kebab menu. Carries `data-item-id`
+   *  ({@link KEBAB_ITEM_ATTR}) with the item's stable id
+   *  (e.g. "forums", "scheduled-messages"). */
+  kebabMenuItem: "kebab-menu-item",
+
+  // -- Forums (per-channel message board) -----------------------------------
+  /** Root of the ForumsPanel split view. */
+  forumPanel: "forum-panel",
+  /** A topic row on the board index. Carries `data-topic`
+   *  ({@link FORUM_TOPIC_ATTR}) with the topic name. */
+  forumTopicRow: "forum-topic-row",
+  /** The "New thread" toggle inside a topic. */
+  forumNewThread: "forum-new-thread",
+  forumThreadTitleInput: "forum-thread-title-input",
+  forumThreadBodyInput: "forum-thread-body-input",
+  /** Submits the new-thread composer. */
+  forumThreadSubmit: "forum-thread-submit",
+  /** A thread row in the topic listing. Carries `data-thread-title`
+   *  ({@link FORUM_THREAD_TITLE_ATTR}) with the decoded display title. */
+  forumThreadRow: "forum-thread-row",
+  /** In-topic thread search input. */
+  forumSearchInput: "forum-search-input",
+  /** A rendered post (root or reply) in the thread view. */
+  forumPost: "forum-post",
+  forumReplyInput: "forum-reply-input",
+  forumReplySubmit: "forum-reply-submit",
+  /** Per-post quote-into-reply button. */
+  forumPostQuote: "forum-post-quote",
+  /** Per-post edit button (author or channel admin). */
+  forumPostEdit: "forum-post-edit",
+  /** Per-post delete button (author or channel admin). */
+  forumPostDelete: "forum-post-delete",
+  forumEditTitleInput: "forum-edit-title-input",
+  forumEditBodyInput: "forum-edit-body-input",
+  forumEditSave: "forum-edit-save",
+  /** Moderator pin/unpin toggle in the thread view. */
+  forumPinToggle: "forum-pin-toggle",
+  /** Moderator lock/unlock toggle in the thread view. */
+  forumLockToggle: "forum-lock-toggle",
+  /** Read-only banner replacing the reply composer in a locked thread. */
+  forumLockedBanner: "forum-locked-banner",
+  /** Board-index button loading the next (older) page of thread roots. */
+  forumLoadMore: "forum-load-more",
+  /** Header button navigating one level up (thread -> topic -> board). */
+  forumBack: "forum-back",
+  forumRefresh: "forum-refresh",
+
+  // -- Scheduled messages ---------------------------------------------------
+  /** Root of the ScheduledMessagesPanel split view. */
+  scheduledPanel: "scheduled-panel",
+  scheduledBodyInput: "scheduled-body-input",
+  /** The `datetime-local` delivery-time input. */
+  scheduledTimeInput: "scheduled-time-input",
+  scheduledSubmit: "scheduled-submit",
+  /** Client-side validation / server rejection error line. */
+  scheduledError: "scheduled-error",
+  /** A pending scheduled message row. */
+  scheduledItem: "scheduled-item",
+  /** Per-row cancel button. */
+  scheduledItemCancel: "scheduled-item-cancel",
+  scheduledRefresh: "scheduled-refresh",
+  /** Empty-state ("no pending messages") placeholder. */
+  scheduledEmpty: "scheduled-empty",
 } as const;
 
 export type TestId = (typeof TID)[keyof typeof TID];
@@ -295,3 +362,12 @@ export const STREAM_SOURCE_TITLE_ATTR = "data-source-title";
 /** Data attribute key carrying a broadcaster's display name, used alongside
  *  {@link TID.broadcastBanner}. */
 export const BROADCASTER_NAME_ATTR = "data-broadcaster-name";
+/** Data attribute key carrying a kebab menu entry's stable id, used alongside
+ *  {@link TID.kebabMenuItem}. */
+export const KEBAB_ITEM_ATTR = "data-item-id";
+/** Data attribute key carrying a forum topic's name, used alongside
+ *  {@link TID.forumTopicRow}. */
+export const FORUM_TOPIC_ATTR = "data-topic";
+/** Data attribute key carrying a forum thread's decoded display title, used
+ *  alongside {@link TID.forumThreadRow}. */
+export const FORUM_THREAD_TITLE_ATTR = "data-thread-title";

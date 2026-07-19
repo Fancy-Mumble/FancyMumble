@@ -2,6 +2,7 @@ import { KebabMenuIcon } from "../../icons";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
+import { TID, KEBAB_ITEM_ATTR } from "../../testids";
 import styles from "./KebabMenu.module.css";
 
 export interface KebabMenuItem {
@@ -22,9 +23,12 @@ interface KebabMenuProps {
   readonly ariaLabel?: string;
   /** Show a red notification dot on the trigger button. */
   readonly badge?: boolean;
+  /** Optional `data-testid` for the trigger button (menu items always carry
+   *  {@link TID.kebabMenuItem} + their stable id as `data-item-id`). */
+  readonly testId?: string;
 }
 
-export default function KebabMenu({ items, ariaLabel, badge }: KebabMenuProps) {
+export default function KebabMenu({ items, ariaLabel, badge, testId }: KebabMenuProps) {
   const { t } = useTranslation("common");
   const resolvedLabel = ariaLabel ?? t("kebabMenu.ariaLabel");
   const [open, setOpen] = useState(false);
@@ -63,6 +67,7 @@ export default function KebabMenu({ items, ariaLabel, badge }: KebabMenuProps) {
         onClick={handleToggle}
         aria-label={resolvedLabel}
         title={resolvedLabel}
+        data-testid={testId}
       >
         <KebabMenuIcon width={18} height={18} />
         {badge && <span className={styles.badgeDot} />}
@@ -91,6 +96,8 @@ export default function KebabMenu({ items, ariaLabel, badge }: KebabMenuProps) {
                 ].filter(Boolean).join(" ")}
                 role="menuitem"
                 disabled={item.disabled}
+                data-testid={TID.kebabMenuItem}
+                {...{ [KEBAB_ITEM_ATTR]: item.id }}
                 onClick={() => {
                   item.onClick();
                   close();

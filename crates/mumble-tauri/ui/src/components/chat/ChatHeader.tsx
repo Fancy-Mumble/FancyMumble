@@ -384,6 +384,7 @@ export default function ChatHeader({
             items={buildKebabItems({ onPollCreate, isSilenced, onToggleSilence, hasNewPins, onPinnedMessages, hasNewDownloads, onDownloads, onMySharedFiles, onOpenDocLibrary, onForums, onScheduledMessages, onChannelSearch: isMobile ? onChannelSearch : undefined, onChannelInfoToggle: isMobile ? onChannelInfoToggle : undefined, t: tStr })}
             ariaLabel={t("header.channelOptions")}
             badge={hasNewPins || hasNewDownloads}
+            testId={TID.chatHeaderKebab}
           />
         )}
         {!isInChannel && onJoin && (

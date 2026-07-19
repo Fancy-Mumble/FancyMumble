@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../store";
 import { ClockIcon, SendIcon, TrashIcon, RefreshCwIcon } from "../../icons";
 import { useScheduledStore, ScheduleStatus, type ScheduledMessage } from "./scheduledStore";
+import { TID } from "../../testids";
 import styles from "./ScheduledMessagesPanel.module.css";
 
 interface ScheduledMessagesPanelProps {
@@ -110,7 +111,7 @@ export default function ScheduledMessagesPanel({ channelId }: ScheduledMessagesP
       : null;
 
   return (
-    <div className={styles.panel}>
+    <div className={styles.panel} data-testid={TID.scheduledPanel}>
       <div className={styles.header}>
         <ClockIcon width={18} height={18} />
         <span className={styles.title}>
@@ -120,6 +121,7 @@ export default function ScheduledMessagesPanel({ channelId }: ScheduledMessagesP
         <button
           type="button"
           className={styles.iconBtn}
+          data-testid={TID.scheduledRefresh}
           onClick={() => void listScheduledMessages()}
           title={t("scheduled.refresh")}
           aria-label={t("scheduled.refresh")}
@@ -131,6 +133,7 @@ export default function ScheduledMessagesPanel({ channelId }: ScheduledMessagesP
       <div className={styles.composer}>
         <textarea
           className={styles.textarea}
+          data-testid={TID.scheduledBodyInput}
           placeholder={t("scheduled.messagePlaceholder")}
           value={body}
           onChange={(e) => setBody(e.target.value)}
@@ -141,16 +144,18 @@ export default function ScheduledMessagesPanel({ channelId }: ScheduledMessagesP
           <input
             className={styles.input}
             type="datetime-local"
+            data-testid={TID.scheduledTimeInput}
             value={when}
             onChange={(e) => setWhen(e.target.value)}
           />
         </label>
         {(localError || ackError) && (
-          <div className={styles.error}>{localError ?? ackError}</div>
+          <div className={styles.error} data-testid={TID.scheduledError}>{localError ?? ackError}</div>
         )}
         <button
           type="button"
           className={styles.primaryBtn}
+          data-testid={TID.scheduledSubmit}
           onClick={() => void submit()}
           disabled={submitting || !body.trim()}
         >
@@ -164,16 +169,17 @@ export default function ScheduledMessagesPanel({ channelId }: ScheduledMessagesP
           <div className={styles.empty}>{t("scheduled.loading")}</div>
         )}
         {!loading && pending.length === 0 && (
-          <div className={styles.empty}>{t("scheduled.none")}</div>
+          <div className={styles.empty} data-testid={TID.scheduledEmpty}>{t("scheduled.none")}</div>
         )}
         {pending.map((m) => (
-          <div key={m.scheduleId} className={styles.item}>
+          <div key={m.scheduleId} className={styles.item} data-testid={TID.scheduledItem}>
             <div className={styles.itemHead}>
               <span className={styles.itemTarget}>{targetName(m)}</span>
               <span className={styles.itemStatus}>{statusLabel(m.status)}</span>
               <button
                 type="button"
                 className={styles.iconBtn}
+                data-testid={TID.scheduledItemCancel}
                 onClick={() => void cancelScheduledMessage(m.scheduleId)}
                 title={t("scheduled.cancel")}
                 aria-label={t("scheduled.cancel")}
