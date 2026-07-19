@@ -324,12 +324,42 @@ mod tests {
     /// Manual stage benchmark: per-stage cost of a 1080p frame for noise
     /// (worst case) and flat-cell board content (e2e-like). Run with
     /// `cargo test -p fancy-screenshare --release -- --ignored --nocapture`.
+    /// One synthetic bench frame: pseudo-random noise (encoder worst case)
+    /// or flat 120px cells with one row's shade cycling (e2e-like content).
+    fn fill_bench_frame(rgba: &mut [u8], w: u32, i: u32, noise: bool) {
+        if noise {
+            for (px, chunk) in rgba.chunks_exact_mut(4).enumerate() {
+                let v = (px as u32).wrapping_add(i.wrapping_mul(7919)) as u8;
+                chunk[0] = v;
+                chunk[1] = v.wrapping_mul(3);
+                chunk[2] = v ^ 0x5a;
+                chunk[3] = 255;
+            }
+            return;
+        }
+        for (px, chunk) in rgba.chunks_exact_mut(4).enumerate() {
+            let (x, y) = (px as u32 % w, px as u32 / w);
+            let green = ((x / 120 + y / 120) % 2) == 0;
+            let step = if y / 120 == i % 9 {
+                (i % 5 * 10) as u8
+            } else {
+                20
+            };
+            if green {
+                chunk[0] = 0;
+                chunk[1] = 160 + step;
+                chunk[2] = 0;
+            } else {
+                chunk[0] = 130 + step;
+                chunk[1] = 0;
+                chunk[2] = 130 + step;
+            }
+            chunk[3] = 255;
+        }
+    }
+
     #[test]
     #[ignore = "manual benchmark, not a correctness test"]
-    #[allow(
-        clippy::excessive_nesting,
-        reason = "throwaway synthetic-frame generation in a bench"
-    )]
     fn bench_convert_encode_1080p() {
         let (w, h) = (1920u32, 1080u32);
         let frames = 60u32;
@@ -339,36 +369,7 @@ mod tests {
             let (mut t_convert, mut t_encode) =
                 (std::time::Duration::ZERO, std::time::Duration::ZERO);
             for i in 0..frames {
-                if noise {
-                    for (px, chunk) in rgba.chunks_exact_mut(4).enumerate() {
-                        let v = (px as u32).wrapping_add(i.wrapping_mul(7919)) as u8;
-                        chunk[0] = v;
-                        chunk[1] = v.wrapping_mul(3);
-                        chunk[2] = v ^ 0x5a;
-                        chunk[3] = 255;
-                    }
-                } else {
-                    // Flat 120px cells, one row's shade cycling per frame.
-                    for (px, chunk) in rgba.chunks_exact_mut(4).enumerate() {
-                        let (x, y) = (px as u32 % w, px as u32 / w);
-                        let green = ((x / 120 + y / 120) % 2) == 0;
-                        let step = if y / 120 == i % 9 {
-                            (i % 5 * 10) as u8
-                        } else {
-                            20
-                        };
-                        if green {
-                            chunk[0] = 0;
-                            chunk[1] = 160 + step;
-                            chunk[2] = 0;
-                        } else {
-                            chunk[0] = 130 + step;
-                            chunk[1] = 0;
-                            chunk[2] = 130 + step;
-                        }
-                        chunk[3] = 255;
-                    }
-                }
+                fill_bench_frame(&mut rgba, w, i, noise);
                 let t0 = std::time::Instant::now();
                 enc.frame.fill_from_rgba(w, w, h, &rgba);
                 t_convert += t0.elapsed();

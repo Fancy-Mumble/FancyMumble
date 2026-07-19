@@ -522,10 +522,6 @@ fn open_stream(
 /// - No `IsFormatSupported` pre-check (Mumble has none; drivers answer
 ///   the query unreliably) - just attempt `Initialize`.
 /// - Period is at least 10 ms (`max(min, 100000)`), matching Mumble.
-#[allow(
-    clippy::excessive_nesting,
-    reason = "the rate x bit-depth x alignment-retry open ladder is one flat search, clearer inline"
-)]
 unsafe fn open_exclusive(
     device: &IMMDevice,
     mix_rate: u32,
@@ -561,76 +557,109 @@ unsafe fn open_exclusive(
     let mut last_err = String::from("no exclusive-capable PCM format found");
     for &rate in &rates {
         for &(ch, bits) in &ladder {
-            let client: IAudioClient = device
-                .Activate(CLSCTX_ALL, None)
-                .map_err(|e| format!("Activate: {e}"))?;
-            let block = ch * bits / 8;
-            let wfe = WAVEFORMATEX {
-                wFormatTag: WAVE_FORMAT_PCM as u16,
-                nChannels: ch,
-                nSamplesPerSec: rate,
-                wBitsPerSample: bits,
-                nBlockAlign: block,
-                nAvgBytesPerSec: rate * u32::from(block),
-                cbSize: 0,
-            };
-            let (mut def, mut min) = (0i64, 0i64);
-            client
-                .GetDevicePeriod(Some(&mut def), Some(&mut min))
-                .map_err(|e| format!("GetDevicePeriod: {e}"))?;
-            let mut period = min.max(100_000);
-
-            let mut attempt: IAudioClient = client;
-            for retry in 0..2 {
-                match attempt.Initialize(
-                    AUDCLNT_SHAREMODE_EXCLUSIVE,
-                    AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-                    period,
-                    period,
-                    &wfe,
-                    None,
-                ) {
-                    Ok(()) => {
-                        let (event, capture) = arm_stream(&attempt)?;
-                        let kind = if bits == 16 { SampleKind::I16 } else { SampleKind::I32 };
-                        debug!("wasapi capture: EXCLUSIVE {rate} Hz, {ch} ch, {bits}-bit");
-                        return Ok((attempt, capture, event, OpenMode::Exclusive, rate, ch, kind));
-                    }
-                    Err(e) if e.code().0 == E_BUFFER_SIZE_NOT_ALIGNED && retry == 0 => {
-                        // Standard alignment dance: recompute the period from
-                        // the driver's buffer size and retry on a FRESH client.
-                        let frames = attempt
-                            .GetBufferSize()
-                            .map_err(|e2| format!("GetBufferSize: {e2}"))?;
-                        period =
-                            (10_000_000.0 * f64::from(frames) / f64::from(rate)).round() as i64;
-                        attempt = device
-                            .Activate(CLSCTX_ALL, None)
-                            .map_err(|e2| format!("re-Activate: {e2}"))?;
-                    }
-                    Err(e) if e.code().0 == E_DEVICE_IN_USE => {
-                        // Another app owns the device exclusively - no other
-                        // rate/format can change that. Bail with a clear,
-                        // actionable message (the UI keys "device_busy" off
-                        // this HRESULT and suggests closing the other app).
-                        return Err(format!(
-                            "device held exclusively by another application (0x{:08X})",
-                            e.code().0
-                        ));
-                    }
-                    Err(e) => {
-                        last_err = format!(
-                            "exclusive Initialize {rate}Hz/{ch}ch/{bits}bit: 0x{:08X} {}",
-                            e.code().0,
-                            e.message()
-                        );
-                        break;
-                    }
-                }
+            match try_open_exclusive_format(device, rate, ch, bits) {
+                Ok(result) => return Ok(result),
+                // A held device (or a hard COM failure) can't be fixed by
+                // trying another rate/format - stop the whole search.
+                Err(ExclusiveOpenErr::Fatal(msg)) => return Err(msg),
+                // This rate x format didn't initialize; remember why and
+                // keep searching the ladder.
+                Err(ExclusiveOpenErr::Soft(msg)) => last_err = msg,
             }
         }
     }
     Err(last_err)
+}
+
+/// Why one exclusive-open attempt failed: `Fatal` aborts the whole search
+/// (device held by another app, or a COM call failed); `Soft` means only
+/// this rate x format didn't work, so the caller tries the next.
+enum ExclusiveOpenErr {
+    Fatal(String),
+    Soft(String),
+}
+
+/// Attempt one exclusive open at `rate`/`ch`/`bits`, including the standard
+/// buffer-size-alignment retry dance on a fresh client. Returns the opened
+/// stream, or the failure classified for [`open_exclusive`]'s ladder.
+unsafe fn try_open_exclusive_format(
+    device: &IMMDevice,
+    rate: u32,
+    ch: u16,
+    bits: u16,
+) -> std::result::Result<OpenResult, ExclusiveOpenErr> {
+    use ExclusiveOpenErr::{Fatal, Soft};
+
+    let client: IAudioClient = device
+        .Activate(CLSCTX_ALL, None)
+        .map_err(|e| Fatal(format!("Activate: {e}")))?;
+    let block = ch * bits / 8;
+    let wfe = WAVEFORMATEX {
+        wFormatTag: WAVE_FORMAT_PCM as u16,
+        nChannels: ch,
+        nSamplesPerSec: rate,
+        wBitsPerSample: bits,
+        nBlockAlign: block,
+        nAvgBytesPerSec: rate * u32::from(block),
+        cbSize: 0,
+    };
+    let (mut def, mut min) = (0i64, 0i64);
+    client
+        .GetDevicePeriod(Some(&mut def), Some(&mut min))
+        .map_err(|e| Fatal(format!("GetDevicePeriod: {e}")))?;
+    let mut period = min.max(100_000);
+
+    let mut attempt: IAudioClient = client;
+    for retry in 0..2 {
+        match attempt.Initialize(
+            AUDCLNT_SHAREMODE_EXCLUSIVE,
+            AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+            period,
+            period,
+            &wfe,
+            None,
+        ) {
+            Ok(()) => {
+                let (event, capture) = arm_stream(&attempt).map_err(Fatal)?;
+                let kind = if bits == 16 { SampleKind::I16 } else { SampleKind::I32 };
+                debug!("wasapi capture: EXCLUSIVE {rate} Hz, {ch} ch, {bits}-bit");
+                return Ok((attempt, capture, event, OpenMode::Exclusive, rate, ch, kind));
+            }
+            Err(e) if e.code().0 == E_BUFFER_SIZE_NOT_ALIGNED && retry == 0 => {
+                // Standard alignment dance: recompute the period from the
+                // driver's buffer size and retry on a FRESH client.
+                let frames = attempt
+                    .GetBufferSize()
+                    .map_err(|e2| Fatal(format!("GetBufferSize: {e2}")))?;
+                period = (10_000_000.0 * f64::from(frames) / f64::from(rate)).round() as i64;
+                attempt = device
+                    .Activate(CLSCTX_ALL, None)
+                    .map_err(|e2| Fatal(format!("re-Activate: {e2}")))?;
+            }
+            Err(e) if e.code().0 == E_DEVICE_IN_USE => {
+                // Another app owns the device exclusively - no other
+                // rate/format can change that. Bail with a clear, actionable
+                // message (the UI keys "device_busy" off this HRESULT and
+                // suggests closing the other app).
+                return Err(Fatal(format!(
+                    "device held exclusively by another application (0x{:08X})",
+                    e.code().0
+                )));
+            }
+            Err(e) => {
+                return Err(Soft(format!(
+                    "exclusive Initialize {rate}Hz/{ch}ch/{bits}bit: 0x{:08X} {}",
+                    e.code().0,
+                    e.message()
+                )));
+            }
+        }
+    }
+    // Unreachable in practice (the retry-1 iteration always returns from one
+    // of the match arms above), but the loop's type needs a fallthrough.
+    Err(Soft(format!(
+        "exclusive Initialize {rate}Hz/{ch}ch/{bits}bit: buffer alignment retry exhausted"
+    )))
 }
 
 /// Create the event, attach it, fetch the capture service, start.

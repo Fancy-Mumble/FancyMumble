@@ -474,6 +474,72 @@ fn nv_err(libs: &NvLibs, encoder: *mut c_void, what: &str, status: NvStatus) -> 
     format!("{what} failed ({status}) {detail}")
 }
 
+/// Open a CUDA-backed NVENC encode session for `device`. The returned
+/// encoder must be destroyed (`Session::destroy`) on any later failure.
+fn open_encode_session(libs: &NvLibs, device: *mut c_void) -> Result<*mut c_void, String> {
+    let open = libs
+        .fns
+        .nv_enc_open_encode_session_ex
+        .ok_or("nvEncOpenEncodeSessionEx missing")?;
+    // SAFETY: zeroed + version-stamped params struct.
+    let mut params: OpenSessionParams = unsafe { std::mem::zeroed() };
+    params.version = NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER;
+    params.device_type = NV_ENC_DEVICE_TYPE_CUDA;
+    params.device = device;
+    params.api_version = NVENCAPI_VERSION;
+    let mut encoder = std::ptr::null_mut();
+    // SAFETY: valid params + out-pointer.
+    let r = unsafe { open(&mut params, &mut encoder) };
+    if r != NV_ENC_SUCCESS || encoder.is_null() {
+        return Err(nv_err(libs, encoder, "nvEncOpenEncodeSessionEx", r));
+    }
+    Ok(encoder)
+}
+
+/// Allocate the NV12 input buffer and the bitstream output buffer for an
+/// initialized `encoder`, returned as `(input, output)`.
+fn create_io_buffers(
+    libs: &NvLibs,
+    encoder: *mut c_void,
+    w: u32,
+    h: u32,
+) -> Result<(*mut c_void, *mut c_void), String> {
+    let create_in = libs
+        .fns
+        .nv_enc_create_input_buffer
+        .ok_or("nvEncCreateInputBuffer missing")?;
+    // SAFETY: zeroed + version-stamped.
+    let mut cin: CreateInputBuffer = unsafe { std::mem::zeroed() };
+    cin.version = NV_ENC_CREATE_INPUT_BUFFER_VER;
+    cin.width = w;
+    cin.height = h;
+    cin.buffer_fmt = NV_ENC_BUFFER_FORMAT_NV12;
+    // SAFETY: live encoder, valid struct.
+    let r = unsafe { create_in(encoder, &mut cin) };
+    if r != NV_ENC_SUCCESS || cin.input_buffer.is_null() {
+        return Err(nv_err(libs, encoder, "nvEncCreateInputBuffer", r));
+    }
+
+    let create_out = libs
+        .fns
+        .nv_enc_create_bitstream_buffer
+        .ok_or("nvEncCreateBitstreamBuffer missing")?;
+    // SAFETY: zeroed + version-stamped.
+    let mut cout: CreateBitstreamBuffer = unsafe { std::mem::zeroed() };
+    cout.version = NV_ENC_CREATE_BITSTREAM_BUFFER_VER;
+    // SAFETY: live encoder, valid struct.
+    let r = unsafe { create_out(encoder, &mut cout) };
+    if r != NV_ENC_SUCCESS || cout.bitstream_buffer.is_null() {
+        // Free the input buffer we just made before bailing.
+        if let Some(f) = libs.fns.nv_enc_destroy_input_buffer {
+            // SAFETY: live encoder + the input buffer allocated just above.
+            let _ = unsafe { f(encoder, cin.input_buffer) };
+        }
+        return Err(nv_err(libs, encoder, "nvEncCreateBitstreamBuffer", r));
+    }
+    Ok((cin.input_buffer, cout.bitstream_buffer))
+}
+
 // ─── encoder ────────────────────────────────────────────────────────────────
 
 /// Owned CUDA context (NVENC's device handle). Created on - and current
@@ -602,28 +668,11 @@ impl NvencEncoder {
         })
     }
 
-    #[allow(
-        clippy::too_many_lines,
-        reason = "one linear NVENC session bring-up (open, buffers, config, init); \
-                  splitting it would scatter the ordered FFI init sequence"
-    )]
+    /// Bring up one NVENC H.264 session (open, configure, allocate buffers).
+    /// Any failure after the encoder opens tears it back down here, so the
+    /// per-stage helpers can propagate with `?` and never leak the encoder.
     fn create_session(&self, libs: &NvLibs, w: u32, h: u32) -> Result<Session, String> {
-        let open = libs
-            .fns
-            .nv_enc_open_encode_session_ex
-            .ok_or("nvEncOpenEncodeSessionEx missing")?;
-        // SAFETY: zeroed + version-stamped params struct.
-        let mut params: OpenSessionParams = unsafe { std::mem::zeroed() };
-        params.version = NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER;
-        params.device_type = NV_ENC_DEVICE_TYPE_CUDA;
-        params.device = self._ctx.raw;
-        params.api_version = NVENCAPI_VERSION;
-        let mut encoder = std::ptr::null_mut();
-        // SAFETY: valid params + out-pointer.
-        let r = unsafe { open(&mut params, &mut encoder) };
-        if r != NV_ENC_SUCCESS || encoder.is_null() {
-            return Err(nv_err(libs, encoder, "nvEncOpenEncodeSessionEx", r));
-        }
+        let encoder = open_encode_session(libs, self._ctx.raw)?;
         let mut session = Session {
             encoder,
             input: std::ptr::null_mut(),
@@ -632,10 +681,45 @@ impl NvencEncoder {
             frame_index: 0,
             fresh: true,
         };
+        match self.configure_session(libs, &mut session, w, h) {
+            Ok(bitrate) => {
+                tracing::info!(w, h, bitrate, "screenshare: NVENC H.264 session up");
+                Ok(session)
+            }
+            Err(e) => {
+                session.destroy(libs);
+                Err(e)
+            }
+        }
+    }
 
-        // Preset defaults for P4/low-latency, then our stream contract:
-        // Main profile, CBR at the shared scaled bitrate, I/P only, no
-        // automatic keyframes (the broadcaster forces periodic IDRs).
+    /// Configure the opened encoder and allocate its I/O buffers, storing the
+    /// buffer handles into `session`. Returns the negotiated bitrate. On any
+    /// `Err` the caller destroys `session`.
+    fn configure_session(
+        &self,
+        libs: &NvLibs,
+        session: &mut Session,
+        w: u32,
+        h: u32,
+    ) -> Result<u32, String> {
+        let bitrate = self.initialize_encoder(libs, session.encoder, w, h)?;
+        let (input, output) = create_io_buffers(libs, session.encoder, w, h)?;
+        session.input = input;
+        session.output = output;
+        Ok(bitrate)
+    }
+
+    /// Apply our stream contract to the encoder (P4/low-latency preset, Main
+    /// profile, CBR at the scaled bitrate, I/P only, app-forced IDRs) and
+    /// initialize it. Returns the negotiated bitrate.
+    fn initialize_encoder(
+        &self,
+        libs: &NvLibs,
+        encoder: *mut c_void,
+        w: u32,
+        h: u32,
+    ) -> Result<u32, String> {
         let get_preset = libs
             .fns
             .nv_enc_get_encode_preset_config_ex
@@ -656,11 +740,10 @@ impl NvencEncoder {
             )
         };
         if r != NV_ENC_SUCCESS {
-            let err = nv_err(libs, encoder, "nvEncGetEncodePresetConfigEx", r);
-            session.destroy(libs);
-            return Err(err);
+            return Err(nv_err(libs, encoder, "nvEncGetEncodePresetConfigEx", r));
         }
 
+        let bitrate = scaled_bitrate(&self.settings, w, h);
         let cfg = &mut preset.preset_cfg.bytes;
         cfg[..4].copy_from_slice(&NV_ENC_CONFIG_VER.to_ne_bytes());
         let poke_u32 = |cfg: &mut [u8; 3584], off: usize, v: u32| {
@@ -671,7 +754,6 @@ impl NvencEncoder {
         poke_u32(cfg, cfg_off::GOP_LENGTH, NVENC_INFINITE_GOPLENGTH);
         poke_u32(cfg, cfg_off::FRAME_INTERVAL_P, 1);
         poke_u32(cfg, cfg_off::RC_MODE, NV_ENC_PARAMS_RC_CBR);
-        let bitrate = scaled_bitrate(&self.settings, w, h);
         poke_u32(cfg, cfg_off::AVERAGE_BITRATE, bitrate);
         poke_u32(cfg, cfg_off::MAX_BITRATE, bitrate);
 
@@ -701,48 +783,9 @@ impl NvencEncoder {
         // `preset`, alive for the duration of the call).
         let r = unsafe { init_fn(encoder, init.as_mut()) };
         if r != NV_ENC_SUCCESS {
-            let err = nv_err(libs, encoder, "nvEncInitializeEncoder", r);
-            session.destroy(libs);
-            return Err(err);
+            return Err(nv_err(libs, encoder, "nvEncInitializeEncoder", r));
         }
-
-        let create_in = libs
-            .fns
-            .nv_enc_create_input_buffer
-            .ok_or("nvEncCreateInputBuffer missing")?;
-        // SAFETY: zeroed + version-stamped.
-        let mut cin: CreateInputBuffer = unsafe { std::mem::zeroed() };
-        cin.version = NV_ENC_CREATE_INPUT_BUFFER_VER;
-        cin.width = w;
-        cin.height = h;
-        cin.buffer_fmt = NV_ENC_BUFFER_FORMAT_NV12;
-        // SAFETY: live encoder, valid struct.
-        let r = unsafe { create_in(encoder, &mut cin) };
-        if r != NV_ENC_SUCCESS || cin.input_buffer.is_null() {
-            let err = nv_err(libs, encoder, "nvEncCreateInputBuffer", r);
-            session.destroy(libs);
-            return Err(err);
-        }
-        session.input = cin.input_buffer;
-
-        let create_out = libs
-            .fns
-            .nv_enc_create_bitstream_buffer
-            .ok_or("nvEncCreateBitstreamBuffer missing")?;
-        // SAFETY: zeroed + version-stamped.
-        let mut cout: CreateBitstreamBuffer = unsafe { std::mem::zeroed() };
-        cout.version = NV_ENC_CREATE_BITSTREAM_BUFFER_VER;
-        // SAFETY: live encoder, valid struct.
-        let r = unsafe { create_out(encoder, &mut cout) };
-        if r != NV_ENC_SUCCESS || cout.bitstream_buffer.is_null() {
-            let err = nv_err(libs, encoder, "nvEncCreateBitstreamBuffer", r);
-            session.destroy(libs);
-            return Err(err);
-        }
-        session.output = cout.bitstream_buffer;
-
-        tracing::info!(w, h, bitrate, "screenshare: NVENC H.264 session up");
-        Ok(session)
+        Ok(bitrate)
     }
 
     /// Encode one RGBA frame (interface-identical to the VA-API tier).
@@ -886,12 +929,7 @@ fn guid_bytes(g: Guid) -> [u8; 16] {
 /// RGBA -> NV12 written directly into a pitched destination (Y rows at
 /// `row * pitch`, interleaved UV rows at `pitch * h + row * pitch`), same
 /// BT.601 fixed-point math as the other tiers, threaded in bands of
-/// source-row pairs.
-#[allow(
-    clippy::excessive_nesting,
-    reason = "tight per-pixel BT.601 conversion loops inside a thread scope; \
-              hoisting them out would only obscure the hot inner arithmetic"
-)]
+/// source-row pairs (per-band work in [`convert_nv12_band`]).
 fn rgba_to_nv12_pitched(
     src_width: usize,
     w: usize,
@@ -920,47 +958,63 @@ fn rgba_to_nv12_pitched(
             uv_rest = uv_next;
             let first_pair = pair0;
             let _ = scope.spawn(move || {
-                for p in 0..take {
-                    let src_row = (first_pair + p) * 2;
-                    for dy in 0..2 {
-                        let src = &rgba[(src_row + dy) * src_width * 4..];
-                        let dst = &mut y_band[(p * 2 + dy) * pitch..(p * 2 + dy) * pitch + w];
-                        for (x, out_y) in dst.iter_mut().enumerate() {
-                            let px = &src[x * 4..x * 4 + 4];
-                            let (r, g, b) = (i32::from(px[0]), i32::from(px[1]), i32::from(px[2]));
-                            *out_y =
-                                (((66 * r + 129 * g + 25 * b + 128) >> 8) + 16).clamp(0, 255) as u8;
-                        }
-                    }
-                    let row0 = &rgba[src_row * src_width * 4..];
-                    let row1 = &rgba[(src_row + 1) * src_width * 4..];
-                    let uv_row = &mut uv_band[p * pitch..p * pitch + w];
-                    for x2 in 0..w / 2 {
-                        let x = x2 * 2;
-                        let mut r = 0i32;
-                        let mut g = 0i32;
-                        let mut b = 0i32;
-                        for row in [row0, row1] {
-                            for dx in 0..2 {
-                                let px = &row[(x + dx) * 4..(x + dx) * 4 + 4];
-                                r += i32::from(px[0]);
-                                g += i32::from(px[1]);
-                                b += i32::from(px[2]);
-                            }
-                        }
-                        r /= 4;
-                        g /= 4;
-                        b /= 4;
-                        uv_row[x] =
-                            ((((-38) * r - 74 * g + 112 * b + 128) >> 8) + 128).clamp(0, 255) as u8;
-                        uv_row[x + 1] =
-                            (((112 * r - 94 * g - 18 * b + 128) >> 8) + 128).clamp(0, 255) as u8;
-                    }
-                }
+                convert_nv12_band(rgba, src_width, w, pitch, first_pair, take, y_band, uv_band);
             });
             pair0 += take;
         }
     });
+}
+
+/// Convert `take` source-row-pairs starting at `first_pair` into one band's
+/// worth of NV12 (Y into `y_band`, interleaved UV into `uv_band`). The hot
+/// BT.601 arithmetic that the band threads run in parallel.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the band's source view + both destination planes + geometry; \
+              a struct would only relocate the same fields"
+)]
+fn convert_nv12_band(
+    rgba: &[u8],
+    src_width: usize,
+    w: usize,
+    pitch: usize,
+    first_pair: usize,
+    take: usize,
+    y_band: &mut [u8],
+    uv_band: &mut [u8],
+) {
+    for p in 0..take {
+        let src_row = (first_pair + p) * 2;
+        for dy in 0..2 {
+            let src = &rgba[(src_row + dy) * src_width * 4..];
+            let dst = &mut y_band[(p * 2 + dy) * pitch..(p * 2 + dy) * pitch + w];
+            for (x, out_y) in dst.iter_mut().enumerate() {
+                let px = &src[x * 4..x * 4 + 4];
+                let (r, g, b) = (i32::from(px[0]), i32::from(px[1]), i32::from(px[2]));
+                *out_y = (((66 * r + 129 * g + 25 * b + 128) >> 8) + 16).clamp(0, 255) as u8;
+            }
+        }
+        let row0 = &rgba[src_row * src_width * 4..];
+        let row1 = &rgba[(src_row + 1) * src_width * 4..];
+        let uv_row = &mut uv_band[p * pitch..p * pitch + w];
+        for x2 in 0..w / 2 {
+            let x = x2 * 2;
+            let (mut r, mut g, mut b) = (0i32, 0i32, 0i32);
+            for row in [row0, row1] {
+                for dx in 0..2 {
+                    let px = &row[(x + dx) * 4..(x + dx) * 4 + 4];
+                    r += i32::from(px[0]);
+                    g += i32::from(px[1]);
+                    b += i32::from(px[2]);
+                }
+            }
+            r /= 4;
+            g /= 4;
+            b /= 4;
+            uv_row[x] = ((((-38) * r - 74 * g + 112 * b + 128) >> 8) + 128).clamp(0, 255) as u8;
+            uv_row[x + 1] = (((112 * r - 94 * g - 18 * b + 128) >> 8) + 128).clamp(0, 255) as u8;
+        }
+    }
 }
 
 #[cfg(test)]

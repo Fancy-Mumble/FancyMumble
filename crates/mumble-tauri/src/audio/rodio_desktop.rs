@@ -870,12 +870,8 @@ mod tests {
     /// `cargo test -p mumble-tauri cpal_inputs_hw -- --ignored --nocapture`
     #[test]
     #[ignore = "requires audio hardware; run manually with --ignored --nocapture"]
-    #[allow(
-        clippy::excessive_nesting,
-        reason = "manual hardware probe; the per-device attempt/error-chain dump reads better inline"
-    )]
     fn cpal_inputs_hw_probe() {
-        use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+        use cpal::traits::{DeviceTrait, HostTrait};
         let host = cpal::default_host();
         let devices: Vec<_> = host.input_devices().expect("enumerate").collect();
         println!("{} input device(s)", devices.len());
@@ -884,43 +880,51 @@ mod tests {
                 .description()
                 .map(|x| x.name().to_string())
                 .unwrap_or_else(|_| "<unnamed>".into());
-            match d.default_input_config() {
-                Ok(cfg) => {
-                    println!(
-                        "device '{name}': default {} Hz, {} ch, {:?}",
-                        cfg.sample_rate(),
-                        cfg.channels(),
-                        cfg.sample_format(),
-                    );
-                    let sc = cpal::StreamConfig {
-                        channels: cfg.channels(),
-                        sample_rate: cfg.sample_rate(),
-                        buffer_size: cpal::BufferSize::Default,
-                    };
-                    match d.build_input_stream(
-                        &sc,
-                        move |_data: &[f32], _| {},
-                        |e| println!("  stream error cb: {e}"),
-                        None,
-                    ) {
-                        Ok(s) => {
-                            let played = s.play();
-                            println!("  open at native rate: OK (play: {played:?})");
-                            drop(s);
-                        }
-                        Err(e) => {
-                            let mut chain = format!("{e}");
-                            let mut src: Option<&dyn std::error::Error> =
-                                std::error::Error::source(&e);
-                            while let Some(s) = src {
-                                chain.push_str(&format!(" -> {s}"));
-                                src = std::error::Error::source(s);
-                            }
-                            println!("  open at native rate FAILED: {chain}");
-                        }
-                    }
+            probe_cpal_input(&d, &name);
+        }
+    }
+
+    /// Report one input device's default config and whether it opens (or the
+    /// full error chain if held by another client). Test-only diagnostic.
+    fn probe_cpal_input(d: &cpal::Device, name: &str) {
+        use cpal::traits::{DeviceTrait, StreamTrait};
+        let cfg = match d.default_input_config() {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                println!("device '{name}': no default config: {e}");
+                return;
+            }
+        };
+        println!(
+            "device '{name}': default {} Hz, {} ch, {:?}",
+            cfg.sample_rate(),
+            cfg.channels(),
+            cfg.sample_format(),
+        );
+        let sc = cpal::StreamConfig {
+            channels: cfg.channels(),
+            sample_rate: cfg.sample_rate(),
+            buffer_size: cpal::BufferSize::Default,
+        };
+        match d.build_input_stream(
+            &sc,
+            move |_data: &[f32], _| {},
+            |e| println!("  stream error cb: {e}"),
+            None,
+        ) {
+            Ok(s) => {
+                let played = s.play();
+                println!("  open at native rate: OK (play: {played:?})");
+                drop(s);
+            }
+            Err(e) => {
+                let mut chain = format!("{e}");
+                let mut src: Option<&dyn std::error::Error> = std::error::Error::source(&e);
+                while let Some(s) = src {
+                    chain.push_str(&format!(" -> {s}"));
+                    src = std::error::Error::source(s);
                 }
-                Err(e) => println!("device '{name}': no default config: {e}"),
+                println!("  open at native rate FAILED: {chain}");
             }
         }
     }
