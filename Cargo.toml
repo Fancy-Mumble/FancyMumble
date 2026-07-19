@@ -76,6 +76,13 @@ panic = "abort"           # Abort on panic (smaller binary, no unwind overhead)
 # while dev video behaves like release.
 [profile.dev.package.fancy-screenshare]
 opt-level = 3
+# No incremental for THIS crate: opt-level 3 + incremental intermittently
+# mixed codegen sessions inside the rlib (undefined hidden `.llvm.*`
+# symbols at link time, failing every other rebuild once the crate started
+# being edited frequently). Incremental reuse is near-zero at opt-level 3
+# anyway; codegen stays fully parallel, and the crate only rebuilds when
+# its own files change.
+incremental = false
 [profile.dev.package.image]
 opt-level = 3
 [profile.dev.package.fast_image_resize]

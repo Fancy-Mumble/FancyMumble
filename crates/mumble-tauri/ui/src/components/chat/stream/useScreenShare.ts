@@ -45,6 +45,25 @@ import {
 import { clearAllStrokesInChannel, clearStrokesFromSender } from "../drawing/DrawingOverlay";
 import type { SourceSelection } from "./ScreenSharePickerDialog";
 import { QUALITY_PRESETS, type StreamSettings } from "./streamSettings";
+import { createPcStatsSampler } from "./StreamStatsPanel";
+import {
+  buildStartPayload,
+  LEGACY_TRACKS,
+  parseStartPayload,
+  trackContentBySession,
+} from "./trackContent";
+import {
+  activeStreamViewerStrategy,
+  registerStreamViewerStrategy,
+} from "./viewerStrategy";
+// Side-effect import: the NATIVE viewer strategy registers at that module's
+// tail, and this hook's effects (channel auto-connect) consult the registry
+// before any stream viewport - the module's other consumer - has ever been
+// lazy-loaded. Without this eager pull the registry held only the webview
+// family, which is unavailable on Linux ("no stream viewer strategy
+// registered" on fresh load). The import cycle with that module is safe:
+// it reaches back only for hoisted functions, called later.
+import "./nativeStreamView";
 
 // This module holds singleton WebRTC state (viewerPcs, the broadcast pin,
 // etc.).  Vite HMR would otherwise hot-swap the module while leaving stale
@@ -67,54 +86,12 @@ const SIGNAL_ICE_CANDIDATE = 4;
 // ---------------------------------------------------------------------------
 // Track metadata (what each broadcast video track shows)
 // ---------------------------------------------------------------------------
+// Lives in the leaf module trackContent.ts (nativeStreamView reads it too;
+// a direct import here would close an HMR-fatal cycle). Re-exported so the
+// existing consumers of this module keep their import site.
 
-/** What a broadcast video track carries. */
-export type TrackContent = "screen" | "camera";
-
-/** Per-mid content map for one broadcaster ("0" -> screen, "1" -> camera). */
-export type TrackContentMap = Readonly<Record<string, TrackContent>>;
-
-/** Track content announced when only a bare/legacy START was received:
- *  a single track that is (or is treated as) a screen. */
-const LEGACY_TRACKS: TrackContentMap = { "0": "screen" };
-
-/** Content maps per broadcaster session, fed by START payloads (and by
- *  ourselves when we are the broadcaster). Module-level like the viewer
- *  PCs: metadata must survive React remounts. */
-const trackContentBySession = new Map<number, TrackContentMap>();
-
-/** Build the START announce payload for a source list. Mid order == source
- *  order (the Rust broadcaster adds one transceiver per source, in order). */
-function buildStartPayload(sources: readonly SourceSelection[]): string {
-  return JSON.stringify({
-    v: 1,
-    tracks: sources.map((s, i) => ({
-      mid: String(i),
-      content: s.kind === "device" ? "camera" : "screen",
-    })),
-  });
-}
-
-/** Parse a START payload into a content map; empty/malformed payloads (old
- *  clients announce with "") fall back to the single-screen assumption. */
-function parseStartPayload(payload: string): TrackContentMap {
-  if (payload === "") return LEGACY_TRACKS;
-  try {
-    const parsed = JSON.parse(payload) as {
-      tracks?: { mid?: string; content?: string }[];
-    };
-    if (!Array.isArray(parsed.tracks) || parsed.tracks.length === 0) return LEGACY_TRACKS;
-    const map: Record<string, TrackContent> = {};
-    for (const track of parsed.tracks) {
-      if (typeof track.mid === "string") {
-        map[track.mid] = track.content === "camera" ? "camera" : "screen";
-      }
-    }
-    return Object.keys(map).length > 0 ? map : LEGACY_TRACKS;
-  } catch {
-    return LEGACY_TRACKS;
-  }
-}
+export { getTrackContentMap } from "./trackContent";
+export type { TrackContent, TrackContentMap } from "./trackContent";
 
 // STUN servers for the client to discover its public address.
 // The server SFU uses ICE-lite and needs no STUN.
@@ -151,6 +128,28 @@ function broadcastSignal(signalType: number, payload: string, serverId: string |
 /** Show a WebRTC error inline banner via the Zustand store (callable from module-level callbacks). */
 function showWebRtcError(message: string): void {
   useAppStore.setState({ webrtcError: message });
+}
+
+/** One-shot marker for the "no webview WebRTC" log in {@link startWatching}
+ *  (the auto-connect effect calls it repeatedly). */
+let warnedNoWebviewRtc = false;
+
+/** Cached `screen_share_capabilities` answer (platform-constant, so it is
+ *  fetched once per webview and shared by every hook instance). */
+let portalPickerCache: boolean | null = null;
+
+/** Whether the OS portal replaces the in-app source picker (GNOME). */
+async function fetchPortalPicker(): Promise<boolean> {
+  if (portalPickerCache === null) {
+    try {
+      const caps = await invoke<{ portalPicker: boolean }>("screen_share_capabilities");
+      portalPickerCache = caps.portalPicker;
+    } catch (e) {
+      console.warn("[screenshare] screen_share_capabilities failed:", e);
+      portalPickerCache = false;
+    }
+  }
+  return portalPickerCache;
 }
 
 // ---------------------------------------------------------------------------
@@ -204,6 +203,7 @@ function stopBroadcasting(): void {
     if (broadcasterChannelId !== null) drawing.delete(broadcasterChannelId);
     return {
       webrtcConnecting: false,
+      captureStalled: false,
       desktopDrawingOverlayOpen: false,
       drawingActiveChannels: drawing,
     };
@@ -514,6 +514,20 @@ async function adaptJitterBuffer(session: number): Promise<void> {
  * broadcast back to us exactly like it serves any other viewer.
  */
 async function startWatching(broadcasterSession: number): Promise<void> {
+  // Linux: distro WebKitGTK builds ship without WebRTC compiled in (Ubuntu's
+  // does), so the webview simply has no RTCPeerConnection and webview viewer
+  // PCs cannot exist. Viewing runs through the NATIVE Rust viewer instead
+  // (NativeStreamView -> start_native_stream_view), driven by the viewer
+  // components on mount - so this whole function is a no-op there.
+  if (typeof RTCPeerConnection === "undefined") {
+    if (!warnedNoWebviewRtc) {
+      warnedNoWebviewRtc = true;
+      console.info(
+        "[sfu] webview has no RTCPeerConnection (WebKit built without WebRTC); stream viewing uses the native Rust viewer",
+      );
+    }
+    return;
+  }
   if (viewerPcs.has(broadcasterSession)) {
     console.info(`[sfu] viewer for ${broadcasterSession} already open`);
     return;
@@ -798,6 +812,14 @@ export interface ScreenShareHook {
   localStream: MediaStream | null;
   /** Whether the source-picker dialog is open. */
   pickerOpen: boolean;
+  /** GNOME: the compositor's portal dialog replaces the in-app screen/window
+   *  picker. {@link startSharing} portals directly (no dialog here), cameras
+   *  get their own button ({@link startCameraSharing}), and the picker only
+   *  ever opens in camera-only mode ({@link pickerDeviceOnly}). */
+  portalPicker: boolean;
+  /** The open picker is in camera-only mode (portal flow): screen/window
+   *  tabs hidden, the live display source carried through untouched. */
+  pickerDeviceOnly: boolean;
   /** Encoder settings the current/next broadcast uses (for the picker + menu). */
   settings: StreamSettings;
   /** Sources of the ACTIVE broadcast (display first, then camera), or null
@@ -806,13 +828,24 @@ export interface ScreenShareHook {
    *  viewer offer an "add the missing kind" shortcut. */
   activeSources: readonly SourceSelection[] | null;
   /** Open the source picker (does not start capturing yet). Works while
-   *  already broadcasting too - confirming replaces the live sources. */
+   *  already broadcasting too - confirming replaces the live sources. On
+   *  GNOME ({@link portalPicker}) this skips the in-app picker and raises
+   *  the compositor's own source dialog instead. */
   startSharing: () => void;
+  /** Share (or re-pick) a camera: runs the system camera consent when the
+   *  platform has one, then opens the picker in camera-only mode. */
+  startCameraSharing: () => void;
   /** Close the source picker without sharing. */
   cancelPicker: () => void;
   /** Start (or replace) the broadcast with the picked sources + settings.
-   *  Order matters: display source first, then camera (track/mid order). */
-  confirmSource: (sources: readonly SourceSelection[], settings: StreamSettings) => Promise<void>;
+   *  Order matters: display source first, then camera (track/mid order).
+   *  `opts.reuseDisplay` marks a replace that keeps the display source, so
+   *  the Linux portal restores the previous pick without re-prompting. */
+  confirmSource: (
+    sources: readonly SourceSelection[],
+    settings: StreamSettings,
+    opts?: { readonly reuseDisplay?: boolean },
+  ) => Promise<void>;
   /** Restart the live broadcast at new settings (same sources). */
   changeSettings: (settings: StreamSettings) => void;
   /** Stop sharing our screen. */
@@ -845,6 +878,13 @@ export function useScreenShare(): ScreenShareHook {
   const isBroadcastingFromOtherTab = broadcastingOwnSession !== null
     && (ownSession === null || broadcastingOwnSession !== ownSession);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerDeviceOnly, setPickerDeviceOnly] = useState(false);
+  const [portalPicker, setPortalPicker] = useState(portalPickerCache ?? false);
+
+  // Platform-constant; resolves from cache instantly after the first fetch.
+  useEffect(() => {
+    void fetchPortalPicker().then(setPortalPicker);
+  }, []);
 
   // The own-preview: the loopback viewer's primary remote stream for our
   // session (the camera PiP is picked up by the viewer components).
@@ -893,6 +933,13 @@ export function useScreenShare(): ScreenShareHook {
               ? `Screen sharing failed: ${message}`
               : "Screen sharing failed.",
           );
+        } else if (bcState === "captureStalled" || bcState === "captureResumed") {
+          // Advisory hint for the GNOME/NVIDIA fullscreen direct-scanout
+          // capture stall (Linux monitor shares only; see fancy-screenshare
+          // StallWatch). The broadcast keeps running - just flag it so the
+          // own-preview can suggest sharing the window instead.
+          if (useAppStore.getState().broadcastingOwnSession === null) return;
+          useAppStore.setState({ captureStalled: bcState === "captureStalled" });
         }
       },
     ).then((un) => {
@@ -959,9 +1006,8 @@ export function useScreenShare(): ScreenShareHook {
     };
   }, [isBroadcasting, loopbackStream, ownSession]);
 
-  const startSharing = useCallback(() => {
-    // Opening the picker while already broadcasting is allowed: confirming
-    // replaces the live source ("Change Stream" in the stream-config menu).
+  /** Shared preflight of every share entry point: surface a missing SFU. */
+  const warnWhenNoSfu = () => {
     const { serverConfig } = useAppStore.getState();
     if (serverConfig.webrtc_sfu_available) {
       console.info("[screen-share] server has WebRTC SFU - media will be relayed via server");
@@ -969,14 +1015,16 @@ export function useScreenShare(): ScreenShareHook {
       console.warn("[screen-share] server does NOT have WebRTC SFU - screen sharing may not work");
       showWebRtcError("This server does not have a WebRTC relay configured. Screen sharing is unlikely to work.");
     }
-
-    setPickerOpen(true);
-  }, []);
+  };
 
   const cancelPicker = useCallback(() => setPickerOpen(false), []);
 
   const confirmSource = useCallback(
-    async (sources: readonly SourceSelection[], settings: StreamSettings) => {
+    async (
+      sources: readonly SourceSelection[],
+      settings: StreamSettings,
+      opts?: { readonly reuseDisplay?: boolean },
+    ) => {
       setPickerOpen(false);
       if (ownSession === null) {
         console.warn("[screenshare] confirmSource ignored: no ownSession");
@@ -1036,19 +1084,28 @@ export function useScreenShare(): ScreenShareHook {
           serverId: activeServerId,
           maxDimension: settings.maxDimension,
           maxFps: settings.maxFps,
+          reusePortalSource: opts?.reuseDisplay === true,
         });
       } catch (e) {
-        console.error("[screenshare] start_screen_broadcast failed:", e);
+        const detail = e instanceof Error ? e.message : String(e);
         endOwnBroadcast("start_screen_broadcast rejected");
-        showWebRtcError(`Screen sharing failed to start: ${e instanceof Error ? e.message : String(e)}`);
+        // Dismissing the compositor's portal dialog surfaces as "cancelled":
+        // the user changed their mind, which deserves no error banner.
+        if (/cancelled/i.test(detail)) {
+          console.info("[screenshare] source selection cancelled");
+          return;
+        }
+        console.error("[screenshare] start_screen_broadcast failed:", e);
+        showWebRtcError(`Screen sharing failed to start: ${detail}`);
         return;
       }
       // Loopback own-preview: watch our own SFU session so the preview
-      // <video> decodes the frames that are actually being transmitted
-      // (capture and encoding live in Rust; there is no local MediaStream).
-      // No-op when replacing (the viewer already exists).
+      // decodes the frames that are actually being transmitted (capture and
+      // encoding live in Rust; there is no local MediaStream). No-op when
+      // replacing (viewer already exists) and under the native strategy
+      // (its viewport owns the receive path).
       console.info("[screenshare] broadcast started; opening loopback preview");
-      startWatching(ownSession).catch((e) =>
+      activeStreamViewerStrategy().watch(ownSession).catch((e) =>
         console.error("[screenshare] loopback preview failed:", e),
       );
     },
@@ -1063,8 +1120,48 @@ export function useScreenShare(): ScreenShareHook {
     ) {
       return;
     }
-    void confirmSource(broadcasterSources, settings);
+    // Same sources, new settings: let the portal restore the picked source
+    // silently instead of re-raising its dialog for a quality change.
+    void confirmSource(broadcasterSources, settings, { reuseDisplay: true });
   }, [confirmSource]);
+
+  const startSharing = useCallback(() => {
+    // Sharing while already broadcasting is allowed: the new pick replaces
+    // the live display source ("Change Stream" in the stream-config menu).
+    warnWhenNoSfu();
+    if (portalPicker) {
+      // GNOME: the compositor's portal dialog IS the source picker. Share a
+      // synthetic display source (advisory id 0; the portal chooses the real
+      // one and offers its own screen-vs-window tabs) and carry a running
+      // camera track across the re-pick.
+      const camera = (isBroadcasting ? broadcasterSources : null)
+        ?.filter((s) => s.kind === "device") ?? [];
+      void confirmSource([{ kind: "screen", id: 0 }, ...camera], broadcasterSettings);
+      return;
+    }
+    setPickerDeviceOnly(false);
+    setPickerOpen(true);
+  }, [portalPicker, isBroadcasting, confirmSource]);
+
+  const startCameraSharing = useCallback(() => {
+    void (async () => {
+      warnWhenNoSfu();
+      try {
+        // GNOME's native camera consent dialog (stored after the first
+        // grant). Only an explicit denial blocks; a missing/broken portal
+        // must not disable cameras that plain V4L2 can open anyway.
+        const granted = await invoke<boolean>("request_camera_access");
+        if (!granted) {
+          showWebRtcError("Camera access was denied in the system dialog.");
+          return;
+        }
+      } catch (e) {
+        console.warn("[screenshare] request_camera_access failed:", e);
+      }
+      setPickerDeviceOnly(true);
+      setPickerOpen(true);
+    })();
+  }, []);
 
   const stopSharingCb = useCallback(() => {
     broadcasterSources = null;
@@ -1073,19 +1170,22 @@ export function useScreenShare(): ScreenShareHook {
 
   // Auto-connect to all active broadcasters in our channel so streams are
   // ready before the user clicks into focus view, and disconnect from
-  // sessions that stopped broadcasting.
+  // sessions that stopped broadcasting. Routed through the active viewer
+  // strategy: the webview family pre-opens PCs, the native family no-ops
+  // (its viewports open the receive path on mount).
   useEffect(() => {
     if (!ownSession) return;
+    const strategy = activeStreamViewerStrategy();
     for (const session of broadcastingSessions) {
-      if (session !== ownSession && !viewerPcs.has(session)) {
-        startWatching(session).catch((e) =>
+      if (session !== ownSession && !strategy.isWatching(session)) {
+        strategy.watch(session).catch((e) =>
           console.error("[screenshare] auto-connect failed for session", session, e),
         );
       }
     }
     for (const [session] of viewerPcs) {
       if (!broadcastingSessions.has(session)) {
-        closeViewer(session);
+        strategy.unwatch(session);
       }
     }
   }, [broadcastingSessions, ownSession]);
@@ -1095,8 +1195,9 @@ export function useScreenShare(): ScreenShareHook {
       watchingSession: session,
       watchingOwnSession: ownSession ?? null,
     });
-    // startWatching is a no-op if already connected (auto-connect effect above).
-    startWatching(session).catch((e) =>
+    // A no-op if already connected (auto-connect above) or under the
+    // native strategy (viewport-owned).
+    activeStreamViewerStrategy().watch(session).catch((e) =>
       console.error("[screenshare] startWatching failed:", e),
     );
   }, [ownSession]);
@@ -1127,9 +1228,12 @@ export function useScreenShare(): ScreenShareHook {
     // belongs to a different connection.
     localStream: isBroadcasting ? loopbackStream : null,
     pickerOpen,
+    portalPicker,
+    pickerDeviceOnly,
     settings: broadcasterSettings,
     activeSources: isBroadcasting ? broadcasterSources : null,
     startSharing,
+    startCameraSharing,
     cancelPicker,
     confirmSource,
     changeSettings,
@@ -1170,9 +1274,6 @@ export function getBroadcastContent(session: number): "screen" | "camera" | "bot
  * Per-mid content map for a broadcaster ("0" -> "screen", "1" -> "camera"),
  * so the stats panel can label each inbound video track by what it shows.
  */
-export function getTrackContentMap(session: number): TrackContentMap {
-  return trackContentBySession.get(session) ?? LEGACY_TRACKS;
-}
 
 /**
  * Subscribe to the remote streams for a specific broadcaster: the primary
@@ -1213,3 +1314,19 @@ export function useRemoteStreams(session: number): RemoteStreams {
 export function useRemoteStream(session: number): MediaStream | null {
   return useRemoteStreams(session).primary;
 }
+
+// ---------------------------------------------------------------------------
+// Viewer-strategy registration (webview family)
+// ---------------------------------------------------------------------------
+
+// The shipped webview family: RTCPeerConnection viewers decoding in the
+// webview (Windows/WebView2 route). Preferred whenever the webview has
+// WebRTC; the runtime flag in viewerStrategy.ts can override.
+registerStreamViewerStrategy({
+  id: "webview",
+  isAvailable: () => typeof RTCPeerConnection !== "undefined",
+  watch: (session) => startWatching(session),
+  isWatching: (session) => viewerPcs.has(session),
+  unwatch: (session) => closeViewer(session),
+  createStatsSampler: (session) => createPcStatsSampler(() => getViewerPc(session)),
+});

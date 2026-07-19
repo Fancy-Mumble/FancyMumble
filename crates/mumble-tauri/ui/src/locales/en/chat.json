@@ -73,7 +73,9 @@
     "join": "Join",
     "joinChannel": "Join Channel",
     "popOutDm": "Pop out direct message",
-    "changeSharing": "Change what you're sharing"
+    "changeSharing": "Change what you're sharing",
+    "shareCamera": "Share a camera",
+    "changeCamera": "Change camera sharing"
   },
   "calendar": {
     "title": "Calendar",
@@ -365,6 +367,8 @@
     "alreadySharingOtherServer": "You are already sharing your screen from another server. Stop that share first.",
     "picker": {
       "title": "Choose what to share",
+      "cameraTitle": "Choose a camera",
+      "systemPickedDisplay": "Shared screen (picked in the system dialog)",
       "tabScreens": "Entire Screen",
       "tabWindows": "Window",
       "tabDevices": "Device",
@@ -426,6 +430,8 @@
     "fullscreen": "Fullscreen",
     "exitFullscreen": "Exit fullscreen",
     "settingUp": "Setting up stream...",
+    "liveNoPreview": "Stream is live. A local preview isn't available on this system - others can still watch.",
+    "captureStalledHint": "Fullscreen content on the shared monitor isn't being captured (a known GNOME/NVIDIA issue). Share the window instead, or move the mouse to resume.",
     "connecting": "Connecting...",
     "waitingForStream": "Waiting for stream",
     "share": "Share screen",
@@ -443,6 +449,7 @@
       "currentRes": "Current Res",
       "volume": "Volume",
       "muted": "muted",
+      "fps": "FPS",
       "codecs": "Codecs",
       "connection": "Connection",
       "connectionSpeed": "Connection Speed",

@@ -22,6 +22,10 @@
 
 pub mod broadcast;
 mod camera;
+/// Native SFU stream viewer for the one platform whose webview cannot run
+/// WebRTC (Linux WebKitGTK); Windows keeps its webview viewer untouched.
+#[cfg(target_os = "linux")]
+pub mod viewer;
 #[cfg(windows)]
 mod camera_directshow;
 pub mod encode;
@@ -35,4 +39,14 @@ mod pipeline;
 pub mod sources;
 
 pub use broadcast::{BroadcastSource, BroadcastState, ScreenBroadcaster, SignalSink};
+#[cfg(all(target_os = "linux", feature = "portal-probe"))]
+pub use linux::portal_probe_main;
 pub use sources::{CaptureSource, SourceKind};
+
+/// GNOME-native share flow: [`linux::native_portal_picker`] tells embedders
+/// to hide the in-app source picker (the compositor's portal dialog picks),
+/// [`linux::camera_portal`] runs the camera consent dialog, and
+/// [`linux::set_restore_last_pick`] lets broadcast replaces reuse the picked
+/// source without re-prompting.
+#[cfg(all(target_os = "linux", feature = "gpu"))]
+pub use linux::{camera_portal, native_portal_picker, set_restore_last_pick};

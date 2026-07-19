@@ -65,6 +65,8 @@ pub(crate) async fn open_image_popout(
     .skip_taskbar(false)
     .build()
     .map_err(|e: tauri::Error| e.to_string())?;
+    #[cfg(target_os = "linux")]
+    crate::app::webview_linux::enable_webrtc(&_window);
 
     Ok(())
 }
@@ -156,6 +158,8 @@ pub(crate) async fn open_stream_popout(
     .skip_taskbar(false)
     .build()
     .map_err(|e: tauri::Error| e.to_string())?;
+    #[cfg(target_os = "linux")]
+    crate::app::webview_linux::enable_webrtc(&_window);
     Ok(())
 }
 
@@ -232,6 +236,8 @@ pub(crate) async fn open_dm_popout(
     .skip_taskbar(false)
     .build()
     .map_err(|e: tauri::Error| e.to_string())?;
+    #[cfg(target_os = "linux")]
+    crate::app::webview_linux::enable_webrtc(&_window);
     Ok(())
 }
 
@@ -252,11 +258,7 @@ pub(crate) fn take_popout_dm(
     state: tauri::State<'_, AppState>,
     id: String,
 ) -> Option<PopoutDmPayload> {
-    state
-        .popout_dms
-        .lock()
-        .ok()
-        .and_then(|mut m| m.remove(&id))
+    state.popout_dms.lock().ok().and_then(|mut m| m.remove(&id))
 }
 
 /// Open the translation helper popout window.
@@ -290,6 +292,8 @@ pub(crate) async fn open_translation_popout(app: tauri::AppHandle) -> Result<(),
     .skip_taskbar(false)
     .build()
     .map_err(|e: tauri::Error| e.to_string())?;
+    #[cfg(target_os = "linux")]
+    crate::app::webview_linux::enable_webrtc(&_window);
     Ok(())
 }
 

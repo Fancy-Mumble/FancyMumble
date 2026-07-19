@@ -8,7 +8,10 @@
 
 /// Register every command on the builder. Add new commands under their domain's
 /// section below (and implement them in the matching `commands::<domain>` file).
-#[allow(clippy::too_many_lines, reason = "intentionally a single flat list of every registered command")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "intentionally a single flat list of every registered command"
+)]
 pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
     builder.invoke_handler(tauri::generate_handler![
         // -- connection / servers --------------------------------------
@@ -242,6 +245,18 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::screenshare::start_screen_broadcast,
         #[cfg(not(target_os = "android"))]
         super::screenshare::stop_screen_broadcast,
+        #[cfg(not(target_os = "android"))]
+        super::screenshare::screen_share_capabilities,
+        #[cfg(not(target_os = "android"))]
+        super::screenshare::request_camera_access,
+        #[cfg(not(target_os = "android"))]
+        super::stream_view::start_native_stream_view,
+        #[cfg(not(target_os = "android"))]
+        super::stream_view::stop_native_stream_view,
+        #[cfg(not(target_os = "android"))]
+        super::stream_view::request_stream_keyframe,
+        #[cfg(not(target_os = "android"))]
+        super::stream_view::native_stream_view_stats,
         // -- updater (desktop only) ------------------------------------
         #[cfg(not(target_os = "android"))]
         crate::updater::commands::updater_check,

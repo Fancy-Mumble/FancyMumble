@@ -120,6 +120,13 @@ objc2-foundation = { version = "0.2", features = ["NSGeometry"] }
 [target.'cfg(all(unix, not(any(target_os = "android", target_os = "macos", target_os = "ios"))))'.dependencies]
 gtk = { version = "0.18", default-features = false }
 
+# Linux-only: flip WebKitGTK's enable-webrtc / enable-media-stream settings on
+# (they default to OFF and wry never sets them - without this the webview has
+# no RTCPeerConnection and stream viewing cannot work; see app/webview_linux.rs).
+# Same crate/version line wry uses; v2_38 gates the set_enable_webrtc binding.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = { version = "2.0.1", features = ["v2_38"] }
+
 [lints]
 workspace = true
 

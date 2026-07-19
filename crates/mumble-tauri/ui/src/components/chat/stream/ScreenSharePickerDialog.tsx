@@ -105,6 +105,11 @@ interface ScreenSharePickerDialogProps {
    *  the live share instead of silently replacing everything. Entries whose
    *  source no longer exists are dropped. */
   readonly initialSelection?: readonly SourceSelection[];
+  /** Camera-only mode (GNOME portal flow): the screen/window tabs are
+   *  hidden - the compositor's own dialog picks those - and a seeded
+   *  display source is carried through untouched (its advisory id never
+   *  matches the source list), so confirming edits only the camera. */
+  readonly deviceOnly?: boolean;
 }
 
 export default function ScreenSharePickerDialog({
@@ -112,9 +117,10 @@ export default function ScreenSharePickerDialog({
   onCancel,
   initialSettings = QUALITY_PRESETS.hd,
   initialSelection,
+  deviceOnly = false,
 }: ScreenSharePickerDialogProps) {
   const { t } = useTranslation("chat");
-  const [tab, setTab] = useState<PickerTab>("screens");
+  const [tab, setTab] = useState<PickerTab>(deviceOnly ? "devices" : "screens");
   const [sources, setSources] = useState<CaptureSource[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<ReadonlyMap<string, string>>(new Map());
@@ -129,12 +135,28 @@ export default function ScreenSharePickerDialog({
     invoke<CaptureSource[]>("list_capture_sources")
       .then((list) => {
         if (cancelled) return;
-        setSources(list);
+        // Camera-only mode never shows (or thumbnails) screens/windows.
+        const usable = deviceOnly ? list.filter((s) => s.kind === "device") : list;
+        setSources(usable);
         // Seed the selection from the active broadcast (once, on load):
         // match each seeded source against the fresh list so vanished
         // sources are silently dropped rather than re-shared blind.
         for (const seed of initialSelection ?? []) {
-          const live = list.find((s) => s.kind === seed.kind && s.id === seed.id);
+          if (deviceOnly && seed.kind !== "device") {
+            // Portal-picked display source: its advisory id is not in the
+            // list, but it must survive the confirm so adding a camera keeps
+            // the live screen track. Represent it as a synthetic card-less
+            // selection (chip only).
+            setSelectedDisplay((prev) => prev ?? {
+              id: seed.id,
+              kind: seed.kind,
+              title: t("screenShare.picker.systemPickedDisplay"),
+              width: 0,
+              height: 0,
+            });
+            continue;
+          }
+          const live = usable.find((s) => s.kind === seed.kind && s.id === seed.id);
           if (!live) continue;
           if (live.kind === "device") {
             setSelectedDevice((prev) => prev ?? live);
@@ -241,9 +263,10 @@ export default function ScreenSharePickerDialog({
         data-testid={TID.screenSharePicker}
       >
         <h3 id="screen-share-picker-title" className={styles.title}>
-          {t("screenShare.picker.title")}
+          {deviceOnly ? t("screenShare.picker.cameraTitle") : t("screenShare.picker.title")}
         </h3>
 
+        {!deviceOnly && (
         <div className={styles.tabs} role="tablist">
           {(["screens", "windows", "devices"] as const).map((p) => {
             const Icon = TAB_ICONS[p];
@@ -267,6 +290,7 @@ export default function ScreenSharePickerDialog({
             );
           })}
         </div>
+        )}
 
         <div className={styles.grid}>
           {status !== null ? (
@@ -350,12 +374,12 @@ export default function ScreenSharePickerDialog({
                 </span>
               );
             })}
-            {selectedDevice === null && (
+            {selectedDevice === null && !deviceOnly && (
               <span className={styles.selectionHint}>
                 {t("screenShare.picker.addCameraHint")}
               </span>
             )}
-            {selectedDisplay === null && (
+            {selectedDisplay === null && !deviceOnly && (
               <span className={styles.selectionHint}>
                 {t("screenShare.picker.addDisplayHint")}
               </span>

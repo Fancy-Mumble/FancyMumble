@@ -20,17 +20,20 @@ pub(crate) mod keyshare;
 pub(crate) mod messaging;
 pub(crate) mod offload;
 pub(crate) mod onboarding;
-pub(crate) mod popout;
 pub(crate) mod plugin_admin;
-pub(crate) mod server_settings;
 pub(crate) mod plugin_info;
+pub(crate) mod popout;
 pub(crate) mod profile;
 pub(crate) mod public_servers;
 pub(crate) mod realtime;
 /// Screen sharing needs OS capture APIs unavailable on Android.
 #[cfg(not(target_os = "android"))]
 pub(crate) mod screenshare;
+/// Native stream viewer (Linux, whose webview lacks WebRTC); stubs elsewhere.
+#[cfg(not(target_os = "android"))]
+pub(crate) mod stream_view;
 pub(crate) mod server;
+pub(crate) mod server_settings;
 pub(crate) mod servers;
 pub(crate) mod system;
 pub(crate) mod ui_mode;

@@ -8,15 +8,17 @@
  * numbers that matter for a realtime stream - network latency (RTT,
  * also graphed), packet loss, jitter and the selected ICE path.
  *
- * Samples `RTCPeerConnection.getStats()` at 1 Hz through a `getPc`
- * getter (re-read every tick so viewer reconnects are picked up
- * transparently). The stats parsing and per-interval derivation are
- * exported as pure functions for unit tests.
+ * Samples at 1 Hz through a {@link StatsSampler} created by the active
+ * stream-viewer strategy's factory - the webview family samples
+ * `RTCPeerConnection.getStats()`, the native family the Rust peer plus the
+ * viewport's decode metrics. The stats parsing and per-interval derivation
+ * are exported as pure functions for unit tests.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CloseIcon } from "../../../icons";
 import { TID } from "../../../testids";
+import type { StatsSampler } from "./viewerStrategy";
 import styles from "./StreamStatsPanel.module.css";
 
 // ---------------------------------------------------------------------------
@@ -329,6 +331,7 @@ interface Histories {
   network: number[];
   buffer: number[];
   rtt: number[];
+  fps: number[];
 }
 
 interface PanelData {
@@ -375,37 +378,59 @@ function describeVideoElement(video: HTMLVideoElement | null, mutedLabel: string
   };
 }
 
+/** Sampler over one webview `RTCPeerConnection` - the webview strategy's
+ *  factory product, and directly usable for standalone PCs (stream popout). */
+export function createPcStatsSampler(getPc: () => RTCPeerConnection | null): StatsSampler {
+  return {
+    async sample() {
+      const pc = getPc();
+      if (!pc || pc.connectionState === "closed") return null;
+      let report: RTCStatsReport;
+      try {
+        report = await pc.getStats();
+      } catch {
+        return null; // PC closed mid-call; the next tick handles it
+      }
+      return {
+        sample: parseStatsReports(report.values() as Iterable<StatsDict>, performance.now()),
+        connectionState: pc.connectionState,
+      };
+    },
+  };
+}
+
 interface StreamStatsPanelProps {
-  /** Re-read every tick so a rebuilt viewer PC (reconnect) is picked up. */
-  readonly getPc: () => RTCPeerConnection | null;
-  /** The video element, for viewport size and volume rows. */
-  readonly videoRef: React.RefObject<HTMLVideoElement | null>;
+  /** Per-session probe from the active viewer strategy's factory
+   *  (`activeStreamViewerStrategy().createStatsSampler(session)`). */
+  readonly sampler: StatsSampler;
+  /** The video element, for viewport size and volume rows (webview family;
+   *  the native canvas viewport has none). */
+  readonly videoRef?: React.RefObject<HTMLVideoElement | null>;
   /** SDP-mid -> content, so each inbound video track is labelled screen /
    *  camera in a screen+camera share. */
   readonly contentByMid?: Readonly<Record<string, "screen" | "camera">>;
   readonly onClose: () => void;
 }
 
-export default function StreamStatsPanel({ getPc, videoRef, contentByMid, onClose }: StreamStatsPanelProps) {
+export default function StreamStatsPanel({ sampler, videoRef, contentByMid, onClose }: StreamStatsPanelProps) {
   const { t } = useTranslation("chat");
   const [data, setData] = useState<PanelData | null>(null);
   const prevSampleRef = useRef<StatsSample | null>(null);
-  const historiesRef = useRef<Histories>({ bitrate: [], network: [], buffer: [], rtt: [] });
+  const historiesRef = useRef<Histories>({ bitrate: [], network: [], buffer: [], rtt: [], fps: [] });
 
   const tick = useCallback(async () => {
-    const pc = getPc();
-    if (!pc || pc.connectionState === "closed") {
+    let result: Awaited<ReturnType<StatsSampler["sample"]>>;
+    try {
+      result = await sampler.sample();
+    } catch {
+      return; // transient sampler failure; the next tick handles it
+    }
+    if (!result) {
       prevSampleRef.current = null;
       setData(null);
       return;
     }
-    let report: RTCStatsReport;
-    try {
-      report = await pc.getStats();
-    } catch {
-      return; // e.g. the PC closed mid-call; the next tick handles it
-    }
-    const sample = parseStatsReports(report.values() as Iterable<StatsDict>, performance.now());
+    const { sample, connectionState } = result;
     const interval = deriveIntervalStats(prevSampleRef.current, sample);
     prevSampleRef.current = sample;
     const hist = historiesRef.current;
@@ -413,18 +438,20 @@ export default function StreamStatsPanel({ getPc, videoRef, contentByMid, onClos
     pushHistory(hist.network, interval.networkKBps);
     pushHistory(hist.buffer, interval.bufferMs);
     pushHistory(hist.rtt, sample.rttMs);
+    pushHistory(hist.fps, interval.fps);
     setData({
       sample,
       interval,
-      connectionState: pc.connectionState,
+      connectionState,
       hist: {
         bitrate: [...hist.bitrate],
         network: [...hist.network],
         buffer: [...hist.buffer],
         rtt: [...hist.rtt],
+        fps: [...hist.fps],
       },
     });
-  }, [getPc]);
+  }, [sampler]);
 
   useEffect(() => {
     let cancelled = false;
@@ -437,7 +464,7 @@ export default function StreamStatsPanel({ getPc, videoRef, contentByMid, onClos
     };
   }, [tick]);
 
-  const info = describeVideoElement(videoRef.current, t("screenShare.stats.muted"));
+  const info = describeVideoElement(videoRef?.current ?? null, t("screenShare.stats.muted"));
 
   interface Row {
     key: string;
@@ -469,6 +496,14 @@ export default function StreamStatsPanel({ getPc, videoRef, contentByMid, onClos
         })}`,
       },
       { key: "volume", label: t("screenShare.stats.volume"), value: info.volume },
+      {
+        key: "fps",
+        label: t("screenShare.stats.fps"),
+        value: `${fmt(interval.fps, 1)} fps`,
+        graph: hist.fps,
+        color: "#e678d8",
+        testid: TID.streamStatsFps,
+      },
       {
         key: "connection",
         label: t("screenShare.stats.connection"),
