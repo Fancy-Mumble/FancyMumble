@@ -236,7 +236,8 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::ui_mode::set_ui_mode,
         super::ui_mode::get_system_specs,
         super::ui_mode::relaunch_in_minimal_mode,
-        // -- screen sharing (desktop only) -----------------------------
+        // -- screen sharing (broadcasting is desktop-only; viewing works
+        //    everywhere via the webview viewer + send_webrtc_signal) ----
         #[cfg(not(target_os = "android"))]
         super::screenshare::list_capture_sources,
         #[cfg(not(target_os = "android"))]
@@ -249,13 +250,10 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::screenshare::screen_share_capabilities,
         #[cfg(not(target_os = "android"))]
         super::screenshare::request_camera_access,
-        #[cfg(not(target_os = "android"))]
+        // Real on Linux + Windows, loud stubs elsewhere (Android included).
         super::stream_view::start_native_stream_view,
-        #[cfg(not(target_os = "android"))]
         super::stream_view::stop_native_stream_view,
-        #[cfg(not(target_os = "android"))]
         super::stream_view::request_stream_keyframe,
-        #[cfg(not(target_os = "android"))]
         super::stream_view::native_stream_view_stats,
         // -- updater (desktop only) ------------------------------------
         #[cfg(not(target_os = "android"))]

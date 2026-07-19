@@ -26,11 +26,15 @@ pub(crate) mod popout;
 pub(crate) mod profile;
 pub(crate) mod public_servers;
 pub(crate) mod realtime;
-/// Screen sharing needs OS capture APIs unavailable on Android.
+/// Screen-share BROADCASTING needs OS capture APIs unavailable on Android.
+/// Viewing does not live here: it is the webview viewer layer plus the
+/// platform-independent `send_webrtc_signal`, so Android watches streams
+/// without this module.
 #[cfg(not(target_os = "android"))]
 pub(crate) mod screenshare;
-/// Native stream viewer (Linux, whose webview lacks WebRTC); stubs elsewhere.
-#[cfg(not(target_os = "android"))]
+/// Native stream viewer commands (Linux + opt-in Windows); loud stubs on
+/// every other platform, Android included, so a stray invoke fails with a
+/// message instead of "command not found".
 pub(crate) mod stream_view;
 pub(crate) mod server;
 pub(crate) mod server_settings;
