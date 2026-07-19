@@ -2936,6 +2936,167 @@ pub struct FancyAccountAck {
     #[prost(string, optional, tag = "5")]
     pub totp_uri: ::core::option::Option<::prost::alloc::string::String>,
 }
+/// A single forum post. Sent Client -> Server to create or edit a post, and
+/// Server -> Client both as a real-time broadcast and as elements of a
+/// FancyForumFetchResponse. Identity/timestamp fields are stamped by the
+/// server; clients leave them empty on create.
+///
+/// A forum is a per-channel, server-persisted, threaded message board. Threads
+/// are ordered by their most recent activity; posts within a thread are ordered
+/// by creation time.
+///
+/// Wire type ID = 157.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyForumPost {
+    #[prost(uint32, optional, tag = "1")]
+    pub channel_id: ::core::option::Option<u32>,
+    /// UUID of this post. The server assigns one when empty on create.
+    #[prost(string, optional, tag = "2")]
+    pub post_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// UUID of the thread root this post belongs to. Empty on a new-thread
+    /// create; the server then sets thread_id = post_id. Non-empty means the
+    /// post is a reply within that thread.
+    #[prost(string, optional, tag = "3")]
+    pub thread_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Thread title. Only meaningful on a thread's root post.
+    #[prost(string, optional, tag = "4")]
+    pub title: ::core::option::Option<::prost::alloc::string::String>,
+    /// Post body (the server enforces the configured text message length limit).
+    #[prost(string, optional, tag = "5")]
+    pub body: ::core::option::Option<::prost::alloc::string::String>,
+    /// TLS certificate hash of the author (set by the server).
+    #[prost(string, optional, tag = "6")]
+    pub author_hash: ::core::option::Option<::prost::alloc::string::String>,
+    /// Session ID of the author at post time (set by the server).
+    #[prost(uint32, optional, tag = "7")]
+    pub author_session: ::core::option::Option<u32>,
+    /// Best-effort display name of the author (set by the server).
+    #[prost(string, optional, tag = "8")]
+    pub author_name: ::core::option::Option<::prost::alloc::string::String>,
+    /// Creation time, Unix epoch milliseconds (set by the server).
+    #[prost(uint64, optional, tag = "9")]
+    pub created_at: ::core::option::Option<u64>,
+    /// Last edit time, Unix epoch milliseconds (set by the server on edit).
+    #[prost(uint64, optional, tag = "10")]
+    pub edited_at: ::core::option::Option<u64>,
+    /// True on a delete broadcast: the post (or whole thread) has been removed.
+    #[prost(bool, optional, tag = "11")]
+    pub deleted: ::core::option::Option<bool>,
+    /// Number of replies in the thread, excluding the root (set by the server on
+    /// thread listings only).
+    #[prost(uint32, optional, tag = "12")]
+    pub reply_count: ::core::option::Option<u32>,
+}
+/// Client -> Server: fetch forum threads for a channel, or the posts within a
+/// single thread. Wire type ID = 158.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyForumFetch {
+    #[prost(uint32, optional, tag = "1")]
+    pub channel_id: ::core::option::Option<u32>,
+    /// Empty: list thread roots in the channel (most recently active first).
+    /// Non-empty: list posts in this thread (root first, then replies by time).
+    #[prost(string, optional, tag = "2")]
+    pub thread_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Pagination cursor: return items that sort before this post_id.
+    #[prost(string, optional, tag = "3")]
+    pub before_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Maximum items to return (the server caps this; default 50).
+    #[prost(uint32, optional, tag = "4")]
+    pub limit: ::core::option::Option<u32>,
+}
+/// Server -> Client: response to a FancyForumFetch. Wire type ID = 159.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FancyForumFetchResponse {
+    #[prost(uint32, optional, tag = "1")]
+    pub channel_id: ::core::option::Option<u32>,
+    /// Echoes the requested thread_id (empty for a thread listing).
+    #[prost(string, optional, tag = "2")]
+    pub thread_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, repeated, tag = "3")]
+    pub posts: ::prost::alloc::vec::Vec<FancyForumPost>,
+    /// True when more items exist beyond the returned page.
+    #[prost(bool, optional, tag = "4")]
+    pub has_more: ::core::option::Option<bool>,
+}
+/// Client -> Server: delete a forum post. Only the original author or a user
+/// with Write permission on the channel may delete. Deleting a thread root
+/// deletes the entire thread. The server broadcasts a FancyForumPost with
+/// deleted = true to channel members. Wire type ID = 160.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyForumDelete {
+    #[prost(uint32, optional, tag = "1")]
+    pub channel_id: ::core::option::Option<u32>,
+    #[prost(string, optional, tag = "2")]
+    pub post_id: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// A text message the server stores and delivers to its target channel(s) at a
+/// future time. Sent Client -> Server to schedule, and Server -> Client as
+/// elements of a FancyScheduledMessageListResponse. Identity/timestamp fields
+/// are stamped by the server. Wire type ID = 161.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyScheduledMessage {
+    /// UUID. The server assigns one when empty on create.
+    #[prost(string, optional, tag = "1")]
+    pub schedule_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Target channels; the message is posted to each. At least one channel_id
+    /// or tree_id is required.
+    #[prost(uint32, repeated, tag = "2")]
+    pub channel_id: ::prost::alloc::vec::Vec<u32>,
+    /// Target channel trees; the message is posted to the whole tree.
+    #[prost(uint32, repeated, tag = "3")]
+    pub tree_id: ::prost::alloc::vec::Vec<u32>,
+    /// Message body (the server enforces the text message length limit).
+    #[prost(string, optional, tag = "4")]
+    pub message: ::core::option::Option<::prost::alloc::string::String>,
+    /// Delivery time, Unix epoch milliseconds.
+    #[prost(uint64, optional, tag = "5")]
+    pub deliver_at: ::core::option::Option<u64>,
+    /// Creator session ID at schedule time (set by the server).
+    #[prost(uint32, optional, tag = "6")]
+    pub creator_session: ::core::option::Option<u32>,
+    /// Creator TLS certificate hash (set by the server); used to key ownership
+    /// stably across reconnects.
+    #[prost(string, optional, tag = "7")]
+    pub creator_hash: ::core::option::Option<::prost::alloc::string::String>,
+    /// Creator display name (set by the server).
+    #[prost(string, optional, tag = "8")]
+    pub creator_name: ::core::option::Option<::prost::alloc::string::String>,
+    /// When it was scheduled, Unix epoch milliseconds (set by the server).
+    #[prost(uint64, optional, tag = "9")]
+    pub created_at: ::core::option::Option<u64>,
+    /// Current status (set by the server in list responses).
+    #[prost(enumeration = "FancyScheduledStatus", optional, tag = "10")]
+    pub status: ::core::option::Option<i32>,
+}
+/// Client -> Server: request the caller's own pending scheduled messages.
+/// Wire type ID = 162.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyScheduledMessageList {}
+/// Server -> Client: the caller's scheduled messages. Wire type ID = 163.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FancyScheduledMessageListResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub messages: ::prost::alloc::vec::Vec<FancyScheduledMessage>,
+}
+/// Client -> Server: cancel a pending scheduled message. Only the creator (by
+/// certificate hash) may cancel. Wire type ID = 164.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyScheduledMessageCancel {
+    #[prost(string, optional, tag = "1")]
+    pub schedule_id: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Server -> Client: acknowledge the outcome of a schedule, cancel, or delivery.
+/// Wire type ID = 165.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyScheduledMessageAck {
+    #[prost(string, optional, tag = "1")]
+    pub schedule_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(enumeration = "FancyScheduledStatus", optional, tag = "2")]
+    pub status: ::core::option::Option<i32>,
+    /// Human-readable detail on rejection or other outcomes.
+    #[prost(string, optional, tag = "3")]
+    pub reason: ::core::option::Option<::prost::alloc::string::String>,
+}
 /// Fancy Mumble extension: a single channel attribute flag. ChannelState carries
 /// a repeated set of these (its `attributes` field), describing the channel from
 /// the receiving user's perspective. This supersedes the individual `can_enter` /
@@ -3081,6 +3242,39 @@ impl ReactionAction {
         match value {
             "REACTION_ADD" => Some(Self::ReactionAdd),
             "REACTION_REMOVE" => Some(Self::ReactionRemove),
+            _ => None,
+        }
+    }
+}
+/// Lifecycle status of a scheduled message.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum FancyScheduledStatus {
+    FancyScheduledPending = 0,
+    FancyScheduledDelivered = 1,
+    FancyScheduledCancelled = 2,
+    FancyScheduledRejected = 3,
+}
+impl FancyScheduledStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::FancyScheduledPending => "FANCY_SCHEDULED_PENDING",
+            Self::FancyScheduledDelivered => "FANCY_SCHEDULED_DELIVERED",
+            Self::FancyScheduledCancelled => "FANCY_SCHEDULED_CANCELLED",
+            Self::FancyScheduledRejected => "FANCY_SCHEDULED_REJECTED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "FANCY_SCHEDULED_PENDING" => Some(Self::FancyScheduledPending),
+            "FANCY_SCHEDULED_DELIVERED" => Some(Self::FancyScheduledDelivered),
+            "FANCY_SCHEDULED_CANCELLED" => Some(Self::FancyScheduledCancelled),
+            "FANCY_SCHEDULED_REJECTED" => Some(Self::FancyScheduledRejected),
             _ => None,
         }
     }
