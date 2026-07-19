@@ -52,6 +52,9 @@ export const TID = {
   /** Flat list (above the channel tree) of private/hidden rooms the user is in
    *  (private rooms + scheduled meeting rooms). */
   privateChannelsViewer: "private-channels-viewer",
+  /** Context-menu action that leaves a meeting room (removes it from the
+   *  user's Meetings list; rejoining happens via the calendar event). */
+  leaveMeeting: "leave-meeting",
   /** The shared password-entry dialog (channel-join / file-download). Its
    *  presence means a password is being demanded. */
   passwordPromptDialog: "password-prompt-dialog",
