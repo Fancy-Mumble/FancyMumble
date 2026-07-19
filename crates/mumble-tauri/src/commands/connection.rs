@@ -16,7 +16,10 @@ fn validate_cert_label(label: Option<&str>) -> Result<(), String> {
     if label == "." || label == ".." {
         return Err("invalid certificate label".into());
     }
-    if !label.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')) {
+    if !label
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+    {
         return Err("certificate label may only contain letters, digits, '.', '_' and '-'".into());
     }
     Ok(())
@@ -33,7 +36,9 @@ pub(crate) async fn connect(
     totp: Option<String>,
 ) -> Result<(), String> {
     validate_cert_label(cert_label.as_deref())?;
-    state.connect(host, port, username, cert_label, password, totp).await
+    state
+        .connect(host, port, username, cert_label, password, totp)
+        .await
 }
 
 #[tauri::command]

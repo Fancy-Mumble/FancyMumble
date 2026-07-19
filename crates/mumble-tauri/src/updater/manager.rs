@@ -32,7 +32,10 @@ impl UpdaterState {
     }
 
     pub(crate) fn snapshot(&self) -> Option<UpdateInfo> {
-        self.pending.lock().ok().and_then(|g| g.as_ref().map(UpdateInfo::from))
+        self.pending
+            .lock()
+            .ok()
+            .and_then(|g| g.as_ref().map(UpdateInfo::from))
     }
 
     pub(crate) fn set_auto_install(&self, enabled: bool) {

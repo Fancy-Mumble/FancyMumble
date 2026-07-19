@@ -32,10 +32,7 @@ impl AppState {
     /// `revision` is preserved to support optimistic concurrency: a
     /// stale concurrent admin that has not seen the latest broadcast
     /// would otherwise overwrite the newer config.
-    pub async fn save_onboarding_config(
-        &self,
-        config: OnboardingConfig,
-    ) -> Result<(), String> {
+    pub async fn save_onboarding_config(&self, config: OnboardingConfig) -> Result<(), String> {
         let handle = {
             let session = self.inner.snapshot();
             let state = session.lock().map_err(|e| e.to_string())?;

@@ -25,7 +25,6 @@ use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use mumble_protocol::error::{Error, Result};
 use tracing::{debug, warn};
 
-
 /// Per-subscriber buffer cap (1 s at 48 kHz); oldest samples are dropped
 /// when a consumer stalls so it never wedges the others.
 const SUBSCRIBER_CAP: usize = 48_000;
@@ -91,7 +90,9 @@ pub(crate) fn acquire(
                 .or_insert_with(|| Arc::new(StreamShared::new(key))),
         )
     };
-    Box::new(SharedCaptureHandle::new(shared, frame_size, volume, factory))
+    Box::new(SharedCaptureHandle::new(
+        shared, frame_size, volume, factory,
+    ))
 }
 
 impl StreamShared {
@@ -163,7 +164,9 @@ impl AudioCapture for SharedCaptureHandle {
         }
         if let Ok(dead) = self.inner.dead.lock() {
             if let Some(reason) = dead.as_ref() {
-                return Err(Error::InvalidState(format!("capture device lost: {reason}")));
+                return Err(Error::InvalidState(format!(
+                    "capture device lost: {reason}"
+                )));
             }
         }
         let mut buf = self
@@ -275,7 +278,9 @@ impl Drop for SharedCaptureHandle {
 /// Record a fatal device error on every live subscriber, so each reader
 /// surfaces it on its next poll.
 fn mark_subscribers_dead(shared: &StreamShared, reason: &str) {
-    let Ok(subs) = shared.subscribers.lock() else { return };
+    let Ok(subs) = shared.subscribers.lock() else {
+        return;
+    };
     for sub in subs.iter().filter_map(Weak::upgrade) {
         if let Ok(mut dead) = sub.dead.lock() {
             *dead = Some(reason.to_owned());
@@ -293,10 +298,14 @@ fn pump(shared: Arc<StreamShared>, mut underlying: Box<dyn AudioCapture>) {
         match underlying.read_frame() {
             Ok(frame) => {
                 let samples = frame.as_f32_samples();
-                let Ok(mut subs) = shared.subscribers.lock() else { break };
+                let Ok(mut subs) = shared.subscribers.lock() else {
+                    break;
+                };
                 subs.retain(|w| w.strong_count() > 0);
                 for sub in subs.iter().filter_map(Weak::upgrade) {
-                    let Ok(mut buf) = sub.buf.lock() else { continue };
+                    let Ok(mut buf) = sub.buf.lock() else {
+                        continue;
+                    };
                     buf.extend(samples.iter().copied());
                     if buf.len() > SUBSCRIBER_CAP {
                         let excess = buf.len() - SUBSCRIBER_CAP;
@@ -420,15 +429,33 @@ mod tests {
 
         a.start().unwrap();
         b.start().unwrap(); // second consumer while first is active
-        assert_eq!(opens.load(Ordering::SeqCst), 1, "device must be opened exactly once");
+        assert_eq!(
+            opens.load(Ordering::SeqCst),
+            1,
+            "device must be opened exactly once"
+        );
 
-        assert!(drain_frames(&mut a, 5, Duration::from_secs(2)) >= 5, "a starved");
-        assert!(drain_frames(&mut b, 3, Duration::from_secs(2)) >= 3, "b starved");
+        assert!(
+            drain_frames(&mut a, 5, Duration::from_secs(2)) >= 5,
+            "a starved"
+        );
+        assert!(
+            drain_frames(&mut b, 3, Duration::from_secs(2)) >= 3,
+            "b starved"
+        );
 
         a.stop().unwrap();
-        assert_eq!(closes.load(Ordering::SeqCst), 0, "device stays open while b runs");
+        assert_eq!(
+            closes.load(Ordering::SeqCst),
+            0,
+            "device stays open while b runs"
+        );
         b.stop().unwrap();
-        assert_eq!(closes.load(Ordering::SeqCst), 1, "last consumer releases the device");
+        assert_eq!(
+            closes.load(Ordering::SeqCst),
+            1,
+            "last consumer releases the device"
+        );
     }
 
     #[test]
@@ -446,7 +473,10 @@ mod tests {
         a.start().unwrap();
         assert!(drain_frames(&mut a, 2, Duration::from_secs(2)) >= 2);
         a.stop().unwrap();
-        assert_eq!((opens.load(Ordering::SeqCst), closes.load(Ordering::SeqCst)), (1, 1));
+        assert_eq!(
+            (opens.load(Ordering::SeqCst), closes.load(Ordering::SeqCst)),
+            (1, 1)
+        );
 
         let mut b = acquire(
             Some("test-shared-reopen"),
@@ -457,7 +487,10 @@ mod tests {
         b.start().unwrap();
         assert!(drain_frames(&mut b, 2, Duration::from_secs(2)) >= 2);
         b.stop().unwrap();
-        assert_eq!((opens.load(Ordering::SeqCst), closes.load(Ordering::SeqCst)), (2, 2));
+        assert_eq!(
+            (opens.load(Ordering::SeqCst), closes.load(Ordering::SeqCst)),
+            (2, 2)
+        );
     }
 
     #[test]
@@ -500,9 +533,7 @@ mod tests {
         // ONLY if frames aligned; instead check scaling of first nonzero
         // sample ratio: values are ramp indices, so compare per-frame
         // max/step ratios.
-        let max = |f: &AudioFrame| {
-            f.as_f32_samples().iter().fold(0.0f32, |m, &s| m.max(s))
-        };
+        let max = |f: &AudioFrame| f.as_f32_samples().iter().fold(0.0f32, |m, &s| m.max(s));
         assert!(max(&fa) > 0.0 && max(&fb) > 0.0);
 
         a.stop().unwrap();

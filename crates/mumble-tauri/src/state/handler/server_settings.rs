@@ -34,7 +34,10 @@ impl HandleMessage for mumble_tcp::FancyServerSettings {
             state.server_settings = Some(snapshot.clone());
         }
 
-        ctx.emit("server-settings", ServerSettingsPayload { settings: snapshot });
+        ctx.emit(
+            "server-settings",
+            ServerSettingsPayload { settings: snapshot },
+        );
     }
 }
 

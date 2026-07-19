@@ -77,7 +77,9 @@ impl VirtualSineCapture {
         let mut parts = spec.split(':');
         let kind = parts.next().unwrap_or_default();
         if kind != "sine" {
-            return Err(format!("unsupported virtual mic kind '{kind}' (expected 'sine')"));
+            return Err(format!(
+                "unsupported virtual mic kind '{kind}' (expected 'sine')"
+            ));
         }
         let rate: f64 = parts
             .next()
@@ -200,7 +202,9 @@ mod tests {
             while t0.elapsed().as_millis() < 200 {
                 match cap.read_frame() {
                     Ok(_) => frames += 1,
-                    Err(Error::NotEnoughSamples) => std::thread::sleep(std::time::Duration::from_millis(2)),
+                    Err(Error::NotEnoughSamples) => {
+                        std::thread::sleep(std::time::Duration::from_millis(2))
+                    }
                     Err(e) => panic!("read_frame: {e}"),
                 }
             }

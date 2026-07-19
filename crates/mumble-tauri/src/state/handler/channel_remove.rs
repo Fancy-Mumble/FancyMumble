@@ -1,5 +1,5 @@
-use tracing::debug;
 use mumble_protocol::proto::mumble_tcp;
+use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
 use crate::state::pchat;
@@ -15,7 +15,10 @@ impl HandleMessage for mumble_tcp::ChannelRemove {
             if let Some(ref mut p) = state.pchat_ctx.pchat {
                 p.key_manager.remove_channel(self.channel_id);
                 let _ = p.fetched_channels.remove(&self.channel_id);
-                debug!(channel_id = self.channel_id, "cleared pchat state for removed channel");
+                debug!(
+                    channel_id = self.channel_id,
+                    "cleared pchat state for removed channel"
+                );
 
                 // Remove persisted archive key from disk.
                 if let Some(ref dir) = p.identity_dir {
@@ -27,7 +30,10 @@ impl HandleMessage for mumble_tcp::ChannelRemove {
             let _ = state.pchat_ctx.key_holders.remove(&self.channel_id);
 
             // Remove any pending key-share consent for this channel.
-            state.pchat_ctx.pending_key_shares.retain(|p| p.channel_id != self.channel_id);
+            state
+                .pchat_ctx
+                .pending_key_shares
+                .retain(|p| p.channel_id != self.channel_id);
         }
 
         ctx.emit_empty("state-changed");

@@ -55,7 +55,13 @@ impl PchatState {
 
         let payload = self
             .key_manager
-            .encrypt(msg.protocol, msg.channel_id, msg.message_id, msg.timestamp, &envelope_bytes)
+            .encrypt(
+                msg.protocol,
+                msg.channel_id,
+                msg.message_id,
+                msg.timestamp,
+                &envelope_bytes,
+            )
             .map_err(|e| format!("encrypt message: {e}"))?;
 
         Ok(mumble_tcp::PchatMessage {

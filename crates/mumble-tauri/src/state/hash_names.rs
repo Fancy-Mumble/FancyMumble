@@ -18,49 +18,209 @@ use fancy_utils::hex::hex_to_bytes;
 // --- Word lists (inspired by Docker's names-generator) ---
 
 const ADJECTIVES: &[&str] = &[
-    "admiring", "adoring", "agitated", "amazing", "angry",
-    "beautiful", "bold", "brave", "busy", "calm",
-    "charming", "clever", "cool", "crazy", "dazzling",
-    "determined", "dreamy", "eager", "ecstatic", "elastic",
-    "elated", "elegant", "epic", "exciting", "fervent",
-    "festive", "flamboyant", "focused", "friendly", "frosty",
-    "gallant", "gifted", "goofy", "gracious", "happy",
-    "hopeful", "hungry", "infallible", "inspiring", "intelligent",
-    "interesting", "jolly", "keen", "kind", "laughing",
-    "loving", "lucid", "magical", "modest", "musing",
-    "mystifying", "naughty", "nervous", "nice", "nifty",
-    "nostalgic", "objective", "optimistic", "peaceful", "pedantic",
-    "pensive", "practical", "priceless", "quirky", "quizzical",
-    "recursing", "relaxed", "reverent", "romantic", "sad",
-    "serene", "sharp", "silly", "sleepy", "stoic",
-    "strange", "stupefied", "suspicious", "sweet", "tender",
-    "thirsty", "trusting", "unruffled", "upbeat", "vibrant",
-    "vigilant", "vigorous", "wizardly", "wonderful", "youthful",
-    "zealous", "zen", "adaptable", "affectionate", "adventurous",
-    "bright", "cheerful", "curious", "gentle", "radiant",
+    "admiring",
+    "adoring",
+    "agitated",
+    "amazing",
+    "angry",
+    "beautiful",
+    "bold",
+    "brave",
+    "busy",
+    "calm",
+    "charming",
+    "clever",
+    "cool",
+    "crazy",
+    "dazzling",
+    "determined",
+    "dreamy",
+    "eager",
+    "ecstatic",
+    "elastic",
+    "elated",
+    "elegant",
+    "epic",
+    "exciting",
+    "fervent",
+    "festive",
+    "flamboyant",
+    "focused",
+    "friendly",
+    "frosty",
+    "gallant",
+    "gifted",
+    "goofy",
+    "gracious",
+    "happy",
+    "hopeful",
+    "hungry",
+    "infallible",
+    "inspiring",
+    "intelligent",
+    "interesting",
+    "jolly",
+    "keen",
+    "kind",
+    "laughing",
+    "loving",
+    "lucid",
+    "magical",
+    "modest",
+    "musing",
+    "mystifying",
+    "naughty",
+    "nervous",
+    "nice",
+    "nifty",
+    "nostalgic",
+    "objective",
+    "optimistic",
+    "peaceful",
+    "pedantic",
+    "pensive",
+    "practical",
+    "priceless",
+    "quirky",
+    "quizzical",
+    "recursing",
+    "relaxed",
+    "reverent",
+    "romantic",
+    "sad",
+    "serene",
+    "sharp",
+    "silly",
+    "sleepy",
+    "stoic",
+    "strange",
+    "stupefied",
+    "suspicious",
+    "sweet",
+    "tender",
+    "thirsty",
+    "trusting",
+    "unruffled",
+    "upbeat",
+    "vibrant",
+    "vigilant",
+    "vigorous",
+    "wizardly",
+    "wonderful",
+    "youthful",
+    "zealous",
+    "zen",
+    "adaptable",
+    "affectionate",
+    "adventurous",
+    "bright",
+    "cheerful",
+    "curious",
+    "gentle",
+    "radiant",
 ];
 
 const ANIMALS: &[&str] = &[
-    "albatross", "alpaca", "badger", "bear", "butterfly",
-    "cardinal", "chameleon", "cheetah", "crane", "deer",
-    "dolphin", "eagle", "elephant", "falcon", "flamingo",
-    "fox", "gazelle", "giraffe", "hawk", "hedgehog",
-    "heron", "iguana", "impala", "jackal", "jaguar",
-    "kangaroo", "kingfisher", "koala", "lemur", "leopard",
-    "lion", "lynx", "macaw", "meerkat", "moose",
-    "narwhal", "newt", "nightingale", "octopus", "osprey",
-    "otter", "owl", "panda", "pangolin", "parrot",
-    "pelican", "penguin", "quail", "quetzal", "raccoon",
-    "raven", "robin", "salamander", "seal", "sparrow",
-    "starling", "swan", "tiger", "toucan", "turtle",
-    "viper", "walrus", "whale", "wolf", "wren",
-    "zebra", "antelope", "armadillo", "bison", "buffalo",
-    "camel", "capybara", "cougar", "coyote", "crow",
-    "dingo", "ferret", "finch", "gecko", "gorilla",
-    "hamster", "hyena", "kestrel", "lizard", "llama",
-    "mantis", "marmot", "mink", "mole", "panther",
-    "peacock", "pheasant", "porpoise", "rabbit", "reindeer",
-    "rhino", "shrew", "sloth", "tapir", "weasel",
+    "albatross",
+    "alpaca",
+    "badger",
+    "bear",
+    "butterfly",
+    "cardinal",
+    "chameleon",
+    "cheetah",
+    "crane",
+    "deer",
+    "dolphin",
+    "eagle",
+    "elephant",
+    "falcon",
+    "flamingo",
+    "fox",
+    "gazelle",
+    "giraffe",
+    "hawk",
+    "hedgehog",
+    "heron",
+    "iguana",
+    "impala",
+    "jackal",
+    "jaguar",
+    "kangaroo",
+    "kingfisher",
+    "koala",
+    "lemur",
+    "leopard",
+    "lion",
+    "lynx",
+    "macaw",
+    "meerkat",
+    "moose",
+    "narwhal",
+    "newt",
+    "nightingale",
+    "octopus",
+    "osprey",
+    "otter",
+    "owl",
+    "panda",
+    "pangolin",
+    "parrot",
+    "pelican",
+    "penguin",
+    "quail",
+    "quetzal",
+    "raccoon",
+    "raven",
+    "robin",
+    "salamander",
+    "seal",
+    "sparrow",
+    "starling",
+    "swan",
+    "tiger",
+    "toucan",
+    "turtle",
+    "viper",
+    "walrus",
+    "whale",
+    "wolf",
+    "wren",
+    "zebra",
+    "antelope",
+    "armadillo",
+    "bison",
+    "buffalo",
+    "camel",
+    "capybara",
+    "cougar",
+    "coyote",
+    "crow",
+    "dingo",
+    "ferret",
+    "finch",
+    "gecko",
+    "gorilla",
+    "hamster",
+    "hyena",
+    "kestrel",
+    "lizard",
+    "llama",
+    "mantis",
+    "marmot",
+    "mink",
+    "mole",
+    "panther",
+    "peacock",
+    "pheasant",
+    "porpoise",
+    "rabbit",
+    "reindeer",
+    "rhino",
+    "shrew",
+    "sloth",
+    "tapir",
+    "weasel",
 ];
 
 // ---------------------------------------------------------------------------
@@ -153,7 +313,10 @@ impl DefaultHashNameResolver {
 
 impl HashNameResolver for DefaultHashNameResolver {
     fn resolve(&self, cert_hash: &str) -> String {
-        let guard = self.mappings.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let guard = self
+            .mappings
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(name) = guard.get(cert_hash) {
             return name.clone();
         }
@@ -164,7 +327,10 @@ impl HashNameResolver for DefaultHashNameResolver {
         if cert_hash.is_empty() || username.is_empty() {
             return;
         }
-        let mut guard = self.mappings.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut guard = self
+            .mappings
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let existing = guard.get(cert_hash);
         if existing.is_some_and(|n| n == username) {
             return;
@@ -183,9 +349,8 @@ mod tests {
 
     #[test]
     fn deterministic_name_generation() {
-        let resolver = DefaultHashNameResolver::new(
-            NamedTempFile::new().unwrap().path().to_path_buf(),
-        );
+        let resolver =
+            DefaultHashNameResolver::new(NamedTempFile::new().unwrap().path().to_path_buf());
         let name1 = resolver.generate_fallback_name("abcdef1234567890");
         let name2 = resolver.generate_fallback_name("abcdef1234567890");
         assert_eq!(name1, name2, "same hash must produce same name");
@@ -193,19 +358,20 @@ mod tests {
 
     #[test]
     fn different_hashes_different_names() {
-        let resolver = DefaultHashNameResolver::new(
-            NamedTempFile::new().unwrap().path().to_path_buf(),
-        );
+        let resolver =
+            DefaultHashNameResolver::new(NamedTempFile::new().unwrap().path().to_path_buf());
         let name1 = resolver.generate_fallback_name("0011223344556677");
         let name2 = resolver.generate_fallback_name("ff11223344556677");
-        assert_ne!(name1, name2, "different first byte should give different adjective");
+        assert_ne!(
+            name1, name2,
+            "different first byte should give different adjective"
+        );
     }
 
     #[test]
     fn name_is_two_words() {
-        let resolver = DefaultHashNameResolver::new(
-            NamedTempFile::new().unwrap().path().to_path_buf(),
-        );
+        let resolver =
+            DefaultHashNameResolver::new(NamedTempFile::new().unwrap().path().to_path_buf());
         let name = resolver.generate_fallback_name("deadbeef");
         let parts: Vec<&str> = name.split(' ').collect();
         assert_eq!(parts.len(), 2, "name should be 'Adjective Animal'");
@@ -213,9 +379,8 @@ mod tests {
 
     #[test]
     fn empty_hash_does_not_panic() {
-        let resolver = DefaultHashNameResolver::new(
-            NamedTempFile::new().unwrap().path().to_path_buf(),
-        );
+        let resolver =
+            DefaultHashNameResolver::new(NamedTempFile::new().unwrap().path().to_path_buf());
         let name = resolver.generate_fallback_name("");
         assert!(!name.is_empty());
     }

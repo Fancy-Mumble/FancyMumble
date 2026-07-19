@@ -552,8 +552,12 @@ impl MumbleMixerSource {
         let empty = std::collections::HashMap::new();
         let sv = sv_guard.as_deref().unwrap_or(&empty);
 
-        let (drained, valid_count, buf_depth) =
-            super::desktop::batch_drain_speakers(&mut bufs, sv, &mut self.mixed_chunk, MIX_CHUNK_SIZE);
+        let (drained, valid_count, buf_depth) = super::desktop::batch_drain_speakers(
+            &mut bufs,
+            sv,
+            &mut self.mixed_chunk,
+            MIX_CHUNK_SIZE,
+        );
 
         self.diag.refills += 1;
         self.diag.max_buf_depth = self.diag.max_buf_depth.max(buf_depth);
@@ -628,8 +632,8 @@ impl Iterator for MumbleMixerSource {
                 // for the first time) requires a much longer fade or
                 // the abrupt onset is heard as a click/pop at the
                 // ramp's fundamental frequency.
-                const MIN_RAMP: usize = 48;   // ~1 ms - jitter recovery
-                const MAX_RAMP: usize = 480;  // ~10 ms - speech onset
+                const MIN_RAMP: usize = 48; // ~1 ms - jitter recovery
+                const MAX_RAMP: usize = 480; // ~10 ms - speech onset
                 let ramp_len = self.underrun_samples.clamp(MIN_RAMP, MAX_RAMP);
                 self.ramp_pos += 1;
                 if self.ramp_pos >= ramp_len {
@@ -766,9 +770,8 @@ impl super::MixingPlayback for RodioMixingPlayback {
             match Self::find_output_by_name(name) {
                 Some(device) => {
                     debug!("rodio playback: using selected output device '{name}'");
-                    rodio::stream::DeviceSinkBuilder::from_device(device).map_err(|e| {
-                        Error::InvalidState(format!("Open output '{name}': {e}"))
-                    })?
+                    rodio::stream::DeviceSinkBuilder::from_device(device)
+                        .map_err(|e| Error::InvalidState(format!("Open output '{name}': {e}")))?
                 }
                 None => {
                     warn!(
@@ -950,7 +953,11 @@ mod tests {
             Ok(mut mic) => {
                 let (rate, chans, fmt) = {
                     let cfg = mic.config();
-                    (cfg.sample_rate.get(), cfg.channel_count.get(), cfg.sample_format)
+                    (
+                        cfg.sample_rate.get(),
+                        cfg.channel_count.get(),
+                        cfg.sample_format,
+                    )
                 };
                 println!("OPEN OK: rate={rate} Hz, channels={chans}, format={fmt:?}");
                 // Pull ~200 ms of samples to prove data flows.
@@ -1021,8 +1028,13 @@ mod tests {
         let mut w = make_watch(48_000.0);
         assert_eq!(w.decide(44_100.4), None);
         assert_eq!(w.decide(44_099.6), None);
-        let corrected = w.decide(44_100.2).expect("third consistent window corrects");
-        assert!((corrected - 44_100.07).abs() < 1.0, "corrected to {corrected}");
+        let corrected = w
+            .decide(44_100.2)
+            .expect("third consistent window corrects");
+        assert!(
+            (corrected - 44_100.07).abs() < 1.0,
+            "corrected to {corrected}"
+        );
         // Afterwards the measured rate matches the applied rate: stable.
         assert_eq!(w.decide(44_100.1), None);
         assert!(w.streak.is_empty());
@@ -1065,7 +1077,10 @@ mod tests {
         let corrected = w
             .observe(n3, t0 + std::time::Duration::from_secs(12))
             .expect("sustained mismatch corrects");
-        assert!((corrected - 44_100.0).abs() < 5.0, "corrected to {corrected}");
+        assert!(
+            (corrected - 44_100.0).abs() < 5.0,
+            "corrected to {corrected}"
+        );
     }
 
     #[test]
@@ -1207,12 +1222,19 @@ mod tests {
         }
 
         let expected_empty = (MIX_CHUNK_SIZE / UNDERRUN_BACKOFF_SAMPLES) as u32;
-        assert!(src.primed, "should still be primed after a single-chunk underrun");
+        assert!(
+            src.primed,
+            "should still be primed after a single-chunk underrun"
+        );
         assert_eq!(
             src.consecutive_empty, expected_empty,
-            "one chunk of underrun should count as {expected_empty} empty refills, not {}", src.consecutive_empty
+            "one chunk of underrun should count as {expected_empty} empty refills, not {}",
+            src.consecutive_empty
         );
-        assert_eq!(src.diag.reprime_count, 0, "no repriming should have occurred");
+        assert_eq!(
+            src.diag.reprime_count, 0,
+            "no repriming should have occurred"
+        );
         assert!(
             expected_empty < REPRIME_AFTER,
             "REPRIME_AFTER ({REPRIME_AFTER}) must be larger than a single-chunk underrun ({expected_empty})"
@@ -1337,7 +1359,8 @@ mod tests {
         // anchor (which would be amplification).
         assert!(
             samples[0] > 0.5 && samples[0] <= ANCHOR + 1e-3,
-            "first fade-out sample should start near anchor, got {}", samples[0]
+            "first fade-out sample should start near anchor, got {}",
+            samples[0]
         );
 
         // Step 2: monotonically decreasing amplitude (no plateau,
@@ -1346,7 +1369,10 @@ mod tests {
             assert!(
                 samples[i] <= samples[i - 1] + 1e-4,
                 "fade-out must be monotonic; samples[{}]={} > samples[{}]={}",
-                i, samples[i], i - 1, samples[i - 1]
+                i,
+                samples[i],
+                i - 1,
+                samples[i - 1]
             );
         }
 
@@ -1367,7 +1393,10 @@ mod tests {
             assert!(
                 delta < MAX_STEP,
                 "step between samples[{}] and samples[{}] = {} exceeds smoothness budget {}",
-                i - 1, i, delta, MAX_STEP
+                i - 1,
+                i,
+                delta,
+                MAX_STEP
             );
         }
     }

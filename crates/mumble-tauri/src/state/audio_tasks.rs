@@ -87,7 +87,10 @@ pub(super) async fn outbound_audio_loop(
     // Brief yield so the cpal callback can deliver an initial batch of
     // samples, then drain any that accumulated during startup.
     tokio::task::yield_now().await;
-    while pipeline.tick().is_ok_and(|t| !matches!(t, OutboundTick::NoData)) {}
+    while pipeline
+        .tick()
+        .is_ok_and(|t| !matches!(t, OutboundTick::NoData))
+    {}
 
     debug!("outbound_audio_loop: entering encoding loop");
 
@@ -119,7 +122,10 @@ pub(super) async fn outbound_audio_loop(
                 "outbound_audio: tick delayed by {:.0} ms, skipping to discard stale audio",
                 elapsed.as_millis()
             );
-            while pipeline.tick().is_ok_and(|t| !matches!(t, OutboundTick::NoData)) {}
+            while pipeline
+                .tick()
+                .is_ok_and(|t| !matches!(t, OutboundTick::NoData))
+            {}
             continue;
         }
 
@@ -264,9 +270,7 @@ async fn outbound_send_task(
             Err(e) => {
                 dropped += 1;
                 if dropped == 1 || dropped.is_multiple_of(100) {
-                    warn!(
-                        "outbound_audio: send failed (dropped={dropped}, sent={sent}): {e}",
-                    );
+                    warn!("outbound_audio: send failed (dropped={dropped}, sent={sent}): {e}",);
                 }
             }
         }
@@ -416,4 +420,3 @@ fn update_voice_activation_if_changed(
         max_gain_db: settings.max_gain_db,
     })
 }
-

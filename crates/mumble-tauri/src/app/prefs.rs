@@ -27,7 +27,10 @@ pub(crate) fn hydrate_persisted_prefs(app: &tauri::AppHandle, state: &AppState) 
     };
     let path = config_dir.join("preferences.json");
     let Ok(bytes) = std::fs::read(&path) else {
-        tracing::debug!("hydrate_persisted_prefs: no preferences at {}", path.display());
+        tracing::debug!(
+            "hydrate_persisted_prefs: no preferences at {}",
+            path.display()
+        );
         return;
     };
     let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
@@ -76,7 +79,13 @@ pub(crate) fn hydrate_persisted_prefs(app: &tauri::AppHandle, state: &AppState) 
             prefs
                 .get("debugLogging")
                 .and_then(serde_json::Value::as_bool)
-                .map(|b| if b { "debug".to_string() } else { "info".to_string() })
+                .map(|b| {
+                    if b {
+                        "debug".to_string()
+                    } else {
+                        "info".to_string()
+                    }
+                })
         });
     if let Some(level) = log_level {
         if logging::set_log_level(&level).is_ok() {

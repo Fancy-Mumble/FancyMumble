@@ -16,7 +16,10 @@ pub struct ChannelEntry {
     /// `description_size: u32 | null` (byte length only) to keep
     /// `get_channels` payloads small; fetched lazily via
     /// `get_channel_description`.
-    #[serde(rename = "description_size", serialize_with = "serialize_string_len_owned")]
+    #[serde(
+        rename = "description_size",
+        serialize_with = "serialize_string_len_owned"
+    )]
     pub description: String,
     /// SHA-256 hash of the description blob.  Internal tracking only;
     /// not serialised to the frontend.
@@ -33,7 +36,10 @@ pub struct ChannelEntry {
     /// Maximum users allowed (0 = unlimited).
     pub max_users: u32,
     /// Persistent-chat protocol.  `None` if not announced by the server.
-    #[serde(skip_serializing_if = "Option::is_none", serialize_with = "serialize_pchat_protocol")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_pchat_protocol"
+    )]
     pub pchat_protocol: Option<PchatProtocol>,
     /// Maximum stored messages (0 = unlimited).
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -44,12 +44,7 @@ pub enum RecordingFormat {
 /// - `{host}`     - server hostname
 /// - `{user}`     - own username
 /// - `{channel}`  - current channel name
-pub fn expand_filename_template(
-    template: &str,
-    host: &str,
-    user: &str,
-    channel: &str,
-) -> String {
+pub fn expand_filename_template(template: &str, host: &str, user: &str, channel: &str) -> String {
     let now = chrono::Local::now();
     let date = now.format("%Y-%m-%d").to_string();
     let time = now.format("%H-%M-%S").to_string();
@@ -102,7 +97,8 @@ impl AppState {
                 .map(|c| c.name.clone())
                 .unwrap_or_default();
             let buffers = state
-                .audio.mixer
+                .audio
+                .mixer
                 .as_ref()
                 .map(AudioMixer::buffers)
                 .ok_or("Voice is not active - cannot record")?;
@@ -134,9 +130,7 @@ impl AppState {
         let path_clone = file_path.clone();
 
         let task = tauri::async_runtime::spawn(async move {
-            if let Err(e) =
-                recording_loop(&path_clone, speaker_buffers, stop_clone, format).await
-            {
+            if let Err(e) = recording_loop(&path_clone, speaker_buffers, stop_clone, format).await {
                 warn!("Recording task failed: {e}");
             }
         });
@@ -163,7 +157,8 @@ impl AppState {
             let __session = self.inner.snapshot();
             let mut state = __session.lock().map_err(|e| e.to_string())?;
             state
-                .audio.recording_handle
+                .audio
+                .recording_handle
                 .take()
                 .ok_or("No recording in progress")?
         };
@@ -180,12 +175,14 @@ impl AppState {
     pub fn recording_state(&self) -> RecordingState {
         let __session = self.inner.snapshot();
         let state = __session.lock().ok();
-        match state.and_then(|s| s.audio.recording_handle.as_ref().map(|h| {
-            (
-                h.file_path.to_string_lossy().to_string(),
-                h.started_at.elapsed().as_secs_f64(),
-            )
-        })) {
+        match state.and_then(|s| {
+            s.audio.recording_handle.as_ref().map(|h| {
+                (
+                    h.file_path.to_string_lossy().to_string(),
+                    h.started_at.elapsed().as_secs_f64(),
+                )
+            })
+        }) {
             Some((path, elapsed)) => RecordingState {
                 is_recording: true,
                 file_path: Some(path),
@@ -247,7 +244,10 @@ async fn recording_loop(
         .finalize()
         .map_err(|e| format!("WAV finalize error: {e}"))?;
 
-    info!("Recording loop finished, file finalized: {}", path.display());
+    info!(
+        "Recording loop finished, file finalized: {}",
+        path.display()
+    );
     Ok(())
 }
 
@@ -436,8 +436,8 @@ mod tests {
             let mut locked = buffers.lock().unwrap();
             let buf = locked.get_mut(&1).unwrap();
             let _ = buf.drain(..3); // [0.4, 0.5]
-            buf.push_back(0.6);     // [0.4, 0.5, 0.6]
-            buf.push_back(0.7);     // [0.4, 0.5, 0.6, 0.7]
+            buf.push_back(0.6); // [0.4, 0.5, 0.6]
+            buf.push_back(0.7); // [0.4, 0.5, 0.6, 0.7]
         }
 
         // cursor=5 > buf.len()=4 -> cursor skips to 4 (end), no re-read

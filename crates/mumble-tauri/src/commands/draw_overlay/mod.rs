@@ -87,7 +87,10 @@ pub(crate) async fn open_drawing_overlay(
     use tauri::Manager;
 
     if let Ok(mut slot) = state.draw_overlay_context.lock() {
-        *slot = Some(DrawOverlayContext { channel_id, own_session });
+        *slot = Some(DrawOverlayContext {
+            channel_id,
+            own_session,
+        });
     }
 
     // Tear down any previous overlay + tracker before opening a new one.
@@ -96,7 +99,12 @@ pub(crate) async fn open_drawing_overlay(
         let _ = existing.close();
     }
 
-    let placement = compute_placement(&app, capture_width, capture_height, display_surface.as_deref())?;
+    let placement = compute_placement(
+        &app,
+        capture_width,
+        capture_height,
+        display_surface.as_deref(),
+    )?;
 
     let window = tauri::WebviewWindowBuilder::new(
         &app,
@@ -164,10 +172,22 @@ fn compute_placement(
 fn broadcast_source_placement() -> Option<OverlayPlacement> {
     let (kind, id) = crate::commands::screenshare::active_broadcast_source()?;
     let Some((x, y, w, h)) = fancy_screenshare::sources::source_rect(kind, id) else {
-        tracing::info!(?kind, id, "draw-overlay: broadcast source rect unavailable; falling back");
+        tracing::info!(
+            ?kind,
+            id,
+            "draw-overlay: broadcast source rect unavailable; falling back"
+        );
         return None;
     };
-    tracing::info!(?kind, id, x, y, w, h, "draw-overlay: pinned to the broadcast's capture source");
+    tracing::info!(
+        ?kind,
+        id,
+        x,
+        y,
+        w,
+        h,
+        "draw-overlay: pinned to the broadcast's capture source"
+    );
     Some(OverlayPlacement {
         x,
         y,
@@ -256,10 +276,7 @@ fn pick_target_monitor(
             let ms = m.size();
             let x = pos.x as i32;
             let y = pos.y as i32;
-            x >= mp.x
-                && y >= mp.y
-                && x < mp.x + ms.width as i32
-                && y < mp.y + ms.height as i32
+            x >= mp.x && y >= mp.y && x < mp.x + ms.width as i32 && y < mp.y + ms.height as i32
         }) {
             return Ok(m.clone());
         }
@@ -276,7 +293,9 @@ fn spawn_tracker_if_supported(
     state: &tauri::State<'_, AppState>,
     placement: OverlayPlacement,
 ) {
-    let Some(hwnd) = placement.hwnd_to_track else { return; };
+    let Some(hwnd) = placement.hwnd_to_track else {
+        return;
+    };
     let handle = win_tracker::spawn_tracker(app.clone(), hwnd);
     if let Ok(mut slot) = state.draw_overlay_tracker.lock() {
         *slot = Some(handle);
@@ -349,5 +368,9 @@ pub(crate) async fn close_drawing_overlay(
 pub(crate) fn take_drawing_overlay_context(
     state: tauri::State<'_, AppState>,
 ) -> Option<DrawOverlayContext> {
-    state.draw_overlay_context.lock().ok().and_then(|m| m.clone())
+    state
+        .draw_overlay_context
+        .lock()
+        .ok()
+        .and_then(|m| m.clone())
 }

@@ -54,7 +54,11 @@ impl Default for EncodeSettings {
         // capture+encode allow and sleeps only when it beats this budget.
         // Small windows comfortably exceed 30 fps (the e2e perf floor);
         // full 4K screens self-limit at whatever the machine manages.
-        Self { bitrate_bps: 4_000_000, max_fps: 60.0, max_dimension: 1920 }
+        Self {
+            bitrate_bps: 4_000_000,
+            max_fps: 60.0,
+            max_dimension: 1920,
+        }
     }
 }
 
@@ -83,14 +87,21 @@ pub struct H264Encoder {
 
 impl std::fmt::Debug for H264Encoder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("H264Encoder").field("dims", &self.dims).finish_non_exhaustive()
+        f.debug_struct("H264Encoder")
+            .field("dims", &self.dims)
+            .finish_non_exhaustive()
     }
 }
 
 impl H264Encoder {
     /// Create an (uninitialised) encoder; the first frame sets dimensions.
     pub fn new(settings: EncodeSettings) -> Self {
-        Self { settings, encoder: None, dims: (0, 0), frame: I420Frame::default() }
+        Self {
+            settings,
+            encoder: None,
+            dims: (0, 0),
+            frame: I420Frame::default(),
+        }
     }
 
     fn ensure_encoder(&mut self, w: u32, h: u32) -> Result<(), String> {
@@ -100,7 +111,11 @@ impl H264Encoder {
                 .unwrap_or(4)
                 .min(8);
             let config = EncoderConfig::new()
-                .bitrate(openh264::encoder::BitRate::from_bps(scaled_bitrate(&self.settings, w, h)))
+                .bitrate(openh264::encoder::BitRate::from_bps(scaled_bitrate(
+                    &self.settings,
+                    w,
+                    h,
+                )))
                 .max_frame_rate(openh264::encoder::FrameRate::from_hz(self.settings.max_fps))
                 // CameraVideoRealTime, deliberately: ScreenContentRealTime's
                 // screen-coding tools cost ~7x the encode time on typical
@@ -214,13 +229,14 @@ impl I420Frame {
         let u_bands = self.u.chunks_mut(rows_per_band / 2 * cw);
         let v_bands = self.v.chunks_mut(rows_per_band / 2 * cw);
         std::thread::scope(|scope| {
-            for (band, ((y_band, u_band), v_band)) in
-                y_bands.zip(u_bands).zip(v_bands).enumerate()
+            for (band, ((y_band, u_band), v_band)) in y_bands.zip(u_bands).zip(v_bands).enumerate()
             {
                 let first_row = band * rows_per_band;
                 let band_rows = y_band.len() / wu;
                 let handle = scope.spawn(move || {
-                    convert_band(rgba, stride, wu, first_row, band_rows, y_band, u_band, v_band);
+                    convert_band(
+                        rgba, stride, wu, first_row, band_rows, y_band, u_band, v_band,
+                    );
                 });
                 // Threads join at scope exit; the handle itself is unused.
                 let _ = handle;
@@ -231,7 +247,10 @@ impl I420Frame {
 
 /// Convert `band_rows` rows (starting at `first_row`) of a tightly packed
 /// RGBA image into the given Y/U/V band slices (BT.601, see caller).
-#[allow(clippy::too_many_arguments, reason = "hot loop; a struct would obscure the banding")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "hot loop; a struct would obscure the banding"
+)]
 fn convert_band(
     rgba: &[u8],
     stride: usize,
@@ -278,7 +297,11 @@ impl YUVSource for I420Frame {
     }
 
     fn strides(&self) -> (usize, usize, usize) {
-        (self.width as usize, self.width as usize / 2, self.width as usize / 2)
+        (
+            self.width as usize,
+            self.width as usize / 2,
+            self.width as usize / 2,
+        )
     }
 
     fn y(&self) -> &[u8] {
@@ -303,14 +326,18 @@ mod tests {
     /// `cargo test -p fancy-screenshare --release -- --ignored --nocapture`.
     #[test]
     #[ignore = "manual benchmark, not a correctness test"]
-    #[allow(clippy::excessive_nesting, reason = "throwaway synthetic-frame generation in a bench")]
+    #[allow(
+        clippy::excessive_nesting,
+        reason = "throwaway synthetic-frame generation in a bench"
+    )]
     fn bench_convert_encode_1080p() {
         let (w, h) = (1920u32, 1080u32);
         let frames = 60u32;
         for noise in [true, false] {
             let mut rgba = vec![0u8; (w * h * 4) as usize];
             let mut enc = H264Encoder::new(EncodeSettings::default());
-            let (mut t_convert, mut t_encode) = (std::time::Duration::ZERO, std::time::Duration::ZERO);
+            let (mut t_convert, mut t_encode) =
+                (std::time::Duration::ZERO, std::time::Duration::ZERO);
             for i in 0..frames {
                 if noise {
                     for (px, chunk) in rgba.chunks_exact_mut(4).enumerate() {
@@ -325,7 +352,11 @@ mod tests {
                     for (px, chunk) in rgba.chunks_exact_mut(4).enumerate() {
                         let (x, y) = (px as u32 % w, px as u32 / w);
                         let green = ((x / 120 + y / 120) % 2) == 0;
-                        let step = if y / 120 == i % 9 { (i % 5 * 10) as u8 } else { 20 };
+                        let step = if y / 120 == i % 9 {
+                            (i % 5 * 10) as u8
+                        } else {
+                            20
+                        };
                         if green {
                             chunk[0] = 0;
                             chunk[1] = 160 + step;
@@ -343,7 +374,12 @@ mod tests {
                 t_convert += t0.elapsed();
                 enc.ensure_encoder(w, h).expect("encoder init");
                 let t1 = std::time::Instant::now();
-                let bitstream = enc.encoder.as_mut().expect("enc").encode(&enc.frame).expect("encode");
+                let bitstream = enc
+                    .encoder
+                    .as_mut()
+                    .expect("enc")
+                    .encode(&enc.frame)
+                    .expect("encode");
                 t_encode += t1.elapsed();
                 assert!(!bitstream.to_vec().is_empty() || i == u32::MAX);
             }
@@ -383,7 +419,9 @@ mod tests {
         let (w, h) = (65u32, 49u32);
         let rgba = vec![128u8; (w * h * 4) as usize];
         let mut enc = H264Encoder::new(EncodeSettings::default());
-        let out = enc.encode_rgba(w, h, &rgba, true).expect("encode should succeed");
+        let out = enc
+            .encode_rgba(w, h, &rgba, true)
+            .expect("encode should succeed");
         assert!(out.is_some());
     }
 }

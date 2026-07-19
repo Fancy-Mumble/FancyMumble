@@ -61,7 +61,9 @@ pub(crate) async fn fetch_older_messages(
     before_id: Option<String>,
     limit: u32,
 ) -> Result<(), String> {
-    state.fetch_older_messages(channel_id, before_id, limit).await
+    state
+        .fetch_older_messages(channel_id, before_id, limit)
+        .await
 }
 
 /// Collect debug statistics for the developer info panel.

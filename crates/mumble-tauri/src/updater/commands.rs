@@ -79,7 +79,9 @@ pub(crate) async fn updater_download_and_install(
         emit_progress(&app, ProgressEvent::Finished);
         return Ok(());
     }
-    let update = state.take().ok_or_else(|| "no pending update".to_string())?;
+    let update = state
+        .take()
+        .ok_or_else(|| "no pending update".to_string())?;
 
     let mut total: Option<u64> = None;
     let mut downloaded: u64 = 0;
@@ -119,10 +121,7 @@ pub(crate) fn updater_dismiss(app: tauri::AppHandle) -> Result<(), String> {
 /// Persist the user's auto-install preference into the in-process
 /// updater state. Called by the main webview during startup.
 #[tauri::command]
-pub(crate) fn updater_set_auto_install(
-    enabled: bool,
-    state: tauri::State<'_, UpdaterState>,
-) {
+pub(crate) fn updater_set_auto_install(enabled: bool, state: tauri::State<'_, UpdaterState>) {
     state.set_auto_install(enabled);
 }
 

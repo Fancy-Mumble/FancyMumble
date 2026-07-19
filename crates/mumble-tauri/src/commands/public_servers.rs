@@ -74,7 +74,10 @@ pub(crate) async fn fetch_public_servers() -> Result<Vec<PublicServer>, String> 
 
     let response = client
         .get("https://publist.mumble.info/v1/list")
-        .header(reqwest::header::ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .header(
+            reqwest::header::ACCEPT,
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        )
         .send()
         .await
         .map_err(|e| format!("Failed to fetch public server list: {e}"))?;

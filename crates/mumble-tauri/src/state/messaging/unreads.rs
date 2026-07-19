@@ -9,7 +9,8 @@ use crate::state::AppState;
 
 impl AppState {
     pub fn unread_counts(&self) -> HashMap<u32, u32> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .map(|s| s.msgs.channel_unread.clone())
             .unwrap_or_default()
@@ -30,7 +31,8 @@ impl AppState {
     }
 
     pub fn dm_unread_counts(&self) -> HashMap<u32, u32> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .map(|s| s.msgs.dm_unread.clone())
             .unwrap_or_default()
