@@ -96,6 +96,61 @@ button {
   font-size: inherit;
 }
 
+/* --- Form control baseline --------------------------------------
+ *
+ * Text-entry surfaces share one look by default, so an input that nobody
+ * styled still belongs. Prefer the `TextInput`/`Field` primitives
+ * (components/elements/TextInput.tsx) over restyling controls locally - this
+ * baseline only exists so unstyled and partially-styled controls don't drift.
+ *
+ * These are element selectors (lowest specificity), so any module class still
+ * wins; components that deliberately go border-/background-less, such as the
+ * highlight-overlay editors, are unaffected because they set those properties
+ * explicitly.
+ *
+ * Toggle-like and picker inputs are excluded: a checkbox with field padding
+ * and a border looks broken.
+ */
+/*
+ * The `:not(...)` list is wrapped in `:where()` on purpose. A bare
+ * `:not([type="checkbox"])` carries attribute specificity, so chaining nine of
+ * them would score (0,9,1) and beat every component class - which is exactly
+ * how the search fields lost the left padding that keeps text off their icon.
+ * `:where()` contributes zero, leaving this at a plain element's (0,0,1) so any
+ * single class still wins, as a baseline must.
+ */
+input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="submit"], [type="button"], [type="image"], [type="reset"])),
+textarea,
+select {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-glass-border);
+  background: var(--color-glass);
+  color: var(--color-text-primary);
+  line-height: 1.4;
+}
+
+input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="submit"], [type="button"], [type="image"], [type="reset"]))::placeholder,
+textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* One focus idiom app-wide: an outline can't reflow layout and survives
+   forced-colours modes, unlike swapping a border colour. */
+input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="submit"], [type="button"], [type="image"], [type="reset"])):focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 a {
   color: var(--color-accent);
   text-decoration: none;

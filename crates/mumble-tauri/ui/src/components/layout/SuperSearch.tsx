@@ -1,10 +1,11 @@
-import { HashIcon, MessageIcon, SearchIcon, UserIcon } from "../../icons";
+import { HashIcon, MessageIcon, UserIcon } from "../../icons";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import type { SearchResult, SearchCategory } from "../../types";
 import styles from "./SuperSearch.module.css";
+import { SearchInput } from "../../components/elements/TextInput";
 
 const CATEGORY_ORDER: SearchCategory[] = ["channel", "user", "message"];
 
@@ -157,15 +158,9 @@ export function SuperSearch({
       <div className={styles.panel}>
         {/* Search input */}
         <div className={styles.inputRow}>
-          <SearchIcon
-            className={styles.inputIcon}
-            width={16}
-            height={16}
-          />
-          <input
+          <SearchInput
             ref={inputRef}
             className={styles.input}
-            type="text"
             placeholder={t("superSearch.placeholder")}
             value={query}
             onChange={handleChange}

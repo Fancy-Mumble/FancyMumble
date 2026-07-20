@@ -1,4 +1,4 @@
-import { CloseIcon, PauseIcon, SearchIcon, UserFilledIcon } from "../../icons";
+import { CloseIcon, PauseIcon, UserFilledIcon } from "../../icons";
 import { useMemo, useRef, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SavedServer, ServerPingResult } from "../../types";
@@ -6,6 +6,7 @@ import { isMobile } from "../../utils/platform";
 import SwipeableCard from "../elements/SwipeableCard";
 import { TID } from "../../testids";
 import styles from "./ServerList.module.css";
+import { SearchInput } from "../../components/elements/TextInput";
 
 interface Props {
   servers: SavedServer[];
@@ -334,10 +335,8 @@ export default function ServerList({
       {/* Search bar - only shown when there are saved servers */}
       {servers.length > 0 && (
         <div className={styles.searchWrap}>
-          <SearchIcon className={styles.searchIcon} aria-hidden="true" />
-          <input
+          <SearchInput
             className={styles.searchInput}
-            type="text"
             placeholder={t("list.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}

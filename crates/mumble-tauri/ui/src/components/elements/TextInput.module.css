@@ -1,0 +1,201 @@
+/* Shared form-control styling.
+ *
+ * One visual definition for every text-entry surface in the app. Before this,
+ * 46 CSS modules each rolled their own input: 12 different border-radii, 14
+ * paddings, 10 background sources and 4 mutually incompatible focus idioms.
+ * Everything here is expressed in theme tokens so all themes stay in step -
+ * please extend this file rather than restyling an input locally.
+ */
+
+.control {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-glass-border);
+  background: var(--color-glass);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  line-height: 1.4;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.control::placeholder {
+  color: var(--color-text-muted);
+  /* Safari/WebKit needs this explicitly when a colour is inherited. */
+  -webkit-text-fill-color: var(--color-text-muted);
+}
+
+.control:hover:not(:disabled):not(:focus-visible) {
+  border-color: var(--color-glass-border-hover);
+}
+
+/*
+ * One focus idiom for the whole app: an outline, not a border-colour swap.
+ * `outline-offset: -1px` keeps it inside the box so nothing reflows, and
+ * unlike a border change it survives high-contrast/forced-colours modes.
+ */
+.control:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
+  border-color: var(--color-accent);
+}
+
+.control:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* -- Sizes ---------------------------------------------------------- */
+
+.sm {
+  padding: 5px 8px;
+  font-size: 12.5px;
+}
+
+.md {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+/* -- Variants ------------------------------------------------------- */
+
+.textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+/* Monospace surfaces (query editors, code, hashes). */
+.mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.invalid,
+.invalid:hover:not(:disabled) {
+  border-color: var(--color-danger);
+}
+
+.invalid:focus-visible {
+  outline-color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+/* -- Search --------------------------------------------------------
+ *
+ * The icon is absolutely positioned, so the input needs matching left padding
+ * to keep text off it. That pairing lived in ~11 separate modules and silently
+ * broke the moment one half changed; it is defined once here now.
+ */
+
+.searchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+  /* The wrapper - not the inner input - is the flex item now, so it has to be
+     the thing that grows; call sites put their sizing class on the input. */
+  flex: 1 1 auto;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  display: flex;
+  color: var(--color-text-muted);
+  /* Clicks belong to the input underneath. */
+  pointer-events: none;
+}
+
+.search {
+  /* Room for the icon; keep in step with .searchIcon's left offset. */
+  padding-left: 32px;
+  /* Suppress WebKit's own clear affordance so it can't double up with ours. */
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.search::-webkit-search-cancel-button,
+.search::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.sm.search {
+  padding-left: 28px;
+}
+
+/* The icon precedes the input in DOM order, so there is no previous-sibling
+   selector to reach it - the size modifier lives on the wrapper instead. */
+.searchWrapSm .searchIcon {
+  left: 8px;
+}
+
+/* Trailing adornment (shortcut hint, close button, ...) sits inside the field.
+   `.hasTrailing` reserves room for it so text never runs underneath - the same
+   coupling as the leading icon, kept in one place for the same reason. */
+.searchTrailing {
+  position: absolute;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-muted);
+  font-size: 11.5px;
+}
+
+.hasTrailing {
+  padding-right: 56px;
+}
+
+.searchClear {
+  position: absolute;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.searchClear:hover {
+  color: var(--color-text-primary);
+}
+
+/* -- Field scaffolding ---------------------------------------------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.label {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.required {
+  color: var(--color-danger);
+  margin-left: 2px;
+}
+
+.hint,
+.error {
+  margin: 0;
+  font-size: 11.5px;
+}
+
+.hint {
+  color: var(--color-text-muted);
+}
+
+.error {
+  color: var(--color-danger);
+}

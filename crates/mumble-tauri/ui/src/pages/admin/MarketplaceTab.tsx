@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
-  SearchIcon, DownloadIcon, RefreshCwIcon, StoreIcon, StarIcon, CheckIcon,
+  DownloadIcon, RefreshCwIcon, StoreIcon, StarIcon, CheckIcon,
 } from "../../icons";
 import type { ServerPluginEntry } from "./ServerPluginsTab";
 import { useAppStore } from "../../store";
@@ -13,6 +13,7 @@ import { getPreferences, updatePreferences } from "../../preferencesStorage";
 import { isPluginAdminSupported } from "./index";
 import styles from "./AdminPanel.module.css";
 import mk from "./MarketplaceTab.module.css";
+import { SearchInput } from "../../components/elements/TextInput";
 
 interface MarketplacePlugin {
   id: string;
@@ -209,16 +210,13 @@ export function MarketplaceTab() {
       <h2 className={styles.panelTitle}>{t("marketplace.title")}</h2>
 
       <div className={styles.toolbar}>
-        <div className={styles.searchWrap}>
-          <SearchIcon className={styles.searchIcon} width={14} height={14} />
-          <input
-            className={styles.searchInput}
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("marketplace.searchPlaceholder")}
-          />
-        </div>
+        <SearchInput
+          className={styles.searchInput}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onClear={() => setQuery("")}
+          placeholder={t("marketplace.searchPlaceholder")}
+        />
         {isDevMode && (
           <select
             className={mk.devSelect}

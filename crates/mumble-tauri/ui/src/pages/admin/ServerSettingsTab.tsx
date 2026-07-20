@@ -15,6 +15,8 @@ import { listen } from "@tauri-apps/api/event";
 import * as Flags from "country-flag-icons/react/3x2";
 import type { ServerSetting, ServerSettingsEvent } from "../../types";
 import { COUNTRIES, countryName } from "../../utils/countries";
+import { SelectInput, TextArea, TextInput } from "../../components/elements/TextInput";
+import { Toggle } from "../settings/SharedControls";
 import { useServerSettingsStore } from "./serverSettingsStore";
 import styles from "./ServerSettingsTab.module.css";
 import tabStyles from "../../components/elements/TabbedPage.module.css";
@@ -48,12 +50,17 @@ function CountryFlag({ code }: { readonly code: string }) {
   );
 }
 
-function TextField({ value, onChange }: FieldProps) {
+/** The row already renders the setting's label, so controls are self-labelled. */
+function label(setting: FieldProps["setting"]): string {
+  return setting.label || setting.key;
+}
+
+function TextField({ setting, value, onChange }: FieldProps) {
   return (
-    <input
+    <TextInput
       type="text"
-      className={styles.input}
       value={value}
+      aria-label={label(setting)}
       onChange={(e) => onChange(e.target.value)}
     />
   );
@@ -61,48 +68,47 @@ function TextField({ value, onChange }: FieldProps) {
 
 function PasswordField({ setting, value, onChange }: FieldProps) {
   return (
-    <input
+    <TextInput
       type="password"
-      className={styles.input}
       value={value}
       placeholder={setting.secret ? "•••••••• (unchanged)" : ""}
       autoComplete="new-password"
+      aria-label={label(setting)}
       onChange={(e) => onChange(e.target.value)}
     />
   );
 }
 
-function CodeField({ value, onChange }: FieldProps) {
+function CodeField({ setting, value, onChange }: FieldProps) {
   return (
-    <textarea
-      className={styles.code}
+    <TextArea
+      mono
       value={value}
       rows={8}
       spellCheck={false}
+      aria-label={label(setting)}
       onChange={(e) => onChange(e.target.value)}
     />
   );
 }
 
-function BoolField({ value, onChange }: FieldProps) {
+function BoolField({ setting, value, onChange }: FieldProps) {
   const checked = value === "true" || value === "1";
   return (
-    <label className={styles.checkboxLabel}>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked ? "true" : "false")}
-      />
-    </label>
+    <Toggle
+      checked={checked}
+      ariaLabel={label(setting)}
+      onChange={() => onChange(checked ? "false" : "true")}
+    />
   );
 }
 
-function IntField({ value, onChange }: FieldProps) {
+function IntField({ setting, value, onChange }: FieldProps) {
   return (
-    <input
+    <TextInput
       type="number"
-      className={styles.input}
       value={value}
+      aria-label={label(setting)}
       onChange={(e) => onChange(e.target.value)}
     />
   );
@@ -110,28 +116,28 @@ function IntField({ value, onChange }: FieldProps) {
 
 function EnumField({ setting, value, onChange }: FieldProps) {
   return (
-    <select className={styles.input} value={value} onChange={(e) => onChange(e.target.value)}>
+    <SelectInput value={value} aria-label={label(setting)} onChange={(e) => onChange(e.target.value)}>
       {!setting.options.includes(value) && value !== "" && <option value={value}>{value}</option>}
       {setting.options.map((o) => (
         <option key={o} value={o}>{o}</option>
       ))}
-    </select>
+    </SelectInput>
   );
 }
 
-function CountryField({ value, onChange }: FieldProps) {
+function CountryField({ setting, value, onChange }: FieldProps) {
   const lower = value.toLowerCase();
   const known = COUNTRIES.some((c) => c.code === lower);
   return (
     <div className={styles.countryRow}>
       <CountryFlag code={value} />
-      <select className={styles.input} value={lower} onChange={(e) => onChange(e.target.value)}>
+      <SelectInput value={lower} aria-label={label(setting)} onChange={(e) => onChange(e.target.value)}>
         <option value="">-</option>
         {!known && value !== "" && <option value={lower}>{value}</option>}
         {COUNTRIES.map((c) => (
           <option key={c.code} value={c.code}>{c.name}</option>
         ))}
-      </select>
+      </SelectInput>
     </div>
   );
 }

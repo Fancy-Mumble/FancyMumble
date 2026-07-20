@@ -1,8 +1,8 @@
-import { SearchIcon } from "../../icons";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./KlipyGifBrowser.module.css";
 import { getActiveApiKey } from "../../components/chat/gif/klipyConfig";
+import { SearchInput } from "../../components/elements/TextInput";
 
 const KLIPY_BASE = "https://api.klipy.com/api/v1";
 
@@ -328,13 +328,12 @@ export function KlipyGifBrowser({ onSelect }: Readonly<KlipyGifBrowserProps>) {
       )}
 
       <div className={styles.searchBar}>
-        <SearchIcon className={styles.searchIcon} width={16} height={16} />
-        <input
+        <SearchInput
           className={styles.searchInput}
           placeholder={searchPlaceholder}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-        />
+          />
       </div>
 
       <div className={styles.content}>

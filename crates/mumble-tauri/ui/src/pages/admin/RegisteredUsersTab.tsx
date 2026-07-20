@@ -1,4 +1,3 @@
-import { SearchIcon } from "../../icons";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
@@ -16,6 +15,7 @@ import { useAppStore } from "../../store";
 import { rootChannelId } from "./rootChannel";
 import { UserRoleManagerDialog } from "./UserRoleManagerDialog";
 import styles from "./AdminPanel.module.css";
+import { SearchInput } from "../../components/elements/TextInput";
 
 /** Builds a map of `user_id -> roles` from the root-channel ACL groups. */
 function buildUserRoleMap(groups: readonly AclGroup[]): Map<number, AclGroup[]> {
@@ -271,11 +271,9 @@ export function RegisteredUsersTab() {
 
       <div className={styles.toolbar}>
         <div className={styles.searchWrap}>
-          <SearchIcon className={styles.searchIcon} width={14} height={14} />
-          <input
+          <SearchInput
             ref={searchRef}
             className={styles.searchInput}
-            type="text"
             placeholder={t("registeredUsers.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}

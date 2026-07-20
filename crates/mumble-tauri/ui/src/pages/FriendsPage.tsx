@@ -26,7 +26,6 @@ import {
   HeadphonesOffIcon,
   MicIcon,
   MicOffIcon,
-  SearchIcon,
   SettingsIcon,
   UserXIcon,
 } from "../icons";
@@ -58,6 +57,7 @@ import {
 import { bytesToAvatarUrl, revokeDisplayUrl } from "../utils/imageBlobs";
 import sidebarStyles from "../components/sidebar/channel/ChannelSidebar.module.css";
 import styles from "./FriendsPage.module.css";
+import { SearchInput } from "../components/elements/TextInput";
 
 interface FriendsMatch {
   serverId: string;
@@ -406,26 +406,26 @@ export default function FriendsPage() {
           <aside className={sidebarStyles.sidebar}>
             <div className={sidebarStyles.header}>
               <div className={sidebarStyles.searchBar}>
-                <SearchIcon className={sidebarStyles.searchBarIcon} width={14} height={14} />
-                <input
-                  className={sidebarStyles.searchBarInput}
-                  type="text"
+                <SearchInput
+                  fieldSize="sm"
                   placeholder={tSidebar("channelSidebar.searchPlaceholder")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Escape") setSearchQuery(""); }}
+                  trailing={
+                    searchQuery ? (
+                      <button
+                        type="button"
+                        className={sidebarStyles.searchBarClose}
+                        onClick={() => setSearchQuery("")}
+                        aria-label={tSidebar("channelSidebar.closeSearch")}
+                        title={tSidebar("channelSidebar.closeSearchTooltip")}
+                      >
+                        <CloseIcon width={14} height={14} />
+                      </button>
+                    ) : null
+                  }
                 />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    className={sidebarStyles.searchBarClose}
-                    onClick={() => setSearchQuery("")}
-                    aria-label={tSidebar("channelSidebar.closeSearch")}
-                    title={tSidebar("channelSidebar.closeSearchTooltip")}
-                  >
-                    <CloseIcon width={14} height={14} />
-                  </button>
-                )}
               </div>
               <button
                 type="button"
