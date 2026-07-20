@@ -125,7 +125,13 @@ export default function AdminPanel() {
       onBack={() => navigate("/chat")}
       footer={tabFooter}
     >
-      <div className={`${styles.content}${tab === "fileServer" || tab === "acl" ? ` ${styles.contentWide}` : ""}`}>
+      <div
+        className={`${styles.content}${
+          tab === "fileServer" || tab === "acl" || tab === "auditLog"
+            ? ` ${styles.contentWide}`
+            : ""
+        }`}
+      >
         {tab === "users" && <RegisteredUsersTab />}
         {tab === "roles" && <RolesListPanel />}
         {tab === "bans" && <BanListTab />}

@@ -134,6 +134,33 @@ describe("lowerToQueryArgs", () => {
     });
   });
 
+  it("expands a `~` category substring against the known vocabulary", () => {
+    // The store matches categories exactly; `~ kick` must become `audit.kick`.
+    const known = ["audit.ban", "audit.kick", "audit.acl", "signal.report"];
+    const f = parseAuditQuery("category ~ kick");
+    expect(f.categoryContains).toEqual(["kick"]);
+    expect(f.categories).toEqual([]);
+    const args = lowerToQueryArgs(f, noUsers, undefined, known);
+    expect(args.categories).toEqual(["audit.kick"]);
+  });
+
+  it("unions exact and expanded categories, keeping an unmatched substring verbatim", () => {
+    const known = ["audit.ban", "audit.kick"];
+    const args = lowerToQueryArgs(
+      { ...EMPTY_FILTERS, categories: ["audit.ban"], categoryContains: ["kick", "nope"] },
+      noUsers,
+      undefined,
+      known,
+    );
+    expect(args.categories).toEqual(["audit.ban", "audit.kick", "nope"]);
+  });
+
+  it("round-trips a `~` category term through serialize/parse", () => {
+    const text = serializeAuditQuery({ ...EMPTY_FILTERS, categoryContains: ["kick"] });
+    expect(text).toBe("category ~ kick");
+    expect(parseAuditQuery(text)).toEqual({ ...EMPTY_FILTERS, categoryContains: ["kick"] });
+  });
+
   it("throws on an unresolvable user name", () => {
     expect(() => lowerToQueryArgs({ ...EMPTY_FILTERS, actor: "ghost" }, noUsers)).toThrow(/Unknown actor/);
   });

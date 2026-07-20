@@ -37,7 +37,14 @@ const UNIT_MS: Record<string, number> = {
 
 /** Filter state driving the builder pills; a superset view of the DSL. */
 export interface AuditFilterState {
+  /** Exact category match (`category = x`, chips, `in (...)`). */
   categories: string[];
+  /**
+   * Substring category match (`category ~ x`). The backend only matches
+   * categories exactly, so these are expanded against the known vocabulary at
+   * lowering time - `~ kick` finds `audit.kick`.
+   */
+  categoryContains: string[];
   source: string;
   severity: string;
   /** Display name or numeric id, as typed/picked. */
@@ -51,6 +58,7 @@ export interface AuditFilterState {
 
 export const EMPTY_FILTERS: AuditFilterState = {
   categories: [],
+  categoryContains: [],
   source: "",
   severity: "",
   actor: "",
@@ -146,7 +154,8 @@ const KNOWN_FIELDS = new Set([
  * simple mode cannot express (suggesting SQL mode where appropriate).
  */
 export function parseAuditQuery(input: string): AuditFilterState {
-  const filters: AuditFilterState = { ...EMPTY_FILTERS, categories: [] };
+  // Fresh arrays: EMPTY_FILTERS is a shared const and applyTerm pushes in place.
+  const filters: AuditFilterState = { ...EMPTY_FILTERS, categories: [], categoryContains: [] };
   const tokens = tokenize(input);
   const freeText: string[] = [];
   let i = 0;
@@ -228,8 +237,11 @@ function applyTerm(filters: AuditFilterState, field: string, op: string, value: 
   };
   switch (field) {
     case "category":
-      eqOnly();
-      filters.categories.push(value);
+      // `=` is an exact category; `~` is a substring, expanded against the
+      // known vocabulary when lowered (the store only matches exactly).
+      if (op === "~") filters.categoryContains.push(value);
+      else if (op === "=") filters.categories.push(value);
+      else throw new AuditQueryError(`Operator "${op}" is not supported for category in simple mode`);
       break;
     case "source":
       eqOnly();
@@ -290,6 +302,9 @@ export function serializeAuditQuery(filters: AuditFilterState): string {
   } else if (filters.categories.length > 1) {
     terms.push(`category in (${filters.categories.map(quoteIfNeeded).join(", ")})`);
   }
+  for (const c of filters.categoryContains) {
+    terms.push(`category ~ ${quoteIfNeeded(c)}`);
+  }
   if (filters.source) terms.push(`source = ${quoteIfNeeded(filters.source)}`);
   if (filters.severity) terms.push(`severity = ${quoteIfNeeded(filters.severity)}`);
   if (filters.actor) terms.push(`actor = ${quoteIfNeeded(filters.actor)}`);
@@ -313,9 +328,21 @@ export function lowerToQueryArgs(
   filters: AuditFilterState,
   resolveUser: UserResolver,
   limit?: number,
+  knownCategories: readonly string[] = [],
 ): AuditQueryArgs {
   const args: AuditQueryArgs = {};
-  if (filters.categories.length > 0) args.categories = [...filters.categories];
+  // Exact categories pass through; `~` substrings expand against the known
+  // vocabulary (the store matches `category IN (...)` exactly, so `~ kick`
+  // becomes the concrete `audit.kick`). An unmatched substring is kept
+  // verbatim so the query is honest about matching nothing.
+  const cats = new Set(filters.categories);
+  for (const token of filters.categoryContains) {
+    const needle = token.toLowerCase();
+    const hits = knownCategories.filter((k) => k.toLowerCase().includes(needle));
+    if (hits.length > 0) hits.forEach((h) => cats.add(h));
+    else cats.add(token);
+  }
+  if (cats.size > 0) args.categories = [...cats];
   if (filters.source) args.source = filters.source;
   if (filters.severity) args.severity = filters.severity;
   if (filters.channel) {

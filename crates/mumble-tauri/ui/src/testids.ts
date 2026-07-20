@@ -301,12 +301,32 @@ export const TID = {
   auditTab: "audit-tab",
   /** Dual-mode search input (DSL text box, or SQL editor in advanced mode). */
   auditQueryInput: "audit-query-input",
+  /** Autocomplete suggestion listbox under the query input. */
+  auditQuerySuggestions: "audit-query-suggestions",
+  /** One autocomplete row; carries `data-suggest-kind` and `data-active`. */
+  auditQuerySuggestionItem: "audit-query-suggestion-item",
   /** Runs the current search. */
   auditRunQuery: "audit-run-query",
   /** Live-tail toggle; carries `data-live`. */
   auditLiveToggle: "audit-live-toggle",
   /** Inline parse / server rejection message. */
   auditQueryError: "audit-query-error",
+  /** Sub-page tabs (Dashboard / Results / Configuration). */
+  auditSubTabs: "audit-sub-tabs",
+  /** Dashboard sub-page tab. */
+  auditDashboardTab: "audit-dashboard-tab",
+  /** Results (table) sub-page tab. */
+  auditResultsTab: "audit-results-tab",
+  /** Collapsible quick-filter ("EZ search") rail; carries `data-open`. */
+  auditFilterRail: "audit-filter-rail",
+  /** Collapse/expand control on the quick-filter rail. */
+  auditFilterRailToggle: "audit-filter-rail-toggle",
+  /** Endless-scroll vs. pagination checkbox in the quick-filter rail. */
+  auditEndlessToggle: "audit-endless-toggle",
+  /** Previous-page control (pagination mode). */
+  auditPagePrev: "audit-page-prev",
+  /** Next-page control (pagination mode). */
+  auditPageNext: "audit-page-next",
   /** KPI stat-tile row. */
   auditKpiRow: "audit-kpi-row",
   /** Results table; rows are {@link TID.auditRow}. */

@@ -12,9 +12,10 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
-import { ShieldCheckIcon } from "../../icons";
+import { ActivityIcon, ListIcon, ShieldCheckIcon, SlidersIcon } from "../../icons";
 import type {
   AuditConfigEvent,
   AuditEventPayload,
@@ -22,15 +23,29 @@ import type {
   ServerSetting,
 } from "../../types";
 import { TID } from "../../testids";
+import { SelectInput, TextInput } from "../../components/elements/TextInput";
+import { Toggle } from "../settings/SharedControls";
 import { AuditViewer } from "./AuditViewer";
+import { PREF_PAGE, readEnumPref, writeEnumPref } from "./auditPrefs";
 import { useAuditStore } from "./auditStore";
 import styles from "./AuditLogTab.module.css";
 
-type Half = "viewer" | "config";
+/** Sub-pages of the audit tab, selected by the tab strip at the top. */
+type AuditPage = "dashboard" | "results" | "config";
+
+const AUDIT_PAGES = ["dashboard", "results", "config"] as const;
 
 export function AuditLogTab() {
   const { t } = useTranslation("settings");
-  const [half, setHalf] = useState<Half>("viewer");
+  // The sub-page you left off on is remembered across sessions.
+  const [page, setPageState] = useState<AuditPage>(() =>
+    readEnumPref<AuditPage>(PREF_PAGE, "dashboard", AUDIT_PAGES),
+  );
+
+  const setPage = (next: AuditPage) => {
+    writeEnumPref(PREF_PAGE, next);
+    setPageState(next);
+  };
 
   const config = useAuditStore((s) => s.config);
   const applyResponse = useAuditStore((s) => s.applyResponse);
@@ -50,30 +65,55 @@ export function AuditLogTab() {
     };
   }, [loadConfig, applyResponse, applyEvent, applyConfig]);
 
+  const tabs: readonly { id: AuditPage; label: string; icon: ReactNode; testId: string }[] = [
+    {
+      id: "dashboard",
+      label: t("audit.pageDashboard", { defaultValue: "Dashboard" }),
+      icon: <ActivityIcon width={15} height={15} />,
+      testId: TID.auditDashboardTab,
+    },
+    {
+      id: "results",
+      label: t("audit.pageResults", { defaultValue: "Results" }),
+      icon: <ListIcon width={15} height={15} />,
+      testId: TID.auditResultsTab,
+    },
+    {
+      id: "config",
+      label: t("audit.halfConfig", { defaultValue: "Configuration" }),
+      icon: <SlidersIcon width={15} height={15} />,
+      // Kept from the old Viewer/Config switch so existing e2e keeps working.
+      testId: TID.auditConfigHalf,
+    },
+  ];
+
   return (
     <div className={styles.panel} data-testid={TID.auditTab}>
-      <div className={styles.halfSwitch}>
-        <button
-          type="button"
-          className={`${styles.halfBtn}${half === "viewer" ? ` ${styles.halfBtnActive}` : ""}`}
-          onClick={() => setHalf("viewer")}
-        >
-          {t("audit.halfViewer", { defaultValue: "Viewer" })}
-        </button>
-        <button
-          type="button"
-          className={`${styles.halfBtn}${half === "config" ? ` ${styles.halfBtnActive}` : ""}`}
-          data-testid={TID.auditConfigHalf}
-          onClick={() => setHalf("config")}
-        >
-          {t("audit.halfConfig", { defaultValue: "Configuration" })}
-        </button>
+      <div className={styles.subTabs} role="tablist" data-testid={TID.auditSubTabs}>
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={page === tab.id}
+            className={`${styles.subTab}${page === tab.id ? ` ${styles.subTabActive}` : ""}`}
+            data-testid={tab.testId}
+            onClick={() => setPage(tab.id)}
+          >
+            <span className={styles.subTabIcon}>{tab.icon}</span>
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {half === "viewer" ? (
-        <AuditViewer advancedSqlAvailable={config?.advancedSqlAvailable ?? false} />
-      ) : (
+      {page === "config" ? (
         <AuditConfigHalf />
+      ) : (
+        <AuditViewer
+          advancedSqlAvailable={config?.advancedSqlAvailable ?? false}
+          view={page}
+          onRan={() => setPage("results")}
+        />
       )}
     </div>
   );
@@ -230,31 +270,33 @@ function AuditSettingField({
     case "bool": {
       const checked = value === "true" || value === "1";
       return (
-        <label>
-          <input
-            type="checkbox"
+        // The wrapper keeps the per-key hook while the switch stays the control.
+        <span data-audit-setting={setting.key}>
+          <Toggle
             checked={checked}
-            data-audit-setting={setting.key}
-            onChange={(e) => onChange(e.target.checked ? "true" : "false")}
+            onChange={() => onChange(checked ? "false" : "true")}
+            ariaLabel={setting.label || setting.key}
           />
-        </label>
+        </span>
       );
     }
     case "int":
       return (
-        <input
+        <TextInput
           type="number"
-          className={styles.pillInput}
+          fieldSize="sm"
           value={value}
+          aria-label={setting.label || setting.key}
           data-audit-setting={setting.key}
           onChange={(e) => onChange(e.target.value)}
         />
       );
     case "enum":
       return (
-        <select
-          className={styles.pillSelect}
+        <SelectInput
+          fieldSize="sm"
           value={value}
+          aria-label={setting.label || setting.key}
           data-audit-setting={setting.key}
           onChange={(e) => onChange(e.target.value)}
         >
@@ -262,26 +304,28 @@ function AuditSettingField({
           {setting.options.map((o) => (
             <option key={o} value={o}>{o}</option>
           ))}
-        </select>
+        </SelectInput>
       );
     case "password":
       return (
-        <input
+        <TextInput
           type="password"
-          className={styles.pillInput}
+          fieldSize="sm"
           value={value}
           placeholder={setting.secret ? "•••••••• (unchanged)" : ""}
           autoComplete="new-password"
+          aria-label={setting.label || setting.key}
           data-audit-setting={setting.key}
           onChange={(e) => onChange(e.target.value)}
         />
       );
     default:
       return (
-        <input
+        <TextInput
           type="text"
-          className={styles.pillInput}
+          fieldSize="sm"
           value={value}
+          aria-label={setting.label || setting.key}
           data-audit-setting={setting.key}
           onChange={(e) => onChange(e.target.value)}
         />

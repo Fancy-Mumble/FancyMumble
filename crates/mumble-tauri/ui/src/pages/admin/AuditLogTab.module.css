@@ -1,30 +1,48 @@
-/* Audit Log admin tab - viewer + configuration halves. */
+/* Audit Log admin tab - Dashboard / Results / Configuration sub-pages. */
 
 .panel {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  width: 100%;
+  min-width: 0;
 }
 
-.halfSwitch {
+/* -- Sub-page tab strip (top) --------------------------------------- */
+
+.subTabs {
   display: flex;
-  gap: 6px;
+  gap: 4px;
+  width: 100%;
+  border-bottom: 1px solid var(--color-border, #2c313a);
+  padding-bottom: 2px;
 }
 
-.halfBtn {
-  padding: 6px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--color-border, #2c313a);
+.subTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 8px 8px 0 0;
   background: transparent;
   color: var(--color-text-secondary, #9aa3ad);
   font-size: 13px;
   cursor: pointer;
 }
 
-.halfBtnActive {
-  background: var(--color-surface-elevated, #22262e);
+.subTab:hover { background: var(--color-surface-elevated, #22262e); }
+
+.subTabActive {
   color: var(--color-text-primary, #f5f6f8);
-  border-color: var(--color-accent, #2aabee);
+  border-bottom-color: var(--color-accent, #2aabee);
+  font-weight: 600;
+}
+
+.subTabIcon {
+  display: inline-flex;
+  opacity: 0.9;
 }
 
 .empty {
@@ -35,39 +53,345 @@
 
 /* -- Search / toolbar ---------------------------------------------- */
 
-.toolbar {
+/* Viewer shell: search on top, then a flex body of content + filter rail. */
+
+.viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.searchBar {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+  width: 100%;
 }
 
+.body {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Dynamic width: the main column absorbs whatever the rail leaves. */
+.main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* -- Quick-filter ("EZ search") rail -------------------------------- */
+
+.rail {
+  flex: 0 0 260px;
+  width: 260px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border, #2c313a);
+  background: var(--color-surface-elevated, #22262e);
+}
+
+.railCollapsed {
+  flex-basis: 40px;
+  width: 40px;
+  padding: 6px;
+}
+
+.railHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.railTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #9aa3ad);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.railToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  border: 1px solid var(--color-border, #2c313a);
+  background: var(--color-surface, #1a1d23);
+  color: var(--color-text-secondary, #9aa3ad);
+  cursor: pointer;
+}
+
+.railToggle:hover { color: var(--color-text-primary, #f5f6f8); }
+
+.railBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.railGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* The shared pill controls stretch to the rail's width. */
+.railGroup .pillSelect,
+.railGroup .pillInput {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.railChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* Separates the filter groups from the results-display options below. */
+.railDivider {
+  height: 1px;
+  margin: 6px 0 2px;
+  background: var(--color-border, #2c313a);
+}
+
+/* Switch + label row (uses the shared settings Toggle). */
+.railSwitchRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Breathing room between the "Results" heading and the switch. */
+  margin-top: 6px;
+}
+
+.railSwitchLabel {
+  font-size: 12.5px;
+  color: var(--color-text-primary, #f5f6f8);
+}
+
+.railHint {
+  font-size: 11px;
+  color: var(--color-text-secondary, #9aa3ad);
+}
+
+/* Pager (pagination mode) sits at the left of the results footer. */
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Dashboard empty state (no entries -> no charts). */
+.emptyCard {
+  padding: 28px;
+  border-radius: 10px;
+  border: 1px dashed var(--color-border, #2c313a);
+  color: var(--color-text-secondary, #9aa3ad);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* Narrow panels: drop the rail below the content instead of squeezing it. */
+@media (max-width: 900px) {
+  .body { flex-direction: column; }
+  .rail,
+  .railCollapsed {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+}
+
+/* Transparent text laid over the highlight backdrop: the caret and selection
+   stay visible while the colored spans show through. The visible box (border +
+   background) lives on .acWrap so the backdrop can fill it exactly. */
 .queryInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--color-text-primary, #f5f6f8);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12.5px;
+  line-height: 1.4;
+  position: relative;
+  z-index: 1;
+}
+
+.queryInput:focus { outline: none; }
+
+.queryInput::placeholder {
+  color: var(--color-text-secondary, #9aa3ad);
+  -webkit-text-fill-color: var(--color-text-secondary, #9aa3ad);
+}
+
+/* -- Search autocomplete -------------------------------------------- */
+
+/* Wraps the input so the suggestion list can anchor to it and the highlight
+   backdrop can sit behind it; owns the visible box (border/background/focus). */
+.acWrap {
+  position: relative;
   flex: 1 1 320px;
   min-width: 220px;
-  padding: 8px 10px;
   border-radius: 8px;
   border: 1px solid var(--color-border, #2c313a);
   background: var(--color-surface, #1a1d23);
-  color: var(--color-text-primary, #f5f6f8);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12.5px;
 }
 
-.queryInput:focus { outline: 1px solid var(--color-accent, #2aabee); }
+.acWrap:focus-within { outline: 1px solid var(--color-accent, #2aabee); }
+
+.acDropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+  border-radius: 8px;
+  border: 1px solid var(--color-border, #2c313a);
+  background: var(--color-surface-elevated, #22262e);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.acItem {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12.5px;
+  color: var(--color-text-primary, #f5f6f8);
+}
+
+.acItemActive {
+  background: var(--color-accent, #2aabee);
+  color: #08131c;
+}
+
+.acGlyph {
+  flex: 0 0 auto;
+  width: 14px;
+  text-align: center;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.acGlyph[data-kind="field"] { color: #6da7ec; }
+.acGlyph[data-kind="value"] { color: #2ecf98; }
+.acGlyph[data-kind="operator"] { color: #c98500; }
+.acGlyph[data-kind="keyword"] { color: #d55181; }
+.acItemActive .acGlyph { color: inherit; }
+
+.acLabel { flex: 0 1 auto; white-space: nowrap; }
+
+.acDetail {
+  flex: 1 1 auto;
+  text-align: right;
+  font-size: 11px;
+  color: var(--color-text-secondary, #9aa3ad);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acItemActive .acDetail { color: rgba(8, 19, 28, 0.7); }
+
+/* SQL mode: the same overlay, wrapped so the textarea is transparent over the
+   highlighted backdrop. The wrapper owns the visible box. */
+.sqlWrap {
+  position: relative;
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--color-border, #2c313a);
+  background: var(--color-surface, #1a1d23);
+}
+
+.sqlWrap:focus-within { outline: 1px solid var(--color-accent, #2aabee); }
 
 .sqlEditor {
+  display: block;
   width: 100%;
+  box-sizing: border-box;
   min-height: 84px;
   resize: vertical;
   padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--color-border, #2c313a);
-  background: var(--color-surface, #1a1d23);
-  color: var(--color-text-primary, #f5f6f8);
+  border: 0;
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--color-text-primary, #f5f6f8);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12.5px;
+  line-height: 1.4;
+  position: relative;
+  z-index: 1;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
+
+.sqlEditor:focus { outline: none; }
+
+.sqlEditor::placeholder {
+  color: var(--color-text-secondary, #9aa3ad);
+  -webkit-text-fill-color: var(--color-text-secondary, #9aa3ad);
+}
+
+/* -- Highlight backdrop (shared by both editors) -------------------- */
+
+.hlBackdrop {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--color-text-primary, #f5f6f8);
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+/* Single-line (DSL input): no wrap, scrolled horizontally with the input. */
+.acBackdrop { white-space: pre; }
+
+/* Multi-line (SQL): wrap exactly like the textarea. */
+.sqlBackdrop {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* Token colors come from highlight.js's github-dark theme (global `.hljs-*`
+   classes), injected once by loadHljs() - see auditHljs.ts. */
 
 .btn {
   padding: 7px 12px;
@@ -111,19 +435,6 @@
 
 /* -- Filter pills --------------------------------------------------- */
 
-.pillsRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-
-.pillGroup {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
 .pillLabel {
   font-size: 11.5px;
   color: var(--color-text-secondary, #9aa3ad);
@@ -163,11 +474,14 @@
 
 .kpiRow {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
+  width: 100%;
+  min-width: 0;
 }
 
 .statCard {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -183,29 +497,48 @@
 
 /* -- Charts --------------------------------------------------------- */
 
+/* Wrap on the *container's* width, not the viewport's: the filter rail eats
+   horizontal space, so a viewport media query would keep 3 tracks long after
+   they stopped fitting and the charts would overflow the column. */
 .chartsRow {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 10px;
-}
-
-@media (max-width: 1100px) {
-  .chartsRow { grid-template-columns: 1fr; }
+  width: 100%;
+  min-width: 0;
 }
 
 .chartCard {
+  /* Without this, grid items default to min-width:auto and the canvas can
+     push the track wider than the available column. */
+  min-width: 0;
   border: 1px solid var(--color-border, #2c313a);
   border-radius: 10px;
   background: var(--color-surface-elevated, #22262e);
   padding: 10px 12px;
-  min-height: 180px;
+  min-height: 200px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
 .chartTitle { font-size: 12px; color: var(--color-text-secondary, #9aa3ad); }
-.chartBody { position: relative; flex: 1; min-height: 150px; }
+
+.chartBody {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 160px;
+}
+
+/* Pin the canvas to the card so Chart.js sizes down to it instead of the
+   canvas dictating (and growing) the card's width. */
+.chartBody > canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
 
 /* -- Results table --------------------------------------------------- */
 

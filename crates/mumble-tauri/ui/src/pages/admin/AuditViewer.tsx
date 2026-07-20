@@ -1,20 +1,32 @@
 /**
- * Audit Log viewer half (audit spec section 10.2).
+ * Audit Log viewer (audit spec section 10.2).
  *
- * Kibana-style dashboard over the audit entries: the search scopes
- * everything - KPI tiles, charts and the results table re-render together.
- * The dual-mode search (spec 10.3) keeps the filter pills and the query text
- * bound both ways; anything starting with SELECT/WITH routes to advanced
- * SQL mode (server-enforced sandbox, spec 10.4) when the server offers it.
+ * Layout: the main search sits on top and scopes everything; below it the body
+ * is a flex row of the active sub-page (Dashboard tiles+charts, or the Results
+ * table) and a collapsible "quick filters" rail on the right. The rail and the
+ * query text stay bound both ways (spec 10.3); anything starting with
+ * SELECT/WITH routes to advanced SQL mode (spec 10.4) when the server offers
+ * it, which hides the rail since pills can't express SQL.
+ *
+ * The Configuration sub-page is a sibling rendered by {@link ./AuditLogTab}.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { DownloadIcon, RefreshIcon, SearchIcon } from "../../icons";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  DownloadIcon,
+  RefreshIcon,
+  SearchIcon,
+} from "../../icons";
 import { useAppStore } from "../../store";
 import type { AuditEntry } from "../../types";
 import { TID } from "../../testids";
 import DashboardChart from "./DashboardChart";
+import { QueryAutocomplete } from "./QueryAutocomplete";
+import { SqlEditor } from "./SqlEditor";
+import type { AuditSuggestContext } from "./auditSuggest";
 import {
   AuditQueryError,
   EMPTY_FILTERS,
@@ -24,7 +36,15 @@ import {
   serializeAuditQuery,
   type AuditFilterState,
 } from "./auditQuery";
+import { Field, SelectInput, TextInput } from "../../components/elements/TextInput";
+import { Toggle } from "../settings/SharedControls";
 import { useAuditStore, AUDIT_PAGE_LIMIT } from "./auditStore";
+import {
+  PREF_ENDLESS,
+  PREF_RAIL_OPEN,
+  readBoolPref,
+  writeBoolPref,
+} from "./auditPrefs";
 import styles from "./AuditLogTab.module.css";
 
 /** Validated categorical palette (dark surface; six-checks pass). */
@@ -41,10 +61,19 @@ const TICK_COLOR = "#9aa3ad";
 const GRID_COLOR = "rgba(128,128,128,0.15)";
 const SURFACE = "#22262e";
 
-/** Categories offered as quick chips (custom ones appear from results). */
+/**
+ * The categories the server actually emits (namespaced), from the audit
+ * plugin's toggle Parts (`audit/src/toggles.rs` `Part::as_str`). These are the
+ * exact strings stored on each entry, so chips and `category = …` match them
+ * verbatim; custom ones still appear from results.
+ */
 const KNOWN_CATEGORIES = [
-  "ban", "kick", "mute", "move", "acl", "channel", "register",
-  "config", "plugin", "pchat", "audit.access", "flag", "signal.report",
+  "audit.ban", "audit.kick", "audit.mute_deafen_suppress", "audit.move",
+  "audit.acl", "audit.channel", "audit.register", "audit.config",
+  "audit.plugin_admin", "audit.plugin_action", "audit.pchat_moderation",
+  "audit.access",
+  "signal.report", "signal.mute", "signal.block", "signal.hide",
+  "signal.deafen_from", "signal.raw_edges",
 ];
 
 const SINCE_OPTIONS = ["", "1h", "24h", "7d", "30d"] as const;
@@ -80,7 +109,7 @@ function download(filename: string, mime: string, content: string): void {
   URL.revokeObjectURL(url);
 }
 
-function toCsv(entries: AuditEntry[]): string {
+function toCsv(entries: readonly AuditEntry[]): string {
   const cols = [
     "id", "ts", "source", "category", "severity", "actorName", "actorUserId",
     "targetName", "targetUserId", "channelId", "reason", "detailJson",
@@ -91,7 +120,7 @@ function toCsv(entries: AuditEntry[]): string {
 }
 
 /** Bucket entries into a time series (hourly under 3 days span, else daily). */
-function timeSeries(entries: AuditEntry[]): { labels: string[]; counts: number[] } {
+function timeSeries(entries: readonly AuditEntry[]): { labels: string[]; counts: number[] } {
   if (entries.length === 0) return { labels: [], counts: [] };
   const times = entries.map((e) => e.ts).filter(Boolean);
   const min = Math.min(...times);
@@ -114,7 +143,7 @@ function timeSeries(entries: AuditEntry[]): { labels: string[]; counts: number[]
 }
 
 /** Top-N categories + "other" fold (fixed palette order, never cycled). */
-function categoryBreakdown(entries: AuditEntry[], topN: number): { labels: string[]; counts: number[] } {
+function categoryBreakdown(entries: readonly AuditEntry[], topN: number): { labels: string[]; counts: number[] } {
   const byCat = new Map<string, number>();
   for (const e of entries) byCat.set(e.category || "?", (byCat.get(e.category || "?") ?? 0) + 1);
   const sorted = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
@@ -129,12 +158,24 @@ function categoryBreakdown(entries: AuditEntry[], topN: number): { labels: strin
   return { labels, counts };
 }
 
+/** Sub-page rendered in the viewer's main column (Configuration is a sibling). */
+export type AuditView = "dashboard" | "results";
+
 interface AuditViewerProps {
   /** Whether the server offers advanced SQL mode (sandbox self-test passed). */
   readonly advancedSqlAvailable: boolean;
+  /** Which sub-page to show in the main column. */
+  readonly view: AuditView;
+  /** Fired when a search runs so the container can reveal the results page. */
+  readonly onRan: () => void;
 }
 
-export function AuditViewer({ advancedSqlAvailable }: AuditViewerProps) {
+/** Rows per page when paginating (endless scrolling off). */
+const PAGE_SIZE = 25;
+/** How long to coalesce keystrokes in the rail's text filters before querying. */
+const FILTER_DEBOUNCE_MS = 350;
+
+export function AuditViewer({ advancedSqlAvailable, view, onRan }: AuditViewerProps) {
   const { t } = useTranslation("settings");
   const users = useAppStore((s) => s.users);
   const entries = useAuditStore((s) => s.entries);
@@ -151,6 +192,22 @@ export function AuditViewer({ advancedSqlAvailable }: AuditViewerProps) {
   const [queryText, setQueryText] = useState("");
   const [parseError, setParseError] = useState<string | null>(null);
   const [selected, setSelected] = useState<AuditEntry | null>(null);
+  const [railOpen, setRailOpen] = useState(() => readBoolPref(PREF_RAIL_OPEN, true));
+  const [endless, setEndless] = useState(() => readBoolPref(PREF_ENDLESS, false));
+  /** Current page of the loaded buffer (pagination mode only). */
+  const [page, setPage] = useState(0);
+
+  const toggleRail = () =>
+    setRailOpen((open) => {
+      writeBoolPref(PREF_RAIL_OPEN, !open);
+      return !open;
+    });
+
+  const changeEndless = (next: boolean) => {
+    writeBoolPref(PREF_ENDLESS, next);
+    setEndless(next);
+    setPage(0);
+  };
 
   const sqlMode = advancedSqlAvailable && isSqlQuery(queryText);
 
@@ -163,12 +220,60 @@ export function AuditViewer({ advancedSqlAvailable }: AuditViewerProps) {
     [users],
   );
 
-  /** Pills changed: update state and rewrite the canonical query text. */
-  const updateFilters = (patch: Partial<AuditFilterState>) => {
+  const catChips = useMemo(() => {
+    const present = new Set(entries.map((e) => e.category).filter(Boolean));
+    return [...new Set([...KNOWN_CATEGORIES, ...present])];
+  }, [entries]);
+
+  /** Run `f` against the server, leaving the visible sub-page alone. */
+  const executeQuery = useCallback(
+    async (f: AuditFilterState) => {
+      setSelected(null);
+      setPage(0);
+      try {
+        await runQuery(lowerToQueryArgs(f, resolveUser, AUDIT_PAGE_LIMIT, catChips));
+        setParseError(null);
+      } catch (e) {
+        setParseError(e instanceof AuditQueryError ? e.message : String(e));
+      }
+    },
+    [runQuery, resolveUser, catChips],
+  );
+
+  // Open on an unfiltered list rather than an empty table waiting for a click.
+  // Guarded on the store so returning from Configuration doesn't re-query.
+  const lastArgs = useAuditStore((s) => s.lastArgs);
+  const bootstrapped = useRef(false);
+  useEffect(() => {
+    if (bootstrapped.current || lastArgs !== null) return;
+    bootstrapped.current = true;
+    void executeQuery(EMPTY_FILTERS);
+  }, [lastArgs, executeQuery]);
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    },
+    [],
+  );
+
+  /**
+   * A quick filter changed: rewrite the canonical query text and apply it
+   * immediately. Discrete controls (selects, chips) fire at once; free-text
+   * fields coalesce keystrokes so typing doesn't issue a query per character.
+   */
+  const updateFilters = (patch: Partial<AuditFilterState>, immediate = true) => {
     const next = { ...filters, ...patch };
     setFilters(next);
     setQueryText(serializeAuditQuery(next));
     setParseError(null);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (immediate) {
+      void executeQuery(next);
+    } else {
+      debounceRef.current = setTimeout(() => void executeQuery(next), FILTER_DEBOUNCE_MS);
+    }
   };
 
   /** Query text edited: reparse into pills (unless it's SQL). */
@@ -183,25 +288,28 @@ export function AuditViewer({ advancedSqlAvailable }: AuditViewerProps) {
   };
 
   const run = async () => {
-    setSelected(null);
-    try {
-      if (sqlMode) {
+    // Searching is a request to see results - surface that page immediately.
+    onRan();
+    if (sqlMode) {
+      setSelected(null);
+      setPage(0);
+      try {
         await runQuery({ sql: queryText });
-      } else {
-        // The text box is authoritative when it parses; otherwise pills win.
-        let f = filters;
-        try {
-          f = parseAuditQuery(queryText);
-          setFilters(f);
-          setParseError(null);
-        } catch {
-          /* keep pill state */
-        }
-        await runQuery(lowerToQueryArgs(f, resolveUser, AUDIT_PAGE_LIMIT));
+        setParseError(null);
+      } catch (e) {
+        setParseError(e instanceof AuditQueryError ? e.message : String(e));
       }
-    } catch (e) {
-      setParseError(e instanceof AuditQueryError ? e.message : String(e));
+      return;
     }
+    // The text box is authoritative when it parses; otherwise pills win.
+    let f = filters;
+    try {
+      f = parseAuditQuery(queryText);
+      setFilters(f);
+    } catch {
+      /* keep pill state */
+    }
+    await executeQuery(f);
   };
 
   // -- Dashboard aggregates (scoped by the loaded result set) --------
@@ -293,53 +401,53 @@ export function AuditViewer({ advancedSqlAvailable }: AuditViewerProps) {
     };
   }, [entries]);
 
-  const catChips = useMemo(() => {
-    const present = new Set(entries.map((e) => e.category).filter(Boolean));
-    return [...new Set([...KNOWN_CATEGORIES, ...present])];
-  }, [entries]);
-
   const channels = useAppStore((s) => s.channels);
   const channelName = useCallback(
     (id?: number) => (id == null ? undefined : channels.find((c) => c.id === id)?.name),
     [channels],
   );
 
+  /** Live value domains for the search autocomplete. */
+  const suggestContext = useMemo<AuditSuggestContext>(
+    () => ({
+      categories: catChips,
+      userNames: users.map((u) => u.name),
+      channels: channels.map((c) => ({ id: c.id, name: c.name })),
+    }),
+    [catChips, users, channels],
+  );
+
   return (
-    <div className={styles.panel}>
-      {/* -- Search ---------------------------------------------------- */}
-      <div className={styles.toolbar}>
+    <div className={styles.viewer}>
+      {/* -- Main search: top, full width ------------------------------ */}
+      <div className={styles.searchBar}>
         {sqlMode ? (
-          <textarea
-            className={styles.sqlEditor}
-            data-testid={TID.auditQueryInput}
+          <SqlEditor
             value={queryText}
-            spellCheck={false}
+            onChange={setQueryText}
             placeholder={t("audit.sqlPlaceholder", { defaultValue: "SELECT ... FROM audit_entries WHERE ..." })}
-            onChange={(e) => setQueryText(e.target.value)}
           />
         ) : (
-          <input
-            type="text"
-            className={styles.queryInput}
-            data-testid={TID.auditQueryInput}
+          <QueryAutocomplete
             value={queryText}
-            spellCheck={false}
+            onChange={setQueryText}
+            onCommit={onTextCommit}
+            onRun={() => void run()}
+            context={suggestContext}
             placeholder={t("audit.queryPlaceholder", {
               defaultValue: advancedSqlAvailable
-                ? 'category = "ban" and ts > now-7d   (or start with SELECT for SQL)'
-                : 'category = "ban" and ts > now-7d',
+                ? 'category ~ kick and ts > now-7d   (or start with SELECT for SQL)'
+                : 'category ~ kick and ts > now-7d',
             })}
-            onChange={(e) => setQueryText(e.target.value)}
-            onBlur={(e) => onTextCommit(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                onTextCommit(queryText);
-                void run();
-              }
-            }}
           />
         )}
-        <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} data-testid={TID.auditRunQuery} disabled={loading} onClick={() => void run()}>
+        <button
+          type="button"
+          className={`${styles.btn} ${styles.btnPrimary}`}
+          data-testid={TID.auditRunQuery}
+          disabled={loading}
+          onClick={() => void run()}
+        >
           <SearchIcon width={14} height={14} />
           {loading
             ? t("audit.searching", { defaultValue: "Searching…" })
@@ -373,109 +481,87 @@ export function AuditViewer({ advancedSqlAvailable }: AuditViewerProps) {
           <DownloadIcon width={14} height={14} /> JSON
         </button>
       </div>
+
       {(parseError ?? serverError) && (
         <div className={styles.queryError} data-testid={TID.auditQueryError}>
           {parseError ?? serverError}
         </div>
       )}
 
-      {/* -- Filter pills (bound to the query text) --------------------- */}
-      {!sqlMode && (
-        <div className={styles.pillsRow}>
-          <span className={styles.pillGroup}>
-            <span className={styles.pillLabel}>{t("audit.filterSince", { defaultValue: "Since" })}</span>
-            <select
-              className={styles.pillSelect}
-              value={filters.since}
-              onChange={(e) => updateFilters({ since: e.target.value })}
-            >
-              {SINCE_OPTIONS.map((o) => (
-                <option key={o || "all"} value={o}>
-                  {o === "" ? t("audit.sinceAll", { defaultValue: "all time" }) : o}
-                </option>
-              ))}
-            </select>
-          </span>
-          <span className={styles.pillGroup}>
-            <span className={styles.pillLabel}>{t("audit.filterSource", { defaultValue: "Source" })}</span>
-            <select
-              className={styles.pillSelect}
-              value={filters.source}
-              onChange={(e) => updateFilters({ source: e.target.value })}
-            >
-              <option value="">{t("audit.any", { defaultValue: "any" })}</option>
-              <option value="server">server</option>
-              <option value="client">client</option>
-              <option value="plugin">plugin</option>
-            </select>
-          </span>
-          <span className={styles.pillGroup}>
-            <span className={styles.pillLabel}>{t("audit.filterSeverity", { defaultValue: "Severity" })}</span>
-            <select
-              className={styles.pillSelect}
-              value={filters.severity}
-              onChange={(e) => updateFilters({ severity: e.target.value })}
-            >
-              <option value="">{t("audit.any", { defaultValue: "any" })}</option>
-              <option value="info">info</option>
-              <option value="notice">notice</option>
-              <option value="warning">warning</option>
-              <option value="critical">critical</option>
-            </select>
-          </span>
-          <span className={styles.pillGroup}>
-            <span className={styles.pillLabel}>{t("audit.filterActor", { defaultValue: "Actor" })}</span>
-            <input
-              className={styles.pillInput}
-              value={filters.actor}
-              placeholder={t("audit.userPlaceholder", { defaultValue: "name or id" })}
-              onChange={(e) => updateFilters({ actor: e.target.value })}
+      {/* -- Body: active sub-page + collapsible quick-filter rail ------ */}
+      <div className={styles.body}>
+        <div className={styles.main}>
+          {view === "dashboard" ? (
+            <AuditDashboard
+              kpis={kpis}
+              hasMore={hasMore}
+              hasEntries={entries.length > 0}
+              timeChart={timeChart}
+              categoryChart={categoryChart}
+              severityChart={severityChart}
             />
-          </span>
-          <span className={styles.pillGroup}>
-            <span className={styles.pillLabel}>{t("audit.filterTarget", { defaultValue: "Target" })}</span>
-            <input
-              className={styles.pillInput}
-              value={filters.target}
-              placeholder={t("audit.userPlaceholder", { defaultValue: "name or id" })}
-              onChange={(e) => updateFilters({ target: e.target.value })}
+          ) : (
+            <AuditResults
+              entries={entries}
+              loading={loading}
+              loadingMore={loadingMore}
+              hasMore={hasMore}
+              onLoadMore={() => void loadMore()}
+              selected={selected}
+              onSelect={setSelected}
+              channelName={channelName}
+              endless={endless}
+              page={page}
+              onPageChange={setPage}
             />
-          </span>
-          <span className={styles.pillGroup}>
-            <span className={styles.pillLabel}>{t("audit.filterText", { defaultValue: "Text" })}</span>
-            <input
-              className={styles.pillInput}
-              value={filters.text}
-              onChange={(e) => updateFilters({ text: e.target.value })}
-            />
-          </span>
+          )}
         </div>
-      )}
-      {!sqlMode && (
-        <div className={styles.pillsRow}>
-          {catChips.map((c) => {
-            const on = filters.categories.includes(c);
-            return (
-              <button
-                key={c}
-                type="button"
-                className={`${styles.catChip}${on ? "" : ` ${styles.catChipOff}`}`}
-                onClick={() =>
-                  updateFilters({
-                    categories: on
-                      ? filters.categories.filter((x) => x !== c)
-                      : [...filters.categories, c],
-                  })
-                }
-              >
-                {c}
-              </button>
-            );
-          })}
-        </div>
-      )}
 
-      {/* -- KPI tiles -------------------------------------------------- */}
+        {!sqlMode && (
+          <AuditFilterRail
+            open={railOpen}
+            onToggle={toggleRail}
+            filters={filters}
+            onChange={updateFilters}
+            categories={catChips}
+            endless={endless}
+            onEndlessChange={changeEndless}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// -- Dashboard sub-page --------------------------------------------
+
+interface AuditDashboardProps {
+  readonly kpis: {
+    total: number;
+    last24h: number;
+    flagged: number;
+    reports: number;
+    distinctActors: number;
+  };
+  readonly hasMore: boolean;
+  readonly hasEntries: boolean;
+  readonly timeChart: object;
+  readonly categoryChart: object;
+  readonly severityChart: object;
+}
+
+/** KPI tiles + charts, all scoped to the currently loaded result set. */
+function AuditDashboard({
+  kpis,
+  hasMore,
+  hasEntries,
+  timeChart,
+  categoryChart,
+  severityChart,
+}: AuditDashboardProps) {
+  const { t } = useTranslation("settings");
+  return (
+    <>
       <div className={styles.kpiRow} data-testid={TID.auditKpiRow}>
         <div className={styles.statCard}>
           <span className={styles.statValue}>{kpis.last24h}</span>
@@ -500,8 +586,7 @@ export function AuditViewer({ advancedSqlAvailable }: AuditViewerProps) {
         </div>
       </div>
 
-      {/* -- Charts ----------------------------------------------------- */}
-      {entries.length > 0 && (
+      {hasEntries ? (
         <div className={styles.chartsRow}>
           <div className={styles.chartCard}>
             <span className={styles.chartTitle}>{t("audit.chartOverTime", { defaultValue: "Events over time" })}</span>
@@ -522,9 +607,72 @@ export function AuditViewer({ advancedSqlAvailable }: AuditViewerProps) {
             </div>
           </div>
         </div>
+      ) : (
+        <div className={styles.emptyCard}>
+          {t("audit.noEntries", { defaultValue: "No entries. Run a search, or wait for the live tail." })}
+        </div>
       )}
+    </>
+  );
+}
 
-      {/* -- Detail drawer ---------------------------------------------- */}
+// -- Results sub-page ----------------------------------------------
+
+interface AuditResultsProps {
+  readonly entries: readonly AuditEntry[];
+  readonly loading: boolean;
+  readonly loadingMore: boolean;
+  readonly hasMore: boolean;
+  readonly onLoadMore: () => void;
+  readonly selected: AuditEntry | null;
+  readonly onSelect: (entry: AuditEntry | null) => void;
+  readonly channelName: (id?: number) => string | undefined;
+  /** Endless scrolling (true) or paged navigation (false). */
+  readonly endless: boolean;
+  readonly page: number;
+  readonly onPageChange: (page: number) => void;
+}
+
+/** The results table plus the detail drawer for the selected row. */
+function AuditResults({
+  entries,
+  loading,
+  loadingMore,
+  hasMore,
+  onLoadMore,
+  selected,
+  onSelect,
+  channelName,
+  endless,
+  page,
+  onPageChange,
+}: AuditResultsProps) {
+  const { t } = useTranslation("settings");
+
+  // Pagination slices the already-loaded buffer; running past its end pulls the
+  // next keyset page from the server.
+  const pageCount = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
+  const atLastPage = page >= pageCount - 1;
+  const visible = endless ? entries : entries.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const goNext = () => {
+    if (!atLastPage) {
+      onPageChange(page + 1);
+    } else if (hasMore) {
+      onLoadMore();
+      onPageChange(page + 1);
+    }
+  };
+
+  /** Endless mode: pull the next page as the scroll approaches the bottom. */
+  const onScroll = (e: UIEvent<HTMLDivElement>) => {
+    if (!endless || !hasMore || loadingMore) return;
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 160) onLoadMore();
+  };
+
+  return (
+    <>
       {selected && (
         <div className={styles.drawer} data-testid={TID.auditDetailDrawer}>
           <div className={styles.drawerHead}>
@@ -533,7 +681,7 @@ export function AuditViewer({ advancedSqlAvailable }: AuditViewerProps) {
             <span className={styles.drawerTitle}>
               #{selected.id} · {selected.category}
             </span>
-            <button type="button" className={styles.btn} onClick={() => setSelected(null)}>
+            <button type="button" className={styles.btn} onClick={() => onSelect(null)}>
               {t("audit.close", { defaultValue: "Close" })}
             </button>
           </div>
@@ -584,8 +732,7 @@ export function AuditViewer({ advancedSqlAvailable }: AuditViewerProps) {
         </div>
       )}
 
-      {/* -- Results table ---------------------------------------------- */}
-      <div className={styles.tableWrap}>
+      <div className={styles.tableWrap} onScroll={onScroll}>
         <table className={styles.table} data-testid={TID.auditTable}>
           <thead>
             <tr>
@@ -600,22 +747,22 @@ export function AuditViewer({ advancedSqlAvailable }: AuditViewerProps) {
             </tr>
           </thead>
           <tbody>
-            {entries.length === 0 && (
+            {visible.length === 0 && (
               <tr>
                 <td colSpan={8} className={styles.empty}>
-                  {loading
+                  {loading || loadingMore
                     ? t("audit.loading", { defaultValue: "Loading…" })
                     : t("audit.noEntries", { defaultValue: "No entries. Run a search, or wait for the live tail." })}
                 </td>
               </tr>
             )}
-            {entries.map((e) => (
+            {visible.map((e) => (
               <tr
                 key={e.id}
                 className={styles.row}
                 data-testid={TID.auditRow}
                 data-entry-id={e.id}
-                onClick={() => setSelected(e)}
+                onClick={() => onSelect(e)}
               >
                 <td className={styles.tdTime}>{fmtTime(e.ts)}</td>
                 <td><span className={`${styles.badge} ${severityClass(e.severity)}`}>{e.severity}</span></td>
@@ -634,13 +781,54 @@ export function AuditViewer({ advancedSqlAvailable }: AuditViewerProps) {
       </div>
 
       <div className={styles.footerRow}>
-        {hasMore && (
-          <button type="button" className={styles.btn} disabled={loadingMore} onClick={() => void loadMore()}>
-            <RefreshIcon width={14} height={14} />
-            {loadingMore
-              ? t("audit.loading", { defaultValue: "Loading…" })
-              : t("audit.loadMore", { defaultValue: "Load more" })}
-          </button>
+        {endless ? (
+          <>
+            {/* Fallback for when the table is too short to scroll. */}
+            {hasMore && (
+              <button type="button" className={styles.btn} disabled={loadingMore} onClick={onLoadMore}>
+                <RefreshIcon width={14} height={14} />
+                {loadingMore
+                  ? t("audit.loading", { defaultValue: "Loading…" })
+                  : t("audit.loadMore", { defaultValue: "Load more" })}
+              </button>
+            )}
+            {!hasMore && entries.length > 0 && (
+              <span className={styles.countNote}>
+                {t("audit.endOfResults", { defaultValue: "End of results" })}
+              </span>
+            )}
+          </>
+        ) : (
+          <div className={styles.pager}>
+            <button
+              type="button"
+              className={styles.btn}
+              disabled={page === 0}
+              data-testid={TID.auditPagePrev}
+              onClick={() => onPageChange(page - 1)}
+            >
+              <ChevronLeftIcon width={14} height={14} />
+              {t("audit.prevPage", { defaultValue: "Previous" })}
+            </button>
+            <span className={styles.countNote}>
+              {t("audit.pageOf", {
+                defaultValue: "Page {{page}} of {{pages}}",
+                page: page + 1,
+                pages: pageCount,
+              })}
+              {hasMore ? "+" : ""}
+            </span>
+            <button
+              type="button"
+              className={styles.btn}
+              disabled={atLastPage && !hasMore}
+              data-testid={TID.auditPageNext}
+              onClick={goNext}
+            >
+              {t("audit.nextPage", { defaultValue: "Next" })}
+              <ChevronRightIcon width={14} height={14} />
+            </button>
+          </div>
         )}
         <span className={styles.countNote}>
           {t("audit.countNote", {
@@ -649,6 +837,185 @@ export function AuditViewer({ advancedSqlAvailable }: AuditViewerProps) {
           })}
         </span>
       </div>
-    </div>
+    </>
+  );
+}
+
+// -- Quick-filter ("EZ search") rail --------------------------------
+
+interface AuditFilterRailProps {
+  readonly open: boolean;
+  readonly onToggle: () => void;
+  readonly filters: AuditFilterState;
+  /** `immediate: false` debounces (used by the free-text fields). */
+  readonly onChange: (patch: Partial<AuditFilterState>, immediate?: boolean) => void;
+  readonly categories: readonly string[];
+  readonly endless: boolean;
+  readonly onEndlessChange: (endless: boolean) => void;
+}
+
+/**
+ * Collapsible right-hand rail of point-and-click filters. Every control writes
+ * back through `onChange`, which re-serialises the canonical query text and
+ * runs the query straight away, so the rail and the main search box never
+ * drift apart and results update as you click.
+ */
+function AuditFilterRail({
+  open,
+  onToggle,
+  filters,
+  onChange,
+  categories,
+  endless,
+  onEndlessChange,
+}: AuditFilterRailProps) {
+  const { t } = useTranslation("settings");
+  return (
+    <aside
+      className={`${styles.rail}${open ? "" : ` ${styles.railCollapsed}`}`}
+      data-open={open}
+      data-testid={TID.auditFilterRail}
+    >
+      <div className={styles.railHead}>
+        {open && (
+          <span className={styles.railTitle}>
+            {t("audit.quickFilters", { defaultValue: "Quick filters" })}
+          </span>
+        )}
+        <button
+          type="button"
+          className={styles.railToggle}
+          data-testid={TID.auditFilterRailToggle}
+          aria-expanded={open}
+          onClick={onToggle}
+          title={
+            open
+              ? t("audit.collapseFilters", { defaultValue: "Collapse quick filters" })
+              : t("audit.expandFilters", { defaultValue: "Expand quick filters" })
+          }
+        >
+          {open ? <ChevronRightIcon width={16} height={16} /> : <ChevronLeftIcon width={16} height={16} />}
+        </button>
+      </div>
+
+      {open && (
+        <div className={styles.railBody}>
+          <Field label={t("audit.filterSince", { defaultValue: "Since" })}>
+            <SelectInput
+              fieldSize="sm"
+              value={filters.since}
+              onChange={(e) => onChange({ since: e.target.value })}
+            >
+              {SINCE_OPTIONS.map((o) => (
+                <option key={o || "all"} value={o}>
+                  {o === "" ? t("audit.sinceAll", { defaultValue: "all time" }) : o}
+                </option>
+              ))}
+            </SelectInput>
+          </Field>
+
+          <Field label={t("audit.filterSource", { defaultValue: "Source" })}>
+            <SelectInput
+              fieldSize="sm"
+              value={filters.source}
+              onChange={(e) => onChange({ source: e.target.value })}
+            >
+              <option value="">{t("audit.any", { defaultValue: "any" })}</option>
+              <option value="server">server</option>
+              <option value="client">client</option>
+              <option value="plugin">plugin</option>
+            </SelectInput>
+          </Field>
+
+          <Field label={t("audit.filterSeverity", { defaultValue: "Severity" })}>
+            <SelectInput
+              fieldSize="sm"
+              value={filters.severity}
+              onChange={(e) => onChange({ severity: e.target.value })}
+            >
+              <option value="">{t("audit.any", { defaultValue: "any" })}</option>
+              <option value="info">info</option>
+              <option value="notice">notice</option>
+              <option value="warning">warning</option>
+              <option value="critical">critical</option>
+            </SelectInput>
+          </Field>
+
+          <Field label={t("audit.filterActor", { defaultValue: "Actor" })}>
+            <TextInput
+              fieldSize="sm"
+              value={filters.actor}
+              placeholder={t("audit.userPlaceholder", { defaultValue: "name or id" })}
+              onChange={(e) => onChange({ actor: e.target.value }, false)}
+            />
+          </Field>
+
+          <Field label={t("audit.filterTarget", { defaultValue: "Target" })}>
+            <TextInput
+              fieldSize="sm"
+              value={filters.target}
+              placeholder={t("audit.userPlaceholder", { defaultValue: "name or id" })}
+              onChange={(e) => onChange({ target: e.target.value }, false)}
+            />
+          </Field>
+
+          <Field label={t("audit.filterText", { defaultValue: "Text" })}>
+            <TextInput
+              fieldSize="sm"
+              value={filters.text}
+              onChange={(e) => onChange({ text: e.target.value }, false)}
+            />
+          </Field>
+
+          <div className={styles.railGroup}>
+            <span className={styles.pillLabel}>{t("audit.filterCategory", { defaultValue: "Categories" })}</span>
+            <div className={styles.railChips}>
+              {categories.map((c) => {
+                const on = filters.categories.includes(c);
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`${styles.catChip}${on ? "" : ` ${styles.catChipOff}`}`}
+                    aria-pressed={on}
+                    onClick={() =>
+                      onChange({
+                        categories: on
+                          ? filters.categories.filter((x) => x !== c)
+                          : [...filters.categories, c],
+                      })
+                    }
+                  >
+                    {c}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className={styles.railDivider} />
+
+          <div className={styles.railGroup}>
+            <span className={styles.pillLabel}>{t("audit.resultsLabel", { defaultValue: "Results" })}</span>
+            <div className={styles.railSwitchRow}>
+              <Toggle
+                checked={endless}
+                onChange={() => onEndlessChange(!endless)}
+                testId={TID.auditEndlessToggle}
+                ariaLabel={t("audit.endlessScroll", { defaultValue: "Endless scrolling" })}
+              />
+              <span className={styles.railSwitchLabel}>
+                {t("audit.endlessScroll", { defaultValue: "Endless scrolling" })}
+              </span>
+            </div>
+            <span className={styles.railHint}>
+              {endless
+                ? t("audit.endlessOn", { defaultValue: "Loads more as you scroll." })
+                : t("audit.endlessOff", { defaultValue: "Paged, 25 rows at a time." })}
+            </span>
+          </div>
+        </div>
+      )}
+    </aside>
   );
 }
