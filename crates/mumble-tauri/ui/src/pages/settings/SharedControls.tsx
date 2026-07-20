@@ -38,10 +38,15 @@ export function Toggle({
   checked,
   onChange,
   disabled,
+  testId,
+  ariaLabel,
 }: {
   checked: boolean;
   onChange: () => void;
   disabled?: boolean;
+  /** Optional `data-testid` so callers can address the switch itself. */
+  testId?: string;
+  ariaLabel?: string;
 }) {
   return (
     <button
@@ -50,6 +55,8 @@ export function Toggle({
       onClick={onChange}
       role="switch"
       aria-checked={checked}
+      aria-label={ariaLabel}
+      data-testid={testId}
       disabled={disabled}
     >
       <span className={styles.toggleKnob} />

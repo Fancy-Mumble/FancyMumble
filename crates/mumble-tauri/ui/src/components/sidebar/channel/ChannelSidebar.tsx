@@ -1,4 +1,4 @@
-import { BellIcon, BellOffIcon, ChevronRightIcon, CloseIcon, DatabaseIcon, EditIcon, HeadphonesIcon, HeadphonesOffIcon, InfoIcon, ListenBadgeIcon, LockIcon, LogoutIcon, MenuIcon, MicIcon, MicOffIcon, MicOffSmallIcon, PhoneIcon, PhoneOffIcon, PlusIcon, RecordIcon, SearchIcon, SettingsIcon, ShieldIcon, TrashIcon, UsersGroupIcon, WarningIcon } from "../../../icons";
+import { BellIcon, BellOffIcon, ChevronRightIcon, CloseIcon, DatabaseIcon, EditIcon, HeadphonesIcon, HeadphonesOffIcon, InfoIcon, ListenBadgeIcon, LockIcon, LogoutIcon, MenuIcon, MicIcon, MicOffIcon, MicOffSmallIcon, PhoneIcon, PhoneOffIcon, PlusIcon, RecordIcon, SettingsIcon, ShieldIcon, TrashIcon, UsersGroupIcon, WarningIcon } from "../../../icons";
 import { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -31,6 +31,7 @@ import { PERM_LISTEN, PERM_WRITE } from "../../../utils/permissions";
 import { filterVisibleChannels, channelDisplayName, filterMeetingChannels, isDmChannel, meetingRooms, dmPeerUserId, usersForChannelTree } from "../../../utils/channelVisibility";
 import { requestLeaveMeeting } from "../../chat/calendar/meetings";
 import { TID } from "../../../testids";
+import { SearchInput } from "../../../components/elements/TextInput";
 
 /** Check whether a channel's cached permissions include the Listen bit. */
 function canListen(channel: ChannelEntry | undefined): boolean {
@@ -492,11 +493,9 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
           </button>
         )}
         <div className={styles.searchBar}>
-          <SearchIcon className={styles.searchBarIcon} width={14} height={14} />
-          <input
+          <SearchInput
             ref={searchInputRef}
-            className={styles.searchBarInput}
-            type="text"
+            fieldSize="sm"
             placeholder={t("channelSidebar.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => {
@@ -505,20 +504,22 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
             }}
             onFocus={() => { if (!showSearch) setShowSearch(true); }}
             onKeyDown={(e) => { if (e.key === "Escape") closeSearch(); }}
+            trailing={
+              showSearch ? (
+                <button
+                  type="button"
+                  className={styles.searchBarClose}
+                  onClick={closeSearch}
+                  aria-label={t("channelSidebar.closeSearch")}
+                  title={t("channelSidebar.closeSearchTooltip")}
+                >
+                  <CloseIcon width={14} height={14} />
+                </button>
+              ) : (
+                <span className={styles.searchShortcut}>Ctrl+K</span>
+              )
+            }
           />
-          {showSearch ? (
-            <button
-              type="button"
-              className={styles.searchBarClose}
-              onClick={closeSearch}
-              aria-label={t("channelSidebar.closeSearch")}
-              title={t("channelSidebar.closeSearchTooltip")}
-            >
-              <CloseIcon width={14} height={14} />
-            </button>
-          ) : (
-            <span className={styles.searchShortcut}>Ctrl+K</span>
-          )}
         </div>
       </div>
 

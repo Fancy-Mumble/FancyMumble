@@ -8,9 +8,9 @@
 
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { SearchIcon } from "../../icons";
 import { getSettingsSearchIndex } from "./settingsSearchRegistry";
 import styles from "./SettingsSearch.module.css";
+import { SearchInput } from "../../components/elements/TextInput";
 
 interface TabInfo {
   readonly id: string;
@@ -53,20 +53,17 @@ export function SettingsSearch({
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.inputWrap}>
-        <SearchIcon className={styles.icon} width={14} height={14} />
-        <input
-          className={styles.input}
-          type="search"
-          value={query}
-          placeholder={tStr("search.placeholder", { defaultValue: "Search settings…" })}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && results.length > 0) select(results[0].id);
-            else if (e.key === "Escape") setQuery("");
-          }}
-        />
-      </div>
+      <SearchInput
+        className={styles.input}
+        value={query}
+        placeholder={tStr("search.placeholder", { defaultValue: "Search settings…" })}
+        onChange={(e) => setQuery(e.target.value)}
+        onClear={() => setQuery("")}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && results.length > 0) select(results[0].id);
+          else if (e.key === "Escape") setQuery("");
+        }}
+      />
 
       {query.trim() && (
         <div className={styles.results}>

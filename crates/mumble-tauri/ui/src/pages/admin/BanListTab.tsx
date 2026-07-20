@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { BanEntry } from "../../types";
+import { Field, TextInput } from "../../components/elements/TextInput";
 import styles from "./AdminPanel.module.css";
 
 const EMPTY_BAN: BanEntry = {
@@ -165,30 +166,24 @@ export function BanListTab() {
         <div className={styles.detailPane}>
           {editing ? (
             <div className={styles.detailForm}>
-              <label className={styles.fieldLabel}>
-                {t("banList.fieldUsername")}
-                <input
-                  className={styles.input}
+              <Field label={t("banList.fieldUsername")}>
+                <TextInput
                   type="text"
                   value={editing.name}
                   onChange={(e) => patchEditing({ name: e.target.value })}
                   onBlur={handleApplyEdit}
                 />
-              </label>
-              <label className={styles.fieldLabel}>
-                {t("banList.fieldAddress")}
-                <input
-                  className={styles.input}
+              </Field>
+              <Field label={t("banList.fieldAddress")}>
+                <TextInput
                   type="text"
                   value={editing.address}
                   onChange={(e) => patchEditing({ address: e.target.value })}
                   onBlur={handleApplyEdit}
                 />
-              </label>
-              <label className={styles.fieldLabel}>
-                {t("banList.fieldMask")}
-                <input
-                  className={styles.input}
+              </Field>
+              <Field label={t("banList.fieldMask")}>
+                <TextInput
                   type="number"
                   min={0}
                   max={128}
@@ -196,49 +191,41 @@ export function BanListTab() {
                   onChange={(e) => patchEditing({ mask: Number(e.target.value) })}
                   onBlur={handleApplyEdit}
                 />
-              </label>
-              <label className={styles.fieldLabel}>
-                {t("banList.fieldReason")}
-                <input
-                  className={styles.input}
+              </Field>
+              <Field label={t("banList.fieldReason")}>
+                <TextInput
                   type="text"
                   value={editing.reason}
                   onChange={(e) => patchEditing({ reason: e.target.value })}
                   onBlur={handleApplyEdit}
                 />
-              </label>
-              <label className={styles.fieldLabel}>
-                {t("banList.fieldHash")}
-                <input
-                  className={styles.input}
+              </Field>
+              <Field label={t("banList.fieldHash")}>
+                <TextInput
                   type="text"
                   value={editing.hash}
                   onChange={(e) => patchEditing({ hash: e.target.value })}
                   onBlur={handleApplyEdit}
                 />
-              </label>
-              <label className={styles.fieldLabel}>
-                {t("banList.fieldStart")}
-                <input
-                  className={styles.input}
+              </Field>
+              <Field label={t("banList.fieldStart")}>
+                <TextInput
                   type="text"
                   value={editing.start}
                   placeholder={t("banList.fieldStartPlaceholder")}
                   onChange={(e) => patchEditing({ start: e.target.value })}
                   onBlur={handleApplyEdit}
                 />
-              </label>
-              <label className={styles.fieldLabel}>
-                {t("banList.fieldDuration")}
-                <input
-                  className={styles.input}
+              </Field>
+              <Field label={t("banList.fieldDuration")}>
+                <TextInput
                   type="number"
                   min={0}
                   value={editing.duration}
                   onChange={(e) => patchEditing({ duration: Number(e.target.value) })}
                   onBlur={handleApplyEdit}
                 />
-              </label>
+              </Field>
             </div>
           ) : (
             <div className={styles.detailEmpty}>{t("banList.selectEntry")}</div>

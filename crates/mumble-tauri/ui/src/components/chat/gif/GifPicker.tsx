@@ -1,4 +1,4 @@
-import { CloseIcon, SearchIcon } from "../../../icons";
+import { CloseIcon } from "../../../icons";
 import { useTranslation } from "react-i18next";
 /**
  * GifPicker - popup GIF / Sticker search & browse powered by Klipy.
@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import { useState, useEffect, useCallback, useRef } from "react";
 import styles from "./GifPicker.module.css";
 import { getActiveApiKey } from "./klipyConfig";
+import { SearchInput } from "../../../components/elements/TextInput";
 
 // --- Klipy API Types ----------------------------------------------
 
@@ -372,14 +373,13 @@ export default function GifPicker({ onSelect, onClose }: Readonly<GifPickerProps
 
       {/* Search bar */}
       <div className={styles.searchBar}>
-        <SearchIcon className={styles.searchIcon} width={16} height={16} />
-        <input
+        <SearchInput
           className={styles.searchInput}
           placeholder={t("gifPicker.searchPlaceholder", { tab: tab === "gifs" ? t("gifPicker.tabGifs") : t("gifPicker.tabStickers") })}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           autoFocus
-        />
+          />
       </div>
 
       {/* Content */}

@@ -26,7 +26,6 @@ import {
   MessageCircleIcon,
   PlayIcon,
   PuzzleIcon,
-  SearchIcon,
   SeparatorHorizontalIcon,
   ShieldCheckIcon,
   SparklesIcon,
@@ -51,6 +50,7 @@ import LiveDocReferencePicker from "./LiveDocReferencePicker";
 import type { RefTarget } from "./liveDocReferences";
 import ribbon from "./LiveDocRibbon.module.css";
 import styles from "./LiveDocInsert.module.css";
+import { SearchInput } from "../../../components/elements/TextInput";
 
 const insertImage = (editor: Editor, src: string) => editor.chain().focus().setImage({ src }).run();
 
@@ -193,14 +193,13 @@ export function IconsButton({ editor, compact }: WidgetProps) {
       {(close) => (
         <div className={styles.iconPicker}>
           <div className={styles.searchRow}>
-            <SearchIcon width={14} height={14} aria-hidden="true" />
-            <input
+            <SearchInput
               className={styles.searchInput}
               value={query}
               autoFocus
               placeholder={t("liveDoc.insert.iconSearch", { defaultValue: "Search icons…" })}
               onChange={(e) => setQuery(e.target.value)}
-            />
+          />
           </div>
           <div className={styles.iconGrid}>
             {results.map(({ name, label, Comp }) => (
