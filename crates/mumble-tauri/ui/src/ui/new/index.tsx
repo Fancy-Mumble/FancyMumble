@@ -49,6 +49,7 @@ import {
   CloseIcon as X,
 } from "@ui/icons";
 import { getUiDesignOverride, setSelectedUiDesign } from "@ui/selection";
+import NewClientApp from "./NewClientApp";
 import styles from "./NewUiApp.module.css";
 
 const sections = [
@@ -154,7 +155,7 @@ function Avatar({ label, online = false }: { label: string; online?: boolean }) 
 }
 
 /** Standalone visual language catalogue for the redesigned interface. */
-export default function NewUiApp() {
+export function DesignSheet({ onBackToClient }: { onBackToClient?: () => void }) {
   const [switchingBack, setSwitchingBack] = useState(false);
   const [toggleOn, setToggleOn] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState("Balanced");
@@ -178,6 +179,11 @@ export default function NewUiApp() {
     <div className={styles.root} data-testid="new-ui-root">
       <WindowTitleBar platform={chromePlatform} />
       <header className={styles.topbar}>
+        {onBackToClient && (
+          <button type="button" className={styles.backButton} onClick={onBackToClient}>
+            <ArrowLeft size={17} /><span>Back to client</span>
+          </button>
+        )}
         <button
           type="button"
           className={styles.backButton}
@@ -464,4 +470,16 @@ export default function NewUiApp() {
       </main>
     </div>
   );
+}
+
+export default function NewUiApp() {
+  const [showDesignSheet, setShowDesignSheet] = useState(
+    () => new URLSearchParams(globalThis.location.search).has("design-sheet"),
+  );
+
+  if (showDesignSheet) {
+    return <DesignSheet onBackToClient={() => setShowDesignSheet(false)} />;
+  }
+
+  return <NewClientApp onOpenDesignSheet={() => setShowDesignSheet(true)} />;
 }
