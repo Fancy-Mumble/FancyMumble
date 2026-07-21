@@ -32,8 +32,16 @@ import {
 import { CloseIcon, SearchIcon } from "../../icons";
 import styles from "./TextInput.module.css";
 
-/** Control density. `sm` matches compact toolbars/rails, `md` is the default. */
-export type FieldSize = "sm" | "md";
+/**
+ * Control density, named as Material UI names it so the whole family reads the
+ * same: `size="small"` for toolbars/rails, `size="medium"` (default) elsewhere.
+ * The native numeric `size` attribute is omitted on each control, exactly as
+ * MUI does, so this name is free.
+ */
+export type FieldSize = "small" | "medium";
+
+/** Density -> CSS modifier. */
+const SIZE_CLASS: Record<FieldSize, string> = { small: styles.sm, medium: styles.md };
 
 interface FieldContextValue {
   readonly id: string;
@@ -50,7 +58,7 @@ function cx(...parts: (string | false | undefined)[]): string {
 interface SharedProps {
   /** Marks the control invalid; inherited from a surrounding `Field` error. */
   readonly invalid?: boolean;
-  readonly fieldSize?: FieldSize;
+  readonly size?: FieldSize;
   /** Render in the monospace face (query editors, hashes, code). */
   readonly mono?: boolean;
 }
@@ -67,10 +75,10 @@ function useControlProps(id: string | undefined, invalid: boolean | undefined) {
   };
 }
 
-type TextInputProps = ComponentPropsWithoutRef<"input"> & SharedProps;
+type TextInputProps = Omit<ComponentPropsWithoutRef<"input">, "size"> & SharedProps;
 
 export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function TextInput(
-  { invalid, fieldSize = "md", mono, className, id, ...rest },
+  { invalid, size = "medium", mono, className, id, ...rest },
   ref,
 ) {
   const c = useControlProps(id, invalid);
@@ -82,7 +90,7 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
       aria-invalid={c["aria-invalid"]}
       className={cx(
         styles.control,
-        styles[fieldSize],
+        SIZE_CLASS[size],
         mono && styles.mono,
         c.invalid && styles.invalid,
         className,
@@ -92,10 +100,10 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
   );
 });
 
-type TextAreaProps = ComponentPropsWithoutRef<"textarea"> & SharedProps;
+type TextAreaProps = Omit<ComponentPropsWithoutRef<"textarea">, "size"> & SharedProps;
 
 export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function TextArea(
-  { invalid, fieldSize = "md", mono, className, id, ...rest },
+  { invalid, size = "medium", mono, className, id, ...rest },
   ref,
 ) {
   const c = useControlProps(id, invalid);
@@ -107,7 +115,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function 
       aria-invalid={c["aria-invalid"]}
       className={cx(
         styles.control,
-        styles[fieldSize],
+        SIZE_CLASS[size],
         styles.textarea,
         mono && styles.mono,
         c.invalid && styles.invalid,
@@ -118,10 +126,10 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function 
   );
 });
 
-type SelectInputProps = ComponentPropsWithoutRef<"select"> & SharedProps;
+type SelectInputProps = Omit<ComponentPropsWithoutRef<"select">, "size"> & SharedProps;
 
 export const SelectInput = forwardRef<HTMLSelectElement, SelectInputProps>(function SelectInput(
-  { invalid, fieldSize = "md", className, id, children, ...rest },
+  { invalid, size = "medium", className, id, children, ...rest },
   ref,
 ) {
   const c = useControlProps(id, invalid);
@@ -135,7 +143,7 @@ export const SelectInput = forwardRef<HTMLSelectElement, SelectInputProps>(funct
       aria-invalid={c["aria-invalid"]}
       className={cx(
         styles.control,
-        styles[fieldSize],
+        SIZE_CLASS[size],
         c.invalid && styles.invalid,
         className,
       )}
@@ -146,8 +154,19 @@ export const SelectInput = forwardRef<HTMLSelectElement, SelectInputProps>(funct
   );
 });
 
-type SearchInputProps = Omit<ComponentPropsWithoutRef<"input">, "type"> &
+/**
+ * Where the search sits, which decides whether it draws its own chrome.
+ *
+ *  - `field`   the input *is* the field (lists, admin toolbars)
+ *  - `bar`     an outer element already draws the field, so this is bare
+ *              (pickers, the settings search wrap, the sidebar bar)
+ *  - `palette` bar, in larger type, for the command palette
+ */
+export type SearchVariant = "field" | "bar" | "palette";
+
+type SearchInputProps = Omit<ComponentPropsWithoutRef<"input">, "type" | "size"> &
   SharedProps & {
+    readonly variant?: SearchVariant;
     /** Renders a clear button while there is a value; called when pressed. */
     readonly onClear?: () => void;
     /** Accessible name for the clear button. */
@@ -168,7 +187,8 @@ type SearchInputProps = Omit<ComponentPropsWithoutRef<"input">, "type"> &
 export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(function SearchInput(
   {
     invalid,
-    fieldSize = "md",
+    size = "medium",
+    variant = "field",
     mono,
     className,
     id,
@@ -184,7 +204,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
   const showClear = Boolean(onClear) && value !== undefined && value !== "";
   const hasTrailing = Boolean(trailing) || showClear;
   return (
-    <div className={cx(styles.searchWrap, fieldSize === "sm" && styles.searchWrapSm)}>
+    <div className={cx(styles.searchWrap, size === "small" && styles.searchWrapSm)}>
       <SearchIcon className={styles.searchIcon} width={14} height={14} aria-hidden="true" />
       <input
         ref={ref}
@@ -195,8 +215,10 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
         aria-invalid={c["aria-invalid"]}
         className={cx(
           styles.control,
-          styles[fieldSize],
+          SIZE_CLASS[size],
           styles.search,
+          variant !== "field" && styles.searchBare,
+          variant === "palette" && styles.searchPalette,
           hasTrailing && styles.hasTrailing,
           mono && styles.mono,
           c.invalid && styles.invalid,

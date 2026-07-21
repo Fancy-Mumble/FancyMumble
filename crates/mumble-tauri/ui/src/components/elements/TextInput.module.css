@@ -149,6 +149,22 @@
   padding-right: 56px;
 }
 
+/* Variant `bar`: the surrounding element already draws the field (a picker's
+   search bar, the settings search wrap), so the control itself must add no
+   chrome or it renders as a box inside a box. */
+.searchBare,
+.searchBare:hover:not(:disabled),
+.searchBare:focus-visible {
+  border-color: transparent;
+  background: transparent;
+  outline: none;
+}
+
+/* Variant `palette`: bare, but set in larger type for the command palette. */
+.searchPalette {
+  font-size: 15px;
+}
+
 .searchClear {
   position: absolute;
   right: 6px;
@@ -165,6 +181,39 @@
 
 .searchClear:hover {
   color: var(--color-text-primary);
+}
+
+/* -- TextField (MUI-shaped wrapper) --------------------------------- */
+
+/* Positioning context for adornments; the control sizes itself. */
+.controlWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+/* `filled`: no outline, just the surface - for dense toolbars. */
+.filled {
+  border-color: transparent;
+}
+
+.filled:hover:not(:disabled):not(:focus-visible) {
+  border-color: var(--color-glass-border);
+}
+
+/* Leading-adornment clearance; mirrors .searchIcon's offset. */
+.hasStart {
+  padding-left: 32px;
+}
+
+.hasStartSm {
+  padding-left: 28px;
 }
 
 /* -- Field scaffolding ---------------------------------------------- */
