@@ -18,25 +18,17 @@
 }
 
 .input {
-  width: 100%;
-  padding: 0.4rem 2rem 0.4rem 0.55rem;
-  border-radius: 0.35rem;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(0, 0, 0, 0.25);
-  color: var(--text-primary, #e7e9ec);
-  font-size: 0.85rem;
-  box-sizing: border-box;
-  outline: none;
-  transition: border-color 0.12s;
+  /* One source of truth for field chrome - see TextInput.module.css. */
+  composes: control from "./TextInput.module.css";
+  composes: md from "./TextInput.module.css";
+  /* Room for the chevron/clear affordance on the right. */
+  padding-right: 2rem;
 }
 
 .inputWithAdornment {
   padding-left: 2.2rem;
 }
 
-.input:focus {
-  border-color: var(--accent-color, #5865f2);
-}
 
 .input:disabled {
   opacity: 0.5;
@@ -95,7 +87,7 @@
   text-align: left;
   background: transparent;
   border: none;
-  color: var(--text-primary, #e7e9ec);
+  color: var(--color-text-primary);
   padding: 0.38rem 0.55rem;
   border-radius: 0.25rem;
   cursor: pointer;
@@ -111,7 +103,7 @@
 }
 
 .option.selected {
-  color: var(--accent-color, #5865f2);
+  color: var(--color-accent);
   font-weight: 600;
 }
 
@@ -129,21 +121,18 @@
    background / padding - `.inputMulti` below resets all of those so
    the input visually dissolves into the wrapper. */
 .inputWrapperMulti {
+  composes: control from "./TextInput.module.css";
   flex-wrap: wrap;
   gap: 0.25rem;
-  padding: 0.2rem 1.8rem 0.2rem 0.35rem;
-  border-radius: 0.35rem;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(0, 0, 0, 0.25);
-  min-height: 1.85rem;
-  box-sizing: border-box;
+  padding: 4px 1.8rem 4px 6px;
+  min-height: 34px;
   cursor: text;
-  transition: border-color 0.12s, box-shadow 0.12s;
 }
 
 .inputWrapperMulti:focus-within {
-  border-color: var(--accent-color, #5865f2);
-  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.18);
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
+  border-color: var(--color-accent);
 }
 
 /* Strip every default look from the input so it blends into the
@@ -174,7 +163,7 @@
   font-size: 0.78rem;
   line-height: 1.25;
   max-width: 100%;
-  color: var(--text-primary, #e7e9ec);
+  color: var(--color-text-primary);
 }
 
 .chipLabel {
@@ -202,7 +191,7 @@
 
 .chipClose:hover {
   background: rgba(255, 255, 255, 0.18);
-  color: var(--text-primary, #e7e9ec);
+  color: var(--color-text-primary);
 }
 
 /* Check-mark badge shown to the left of every option in multi-select
@@ -222,7 +211,7 @@
 }
 
 .option.selected .checkbox {
-  background: var(--accent-color, #5865f2);
-  border-color: var(--accent-color, #5865f2);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
   color: #fff;
 }

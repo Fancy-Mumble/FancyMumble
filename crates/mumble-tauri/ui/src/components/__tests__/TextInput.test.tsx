@@ -8,6 +8,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { Field, TextInput, TextArea, SelectInput, SearchInput } from "../elements/TextInput";
+import { SidebarSearch, ToolbarSearch, PickerSearch, PaletteSearch } from "../elements/SearchFields";
 
 describe("TextInput", () => {
   it("passes native props straight through", () => {
@@ -65,6 +66,49 @@ describe("SearchInput", () => {
     const ref = { current: null as HTMLInputElement | null };
     render(<SearchInput ref={ref} value="" onChange={() => {}} data-testid="s" />);
     expect(ref.current).toBe(screen.getByTestId("s"));
+  });
+});
+
+describe("search variants / positional presets", () => {
+  it("draws its own chrome in the default `field` variant", () => {
+    render(<SearchInput value="" onChange={() => {}} data-testid="s" />);
+    // No bare modifier: the input itself is the field.
+    expect(screen.getByTestId("s").className).not.toMatch(/searchBare/);
+  });
+
+  it("goes bare in the `bar` variant so it doesn't box inside a box", () => {
+    render(<SearchInput variant="bar" value="" onChange={() => {}} data-testid="s" />);
+    expect(screen.getByTestId("s").className).toMatch(/searchBare/);
+  });
+
+  it("palette is bare and larger", () => {
+    render(<SearchInput variant="palette" value="" onChange={() => {}} data-testid="s" />);
+    const cls = screen.getByTestId("s").className;
+    expect(cls).toMatch(/searchBare/);
+    expect(cls).toMatch(/searchPalette/);
+  });
+
+  it("each preset applies its position's variant", () => {
+    render(<PickerSearch value="" onChange={() => {}} data-testid="pick" />);
+    expect(screen.getByTestId("pick").className).toMatch(/searchBare/);
+
+    render(<PaletteSearch value="" onChange={() => {}} data-testid="pal" />);
+    expect(screen.getByTestId("pal").className).toMatch(/searchPalette/);
+  });
+
+  /**
+   * Only `PickerSearch` may be bare, and only because a picker's own bar draws
+   * the field. The sidebar/settings/menu rows are layout-only and the admin
+   * toolbars have no wrapper at all, so those presets must draw their own
+   * border - shipping them bare renders a search with no chrome, which is
+   * exactly what happened once.
+   */
+  it("every self-drawing preset keeps its border", () => {
+    render(<SidebarSearch value="" onChange={() => {}} data-testid="side" />);
+    expect(screen.getByTestId("side").className).not.toMatch(/searchBare/);
+
+    render(<ToolbarSearch value="" onChange={() => {}} data-testid="tool" />);
+    expect(screen.getByTestId("tool").className).not.toMatch(/searchBare/);
   });
 });
 
