@@ -8,6 +8,13 @@
 
     /* Bundler mode */
     "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["src/core/*"],
+      "@legacy/*": ["src/ui/legacy/*"],
+      "@new/*": ["src/ui/new/*"],
+      "@ui/*": ["src/ui/*"]
+    },
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,

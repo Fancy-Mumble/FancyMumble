@@ -1,0 +1,216 @@
+import { useEffect } from "react";
+import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
+import { SafeHtml } from "../../elements/SafeHtml";
+import {
+  CloseIcon,
+  ClockIcon,
+  EditIcon,
+  MapPinIcon,
+  RepeatIcon,
+  TrashIcon,
+  UsersGroupIcon,
+} from "../../../icons";
+import { useCalendarStore } from "@core/features/chat/calendar/calendarStore";
+import { useAppStore } from "@core/store";
+import { getCachedUserAvatar } from "@core/lazyBlobs";
+import { colorFor } from "@core/utils/format";
+import { eventColor, formatRangeFormatted } from "@core/features/chat/calendar/calendarFormat";
+import { useCalendarFormatPreferences } from "@core/features/chat/calendar/useCalendarFormatPreferences";
+import { TID } from "@core/testids";
+import {
+  requestJoinMeeting,
+  requestMeetingInviteLink,
+  EVT_MEETING_INVITE_LINK,
+  type MeetingInviteLinkDetail,
+} from "@core/features/chat/calendar/meetings";
+import styles from "./CalendarPanel.module.css";
+
+const CARD_W = 320;
+
+/** Side card shown when an event is clicked: info + Edit/Delete. */
+export default function EventDetailCard() {
+  const { t } = useTranslation("chat");
+  const detail = useCalendarStore((s) => s.detail);
+  const event = useCalendarStore((s) =>
+    detail ? s.events.find((e) => e.id === detail.eventId) : undefined,
+  );
+  const closeDetail = useCalendarStore((s) => s.closeDetail);
+  const openEditEvent = useCalendarStore((s) => s.openEditEvent);
+  const deleteEvent = useCalendarStore((s) => s.deleteEvent);
+  const users = useAppStore((s) => s.users);
+  const formatPrefs = useCalendarFormatPreferences();
+  const ownSession = useAppStore((s) => s.ownSession);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeDetail();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [closeDetail]);
+
+  if (!detail || !event) return null;
+
+  const duration = event.end - event.start;
+  const occStart = detail.occStart;
+  const occEnd = occStart + duration;
+
+  const organizer = users.find((u) => u.user_id === event.organizerId);
+  const organizerAvatar = organizer
+    ? getCachedUserAvatar(organizer.session, organizer.texture_size)
+    : null;
+
+  // The viewer's registered user_id, used to gate the organiser-only invite link.
+  const ownUserId = users.find((u) => u.session === ownSession)?.user_id ?? null;
+  const isOrganizer = ownUserId != null && ownUserId === event.organizerId;
+
+  // "Join meeting": ask the server to create-or-return the room and admit us.
+  // The inbound `calendar.room` (handled in the store) then navigates us in.
+  const handleJoin = () => {
+    requestJoinMeeting(event.id);
+    closeDetail();
+  };
+
+  // Organiser-only "Copy invite link": request a token URL and copy it once it
+  // arrives back over the plugin channel.
+  const handleCopyInviteLink = () => {
+    const eventId = event.id;
+    const onLink = (e: Event) => {
+      const d = (e as CustomEvent<MeetingInviteLinkDetail>).detail;
+      if (d?.eventId === eventId && d.url) {
+        window.removeEventListener(EVT_MEETING_INVITE_LINK, onLink);
+        void navigator.clipboard?.writeText(d.url).catch(() => {
+          /* clipboard may be unavailable; the link still reached the UI event */
+        });
+      }
+    };
+    window.addEventListener(EVT_MEETING_INVITE_LINK, onLink);
+    setTimeout(() => window.removeEventListener(EVT_MEETING_INVITE_LINK, onLink), 10_000);
+    requestMeetingInviteLink(eventId);
+  };
+
+  // Prefer placing the card to the right of the clicked event; flip left if it
+  // would overflow, then clamp vertically to the viewport.
+  const spaceRight = window.innerWidth - detail.rect.right;
+  const left =
+    spaceRight >= CARD_W + 16 ? detail.rect.right + 8 : Math.max(8, detail.rect.left - CARD_W - 8);
+  const top = Math.min(detail.rect.top, window.innerHeight - 280);
+
+  return createPortal(
+    <>
+      <div className={styles.detailBackdrop} onClick={closeDetail} />
+      <div
+        className={styles.detailCard}
+        style={{ left, top: Math.max(8, top), width: CARD_W }}
+        data-testid={TID.calendarDetailCard}
+      >
+        <div className={styles.detailHeader}>
+          <span className={styles.detailColorDot} style={{ background: eventColor(event) }} />
+          <span className={styles.detailTitle}>{event.title || t("calendar.untitled")}</span>
+          <button
+            type="button"
+            className={styles.iconBtnSmall}
+            onClick={closeDetail}
+            aria-label={t("calendar.cancel")}
+          >
+            <CloseIcon width={14} height={14} />
+          </button>
+        </div>
+
+        <div className={styles.detailOrganizer}>
+          {organizerAvatar ? (
+            <img className={styles.detailAvatar} src={organizerAvatar} alt="" />
+          ) : (
+            <div
+              className={styles.detailAvatarFallback}
+              style={{ background: colorFor(event.organizerName) }}
+            >
+              {(event.organizerName || "?").charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className={styles.detailOrganizerText}>
+            <span className={styles.detailOrganizerName}>{event.organizerName}</span>
+            <span className={styles.detailOrganizerRole}>{t("calendar.organizer")}</span>
+          </div>
+        </div>
+
+        <div className={styles.detailRow}>
+          <ClockIcon width={14} height={14} />
+          <span>{formatRangeFormatted(occStart, occEnd, event.allDay, formatPrefs.timeFormat, formatPrefs.dateFormat)}</span>
+        </div>
+
+        {event.repeat.freq !== "none" && (
+          <div className={styles.detailRow}>
+            <RepeatIcon width={14} height={14} />
+            <span>{t(`calendar.repeat.${event.repeat.freq}`)}</span>
+          </div>
+        )}
+
+        {event.location && (
+          <div className={styles.detailRow}>
+            <MapPinIcon width={14} height={14} />
+            <span>{event.location}</span>
+          </div>
+        )}
+
+        {event.participants.length > 0 && (
+          <div className={styles.detailRow}>
+            <UsersGroupIcon width={14} height={14} />
+            <span>{event.participants.map((p) => p.name).join(", ")}</span>
+          </div>
+        )}
+
+        {event.description && (
+          <div className={styles.detailDescription}>
+            <SafeHtml html={event.description} />
+          </div>
+        )}
+
+        <div className={styles.detailFooter}>
+          <button
+            type="button"
+            className={styles.detailEditBtn}
+            data-testid={TID.calendarJoinMeeting}
+            onClick={handleJoin}
+          >
+            {t("calendar.joinMeeting", { defaultValue: "Join meeting" })}
+          </button>
+          {isOrganizer && (
+            <button
+              type="button"
+              className={styles.detailEditBtn}
+              data-testid={TID.calendarCopyInviteLink}
+              onClick={handleCopyInviteLink}
+            >
+              {t("calendar.copyInviteLink", { defaultValue: "Copy invite link" })}
+            </button>
+          )}
+          <button
+            type="button"
+            className={styles.detailDeleteBtn}
+            onClick={() => {
+              deleteEvent(event.id);
+              closeDetail();
+            }}
+          >
+            <TrashIcon width={14} height={14} />
+            {t("calendar.delete")}
+          </button>
+          <button
+            type="button"
+            className={styles.detailEditBtn}
+            onClick={() => {
+              openEditEvent(event.id);
+              closeDetail();
+            }}
+          >
+            <EditIcon width={14} height={14} />
+            {t("calendar.edit")}
+          </button>
+        </div>
+      </div>
+    </>,
+    document.body,
+  );
+}

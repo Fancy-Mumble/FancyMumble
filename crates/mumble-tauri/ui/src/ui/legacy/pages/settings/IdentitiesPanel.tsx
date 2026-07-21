@@ -1,0 +1,202 @@
+import { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
+import { save, open } from "@tauri-apps/plugin-dialog";
+import { deleteProfileData } from "@core/features/settings/profileData";
+import styles from "./SettingsPage.module.css";
+import panelStyles from "./IdentitiesPanel.module.css";
+import { registerSettings } from "@core/features/settings/settingsSearchRegistry";
+
+registerSettings("identities")
+  .add("identities.createNew", ["certificate", "key", "identity"]);
+
+export function IdentitiesPanel({
+  identities,
+  connectedCertLabel,
+  onRefresh,
+  onEditProfile,
+  isExpert,
+}: Readonly<{
+  identities: string[];
+  connectedCertLabel: string | null;
+  onRefresh: () => void;
+  onEditProfile: (label: string) => void;
+  isExpert: boolean;
+}>) {
+  const [newLabel, setNewLabel] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const { t } = useTranslation(["settings", "common"]);
+
+  const handleCreate = useCallback(async () => {
+    const label = newLabel.trim();
+    if (!label) return;
+    setError(null);
+    try {
+      await invoke("generate_certificate", { label });
+      setNewLabel("");
+      onRefresh();
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [newLabel, onRefresh]);
+
+  const handleDelete = useCallback(
+    async (label: string) => {
+      setError(null);
+      try {
+        await invoke("delete_certificate", { label });
+        await deleteProfileData(label);
+        setConfirmDelete(null);
+        onRefresh();
+      } catch (e) {
+        setError(String(e));
+      }
+    },
+    [onRefresh],
+  );
+
+  const handleExport = useCallback(async (label: string) => {
+    setError(null);
+    try {
+      const destPath = await save({
+        defaultPath: `${label}.fmid`,
+        filters: [{ name: "Fancy Mumble Identity", extensions: ["fmid"] }],
+      });
+      if (!destPath) return;
+      await invoke("export_certificate", { label, destPath });
+    } catch (e) {
+      setError(String(e));
+    }
+  }, []);
+
+  const handleImport = useCallback(async () => {
+    setError(null);
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "Fancy Mumble Identity", extensions: ["fmid"] }],
+      });
+      if (!selected) return;
+      await invoke("import_certificate", { srcPath: selected });
+      onRefresh();
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [onRefresh]);
+
+  return (
+    <>
+      <h2 className={styles.panelTitle}>{t("identities.panelTitle")}</h2>
+
+      <section className={styles.section}>
+        <p className={styles.fieldHint}>{t("identities.description")}</p>
+
+        {error && <p className={styles.error}>{error}</p>}
+
+        {identities.length === 0 ? (
+          <p className={styles.fieldHint} style={{ fontStyle: "italic" }}>
+            {t("identities.noIdentities")}
+          </p>
+        ) : (
+          <ul className={panelStyles.identityList}>
+            {identities.map((label) => (
+              <li
+                key={label}
+                className={`${panelStyles.identityItem}${label === connectedCertLabel ? ` ${panelStyles.identityItemActive}` : ""}`}
+              >
+                <span className={panelStyles.identityLabel}>
+                  {label}
+                  {label === connectedCertLabel && (
+                    <span className={panelStyles.identityActiveBadge}>{t("identities.connectedBadge")}</span>
+                  )}
+                </span>
+
+                <div className={panelStyles.identityActions}>
+                  {isExpert && (
+                    <button
+                      type="button"
+                      className={panelStyles.identityEditBtn}
+                      onClick={() => onEditProfile(label)}
+                    >
+                      {t("identities.editProfile")}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={styles.ghostBtn}
+                    onClick={() => handleExport(label)}
+                  >
+                    {t("identities.export")}
+                  </button>
+
+                  {confirmDelete === label ? (
+                    <div className={styles.confirmBtns}>
+                      <button
+                        type="button"
+                        className={styles.dangerBtn}
+                        onClick={() => handleDelete(label)}
+                      >
+                        {t("identities.confirmDelete")}
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.ghostBtn}
+                        onClick={() => setConfirmDelete(null)}
+                      >
+                        {t("common:actions.cancel")}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.dangerBtn}
+                      onClick={() => setConfirmDelete(label)}
+                    >
+                      {t("identities.delete")}
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className={styles.section}>
+        <h3 className={styles.sectionTitle}>{t("identities.createNew")}</h3>
+        <div className={panelStyles.identityCreateRow}>
+          <input
+            type="text"
+            className={`${styles.input} ${panelStyles.identityCreateRowInput}`}
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+            placeholder={t("identities.createPlaceholder")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreate();
+            }}
+          />
+          <button
+            type="button"
+            className={styles.ghostBtn}
+            onClick={handleCreate}
+            disabled={!newLabel.trim()}
+          >
+            {t("identities.createBtn")}
+          </button>
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <button
+          type="button"
+          className={styles.ghostBtn}
+          onClick={handleImport}
+        >
+          {t("identities.importBtn")}
+        </button>
+      </section>
+    </>
+  );
+}
+

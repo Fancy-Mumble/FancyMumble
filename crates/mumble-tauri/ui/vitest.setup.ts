@@ -5,11 +5,11 @@
  */
 
 import { vi } from "vitest";
-import enChat from "./src/locales/en/chat.json";
-import enCommon from "./src/locales/en/common.json";
-import enServer from "./src/locales/en/server.json";
-import enSettings from "./src/locales/en/settings.json";
-import enSidebar from "./src/locales/en/sidebar.json";
+import enChat from "./src/core/locales/en/chat.json";
+import enCommon from "./src/core/locales/en/common.json";
+import enServer from "./src/core/locales/en/server.json";
+import enSettings from "./src/core/locales/en/settings.json";
+import enSidebar from "./src/core/locales/en/sidebar.json";
 
 type NestedRecord = { [key: string]: unknown };
 
