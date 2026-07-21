@@ -3263,6 +3263,17 @@ export async function initEventListeners(
       (event) => {
         const { sender_session, target_session, signal_type, payload } = event.payload;
         const serverId = event.payload.serverId ?? null;
+        // Broadcast presence is application state, not a concern of any one
+        // visual implementation. Keep it current even when a UI has not
+        // mounted a WebRTC viewer yet (START=0, STOP=1).
+        const state = useAppStore.getState();
+        const belongsToActiveServer = serverId === null || serverId === state.activeServerId;
+        if (sender_session !== null && belongsToActiveServer && (signal_type === 0 || signal_type === 1)) {
+          const next = new Set(state.broadcastingSessions);
+          if (signal_type === 0) next.add(sender_session);
+          else next.delete(sender_session);
+          useAppStore.setState({ broadcastingSessions: next });
+        }
         for (const handler of webRtcSignalHandlers) {
           handler(sender_session, target_session, signal_type, payload, serverId);
         }
