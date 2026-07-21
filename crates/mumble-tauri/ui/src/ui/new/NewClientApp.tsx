@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { initEventListeners, useAppStore } from "@core/store";
+import { getPreferences } from "@core/preferencesStorage";
 import {
   ArrowLeftIcon,
   HashIcon,
@@ -28,6 +29,7 @@ import {
   ServerBrowser,
   SettingsPanel,
   UserCard,
+  UserHoverCard,
   type Surface,
 } from "./NewClientSurfaces";
 
@@ -72,10 +74,10 @@ function ChannelRow({
   );
 }
 
-function MemberRow({ user, own, talking }: { user: UserEntry; own: boolean; talking: boolean }) {
+function MemberRow({ user, own, talking, onHover }: { user: UserEntry; own: boolean; talking: boolean; onHover: (session: number | null) => void }) {
   const muted = user.self_mute || user.mute || user.suppress;
   return (
-    <button type="button" className={styles.member} onClick={() => useAppStore.getState().selectUser(user.session)}>
+    <button type="button" className={styles.member} onClick={() => useAppStore.getState().selectUser(user.session)} onMouseEnter={() => onHover(user.session)} onMouseLeave={() => onHover(null)} onFocus={() => onHover(user.session)} onBlur={() => onHover(null)}>
       <span className={`${styles.avatar} ${talking ? styles.avatarTalking : ""}`}>{initials(user.name)}</span>
       <span><strong>{user.name}{own ? " (you)" : ""}</strong><small>{talking ? "Speaking" : muted ? "Muted" : "Listening"}</small></span>
       {muted ? <MicOffIcon /> : <MicIcon />}
@@ -105,6 +107,8 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
   const [port, setPort] = useState(64738);
   const [username, setUsername] = useState("");
   const [surface, setSurface] = useState<Surface>(null);
+  const [hideEmptyChannels, setHideEmptyChannels] = useState(false);
+  const [hoveredUser, setHoveredUser] = useState<number | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [switchingBack, setSwitchingBack] = useState(false);
   const override = getUiDesignOverride();
@@ -128,6 +132,10 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
 
   const activeSession = sessions.find((session) => session.id === activeServerId);
   const activeChannel = channels.find((channel) => channel.id === selectedChannel) ?? null;
+  const visibleChannels = useMemo(
+    () => channels.filter((channel) => !channel.detached && (!hideEmptyChannels || channel.user_count > 0 || channel.id === currentChannel || channel.id === selectedChannel)),
+    [channels, hideEmptyChannels, currentChannel, selectedChannel],
+  );
   const channelUsers = useMemo(
     () => users.filter((user) => user.channel_id === selectedChannel),
     [users, selectedChannel],
@@ -149,6 +157,17 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
       unlisteners.forEach((unlisten) => unlisten());
     };
   }, [navigate]);
+
+  useEffect(() => {
+    let active = true;
+    const apply = (preferences: { hideEmptyChannels?: boolean }) => {
+      if (active) setHideEmptyChannels(preferences.hideEmptyChannels ?? false);
+    };
+    void getPreferences().then(apply).catch(() => undefined);
+    const onPreferencesChanged = (event: Event) => apply((event as CustomEvent<{ hideEmptyChannels?: boolean }>).detail);
+    globalThis.addEventListener("preferences-changed", onPreferencesChanged);
+    return () => { active = false; globalThis.removeEventListener("preferences-changed", onPreferencesChanged); };
+  }, []);
 
   const connect = async (event: FormEvent) => {
     event.preventDefault();
@@ -240,9 +259,10 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
         <label className={styles.search}><SearchIcon /><input placeholder="Search channels" /></label>
         <div className={styles.sectionLabel}><span>CHANNELS</span><button type="button" aria-label="Create channel"><PlusIcon /></button></div>
         <nav>
-          {channels.filter((channel) => !channel.detached).map((channel) => (
+          {visibleChannels.map((channel) => (
             <ChannelRow key={channel.id} channel={channel} selected={channel.id === selectedChannel} current={channel.id === currentChannel} unread={unreadCounts[channel.id] ?? 0} onSelect={() => void useAppStore.getState().selectChannel(channel.id)} />
           ))}
+          {visibleChannels.length === 0 && <div className={styles.noChannels}>No active channels</div>}
         </nav>
         <div className={styles.voiceDock}>
           <div><span className={styles.avatar}>{initials(users.find((user) => user.session === ownSession)?.name ?? username ?? "You")}</span><span><strong>{users.find((user) => user.session === ownSession)?.name ?? (username || "You")}</strong><small>{inCall ? "Voice connected" : "Voice available"}</small></span></div>
@@ -269,8 +289,9 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
 
       <aside className={styles.members}>
         <div className={styles.panelHeader}><div><small>IN THIS CHANNEL</small><strong>{channelUsers.length} online</strong></div><UsersGroupIcon /></div>
-        <div className={styles.memberList}>{channelUsers.map((user) => <MemberRow key={user.session} user={user} own={user.session === ownSession} talking={talkingSessions.has(user.session)} />)}</div>
+        <div className={styles.memberList}>{channelUsers.map((user) => <MemberRow key={user.session} user={user} own={user.session === ownSession} talking={talkingSessions.has(user.session)} onHover={setHoveredUser} />)}</div>
       </aside>
+      {hoveredUser !== null && selectedUser === null && users.find((user) => user.session === hoveredUser) && <UserHoverCard user={users.find((user) => user.session === hoveredUser)!} />}
       {selectedUser !== null && users.find((user) => user.session === selectedUser) && <UserCard user={users.find((user) => user.session === selectedUser)!} onClose={() => useAppStore.getState().selectUser(null)} />}
       {surface === "servers" && <ServerBrowser onClose={() => setSurface(null)} />}
       {surface === "settings" && <SettingsPanel onClose={() => setSurface(null)} />}

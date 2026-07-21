@@ -17,7 +17,7 @@ button { color:inherit; }
 .serverActive { color:#102535; background:var(--accent); border-color:transparent; box-shadow:0 8px 24px rgba(61,157,215,.16); }
 .addServer { margin-top:auto; border-style:dashed; display:grid; place-items:center; }
 .addServer svg { width:18px; }
-.channels,.members { display:flex; flex-direction:column; }
+.channels,.members { display:flex; flex-direction:column; min-height:0; overflow:hidden; }
 .panelHeader { height:72px; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
 .panelHeader div { min-width:0; display:flex; flex-direction:column; gap:3px; }
 .panelHeader small,.sectionLabel { color:#737e8d; font-size:10px; letter-spacing:.1em; }
@@ -31,7 +31,10 @@ button { color:inherit; }
 .sectionLabel { padding:14px 17px 7px; display:flex; justify-content:space-between; align-items:center; }
 .sectionLabel button { border:0; background:none; color:var(--muted); }
 .sectionLabel svg { width:14px; }
-.channels nav { padding:0 9px; overflow:auto; }
+.channels nav { flex:1 1 0; min-height:0; padding:0 9px 10px; overflow-y:auto; overflow-x:hidden; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.16) transparent; overscroll-behavior:contain; }
+.channels nav::-webkit-scrollbar { width:6px; }
+.channels nav::-webkit-scrollbar-thumb { border-radius:8px; background:rgba(255,255,255,.16); }
+.noChannels { padding:18px 10px; color:#687482; font-size:11px; text-align:center; }
 .channel,.channelActive { width:100%; height:38px; padding:0 10px; display:flex; align-items:center; gap:9px; border:0; border-radius:9px; background:transparent; color:var(--muted); cursor:pointer; text-align:left; }
 .channel:hover { color:var(--text); background:rgba(255,255,255,.035); }
 .channelActive { color:var(--text); background:rgba(255,255,255,.075); }

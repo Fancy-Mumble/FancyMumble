@@ -53,7 +53,7 @@ export function ServerBrowser({ onClose }: { onClose: () => void }) {
   const [username, setUsername] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const reload = () => void getSavedServers().then(setServers);
+  const reload = () => void getSavedServers().then(setServers).catch(() => setServers([]));
   useEffect(reload, []);
 
   const clearForm = () => { setEditing(null); setLabel(""); setHost(""); setPort(64738); };
@@ -113,7 +113,7 @@ const settingRows: Array<{ key: keyof UserPreferences; title: string; detail: st
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [prefs, setPrefs] = useState<UserPreferences | null>(null);
   const [section, setSection] = useState<"general" | "voice" | "notifications" | "privacy" | "appearance">("general");
-  useEffect(() => { void getPreferences().then(setPrefs); }, []);
+  useEffect(() => { void getPreferences().then(setPrefs).catch(() => undefined); }, []);
   const toggle = async (key: keyof UserPreferences) => {
     if (!prefs || typeof prefs[key] !== "boolean") return;
     const next = await updatePreferences({ [key]: !prefs[key] });
@@ -157,6 +157,24 @@ export function UserCard({ user, onClose }: { user: UserEntry; onClose: () => vo
   const channel = useAppStore((state) => state.channels.find((item) => item.id === user.channel_id));
   const muted = user.mute || user.self_mute || user.suppress;
   return <aside className={styles.userCard} aria-label={`${user.name} profile`}><header><button type="button" onClick={onClose}><CloseIcon /></button></header><div className={styles.profileBody}>{avatar ? <img src={avatar} alt="" /> : <span className={styles.profileAvatar}>{user.name.slice(0, 2).toUpperCase()}</span>}<i className={styles.online} /><h2>{user.name}</h2><small>{muted ? "Muted" : "Online"} · #{channel?.name ?? "Unknown"}</small><p>{plainText(user.comment ?? comment) || "This user has not added a profile description yet."}</p><div className={styles.profileFacts}><Fact label="Account" value={user.user_id == null ? "Guest" : "Registered"} /><Fact label="Voice" value={muted ? "Muted" : "Available"} /></div><button type="button" className={styles.primary}><UsersGroupIcon /> Open direct message</button></div></aside>;
+}
+
+export function UserHoverCard({ user }: { user: UserEntry }) {
+  const avatar = useUserAvatar(user.session, user.texture_size);
+  const comment = useUserComment(user.session, user.comment_size);
+  const channel = useAppStore((state) => state.channels.find((item) => item.id === user.channel_id));
+  const muted = user.mute || user.self_mute || user.suppress;
+  return <aside className={styles.userHoverCard} role="tooltip">
+    <div className={styles.hoverBanner} />
+    <div className={styles.hoverProfile}>
+      {avatar ? <img src={avatar} alt="" /> : <span>{user.name.slice(0, 2).toUpperCase()}</span>}
+      <i />
+      <h3>{user.name}</h3>
+      <small>{muted ? "Muted" : "Online"} · #{channel?.name ?? "Unknown"}</small>
+      <p>{plainText(user.comment ?? comment) || "No profile description."}</p>
+      <footer>Click the member to open their full profile</footer>
+    </div>
+  </aside>;
 }
 
 export function LinkPreviews({ embeds, allowExternal }: { embeds: LinkEmbed[]; allowExternal: boolean }) {
