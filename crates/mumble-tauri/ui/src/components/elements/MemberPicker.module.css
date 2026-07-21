@@ -71,12 +71,6 @@
 
 .input {
   width: 100%;
-  padding: 0.35rem 0.55rem;
-  border-radius: 0.35rem;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(0, 0, 0, 0.25);
-  color: var(--text-primary, #e7e9ec);
-  font-size: 0.85rem;
   box-sizing: border-box;
 }
 

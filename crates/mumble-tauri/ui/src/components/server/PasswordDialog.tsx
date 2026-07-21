@@ -3,6 +3,7 @@ import { useState, useCallback, useRef, useEffect, type FormEvent } from "react"
 import { useTranslation } from "react-i18next";
 import { Modal } from "../elements/Modal";
 import styles from "./PasswordDialog.module.css";
+import { TextField } from "../../components/elements/TextField";
 
 interface PasswordDialogProps {
   readonly open: boolean;
@@ -100,23 +101,19 @@ export default function PasswordDialog({
             <p className={styles.message}>
               <span dangerouslySetInnerHTML={{ __html: t("password.differentUser.message", { host: serverHost }) }} />
             </p>
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="pw-dialog-username">
-                {t("password.differentUser.usernameLabel")}
-              </label>
-              <input
-                ref={usernameInputRef}
-                id="pw-dialog-username"
-                className={styles.input}
-                type="text"
-                value={usernameDraft}
-                onChange={(e) => setUsernameDraft(e.target.value)}
-                autoComplete="username"
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-              />
-            </div>
+            <TextField
+              className={styles.field}
+              label={t("password.differentUser.usernameLabel")}
+              ref={usernameInputRef}
+              id="pw-dialog-username"
+              inputClassName={styles.input}
+              value={usernameDraft}
+              onChange={(e) => setUsernameDraft(e.target.value)}
+              autoComplete="username"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+            />
             <div className={styles.actions}>
               <button
                 className={styles.cancelBtn}
@@ -145,20 +142,17 @@ export default function PasswordDialog({
                 : <span dangerouslySetInnerHTML={{ __html: t("password.enterMessage", { target }) }} />}
             </p>
 
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="pw-dialog-input">
-                {t("password.passwordLabel")}
-              </label>
-              <input
-                ref={inputRef}
-                id="pw-dialog-input"
-                className={styles.input}
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-              />
-            </div>
+            <TextField
+              className={styles.field}
+              label={t("password.passwordLabel")}
+              ref={inputRef}
+              id="pw-dialog-input"
+              inputClassName={styles.input}
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
 
             {onChangeUsername && (
               <button

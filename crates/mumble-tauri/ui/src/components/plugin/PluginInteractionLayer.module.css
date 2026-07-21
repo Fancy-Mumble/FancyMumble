@@ -102,12 +102,6 @@
 .btnDanger:hover:not(:disabled) { background: #b91c1c; }
 
 .select {
-  background: var(--color-bg-elevated, #0f172a);
-  color: var(--color-text-primary, #f3f4f6);
-  border: 1px solid var(--color-glass-border-hover, rgba(255, 255, 255, 0.12));
-  border-radius: var(--radius-sm, 8px);
-  padding: 6px 8px;
-  font-size: 12px;
 }
 
 /* Modal */
@@ -185,12 +179,6 @@
 
 .input,
 .textarea {
-  background: var(--color-bg-elevated, #0f172a);
-  color: var(--color-text-primary, #f3f4f6);
-  border: 1px solid var(--color-glass-border-hover, rgba(255, 255, 255, 0.12));
-  border-radius: var(--radius-sm, 8px);
-  padding: 8px 10px;
-  font-size: 13px;
   font-family: inherit;
 }
 

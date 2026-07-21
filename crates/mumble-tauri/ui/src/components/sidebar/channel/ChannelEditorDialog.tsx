@@ -7,6 +7,7 @@ import { MemberPicker } from "../../elements/MemberPicker";
 import { useChannelDescription } from "../../../lazyBlobs";
 const BioEditor = lazy(() => import("../../../pages/settings/BioEditor").then((m) => ({ default: m.BioEditor })));
 import styles from "./ChannelEditorDialog.module.css";
+import { TextField } from "../../../components/elements/TextField";
 import {
   PERM_WRITE,
   PERM_MAKE_CHANNEL,
@@ -226,18 +227,16 @@ export default function ChannelEditorDialog({
         <h3 className={styles.title}>{isCreate ? t("channelEditor.titleCreate") : t("channelEditor.titleEdit")}</h3>
 
         {/* Name */}
-        <div className={styles.field}>
-          <label className={styles.label} htmlFor="ch-ed-name">{t("channelEditor.nameLabel")}</label>
-          <input
-            id="ch-ed-name"
-            className={styles.input}
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={t("channelEditor.namePlaceholder")}
-            autoFocus
-          />
-        </div>
+        <TextField
+          className={styles.field}
+          label={t("channelEditor.nameLabel")}
+          id="ch-ed-name"
+          inputClassName={styles.input}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={t("channelEditor.namePlaceholder")}
+          autoFocus
+        />
 
         {/* Description */}
         <div className={styles.field}>
@@ -253,17 +252,16 @@ export default function ChannelEditorDialog({
 
         {/* Position & Max Users */}
         <div className={styles.row}>
-          <div className={styles.field}>
-            <label className={styles.label} htmlFor="ch-ed-pos">{t("channelEditor.positionLabel")}</label>
-            <input
-              id="ch-ed-pos"
-              className={styles.input}
-              type="number"
-              value={position}
-              onChange={(e) => setPosition(Number(e.target.value))}
-              min={0}
-            />
-          </div>
+          <TextField
+            className={styles.field}
+            label={t("channelEditor.positionLabel")}
+            id="ch-ed-pos"
+            inputClassName={styles.input}
+            type="number"
+            value={position}
+            onChange={(e) => setPosition(Number(e.target.value))}
+            min={0}
+          />
           <div className={styles.field}>
             <label className={styles.label} htmlFor="ch-ed-max">{t("channelEditor.maxUsersLabel")}</label>
             <input
@@ -365,24 +363,23 @@ export default function ChannelEditorDialog({
         </div>
 
         {/* Access password */}
-        <div className={styles.field}>
-          <label className={styles.label} htmlFor="ch-ed-password">{t("channelEditor.passwordLabel")}</label>
-          <input
-            id="ch-ed-password"
-            className={styles.input}
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={
-              isCreate
-                ? t("channelEditor.passwordPlaceholderNew")
-                : channel?.is_enter_restricted
-                  ? t("channelEditor.passwordPlaceholderChange")
-                  : t("channelEditor.passwordPlaceholderNew")
-            }
-            autoComplete="new-password"
-          />
-        </div>
+        <TextField
+          className={styles.field}
+          label={t("channelEditor.passwordLabel")}
+          id="ch-ed-password"
+          inputClassName={styles.input}
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder={
+          isCreate
+          ? t("channelEditor.passwordPlaceholderNew")
+          : channel?.is_enter_restricted
+          ? t("channelEditor.passwordPlaceholderChange")
+          : t("channelEditor.passwordPlaceholderNew")
+          }
+          autoComplete="new-password"
+        />
 
         {/* Persistence settings */}
         <div className={styles.section}>

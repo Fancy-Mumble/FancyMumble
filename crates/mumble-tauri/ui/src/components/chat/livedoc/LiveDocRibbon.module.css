@@ -477,12 +477,6 @@
 .textInput {
   height: 24px;
   width: 150px;
-  padding: 0 8px;
-  background: var(--color-surface, #1e2128);
-  color: var(--color-text-primary, #f5f6f8);
-  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
-  border-radius: var(--radius-sm, 4px);
-  font-size: 12px;
 }
 
 .toggle {

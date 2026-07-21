@@ -83,13 +83,6 @@
 
 .searchInput {
   width: 100%;
-  padding: 6px 8px;
-  background: var(--color-glass-subtle);
-  border: 1px solid var(--color-glass-border);
-  border-radius: 4px;
-  color: var(--color-text-primary);
-  font-size: 12px;
-  outline: none;
 }
 
 .searchInput:focus {

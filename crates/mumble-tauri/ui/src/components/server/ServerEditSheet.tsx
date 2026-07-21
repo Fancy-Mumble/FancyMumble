@@ -13,6 +13,7 @@ import { getServerPassword, setServerPassword } from "../../serverStorage";
 import { isMobile } from "../../utils/platform";
 import MobileBottomSheet from "../elements/MobileBottomSheet";
 import styles from "./ServerEditSheet.module.css";
+import { TextField } from "../../components/elements/TextField";
 
 interface Props {
   server: SavedServer;
@@ -83,50 +84,42 @@ function EditForm({ server, onSave, onClose }: Readonly<Props>) {
     <form className={styles.form} onSubmit={handleSubmit}>
       <h3 className={styles.title}>{t("edit.title")}</h3>
 
-      <label className={styles.fieldLabel}>
-        {t("edit.labelField")}
-        <input
-          className={styles.input}
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder={t("edit.labelPlaceholder")}
-        />
-      </label>
+      <TextField
+        label={t("edit.labelField")}
+        inputClassName={styles.input}
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        placeholder={t("edit.labelPlaceholder")}
+      />
 
-      <label className={styles.fieldLabel}>
-        {t("edit.hostField")}
-        <input
-          className={styles.input}
-          value={host}
-          onChange={(e) => setHost(e.target.value)}
-          placeholder={t("edit.hostPlaceholder")}
-          required
-        />
-      </label>
+      <TextField
+        label={t("edit.hostField")}
+        inputClassName={styles.input}
+        value={host}
+        onChange={(e) => setHost(e.target.value)}
+        placeholder={t("edit.hostPlaceholder")}
+        required
+      />
 
-      <label className={styles.fieldLabel}>
-        {t("edit.portField")}
-        <input
-          className={styles.input}
-          type="number"
-          value={port}
-          onChange={(e) => setPort(e.target.value)}
-          placeholder={t("edit.portPlaceholder")}
-          min={1}
-          max={65535}
-        />
-      </label>
+      <TextField
+        label={t("edit.portField")}
+        inputClassName={styles.input}
+        type="number"
+        value={port}
+        onChange={(e) => setPort(e.target.value)}
+        placeholder={t("edit.portPlaceholder")}
+        min={1}
+        max={65535}
+      />
 
-      <label className={styles.fieldLabel}>
-        {t("edit.usernameField")}
-        <input
-          className={styles.input}
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder={t("edit.usernamePlaceholder")}
-          required
-        />
-      </label>
+      <TextField
+        label={t("edit.usernameField")}
+        inputClassName={styles.input}
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+        placeholder={t("edit.usernamePlaceholder")}
+        required
+      />
 
       <label className={styles.fieldLabel}>
         {t("edit.identityField")}

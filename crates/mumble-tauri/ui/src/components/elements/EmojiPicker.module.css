@@ -35,13 +35,6 @@
 
 .searchInput {
   width: 100%;
-  padding: 6px 10px;
-  border: 1px solid var(--color-glass-border);
-  border-radius: 8px;
-  background: var(--color-glass-hover);
-  color: var(--color-text-primary);
-  font-size: 0.82rem;
-  outline: none;
   box-sizing: border-box;
 }
 

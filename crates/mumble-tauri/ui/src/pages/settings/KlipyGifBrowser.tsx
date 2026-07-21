@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./KlipyGifBrowser.module.css";
 import { getActiveApiKey } from "../../components/chat/gif/klipyConfig";
-import { SearchInput } from "../../components/elements/TextInput";
+import { PickerSearch } from "../../components/elements/SearchFields";
 
 const KLIPY_BASE = "https://api.klipy.com/api/v1";
 
@@ -328,7 +328,7 @@ export function KlipyGifBrowser({ onSelect }: Readonly<KlipyGifBrowserProps>) {
       )}
 
       <div className={styles.searchBar}>
-        <SearchInput
+        <PickerSearch
           className={styles.searchInput}
           placeholder={searchPlaceholder}
           value={searchQuery}

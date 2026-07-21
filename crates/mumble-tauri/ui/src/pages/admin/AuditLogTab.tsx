@@ -284,7 +284,7 @@ function AuditSettingField({
       return (
         <TextInput
           type="number"
-          fieldSize="sm"
+          size="small"
           value={value}
           aria-label={setting.label || setting.key}
           data-audit-setting={setting.key}
@@ -294,7 +294,7 @@ function AuditSettingField({
     case "enum":
       return (
         <SelectInput
-          fieldSize="sm"
+          size="small"
           value={value}
           aria-label={setting.label || setting.key}
           data-audit-setting={setting.key}
@@ -310,7 +310,7 @@ function AuditSettingField({
       return (
         <TextInput
           type="password"
-          fieldSize="sm"
+          size="small"
           value={value}
           placeholder={setting.secret ? "•••••••• (unchanged)" : ""}
           autoComplete="new-password"
@@ -323,7 +323,7 @@ function AuditSettingField({
       return (
         <TextInput
           type="text"
-          fieldSize="sm"
+          size="small"
           value={value}
           aria-label={setting.label || setting.key}
           data-audit-setting={setting.key}

@@ -27,13 +27,7 @@
 .input {
   flex: 1;
   min-width: 0;
-  padding: 0.35rem 0.55rem;
-  border-radius: 0.35rem;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(0, 0, 0, 0.25);
-  color: var(--text-primary, #e7e9ec);
   font-family: monospace;
-  font-size: 0.85rem;
 }
 
 .clearBtn {

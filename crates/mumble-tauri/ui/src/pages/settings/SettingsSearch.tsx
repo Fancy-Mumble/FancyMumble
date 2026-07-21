@@ -10,7 +10,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getSettingsSearchIndex } from "./settingsSearchRegistry";
 import styles from "./SettingsSearch.module.css";
-import { SearchInput } from "../../components/elements/TextInput";
+import { SidebarSearch } from "../../components/elements/SearchFields";
 
 interface TabInfo {
   readonly id: string;
@@ -53,7 +53,7 @@ export function SettingsSearch({
 
   return (
     <div className={styles.wrap}>
-      <SearchInput
+      <SidebarSearch
         className={styles.input}
         value={query}
         placeholder={tStr("search.placeholder", { defaultValue: "Search settings…" })}

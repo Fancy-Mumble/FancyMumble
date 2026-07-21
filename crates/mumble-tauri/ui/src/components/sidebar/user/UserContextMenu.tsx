@@ -19,6 +19,7 @@ import Toast, { type ToastData } from "../../elements/Toast";
 import styles from "./UserContextMenu.module.css";
 import pickerStyles from "../move/MoveUserPicker.module.css";
 import { PERM_BAN, PERM_KICK, PERM_MOVE, PERM_MUTE_DEAFEN, PERM_REGISTER, PERM_RESET_USER_CONTENT } from "../../../utils/permissions";
+import { SidebarSearch } from "../../elements/SearchFields";
 
 // -- Local per-session state --------------------------------------
 
@@ -627,13 +628,13 @@ function MoveUserChannelPicker({
           </span>
         </div>
         <div className={pickerStyles.searchWrap}>
-          <input
-            type="search"
-            className={pickerStyles.search}
+          <SidebarSearch
             autoFocus
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
+            onClear={() => setFilter("")}
             placeholder={t("movePicker.filterPlaceholder")}
+            aria-label={t("movePicker.filterPlaceholder")}
           />
         </div>
         <div className={pickerStyles.list}>

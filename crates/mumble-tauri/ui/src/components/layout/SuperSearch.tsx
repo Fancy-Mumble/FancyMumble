@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import type { SearchResult, SearchCategory } from "../../types";
 import styles from "./SuperSearch.module.css";
-import { SearchInput } from "../../components/elements/TextInput";
+import { PaletteSearch } from "../../components/elements/SearchFields";
 
 const CATEGORY_ORDER: SearchCategory[] = ["channel", "user", "message"];
 
@@ -158,7 +158,7 @@ export function SuperSearch({
       <div className={styles.panel}>
         {/* Search input */}
         <div className={styles.inputRow}>
-          <SearchInput
+          <PaletteSearch
             ref={inputRef}
             className={styles.input}
             placeholder={t("superSearch.placeholder")}

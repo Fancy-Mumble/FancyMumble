@@ -30,7 +30,7 @@ import DashboardChart from "./DashboardChart";
 import { DocumentsSection } from "./DocumentsSection";
 import panel from "./AdminPanel.module.css";
 import styles from "./FileServerTab.module.css";
-import { SearchInput } from "../../components/elements/TextInput";
+import { ToolbarSearch } from "../../components/elements/SearchFields";
 
 const PALETTE = ["#2aabee", "#8a5cf6", "#f0428a", "#38b27a", "#e0892f", "#e0533c", "#3c8be0"];
 const CATEGORIES: FileCategory[] = ["image", "video", "audio", "document", "archive", "other"];
@@ -549,7 +549,7 @@ export function FileServerTab() {
       {/* Toolbar: unified search across files + documents, plus bulk select. */}
       <div className={styles.toolbar}>
         <div className={styles.searchRow}>
-          <SearchInput
+          <ToolbarSearch
             className={styles.searchInput}
             placeholder={t("fileServer.searchAll", { defaultValue: "Search files & documents…" })}
             value={search}

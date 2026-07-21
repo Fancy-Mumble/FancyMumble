@@ -147,13 +147,6 @@
 
 .input {
   width: 100%;
-  padding: 13px 16px;
-  background: var(--color-glass);
-  border: 1px solid var(--color-glass-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-primary);
-  font-size: 15px;
-  outline: none;
   transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
 }
 

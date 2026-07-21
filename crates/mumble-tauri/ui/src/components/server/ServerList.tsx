@@ -6,7 +6,7 @@ import { isMobile } from "../../utils/platform";
 import SwipeableCard from "../elements/SwipeableCard";
 import { TID } from "../../testids";
 import styles from "./ServerList.module.css";
-import { SearchInput } from "../../components/elements/TextInput";
+import { ToolbarSearch } from "../../components/elements/SearchFields";
 
 interface Props {
   servers: SavedServer[];
@@ -335,7 +335,7 @@ export default function ServerList({
       {/* Search bar - only shown when there are saved servers */}
       {servers.length > 0 && (
         <div className={styles.searchWrap}>
-          <SearchInput
+          <ToolbarSearch
             className={styles.searchInput}
             placeholder={t("list.searchPlaceholder")}
             value={searchQuery}

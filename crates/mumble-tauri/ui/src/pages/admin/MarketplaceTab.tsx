@@ -13,7 +13,7 @@ import { getPreferences, updatePreferences } from "../../preferencesStorage";
 import { isPluginAdminSupported } from "./index";
 import styles from "./AdminPanel.module.css";
 import mk from "./MarketplaceTab.module.css";
-import { SearchInput } from "../../components/elements/TextInput";
+import { ToolbarSearch } from "../../components/elements/SearchFields";
 
 interface MarketplacePlugin {
   id: string;
@@ -210,7 +210,7 @@ export function MarketplaceTab() {
       <h2 className={styles.panelTitle}>{t("marketplace.title")}</h2>
 
       <div className={styles.toolbar}>
-        <SearchInput
+        <ToolbarSearch
           className={styles.searchInput}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
