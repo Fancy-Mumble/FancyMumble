@@ -1,0 +1,165 @@
+import { ChevronRightIcon, CloseIcon } from "../../icons";
+import { useState, useCallback, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import { eventToShortcut } from "@core/features/settings/shortcutHelpers";
+import styles from "./SettingsPage.module.css";
+
+export function Accordion({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className={styles.accordion}>
+      <button
+        type="button"
+        className={styles.accordionHeader}
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <ChevronRightIcon
+          className={`${styles.accordionChevron} ${open ? styles.accordionChevronOpen : ""}`}
+          width={14}
+          height={14}
+        />
+        <span>{title}</span>
+      </button>
+      {open && <div className={styles.accordionBody}>{children}</div>}
+    </div>
+  );
+}
+
+export function Toggle({
+  checked,
+  onChange,
+  disabled,
+  testId,
+  ariaLabel,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+  /** Optional `data-testid` so callers can address the switch itself. */
+  testId?: string;
+  ariaLabel?: string;
+}) {
+  return (
+    <button
+      type="button"
+      className={`${styles.toggle} ${checked ? styles.toggleOn : ""}`}
+      onClick={onChange}
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      data-testid={testId}
+      disabled={disabled}
+    >
+      <span className={styles.toggleKnob} />
+    </button>
+  );
+}
+
+export function SliderField({
+  label,
+  hint,
+  min,
+  max,
+  step,
+  value,
+  onChange,
+  format,
+}: {
+  label: string;
+  hint?: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  onChange: (v: number) => void;
+  format?: (v: number) => string;
+}) {
+  const display = format ? format(value) : String(value);
+  return (
+    <div className={styles.field}>
+      <div className={styles.fieldRow}>
+        <label className={styles.fieldLabel}>{label}</label>
+        <span className={styles.sliderValue}>{display}</span>
+      </div>
+      {hint && <p className={styles.fieldHint}>{hint}</p>}
+      <input
+        type="range"
+        className={styles.slider}
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+      />
+    </div>
+  );
+}
+
+export function ShortcutRecorder({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (shortcut: string) => void;
+}) {
+  const [recording, setRecording] = useState(false);
+  const { t } = useTranslation("settings");
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const shortcut = eventToShortcut(e);
+      if (shortcut) {
+        onChange(shortcut);
+        setRecording(false);
+      }
+    },
+    [onChange],
+  );
+
+  return (
+    <div className={styles.recorderRow}>
+      <span className={styles.recorderLabel}>{label}</span>
+      {recording ? (
+        <input
+          className={`${styles.recorderInput} ${styles.recorderActive}`}
+          autoFocus
+          readOnly
+          placeholder={t("shared.shortcutPlaceholder")}
+          onKeyDown={handleKeyDown}
+          onBlur={() => setRecording(false)}
+        />
+      ) : (
+        <button
+          type="button"
+          className={styles.recorderBtn}
+          onClick={() => setRecording(true)}
+        >
+          {value || t("shared.shortcutNotSet")}
+        </button>
+      )}
+      <button
+        type="button"
+        className={styles.clearBtn}
+        style={{ visibility: value ? "visible" : "hidden" }}
+        onClick={() => onChange("")}
+        title={t("shared.clearShortcutTitle")}
+        disabled={!value}
+      >
+        <CloseIcon width={14} height={14} />
+      </button>
+    </div>
+  );
+}

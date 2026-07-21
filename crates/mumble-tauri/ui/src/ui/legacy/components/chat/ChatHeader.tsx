@@ -1,0 +1,396 @@
+import { ArrowRightIcon, BellIcon, BellOffIcon, CalendarIcon, DatabaseIcon, FileTextIcon, FolderIcon, PinIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, ShieldCheckIcon, ShieldIcon, UsersGroupIcon, WebcamIcon } from "../../icons";
+import { useTranslation } from "react-i18next";
+import { isMobile } from "@core/utils/platform";
+import type { KeyTrustLevel } from "@core/types";
+import KeyTrustIndicator from "../security/KeyTrustIndicator";
+import KebabMenu, { type KebabMenuItem } from "../elements/KebabMenu";
+import styles from "./ChatView.module.css";
+import { colorFor } from "../sidebar/user/UserListItem";
+import { TID } from "@core/testids";
+
+/** Info about the active broadcast, passed in when streaming is active. */
+export interface BroadcastInfo {
+  /** Name of the broadcaster. */
+  broadcasterName: string;
+  /** Avatar data URL (or null for initial-based avatar). */
+  avatarUrl: string | null;
+  /** Number of viewers in the channel (excluding the broadcaster). */
+  viewerCount: number;
+  /** Whether the current user is the broadcaster. */
+  isOwnBroadcast: boolean;
+  /** Channel name the broadcast is happening in. */
+  channelName: string;
+  /** Called when the user clicks the close/stop button in the stream header. */
+  onClose: () => void;
+}
+
+interface ChatHeaderProps {
+  readonly channelName: string;
+  readonly memberCount: number;
+  readonly isInChannel: boolean;
+  readonly isDm?: boolean;
+  readonly isPersisted?: boolean;
+  /** Whether this chat is end-to-end encrypted (a signal_v1 / fancy archive
+   *  channel). Drives the header lock badge so the user always knows whether
+   *  their chat is E2E or a classic (server-readable) chat. */
+  readonly isE2E?: boolean;
+  readonly onJoin?: () => void;
+  readonly onChannelInfoToggle?: () => void;
+  readonly onChannelSearch?: () => void;
+  readonly keyTrustLevel?: KeyTrustLevel;
+  readonly onVerifyClick?: () => void;
+  readonly onPollCreate?: () => void;
+  readonly isSilenced?: boolean;
+  readonly onToggleSilence?: () => void;
+  readonly isScreenSharing?: boolean;
+  readonly onToggleScreenShare?: () => void;
+  /** Whether the active broadcast carries a camera track (camera button state). */
+  readonly isCameraSharing?: boolean;
+  /** Camera share button next to the screen share one (GNOME portal flow,
+   *  where the in-app picker - and with it the Devices tab - is hidden). */
+  readonly onToggleCameraShare?: () => void;
+  /** When set, the share button is shown but disabled with this tooltip. */
+  readonly screenShareDisabledReason?: string;
+  /** True when the server has a WebRTC SFU module for server-relayed screen sharing. */
+  readonly sfuAvailable?: boolean;
+  /** When a stream is active, display broadcast info in the header. */
+  readonly broadcastInfo?: BroadcastInfo;
+  /** Whether there are unseen pin changes (shows red dot on kebab & menu item). */
+  readonly hasNewPins?: boolean;
+  /** Called when the user opens the pinned messages panel. */
+  readonly onPinnedMessages?: () => void;
+  /** Whether the user has unseen completed downloads. */
+  readonly hasNewDownloads?: boolean;
+  /** Called when the user opens the downloads panel. */
+  readonly onDownloads?: () => void;
+  /** Called when the user opens the "my shared files" panel. */
+  readonly onMySharedFiles?: () => void;
+  /** Called when the user opens the saved document library. */
+  readonly onOpenDocLibrary?: () => void;
+  /** Called when the user opens the calendar panel. */
+  readonly onOpenCalendar?: () => void;
+  /** Called when the user clicks "Pop out DM" (only meaningful when isDm). */
+  readonly onPopOutDm?: () => void;
+}
+
+function buildKebabItems({
+  onPollCreate,
+  isSilenced,
+  onToggleSilence,
+  hasNewPins,
+  onPinnedMessages,
+  hasNewDownloads,
+  onDownloads,
+  onMySharedFiles,
+  onOpenDocLibrary,
+  onChannelSearch,
+  onChannelInfoToggle,
+  t,
+}: Pick<ChatHeaderProps, "onPollCreate" | "isSilenced" | "onToggleSilence" | "hasNewPins" | "onPinnedMessages" | "hasNewDownloads" | "onDownloads" | "onMySharedFiles" | "onOpenDocLibrary" | "onChannelSearch" | "onChannelInfoToggle"> & { t: (key: string) => string }): KebabMenuItem[] {
+  const items: KebabMenuItem[] = [];
+  if (onChannelSearch) {
+    items.push({
+      id: "channel-search",
+      label: t("header.searchInChannel"),
+      icon: <SearchIcon width={16} height={16} />,
+      onClick: onChannelSearch,
+    });
+  }
+  if (onChannelInfoToggle) {
+    items.push({
+      id: "channel-info",
+      label: t("header.channelInfo"),
+      icon: <FolderIcon width={16} height={16} />,
+      onClick: onChannelInfoToggle,
+    });
+  }
+  if (onPinnedMessages) {
+    items.push({
+      id: "pinned-messages",
+      label: t("header.pinnedMessages"),
+      icon: <PinIcon width={15} height={15} />,
+      badge: hasNewPins,
+      onClick: onPinnedMessages,
+    });
+  }
+  if (onDownloads) {
+    items.push({
+      id: "downloads",
+      label: t("header.downloads"),
+      icon: <FolderIcon width={16} height={16} />,
+      badge: hasNewDownloads,
+      onClick: onDownloads,
+    });
+  }
+  if (onMySharedFiles) {
+    items.push({
+      id: "my-shared-files",
+      label: t("header.mySharedFiles"),
+      icon: <FileTextIcon width={15} height={15} />,
+      onClick: onMySharedFiles,
+    });
+  }
+  if (onPollCreate) {
+    items.push({
+      id: "create-poll",
+      label: t("header.createPoll"),
+      icon: <PollIcon width={16} height={16} />,
+      onClick: onPollCreate,
+    });
+  }
+  if (onOpenDocLibrary) {
+    items.push({
+      id: "browse-documents",
+      label: t("header.browseDocuments"),
+      icon: <FileTextIcon width={16} height={16} />,
+      onClick: onOpenDocLibrary,
+    });
+  }
+  if (onToggleSilence) {
+    items.push({
+      id: "toggle-silence",
+      label: isSilenced ? t("header.unmuteChannel") : t("header.muteChannel"),
+      icon: isSilenced
+        ? <BellIcon width={16} height={16} />
+        : <BellOffIcon width={16} height={16} />,
+      active: isSilenced,
+      onClick: onToggleSilence,
+    });
+  }
+  return items;
+}
+
+export default function ChatHeader({
+  channelName,
+  memberCount,
+  isInChannel,
+  isDm,
+  isPersisted,
+  isE2E,
+  onJoin,
+  onChannelInfoToggle,
+  onChannelSearch,
+  keyTrustLevel,
+  onVerifyClick,
+  onPollCreate,
+  isSilenced,
+  onToggleSilence,
+  isScreenSharing,
+  onToggleScreenShare,
+  isCameraSharing,
+  onToggleCameraShare,
+  screenShareDisabledReason,
+  sfuAvailable,
+  broadcastInfo,
+  hasNewPins,
+  onPinnedMessages,
+  hasNewDownloads,
+  onDownloads,
+  onMySharedFiles,
+  onOpenDocLibrary,
+  onOpenCalendar,
+  onPopOutDm,
+}: ChatHeaderProps) {
+  const { t } = useTranslation("chat");
+  const tStr = t as (key: string) => string;
+  const prefix = isDm ? "@" : "#";
+  const subtitle = isDm ? t("header.directMessage") : t("header.members", { count: memberCount });
+
+  const privateBadge = isDm;
+  const isStreaming = !!broadcastInfo;
+
+  return (
+    <div className={`${styles.header} ${isStreaming ? styles.headerStreaming : ""}`}>
+      {/* Broadcaster info (replaces channel info when streaming) */}
+      {isStreaming ? (
+        <div className={styles.headerInfo}>
+          <div className={styles.broadcasterRow}>
+            <div
+              className={styles.broadcasterAvatar}
+              style={{
+                background: broadcastInfo.avatarUrl
+                  ? "transparent"
+                  : colorFor(broadcastInfo.broadcasterName),
+              }}
+            >
+              {broadcastInfo.avatarUrl ? (
+                <img
+                  src={broadcastInfo.avatarUrl}
+                  alt={broadcastInfo.broadcasterName}
+                  className={styles.broadcasterAvatarImg}
+                />
+              ) : (
+                broadcastInfo.broadcasterName.charAt(0).toUpperCase()
+              )}
+            </div>
+            <div className={styles.broadcasterMeta}>
+              <span className={styles.broadcasterName}>
+                {broadcastInfo.isOwnBroadcast ? t("header.you") : broadcastInfo.broadcasterName}
+                <span className={styles.broadcasterChannel}> - {broadcastInfo.channelName}</span>
+              </span>
+              <span className={styles.broadcastLabel}>
+                <span className={styles.liveDot} />
+                {t("liveDocBroadcast.sharing", { ns: "chat" })}
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className={styles.headerInfo}>
+          <h2 className={styles.channelName} data-testid={TID.chatHeaderTitle}>
+            {prefix} {channelName}
+            {isPersisted && (
+              <DatabaseIcon
+                className={styles.persistedIcon}
+                width={14}
+                height={14}
+                aria-label={t("header.persistedChat")}
+              >
+                <title>{t("header.persistedChatTooltip")}</title>
+              </DatabaseIcon>
+            )}
+            {isE2E ? (
+              <ShieldCheckIcon
+                className={styles.e2eBadge}
+                width={14}
+                height={14}
+                data-testid={TID.chatE2EBadge}
+                aria-label={t("header.e2eEncrypted", { defaultValue: "End-to-end encrypted" })}
+              >
+                <title>
+                  {t("header.e2eEncryptedTooltip", {
+                    defaultValue: "End-to-end encrypted - the server cannot read these messages.",
+                  })}
+                </title>
+              </ShieldCheckIcon>
+            ) : (
+              isDm && (
+                <ShieldIcon
+                  className={styles.e2eBadgeOff}
+                  width={14}
+                  height={14}
+                  aria-label={t("header.notE2E", { defaultValue: "Not end-to-end encrypted" })}
+                >
+                  <title>
+                    {t("header.notE2ETooltip", {
+                      defaultValue: "Classic direct message - not end-to-end encrypted or persisted.",
+                    })}
+                  </title>
+                </ShieldIcon>
+              )
+            )}
+          </h2>
+          {!isMobile && (<span className={styles.memberCount}>{subtitle}</span>)}
+        </div>
+      )}
+
+      <div className={styles.headerActions}>
+        {/* Viewer count (when streaming, shown on the right) */}
+        {isStreaming && (
+          <span className={styles.viewerCount}>
+            <UsersGroupIcon width={14} height={14} />
+            {broadcastInfo.viewerCount}
+          </span>
+        )}
+        {keyTrustLevel && !privateBadge && (
+          <KeyTrustIndicator
+            trustLevel={keyTrustLevel}
+            onVerifyClick={onVerifyClick}
+          />
+        )}
+        {privateBadge && onPopOutDm && (
+          <button
+            className={styles.serverInfoBtn}
+            onClick={onPopOutDm}
+            aria-label={t("header.popOutDm")}
+            title={t("header.popOutDm")}
+          >
+            <PopoutIcon width={18} height={18} />
+          </button>
+        )}
+        {onChannelSearch && !privateBadge && !isMobile && (
+          <button
+            className={styles.serverInfoBtn}
+            onClick={onChannelSearch}
+            aria-label={t("header.searchInChannel")}
+            title={t("header.searchInChannel")}
+          >
+            <SearchIcon width={18} height={18} />
+          </button>
+        )}
+        {onChannelInfoToggle && !privateBadge && !isMobile && (
+          <button
+            className={styles.serverInfoBtn}
+            onClick={onChannelInfoToggle}
+            aria-label={t("header.channelInfo")}
+            title={t("header.channelInfo")}
+          >
+            <FolderIcon width={18} height={18} />
+          </button>
+        )}
+        {onOpenCalendar && !isMobile && (
+          <button
+            className={styles.serverInfoBtn}
+            onClick={onOpenCalendar}
+            aria-label={t("header.calendar")}
+            title={t("header.calendar")}
+            data-testid={TID.calendarHeaderButton}
+          >
+            <CalendarIcon width={18} height={18} />
+          </button>
+        )}
+        {onToggleScreenShare && !privateBadge && (
+          <button
+            className={`${styles.serverInfoBtn} ${isScreenSharing ? styles.screenShareActive : ""}`}
+            onClick={onToggleScreenShare}
+            disabled={!!screenShareDisabledReason}
+            data-testid={TID.screenShareToggle}
+            aria-label={isScreenSharing ? t("header.changeSharing") : t("header.shareScreen")}
+            title={
+              screenShareDisabledReason ?? (
+                isScreenSharing
+                  ? t("header.changeSharing")
+                  : sfuAvailable
+                    ? t("header.shareScreenRelayed")
+                    : t("header.shareScreenP2P")
+              )
+            }
+          >
+            <ScreenShareIcon width={18} height={18} />
+          </button>
+        )}
+        {onToggleCameraShare && !privateBadge && (
+          <button
+            className={`${styles.serverInfoBtn} ${isCameraSharing ? styles.screenShareActive : ""}`}
+            onClick={onToggleCameraShare}
+            disabled={!!screenShareDisabledReason}
+            data-testid={TID.cameraShareToggle}
+            aria-label={isCameraSharing ? t("header.changeCamera") : t("header.shareCamera")}
+            title={
+              screenShareDisabledReason ?? (
+                isCameraSharing ? t("header.changeCamera") : t("header.shareCamera")
+              )
+            }
+          >
+            <WebcamIcon width={18} height={18} />
+          </button>
+        )}
+        {/* The stream close (×) now lives on the stream panel itself (top-right),
+            unified with the other chat-splitting panels - see ResizableSplitPanel
+            / StreamFocusView. */}
+        {!privateBadge && (
+          <KebabMenu
+            items={buildKebabItems({ onPollCreate, isSilenced, onToggleSilence, hasNewPins, onPinnedMessages, hasNewDownloads, onDownloads, onMySharedFiles, onOpenDocLibrary, onChannelSearch: isMobile ? onChannelSearch : undefined, onChannelInfoToggle: isMobile ? onChannelInfoToggle : undefined, t: tStr })}
+            ariaLabel={t("header.channelOptions")}
+            badge={hasNewPins || hasNewDownloads}
+          />
+        )}
+        {!isInChannel && onJoin && (
+          <button className={styles.joinBtn} onClick={onJoin}>
+            {isMobile ? <ArrowRightIcon width={18} height={18} /> : t("header.joinChannel")}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

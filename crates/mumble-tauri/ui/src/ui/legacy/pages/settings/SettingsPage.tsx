@@ -1,0 +1,948 @@
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { load } from "@core/utils/store";
+import type { AudioDevice, AudioSettings, FancyProfile, UserMode, TimeFormat, DateFormat, NumberFormat, WelcomeMessageDisplay } from "@core/types";
+import { getPreferences, updatePreferences, getSavedAudioSettings, saveAudioSettings } from "@core/preferencesStorage";
+import { serializeProfile, dataUrlToBytes } from "@core/profileFormat";
+import { setKlipyApiKey } from "@core/features/chat/gif/klipyConfig";
+import { useAppStore } from "@core/store";
+import {
+  type ShortcutBindings,
+  DEFAULT_SHORTCUTS,
+  loadShortcuts,
+  saveShortcuts,
+  applyChangedShortcut,
+} from "@core/features/settings/shortcutHelpers";
+import { loadProfileData, saveProfileData, migrateProfilesToIdentities } from "@core/features/settings/profileData";
+import { ProfilePanel } from "./ProfilePanel";
+import { AudioPanel } from "./AudioPanel";
+import { ShortcutsPanel } from "./ShortcutsPanel";
+import { AdvancedPanel } from "./AdvancedPanel";
+import { PrivacyPanel } from "./PrivacyPanel";
+import { IdentitiesPanel } from "./IdentitiesPanel";
+import { PersonalizationPanel } from "./PersonalizationPanel";
+import { LocalizationPanel } from "./LocalizationPanel";
+import { NotificationsPanel, DEFAULT_NOTIFICATION_SOUNDS } from "./NotificationsPanel";
+import { SettingsSearch } from "./SettingsSearch";
+import { getNotificationSounds, saveNotificationSounds } from "@core/preferencesStorage";
+import { ProfilePreviewCard } from "./ProfilePreviewCard";
+import { loadPersonalization, savePersonalization, type PersonalizationData } from "../../personalizationStorage";
+import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
+import {
+  UserIcon, MicIcon, KeyboardIcon, KeyIcon, BellIcon, LockIcon,
+  PaletteIcon, GlobeIcon, PuzzleIcon, SlidersIcon, UsersGroupIcon,
+  ShieldIcon,
+} from "../../icons";
+import { AccountPanel } from "./AccountPanel";
+import { isAccountSettingsSupported } from "@core/features/settings/accountStore";
+import ChannelsAndRolesPanel from "../../components/onboarding/ChannelsAndRolesPanel";
+import { isOnboardingSupported } from "@core/features/onboarding/onboardingStore";
+import PluginsPanel from "./PluginsPanel";
+import { isMobile } from "@core/utils/platform";
+import styles from "./SettingsPage.module.css";
+
+// -- Types & constants ----------------------------------------------
+
+type Tab = "profile" | "account" | "voice" | "shortcuts" | "identities" | "advanced" | "personalize" | "localization" | "notifications" | "privacy" | "channels-roles" | "plugins";
+
+const DEFAULT_AUDIO: AudioSettings = {
+  selected_device: null,
+  auto_gain: true,
+  vad_threshold: 0.3,
+  max_gain_db: 15,
+  noise_gate_close_ratio: 0.8,
+  hold_frames: 15,
+  push_to_talk: false,
+  push_to_talk_key: null,
+  bitrate_bps: 72000,
+  frame_size_ms: 20,
+  noise_suppression: true,
+  denoiser_algorithm: "rnnoise",
+  denoiser_params: {},
+  selected_output_device: null,
+  input_volume: 1,
+  output_volume: 1,
+  auto_input_sensitivity: false,
+  force_tcp_audio: false,
+};
+
+const PERSONALIZATION_DEFAULTS: PersonalizationData = {
+  chatBgOriginal: null,
+  chatBgBlurred: null,
+  chatBgBlurSigma: 0,
+  chatBgOpacity: 0.25,
+  chatBgDim: 0.5,
+  chatBgFit: "cover",
+  bubbleStyle: "bubbles",
+  fontSize: "medium",
+  fontSizeCustomPx: 14,
+  fontFamily: "system",
+  compactMode: false,
+  channelViewerStyle: "flat",
+  theme: "dark",
+  alwaysShowMessageActions: false,
+};
+
+const TAB_ICON_SIZE = 16;
+
+function buildTabs(t: (key: string) => string, hasPlugins: boolean): TabDef<Tab>[] {
+  const tabs: TabDef<Tab>[] = [
+    { id: "profile",        label: t("tabs.profile"),        icon: <UserIcon     width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "voice",          label: t("tabs.voice"),          icon: <MicIcon      width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "shortcuts",      label: t("tabs.shortcuts"),      icon: <KeyboardIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "identities",     label: t("tabs.identities"),     icon: <KeyIcon      width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "notifications",  label: t("tabs.notifications"),  icon: <BellIcon     width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "privacy",        label: t("tabs.privacy"),        icon: <LockIcon     width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "personalize",    label: t("tabs.personalize"),    icon: <PaletteIcon  width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    { id: "localization",   label: t("tabs.localization"),   icon: <GlobeIcon    width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+  ];
+  if (hasPlugins) {
+    tabs.push({ id: "plugins", label: t("tabs.plugins"), icon: <PuzzleIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> });
+  }
+  tabs.push({ id: "advanced", label: t("tabs.advanced"), icon: <SlidersIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> });
+  return tabs;
+}
+
+// -- Main component -------------------------------------------------
+
+export default function SettingsPage() {
+  const navigate = useNavigate();
+  const { t } = useTranslation("settings");
+  const [tab, setTab] = useState<Tab>("profile");
+  // Settings-search: term to flash-highlight on the active tab after a result
+  // is chosen, and a ref to the content area we scan for matching settings.
+  const [highlightTerm, setHighlightTerm] = useState<string | null>(null);
+  const contentRef = useRef<HTMLElement>(null);
+
+  // Flash-highlight settings on the active tab whose heading matches the search
+  // term picked from the search results, and scroll the first into view.
+  useEffect(() => {
+    if (!highlightTerm) return;
+    const root = contentRef.current;
+    if (!root) return;
+    const term = highlightTerm.toLowerCase();
+    const cls = styles.searchHighlight;
+    const matched: HTMLElement[] = [];
+    const rafId = requestAnimationFrame(() => {
+      let first: HTMLElement | null = null;
+      root.querySelectorAll<HTMLElement>("h3").forEach((el) => {
+        if (el.textContent && el.textContent.toLowerCase().includes(term)) {
+          el.classList.add(cls);
+          matched.push(el);
+          if (!first) first = el;
+        }
+      });
+      (first as HTMLElement | null)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    const timer = setTimeout(() => {
+      matched.forEach((el) => el.classList.remove(cls));
+      setHighlightTerm(null);
+    }, 3200);
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timer);
+      matched.forEach((el) => el.classList.remove(cls));
+    };
+  }, [highlightTerm, tab]);
+  const isConnected = useAppStore((s) => s.status) === "connected";
+  const connectedCertLabel = useAppStore((s) => s.connectedCertLabel);
+  const serverFancyVersion = useAppStore((s) => s.serverFancyVersion);
+  const onboardingSupported = isOnboardingSupported(serverFancyVersion);
+  const hasPlugins = useAppStore((s) => s.pluginRegistry.length > 0);
+  const BASE_TABS = buildTabs(t as (key: string) => string, hasPlugins).filter(
+    (tab) => !isMobile || tab.id !== "shortcuts",
+  );
+  // "Account" (self-service server registration) is only meaningful while
+  // connected as a registered user, and only on servers that understand the
+  // account-settings messages (Fancy >= 0.4.1). Legacy Mumble servers and
+  // older Fancy servers would silently drop them, so hide the tab there.
+  const ownUserId = useAppStore((s) => {
+    const own = s.users.find((u) => u.session === s.ownSession);
+    return own?.user_id ?? null;
+  });
+  const showAccountTab =
+    isConnected
+    && ownUserId != null
+    && ownUserId > 0
+    && isAccountSettingsSupported(serverFancyVersion);
+  const WITH_ACCOUNT: TabDef<Tab>[] = showAccountTab
+    ? [
+        BASE_TABS[0],
+        { id: "account", label: t("tabs.account"), icon: <ShieldIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+        ...BASE_TABS.slice(1),
+      ]
+    : BASE_TABS;
+  const TABS: TabDef<Tab>[] = onboardingSupported
+    ? [
+        ...WITH_ACCOUNT.slice(0, WITH_ACCOUNT.length - 1),
+        { id: "channels-roles", label: t("tabs.channelsRoles"), icon: <UsersGroupIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+        WITH_ACCOUNT[WITH_ACCOUNT.length - 1],
+      ]
+    : WITH_ACCOUNT;
+
+  // If the account tab disappears (disconnect / unregister elsewhere) while
+  // it is active, fall back to the profile tab.
+  useEffect(() => {
+    if (tab === "account" && !showAccountTab) {
+      setTab("profile");
+    }
+  }, [tab, showAccountTab]);
+
+  // Audio
+  const [devices, setDevices] = useState<AudioDevice[]>([]);
+  const [outputDevices, setOutputDevices] = useState<AudioDevice[]>([]);
+  const [audioSettings, setAudioSettings] =
+    useState<AudioSettings>(DEFAULT_AUDIO);
+  const initialLoadDone = useRef(false);
+
+  // Preferences
+  const [userMode, setUserMode] = useState<UserMode>("normal");
+  const [defaultUsername, setDefaultUsername] = useState("");
+  const [klipyApiKey, setKlipyApiKeyState] = useState("");
+  const [enableNotifications, setEnableNotifications] = useState(true);
+  const [welcomeMessageDisplay, setWelcomeMessageDisplay] = useState<WelcomeMessageDisplay>("once");
+  const [enableDualPath, setEnableDualPath] = useState(false);
+  const [disableReadReceipts, setDisableReadReceipts] = useState(false);
+  const [disableTypingIndicators, setDisableTypingIndicators] = useState(false);
+  const [disableOsmMaps, setDisableOsmMaps] = useState(false);
+  const [disableLinkPreviews, setDisableLinkPreviews] = useState(false);
+  const [enableExternalEmbeds, setEnableExternalEmbeds] = useState(false);
+  const [streamerMode, setStreamerMode] = useState(false);
+  const [autoReconnect, setAutoReconnect] = useState(false);
+  const [autoUpdateOnStartup, setAutoUpdateOnStartup] = useState(false);
+  const [persistDms, setPersistDms] = useState(false);
+  const [showDisconnectWarning, setShowDisconnectWarning] = useState(true);
+  const [logLevel, setLogLevel] = useState<string>("info");
+  const [logToFile, setLogToFile] = useState(false);
+  const [terminalLogging, setTerminalLogging] = useState(false);
+  const [autoZipLogs, setAutoZipLogs] = useState(false);
+  const [useRodioBackend, setUseRodioBackend] = useState(true);
+  const [timeFormat, setTimeFormat] = useState<TimeFormat>("auto");
+  const [convertToLocalTime, setConvertToLocalTime] = useState(true);
+  const [dateFormat, setDateFormat] = useState<DateFormat>("auto");
+  const [numberFormat, setNumberFormat] = useState<NumberFormat>("auto");
+
+  // Shortcuts
+  const [shortcuts, setShortcuts] = useState<ShortcutBindings>(DEFAULT_SHORTCUTS);
+
+  // Profile (per-identity)
+  const [profile, setProfile] = useState<FancyProfile>({});
+  const [bio, setBio] = useState("");
+  const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
+  const [activeIdentity, setActiveIdentity] = useState<string | null>(null);
+
+  // Identities
+  const [identities, setIdentities] = useState<string[]>([]);
+
+  // Personalization
+  const [personalization, setPersonalization] = useState<PersonalizationData>(PERSONALIZATION_DEFAULTS);
+
+  // Notification sounds
+  const [notificationSounds, setNotificationSounds] = useState(DEFAULT_NOTIFICATION_SOUNDS);
+
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
+  // -- Load everything on mount ------------------------------------
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [devs, outDevs, cfg, saved] = await Promise.all([
+          invoke<AudioDevice[]>("get_audio_devices"),
+          invoke<AudioDevice[]>("get_output_devices"),
+          invoke<AudioSettings>("get_audio_settings"),
+          getSavedAudioSettings(),
+        ]);
+        setDevices(devs);
+        setOutputDevices(outDevs);
+        // Merge: persisted settings take precedence over backend defaults.
+        const merged = saved ? { ...cfg, ...saved } : cfg;
+        setAudioSettings(merged);
+        // Push merged settings to the backend so it picks up persisted values.
+        if (saved) {
+          invoke("set_audio_settings", { settings: merged }).catch((e) =>
+            console.error("Restore audio settings error:", e),
+          );
+        }
+      } catch (e) {
+        setLoadError(String(e));
+      }
+
+      try {
+        const prefs = await getPreferences();
+        setUserMode(prefs.userMode);
+        setDefaultUsername(prefs.defaultUsername);
+        setKlipyApiKeyState(prefs.klipyApiKey ?? "");
+        setKlipyApiKey(prefs.klipyApiKey);
+        setEnableNotifications(prefs.enableNotifications ?? true);
+        setWelcomeMessageDisplay(prefs.welcomeMessageDisplay ?? "once");
+        setEnableDualPath(prefs.enableDualPath ?? false);
+        setDisableReadReceipts(prefs.disableReadReceipts ?? false);
+        setDisableTypingIndicators(prefs.disableTypingIndicators ?? false);
+        setDisableOsmMaps(prefs.disableOsmMaps ?? false);
+        setDisableLinkPreviews(prefs.disableLinkPreviews ?? false);
+        setEnableExternalEmbeds(prefs.enableExternalEmbeds ?? false);
+        setStreamerMode(prefs.streamerMode ?? false);
+        setAutoReconnect(prefs.autoReconnect ?? false);
+        setAutoUpdateOnStartup(prefs.autoUpdateOnStartup ?? false);
+        setPersistDms(prefs.persistDms ?? false);
+        setShowDisconnectWarning(prefs.showDisconnectWarning ?? true);
+        setLogLevel(prefs.logLevel ?? (prefs.debugLogging ? "debug" : "info"));
+        setLogToFile(prefs.logToFile ?? false);
+        setTerminalLogging(prefs.terminalLogging ?? false);
+        setAutoZipLogs(prefs.autoZipLogs ?? false);
+        setTimeFormat(prefs.timeFormat);
+        setConvertToLocalTime(prefs.convertToLocalTime);
+        setDateFormat(prefs.dateFormat ?? "auto");
+        setNumberFormat(prefs.numberFormat ?? "auto");
+      } catch {
+        /* keep defaults */
+      }
+
+      try {
+        const rodio = await invoke<boolean>("get_audio_backend");
+        setUseRodioBackend(rodio);
+      } catch {
+        /* command not available on Android - keep default (true) */
+      }
+
+      try {
+        const sc = await loadShortcuts();
+        setShortcuts(sc);
+      } catch {
+        /* keep defaults */
+      }
+
+      let certs: string[] = [];
+      try {
+        certs = await invoke<string[]>("list_certificates");
+        setIdentities(certs);
+      } catch {
+        /* keep defaults */
+      }
+
+      // Migrate global profile to per-identity storage (one-time).
+      await migrateProfilesToIdentities(certs);
+
+      // Prefer the identity used for the active connection; fall back to first cert.
+      const { connectedCertLabel } = useAppStore.getState();
+      const initialIdentity = connectedCertLabel ?? certs[0] ?? null;
+      setActiveIdentity(initialIdentity);
+
+      try {
+        const pd = await loadProfileData(initialIdentity);
+        setProfile(pd.profile);
+        setBio(pd.bio);
+        setAvatarDataUrl(pd.avatarDataUrl);
+      } catch {
+        /* keep defaults */
+      }
+
+      try {
+        const pz = await loadPersonalization();
+        setPersonalization(pz);
+      } catch {
+        /* keep defaults */
+      }
+
+      try {
+        const ns = await getNotificationSounds();
+        if (ns) setNotificationSounds(ns);
+      } catch {
+        /* keep defaults */
+      }
+
+      // Mark initial load as done *after* state has settled.
+      requestAnimationFrame(() => {
+        initialLoadDone.current = true;
+      });
+    })();
+  }, []);
+
+  // -- Listen for permission-denied events from the backend -----
+
+  useEffect(() => {
+    const unlisten = listen<{ deny_type: number | null; reason: string | null }>(
+      "permission-denied",
+      (event) => {
+        const { deny_type, reason } = event.payload;
+        let msg = reason || "Permission denied by server.";
+        if (deny_type === 4) {
+          msg =
+            "Your profile is too large for this server. " +
+            "Try using a smaller banner image or shorter bio.";
+        }
+        setProfileError(msg);
+      },
+    );
+    return () => {
+      unlisten.then((f) => f());
+    };
+  }, []);
+
+  // -- Auto-save audio settings (debounced) ------------------------
+
+  useEffect(() => {
+    if (!initialLoadDone.current) return;
+    const timer = setTimeout(async () => {
+      try {
+        await Promise.all([
+          invoke("set_audio_settings", { settings: audioSettings }),
+          saveAudioSettings(audioSettings),
+        ]);
+      } catch (e) {
+        console.error("Auto-save audio settings error:", e);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [audioSettings]);
+
+  // -- Auto-save personalization (debounced) -----------------------
+
+  useEffect(() => {
+    if (!initialLoadDone.current) return;
+    const timer = setTimeout(async () => {
+      try {
+        await savePersonalization(personalization);
+      } catch (e) {
+        console.error("Auto-save personalization error:", e);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [personalization]);
+
+  // -- Auto-save notification sounds (debounced) -------------------
+
+  useEffect(() => {
+    if (!initialLoadDone.current) return;
+    const timer = setTimeout(async () => {
+      try {
+        await saveNotificationSounds(notificationSounds);
+      } catch (e) {
+        console.error("Auto-save notification sounds error:", e);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [notificationSounds]);
+
+  // -- Auto-save profile data locally (debounced) ------------------
+
+  useEffect(() => {
+    if (!initialLoadDone.current) return;
+    const timer = setTimeout(async () => {
+      try {
+        await saveProfileData({
+          profile,
+          bio,
+          avatarDataUrl,
+        }, activeIdentity);
+      } catch (e) {
+        console.error("Auto-save profile error:", e);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [profile, bio, avatarDataUrl, activeIdentity]);
+
+  // -- Auto-apply profile to server (debounced) --------------------
+  // Only sync when viewing the identity that is actually connected.
+
+  useEffect(() => {
+    if (!initialLoadDone.current || !isConnected) return;
+    if (connectedCertLabel !== activeIdentity) return;
+    const timer = setTimeout(async () => {
+      setProfileError(null);
+      try {
+        const comment = serializeProfile(profile, bio);
+        await invoke("set_user_comment", { comment });
+
+        const texture = avatarDataUrl ? dataUrlToBytes(avatarDataUrl) : [];
+        await invoke("set_user_texture", { texture });
+      } catch (e) {
+        console.error("Auto-apply profile error:", e);
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [profile, bio, avatarDataUrl, isConnected, connectedCertLabel, activeIdentity]);
+
+  // -- Handlers ----------------------------------------------------
+
+  const patchAudio = useCallback((patch: Partial<AudioSettings>) => {
+    setAudioSettings((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  const patchProfile = useCallback((patch: Partial<FancyProfile>) => {
+    setProfile((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  const handleToggleMode = useCallback(async () => {
+    const next: UserMode = userMode === "normal" ? "expert" : "normal";
+    setUserMode(next);
+    await updatePreferences({ userMode: next });
+  }, [userMode]);
+
+  const handleKlipyApiKeyChange = useCallback(async (key: string) => {
+    setKlipyApiKeyState(key);
+    setKlipyApiKey(key);
+    await updatePreferences({ klipyApiKey: key });
+  }, []);
+
+  const handleChangeShortcut = useCallback(
+    async (key: keyof ShortcutBindings, value: string) => {
+      setShortcuts((prev) => {
+        const updated = { ...prev, [key]: value };
+        (async () => {
+          await applyChangedShortcut(key, prev[key], value);
+          await saveShortcuts(updated);
+          globalThis.dispatchEvent(
+            new CustomEvent("shortcuts-changed", { detail: updated }),
+          );
+        })();
+        return updated;
+      });
+    },
+    [],
+  );
+
+  const handleTimeFormatChange = useCallback(async (fmt: TimeFormat) => {
+    setTimeFormat(fmt);
+    await updatePreferences({ timeFormat: fmt });
+  }, []);
+
+  const handleConvertToLocalTimeChange = useCallback(async () => {
+    setConvertToLocalTime((prev) => {
+      const next = !prev;
+      updatePreferences({ convertToLocalTime: next });
+      return next;
+    });
+  }, []);
+
+  const handleDateFormatChange = useCallback(async (fmt: DateFormat) => {
+    setDateFormat(fmt);
+    await updatePreferences({ dateFormat: fmt });
+  }, []);
+
+  const handleNumberFormatChange = useCallback(async (fmt: NumberFormat) => {
+    setNumberFormat(fmt);
+    await updatePreferences({ numberFormat: fmt });
+  }, []);
+
+  const handleToggleNotifications = useCallback(async () => {
+    setEnableNotifications((prev) => {
+      const next = !prev;
+      updatePreferences({ enableNotifications: next });
+      invoke("set_notifications_enabled", { enabled: next }).catch((e) =>
+        console.error("set_notifications_enabled error:", e),
+      );
+      return next;
+    });
+  }, []);
+
+  const handleWelcomeMessageDisplayChange = useCallback((value: WelcomeMessageDisplay) => {
+    setWelcomeMessageDisplay(value);
+    void updatePreferences({ welcomeMessageDisplay: value });
+  }, []);
+
+  const handleNotificationSoundsChange = useCallback(
+    (patch: Partial<typeof notificationSounds>) => {
+      setNotificationSounds((prev) => ({ ...prev, ...patch }));
+    },
+    [],
+  );
+
+  const handleToggleDualPath = useCallback(async () => {
+    setEnableDualPath((prev) => {
+      const next = !prev;
+      updatePreferences({ enableDualPath: next });
+      invoke("set_disable_dual_path", { disabled: !next }).catch((e) =>
+        console.error("set_disable_dual_path error:", e),
+      );
+      return next;
+    });
+  }, []);
+
+  const handleToggleReadReceipts = useCallback(() => {
+    setDisableReadReceipts((prev) => {
+      const next = !prev;
+      updatePreferences({ disableReadReceipts: next });
+      return next;
+    });
+  }, []);
+
+  const handleToggleTypingIndicators = useCallback(() => {
+    setDisableTypingIndicators((prev) => {
+      const next = !prev;
+      updatePreferences({ disableTypingIndicators: next });
+      return next;
+    });
+  }, []);
+
+  const handleToggleOsmMaps = useCallback(() => {
+    setDisableOsmMaps((prev) => {
+      const next = !prev;
+      updatePreferences({ disableOsmMaps: next });
+      return next;
+    });
+  }, []);
+
+  const handleToggleLinkPreviews = useCallback(() => {
+    setDisableLinkPreviews((prev) => {
+      const next = !prev;
+      updatePreferences({ disableLinkPreviews: next });
+      useAppStore.setState({ disableLinkPreviews: next });
+      return next;
+    });
+  }, []);
+
+  const handleToggleExternalEmbeds = useCallback(() => {
+    setEnableExternalEmbeds((prev) => {
+      const next = !prev;
+      updatePreferences({ enableExternalEmbeds: next });
+      useAppStore.setState({ enableExternalEmbeds: next });
+      return next;
+    });
+  }, []);
+
+  const handleToggleStreamerMode = useCallback(() => {
+    setStreamerMode((prev) => {
+      const next = !prev;
+      updatePreferences({ streamerMode: next });
+      useAppStore.setState({ streamerMode: next });
+      const notificationsEnabled = next ? false : (enableNotifications ?? true);
+      invoke("set_notifications_enabled", { enabled: notificationsEnabled }).catch(() => undefined);
+      return next;
+    });
+  }, [enableNotifications]);
+
+  const handleToggleAutoReconnect = useCallback(() => {
+    setAutoReconnect((prev) => {
+      const next = !prev;
+      updatePreferences({ autoReconnect: next });
+      return next;
+    });
+  }, []);
+
+  const handleToggleAutoUpdate = useCallback(() => {
+    setAutoUpdateOnStartup((prev) => {
+      const next = !prev;
+      updatePreferences({ autoUpdateOnStartup: next });
+      invoke("updater_set_auto_install", { enabled: next }).catch(() => undefined);
+      return next;
+    });
+  }, []);
+
+  const handleTogglePersistDms = useCallback(() => {
+    setPersistDms((prev) => {
+      const next = !prev;
+      updatePreferences({ persistDms: next });
+      if (!next) {
+        // Drop any encrypted history when persistence is turned off.
+        import("@core/dmStorage").then((m) => m.clearAllDmHistory()).catch(() => undefined);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleDisconnectWarning = useCallback(() => {
+    setShowDisconnectWarning((prev) => {
+      const next = !prev;
+      updatePreferences({ showDisconnectWarning: next });
+      return next;
+    });
+  }, []);
+
+  const handleToggleDeveloperMode = useCallback(async () => {
+    const next: UserMode = userMode === "developer" ? "expert" : "developer";
+    setUserMode(next);
+    await updatePreferences({ userMode: next });
+  }, [userMode]);
+
+  const handleLogLevelChange = useCallback(async (level: string) => {
+    try {
+      await invoke("set_log_level", { filter: level });
+      setLogLevel(level);
+      await updatePreferences({ logLevel: level });
+    } catch (e) {
+      console.error("Failed to set log level:", e);
+    }
+  }, []);
+
+  const handleToggleLogToFile = useCallback(async () => {
+    const next = !logToFile;
+    try {
+      await invoke("set_log_to_file", { enabled: next });
+      setLogToFile(next);
+      await updatePreferences({ logToFile: next });
+    } catch (e) {
+      console.error("Failed to toggle file logging:", e);
+    }
+  }, [logToFile]);
+
+  const handleToggleTerminalLogging = useCallback(async () => {
+    const next = !terminalLogging;
+    try {
+      await invoke("set_terminal_logging", { enabled: next });
+      setTerminalLogging(next);
+      await updatePreferences({ terminalLogging: next });
+    } catch (e) {
+      console.error("Failed to toggle terminal logging:", e);
+    }
+  }, [terminalLogging]);
+
+  const handleToggleAutoZipLogs = useCallback(async () => {
+    const next = !autoZipLogs;
+    try {
+      await invoke("set_auto_zip_logs", { enabled: next });
+      setAutoZipLogs(next);
+      await updatePreferences({ autoZipLogs: next });
+    } catch (e) {
+      console.error("Failed to toggle auto-zip logs:", e);
+    }
+  }, [autoZipLogs]);
+
+  const handleToggleAudioBackend = useCallback(async () => {
+    const next = !useRodioBackend;
+    try {
+      await invoke("set_audio_backend", { useRodio: next });
+      setUseRodioBackend(next);
+    } catch (e) {
+      console.error("Failed to switch audio backend:", e);
+    }
+  }, [useRodioBackend]);
+
+  const refreshIdentities = useCallback(async () => {
+    try {
+      const certs = await invoke<string[]>("list_certificates");
+      setIdentities(certs);
+    } catch (e) {
+      console.error("Failed to refresh identities:", e);
+    }
+  }, []);
+
+  const switchIdentity = useCallback(async (label: string | null) => {
+    setActiveIdentity(label);
+    try {
+      const pd = await loadProfileData(label);
+      setProfile(pd.profile);
+      setBio(pd.bio);
+      setAvatarDataUrl(pd.avatarDataUrl);
+    } catch {
+      setProfile({});
+      setBio("");
+      setAvatarDataUrl(null);
+    }
+  }, []);
+
+  const handleEditIdentityProfile = useCallback(
+    (label: string) => {
+      switchIdentity(label);
+      setTab("profile");
+    },
+    [switchIdentity],
+  );
+
+  const handleReset = useCallback(async () => {
+    try {
+      // Clear all tauri-plugin-store caches so the in-memory data is gone.
+      // (The Rust reset_app_data only deletes files on disk - the plugin
+      //  keeps a Rust-side cache that survives a webview reload.)
+      for (const file of ["preferences.json", "servers.json", "shortcuts.json", "profile.json"]) {
+        try {
+          const s = await load(file, { autoSave: false, defaults: {} });
+          await s.clear();
+          await s.save();
+        } catch {
+          // Ignore - file may not exist yet.
+        }
+      }
+      await invoke("reset_app_data");
+      // Reload the app so isFirstRun() re-evaluates and shows the welcome page.
+      window.location.replace("/");
+    } catch (e) {
+      console.error("reset_app_data error:", e);
+    }
+  }, []);
+
+  const handleBack = useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
+
+  // -- Render ------------------------------------------------------
+
+  return (
+    <TabbedPage
+      heading="Settings"
+      tabs={TABS}
+      activeTab={tab}
+      onTabChange={setTab}
+      onBack={handleBack}
+      mainAreaClassName={tab === "profile" ? styles.mainAreaWithPreview : undefined}
+      sidebarExtra={
+        <SettingsSearch
+          tabs={TABS}
+          onSelect={(tabId, term) => {
+            setTab(tabId as Tab);
+            setHighlightTerm(term);
+          }}
+        />
+      }
+    >
+      {/* Content */}
+      <main className={styles.content} ref={contentRef}>
+        {loadError && <p className={styles.error}>{loadError}</p>}
+
+        {tab === "profile" && (
+            <ProfilePanel
+              defaultUsername={defaultUsername}
+              setDefaultUsername={setDefaultUsername}
+              profile={profile}
+              onPatchProfile={patchProfile}
+              bio={bio}
+              onBioChange={setBio}
+              avatar={avatarDataUrl}
+              onAvatarChange={setAvatarDataUrl}
+              profileError={profileError}
+              isExpert={userMode !== "normal"}
+              activeIdentity={activeIdentity}
+              identities={identities}
+              connectedCertLabel={connectedCertLabel}
+              onSwitchIdentity={switchIdentity}
+              onGoToIdentities={() => setTab("identities")}
+            />
+          )}
+
+          {tab === "account" && <AccountPanel />}
+
+          {tab === "voice" && (
+            <AudioPanel
+              devices={devices}
+              outputDevices={outputDevices}
+              settings={audioSettings}
+              onChange={patchAudio}
+              isExpert={userMode !== "normal"}
+              useRodioBackend={useRodioBackend}
+              onToggleAudioBackend={handleToggleAudioBackend}
+            />
+          )}
+
+          {tab === "shortcuts" && (
+            <ShortcutsPanel
+              shortcuts={shortcuts}
+              onChangeShortcut={handleChangeShortcut}
+              isExpert={userMode !== "normal"}
+            />
+          )}
+
+          {tab === "identities" && (
+            <IdentitiesPanel
+              identities={identities}
+              connectedCertLabel={connectedCertLabel}
+              onRefresh={refreshIdentities}
+              onEditProfile={handleEditIdentityProfile}
+              isExpert={userMode !== "normal"}
+            />
+          )}
+
+          {tab === "personalize" && (
+            <PersonalizationPanel
+              data={personalization}
+              onChange={(patch) => setPersonalization((prev) => ({ ...prev, ...patch }))}
+              isExpert={userMode !== "normal"}
+            />
+          )}
+
+          {tab === "localization" && (
+            <LocalizationPanel
+              timeFormat={timeFormat}
+              convertToLocalTime={convertToLocalTime}
+              dateFormat={dateFormat}
+              numberFormat={numberFormat}
+              onTimeFormatChange={handleTimeFormatChange}
+              onConvertToLocalTimeChange={handleConvertToLocalTimeChange}
+              onDateFormatChange={handleDateFormatChange}
+              onNumberFormatChange={handleNumberFormatChange}
+            />
+          )}
+
+          {tab === "notifications" && (
+            <NotificationsPanel
+              settings={notificationSounds}
+              onChange={handleNotificationSoundsChange}
+              enableNativeNotifications={enableNotifications}
+              onToggleNativeNotifications={handleToggleNotifications}
+              welcomeMessageDisplay={welcomeMessageDisplay}
+              onWelcomeMessageDisplayChange={handleWelcomeMessageDisplayChange}
+              isExpert={userMode !== "normal"}
+            />
+          )}
+
+          {tab === "privacy" && (
+            <PrivacyPanel
+              enableDualPath={enableDualPath}
+              disableReadReceipts={disableReadReceipts}
+              disableTypingIndicators={disableTypingIndicators}
+              disableOsmMaps={disableOsmMaps}
+              disableLinkPreviews={disableLinkPreviews}
+              enableExternalEmbeds={enableExternalEmbeds}
+              streamerMode={streamerMode}
+              onToggleDualPath={handleToggleDualPath}
+              onToggleReadReceipts={handleToggleReadReceipts}
+              onToggleTypingIndicators={handleToggleTypingIndicators}
+              onToggleOsmMaps={handleToggleOsmMaps}
+              onToggleLinkPreviews={handleToggleLinkPreviews}
+              onToggleExternalEmbeds={handleToggleExternalEmbeds}
+              onToggleStreamerMode={handleToggleStreamerMode}
+            />
+          )}
+
+          {tab === "channels-roles" && <ChannelsAndRolesPanel />}
+
+          {tab === "plugins" && <PluginsPanel />}
+
+          {tab === "advanced" && (
+            <AdvancedPanel
+              userMode={userMode}
+              klipyApiKey={klipyApiKey}
+              logLevel={logLevel}
+              logToFile={logToFile}
+              terminalLogging={terminalLogging}
+              autoZipLogs={autoZipLogs}
+              autoReconnect={autoReconnect}
+              autoUpdateOnStartup={autoUpdateOnStartup}
+              persistDms={persistDms}
+              showDisconnectWarning={showDisconnectWarning}
+              onToggleMode={handleToggleMode}
+              onKlipyApiKeyChange={handleKlipyApiKeyChange}
+              onLogLevelChange={handleLogLevelChange}
+              onToggleLogToFile={handleToggleLogToFile}
+              onToggleTerminalLogging={handleToggleTerminalLogging}
+              onToggleAutoZipLogs={handleToggleAutoZipLogs}
+              onToggleAutoReconnect={handleToggleAutoReconnect}
+              onToggleAutoUpdate={handleToggleAutoUpdate}
+              onTogglePersistDms={handleTogglePersistDms}
+              onToggleDisconnectWarning={handleToggleDisconnectWarning}
+              onToggleDeveloperMode={handleToggleDeveloperMode}
+              onReset={handleReset}
+            />
+          )}
+        </main>
+
+      {/* Profile preview (sticky right column) */}
+      {tab === "profile" && (
+        <aside className={styles.previewPane}>
+          <div className={styles.previewSticky}>
+            <ProfilePreviewCard
+              profile={profile}
+              bio={bio}
+              avatar={avatarDataUrl}
+              displayName={defaultUsername}
+            />
+          </div>
+        </aside>
+      )}
+    </TabbedPage>
+  );
+}
