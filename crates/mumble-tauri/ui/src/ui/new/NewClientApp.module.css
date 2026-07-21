@@ -56,6 +56,11 @@ button { color:inherit; }
 .conversationHeader p { margin:3px 0 0; color:var(--muted); font-size:11px; }
 .joinButton { margin-left:auto; height:34px; padding:0 12px; display:flex; align-items:center; gap:7px; border:1px solid rgba(101,184,237,.26); border-radius:9px; background:rgba(101,184,237,.1); color:#a7d9f7; cursor:pointer; }
 .joinButton svg { width:15px; }
+.headerIconButton { margin-left:auto; width:34px; height:34px; display:grid; place-items:center; border:0; border-radius:9px; background:transparent; color:var(--muted); cursor:pointer; }
+.headerIconButton + .headerIconButton { margin-left:0; }
+.headerIconButton:hover { color:var(--text); background:rgba(255,255,255,.05); }
+.headerIconButton svg { width:16px; }
+.headerIconButton ~ .joinButton { margin-left:4px; }
 .messageList { padding:22px; overflow:auto; }
 .message { display:grid; grid-template-columns:38px 1fr; gap:11px; padding:8px; border-radius:10px; }
 .message:hover { background:rgba(255,255,255,.025); }

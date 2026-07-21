@@ -3,24 +3,33 @@ import { useNavigate } from "react-router-dom";
 import { initEventListeners, useAppStore } from "@core/store";
 import {
   ArrowLeftIcon,
-  AttachIcon,
   HashIcon,
   HeadphonesIcon,
-  KebabMenuIcon,
   MicIcon,
   MicOffIcon,
   PlusIcon,
   SearchIcon,
-  SendIcon,
   ServerIcon,
   SettingsIcon,
   SparklesIcon,
   UsersGroupIcon,
   VolumeIcon,
+  InfoIcon,
+  WebcamIcon,
 } from "@ui/icons";
 import { getUiDesignOverride, setSelectedUiDesign } from "@ui/selection";
 import type { ChannelEntry, ChatMessage, UserEntry } from "@core/types";
 import styles from "./NewClientApp.module.css";
+import {
+  InfoPanel,
+  LinkPreviews,
+  RichComposer,
+  ScreenSharePanel,
+  ServerBrowser,
+  SettingsPanel,
+  UserCard,
+  type Surface,
+} from "./NewClientSurfaces";
 
 type NewClientAppProps = {
   onOpenDesignSheet: () => void;
@@ -75,12 +84,16 @@ function MemberRow({ user, own, talking }: { user: UserEntry; own: boolean; talk
 }
 
 function Message({ message }: { message: ChatMessage }) {
+  const embeds = useAppStore((state) => message.message_id ? state.linkEmbeds.get(message.message_id) : undefined);
+  const disableLinkPreviews = useAppStore((state) => state.disableLinkPreviews);
+  const allowExternal = useAppStore((state) => state.enableExternalEmbeds);
   return (
     <article className={`${styles.message} ${message.is_own ? styles.ownMessage : ""}`}>
       <span className={styles.avatar}>{initials(message.sender_name || "Server")}</span>
       <div>
         <header><strong>{message.sender_name || "Server"}</strong><time>{formatTime(message.timestamp)}</time></header>
         <p>{messageText(message.body)}</p>
+        {!disableLinkPreviews && embeds && embeds.length > 0 && <LinkPreviews embeds={embeds} allowExternal={allowExternal} />}
       </div>
     </article>
   );
@@ -91,7 +104,7 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
   const [host, setHost] = useState("localhost");
   const [port, setPort] = useState(64738);
   const [username, setUsername] = useState("");
-  const [draft, setDraft] = useState("");
+  const [surface, setSurface] = useState<Surface>(null);
   const [connecting, setConnecting] = useState(false);
   const [switchingBack, setSwitchingBack] = useState(false);
   const override = getUiDesignOverride();
@@ -109,6 +122,7 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
   const voiceState = useAppStore((state) => state.voiceState);
   const inCall = useAppStore((state) => state.inCall);
   const talkingSessions = useAppStore((state) => state.talkingSessions);
+  const selectedUser = useAppStore((state) => state.selectedUser);
   const error = useAppStore((state) => state.error);
   const bootstrapStage = useAppStore((state) => state.bootstrapStage);
 
@@ -147,16 +161,10 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
     }
   };
 
-  const send = async (event: FormEvent) => {
-    event.preventDefault();
-    const body = draft.trim();
+  const sendRich = async (html: string) => {
+    const body = html.trim();
     if (!body || selectedChannel === null) return;
-    setDraft("");
-    try {
-      await useAppStore.getState().sendMessage(selectedChannel, body);
-    } catch {
-      setDraft(body);
-    }
+    await useAppStore.getState().sendMessage(selectedChannel, body);
   };
 
   const switchToLegacy = async () => {
@@ -176,6 +184,7 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
         <header className={styles.titlebar} data-tauri-drag-region>
           <span className={styles.appMark}><SparklesIcon /></span><strong>Fancy Mumble</strong>
           <div className={styles.titleActions}>
+            <button type="button" onClick={() => setSurface("servers")}><ServerIcon /> Servers</button>
             <button type="button" onClick={onOpenDesignSheet}><SparklesIcon /> Design system</button>
             <button type="button" onClick={() => void switchToLegacy()} disabled={switchingBack || override !== null}><ArrowLeftIcon /> Old UI</button>
           </div>
@@ -199,6 +208,7 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
             </form>
           </section>
         </main>
+        {surface === "servers" && <ServerBrowser onClose={() => setSurface(null)} />}
       </div>
     );
   }
@@ -210,7 +220,8 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
         <span className={styles.serverTitle}>{activeSession?.label ?? "Connecting"}</span>
         <div className={styles.titleActions}>
           <button type="button" onClick={onOpenDesignSheet}><SparklesIcon /> Design system</button>
-          <button type="button" aria-label="Settings"><SettingsIcon /></button>
+          <button type="button" onClick={() => setSurface("servers")}><ServerIcon /> Servers</button>
+          <button type="button" aria-label="Settings" onClick={() => setSurface("settings")}><SettingsIcon /></button>
           <button type="button" onClick={() => void useAppStore.getState().disconnect()}><ArrowLeftIcon /> Disconnect</button>
         </div>
       </header>
@@ -221,11 +232,11 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
             {initials(session.label)}
           </button>
         ))}
-        <button type="button" className={styles.addServer} title="Add server"><PlusIcon /></button>
+        <button type="button" className={styles.addServer} title="Add server" onClick={() => setSurface("servers")}><PlusIcon /></button>
       </aside>
 
       <aside className={styles.channels}>
-        <div className={styles.panelHeader}><div><small>SERVER</small><strong>{activeSession?.label ?? activeSession?.host ?? "Fancy server"}</strong></div><button type="button"><KebabMenuIcon /></button></div>
+        <div className={styles.panelHeader}><div><small>SERVER</small><strong>{activeSession?.label ?? activeSession?.host ?? "Fancy server"}</strong></div><button type="button" aria-label="Server information" onClick={() => setSurface("server-info")}><InfoIcon /></button></div>
         <label className={styles.search}><SearchIcon /><input placeholder="Search channels" /></label>
         <div className={styles.sectionLabel}><span>CHANNELS</span><button type="button" aria-label="Create channel"><PlusIcon /></button></div>
         <nav>
@@ -244,6 +255,8 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
         <header className={styles.conversationHeader}>
           <span className={styles.channelGlyph}><HashIcon /></span>
           <div><h1>{activeChannel?.name ?? "Choose a channel"}</h1><p>{activeChannel ? `${activeChannel.user_count} member${activeChannel.user_count === 1 ? "" : "s"}` : "Select a channel to start"}</p></div>
+          {activeChannel && <button type="button" className={styles.headerIconButton} aria-label="Channel information" onClick={() => setSurface("channel-info")}><InfoIcon /></button>}
+          <button type="button" className={styles.headerIconButton} aria-label="Share screen" onClick={() => setSurface("screen-share")}><WebcamIcon /></button>
           {activeChannel && currentChannel !== activeChannel.id && <button type="button" className={styles.joinButton} onClick={() => void useAppStore.getState().joinChannel(activeChannel.id)}><VolumeIcon /> Join voice</button>}
         </header>
         {bootstrapStage ? <div className={styles.emptyState}><span className={styles.spinner} /><strong>{bootstrapStage}</strong></div> : channelMessages.length === 0 ? (
@@ -251,17 +264,19 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
         ) : (
           <section className={styles.messageList}>{channelMessages.map((message, index) => <Message key={message.message_id ?? `${message.timestamp}-${index}`} message={message} />)}</section>
         )}
-        <form className={styles.composer} onSubmit={(event) => void send(event)}>
-          <button type="button" aria-label="Attach file"><AttachIcon /></button>
-          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={activeChannel ? `Message #${activeChannel.name}` : "Select a channel"} disabled={!activeChannel} rows={1} />
-          <button type="submit" className={styles.sendButton} disabled={!draft.trim() || !activeChannel} aria-label="Send message"><SendIcon /></button>
-        </form>
+        <RichComposer channel={activeChannel} onSend={sendRich} />
       </main>
 
       <aside className={styles.members}>
         <div className={styles.panelHeader}><div><small>IN THIS CHANNEL</small><strong>{channelUsers.length} online</strong></div><UsersGroupIcon /></div>
         <div className={styles.memberList}>{channelUsers.map((user) => <MemberRow key={user.session} user={user} own={user.session === ownSession} talking={talkingSessions.has(user.session)} />)}</div>
       </aside>
+      {selectedUser !== null && users.find((user) => user.session === selectedUser) && <UserCard user={users.find((user) => user.session === selectedUser)!} onClose={() => useAppStore.getState().selectUser(null)} />}
+      {surface === "servers" && <ServerBrowser onClose={() => setSurface(null)} />}
+      {surface === "settings" && <SettingsPanel onClose={() => setSurface(null)} />}
+      {surface === "server-info" && <InfoPanel kind="server" channel={activeChannel} onClose={() => setSurface(null)} />}
+      {surface === "channel-info" && <InfoPanel kind="channel" channel={activeChannel} onClose={() => setSurface(null)} />}
+      {surface === "screen-share" && <ScreenSharePanel onClose={() => setSurface(null)} />}
     </div>
   );
 }
