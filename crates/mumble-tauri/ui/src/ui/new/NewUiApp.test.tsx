@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import NewUiApp from "./index";
 
@@ -14,24 +15,30 @@ vi.mock("@ui/selection", () => ({
 describe("NewUiApp", () => {
   beforeEach(() => setSelectedUiDesignMock.mockClear());
 
-  it("renders the independent new UI shell", () => {
-    render(<NewUiApp />);
+  const renderApp = () => render(<MemoryRouter><NewUiApp /></MemoryRouter>);
+
+  it("renders the functional new client shell and opens its design system", () => {
+    renderApp();
+    expect(screen.getByTestId("new-client-root")).toBeTruthy();
+    expect(screen.getByText("Join a conversation")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Design system/i }));
     expect(screen.getByTestId("new-ui-root")).toBeTruthy();
-    expect(screen.getAllByText("Design sheet")).toHaveLength(2);
     expect(screen.getByText("One interface.")).toBeTruthy();
     expect(screen.getByText("Conversation, redesigned")).toBeTruthy();
   });
 
   it("can switch back to the legacy UI", async () => {
-    render(<NewUiApp />);
-    fireEvent.click(screen.getByRole("button", { name: "Back to old UI" }));
+    renderApp();
+    fireEvent.click(screen.getByRole("button", { name: /Old UI/i }));
     await waitFor(() => {
       expect(setSelectedUiDesignMock).toHaveBeenCalledWith("legacy");
     });
   });
 
   it("previews native title bars for each platform", () => {
-    render(<NewUiApp />);
+    renderApp();
+    fireEvent.click(screen.getByRole("button", { name: /Design system/i }));
     expect(screen.getByLabelText("Windows window controls")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "macOS" }));
