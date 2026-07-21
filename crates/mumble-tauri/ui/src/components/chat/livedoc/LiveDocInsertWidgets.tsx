@@ -50,7 +50,7 @@ import LiveDocReferencePicker from "./LiveDocReferencePicker";
 import type { RefTarget } from "./liveDocReferences";
 import ribbon from "./LiveDocRibbon.module.css";
 import styles from "./LiveDocInsert.module.css";
-import { SearchInput } from "../../../components/elements/TextInput";
+import { PickerSearch } from "../../../components/elements/SearchFields";
 
 const insertImage = (editor: Editor, src: string) => editor.chain().focus().setImage({ src }).run();
 
@@ -193,7 +193,7 @@ export function IconsButton({ editor, compact }: WidgetProps) {
       {(close) => (
         <div className={styles.iconPicker}>
           <div className={styles.searchRow}>
-            <SearchInput
+            <PickerSearch
               className={styles.searchInput}
               value={query}
               autoFocus

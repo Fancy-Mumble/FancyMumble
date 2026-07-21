@@ -20,6 +20,7 @@ import PasswordDialog from "../components/server/PasswordDialog";
 import TotpDialog from "../components/server/TotpDialog";
 import { TID } from "../testids";
 import styles from "./ConnectPage.module.css";
+import { TextField } from "../components/elements/TextField";
 
 type View = "loading" | "servers" | "wizard" | "public";
 
@@ -442,33 +443,29 @@ export default function ConnectPage() {
               {/* -- Step 0: Server address ---------------- */}
               {step === 0 && (
                 <>
-                  <div className={styles.field}>
-                    <label className={styles.label}>{t("fields.host")}</label>
-                    <input
-                      className={styles.input}
-                      data-testid={TID.connectHostInput}
-                      type="text"
-                      placeholder={t("fields.hostPlaceholder")}
-                      value={host}
-                      onChange={(e) => setHost(e.target.value)}
-                      disabled={isConnecting}
-                      autoFocus
-                    />
-                  </div>
+                  <TextField
+                    className={styles.field}
+                    label={t("fields.host")}
+                    inputClassName={styles.input}
+                    data-testid={TID.connectHostInput}
+                    placeholder={t("fields.hostPlaceholder")}
+                    value={host}
+                    onChange={(e) => setHost(e.target.value)}
+                    disabled={isConnecting}
+                    autoFocus
+                  />
                   {userMode !== "normal" && (
                     <>
-                      <div className={styles.field}>
-                        <label className={styles.label}>{t("fields.port")}</label>
-                        <input
-                          className={styles.input}
-                          data-testid={TID.connectPortInput}
-                          type="text"
-                          placeholder={t("fields.portPlaceholder")}
-                          value={port}
-                          onChange={(e) => setPort(e.target.value)}
-                          disabled={isConnecting}
-                        />
-                      </div>
+                      <TextField
+                        className={styles.field}
+                        label={t("fields.port")}
+                        inputClassName={styles.input}
+                        data-testid={TID.connectPortInput}
+                        placeholder={t("fields.portPlaceholder")}
+                        value={port}
+                        onChange={(e) => setPort(e.target.value)}
+                        disabled={isConnecting}
+                      />
                       <div className={styles.field}>
                         <label className={styles.label}>{t("fields.certificate")}</label>
                         <select
@@ -589,18 +586,16 @@ export default function ConnectPage() {
 
               {/* -- Step 2: Label (expert only) ---------- */}
               {step === 2 && userMode !== "normal" && (
-                <div className={styles.field}>
-                  <label className={styles.label}>{t("fields.label")}</label>
-                  <input
-                    className={styles.input}
-                    type="text"
-                    placeholder={host || t("fields.labelPlaceholderFallback")}
-                    value={label}
-                    onChange={(e) => setLabel(e.target.value)}
-                    disabled={isConnecting}
-                    autoFocus
-                  />
-                </div>
+                <TextField
+                  className={styles.field}
+                  label={t("fields.label")}
+                  inputClassName={styles.input}
+                  placeholder={host || t("fields.labelPlaceholderFallback")}
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  disabled={isConnecting}
+                  autoFocus
+                />
               )}
 
               {/* Hint card */}

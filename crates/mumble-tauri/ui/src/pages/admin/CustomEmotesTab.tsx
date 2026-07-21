@@ -5,6 +5,7 @@ import { PERM_MANAGE_EMOTES } from "../../utils/permissions";
 import styles from "./AdminPanel.module.css";
 
 import { inferMimeType } from "../../utils/media";
+import { TextField } from "../../components/elements/TextField";
 
 const ALLOWED_MIME = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"];
 
@@ -105,42 +106,30 @@ export function CustomEmotesTab() {
     <div className={styles.content}>
       <h3 className={styles.aclSectionTitle}>{t("emotes.addTitle")}</h3>
       <form onSubmit={handleSubmit} className={styles.emoteForm}>
-        <label className={styles.fieldLabel}>
-          {t("emotes.fieldShortcode")}
-          <input
-            type="text"
-            className={styles.input}
-            value={shortcode}
-            onChange={(e) => setShortcode(e.target.value)}
-            placeholder="myCustom"
-            maxLength={64}
-            pattern="[A-Za-z0-9_\-]+"
-            required
-          />
-        </label>
-        <label className={styles.fieldLabel}>
-          {t("emotes.fieldAliasEmoji")}
-          <input
-            type="text"
-            className={styles.input}
-            value={aliasEmoji}
-            onChange={(e) => setAliasEmoji(e.target.value)}
-            placeholder="&#x1F923;"
-            maxLength={32}
-            required
-          />
-        </label>
-        <label className={styles.fieldLabel}>
-          {t("emotes.fieldDescription")}
-          <input
-            type="text"
-            className={styles.input}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="(optional)"
-            maxLength={256}
-          />
-        </label>
+        <TextField
+          label={t("emotes.fieldShortcode")}
+          value={shortcode}
+          onChange={(e) => setShortcode(e.target.value)}
+          placeholder="myCustom"
+          maxLength={64}
+          pattern="[A-Za-z0-9_\-]+"
+          required
+        />
+        <TextField
+          label={t("emotes.fieldAliasEmoji")}
+          value={aliasEmoji}
+          onChange={(e) => setAliasEmoji(e.target.value)}
+          placeholder="&#x1F923;"
+          maxLength={32}
+          required
+        />
+        <TextField
+          label={t("emotes.fieldDescription")}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="(optional)"
+          maxLength={256}
+        />
         <div className={styles.fieldLabel}>
           {t("emotes.fieldImage")}
           <div className={styles.emoteFileRow}>

@@ -203,14 +203,7 @@
 }
 
 .editInput {
-  padding: 6px 10px;
-  border: 1px solid var(--color-glass-border);
-  border-radius: 6px;
-  background: var(--color-glass);
-  color: var(--color-text-primary);
   font: inherit;
-  font-size: 13px;
-  outline: none;
   transition: border-color 0.2s;
 }
 

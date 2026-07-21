@@ -1,13 +1,6 @@
 .devSelect {
-  padding: 6px 10px;
-  font-size: 12px;
   font-family: inherit;
-  color: var(--color-text-secondary);
-  background: var(--color-bg-secondary);
-  border: 1px dashed rgba(220, 160, 0, 0.5);
-  border-radius: var(--radius-sm);
   cursor: pointer;
-  outline: none;
 }
 
 .devSelect:focus {

@@ -7,11 +7,14 @@ import type {
   OnboardingConfig,
   OnboardingQuestion,
 } from "../../types";
-import { Autocomplete, type AutocompleteOption } from "../elements/Autocomplete";
+import { type AutocompleteOption } from "../elements/Autocomplete";
+import { MultiSelectField } from "../elements/MultiSelectField";
 import { PlusIcon, TrashIcon, HashIcon, SparklesIcon } from "../../icons";
 import { isOnboardingSupported, useOnboardingStore } from "./onboardingStore";
 import styles from "./OnboardingAdminPanel.module.css";
 import tabStyles from "../elements/TabbedPage.module.css";
+import { TextField } from "../../components/elements/TextField";
+import { TextInput } from "../elements/TextInput";
 
 export interface OnboardingAdminPanelProps {
   /** Hands the panel's Save bar up to `AdminPanel`'s shared pinned footer. */
@@ -211,19 +214,15 @@ export default function OnboardingAdminPanel({ setFooter }: Readonly<OnboardingA
           onChange={(v) => setDraft({ ...draft, enabled: v })}
           label={t("onboarding.admin.enabledLabel")}
         />
-        <div className={styles.field}>
-          <label className={styles.fieldLabel}>
-            <HashIcon width={13} height={13} /> {t("onboarding.admin.defaultChannelIdsLabel")}
-          </label>
-          <Autocomplete
-            multiple
-            options={channelOptions}
-            value={toOptions(draft.default_channel_ids)}
-            onChange={(opts) => setDraft({ ...draft, default_channel_ids: opts.map((o) => o.value) })}
-            placeholder={t("onboarding.admin.defaultChannelIdsLabel")}
-            noOptionsText={t("onboarding.admin.noChannels", { defaultValue: "No channels" })}
-          />
-        </div>
+        <MultiSelectField
+          className={styles.field}
+          label={<><HashIcon width={13} height={13} /> {t("onboarding.admin.defaultChannelIdsLabel")}</>}
+          options={channelOptions}
+          value={toOptions(draft.default_channel_ids)}
+          onChange={(opts) => setDraft({ ...draft, default_channel_ids: opts.map((o) => o.value) })}
+          placeholder={t("onboarding.admin.defaultChannelIdsLabel")}
+          noOptionsText={t("onboarding.admin.noChannels", { defaultValue: "No channels" })}
+        />
       </div>
 
       {draft.questions.map((q, qIdx) => (
@@ -243,15 +242,14 @@ export default function OnboardingAdminPanel({ setFooter }: Readonly<OnboardingA
             </button>
           </div>
 
-          <div className={styles.field}>
-            <label className={styles.fieldLabel}>{t("onboarding.admin.promptLabel")}</label>
-            <input
-              className={styles.input}
-              value={q.text}
-              onChange={(e) => updateQuestion(qIdx, { text: e.target.value })}
-              placeholder={t("onboarding.admin.promptPlaceholder")}
-            />
-          </div>
+          <TextField
+            className={styles.field}
+            label={t("onboarding.admin.promptLabel")}
+            inputClassName={styles.input}
+            value={q.text}
+            onChange={(e) => updateQuestion(qIdx, { text: e.target.value })}
+            placeholder={t("onboarding.admin.promptPlaceholder")}
+          />
 
           <div className={styles.toggleRow}>
             <Toggle
@@ -275,16 +273,21 @@ export default function OnboardingAdminPanel({ setFooter }: Readonly<OnboardingA
             {q.answers.map((a, aIdx) => (
               <div key={a.id} className={styles.answerCard}>
                 <div className={styles.answerTop}>
-                  <input
-                    className={`${styles.input} ${styles.emojiInput}`}
+                  {/* Bare TextInput, not TextField: these sit directly in the
+                      .answerTop flex row, so a wrapping field element would
+                      break the row's layout. */}
+                  <TextInput
+                    className={styles.emojiInput}
+                    size="small"
                     value={a.emoji ?? ""}
                     onChange={(e) => updateAnswer(qIdx, aIdx, { emoji: e.target.value || undefined })}
                     maxLength={4}
                     placeholder="🙂"
                     aria-label={t("onboarding.admin.emojiLabel")}
                   />
-                  <input
-                    className={`${styles.input} ${styles.grow}`}
+                  <TextInput
+                    className={styles.grow}
+                    size="small"
                     value={a.label}
                     onChange={(e) => updateAnswer(qIdx, aIdx, { label: e.target.value })}
                     placeholder={t("onboarding.admin.answerLabelField")}
@@ -301,41 +304,35 @@ export default function OnboardingAdminPanel({ setFooter }: Readonly<OnboardingA
                   </button>
                 </div>
 
-                <div className={styles.field}>
-                  <label className={styles.fieldLabel}>
-                    <HashIcon width={13} height={13} /> {t("onboarding.admin.channelIdsLabel")}
-                  </label>
-                  <Autocomplete
-                    multiple
-                    options={channelOptions}
-                    value={toOptions(a.channel_ids)}
-                    onChange={(opts) => updateAnswer(qIdx, aIdx, { channel_ids: opts.map((o) => o.value) })}
-                    placeholder={t("onboarding.admin.channelIdsLabel")}
-                    noOptionsText={t("onboarding.admin.noChannels", { defaultValue: "No channels" })}
-                  />
-                </div>
+                <MultiSelectField
+                  className={styles.field}
+                  label={<><HashIcon width={13} height={13} /> {t("onboarding.admin.channelIdsLabel")}</>}
+                  options={channelOptions}
+                  value={toOptions(a.channel_ids)}
+                  onChange={(opts) => updateAnswer(qIdx, aIdx, { channel_ids: opts.map((o) => o.value) })}
+                  placeholder={t("onboarding.admin.channelIdsLabel")}
+                  noOptionsText={t("onboarding.admin.noChannels", { defaultValue: "No channels" })}
+                />
 
                 <div className={styles.row}>
-                  <div className={styles.field}>
-                    <label className={styles.fieldLabel}>{t("onboarding.admin.aclGroupNamesLabel")}</label>
-                    <input
-                      className={styles.input}
-                      value={a.group_names.join(", ")}
-                      onChange={(e) => updateAnswer(qIdx, aIdx, { group_names: parseStringList(e.target.value) })}
-                      placeholder="gamers, newcomer"
-                    />
-                  </div>
-                </div>
-
-                <div className={styles.field}>
-                  <label className={styles.fieldLabel}>{t("onboarding.admin.descriptionLabel")}</label>
-                  <textarea
-                    className={styles.textarea}
-                    value={a.description ?? ""}
-                    onChange={(e) => updateAnswer(qIdx, aIdx, { description: e.target.value || undefined })}
-                    rows={2}
+                  <TextField
+                    className={styles.field}
+                    label={t("onboarding.admin.aclGroupNamesLabel")}
+                    inputClassName={styles.input}
+                    value={a.group_names.join(", ")}
+                    onChange={(e) => updateAnswer(qIdx, aIdx, { group_names: parseStringList(e.target.value) })}
+                    placeholder="gamers, newcomer"
                   />
                 </div>
+
+                <TextField
+                  className={styles.field}
+                  label={t("onboarding.admin.descriptionLabel")}
+                  multiline
+                  rows={2}
+                  value={a.description ?? ""}
+                  onChange={(e) => updateAnswer(qIdx, aIdx, { description: e.target.value || undefined })}
+                />
               </div>
             ))}
 

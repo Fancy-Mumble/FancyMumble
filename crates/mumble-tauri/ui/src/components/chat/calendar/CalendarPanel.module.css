@@ -747,12 +747,6 @@
 /* Inputs used inside the work-hours popover (mirror the dialog inputs). */
 .input {
   height: 32px;
-  padding: 0 8px;
-  border: 1px solid var(--color-glass-border);
-  border-radius: 6px;
-  background: var(--color-bg-elevated, #1b1d23);
-  color: var(--color-text-primary);
-  font-size: 13px;
   color-scheme: dark;
 }
 

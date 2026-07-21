@@ -14,7 +14,7 @@ import { useTranslation } from "react-i18next";
 import { useState, useEffect, useCallback, useRef } from "react";
 import styles from "./GifPicker.module.css";
 import { getActiveApiKey } from "./klipyConfig";
-import { SearchInput } from "../../../components/elements/TextInput";
+import { PickerSearch } from "../../../components/elements/SearchFields";
 
 // --- Klipy API Types ----------------------------------------------
 
@@ -373,7 +373,7 @@ export default function GifPicker({ onSelect, onClose }: Readonly<GifPickerProps
 
       {/* Search bar */}
       <div className={styles.searchBar}>
-        <SearchInput
+        <PickerSearch
           className={styles.searchInput}
           placeholder={t("gifPicker.searchPlaceholder", { tab: tab === "gifs" ? t("gifPicker.tabGifs") : t("gifPicker.tabStickers") })}
           value={query}

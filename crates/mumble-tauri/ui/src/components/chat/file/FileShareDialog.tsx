@@ -5,6 +5,7 @@ import type { FileAccessMode } from "../../../types";
 import { useAppStore } from "../../../store";
 import { Modal } from "../../elements/Modal";
 import styles from "./FileShareDialog.module.css";
+import { TextField } from "../../../components/elements/TextField";
 
 export interface FileShareChoice {
   readonly mode: FileAccessMode;
@@ -172,20 +173,17 @@ export default function FileShareDialog({
           </div>
 
           {mode === "password" && (
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="file-share-password">
-                {t("fileShare.passwordLabel")}
-              </label>
-              <input
-                ref={passwordRef}
-                id="file-share-password"
-                className={styles.input}
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
-              />
-            </div>
+            <TextField
+              className={styles.field}
+              label={t("fileShare.passwordLabel")}
+              ref={passwordRef}
+              id="file-share-password"
+              inputClassName={styles.input}
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+            />
           )}
 
           <div className={styles.field}>

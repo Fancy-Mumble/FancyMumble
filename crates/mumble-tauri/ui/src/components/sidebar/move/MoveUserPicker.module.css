@@ -59,13 +59,7 @@
 .search {
   width: 100%;
   box-sizing: border-box;
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgba(255, 255, 255, 0.04);
-  color: inherit;
   font: inherit;
-  outline: none;
   transition: border-color 120ms, background 120ms;
 }
 

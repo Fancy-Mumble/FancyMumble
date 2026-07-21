@@ -902,7 +902,7 @@ function AuditFilterRail({
         <div className={styles.railBody}>
           <Field label={t("audit.filterSince", { defaultValue: "Since" })}>
             <SelectInput
-              fieldSize="sm"
+              size="small"
               value={filters.since}
               onChange={(e) => onChange({ since: e.target.value })}
             >
@@ -916,7 +916,7 @@ function AuditFilterRail({
 
           <Field label={t("audit.filterSource", { defaultValue: "Source" })}>
             <SelectInput
-              fieldSize="sm"
+              size="small"
               value={filters.source}
               onChange={(e) => onChange({ source: e.target.value })}
             >
@@ -929,7 +929,7 @@ function AuditFilterRail({
 
           <Field label={t("audit.filterSeverity", { defaultValue: "Severity" })}>
             <SelectInput
-              fieldSize="sm"
+              size="small"
               value={filters.severity}
               onChange={(e) => onChange({ severity: e.target.value })}
             >
@@ -943,7 +943,7 @@ function AuditFilterRail({
 
           <Field label={t("audit.filterActor", { defaultValue: "Actor" })}>
             <TextInput
-              fieldSize="sm"
+              size="small"
               value={filters.actor}
               placeholder={t("audit.userPlaceholder", { defaultValue: "name or id" })}
               onChange={(e) => onChange({ actor: e.target.value }, false)}
@@ -952,7 +952,7 @@ function AuditFilterRail({
 
           <Field label={t("audit.filterTarget", { defaultValue: "Target" })}>
             <TextInput
-              fieldSize="sm"
+              size="small"
               value={filters.target}
               placeholder={t("audit.userPlaceholder", { defaultValue: "name or id" })}
               onChange={(e) => onChange({ target: e.target.value }, false)}
@@ -961,7 +961,7 @@ function AuditFilterRail({
 
           <Field label={t("audit.filterText", { defaultValue: "Text" })}>
             <TextInput
-              fieldSize="sm"
+              size="small"
               value={filters.text}
               onChange={(e) => onChange({ text: e.target.value }, false)}
             />

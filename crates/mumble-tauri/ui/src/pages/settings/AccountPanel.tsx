@@ -22,6 +22,7 @@ import {
 import { TID } from "../../testids";
 import styles from "./SettingsPage.module.css";
 import { registerSettings } from "./settingsSearchRegistry";
+import { TextField } from "../../components/elements/TextField";
 
 registerSettings("account")
   .add("account.password.title", ["password", "authentication", "login", "certificate"])
@@ -178,31 +179,24 @@ export function AccountPanel() {
             <p>{t("account.password.enableWarningPara")}</p>
           </div>
         )}
+        <TextField
+          id="account-password"
+          className={styles.field}
+          label={t("account.password.newLabel")}
+          data-testid={TID.accountPasswordInput}
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="new-password"
+          placeholder={t("account.password.placeholder", {
+            min: MIN_PASSWORD_LENGTH,
+          })}
+        />
         <div className={styles.field}>
-          <label className={styles.fieldLabel} htmlFor="account-password">
-            {t("account.password.newLabel")}
-          </label>
-          <input
-            id="account-password"
-            data-testid={TID.accountPasswordInput}
-            className={styles.input}
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="new-password"
-            placeholder={t("account.password.placeholder", {
-              min: MIN_PASSWORD_LENGTH,
-            })}
-          />
-        </div>
-        <div className={styles.field}>
-          <label className={styles.fieldLabel} htmlFor="account-password-confirm">
-            {t("account.password.confirmLabel")}
-          </label>
-          <input
+          <TextField
             id="account-password-confirm"
+            label={t("account.password.confirmLabel")}
             data-testid={TID.accountPasswordConfirmInput}
-            className={styles.input}
             type="password"
             value={passwordConfirm}
             onChange={(e) => setPasswordConfirm(e.target.value)}
@@ -255,19 +249,17 @@ export function AccountPanel() {
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>{t("account.rename.title")}</h3>
         <p className={styles.fieldHint}>{t("account.rename.hint")}</p>
-        <div className={styles.field}>
-          <input
-            data-testid={TID.accountRenameInput}
-            className={styles.input}
-            type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder={snapshot.name ?? ""}
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-        </div>
+        <TextField
+          className={styles.field}
+          data-testid={TID.accountRenameInput}
+          inputClassName={styles.input}
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder={snapshot.name ?? ""}
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+        />
         <button
           type="button"
           data-testid={TID.accountRenameSave}
@@ -288,19 +280,18 @@ export function AccountPanel() {
           <span>{t("account.email.warning")}</span>
           <p>{t("account.email.warningPara")}</p>
         </div>
-        <div className={styles.field}>
-          <input
-            data-testid={TID.accountEmailInput}
-            className={styles.input}
-            type="email"
-            value={email ?? snapshot.email ?? ""}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder={t("account.email.placeholder")}
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-        </div>
+        <TextField
+          className={styles.field}
+          data-testid={TID.accountEmailInput}
+          inputClassName={styles.input}
+          type="email"
+          value={email ?? snapshot.email ?? ""}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder={t("account.email.placeholder")}
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+        />
         <button
           type="button"
           data-testid={TID.accountEmailSave}
@@ -319,22 +310,18 @@ export function AccountPanel() {
         {snapshot.totp_enabled ? (
           <>
             <p className={styles.fieldHint}>{t("account.totp.enabledHint")}</p>
-            <div className={styles.field}>
-              <label className={styles.fieldLabel} htmlFor="account-totp-disable">
-                {t("account.totp.codeLabel")}
-              </label>
-              <input
-                id="account-totp-disable"
-                data-testid={TID.accountTotpDisableInput}
-                className={styles.input}
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                value={totpDisableCode}
-                onChange={(e) => setTotpDisableCode(e.target.value.replace(/\D/g, ""))}
-                placeholder="123456"
-              />
-            </div>
+            <TextField
+              className={styles.field}
+              label={t("account.totp.codeLabel")}
+              id="account-totp-disable"
+              data-testid={TID.accountTotpDisableInput}
+              inputClassName={styles.input}
+              inputMode="numeric"
+              maxLength={6}
+              value={totpDisableCode}
+              onChange={(e) => setTotpDisableCode(e.target.value.replace(/\D/g, ""))}
+              placeholder="123456"
+            />
             <button
               type="button"
               data-testid={TID.accountTotpDisable}
@@ -391,22 +378,18 @@ export function AccountPanel() {
                 </div>
               </div>
             )}
-            <div className={styles.field}>
-              <label className={styles.fieldLabel} htmlFor="account-totp-code">
-                {t("account.totp.codeLabel")}
-              </label>
-              <input
-                id="account-totp-code"
-                data-testid={TID.accountTotpCodeInput}
-                className={styles.input}
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                value={totpCode}
-                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
-                placeholder="123456"
-              />
-            </div>
+            <TextField
+              className={styles.field}
+              label={t("account.totp.codeLabel")}
+              id="account-totp-code"
+              data-testid={TID.accountTotpCodeInput}
+              inputClassName={styles.input}
+              inputMode="numeric"
+              maxLength={6}
+              value={totpCode}
+              onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
+              placeholder="123456"
+            />
             <button
               type="button"
               data-testid={TID.accountTotpVerify}

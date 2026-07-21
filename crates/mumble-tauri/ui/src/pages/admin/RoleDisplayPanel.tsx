@@ -6,6 +6,7 @@ import { RoleColorPicker } from "../../components/elements/role/RoleColorPicker"
 import { RoleIconPicker } from "../../components/elements/role/RoleIconPicker";
 import { RolePreviewCard } from "../../components/elements/role/RolePreviewCard";
 import styles from "./AdminPanel.module.css";
+import { TextField } from "../../components/elements/TextField";
 
 export interface RoleDisplayPanelProps {
   readonly role: AclGroup;
@@ -42,17 +43,14 @@ export function RoleDisplayPanel({ role, onPatch, disabled }: RoleDisplayPanelPr
   return (
     <div className={styles.editorGrid}>
       <div className={styles.editorMain}>
-        <label className={styles.fieldLabel}>
-          {t("roleDisplay.fieldName")}
-          <input
-            type="text"
-            className={styles.input}
-            value={role.name}
-            onChange={(e) => onPatch({ name: e.target.value })}
-            disabled={disabled || role.inherited}
-            data-testid={TID.roleNameInput}
-          />
-        </label>
+        <TextField
+          label={t("roleDisplay.fieldName")}
+          inputClassName={styles.input}
+          value={role.name}
+          onChange={(e) => onPatch({ name: e.target.value })}
+          disabled={disabled || role.inherited}
+          data-testid={TID.roleNameInput}
+        />
 
         <fieldset className={styles.fieldset}>
           <legend>{t("roleDisplay.fieldColor")}</legend>
@@ -72,21 +70,20 @@ export function RoleDisplayPanel({ role, onPatch, disabled }: RoleDisplayPanelPr
           />
         </fieldset>
 
-        <label className={styles.fieldLabel}>
-          {t("roleDisplay.fieldStylePreset")}
-          <select
-            className={styles.select}
-            value={role.style_preset ?? ""}
-            onChange={(e) => onPatch({ style_preset: e.target.value || null })}
-            disabled={disabled || role.inherited}
-          >
+        <TextField
+          label={t("roleDisplay.fieldStylePreset")}
+          select
+          inputClassName={styles.select}
+          value={role.style_preset ?? ""}
+          onChange={(e) => onPatch({ style_preset: e.target.value || null })}
+          disabled={disabled || role.inherited}
+        >
             {stylePresets.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label}
               </option>
             ))}
-          </select>
-        </label>
+        </TextField>
 
         <fieldset className={styles.fieldset}>
           <legend>{t("roleDisplay.fieldMetadata")}</legend>

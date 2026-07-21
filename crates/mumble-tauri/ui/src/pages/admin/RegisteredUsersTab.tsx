@@ -15,7 +15,8 @@ import { useAppStore } from "../../store";
 import { rootChannelId } from "./rootChannel";
 import { UserRoleManagerDialog } from "./UserRoleManagerDialog";
 import styles from "./AdminPanel.module.css";
-import { SearchInput } from "../../components/elements/TextInput";
+import { ToolbarSearch } from "../../components/elements/SearchFields";
+import { TextField } from "../../components/elements/TextField";
 
 /** Builds a map of `user_id -> roles` from the root-channel ACL groups. */
 function buildUserRoleMap(groups: readonly AclGroup[]): Map<number, AclGroup[]> {
@@ -271,7 +272,7 @@ export function RegisteredUsersTab() {
 
       <div className={styles.toolbar}>
         <div className={styles.searchWrap}>
-          <SearchInput
+          <ToolbarSearch
             ref={searchRef}
             className={styles.searchInput}
             placeholder={t("registeredUsers.searchPlaceholder")}
@@ -324,10 +325,11 @@ export function RegisteredUsersTab() {
                   <td>
                     {editingId === u.user_id ? (
                       <span className={styles.inlineEdit}>
-                        <input
+                        <TextField
                           ref={editRef}
-                          className={styles.inputSmall}
-                          type="text"
+                          size="small"
+                          fullWidth={false}
+                          aria-label={t("registeredUsers.renameAriaLabel", { defaultValue: "User name" })}
                           value={editName}
                           onChange={(e) => setEditName(e.target.value)}
                           onKeyDown={(e) => {

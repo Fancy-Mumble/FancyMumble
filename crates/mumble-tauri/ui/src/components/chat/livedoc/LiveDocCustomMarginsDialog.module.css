@@ -51,13 +51,6 @@
 
 .input {
   flex: 1;
-  padding: 7px 10px;
-  background: var(--color-surface, #1e2128);
-  border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.12));
-  border-radius: var(--radius-sm, 4px);
-  color: var(--color-text-primary, #f5f6f8);
-  font-size: 13px;
-  outline: none;
   appearance: textfield;
   -moz-appearance: textfield;
 }

@@ -6,6 +6,7 @@ import { Toggle } from "./SharedControls";
 import { registerSettings } from "./settingsSearchRegistry";
 import { StreamViewerBackendSetting } from "./StreamViewerBackendSetting";
 import styles from "./SettingsPage.module.css";
+import { TextField } from "../../components/elements/TextField";
 
 registerSettings("advanced")
   .add("advanced.expertMode", ["expert"])
@@ -217,14 +218,14 @@ export function AdvancedPanel({
             </a>{" "}
             {t("advanced.klipyApiKeyHintAfter")}
           </p>
-          <input
+          <TextField
             type="password"
-            className={styles.input}
             value={klipyApiKey}
             onChange={(e) => onKlipyApiKeyChange(e.target.value)}
             placeholder="klipy_xxxxxxxx..."
             autoComplete="off"
             spellCheck={false}
+            aria-label={t("advanced.klipyApiKeyLabel", { defaultValue: "Klipy API key" })}
           />
         </section>
       )}

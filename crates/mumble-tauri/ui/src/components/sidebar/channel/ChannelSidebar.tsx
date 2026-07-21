@@ -31,7 +31,7 @@ import { PERM_LISTEN, PERM_WRITE } from "../../../utils/permissions";
 import { filterVisibleChannels, channelDisplayName, filterMeetingChannels, isDmChannel, meetingRooms, dmPeerUserId, usersForChannelTree } from "../../../utils/channelVisibility";
 import { requestLeaveMeeting } from "../../chat/calendar/meetings";
 import { TID } from "../../../testids";
-import { SearchInput } from "../../../components/elements/TextInput";
+import { SidebarSearch } from "../../../components/elements/SearchFields";
 
 /** Check whether a channel's cached permissions include the Listen bit. */
 function canListen(channel: ChannelEntry | undefined): boolean {
@@ -493,9 +493,8 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
           </button>
         )}
         <div className={styles.searchBar}>
-          <SearchInput
+          <SidebarSearch
             ref={searchInputRef}
-            fieldSize="sm"
             placeholder={t("channelSidebar.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => {

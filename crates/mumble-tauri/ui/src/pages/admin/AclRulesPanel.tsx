@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { AclEntry } from "../../types";
 import styles from "./AdminPanel.module.css";
 import { PERMISSIONS } from "../../utils/permissions";
+import { TextField } from "../../components/elements/TextField";
 
 export function AclRulesPanel({
   acls,
@@ -112,27 +113,22 @@ function AclRuleCard({
 
           {!entry.inherited && (
             <div className={styles.aclRuleOptions}>
-              <label className={styles.fieldLabel}>
-                {t("aclRules.labelGroup")}
-                <input
-                  className={styles.inputSmall}
-                  type="text"
-                  value={entry.group ?? ""}
-                  onChange={(e) => onPatch(index, { group: e.target.value || null, user_id: null })}
-                />
-              </label>
-              <label className={styles.fieldLabel}>
-                {t("aclRules.labelUserId")}
-                <input
-                  className={styles.inputSmall}
-                  type="number"
-                  value={entry.user_id ?? ""}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    onPatch(index, { user_id: val ? Number(val) : null, group: null });
-                  }}
-                />
-              </label>
+              <TextField
+                label={t("aclRules.labelGroup")}
+                size="small"
+                value={entry.group ?? ""}
+                onChange={(e) => onPatch(index, { group: e.target.value || null, user_id: null })}
+              />
+              <TextField
+                label={t("aclRules.labelUserId")}
+                size="small"
+                type="number"
+                value={entry.user_id ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  onPatch(index, { user_id: val ? Number(val) : null, group: null });
+                }}
+              />
             </div>
           )}
 

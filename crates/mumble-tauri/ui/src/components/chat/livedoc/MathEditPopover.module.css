@@ -32,15 +32,8 @@
   width: 100%;
   min-height: 32px;
   resize: none;
-  background: var(--color-surface, #1e2128);
-  color: var(--color-text-primary, #f5f6f8);
-  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
-  border-radius: var(--radius-sm, 4px);
-  padding: 6px 8px;
   font-family: var(--font-mono, ui-monospace, "JetBrains Mono", Consolas, monospace);
-  font-size: 13px;
   line-height: 1.4;
-  outline: none;
 }
 
 .textarea:focus {

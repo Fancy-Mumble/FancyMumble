@@ -57,7 +57,7 @@ import {
 import { bytesToAvatarUrl, revokeDisplayUrl } from "../utils/imageBlobs";
 import sidebarStyles from "../components/sidebar/channel/ChannelSidebar.module.css";
 import styles from "./FriendsPage.module.css";
-import { SearchInput } from "../components/elements/TextInput";
+import { SidebarSearch } from "../components/elements/SearchFields";
 
 interface FriendsMatch {
   serverId: string;
@@ -406,8 +406,7 @@ export default function FriendsPage() {
           <aside className={sidebarStyles.sidebar}>
             <div className={sidebarStyles.header}>
               <div className={sidebarStyles.searchBar}>
-                <SearchInput
-                  fieldSize="sm"
+                <SidebarSearch
                   placeholder={tSidebar("channelSidebar.searchPlaceholder")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}

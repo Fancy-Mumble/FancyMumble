@@ -70,12 +70,6 @@
 }
 
 .userShortcutSelect {
-  padding: 6px 8px;
-  background: var(--color-glass);
-  border: 1px solid var(--color-glass-border);
-  border-radius: 4px;
-  color: var(--color-text-primary);
-  font-size: 13px;
 }
 
 .userShortcutPickActions {
