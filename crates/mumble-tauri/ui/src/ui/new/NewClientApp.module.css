@@ -14,7 +14,7 @@ button { color:inherit; }
 .servers,.channels,.members { background:var(--panel); backdrop-filter:blur(24px) saturate(115%); border-right:1px solid var(--line); min-height:0; }
 .servers { display:flex; flex-direction:column; align-items:center; padding:14px 10px; gap:10px; }
 .server,.serverActive,.addServer { border:1px solid var(--line); width:46px; height:46px; border-radius:15px; background:rgba(255,255,255,.04); color:var(--muted); cursor:pointer; font-weight:700; }
-.serverActive { color:#102535; background:var(--accent); border-color:transparent; box-shadow:0 8px 24px rgba(61,157,215,.16); }
+.serverActive { color:var(--text); background:rgba(255,255,255,.075); border-color:rgba(101,184,237,.28); box-shadow:inset 3px 0 0 var(--accent),0 8px 24px rgba(0,0,0,.12); }
 .addServer { margin-top:auto; border-style:dashed; display:grid; place-items:center; }
 .addServer svg { width:18px; }
 .channels,.members { display:flex; flex-direction:column; min-height:0; overflow:hidden; }
@@ -142,23 +142,34 @@ button { color:inherit; }
 .serverMark { flex:0 0 auto; width:44px; height:44px; display:grid; place-items:center; border-radius:14px; background:rgba(255,255,255,.045); color:#9aa5b4; font-size:11px; font-weight:800; }
 .serverDetails { display:none; min-width:0; flex:1; text-align:left; }
 .serverDetails strong,.serverDetails small,.serverDetails em { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.serverDetails strong { color:#e4e9ef; font-size:12px; }.serverDetails small { margin-top:3px; color:#788493; font-size:9px; }.serverDetails em { margin-top:4px; color:#9ab5c6; font-size:9px; font-style:normal; }
+.serverDetails strong { color:#e9edf3; font-size:13px; line-height:1.25; }.serverDetails small { margin-top:3px; color:#9aa5b3; font-size:11px; line-height:1.25; }.serverDetails em { margin-top:3px; color:#a8bdca; font-size:11px; line-height:1.25; font-style:normal; }
 .savedServer { position:relative; width:46px; height:46px; padding:0; border:1px solid var(--line); border-radius:15px; background:rgba(255,255,255,.03); color:var(--text); cursor:pointer; }
+.savedServer>span:first-child,.serverActive>span:first-child { width:100%; height:100%; }
+.savedServer>span:last-child,.serverActive>span:last-child { display:none; }
 .savedServer .serverMark { width:100%; height:100%; background:transparent; }
-.savedServer>i { position:absolute; right:8px; top:50%; width:6px; height:6px; border-radius:50%; background:#70d1a4; opacity:0; transform:translateY(-50%); }
-.servers .addServer>span { display:none; }
+.serverPresence { display:block; width:6px; height:6px; border-radius:50%; background:#70d1a4; opacity:0; }
+.servers .addServer>span:first-child { display:grid; }
+.servers .addServer>span:nth-child(2) { display:none; }
 .serverRailExpanded .servers { align-items:stretch; padding:14px 12px; }
 .serverRailExpanded .railHeader { justify-content:space-between; padding:0 4px 8px; }
 .serverRailExpanded .railHeader>span { display:block; }
 .serverRailExpanded .serverLibrary { align-items:stretch; }
 .serverRailExpanded .savedServer,.serverRailExpanded .server,.serverRailExpanded .serverActive { width:100%; height:64px; padding:9px; display:flex; align-items:center; gap:10px; border-radius:13px; }
+.serverRailExpanded .savedServer>span:nth-child(2),.serverRailExpanded .serverActive>span:nth-child(2){min-width:0;flex:1}
+.serverRailExpanded .savedServer>span:first-child,.serverRailExpanded .serverActive>span:first-child { width:44px; height:44px; }
+.serverRailExpanded .savedServer>span:last-child,.serverRailExpanded .serverActive>span:last-child { display:grid; }
 .serverRailExpanded .savedServer { border-color:transparent; background:transparent; }
 .serverRailExpanded .savedServer:hover { background:rgba(255,255,255,.045); }
 .serverRailExpanded .savedServer .serverMark { width:44px; height:44px; background:rgba(255,255,255,.05); }
 .serverRailExpanded .serverDetails { display:block; }
-.serverRailExpanded .savedServer>i { opacity:1; }
-.serverRailExpanded .serverActive .serverMark { color:#102535; background:var(--accent); }
+.serverRailExpanded .serverPresence { opacity:1; }
+.serverRailExpanded .serverActive { background:rgba(255,255,255,.065); border-color:rgba(101,184,237,.2); }
+.serverRailExpanded .serverActive .serverMark { color:#ccecff; background:rgba(101,184,237,.16); }
+.serverRailExpanded .serverActive .serverDetails strong { color:#f5f7fa; }
+.serverRailExpanded .serverActive .serverDetails small { color:#a9b5c3; }
+.serverRailExpanded .serverActive .serverDetails em { color:#87b9d6; }
 .serverRailExpanded .servers .addServer { width:100%; height:42px; margin-top:10px; display:flex; align-items:center; justify-content:center; gap:8px; border-radius:11px; }
-.serverRailExpanded .servers .addServer>span { display:inline; font-size:10px; }
+.serverRailExpanded .servers .addServer>span:first-child { display:grid; }
+.serverRailExpanded .servers .addServer>span:nth-child(2) { display:inline; font-size:10px; }
 @media(max-width:720px){.serverRailExpanded,.launcherRoot.serverRailExpanded{grid-template-columns:1fr}.launcherRoot .servers{position:fixed;z-index:12;inset:46px auto 62px 0;width:min(86vw,280px);box-shadow:20px 0 50px rgba(0,0,0,.3)}.launcherIntro{grid-column:1}.onboardingPage{padding:0}.launcherWelcome h1{font-size:29px}.introFeatures{display:none}}
 @media(max-width:720px){.serverRailExpanded .servers{display:flex}}
