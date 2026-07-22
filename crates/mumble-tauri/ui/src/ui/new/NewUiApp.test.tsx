@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useAppStore } from "@core/store";
 import NewUiApp from "./index";
 
 const { setSelectedUiDesignMock, getSavedServersMock } = vi.hoisted(() => ({
@@ -22,9 +23,11 @@ vi.mock("@core/serverStorage", () => ({
 
 describe("NewUiApp", () => {
   beforeEach(() => {
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => document.body });
     setSelectedUiDesignMock.mockClear();
     getSavedServersMock.mockReset();
     getSavedServersMock.mockResolvedValue([]);
+    useAppStore.setState({ status: "disconnected", sessions: [], activeServerId: null });
   });
 
   const renderApp = () => render(<MemoryRouter><NewUiApp /></MemoryRouter>);
@@ -56,6 +59,17 @@ describe("NewUiApp", () => {
     expect(screen.getByText("Morgan")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Collapse server sidebar" }));
     expect(screen.getByRole("button", { name: "Expand server sidebar" })).toBeTruthy();
+  });
+
+  it("starts with the server rail collapsed while connected", () => {
+    useAppStore.setState({
+      status: "connected",
+      activeServerId: "studio",
+      sessions: [{ id: "studio", label: "Fancy studio", host: "voice.example.com", port: 64738, username: "Morgan", certLabel: null, status: "connected" }],
+    });
+    renderApp();
+    const expand = screen.getByRole("button", { name: "Expand server sidebar" });
+    expect(expand.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("previews native title bars for each platform", () => {

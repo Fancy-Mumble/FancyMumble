@@ -45,7 +45,8 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
   const navigate = useNavigate();
   const [surface, setSurface] = useState<Surface>(null);
   const [savedServers, setSavedServers] = useState<SavedServer[] | null>(null);
-  const [serverRailExpanded, setServerRailExpanded] = useState(true);
+  const [launcherRailExpanded, setLauncherRailExpanded] = useState(true);
+  const [connectedRailExpanded, setConnectedRailExpanded] = useState(false);
   const [hideEmptyChannels, setHideEmptyChannels] = useState(false);
   const [hoveredUser, setHoveredUser] = useState<number | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -151,9 +152,9 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
       );
     }
     return (
-      <div className={`${styles.root} ${styles.launcherRoot} ${serverRailExpanded ? styles.serverRailExpanded : ""}`} data-testid="new-client-root">
+      <div className={`${styles.root} ${styles.launcherRoot} ${launcherRailExpanded ? styles.serverRailExpanded : ""}`} data-testid="new-client-root">
         <AppTitleBar actions={[{ id: "servers", label: "Servers", icon: <ServerIcon />, onClick: () => setSurface("servers") }, { id: "design", label: "Design system", icon: <SparklesIcon />, onClick: onOpenDesignSheet }, { id: "legacy", label: "Old UI", icon: <ArrowLeftIcon />, onClick: () => void switchToLegacy(), disabled: switchingBack || override !== null }]} />
-        <ServerRail items={savedServers} expanded={serverRailExpanded} connecting={connecting} label="Saved servers" onToggle={() => setServerRailExpanded((value) => !value)} onSelect={(server) => void connectSaved(server)} onAdd={() => setSurface("servers")} />
+        <ServerRail items={savedServers} expanded={launcherRailExpanded} connecting={connecting} label="Saved servers" onToggle={() => setLauncherRailExpanded((value) => !value)} onSelect={(server) => void connectSaved(server)} onAdd={() => setSurface("servers")} />
         <main className={styles.launcherIntro}>
           <section className={styles.launcherWelcome}>
             <div className={styles.introOrb}><span><VolumeIcon /></span><i /><i /><i /></div>
@@ -175,10 +176,10 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
   }
 
   return (
-    <div className={`${styles.root} ${serverRailExpanded ? styles.serverRailExpanded : ""}`} data-testid="new-client-root">
+    <div className={`${styles.root} ${connectedRailExpanded ? styles.serverRailExpanded : ""}`} data-testid="new-client-root">
       <AppTitleBar serverTitle={activeSession?.label ?? "Connecting"} actions={[{ id: "design", label: "Design system", icon: <SparklesIcon />, onClick: onOpenDesignSheet }, { id: "servers", label: "Servers", icon: <ServerIcon />, onClick: () => setSurface("servers") }, { id: "settings", label: "Settings", icon: <SettingsIcon />, iconOnly: true, onClick: () => setSurface("settings") }, { id: "disconnect", label: "Disconnect", icon: <ArrowLeftIcon />, onClick: () => void useAppStore.getState().disconnect() }]} />
 
-      <ServerRail items={sessions} expanded={serverRailExpanded} activeId={activeServerId} label="Connected servers" onToggle={() => setServerRailExpanded((value) => !value)} onSelect={(session) => void useAppStore.getState().switchServer(session.id)} onAdd={() => setSurface("servers")} />
+      <ServerRail items={sessions} expanded={connectedRailExpanded} activeId={activeServerId} label="Connected servers" onToggle={() => setConnectedRailExpanded((value) => !value)} onSelect={(session) => void useAppStore.getState().switchServer(session.id)} onAdd={() => setSurface("servers")} />
 
       <aside className={styles.channels}>
         <div className={styles.panelHeader}><div><small>SERVER</small><strong>{activeSession?.label ?? activeSession?.host ?? "Fancy server"}</strong></div><IconButton icon={<InfoIcon />} label="Server information" onClick={() => setSurface("server-info")} /></div>

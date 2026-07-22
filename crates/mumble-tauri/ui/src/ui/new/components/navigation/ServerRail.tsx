@@ -27,8 +27,8 @@ function ServerRailEntry({ item, active, disabled, onSelect }: { item: ServerRai
 }
 
 export default function ServerRail<T extends ServerRailItem>({ items, expanded, activeId, connecting = false, label, onToggle, onSelect, onAdd }: ServerRailProps<T>) {
-  return <aside className={styles.servers} aria-label={label}>
-    <div className={styles.railHeader}><span>{activeId ? "CONNECTED" : "YOUR SERVERS"}</span><IconButton icon={expanded ? <ChevronLeftIcon /> : <ChevronRightIcon />} label={expanded ? "Collapse server sidebar" : "Expand server sidebar"} onClick={onToggle} /></div>
+  return <aside className={styles.servers} aria-label={label} data-expanded={expanded}>
+    <div className={styles.railHeader}><span>{activeId ? "CONNECTED" : "YOUR SERVERS"}</span><IconButton icon={expanded ? <ChevronLeftIcon /> : <ChevronRightIcon />} label={expanded ? "Collapse server sidebar" : "Expand server sidebar"} aria-expanded={expanded} onClick={onToggle} /></div>
     <div className={styles.serverLibrary}>{items.map((item) => <ServerRailEntry key={item.id} item={item} active={item.id === activeId} disabled={connecting} onSelect={() => onSelect(item)} />)}</div>
     <Button variant="ghost" className={styles.addServer} onClick={onAdd} leadingIcon={<PlusIcon />}>Add server</Button>
   </aside>;
