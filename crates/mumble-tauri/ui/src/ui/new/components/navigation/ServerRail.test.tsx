@@ -19,6 +19,7 @@ describe("ServerRail", () => {
     expect(screen.getByText("Magical Rocks")).toBeTruthy();
     expect(screen.getByText("magical.rocks:64738")).toBeTruthy();
     expect(screen.getByText("MyUser")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Collapse server sidebar" }).getAttribute("aria-expanded")).toBe("true");
   });
 
   it("composes selection and add actions through accessible buttons", () => {
