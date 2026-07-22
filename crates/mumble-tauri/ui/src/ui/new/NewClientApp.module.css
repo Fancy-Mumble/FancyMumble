@@ -112,4 +112,53 @@ button { color:inherit; }
 .connectButton:disabled { opacity:.45; cursor:default; }
 .error { padding:10px 12px; border:1px solid rgba(246,111,111,.22); border-radius:9px; background:rgba(246,111,111,.08); color:#f58d8d; font-size:11px; }
 @media (max-width:1000px) { .root { grid-template-columns:64px 238px minmax(380px,1fr); } .members { display:none; } }
-@media (max-width:720px) { .root { grid-template:46px minmax(0,1fr) 62px / 1fr; } .titlebar { grid-column:1; } .servers,.members { display:none; } .channels { position:fixed; inset:46px auto 62px 0; width:min(86vw,300px); z-index:5; transform:translateX(-100%); } .conversation { grid-column:1; } .voiceDock { position:fixed; bottom:0; left:0; right:0; height:62px; background:var(--panel); backdrop-filter:blur(22px); } .titleActions button:first-child { display:none; } }
+@media (max-width:720px) { .root { grid-template:46px minmax(0,1fr) 62px / 1fr; } .titlebar { grid-column:1; } .root:not(.serverRailExpanded) .servers,.members { display:none; } .channels { position:fixed; inset:46px auto 62px 0; width:min(86vw,300px); z-index:5; transform:translateX(-100%); } .conversation { grid-column:1; } .voiceDock { position:fixed; bottom:0; left:0; right:0; height:62px; background:var(--panel); backdrop-filter:blur(22px); } .titleActions button:first-child { display:none; } }
+.serverRailExpanded { grid-template-columns:240px 272px minmax(420px,1fr) 260px; }
+.onboardingRoot { grid-template:48px minmax(0,1fr) / 1fr; }
+.onboardingPage { grid-column:1; min-height:0; display:grid; place-items:center; padding:22px; }
+.launcherRoot { grid-template-columns:72px minmax(0,1fr); }
+.launcherRoot.serverRailExpanded { grid-template-columns:280px minmax(0,1fr); }
+.launcherRoot .servers { grid-column:1; }
+.launcherIntro { grid-column:2; min-width:0; display:grid; place-items:center; padding:34px; }
+.launcherWelcome { width:min(720px,100%); display:flex; flex-direction:column; align-items:center; text-align:center; }
+.launcherWelcome>small { margin-top:28px; color:var(--accent); font-size:9px; letter-spacing:.16em; }
+.launcherWelcome h1 { margin:8px 0 12px; font-size:36px; line-height:1.08; letter-spacing:-.045em; }
+.launcherWelcome h1 em { color:#9bcce9; font-style:normal; font-weight:500; }
+.launcherWelcome>p { max-width:560px; margin:0; color:var(--muted); font-size:13px; line-height:1.65; }
+.introOrb { position:relative; width:110px; height:110px; display:grid; place-items:center; border:1px solid rgba(101,184,237,.14); border-radius:50%; background:radial-gradient(circle,rgba(101,184,237,.12),rgba(101,184,237,.025) 52%,transparent 53%); }
+.introOrb span { width:50px; height:50px; display:grid; place-items:center; border-radius:17px; background:rgba(101,184,237,.16); color:#8dcef3; box-shadow:0 14px 40px rgba(33,107,149,.16); }
+.introOrb span svg { width:22px; }
+.introOrb>i { position:absolute; width:7px; height:7px; border-radius:50%; background:#70d1a4; box-shadow:0 0 15px rgba(112,209,164,.6); }
+.introOrb>i:nth-of-type(1) { top:8px; left:29px; }.introOrb>i:nth-of-type(2) { right:5px; bottom:35px; }.introOrb>i:nth-of-type(3) { left:5px; bottom:25px; background:#65b8ed; }
+.introFeatures { margin-top:24px; display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+.introFeatures>span { padding:9px 12px; border:1px solid var(--line); border-radius:10px; background:rgba(255,255,255,.025); color:#8592a1; font-size:10px; }
+.introFeatures b { color:#c9d3de; }
+.connectingHint { display:block; width:100%; margin-top:12px; color:#8dcef3; font-size:11px; }
+.railHeader { width:100%; min-height:32px; display:flex; align-items:center; justify-content:center; }
+.railHeader>span { display:none; color:#697687; font-size:9px; letter-spacing:.12em; }
+.railHeader button { width:32px; height:30px; display:grid; place-items:center; border:0; border-radius:8px; background:rgba(255,255,255,.035); color:#788594; cursor:pointer; }
+.railHeader svg { width:14px; }
+.serverLibrary { width:100%; min-height:0; flex:1; display:flex; flex-direction:column; align-items:center; gap:8px; overflow-y:auto; overflow-x:hidden; }
+.serverMark { flex:0 0 auto; width:44px; height:44px; display:grid; place-items:center; border-radius:14px; background:rgba(255,255,255,.045); color:#9aa5b4; font-size:11px; font-weight:800; }
+.serverDetails { display:none; min-width:0; flex:1; text-align:left; }
+.serverDetails strong,.serverDetails small,.serverDetails em { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.serverDetails strong { color:#e4e9ef; font-size:12px; }.serverDetails small { margin-top:3px; color:#788493; font-size:9px; }.serverDetails em { margin-top:4px; color:#9ab5c6; font-size:9px; font-style:normal; }
+.savedServer { position:relative; width:46px; height:46px; padding:0; border:1px solid var(--line); border-radius:15px; background:rgba(255,255,255,.03); color:var(--text); cursor:pointer; }
+.savedServer .serverMark { width:100%; height:100%; background:transparent; }
+.savedServer>i { position:absolute; right:8px; top:50%; width:6px; height:6px; border-radius:50%; background:#70d1a4; opacity:0; transform:translateY(-50%); }
+.servers .addServer>span { display:none; }
+.serverRailExpanded .servers { align-items:stretch; padding:14px 12px; }
+.serverRailExpanded .railHeader { justify-content:space-between; padding:0 4px 8px; }
+.serverRailExpanded .railHeader>span { display:block; }
+.serverRailExpanded .serverLibrary { align-items:stretch; }
+.serverRailExpanded .savedServer,.serverRailExpanded .server,.serverRailExpanded .serverActive { width:100%; height:64px; padding:9px; display:flex; align-items:center; gap:10px; border-radius:13px; }
+.serverRailExpanded .savedServer { border-color:transparent; background:transparent; }
+.serverRailExpanded .savedServer:hover { background:rgba(255,255,255,.045); }
+.serverRailExpanded .savedServer .serverMark { width:44px; height:44px; background:rgba(255,255,255,.05); }
+.serverRailExpanded .serverDetails { display:block; }
+.serverRailExpanded .savedServer>i { opacity:1; }
+.serverRailExpanded .serverActive .serverMark { color:#102535; background:var(--accent); }
+.serverRailExpanded .servers .addServer { width:100%; height:42px; margin-top:10px; display:flex; align-items:center; justify-content:center; gap:8px; border-radius:11px; }
+.serverRailExpanded .servers .addServer>span { display:inline; font-size:10px; }
+@media(max-width:720px){.serverRailExpanded,.launcherRoot.serverRailExpanded{grid-template-columns:1fr}.launcherRoot .servers{position:fixed;z-index:12;inset:46px auto 62px 0;width:min(86vw,280px);box-shadow:20px 0 50px rgba(0,0,0,.3)}.launcherIntro{grid-column:1}.onboardingPage{padding:0}.launcherWelcome h1{font-size:29px}.introFeatures{display:none}}
+@media(max-width:720px){.serverRailExpanded .servers{display:flex}}

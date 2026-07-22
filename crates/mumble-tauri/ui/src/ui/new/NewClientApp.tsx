@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { initEventListeners, useAppStore } from "@core/store";
 import { getPreferences } from "@core/preferencesStorage";
@@ -17,9 +17,12 @@ import {
   VolumeIcon,
   InfoIcon,
   WebcamIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from "@ui/icons";
 import { getUiDesignOverride, setSelectedUiDesign } from "@ui/selection";
-import type { ChannelEntry, ChatMessage, UserEntry } from "@core/types";
+import type { ChannelEntry, ChatMessage, SavedServer, UserEntry } from "@core/types";
+import { getSavedServers } from "@core/serverStorage";
 import styles from "./NewClientApp.module.css";
 import {
   InfoPanel,
@@ -30,6 +33,7 @@ import {
   SettingsPanel,
   UserCard,
   UserHoverCard,
+  OnboardingStepper,
   type Surface,
 } from "./NewClientSurfaces";
 
@@ -103,10 +107,9 @@ function Message({ message }: { message: ChatMessage }) {
 
 export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
   const navigate = useNavigate();
-  const [host, setHost] = useState("localhost");
-  const [port, setPort] = useState(64738);
-  const [username, setUsername] = useState("");
   const [surface, setSurface] = useState<Surface>(null);
+  const [savedServers, setSavedServers] = useState<SavedServer[] | null>(null);
+  const [serverRailExpanded, setServerRailExpanded] = useState(true);
   const [hideEmptyChannels, setHideEmptyChannels] = useState(false);
   const [hoveredUser, setHoveredUser] = useState<number | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -169,12 +172,17 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
     return () => { active = false; globalThis.removeEventListener("preferences-changed", onPreferencesChanged); };
   }, []);
 
-  const connect = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!host.trim() || !username.trim() || connecting) return;
+  const reloadSavedServers = () => {
+    void getSavedServers().then(setSavedServers).catch(() => setSavedServers([]));
+  };
+
+  useEffect(() => { reloadSavedServers(); }, []);
+
+  const connectSaved = async (server: SavedServer) => {
+    if (connecting) return;
     setConnecting(true);
     try {
-      await useAppStore.getState().connect(host.trim(), port, username.trim());
+      await useAppStore.getState().connect(server.host, server.port, server.username, server.cert_label);
     } finally {
       setConnecting(false);
     }
@@ -198,8 +206,19 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
   };
 
   if (status === "disconnected" && sessions.length === 0) {
+    if (savedServers === null || savedServers.length === 0) {
+      return (
+        <div className={`${styles.root} ${styles.onboardingRoot}`} data-testid="new-client-root">
+          <header className={styles.titlebar} data-tauri-drag-region>
+            <span className={styles.appMark}><SparklesIcon /></span><strong>Fancy Mumble</strong>
+            <div className={styles.titleActions}><button type="button" onClick={onOpenDesignSheet}><SparklesIcon /> Design system</button><button type="button" onClick={() => void switchToLegacy()} disabled={switchingBack || override !== null}><ArrowLeftIcon /> Old UI</button></div>
+          </header>
+          <main className={styles.onboardingPage}>{savedServers === null ? <span className={styles.spinner} /> : <OnboardingStepper onComplete={(server, connectNow) => { setSavedServers([server]); if (connectNow) void connectSaved(server); }} />}</main>
+        </div>
+      );
+    }
     return (
-      <div className={styles.root} data-testid="new-client-root">
+      <div className={`${styles.root} ${styles.launcherRoot} ${serverRailExpanded ? styles.serverRailExpanded : ""}`} data-testid="new-client-root">
         <header className={styles.titlebar} data-tauri-drag-region>
           <span className={styles.appMark}><SparklesIcon /></span><strong>Fancy Mumble</strong>
           <div className={styles.titleActions}>
@@ -208,32 +227,33 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
             <button type="button" onClick={() => void switchToLegacy()} disabled={switchingBack || override !== null}><ArrowLeftIcon /> Old UI</button>
           </div>
         </header>
-        <main className={styles.connectPage}>
-          <section className={styles.connectCard}>
-            <span className={styles.connectIcon}><ServerIcon /></span>
-            <small>NEW CLIENT</small>
-            <h1>Join a conversation</h1>
-            <p>Connect to a Mumble server. The same trusted client logic now drives a calmer, consistent interface.</p>
-            <form onSubmit={(event) => void connect(event)}>
-              <label>Server address<input value={host} onChange={(event) => setHost(event.target.value)} placeholder="voice.example.com" /></label>
-              <div className={styles.formRow}>
-                <label>Port<input type="number" min={1} max={65535} value={port} onChange={(event) => setPort(Number(event.target.value))} /></label>
-                <label>Display name<input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Your name" /></label>
-              </div>
+        <aside className={styles.servers} aria-label="Saved servers">
+          <div className={styles.railHeader}><span>YOUR SERVERS</span><button type="button" onClick={() => setServerRailExpanded((value) => !value)} aria-label={serverRailExpanded ? "Collapse server sidebar" : "Expand server sidebar"}>{serverRailExpanded ? <ChevronLeftIcon /> : <ChevronRightIcon />}</button></div>
+          <div className={styles.serverLibrary}>{savedServers.map((server) => <button key={server.id} type="button" className={styles.savedServer} disabled={connecting} onClick={() => void connectSaved(server)} title={`Connect to ${server.label}`}><span className={styles.serverMark}>{initials(server.label)}</span><span className={styles.serverDetails}><strong>{server.label}</strong><small>{server.host}:{server.port}</small><em>{server.username}</em></span><i /></button>)}</div>
+          <button type="button" className={styles.addServer} title="Add server" onClick={() => setSurface("servers")}><PlusIcon /><span>Add server</span></button>
+        </aside>
+        <main className={styles.launcherIntro}>
+          <section className={styles.launcherWelcome}>
+            <div className={styles.introOrb}><span><VolumeIcon /></span><i /><i /><i /></div>
+            <small>SERVER LAUNCHER</small>
+            <h1>Your conversations<br /><em>are ready when you are.</em></h1>
+            <p>Choose a server from the sidebar to connect. Expand it whenever you want to see addresses, identities, and connection details.</p>
+            <div className={styles.introFeatures}>
+              <span><b>{savedServers.length}</b> saved server{savedServers.length === 1 ? "" : "s"}</span>
+              <span><b>Native</b> low-latency voice</span>
+              <span><b>Private</b> server-first design</span>
               {error && <div className={styles.error}>{error}</div>}
-              <button className={styles.connectButton} type="submit" disabled={connecting || !host.trim() || !username.trim()}>
-                {connecting ? "Connecting…" : "Connect to server"}
-              </button>
-            </form>
+              {connecting && <span className={styles.connectingHint}>Connecting…</span>}
+            </div>
           </section>
         </main>
-        {surface === "servers" && <ServerBrowser onClose={() => setSurface(null)} />}
+        {surface === "servers" && <ServerBrowser onClose={() => { setSurface(null); reloadSavedServers(); }} />}
       </div>
     );
   }
 
   return (
-    <div className={styles.root} data-testid="new-client-root">
+    <div className={`${styles.root} ${serverRailExpanded ? styles.serverRailExpanded : ""}`} data-testid="new-client-root">
       <header className={styles.titlebar} data-tauri-drag-region>
         <span className={styles.appMark}><SparklesIcon /></span><strong>Fancy Mumble</strong>
         <span className={styles.serverTitle}>{activeSession?.label ?? "Connecting"}</span>
@@ -246,12 +266,13 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
       </header>
 
       <aside className={styles.servers} aria-label="Connected servers">
+        <div className={styles.railHeader}><span>CONNECTED</span><button type="button" onClick={() => setServerRailExpanded((value) => !value)} aria-label={serverRailExpanded ? "Collapse server sidebar" : "Expand server sidebar"}>{serverRailExpanded ? <ChevronLeftIcon /> : <ChevronRightIcon />}</button></div>
         {sessions.map((session) => (
           <button key={session.id} type="button" className={session.id === activeServerId ? styles.serverActive : styles.server} onClick={() => void useAppStore.getState().switchServer(session.id)} title={session.label}>
-            {initials(session.label)}
+            <span className={styles.serverMark}>{initials(session.label)}</span><span className={styles.serverDetails}><strong>{session.label}</strong><small>{session.host}:{session.port}</small><em>{session.username}</em></span>
           </button>
         ))}
-        <button type="button" className={styles.addServer} title="Add server" onClick={() => setSurface("servers")}><PlusIcon /></button>
+        <button type="button" className={styles.addServer} title="Add server" onClick={() => setSurface("servers")}><PlusIcon /><span>Add server</span></button>
       </aside>
 
       <aside className={styles.channels}>
@@ -265,7 +286,7 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
           {visibleChannels.length === 0 && <div className={styles.noChannels}>No active channels</div>}
         </nav>
         <div className={styles.voiceDock}>
-          <div><span className={styles.avatar}>{initials(users.find((user) => user.session === ownSession)?.name ?? username ?? "You")}</span><span><strong>{users.find((user) => user.session === ownSession)?.name ?? (username || "You")}</strong><small>{inCall ? "Voice connected" : "Voice available"}</small></span></div>
+          <div><span className={styles.avatar}>{initials(users.find((user) => user.session === ownSession)?.name ?? activeSession?.username ?? "You")}</span><span><strong>{users.find((user) => user.session === ownSession)?.name ?? activeSession?.username ?? "You"}</strong><small>{inCall ? "Voice connected" : "Voice available"}</small></span></div>
           <button type="button" className={voiceState === "muted" ? styles.controlActive : undefined} onClick={() => void (voiceState === "inactive" ? useAppStore.getState().enableVoice() : useAppStore.getState().toggleMute())} aria-label={voiceState === "muted" ? "Unmute" : "Mute"}>{voiceState === "muted" ? <MicOffIcon /> : <MicIcon />}</button>
           <button type="button" onClick={() => void useAppStore.getState().toggleDeafen()} aria-label="Toggle deafen"><HeadphonesIcon /></button>
         </div>
@@ -293,7 +314,7 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
       </aside>
       {hoveredUser !== null && selectedUser === null && users.find((user) => user.session === hoveredUser) && <UserHoverCard user={users.find((user) => user.session === hoveredUser)!} />}
       {selectedUser !== null && users.find((user) => user.session === selectedUser) && <UserCard user={users.find((user) => user.session === selectedUser)!} onClose={() => useAppStore.getState().selectUser(null)} />}
-      {surface === "servers" && <ServerBrowser onClose={() => setSurface(null)} />}
+      {surface === "servers" && <ServerBrowser onClose={() => { setSurface(null); reloadSavedServers(); }} />}
       {surface === "settings" && <SettingsPanel onClose={() => setSurface(null)} />}
       {surface === "server-info" && <InfoPanel kind="server" channel={activeChannel} onClose={() => setSurface(null)} />}
       {surface === "channel-info" && <InfoPanel kind="channel" channel={activeChannel} onClose={() => setSurface(null)} />}
