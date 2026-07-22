@@ -112,12 +112,12 @@ button { color:inherit; }
 .connectButton { height:43px; margin-top:4px; border:0; border-radius:10px; background:var(--accent); color:#0d2637; font-weight:750; cursor:pointer; }
 .connectButton:disabled { opacity:.45; cursor:default; }
 .error { padding:10px 12px; border:1px solid rgba(246,111,111,.22); border-radius:9px; background:rgba(246,111,111,.08); color:#f58d8d; font-size:11px; }
-@media (max-width:1000px) { .root { grid-template-columns:64px 238px minmax(380px,1fr); } .members { display:none; } }
+@media (max-width:1000px) { .root { --server-rail-width:64px; grid-template-columns:var(--server-rail-width) 238px minmax(380px,1fr); } .members { display:none; } }
 @media (max-width:720px) { .root { grid-template:46px minmax(0,1fr) 62px / 1fr; } .titlebar { grid-column:1; } .root:not(.serverRailExpanded) .servers,.members { display:none; } .channels { position:fixed; inset:46px auto 62px 0; width:min(86vw,300px); z-index:5; transform:translateX(-100%); } .conversation { grid-column:1; } .voiceDock { position:fixed; bottom:0; left:0; right:0; height:62px; background:var(--panel); backdrop-filter:blur(22px); } .titleActions button:first-child { display:none; } }
 .serverRailExpanded { --server-rail-width:240px; }
 .onboardingRoot { grid-template:48px minmax(0,1fr) / 1fr; }
 .onboardingPage { grid-column:1; min-height:0; display:grid; place-items:center; padding:22px; }
-.launcherRoot { grid-template-columns:var(--server-rail-width) minmax(0,1fr); }
+.launcherRoot { --server-rail-width:72px; grid-template-columns:var(--server-rail-width) minmax(0,1fr); }
 .launcherRoot.serverRailExpanded { --server-rail-width:280px; }
 .launcherRoot .servers { grid-column:1; }
 .launcherIntro { grid-column:2; min-width:0; display:grid; place-items:center; padding:34px; }
