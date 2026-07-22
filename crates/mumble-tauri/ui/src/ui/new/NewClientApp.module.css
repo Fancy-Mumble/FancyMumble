@@ -1,8 +1,7 @@
-@property --server-rail-width { syntax:"<length>"; inherits:false; initial-value:72px; }
 :global(*) { box-sizing: border-box; }
 :global(body) { margin: 0; background: #0d1117; }
 :global(button), :global(input), :global(textarea) { font: inherit; }
-.root { --bg:#0d1117; --panel:rgba(20,25,33,.88); --panel2:rgba(25,31,40,.78); --line:rgba(255,255,255,.085); --text:#edf1f7; --muted:#8f99a8; --accent:#65b8ed; --server-rail-width:72px; min-height:100vh; color:var(--text); background:radial-gradient(circle at 75% 0,rgba(65,116,160,.12),transparent 34%),var(--bg); display:grid; grid-template:48px minmax(0,1fr) / var(--server-rail-width) 272px minmax(420px,1fr) 260px; font-family:Inter,"Segoe UI",system-ui,sans-serif; overflow:hidden; transition:--server-rail-width .34s cubic-bezier(.2,.8,.2,1),grid-template-columns .34s cubic-bezier(.2,.8,.2,1); }
+.root { --bg:#0d1117; --panel:rgba(20,25,33,.88); --panel2:rgba(25,31,40,.78); --line:rgba(255,255,255,.085); --text:#edf1f7; --muted:#8f99a8; --accent:#65b8ed; min-height:100vh; color:var(--text); background:radial-gradient(circle at 75% 0,rgba(65,116,160,.12),transparent 34%),var(--bg); display:grid; grid-template:48px minmax(0,1fr) / 72px 272px minmax(420px,1fr) 260px; font-family:Inter,"Segoe UI",system-ui,sans-serif; overflow:hidden; transition:grid-template-columns .34s cubic-bezier(.2,.8,.2,1); }
 button { color:inherit; }
 .titlebar { grid-column:1/-1; display:flex; align-items:center; gap:10px; padding:0 14px; border-bottom:1px solid var(--line); background:rgba(13,17,23,.84); backdrop-filter:blur(22px) saturate(125%); font-size:13px; }
 .appMark { width:27px; height:27px; border-radius:8px; display:grid; place-items:center; color:#0c2637; background:var(--accent); }
@@ -112,13 +111,14 @@ button { color:inherit; }
 .connectButton { height:43px; margin-top:4px; border:0; border-radius:10px; background:var(--accent); color:#0d2637; font-weight:750; cursor:pointer; }
 .connectButton:disabled { opacity:.45; cursor:default; }
 .error { padding:10px 12px; border:1px solid rgba(246,111,111,.22); border-radius:9px; background:rgba(246,111,111,.08); color:#f58d8d; font-size:11px; }
-@media (max-width:1000px) { .root { --server-rail-width:64px; grid-template-columns:var(--server-rail-width) 238px minmax(380px,1fr); } .members { display:none; } }
+@media (max-width:1000px) { .root { grid-template-columns:64px 238px minmax(380px,1fr); } .members { display:none; } }
 @media (max-width:720px) { .root { grid-template:46px minmax(0,1fr) 62px / 1fr; } .titlebar { grid-column:1; } .root:not(.serverRailExpanded) .servers,.members { display:none; } .channels { position:fixed; inset:46px auto 62px 0; width:min(86vw,300px); z-index:5; transform:translateX(-100%); } .conversation { grid-column:1; } .voiceDock { position:fixed; bottom:0; left:0; right:0; height:62px; background:var(--panel); backdrop-filter:blur(22px); } .titleActions button:first-child { display:none; } }
-.serverRailExpanded { --server-rail-width:240px; }
+.serverRailExpanded { grid-template-columns:240px 272px minmax(420px,1fr) 260px; }
+@media (max-width:1000px) { .root.serverRailExpanded { grid-template-columns:240px 238px minmax(380px,1fr); } }
 .onboardingRoot { grid-template:48px minmax(0,1fr) / 1fr; }
 .onboardingPage { grid-column:1; min-height:0; display:grid; place-items:center; padding:22px; }
-.launcherRoot { --server-rail-width:72px; grid-template-columns:var(--server-rail-width) minmax(0,1fr); }
-.launcherRoot.serverRailExpanded { --server-rail-width:280px; }
+.launcherRoot { grid-template-columns:72px minmax(0,1fr); }
+.launcherRoot.serverRailExpanded { grid-template-columns:280px minmax(0,1fr); }
 .launcherRoot .servers { grid-column:1; }
 .launcherIntro { grid-column:2; min-width:0; display:grid; place-items:center; padding:34px; }
 .launcherWelcome { width:min(720px,100%); display:flex; flex-direction:column; align-items:center; text-align:center; }
@@ -178,4 +178,3 @@ button { color:inherit; }
 @media(max-width:720px){.serverRailExpanded,.launcherRoot.serverRailExpanded{grid-template-columns:1fr}.launcherRoot .servers{position:fixed;z-index:12;inset:46px auto 62px 0;width:min(86vw,280px);box-shadow:20px 0 50px rgba(0,0,0,.3)}.launcherIntro{grid-column:1}.onboardingPage{padding:0}.launcherWelcome h1{font-size:29px}.introFeatures{display:none}}
 @media(max-width:720px){.serverRailExpanded .servers{display:flex}}
 @media(max-width:720px){.root .servers,.root:not(.serverRailExpanded) .servers{display:flex;position:fixed;z-index:12;inset:46px auto 62px 0;width:min(86vw,280px);transform:translateX(-102%);opacity:0;pointer-events:none;box-shadow:20px 0 50px rgba(0,0,0,.3);transition:transform .3s cubic-bezier(.2,.8,.2,1),opacity .2s ease}.root.serverRailExpanded .servers{transform:none;opacity:1;pointer-events:auto}}
-@media(prefers-reduced-motion:reduce){.root,.servers,.savedServer,.serverDetails,.railHeader>span,.servers .addServer>span:nth-child(2){transition-duration:.01ms}}
