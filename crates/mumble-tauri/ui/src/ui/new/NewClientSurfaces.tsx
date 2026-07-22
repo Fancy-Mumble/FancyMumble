@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -195,7 +195,8 @@ export function ScreenSharePanel({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const isSharing = useAppStore((state) => state.isSharingOwn);
-  const broadcasters = useAppStore((state) => [...state.broadcastingSessions]);
+  const broadcastingSessions = useAppStore((state) => state.broadcastingSessions);
+  const broadcasters = useMemo(() => [...broadcastingSessions], [broadcastingSessions]);
   const users = useAppStore((state) => state.users);
   useEffect(() => { void invoke<CaptureSource[]>("list_capture_sources").then((items) => { setSources(items); setSelected(items[0] ?? null); }).catch((reason) => setError(String(reason))); }, []);
   const start = async () => {
