@@ -20,12 +20,11 @@ import {
 import { getUiDesignOverride, setSelectedUiDesign } from "@ui/selection";
 import type { SavedServer } from "@core/types";
 import { getSavedServers } from "@core/serverStorage";
-import { AppTitleBar, Button, ChannelRow, IconButton, MemberRow, MessageItem, OnboardingFlow, SearchField, ServerRail } from "./components";
+import { AppTitleBar, Button, ChannelRow, IconButton, MemberRow, MessageItem, OnboardingFlow, ScreenSharePanel, SearchField, ServerRail } from "./components";
 import styles from "./NewClientApp.module.css";
 import {
   InfoPanel,
   RichComposer,
-  ScreenSharePanel,
   ServerBrowser,
   SettingsPanel,
   UserCard,
