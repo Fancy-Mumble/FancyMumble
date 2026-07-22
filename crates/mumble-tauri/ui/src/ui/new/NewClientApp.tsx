@@ -9,7 +9,6 @@ import {
   MicIcon,
   MicOffIcon,
   PlusIcon,
-  SearchIcon,
   ServerIcon,
   SettingsIcon,
   SparklesIcon,
@@ -17,23 +16,20 @@ import {
   VolumeIcon,
   InfoIcon,
   WebcamIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
 } from "@ui/icons";
 import { getUiDesignOverride, setSelectedUiDesign } from "@ui/selection";
-import type { ChannelEntry, ChatMessage, SavedServer, UserEntry } from "@core/types";
+import type { SavedServer } from "@core/types";
 import { getSavedServers } from "@core/serverStorage";
+import { AppTitleBar, Button, ChannelRow, IconButton, MemberRow, MessageItem, OnboardingFlow, SearchField, ServerRail } from "./components";
 import styles from "./NewClientApp.module.css";
 import {
   InfoPanel,
-  LinkPreviews,
   RichComposer,
   ScreenSharePanel,
   ServerBrowser,
   SettingsPanel,
   UserCard,
   UserHoverCard,
-  OnboardingStepper,
   type Surface,
 } from "./NewClientSurfaces";
 
@@ -43,66 +39,6 @@ type NewClientAppProps = {
 
 function initials(name: string): string {
   return name.split(/\s+/).slice(0, 2).map((part) => part[0] ?? "").join("").toUpperCase();
-}
-
-function messageText(body: string): string {
-  const doc = new DOMParser().parseFromString(body, "text/html");
-  return doc.body.textContent ?? body;
-}
-
-function formatTime(timestamp?: number | null): string {
-  if (!timestamp) return "now";
-  return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(timestamp);
-}
-
-function ChannelRow({
-  channel,
-  selected,
-  current,
-  unread,
-  onSelect,
-}: {
-  channel: ChannelEntry;
-  selected: boolean;
-  current: boolean;
-  unread: number;
-  onSelect: () => void;
-}) {
-  return (
-    <button type="button" className={selected ? styles.channelActive : styles.channel} onClick={onSelect}>
-      <HashIcon />
-      <span>{channel.name}</span>
-      {current && <i className={styles.currentDot} title="Your current channel" />}
-      {unread > 0 && <b>{unread > 99 ? "99+" : unread}</b>}
-    </button>
-  );
-}
-
-function MemberRow({ user, own, talking, onHover }: { user: UserEntry; own: boolean; talking: boolean; onHover: (session: number | null) => void }) {
-  const muted = user.self_mute || user.mute || user.suppress;
-  return (
-    <button type="button" className={styles.member} onClick={() => useAppStore.getState().selectUser(user.session)} onMouseEnter={() => onHover(user.session)} onMouseLeave={() => onHover(null)} onFocus={() => onHover(user.session)} onBlur={() => onHover(null)}>
-      <span className={`${styles.avatar} ${talking ? styles.avatarTalking : ""}`}>{initials(user.name)}</span>
-      <span><strong>{user.name}{own ? " (you)" : ""}</strong><small>{talking ? "Speaking" : muted ? "Muted" : "Listening"}</small></span>
-      {muted ? <MicOffIcon /> : <MicIcon />}
-    </button>
-  );
-}
-
-function Message({ message }: { message: ChatMessage }) {
-  const embeds = useAppStore((state) => message.message_id ? state.linkEmbeds.get(message.message_id) : undefined);
-  const disableLinkPreviews = useAppStore((state) => state.disableLinkPreviews);
-  const allowExternal = useAppStore((state) => state.enableExternalEmbeds);
-  return (
-    <article className={`${styles.message} ${message.is_own ? styles.ownMessage : ""}`}>
-      <span className={styles.avatar}>{initials(message.sender_name || "Server")}</span>
-      <div>
-        <header><strong>{message.sender_name || "Server"}</strong><time>{formatTime(message.timestamp)}</time></header>
-        <p>{messageText(message.body)}</p>
-        {!disableLinkPreviews && embeds && embeds.length > 0 && <LinkPreviews embeds={embeds} allowExternal={allowExternal} />}
-      </div>
-    </article>
-  );
 }
 
 export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
@@ -209,29 +145,15 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
     if (savedServers === null || savedServers.length === 0) {
       return (
         <div className={`${styles.root} ${styles.onboardingRoot}`} data-testid="new-client-root">
-          <header className={styles.titlebar} data-tauri-drag-region>
-            <span className={styles.appMark}><SparklesIcon /></span><strong>Fancy Mumble</strong>
-            <div className={styles.titleActions}><button type="button" onClick={onOpenDesignSheet}><SparklesIcon /> Design system</button><button type="button" onClick={() => void switchToLegacy()} disabled={switchingBack || override !== null}><ArrowLeftIcon /> Old UI</button></div>
-          </header>
-          <main className={styles.onboardingPage}>{savedServers === null ? <span className={styles.spinner} /> : <OnboardingStepper onComplete={(server, connectNow) => { setSavedServers([server]); if (connectNow) void connectSaved(server); }} />}</main>
+          <AppTitleBar actions={[{ id: "design", label: "Design system", icon: <SparklesIcon />, onClick: onOpenDesignSheet }, { id: "legacy", label: "Old UI", icon: <ArrowLeftIcon />, onClick: () => void switchToLegacy(), disabled: switchingBack || override !== null }]} />
+          <main className={styles.onboardingPage}>{savedServers === null ? <span className={styles.spinner} /> : <OnboardingFlow onComplete={(server, connectNow) => { setSavedServers([server]); if (connectNow) void connectSaved(server); }} />}</main>
         </div>
       );
     }
     return (
       <div className={`${styles.root} ${styles.launcherRoot} ${serverRailExpanded ? styles.serverRailExpanded : ""}`} data-testid="new-client-root">
-        <header className={styles.titlebar} data-tauri-drag-region>
-          <span className={styles.appMark}><SparklesIcon /></span><strong>Fancy Mumble</strong>
-          <div className={styles.titleActions}>
-            <button type="button" onClick={() => setSurface("servers")}><ServerIcon /> Servers</button>
-            <button type="button" onClick={onOpenDesignSheet}><SparklesIcon /> Design system</button>
-            <button type="button" onClick={() => void switchToLegacy()} disabled={switchingBack || override !== null}><ArrowLeftIcon /> Old UI</button>
-          </div>
-        </header>
-        <aside className={styles.servers} aria-label="Saved servers">
-          <div className={styles.railHeader}><span>YOUR SERVERS</span><button type="button" onClick={() => setServerRailExpanded((value) => !value)} aria-label={serverRailExpanded ? "Collapse server sidebar" : "Expand server sidebar"}>{serverRailExpanded ? <ChevronLeftIcon /> : <ChevronRightIcon />}</button></div>
-          <div className={styles.serverLibrary}>{savedServers.map((server) => <button key={server.id} type="button" className={styles.savedServer} disabled={connecting} onClick={() => void connectSaved(server)} title={`Connect to ${server.label}`}><span className={styles.serverMark}>{initials(server.label)}</span><span className={styles.serverDetails}><strong>{server.label}</strong><small>{server.host}:{server.port}</small><em>{server.username}</em></span><i /></button>)}</div>
-          <button type="button" className={styles.addServer} title="Add server" onClick={() => setSurface("servers")}><PlusIcon /><span>Add server</span></button>
-        </aside>
+        <AppTitleBar actions={[{ id: "servers", label: "Servers", icon: <ServerIcon />, onClick: () => setSurface("servers") }, { id: "design", label: "Design system", icon: <SparklesIcon />, onClick: onOpenDesignSheet }, { id: "legacy", label: "Old UI", icon: <ArrowLeftIcon />, onClick: () => void switchToLegacy(), disabled: switchingBack || override !== null }]} />
+        <ServerRail items={savedServers} expanded={serverRailExpanded} connecting={connecting} label="Saved servers" onToggle={() => setServerRailExpanded((value) => !value)} onSelect={(server) => void connectSaved(server)} onAdd={() => setSurface("servers")} />
         <main className={styles.launcherIntro}>
           <section className={styles.launcherWelcome}>
             <div className={styles.introOrb}><span><VolumeIcon /></span><i /><i /><i /></div>
@@ -254,31 +176,14 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
 
   return (
     <div className={`${styles.root} ${serverRailExpanded ? styles.serverRailExpanded : ""}`} data-testid="new-client-root">
-      <header className={styles.titlebar} data-tauri-drag-region>
-        <span className={styles.appMark}><SparklesIcon /></span><strong>Fancy Mumble</strong>
-        <span className={styles.serverTitle}>{activeSession?.label ?? "Connecting"}</span>
-        <div className={styles.titleActions}>
-          <button type="button" onClick={onOpenDesignSheet}><SparklesIcon /> Design system</button>
-          <button type="button" onClick={() => setSurface("servers")}><ServerIcon /> Servers</button>
-          <button type="button" aria-label="Settings" onClick={() => setSurface("settings")}><SettingsIcon /></button>
-          <button type="button" onClick={() => void useAppStore.getState().disconnect()}><ArrowLeftIcon /> Disconnect</button>
-        </div>
-      </header>
+      <AppTitleBar serverTitle={activeSession?.label ?? "Connecting"} actions={[{ id: "design", label: "Design system", icon: <SparklesIcon />, onClick: onOpenDesignSheet }, { id: "servers", label: "Servers", icon: <ServerIcon />, onClick: () => setSurface("servers") }, { id: "settings", label: "Settings", icon: <SettingsIcon />, iconOnly: true, onClick: () => setSurface("settings") }, { id: "disconnect", label: "Disconnect", icon: <ArrowLeftIcon />, onClick: () => void useAppStore.getState().disconnect() }]} />
 
-      <aside className={styles.servers} aria-label="Connected servers">
-        <div className={styles.railHeader}><span>CONNECTED</span><button type="button" onClick={() => setServerRailExpanded((value) => !value)} aria-label={serverRailExpanded ? "Collapse server sidebar" : "Expand server sidebar"}>{serverRailExpanded ? <ChevronLeftIcon /> : <ChevronRightIcon />}</button></div>
-        {sessions.map((session) => (
-          <button key={session.id} type="button" className={session.id === activeServerId ? styles.serverActive : styles.server} onClick={() => void useAppStore.getState().switchServer(session.id)} title={session.label}>
-            <span className={styles.serverMark}>{initials(session.label)}</span><span className={styles.serverDetails}><strong>{session.label}</strong><small>{session.host}:{session.port}</small><em>{session.username}</em></span>
-          </button>
-        ))}
-        <button type="button" className={styles.addServer} title="Add server" onClick={() => setSurface("servers")}><PlusIcon /><span>Add server</span></button>
-      </aside>
+      <ServerRail items={sessions} expanded={serverRailExpanded} activeId={activeServerId} label="Connected servers" onToggle={() => setServerRailExpanded((value) => !value)} onSelect={(session) => void useAppStore.getState().switchServer(session.id)} onAdd={() => setSurface("servers")} />
 
       <aside className={styles.channels}>
-        <div className={styles.panelHeader}><div><small>SERVER</small><strong>{activeSession?.label ?? activeSession?.host ?? "Fancy server"}</strong></div><button type="button" aria-label="Server information" onClick={() => setSurface("server-info")}><InfoIcon /></button></div>
-        <label className={styles.search}><SearchIcon /><input placeholder="Search channels" /></label>
-        <div className={styles.sectionLabel}><span>CHANNELS</span><button type="button" aria-label="Create channel"><PlusIcon /></button></div>
+        <div className={styles.panelHeader}><div><small>SERVER</small><strong>{activeSession?.label ?? activeSession?.host ?? "Fancy server"}</strong></div><IconButton icon={<InfoIcon />} label="Server information" onClick={() => setSurface("server-info")} /></div>
+        <SearchField placeholder="Search channels" aria-label="Search channels" />
+        <div className={styles.sectionLabel}><span>CHANNELS</span><IconButton icon={<PlusIcon />} label="Create channel" /></div>
         <nav>
           {visibleChannels.map((channel) => (
             <ChannelRow key={channel.id} channel={channel} selected={channel.id === selectedChannel} current={channel.id === currentChannel} unread={unreadCounts[channel.id] ?? 0} onSelect={() => void useAppStore.getState().selectChannel(channel.id)} />
@@ -287,8 +192,8 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
         </nav>
         <div className={styles.voiceDock}>
           <div><span className={styles.avatar}>{initials(users.find((user) => user.session === ownSession)?.name ?? activeSession?.username ?? "You")}</span><span><strong>{users.find((user) => user.session === ownSession)?.name ?? activeSession?.username ?? "You"}</strong><small>{inCall ? "Voice connected" : "Voice available"}</small></span></div>
-          <button type="button" className={voiceState === "muted" ? styles.controlActive : undefined} onClick={() => void (voiceState === "inactive" ? useAppStore.getState().enableVoice() : useAppStore.getState().toggleMute())} aria-label={voiceState === "muted" ? "Unmute" : "Mute"}>{voiceState === "muted" ? <MicOffIcon /> : <MicIcon />}</button>
-          <button type="button" onClick={() => void useAppStore.getState().toggleDeafen()} aria-label="Toggle deafen"><HeadphonesIcon /></button>
+          <IconButton icon={voiceState === "muted" ? <MicOffIcon /> : <MicIcon />} label={voiceState === "muted" ? "Unmute" : "Mute"} className={voiceState === "muted" ? styles.controlActive : undefined} onClick={() => void (voiceState === "inactive" ? useAppStore.getState().enableVoice() : useAppStore.getState().toggleMute())} />
+          <IconButton icon={<HeadphonesIcon />} label="Toggle deafen" onClick={() => void useAppStore.getState().toggleDeafen()} />
         </div>
       </aside>
 
@@ -296,14 +201,14 @@ export default function NewClientApp({ onOpenDesignSheet }: NewClientAppProps) {
         <header className={styles.conversationHeader}>
           <span className={styles.channelGlyph}><HashIcon /></span>
           <div><h1>{activeChannel?.name ?? "Choose a channel"}</h1><p>{activeChannel ? `${activeChannel.user_count} member${activeChannel.user_count === 1 ? "" : "s"}` : "Select a channel to start"}</p></div>
-          {activeChannel && <button type="button" className={styles.headerIconButton} aria-label="Channel information" onClick={() => setSurface("channel-info")}><InfoIcon /></button>}
-          <button type="button" className={styles.headerIconButton} aria-label="Share screen" onClick={() => setSurface("screen-share")}><WebcamIcon /></button>
-          {activeChannel && currentChannel !== activeChannel.id && <button type="button" className={styles.joinButton} onClick={() => void useAppStore.getState().joinChannel(activeChannel.id)}><VolumeIcon /> Join voice</button>}
+          {activeChannel && <IconButton icon={<InfoIcon />} label="Channel information" className={styles.headerIconButton} onClick={() => setSurface("channel-info")} />}
+          <IconButton icon={<WebcamIcon />} label="Share screen" className={styles.headerIconButton} onClick={() => setSurface("screen-share")} />
+          {activeChannel && currentChannel !== activeChannel.id && <Button variant="bare" className={styles.joinButton} leadingIcon={<VolumeIcon />} onClick={() => void useAppStore.getState().joinChannel(activeChannel.id)}>Join voice</Button>}
         </header>
         {bootstrapStage ? <div className={styles.emptyState}><span className={styles.spinner} /><strong>{bootstrapStage}</strong></div> : channelMessages.length === 0 ? (
           <div className={styles.emptyState}><span><HashIcon /></span><strong>This is the start of #{activeChannel?.name ?? "this channel"}</strong><p>Messages and shared moments will appear here.</p></div>
         ) : (
-          <section className={styles.messageList}>{channelMessages.map((message, index) => <Message key={message.message_id ?? `${message.timestamp}-${index}`} message={message} />)}</section>
+          <section className={styles.messageList}>{channelMessages.map((message, index) => <MessageItem key={message.message_id ?? `${message.timestamp}-${index}`} message={message} />)}</section>
         )}
         <RichComposer channel={activeChannel} onSend={sendRich} />
       </main>
