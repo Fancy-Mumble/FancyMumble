@@ -23,6 +23,8 @@ export {
   Link2 as Link2Icon,
   Lock as LockIcon,
   Menu as MenuIcon,
+  Monitor as MonitorIcon,
+  AppWindow as AppWindowIcon,
   MessageCircle as MessageCircleIcon,
   Mic as MicIcon,
   MicOff as MicOffIcon,

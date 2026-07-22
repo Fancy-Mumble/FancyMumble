@@ -5,3 +5,4 @@ export * from "./navigation";
 export * from "./onboarding";
 export * from "./client";
 export * from "./chat";
+export * from "./share";

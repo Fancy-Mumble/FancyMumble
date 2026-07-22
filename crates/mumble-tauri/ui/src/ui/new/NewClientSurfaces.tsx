@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -12,17 +12,14 @@ import { useAppStore } from "@core/store";
 import type { ChannelEntry, SavedServer, ServerInfo, UserEntry, UserPreferences } from "@core/types";
 import {
   AttachIcon,
-  CheckIcon,
   CloseIcon,
   CodeIcon,
   InfoIcon,
   Link2Icon,
   SendIcon,
   ServerIcon,
-  SparklesIcon,
   TrashIcon,
   UsersGroupIcon,
-  WebcamIcon,
 } from "@ui/icons";
 import styles from "./NewClientSurfaces.module.css";
 import { Button, IconButton, ModalSurface, TextField } from "./components";
@@ -33,7 +30,6 @@ function plainText(html: string | null | undefined): string {
   if (!html) return "";
   return new DOMParser().parseFromString(html, "text/html").body.textContent ?? "";
 }
-
 export function ServerBrowser({ onClose }: { onClose: () => void }) {
   const [servers, setServers] = useState<SavedServer[]>([]);
   const [editing, setEditing] = useState<SavedServer | null>(null);
@@ -184,35 +180,4 @@ export function RichComposer({ channel, onSend }: { channel: ChannelEntry | null
     <Button variant="bare" className={editor?.isActive("underline") ? styles.toolActive : undefined} onClick={() => editor?.chain().focus().toggleUnderline().run()}><u>U</u></Button>
     <IconButton icon={<Link2Icon />} label="Add link" onClick={setLink} /><Button variant="bare" onClick={() => editor?.chain().focus().toggleBulletList().run()}>• List</Button><IconButton icon={<CodeIcon />} label="Code block" onClick={() => editor?.chain().focus().toggleCodeBlock().run()} />
   </div><div className={styles.editorRow}><IconButton icon={<AttachIcon />} label="Attach file" /><EditorContent editor={editor} className={styles.editorContent} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} /><IconButton icon={<SendIcon />} label="Send message" className={styles.send} onClick={() => void send()} disabled={!channel || sending} /></div></div>;
-}
-
-type CaptureSource = { id: number; kind: "screen" | "window" | "device"; title: string; width: number; height: number };
-function sharePayload(source: CaptureSource): string { return JSON.stringify({ v: 1, tracks: [{ mid: "0", content: source.kind === "device" ? "camera" : "screen" }] }); }
-
-export function ScreenSharePanel({ onClose }: { onClose: () => void }) {
-  const [sources, setSources] = useState<CaptureSource[]>([]);
-  const [selected, setSelected] = useState<CaptureSource | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const isSharing = useAppStore((state) => state.isSharingOwn);
-  const broadcastingSessions = useAppStore((state) => state.broadcastingSessions);
-  const broadcasters = useMemo(() => [...broadcastingSessions], [broadcastingSessions]);
-  const users = useAppStore((state) => state.users);
-  useEffect(() => { void invoke<CaptureSource[]>("list_capture_sources").then((items) => { setSources(items); setSelected(items[0] ?? null); }).catch((reason) => setError(String(reason))); }, []);
-  const start = async () => {
-    if (!selected) return; setBusy(true); setError(null);
-    const state = useAppStore.getState();
-    try {
-      await state.sendWebRtcSignal(0, 0, sharePayload(selected), state.activeServerId);
-      await invoke("start_screen_broadcast", { sources: [{ kind: selected.kind, id: selected.id }], serverId: state.activeServerId, maxDimension: 1920, maxFps: 60, reusePortalSource: false });
-      useAppStore.setState((current) => ({ isSharingOwn: true, broadcastingOwnSession: current.ownSession, broadcastingSessions: new Set(current.ownSession == null ? current.broadcastingSessions : [...current.broadcastingSessions, current.ownSession]) }));
-      onClose();
-    } catch (reason) { setError(String(reason)); } finally { setBusy(false); }
-  };
-  const stop = async () => { const state = useAppStore.getState(); await invoke("stop_screen_broadcast"); await state.sendWebRtcSignal(0, 1, "", state.activeServerId); useAppStore.setState((current) => { const next = new Set(current.broadcastingSessions); if (current.ownSession != null) next.delete(current.ownSession); return { isSharingOwn: false, broadcastingOwnSession: null, broadcastingSessions: next }; }); onClose(); };
-  return <ModalSurface title="Share your screen" eyebrow="SCREEN & CAMERA" onClose={onClose}><div className={styles.shareLayout}>
-    {broadcasters.length > 0 && <section><small>LIVE NOW</small><div className={styles.liveRows}>{broadcasters.map((session) => <Button variant="bare" wrapLabel={false} key={session} onClick={() => useAppStore.setState({ watchingSession: session, watchingOwnSession: useAppStore.getState().ownSession })}><span><SparklesIcon /></span><strong>{users.find((user) => user.session === session)?.name ?? "A member"}</strong><small>is sharing · Watch</small></Button>)}</div></section>}
-    <section><small>CHOOSE A SOURCE</small><div className={styles.sourceGrid}>{sources.map((source) => <Button variant="bare" wrapLabel={false} key={`${source.kind}-${source.id}`} className={selected?.id === source.id && selected.kind === source.kind ? styles.sourceActive : styles.source} onClick={() => setSelected(source)}><span>{source.kind === "device" ? <WebcamIcon /> : <ServerIcon />}</span><strong>{source.title}</strong><small>{source.width} × {source.height}</small>{selected?.id === source.id && selected.kind === source.kind && <i><CheckIcon /></i>}</Button>)}</div></section>
-    {error && <div className={styles.error}>{error}</div>}<footer>{isSharing ? <Button variant="danger" leadingIcon={<TrashIcon />} onClick={() => void stop()}>Stop sharing</Button> : <Button variant="primary" leadingIcon={<WebcamIcon />} disabled={!selected || busy} onClick={() => void start()}>{busy ? "Starting…" : "Go live"}</Button>}</footer>
-  </div></ModalSurface>;
 }
