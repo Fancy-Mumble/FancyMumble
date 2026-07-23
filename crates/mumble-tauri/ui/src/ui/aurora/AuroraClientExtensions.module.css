@@ -1,0 +1,1429 @@
+.messageSelected {
+    background: rgba(100, 178, 224, .075) !important;
+    box-shadow: inset 3px 0 #69b5df
+}
+
+.messageSelect {
+    flex: 0 0 19px;
+    width: 19px;
+    height: 19px;
+    margin: 8px 0 0 2px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, .18);
+    border-radius: 6px;
+    background: #151b22;
+    color: #dfe9ef;
+    cursor: pointer
+}
+
+.messageSelect[aria-pressed="true"] {
+    border-color: #66b4de;
+    background: #2879a8
+}
+
+.messageSelect svg {
+    width: 12px
+}
+
+.messageContextMenu {
+    position: fixed;
+    z-index: 900;
+    width: 174px;
+    padding: 5px;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(255, 255, 255, .1);
+    border-radius: 11px;
+    background: rgba(18, 23, 30, .96);
+    box-shadow: 0 18px 55px rgba(0, 0, 0, .45);
+    backdrop-filter: blur(20px)
+}
+
+.messageContextMenu button {
+    width: 100%;
+    justify-content: flex-start
+}
+
+.messageSelectionBar {
+    position: absolute;
+    z-index: 50;
+    right: 18px;
+    bottom: 76px;
+    left: 18px;
+    min-height: 54px;
+    padding: 9px 11px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid rgba(255, 255, 255, .1);
+    border-radius: 12px;
+    background: rgba(23, 29, 37, .94);
+    box-shadow: 0 16px 50px rgba(0, 0, 0, .35);
+    backdrop-filter: blur(20px)
+}
+
+.messageSelectionBar strong {
+    font-size: 11px
+}
+
+.messageSelectionBar span {
+    flex: 1;
+    color: #8995a1;
+    font-size: 10px
+}
+
+.channelContextMenu {
+    position: fixed;
+    z-index: 910;
+    width: 190px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(255, 255, 255, .1);
+    border-radius: 11px;
+    background: rgba(18, 23, 30, .96);
+    box-shadow: 0 18px 55px rgba(0, 0, 0, .45);
+    backdrop-filter: blur(20px)
+}
+
+.channelContextMenu>strong {
+    padding: 7px 9px;
+    color: #8f9aa6;
+    font-size: 9px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap
+}
+
+.channelContextMenu button {
+    width: 100%;
+    justify-content: flex-start
+}
+
+.channelTargetList {
+    max-height: 560px;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    overflow: auto
+}
+
+.channelTargetList button {
+    min-height: 48px;
+    display: flex;
+    justify-content: space-between
+}
+
+.channelTargetList small {
+    color: #7f8b97
+}
+
+.purgeConfirm {
+    padding: 20px
+}
+
+.purgeConfirm p {
+    color: #aeb7c0;
+    font-size: 11px;
+    line-height: 1.55
+}
+
+.purgeConfirm footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 7px;
+    margin-top: 18px
+}
+
+@media(max-width:620px) {
+    .messageContextMenu {
+        right: 8px !important;
+        bottom: 8px !important;
+        left: 8px !important;
+        top: auto !important;
+        width: auto;
+        padding: 8px;
+        border-radius: 15px
+    }
+
+    .messageContextMenu button {
+        min-height: 42px
+    }
+
+    .messageSelectionBar {
+        right: 8px;
+        bottom: 68px;
+        left: 8px;
+        flex-wrap: wrap
+    }
+
+    .messageSelectionBar span {
+        flex-basis: 100%;
+        order: 3
+    }
+
+    .channelContextMenu {
+        right: 8px !important;
+        bottom: 8px !important;
+        left: 8px !important;
+        top: auto !important;
+        width: auto
+    }
+
+    .channelTargetList {
+        grid-template-columns: 1fr
+    }
+}
+
+.serverTabs {
+    height: 50px;
+    padding: 8px 14px;
+    display: flex;
+    gap: 5px;
+    border-bottom: 1px solid rgba(255, 255, 255, .07)
+}
+
+.serverTabs button {
+    height: 34px
+}
+
+.serverListSearch {
+    margin-bottom: 12px
+}
+
+.serverCard {
+    grid-template-columns: 42px minmax(0, 1fr) auto auto auto !important;
+    gap: 7px !important
+}
+
+.connectionActions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px
+}
+
+.publicConsent {
+    min-height: 450px;
+    padding: 50px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center
+}
+
+.publicConsentIcon {
+    width: 58px;
+    height: 58px;
+    display: grid;
+    place-items: center;
+    border-radius: 16px;
+    background: rgba(101, 184, 237, .1);
+    color: #76bfe9
+}
+
+.publicConsent h3 {
+    margin: 18px 0 7px;
+    font-size: 18px
+}
+
+.publicConsent p {
+    max-width: 480px;
+    margin: 0 0 20px;
+    color: #929eac;
+    font-size: 12px;
+    line-height: 1.6
+}
+
+.publicDirectory {
+    min-height: 450px;
+    padding: 18px
+}
+
+.directoryToolbar {
+    display: grid;
+    grid-template-columns: 2fr 1fr 130px;
+    align-items: end;
+    gap: 10px;
+    margin-bottom: 14px
+}
+
+.sortField {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #9ba6b4;
+    font-size: 11px
+}
+
+.sortField select {
+    height: 39px;
+    padding: 0 9px;
+    border: 1px solid rgba(255, 255, 255, .09);
+    border-radius: 9px;
+    background: #151b23;
+    color: #edf1f7
+}
+
+.directoryList {
+    max-height: 430px;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px
+}
+
+.publicServer {
+    min-height: 58px;
+    padding: 8px 10px;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) 75px 95px 72px;
+    align-items: center;
+    gap: 10px;
+    border-radius: 11px;
+    background: rgba(255, 255, 255, .028)
+}
+
+.publicServer>div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px
+}
+
+.publicServer strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px
+}
+
+.publicServer small, .userCapacity {
+    color: #7f8b99;
+    font-size: 10px
+}
+
+.countryFlag {
+    font-size: 21px
+}
+
+.onlinePing, .unknownPing {
+    font-size: 10px
+}
+
+.onlinePing {
+    color: #70d1a4
+}
+
+.unknownPing {
+    color: #7f8b99
+}
+
+.directoryState {
+    padding: 40px;
+    text-align: center;
+    color: #7f8b99;
+    font-size: 12px
+}
+
+.directoryError {
+    padding: 12px;
+    border-radius: 9px;
+    background: rgba(239, 100, 100, .08);
+    color: #ef8888;
+    font-size: 11px
+}
+
+@media(max-width:720px) {
+    .directoryToolbar {
+        grid-template-columns: 1fr
+    }
+
+    .publicServer {
+        grid-template-columns: 30px minmax(0, 1fr) auto
+    }
+
+    .publicServer .userCapacity {
+        display: none
+    }
+
+    .publicServer>button {
+        grid-column: 2/-1
+    }
+
+    .connectionActions {
+        grid-template-columns: 1fr
+    }
+}
+
+.channelTreeRow {
+    display: flex;
+    align-items: center;
+    padding-left: calc(var(--channel-depth) * 15px)
+}
+
+.channelTreeRow>button:first-child {
+    flex: 0 0 24px;
+    width: 24px;
+    height: 32px;
+    padding: 0;
+    color: #6f7c8b
+}
+
+.channelTreeRow>button:last-child {
+    min-width: 0;
+    flex: 1
+}
+
+.channelTreeSpacer {
+    flex: 0 0 24px
+}
+
+.channelEditorSurface {
+    width: min(760px, 100%)
+}
+
+.channelEditor {
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px
+}
+
+.channelEditorGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px
+}
+
+.channelDescription, .selectField {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #aeb7c3;
+    font-size: 11px;
+    font-weight: 650
+}
+
+.channelDescription textarea, .selectField select {
+    padding: 10px;
+    border: 1px solid rgba(255, 255, 255, .09);
+    border-radius: 9px;
+    outline: 0;
+    background: rgba(5, 8, 12, .36);
+    color: #edf1f7;
+    font: inherit;
+    font-weight: 400;
+    resize: vertical
+}
+
+.channelDescription textarea:focus, .selectField select:focus {
+    border-color: rgba(101, 184, 237, .5);
+    box-shadow: 0 0 0 3px rgba(101, 184, 237, .08)
+}
+
+.selectField select {
+    height: 39px;
+    padding: 0 9px;
+    resize: none
+}
+
+.channelChecks {
+    display: flex;
+    gap: 20px;
+    color: #aeb7c3;
+    font-size: 11px
+}
+
+.channelChecks label {
+    display: flex;
+    align-items: center;
+    gap: 7px
+}
+
+.channelChecks input {
+    accent-color: #65b8ed
+}
+
+.formError {
+    padding: 10px;
+    border-radius: 8px;
+    background: rgba(239, 100, 100, .08);
+    color: #ef8888;
+    font-size: 11px
+}
+
+/* Pinned to the bottom of the scrolling dialog body so Cancel/Save stay
+   reachable however long the form gets. The negative margins let it span the
+   full surface width and absorb the form's bottom padding. */
+.channelEditorActions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin: 0 -22px -22px;
+    padding: 14px 22px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    border-top: 1px solid rgba(255, 255, 255, .07);
+    background: rgba(20, 25, 33, .94);
+    backdrop-filter: blur(14px)
+}
+
+.channelEditorActions>span {
+    margin-right: auto;
+    color: #ef8888;
+    font-size: 11px
+}
+
+.channelEditorActions>button:first-child {
+    margin-right: auto
+}
+
+@media(max-width:620px) {
+    .channelEditorGrid {
+        grid-template-columns: 1fr
+    }
+
+    .channelEditorActions {
+        flex-wrap: wrap
+    }
+
+    .channelEditorActions>span {
+        width: 100%
+    }
+}
+
+.challengeSurface {
+    width: min(470px, 100%)
+}
+
+.challengeForm {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px
+}
+
+.challengeForm>p {
+    margin: 0;
+    color: #a6b0bc;
+    font-size: 12px;
+    line-height: 1.55
+}
+
+.challengeForm>p strong {
+    color: #e9edf2
+}
+
+.rememberSecret {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #9ca8b5;
+    font-size: 11px
+}
+
+.rememberSecret input {
+    accent-color: #65b8ed
+}
+
+.challengeForm>footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 8px
+}
+
+.reconnectBanner {
+    position: fixed;
+    z-index: 45;
+    left: 50%;
+    top: 62px;
+    transform: translateX(-50%);
+    min-width: 390px;
+    padding: 9px 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid rgba(255, 255, 255, .1);
+    border-radius: 12px;
+    background: rgba(23, 29, 37, .94);
+    backdrop-filter: blur(18px);
+    box-shadow: 0 14px 38px rgba(0, 0, 0, .3);
+    color: #e9edf2
+}
+
+.reconnectPulse {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #efb66e;
+    box-shadow: 0 0 0 5px rgba(239, 182, 110, .1);
+    animation: reconnectPulse 1.6s ease-in-out infinite
+}
+
+.reconnectBanner>div {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px
+}
+
+.reconnectBanner strong {
+    font-size: 11px
+}
+
+.reconnectBanner small {
+    color: #8996a5;
+    font-size: 9px
+}
+
+.reconnectBanner button {
+    height: 30px;
+    padding: 0 9px
+}
+
+@keyframes reconnectPulse {
+    50% {
+        opacity: .45;
+        transform: scale(.8)
+    }
+}
+
+@media(max-width:520px) {
+    .reconnectBanner {
+        left: 10px;
+        right: 10px;
+        min-width: 0;
+        transform: none
+    }
+
+    .reconnectBanner>button:last-child {
+        display: none
+    }
+}
+
+.messageBody {
+    margin: 5px 0 0;
+    color: #aeb7c2;
+    font-size: 12px;
+    line-height: 1.55;
+    overflow-wrap: anywhere
+}
+
+.messageBody p {
+    margin: 0 0 6px
+}
+
+.messageBody p:last-child {
+    margin-bottom: 0
+}
+
+.messageBody a {
+    color: #78bfe9
+}
+
+.messageBody pre {
+    max-width: 100%;
+    padding: 9px;
+    overflow: auto;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, .24)
+}
+
+.messageBody code {
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace
+}
+
+.messageBody blockquote {
+    margin: 6px 0;
+    padding-left: 10px;
+    border-left: 2px solid rgba(101, 184, 237, .5);
+    color: #919eac
+}
+
+.messageBody img {
+    display: block;
+    max-width: min(520px, 100%);
+    max-height: 420px;
+    margin-top: 7px;
+    border-radius: 9px;
+    object-fit: contain;
+    /* Click opens the shared lightbox (see the delegated handler on the list). */
+    cursor: zoom-in
+}
+
+/* Composer: one rounded bar with the actions inline and formatting hidden
+   behind a toggle, so the resting state stays quiet. */
+.composer {
+    margin: 10px 18px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.composerBar {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    padding: 5px 6px 5px 5px;
+    border: 1px solid rgba(255, 255, 255, .075);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, .045);
+    transition: border-color .16s ease, background-color .16s ease;
+}
+
+.composerBar:focus-within {
+    border-color: rgba(101, 184, 237, .4);
+    background: rgba(255, 255, 255, .06);
+}
+
+.composerInput {
+    flex: 1;
+    min-width: 0;
+    max-height: 190px;
+    overflow-y: auto;
+}
+
+.composerInput :global(.tiptap) {
+    min-height: 32px;
+    padding: 8px 6px;
+    outline: 0;
+    color: #e6ebf1;
+    font-size: 13.5px;
+    line-height: 1.5;
+}
+
+.composerInput :global(.tiptap p) {
+    margin: 0;
+}
+
+.composerInput :global(.tiptap img) {
+    max-width: 260px;
+    max-height: 180px;
+    border-radius: 8px;
+}
+
+.composerInput :global(.is-editor-empty:first-child::before) {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    color: #6b7684;
+    pointer-events: none;
+}
+
+/* Leading action (share file / inline image) and the trailing action cluster. */
+.composerLead,
+.composerActions button {
+    flex: 0 0 auto;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    color: #8b96a5;
+}
+
+.composerLead:hover,
+.composerActions button:hover {
+    background: rgba(255, 255, 255, .07);
+    color: #e3e9ef;
+}
+
+.composerActions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 1px;
+}
+
+.composerGif {
+    min-width: 34px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .04em;
+}
+
+.composerSend {
+    margin-left: 3px;
+    background: #65b8ed;
+    color: #0f2634;
+}
+
+.composerSend:hover {
+    background: #7cc5f1;
+    color: #0f2634;
+}
+
+.composerSend:disabled {
+    background: rgba(255, 255, 255, .06);
+    color: #6d7987;
+}
+
+.composerToolActive {
+    background: rgba(101, 184, 237, .16);
+    color: #cfe8fb;
+}
+
+.composerFormatBar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 6px;
+    border: 1px solid rgba(255, 255, 255, .07);
+    border-radius: 11px;
+    background: rgba(255, 255, 255, .03);
+}
+
+.composerFormatBar button {
+    min-width: 30px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 7px;
+    color: #8b96a5;
+    font-size: 11px;
+}
+
+.composerFormatBar button:hover {
+    background: rgba(255, 255, 255, .07);
+    color: #e3e9ef;
+}
+
+/* Sits above the bar, so showing it never nudges the input. */
+.composerError {
+    padding: 7px 11px;
+    border: 1px solid rgba(239, 100, 100, .18);
+    border-radius: 10px;
+    background: rgba(239, 100, 100, .08);
+    color: #ef8888;
+    font-size: 10px
+}
+
+.userCardScrollable {
+    overflow-y: auto
+}
+
+.userActions {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, .07);
+    text-align: left
+}
+
+.userActions h3 {
+    margin: 10px 0 8px;
+    color: #dce3ea;
+    font-size: 11px
+}
+
+.volumeControl {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #8f9baa;
+    font-size: 10px
+}
+
+.volumeControl span {
+    display: flex;
+    justify-content: space-between
+}
+
+.volumeControl input {
+    width: 100%;
+    accent-color: #65b8ed
+}
+
+.userActionGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin: 9px 0
+}
+
+.userActionGrid button {
+    min-width: 0;
+    height: 32px;
+    padding: 0 7px;
+    font-size: 9px
+}
+
+.userActions>label {
+    margin-top: 9px
+}
+
+.moveUser {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 6px;
+    margin: 9px 0
+}
+
+.moveUser label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    color: #8f9baa;
+    font-size: 10px
+}
+
+.moveUser select {
+    height: 34px;
+    padding: 0 7px;
+    border: 1px solid rgba(255, 255, 255, .09);
+    border-radius: 8px;
+    background: #151b23;
+    color: #dfe5ec;
+    font-size: 10px
+}
+
+.moveUser button {
+    height: 34px
+}
+
+.confirmAction {
+    padding: 9px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    border-radius: 8px;
+    background: rgba(239, 100, 100, .06)
+}
+
+.confirmAction span {
+    width: 100%;
+    color: #e9a0a0;
+    font-size: 10px
+}
+
+.confirmAction button {
+    height: 29px;
+    font-size: 9px
+}
+
+.actionStatus {
+    margin: 8px 0 0 !important;
+    padding: 7px;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, .035);
+    color: #9ba8b5 !important;
+    font-size: 9px !important
+}
+
+.userShortcut {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 6px;
+    margin-top: 9px
+}
+
+.userShortcut button {
+    height: 39px;
+    padding: 0 8px;
+    font-size: 9px
+}
+
+.audioSettings {
+    margin-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, .07)
+}
+
+.audioSetting {
+    min-height: 66px;
+    padding: 12px 2px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, .06)
+}
+
+.audioSetting>span {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px
+}
+
+.audioSetting strong {
+    font-size: 12px
+}
+
+.audioSetting small {
+    color: #7e8a99;
+    font-size: 10px
+}
+
+.audioSetting select, .audioSetting>input {
+    width: min(250px, 42%);
+    height: 36px;
+    padding: 0 9px;
+    border: 1px solid rgba(255, 255, 255, .09);
+    border-radius: 8px;
+    background: #151b23;
+    color: #dce3ea;
+    font-size: 10px
+}
+
+.audioToggle, .audioToggleOn {
+    width: 38px !important;
+    min-width: 38px !important;
+    height: 22px !important;
+    padding: 3px !important;
+    border: 0 !important;
+    border-radius: 12px !important;
+    background: #303944 !important
+}
+
+.audioToggle i, .audioToggleOn i {
+    display: block;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #8c98a6;
+    transition: transform .18s
+}
+
+.audioToggleOn {
+    background: rgba(101, 184, 237, .35) !important
+}
+
+.audioToggleOn i {
+    transform: translateX(16px);
+    background: #76c1ed
+}
+
+.audioSlider {
+    width: min(270px, 48%);
+    display: flex;
+    align-items: center;
+    gap: 8px
+}
+
+.audioSlider input {
+    min-width: 0;
+    flex: 1;
+    accent-color: #65b8ed
+}
+
+.audioSlider b {
+    width: 62px;
+    color: #aeb9c5;
+    font-size: 10px;
+    text-align: right
+}
+
+.micTest {
+    padding: 14px 2px;
+    display: flex;
+    align-items: center;
+    gap: 12px
+}
+
+.micTest>div {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px
+}
+
+.micTest strong {
+    font-size: 12px
+}
+
+.micTest small {
+    color: #7e8a99;
+    font-size: 10px
+}
+
+.micTest i {
+    height: 5px;
+    margin-top: 5px;
+    overflow: hidden;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, .06)
+}
+
+.micTest i b {
+    height: 100%;
+    display: block;
+    border-radius: inherit;
+    background: #70d1a4;
+    transition: width .08s linear
+}
+
+.audioStatus {
+    margin: 0;
+    padding: 8px 0;
+    color: #7e8a99;
+    font-size: 9px
+}
+
+@media(max-width:620px) {
+    .audioSetting {
+        align-items: flex-start;
+        flex-direction: column
+    }
+
+    .audioSetting select, .audioSetting>input, .audioSlider {
+        width: 100%
+    }
+}
+
+.messageContent {
+    position: relative;
+    min-width: 0
+}
+
+.messageContent>header small {
+    margin-left: 6px;
+    color: #697584;
+    font-size: 8px
+}
+
+.messageActions {
+    position: absolute;
+    right: 0;
+    top: -12px;
+    padding: 3px;
+    display: none;
+    gap: 1px;
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 8px;
+    background: #1a2029;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .24)
+}
+
+.messageContent:hover .messageActions, .messageActions:focus-within {
+    display: flex
+}
+
+.messageActions button {
+    min-width: 26px;
+    height: 25px;
+    padding: 0 5px;
+    font-size: 10px
+}
+
+.messageActions svg {
+    width: 12px
+}
+
+.reactionRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px
+}
+
+.reactionRow button {
+    height: 25px;
+    padding: 0 7px;
+    border: 1px solid rgba(101, 184, 237, .15);
+    background: rgba(101, 184, 237, .05);
+    font-size: 10px
+}
+
+.readers {
+    display: block;
+    margin-top: 5px;
+    color: #6f7c8a;
+    font-size: 8px
+}
+
+.messageEdit {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 6px;
+    margin-top: 6px
+}
+
+.messageEdit textarea {
+    grid-column: 1/-1;
+    min-height: 70px;
+    padding: 9px;
+    border: 1px solid rgba(101, 184, 237, .35);
+    border-radius: 8px;
+    outline: 0;
+    background: rgba(5, 8, 12, .5);
+    color: #dce3ea;
+    font: inherit;
+    resize: vertical
+}
+
+.messageEdit button {
+    grid-row: 2
+}
+
+.messageEdit button:first-of-type {
+    grid-column: 2
+}
+
+.deleteMessageConfirm {
+    margin-top: 7px;
+    padding: 7px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 8px;
+    background: rgba(239, 100, 100, .06)
+}
+
+.deleteMessageConfirm span {
+    margin-right: auto;
+    color: #e9a0a0;
+    font-size: 9px
+}
+
+.deleteMessageConfirm button {
+    height: 27px;
+    font-size: 9px
+}
+
+.composerPicker {
+    max-height: 150px;
+    padding: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    overflow: auto;
+    border-bottom: 1px solid rgba(255, 255, 255, .065);
+    background: rgba(8, 11, 15, .22)
+}
+
+.composerPicker button {
+    min-width: 30px;
+    height: 29px;
+    padding: 0 7px;
+    font-size: 12px
+}
+
+.composerPicker button:has(span) {
+    font-size: 10px
+}
+
+.typingStatus {
+    height: 24px;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: #748190;
+    font-size: 9px
+}
+
+.typingStatus i, .typingStatus i:before, .typingStatus i:after {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: #8492a1;
+    animation: typingDot 1.2s infinite
+}
+
+.typingStatus i {
+    position: relative
+}
+
+.typingStatus i:before, .typingStatus i:after {
+    content: "";
+    position: absolute;
+    top: 0
+}
+
+.typingStatus i:before {
+    left: 5px;
+    animation-delay: .15s
+}
+
+.typingStatus i:after {
+    left: 10px;
+    animation-delay: .3s
+}
+
+.typingStatus span {
+    margin-left: 9px
+}
+
+@keyframes typingDot {
+    50% {
+        opacity: .3;
+        transform: translateY(-2px)
+    }
+}
+
+.pinnedSurface {
+    width: min(760px, 100%)
+}
+
+.pinnedMessages {
+    max-height: 620px;
+    padding: 16px;
+    overflow: auto
+}
+
+.chatSearch {
+    height: 48px;
+    padding: 6px 18px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    border-bottom: 1px solid rgba(255, 255, 255, .06)
+}
+
+.chatSearch label {
+    flex: 1;
+    margin: 0 !important
+}
+
+.chatSearch button {
+    height: 32px
+}
+
+.loadHistory {
+    align-self: center;
+    height: 28px !important;
+    margin: 7px auto !important;
+    color: #82909f !important;
+    font-size: 9px !important
+}
+
+.blockedDm {
+    margin: 8px 18px;
+    padding: 9px;
+    border-radius: 8px;
+    background: rgba(239, 100, 100, .07);
+    color: #e79898;
+    font-size: 10px
+}
+
+.memberTools {
+    padding: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, .06)
+}
+
+.memberTools label {
+    margin: 0 0 6px !important
+}
+
+.memberTools>div {
+    display: flex;
+    gap: 3px
+}
+
+.memberTools button {
+    flex: 1;
+    height: 27px;
+    padding: 0 5px;
+    font-size: 9px
+}
+
+.pollCreator {
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px
+}
+
+.pollCreator>footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 7px;
+    padding-top: 8px
+}
+
+.pollOptionInput {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 6px
+}
+
+.pollOptionInput button {
+    height: 39px
+}
+
+.pollCard {
+    max-width: 500px;
+    margin-top: 7px;
+    padding: 13px;
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 11px;
+    background: rgba(255, 255, 255, .025)
+}
+
+.pollCard>strong, .pollCard>small {
+    display: block
+}
+
+.pollCard>strong {
+    font-size: 13px
+}
+
+.pollCard>small {
+    margin: 3px 0 10px;
+    color: #788594;
+    font-size: 9px
+}
+
+.pollCard>button {
+    width: 100%;
+    height: 34px;
+    margin-top: 5px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-start;
+    border: 1px solid rgba(255, 255, 255, .06);
+    background: rgba(255, 255, 255, .025)
+}
+
+.pollCard>button i {
+    width: 16px;
+    height: 16px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, .15);
+    border-radius: 50%;
+    font-size: 9px
+}
+
+.pollCard>button span {
+    flex: 1;
+    text-align: left
+}
+
+.pollCard>button b {
+    color: #7d8997
+}
+
+.pollCard .pollSelected {
+    border-color: rgba(101, 184, 237, .3);
+    background: rgba(101, 184, 237, .07)
+}
+
+.pollCard .pollSelected i {
+    border-color: #65b8ed;
+    background: #65b8ed;
+    color: #102535
+}
+
+.pollCard>footer {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px
+}
+
+.pollCard>footer span {
+    margin-right: auto;
+    color: #788594;
+    font-size: 9px
+}
+
+.pollCard>footer button {
+    height: 29px
+}

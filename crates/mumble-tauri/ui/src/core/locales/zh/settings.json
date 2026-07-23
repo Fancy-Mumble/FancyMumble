@@ -119,9 +119,6 @@
   },
   "advanced": {
     "panelTitle": "高级",
-    "webUiDesign": "新版 WebUI 设计",
-    "webUiDesignHint": "使用新的 React 界面。经典界面仍然可用，并可通过此开关恢复。",
-    "webUiDesignOverrideHint": "开发 URL 参数当前将界面强制设为“{{design}}”。",
     "uiMode": "轻量界面（极简模式）",
     "uiModeHint": "重启进入原生极简客户端：内存占用大幅降低，但仅提供核心功能（连接、聊天、频道、语音）。",
     "uiModeConfirmText": "现在切换到极简界面吗？应用将关闭并启动轻量客户端。",
@@ -320,6 +317,10 @@
   },
   "personalize": {
     "panelTitle": "个性化",
+    "uiDesign": "Aurora 设计",
+    "beta": "测试版",
+    "uiDesignHint": "试用 Aurora，一个仍处于测试阶段的实验性设计。标准界面为默认界面，可通过此开关恢复。",
+    "uiDesignOverrideHint": "开发 URL 参数当前将界面强制设为“{{design}}”。",
     "theme": "主题",
     "themeHint": "选择整个应用的视觉风格。",
     "chatBackground": "聊天背景",

@@ -33,7 +33,10 @@ import {
   loadProfileData,
   saveProfileData,
   deleteProfileData,
+  deleteServerProfileData,
+  loadServerProfileData,
   migrateProfilesToIdentities,
+  saveServerProfileData,
 } from "../settings/profileData";
 
 import type { ProfileData } from "../settings/profileData";
@@ -125,6 +128,23 @@ describe("Per-identity profile storage", () => {
     const personal = await loadProfileData("personal");
     expect(personal.profile.decoration).toBe("fire");
     expect(personal.bio).toBe("Keep me");
+  });
+
+  it("uses and removes an isolated server-specific override", async () => {
+    await saveProfileData(SAMPLE_PROFILE, "work");
+    await saveServerProfileData("server-a", { profile: { status: "At work" }, bio: "Scoped", avatarDataUrl: null }, "work");
+
+    const overridden = await loadServerProfileData("server-a", "work");
+    const fallback = await loadServerProfileData("server-b", "work");
+    expect(overridden.isOverride).toBe(true);
+    expect(overridden.data.bio).toBe("Scoped");
+    expect(fallback.isOverride).toBe(false);
+    expect(fallback.data.bio).toBe("Hello world");
+
+    await deleteServerProfileData("server-a", "work");
+    const removed = await loadServerProfileData("server-a", "work");
+    expect(removed.isOverride).toBe(false);
+    expect(removed.data.bio).toBe("Hello world");
   });
 });
 

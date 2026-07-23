@@ -6,9 +6,11 @@ import type { ServerId } from "./server";
 /** Whether the user prefers a simplified or full-featured UI. */
 export type UserMode = "normal" | "expert" | "developer";
 
-/** Selects the complete React UI implementation. Color themes remain a
- * separate preference and are expected to work with every UI design. */
-export type UiDesignId = "legacy" | "new";
+/** Selects which React UI design pack loads. The `standard` pack is the
+ * mature, feature-complete default; `aurora` is an opt-in design beta. The
+ * two ship side by side. Color themes remain a separate preference and are
+ * expected to work with every UI design. */
+export type UiDesignId = "standard" | "aurora";
 
 /** Preferred time display format. */
 export type TimeFormat = "12h" | "24h" | "auto";

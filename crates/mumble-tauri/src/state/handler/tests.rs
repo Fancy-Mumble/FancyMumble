@@ -1308,7 +1308,7 @@ fn server_config_updates_state() {
 }
 
 #[test]
-fn server_config_zero_image_length_keeps_default() {
+fn server_config_zero_image_length_means_no_dedicated_limit() {
     let (ctx, _) = make_ctx();
     let sc = mumble_tcp::ServerConfig {
         image_message_length: Some(0),
@@ -1317,7 +1317,9 @@ fn server_config_zero_image_length_keeps_default() {
     sc.handle(&ctx);
 
     let state = ctx.shared.lock().unwrap();
-    assert_eq!(state.server.config.max_image_message_length, 131_072); // default
+    // 0 is preserved so callers can apply the general message limit; clamping
+    // it to the default hid "unlimited" behind a phantom 128 KiB cap.
+    assert_eq!(state.server.config.max_image_message_length, 0);
 }
 
 #[test]

@@ -28,6 +28,8 @@ export function useTypingIndicator() {
   useEffect(() => {
     getPreferences().then((prefs) => {
       disabledRef.current = prefs.disableTypingIndicators ?? false;
+    }).catch(() => {
+      disabledRef.current = false;
     });
   }, []);
 

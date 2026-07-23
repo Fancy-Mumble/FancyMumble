@@ -119,9 +119,6 @@
   },
   "advanced": {
     "panelTitle": "Advanced",
-    "webUiDesign": "New WebUI design",
-    "webUiDesignHint": "Use the new React interface. The classic interface remains available and can be restored with this switch.",
-    "webUiDesignOverrideHint": "The interface is currently forced to '{{design}}' by the development URL override.",
     "uiMode": "Lightweight interface (minimal mode)",
     "uiModeHint": "Restart into the native minimal client: much lower RAM usage, but only core features (connect, chat, channels, voice).",
     "uiModeConfirmText": "Switch to the minimal interface now? The app will close and the lightweight client will start.",
@@ -320,6 +317,10 @@
   },
   "personalize": {
     "panelTitle": "Personalize",
+    "uiDesign": "Aurora design",
+    "beta": "Beta",
+    "uiDesignHint": "Try Aurora, an experimental design still in beta. The Standard interface is the default and can be restored with this switch.",
+    "uiDesignOverrideHint": "The interface is currently forced to '{{design}}' by the development URL override.",
     "theme": "Theme",
     "themeHint": "Choose the visual style for the entire app.",
     "chatBackground": "Chat Background",

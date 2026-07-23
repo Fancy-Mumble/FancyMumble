@@ -145,6 +145,7 @@ pub(crate) fn mark_channel_read(state: tauri::State<'_, AppState>, channel_id: u
 pub(crate) async fn update_channel(
     state: tauri::State<'_, AppState>,
     channel_id: u32,
+    parent_id: Option<u32>,
     name: Option<String>,
     description: Option<String>,
     position: Option<i32>,
@@ -161,6 +162,7 @@ pub(crate) async fn update_channel(
     state
         .update_channel(
             channel_id,
+            parent_id,
             name,
             description,
             position,

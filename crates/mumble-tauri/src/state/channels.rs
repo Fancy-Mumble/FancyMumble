@@ -144,6 +144,7 @@ impl AppState {
     pub async fn update_channel(
         &self,
         channel_id: u32,
+        parent_id: Option<u32>,
         name: Option<String>,
         description: Option<String>,
         position: Option<i32>,
@@ -177,7 +178,7 @@ impl AppState {
                 );
                 h.send(command::SetChannelState {
                     channel_id: Some(channel_id),
-                    parent: None,
+                    parent: parent_id,
                     name,
                     description,
                     position,

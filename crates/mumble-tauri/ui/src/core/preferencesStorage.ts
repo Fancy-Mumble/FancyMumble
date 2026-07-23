@@ -17,7 +17,7 @@ const KEY = "preferences";
 const AUDIO_KEY = "audioSettings";
 
 const DEFAULTS: UserPreferences = {
-  uiDesign: "legacy",
+  uiDesign: "standard",
   userMode: "normal",
   hasCompletedSetup: false,
   defaultUsername: "",

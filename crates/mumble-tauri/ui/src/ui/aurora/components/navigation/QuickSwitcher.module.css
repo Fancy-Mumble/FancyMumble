@@ -1,0 +1,53 @@
+.surface {
+    width: min(620px, 100%)
+}
+
+.body {
+    padding: 14px
+}
+
+.body>label {
+    margin-bottom: 10px
+}
+
+.body>div {
+    display: flex;
+    flex-direction: column;
+    gap: 3px
+}
+
+.body button {
+    width: 100%;
+    padding: 9px !important;
+    display: grid !important;
+    grid-template-columns: 65px 1fr;
+    gap: 8px;
+    text-align: left !important
+}
+
+.body button>small {
+    color: #687687;
+    font-size: 8px;
+    text-transform: uppercase
+}
+
+.body button>span {
+    display: flex;
+    flex-direction: column;
+    gap: 2px
+}
+
+.body strong {
+    font-size: 11px
+}
+
+.body b {
+    color: #758291;
+    font-size: 8px;
+    font-weight: 400
+}
+
+.body p {
+    color: #778492;
+    text-align: center
+}

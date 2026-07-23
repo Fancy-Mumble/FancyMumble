@@ -1,0 +1,151 @@
+/* Shared field chrome, matching TextAreaField/TextField. */
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #aeb7c3;
+    font-size: 11px;
+    font-weight: 650;
+}
+
+.field > span {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+}
+
+.field small {
+    color: #687483;
+    font-weight: 400;
+}
+
+.wrap {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(255, 255, 255, .09);
+    border-radius: 9px;
+    background: rgba(5, 8, 12, .36);
+    overflow: hidden;
+    transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+.wrap:focus-within {
+    border-color: rgba(101, 184, 237, .5);
+    box-shadow: 0 0 0 3px rgba(101, 184, 237, .08);
+}
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 5px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, .07);
+    background: rgba(255, 255, 255, .02);
+}
+
+.toolBtn {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: #9aa5b3;
+    cursor: pointer;
+    transition: background-color .14s ease, color .14s ease;
+}
+
+.toolBtn:hover {
+    background: rgba(255, 255, 255, .06);
+    color: #edf1f7;
+}
+
+.toolBtnActive {
+    composes: toolBtn;
+    background: rgba(101, 184, 237, .16);
+    color: #cfe8fb;
+}
+
+.toolSep {
+    width: 1px;
+    height: 18px;
+    margin: 0 3px;
+    background: rgba(255, 255, 255, .09);
+}
+
+.content {
+    min-height: 120px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+/* The editable ProseMirror node carries the .surface class (see editorProps). */
+.surface {
+    min-height: 120px;
+    padding: 10px 12px;
+    outline: 0;
+    color: #edf1f7;
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.surface > :first-child {
+    margin-top: 0;
+}
+
+.surface > :last-child {
+    margin-bottom: 0;
+}
+
+.surface p {
+    margin: 0 0 8px;
+}
+
+.surface ul,
+.surface ol {
+    margin: 0 0 8px;
+    padding-left: 20px;
+}
+
+.surface blockquote {
+    margin: 0 0 8px;
+    padding-left: 12px;
+    border-left: 3px solid rgba(101, 184, 237, .4);
+    color: #b6c1cf;
+}
+
+.surface pre {
+    margin: 0 0 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, .32);
+    font-size: 12px;
+    overflow-x: auto;
+}
+
+.surface code {
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, .08);
+    font-size: 12px;
+}
+
+.surface pre code {
+    padding: 0;
+    background: none;
+}
+
+.surface a {
+    color: #79bdff;
+}
+
+/* Placeholder text for the empty editor (tiptap Placeholder extension adds the
+   global `is-editor-empty` class + `data-placeholder` attribute). */
+.surface :global(p.is-editor-empty:first-child)::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    color: #687483;
+    pointer-events: none;
+}

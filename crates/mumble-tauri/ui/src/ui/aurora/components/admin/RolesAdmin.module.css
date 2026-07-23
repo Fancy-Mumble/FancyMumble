@@ -1,0 +1,217 @@
+.root>header {
+    display: flex;
+    align-items: center;
+    gap: 10px
+}
+
+.root>header>div {
+    flex: 1
+}
+
+.root h3 {
+    margin: 0;
+    font-size: 14px
+}
+
+.root header p {
+    margin: 4px 0 0;
+    color: #7e8a97;
+    font-size: 10px
+}
+
+.layout {
+    height: calc(100% - 52px);
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    border: 1px solid rgba(255, 255, 255, .06);
+    border-radius: 11px;
+    overflow: hidden
+}
+
+.layout>aside {
+    padding: 9px;
+    overflow: auto;
+    border-right: 1px solid rgba(255, 255, 255, .06)
+}
+
+.layout>aside>label {
+    margin: 0 0 7px !important
+}
+
+.create {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 5px;
+    margin-bottom: 8px
+}
+
+.create label {
+    margin: 0 !important
+}
+
+.create button {
+    height: 39px
+}
+
+.roles {
+    display: flex;
+    flex-direction: column;
+    gap: 3px
+}
+
+.roles>button {
+    width: 100%;
+    padding: 8px !important;
+    display: flex !important;
+    justify-content: flex-start !important
+}
+
+.roles>button>i {
+    width: 8px;
+    height: 28px;
+    border-radius: 5px
+}
+
+.roles span {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px
+}
+
+.roles strong {
+    font-size: 10px
+}
+
+.roles small {
+    color: #7e8a97;
+    font-size: 8px
+}
+
+.roles .active {
+    background: rgba(101, 184, 237, .09) !important
+}
+
+.layout>main {
+    padding: 14px;
+    overflow: auto
+}
+
+.fields {
+    display: grid;
+    grid-template-columns: 1fr 120px 180px;
+    align-items: end;
+    gap: 8px
+}
+
+.fields>label, .memberAdd>label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    color: #929eaa;
+    font-size: 9px
+}
+
+.fields input[type=color], .fields select, .memberAdd select {
+    height: 39px;
+    padding: 0 8px;
+    border: 1px solid rgba(255, 255, 255, .09);
+    border-radius: 8px;
+    background: #151b23;
+    color: #e0e7ed
+}
+
+.fields input[type=color] {
+    padding: 4px
+}
+
+.checks {
+    display: flex;
+    gap: 14px;
+    margin: 14px 0;
+    padding: 10px;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, .025)
+}
+
+.checks label {
+    color: #a2adb8;
+    font-size: 9px
+}
+
+.root section h4 {
+    margin: 13px 0 7px;
+    color: #aab4be;
+    font-size: 10px
+}
+
+.memberAdd {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 6px
+}
+
+.memberAdd button {
+    height: 39px
+}
+
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 7px
+}
+
+.chips>span {
+    min-height: 27px;
+    padding: 0 7px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, .05);
+    font-size: 9px
+}
+
+.chips button {
+    border: 0;
+    background: none;
+    color: #a6b1bc;
+    cursor: pointer
+}
+
+.chips>small {
+    color: #77838f
+}
+
+.root footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 18px
+}
+
+.blank, .loading {
+    padding: 50px;
+    color: #7e8a97;
+    text-align: center
+}
+
+@media(max-width:760px) {
+    .layout {
+        grid-template-columns: 1fr
+    }
+
+    .layout>aside {
+        max-height: 230px;
+        border-right: 0;
+        border-bottom: 1px solid rgba(255, 255, 255, .06)
+    }
+
+    .fields {
+        grid-template-columns: 1fr
+    }
+}
