@@ -1,0 +1,51 @@
+.fileCard {
+  display: grid;
+  gap: 10px;
+  max-width: 560px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .025);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08);
+}
+
+.fileCard>img,
+.fileCard>video {
+  display: block;
+  width: min(100%, 520px);
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #080a0e;
+}
+
+.fileCard>audio {
+  width: 100%;
+}
+
+.fileCard>p {
+  margin: 0;
+  color: #ef8888;
+  font-size: 10px;
+}
+
+.fileCard>footer {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fileDetails {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.fileDetails strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.fileDetails small {
+  color: #7e8a99;
+  font-size: 9px;
+}

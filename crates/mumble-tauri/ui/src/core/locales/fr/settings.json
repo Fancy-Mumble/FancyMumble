@@ -119,9 +119,6 @@
   },
   "advanced": {
     "panelTitle": "Avancé",
-    "webUiDesign": "Nouveau design WebUI",
-    "webUiDesignHint": "Utilise la nouvelle interface React. L’interface classique reste disponible et peut être restaurée avec ce bouton.",
-    "webUiDesignOverrideHint": "L’interface est actuellement forcée sur « {{design}} » par le paramètre d’URL de développement.",
     "uiMode": "Interface légère (mode minimal)",
     "uiModeHint": "Redémarre dans le client natif minimal : consommation de RAM bien plus faible, mais uniquement les fonctions essentielles (connexion, chat, canaux, voix).",
     "uiModeConfirmText": "Passer à l'interface minimale maintenant ? L'application va se fermer et le client léger va démarrer.",
@@ -320,6 +317,10 @@
   },
   "personalize": {
     "panelTitle": "Personnaliser",
+    "uiDesign": "Design Aurora",
+    "beta": "Bêta",
+    "uiDesignHint": "Essayez Aurora, un design expérimental encore en bêta. L’interface Standard reste la valeur par défaut et peut être restaurée avec ce bouton.",
+    "uiDesignOverrideHint": "L’interface est actuellement forcée sur « {{design}} » par le paramètre d’URL de développement.",
     "theme": "Thème",
     "themeHint": "Choisissez le style visuel de toute l'application.",
     "chatBackground": "Arrière-plan du chat",

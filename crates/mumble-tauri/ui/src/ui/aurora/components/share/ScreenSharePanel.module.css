@@ -1,0 +1,57 @@
+.shareQuality {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 9px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .025);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06)
+}
+
+.shareQuality>span {
+    min-width: 150px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px
+}
+
+.shareQuality strong {
+    font-size: 10px
+}
+
+.shareQuality small {
+    color: #74818f;
+    font-size: 8px
+}
+
+.shareQuality button {
+    height: 31px;
+    padding: 0 9px;
+    font-size: 9px
+}
+
+.shareQuality select {
+    height: 31px;
+    padding: 0 7px;
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 7px;
+    outline: 0;
+    background: #151b23;
+    color: #c8d0da;
+    font-size: 9px
+}
+
+@media(max-width:720px) {
+    .shareQuality {
+        overflow-x: auto
+    }
+
+    .shareQuality>span {
+        display: none
+    }
+
+    .shareQuality button, .shareQuality select {
+        flex: 0 0 auto
+    }
+}

@@ -7,8 +7,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@core": fileURLToPath(new URL("./src/core", import.meta.url)),
-      "@legacy": fileURLToPath(new URL("./src/ui/legacy", import.meta.url)),
-      "@new": fileURLToPath(new URL("./src/ui/new", import.meta.url)),
+      "@standard": fileURLToPath(new URL("./src/ui/standard", import.meta.url)),
+      "@aurora": fileURLToPath(new URL("./src/ui/aurora", import.meta.url)),
       "@ui": fileURLToPath(new URL("./src/ui", import.meta.url)),
     },
   },

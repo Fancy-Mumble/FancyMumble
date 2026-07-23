@@ -11,8 +11,8 @@
     "baseUrl": ".",
     "paths": {
       "@core/*": ["src/core/*"],
-      "@legacy/*": ["src/ui/legacy/*"],
-      "@new/*": ["src/ui/new/*"],
+      "@standard/*": ["src/ui/standard/*"],
+      "@aurora/*": ["src/ui/aurora/*"],
       "@ui/*": ["src/ui/*"]
     },
     "allowImportingTsExtensions": true,

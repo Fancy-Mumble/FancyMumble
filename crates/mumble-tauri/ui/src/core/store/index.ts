@@ -73,7 +73,7 @@ import {
   downloadsInitialState,
   type DownloadsSlice,
 } from "./slices/downloads";
-import { loadProfileData } from "../features/settings/profileData";
+import { loadProfileData, loadServerProfileData } from "../features/settings/profileData";
 import { base64ToBytes } from "../utils/base64";
 import { serializeProfile, dataUrlToBytes } from "../profileFormat";
 import { sanitiseWsUrl } from "../features/chat/livedoc/sanitiseWsUrl";
@@ -575,6 +575,7 @@ export interface AppState extends PersistentChatSlice, DmSlice, VoiceSlice, Noti
     invitees?: number[];
   }) => Promise<void>;
   updateChannel: (channelId: number, opts: {
+    parentId?: number;
     name?: string;
     description?: string;
     position?: number;
@@ -1267,6 +1268,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     try {
       await invoke("update_channel", {
         channelId,
+        parentId: opts.parentId ?? null,
         name: opts.name ?? null,
         description: opts.description ?? null,
         position: opts.position ?? null,
@@ -2633,8 +2635,9 @@ export async function initEventListeners(
             const isRegistered = ownUser?.user_id != null && ownUser.user_id > 0;
             if (!isRegistered) {
               const identityLabel = useAppStore.getState().connectedCertLabel ?? null;
-              loadProfileData(identityLabel)
-                .then(async ({ profile, bio, avatarDataUrl }) => {
+              const activeServerId = useAppStore.getState().activeServerId;
+              const profileRequest = activeServerId ? loadServerProfileData(activeServerId, identityLabel).then(({ data }) => data) : loadProfileData(identityLabel);
+              profileRequest.then(async ({ profile, bio, avatarDataUrl }) => {
                   const comment = serializeProfile(profile, bio);
                   if (comment) {
                     await invoke("set_user_comment", { comment });

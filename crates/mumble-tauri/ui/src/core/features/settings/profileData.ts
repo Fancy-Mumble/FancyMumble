@@ -21,6 +21,10 @@ function profileKey(identityLabel: string | null | undefined): string {
   return identityLabel ? `profile:${identityLabel}` : "data";
 }
 
+function serverProfileKey(identityLabel: string | null | undefined, serverId: string): string {
+  return `${profileKey(identityLabel)}:server:${serverId}`;
+}
+
 export async function loadProfileData(
   identityLabel?: string | null,
 ): Promise<ProfileData> {
@@ -36,6 +40,33 @@ export async function saveProfileData(
 ): Promise<void> {
   const store = await load(PROFILE_STORE, { autoSave: true, defaults: {} });
   await store.set(profileKey(identityLabel), data);
+}
+
+export async function loadServerProfileData(
+  serverId: string,
+  identityLabel?: string | null,
+): Promise<{ data: ProfileData; isOverride: boolean }> {
+  const store = await load(PROFILE_STORE, { autoSave: true, defaults: {} });
+  const override = await store.get<ProfileData>(serverProfileKey(identityLabel, serverId));
+  if (override) return { data: { ...PROFILE_DEFAULTS, ...override }, isOverride: true };
+  return { data: await loadProfileData(identityLabel), isOverride: false };
+}
+
+export async function saveServerProfileData(
+  serverId: string,
+  data: ProfileData,
+  identityLabel?: string | null,
+): Promise<void> {
+  const store = await load(PROFILE_STORE, { autoSave: true, defaults: {} });
+  await store.set(serverProfileKey(identityLabel, serverId), data);
+}
+
+export async function deleteServerProfileData(
+  serverId: string,
+  identityLabel?: string | null,
+): Promise<void> {
+  const store = await load(PROFILE_STORE, { autoSave: true, defaults: {} });
+  await store.delete(serverProfileKey(identityLabel, serverId));
 }
 
 export async function deleteProfileData(

@@ -119,9 +119,6 @@
   },
   "advanced": {
     "panelTitle": "Erweitert",
-    "webUiDesign": "Neues WebUI-Design",
-    "webUiDesignHint": "Verwendet die neue React-Oberfläche. Die klassische Oberfläche bleibt verfügbar und kann mit diesem Schalter wiederhergestellt werden.",
-    "webUiDesignOverrideHint": "Die Oberfläche wird derzeit durch den Entwicklungs-URL-Parameter auf '{{design}}' festgelegt.",
     "uiMode": "Leichtgewichtige Oberfläche (Minimalmodus)",
     "uiModeHint": "Startet den nativen Minimal-Client: deutlich weniger RAM-Verbrauch, aber nur Kernfunktionen (Verbinden, Chat, Kanäle, Sprache).",
     "uiModeConfirmText": "Jetzt zur minimalen Oberfläche wechseln? Die App wird geschlossen und der leichtgewichtige Client gestartet.",
@@ -320,6 +317,10 @@
   },
   "personalize": {
     "panelTitle": "Anpassen",
+    "uiDesign": "Aurora-Design",
+    "beta": "Beta",
+    "uiDesignHint": "Aurora ausprobieren – ein experimentelles Design in der Beta-Phase. Die Standard-Oberfläche ist die Voreinstellung und kann mit diesem Schalter wiederhergestellt werden.",
+    "uiDesignOverrideHint": "Die Oberfläche wird derzeit durch den Entwicklungs-URL-Parameter auf '{{design}}' festgelegt.",
     "theme": "Design",
     "themeHint": "Wähle das Erscheinungsbild der ganzen App.",
     "chatBackground": "Chat-Hintergrund",

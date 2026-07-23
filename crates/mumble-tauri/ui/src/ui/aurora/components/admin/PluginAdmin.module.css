@@ -1,0 +1,217 @@
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 14px
+}
+
+.page>header {
+    display: flex;
+    align-items: center;
+    gap: 10px
+}
+
+.page>header>div:first-child {
+    flex: 1
+}
+
+.page h3 {
+    margin: 0
+}
+
+.page header p, .pluginList p, .marketCard p, .details p {
+    margin: 4px 0 0;
+    color: #7f8c9a;
+    font-size: 9px;
+    line-height: 1.45
+}
+
+.page header label {
+    width: 260px;
+    margin: 0
+}
+
+.directory {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .035);
+    color: #8f9cab;
+    font-size: 9px
+}
+
+.error, .status {
+    padding: 9px !important;
+    border-radius: 8px;
+    background: rgba(239, 100, 100, .07);
+    color: #e99494 !important
+}
+
+.status {
+    background: rgba(101, 184, 237, .07);
+    color: #9dcde9 !important
+}
+
+.pluginList {
+    display: flex;
+    flex-direction: column;
+    gap: 6px
+}
+
+.pluginList article {
+    min-height: 58px;
+    padding: 9px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(255, 255, 255, .065);
+    border-radius: 11px;
+    background: rgba(255, 255, 255, .02)
+}
+
+.pluginIcon {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: rgba(101, 184, 237, .1);
+    color: #80c4ed;
+    font-size: 10px;
+    font-weight: 800
+}
+
+.pluginList article>div {
+    min-width: 0;
+    flex: 1
+}
+
+.pluginList small {
+    color: #72808f
+}
+
+.marketLayout {
+    min-height: 420px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 250px;
+    gap: 14px
+}
+
+.marketGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 8px
+}
+
+.marketCard {
+    min-width: 0 !important;
+    padding: 10px !important;
+    display: flex !important;
+    align-items: flex-start !important;
+    gap: 9px !important;
+    border: 1px solid rgba(255, 255, 255, .06) !important;
+    border-radius: 11px !important;
+    text-align: left !important
+}
+
+.marketCard>img, .marketCard>span {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    object-fit: cover;
+    border-radius: 10px;
+    font-weight: 800
+}
+
+.marketCard>div {
+    min-width: 0
+}
+
+.marketCard strong, .marketCard small {
+    display: block
+}
+
+.marketCard small {
+    margin-top: 2px;
+    color: #778594;
+    font-size: 8px
+}
+
+.marketCard p {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden
+}
+
+.details {
+    padding: 15px;
+    border: 1px solid rgba(255, 255, 255, .07);
+    border-radius: 13px;
+    background: rgba(255, 255, 255, .022)
+}
+
+.details .hero {
+    width: 64px;
+    height: 64px;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 16px;
+    color: white;
+    font-size: 22px;
+    font-weight: 800
+}
+
+.hero img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover
+}
+
+.details h3 {
+    margin-top: 12px
+}
+
+.details>small {
+    color: #788594
+}
+
+.details>b {
+    display: block;
+    margin: 10px 0;
+    color: #e8a0a0;
+    font-size: 9px
+}
+
+.details>button:last-child {
+    width: 100%;
+    margin-top: 14px
+}
+
+.empty {
+    grid-column: 1/-1;
+    color: #788594;
+    text-align: center
+}
+
+@media(max-width:760px) {
+    .page>header {
+        align-items: stretch;
+        flex-direction: column
+    }
+
+    .page header label {
+        width: 100%
+    }
+
+    .marketLayout {
+        grid-template-columns: 1fr
+    }
+
+    .marketGrid {
+        grid-template-columns: 1fr
+    }
+}

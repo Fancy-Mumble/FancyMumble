@@ -1,0 +1,61 @@
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 7px
+}
+
+.list article {
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid rgba(255, 255, 255, .065);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .02)
+}
+
+.list article>div {
+    min-width: 0;
+    flex: 1
+}
+
+.list strong {
+    font-size: 10px
+}
+
+.list strong small {
+    color: #758290
+}
+
+.list p {
+    margin: 3px 0;
+    color: #85919f;
+    font-size: 9px
+}
+
+.list span {
+    color: #6e7c8b;
+    font-size: 8px
+}
+
+.list article>b {
+    padding: 5px 7px;
+    border-radius: 7px;
+    font-size: 8px;
+    text-transform: capitalize
+}
+
+.allowed {
+    background: rgba(112, 209, 164, .09);
+    color: #83d7b1
+}
+
+.blocked {
+    background: rgba(239, 100, 100, .08);
+    color: #e99393
+}
+
+.empty {
+    color: #7e8b99;
+    font-size: 10px
+}

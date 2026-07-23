@@ -1,0 +1,270 @@
+.stage {
+    flex: 0 0 min(52vh, 520px);
+    min-height: 260px;
+    margin: 10px 16px 4px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border-radius: 15px;
+    background: #0c1016;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08), 0 18px 42px rgba(0, 0, 0, .24)
+}
+
+.stage>header {
+    min-height: 52px;
+    padding: 8px 10px 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    border-bottom: 1px solid rgba(255, 255, 255, .07);
+    background: rgba(25, 31, 40, .84);
+    backdrop-filter: blur(18px)
+}
+
+.stage>header>div {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column
+}
+
+.stage>header strong {
+    font-size: 11px
+}
+
+.stage>header small {
+    color: #7f8b99;
+    font-size: 9px
+}
+
+.stage>header button {
+    height: 30px;
+    padding: 0 8px;
+    font-size: 9px
+}
+
+.live {
+    padding: 4px 7px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border-radius: 7px;
+    background: rgba(239, 100, 100, .1);
+    color: #ef8888;
+    font-size: 8px;
+    font-weight: 750;
+    letter-spacing: .08em
+}
+
+.live i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ef7171;
+    box-shadow: 0 0 0 4px rgba(239, 113, 113, .1)
+}
+
+.viewport {
+    position: relative;
+    min-height: 0;
+    flex: 1;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: #07090c
+}
+
+.viewport>video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain
+}
+
+.cameraPip {
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    width: min(25%, 230px) !important;
+    height: auto !important;
+    max-height: 42%;
+    aspect-ratio: 16/10;
+    object-fit: cover !important;
+    border-radius: 11px;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .14)
+}
+
+.connecting {
+    height: 100%;
+    min-height: 180px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: #8995a3
+}
+
+.connecting span {
+    width: 28px;
+    height: 28px;
+    border: 2px solid rgba(255, 255, 255, .12);
+    border-top-color: #68b7e7;
+    border-radius: 50%;
+    animation: spin 1s linear infinite
+}
+
+.connecting strong {
+    font-size: 10px
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg)
+    }
+}
+
+.stats {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    width: 225px;
+    padding: 11px;
+    display: grid;
+    gap: 7px;
+    border-radius: 11px;
+    background: rgba(12, 16, 22, .82);
+    backdrop-filter: blur(20px);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .09)
+}
+
+.stats>strong {
+    font-size: 10px
+}
+
+.stats>span {
+    display: flex;
+    justify-content: space-between;
+    color: #84909e;
+    font-size: 8px
+}
+
+.stats b {
+    color: #c8d0d9
+}
+
+.warning {
+    position: absolute;
+    bottom: 12px;
+    padding: 9px 12px;
+    border-radius: 9px;
+    background: rgba(239, 182, 110, .13);
+    color: #efc487;
+    font-size: 9px
+}
+
+.stage>footer {
+    padding: 7px;
+    display: flex;
+    gap: 5px;
+    overflow: auto;
+    border-top: 1px solid rgba(255, 255, 255, .07)
+}
+
+.stage>footer button {
+    height: 30px;
+    font-size: 9px
+}
+
+.stage>footer svg {
+    width: 13px
+}
+
+.broadcasts {
+    margin: 8px 16px 2px;
+    display: grid;
+    gap: 5px
+}
+
+.broadcasts>div {
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border-radius: 11px;
+    background: rgba(101, 184, 237, .055);
+    box-shadow: inset 0 0 0 1px rgba(101, 184, 237, .11)
+}
+
+.broadcasts>div>span {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    background: rgba(101, 184, 237, .1);
+    color: #6fbee9
+}
+
+.broadcasts svg {
+    width: 14px
+}
+
+.broadcasts>div>div {
+    flex: 1;
+    display: flex;
+    flex-direction: column
+}
+
+.broadcasts strong {
+    font-size: 10px
+}
+
+.broadcasts small {
+    color: #798695;
+    font-size: 8px
+}
+
+.broadcasts button {
+    height: 29px
+}
+
+.error {
+    margin: 7px 16px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 9px;
+    background: rgba(239, 100, 100, .08);
+    color: #ef9999;
+    font-size: 9px
+}
+
+.error span {
+    flex: 1
+}
+
+.error button {
+    height: 26px
+}
+
+.stage+* {}
+
+@media(max-width:720px) {
+    .stage {
+        margin: 7px;
+        flex-basis: 44vh
+    }
+
+    .stage>header>button:not(:last-child) {
+        display: none
+    }
+
+    .stats {
+        width: 190px
+    }
+
+    .cameraPip {
+        width: 34% !important
+    }
+}

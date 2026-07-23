@@ -1,0 +1,238 @@
+.layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: 18px
+}
+
+.editor {
+    display: flex;
+    flex-direction: column;
+    gap: 13px
+}
+
+.identityBar {
+    display: flex;
+    align-items: end;
+    gap: 8px
+}
+
+.identityBar label, .optionGrid label {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    color: #aeb7c3;
+    font-size: 10px;
+    font-weight: 700
+}
+
+.identityBar select, .optionGrid select {
+    height: 38px;
+    padding: 0 9px;
+    border: 1px solid rgba(255, 255, 255, .09);
+    border-radius: 9px;
+    background: #151b23;
+    color: #e4eaf0
+}
+
+.identityBar b {
+    padding: 6px 8px;
+    border-radius: 7px;
+    background: rgba(112, 209, 164, .1);
+    color: #82d9b1;
+    font-size: 8px
+}
+
+.imagePicker {
+    padding: 9px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border-radius: 11px;
+    background: rgba(255, 255, 255, .025);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06)
+}
+
+.imagePicker>span {
+    width: 48px;
+    height: 48px;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    background: #26313e;
+    font-weight: 800
+}
+
+.imagePicker img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover
+}
+
+.imagePicker>div {
+    flex: 1;
+    display: flex;
+    flex-direction: column
+}
+
+.imagePicker strong {
+    font-size: 10px
+}
+
+.imagePicker small {
+    color: #75818f;
+    font-size: 8px
+}
+
+.imagePicker button {
+    height: 29px;
+    padding: 0 8px;
+    font-size: 9px
+}
+
+.optionGrid, .colors {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px
+}
+
+.colors>label:last-child {
+    align-self: end;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: #aeb7c3;
+    font-size: 10px
+}
+
+.colors input[type=checkbox] {
+    accent-color: #65b8ed
+}
+
+.status {
+    margin: 0;
+    color: #8794a2;
+    font-size: 9px
+}
+
+.side {
+    display: flex;
+    flex-direction: column;
+    gap: 12px
+}
+
+.preview {
+    min-height: 260px;
+    padding: 72px 16px 16px;
+    border-radius: 16px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1);
+    text-align: center
+}
+
+.preview>img, .preview>span {
+    width: 72px;
+    height: 72px;
+    margin: auto;
+    display: grid;
+    place-items: center;
+    object-fit: cover;
+    border: 4px solid rgba(255, 255, 255, .45);
+    border-radius: 22px;
+    background: #202b37;
+    font-weight: 800
+}
+
+.preview h3 {
+    margin: 12px 0 3px
+}
+
+.preview>strong {
+    color: #aab4c0;
+    font-size: 9px
+}
+
+.preview p {
+    color: #d0d6dd;
+    font-size: 10px;
+    line-height: 1.5
+}
+
+.identities {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    border-radius: 13px;
+    background: rgba(255, 255, 255, .025);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07)
+}
+
+.identities h4 {
+    margin: 0 0 4px;
+    font-size: 11px
+}
+
+.identities>div {
+    display: flex;
+    align-items: center;
+    gap: 4px
+}
+
+.identities>div>span {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column
+}
+
+.identities strong {
+    font-size: 9px
+}
+
+.identities small {
+    color: #727f8d;
+    font-size: 7px
+}
+
+.identities button {
+    height: 28px;
+    padding: 0 7px;
+    font-size: 8px
+}
+
+.confirm {
+    padding: 10px;
+    border-radius: 10px;
+    background: rgba(239, 100, 100, .07)
+}
+
+.confirm p {
+    margin: 0 0 8px;
+    color: #eba0a0;
+    font-size: 9px
+}
+
+.confirm button {
+    height: 29px;
+    margin-right: 5px;
+    font-size: 8px
+}
+
+@media(max-width:800px) {
+    .layout {
+        grid-template-columns: 1fr
+    }
+
+    .side {
+        display: grid;
+        grid-template-columns: 1fr 1fr
+    }
+}
+
+@media(max-width:560px) {
+    .optionGrid, .colors, .side {
+        grid-template-columns: 1fr
+    }
+}
