@@ -1,0 +1,85 @@
+/* Box reads its spacing from custom properties the component sets inline, so
+   every value comes from the shared scale and none are hard-coded here. */
+
+.box {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  padding-block: var(--box-py, var(--box-p, 0));
+  padding-inline: var(--box-px, var(--box-p, 0));
+  margin-block: var(--box-my, var(--box-m, 0));
+  margin-inline: var(--box-mx, var(--box-m, 0));
+  gap: var(--box-gap, 0);
+}
+
+.flex {
+  display: flex;
+}
+
+.inlineFlex {
+  display: inline-flex;
+}
+
+.grid {
+  display: grid;
+}
+
+.block {
+  display: block;
+}
+
+.row {
+  flex-direction: row;
+}
+
+.column {
+  flex-direction: column;
+}
+
+.wrap {
+  flex-wrap: wrap;
+}
+
+.grow {
+  flex: 1 1 auto;
+}
+
+.alignStart {
+  align-items: flex-start;
+}
+
+.alignCenter {
+  align-items: center;
+}
+
+.alignEnd {
+  align-items: flex-end;
+}
+
+.alignStretch {
+  align-items: stretch;
+}
+
+.alignBaseline {
+  align-items: baseline;
+}
+
+.justifyStart {
+  justify-content: flex-start;
+}
+
+.justifyCenter {
+  justify-content: center;
+}
+
+.justifyEnd {
+  justify-content: flex-end;
+}
+
+.justifyBetween {
+  justify-content: space-between;
+}
+
+.justifyAround {
+  justify-content: space-around;
+}
