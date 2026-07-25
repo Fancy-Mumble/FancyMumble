@@ -15,6 +15,7 @@ export interface ChannelSidebarProps {
   query: string;
   onQueryChange: (query: string) => void;
   ownName: string;
+  ownSession?: number | null;
   inCall: boolean;
   onOpenServerInfo: () => void;
   onCreateChannel: () => void;
@@ -46,7 +47,7 @@ export default function ChannelSidebar({
   talkingSessions,
   query,
   onQueryChange,
-  ownName,
+  ownName, ownSession,
   inCall,
   onOpenServerInfo,
   onCreateChannel,
@@ -89,6 +90,7 @@ export default function ChannelSidebar({
           listenedChannels={listenedChannels}
           unreadCounts={unreadCounts}
           talkingSessions={talkingSessions}
+          ownSession={ownSession}
           onSelect={onSelectChannel}
           onJoin={onJoinChannel}
           onContextMenu={onChannelContextMenu}

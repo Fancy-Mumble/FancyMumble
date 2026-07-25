@@ -1,3 +1,4 @@
+import ChannelRosterSpecimen from "./ChannelRosterSpecimen";
 import MemberSidebarSpecimen from "./MemberSidebarSpecimen";
 import ServerRailSpecimen from "./ServerRailSpecimen";
 import Avatar from "./Avatar";
@@ -137,6 +138,9 @@ export default function NavigationSection() {
       </Specimen>
       <Specimen title="Member sidebar" meta="Client component / roster" wide>
         <MemberSidebarSpecimen />
+      </Specimen>
+      <Specimen title="Voice channel occupancy" meta="Client component / speaking, muted, deafened">
+        <ChannelRosterSpecimen />
       </Specimen>
     </Section>
   );

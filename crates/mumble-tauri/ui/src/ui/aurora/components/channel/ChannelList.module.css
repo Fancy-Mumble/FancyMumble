@@ -96,39 +96,78 @@
     font-variant-numeric: tabular-nums;
 }
 
-.presence {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
+/* Occupants are listed under their channel rather than stacked into it, so a
+   glance answers "who is in here and is their mic on". */
+.occupants {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 1px 0 3px;
+  padding-left: 22px;
+}
+
+.occupant {
+  min-height: 26px;
+  padding: 2px 8px 2px 4px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 7px;
+  color: #97a2b0;
+}
+
+.occupant:hover {
+  background: rgb(255 255 255 / 4%);
+  color: #dbe2ea;
+}
+
+.occupantOwn .occupantName {
+  color: #dbe2ea;
+  font-weight: 650;
+}
+
+.occupantName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+/* Reserve the slot so names do not shift when someone mutes. */
+.occupantState {
+  flex: 0 0 auto;
+  min-width: 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #75808d;
+}
+
+.occupantState svg {
+  width: 13px;
+  height: 13px;
 }
 
 .presenceAvatar {
-    width: 19px;
-    height: 19px;
-    margin-left: -5px;
-    display: grid;
-    place-items: center;
-    border: 1.5px solid #171c24;
-    border-radius: 50%;
-    background: #37424f;
-    color: #cdd5de;
-    font-size: 8px;
-    font-weight: 700;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid transparent;
+  border-radius: 50%;
+  background: #37424f;
+  color: #cdd5de;
+  font-size: 8px;
+  font-weight: 700;
 }
 
-.presenceAvatar:first-child {
-    margin-left: 0;
-}
-
+/* A speaking ring is the one thing that must be readable at a glance. */
 .presenceTalking {
-    border-color: #70d1a4;
-}
-
-.presenceOverflow {
-    margin-left: 4px;
-    color: #6b7684;
-    font-size: 10px;
-    font-weight: 700;
+  border-color: #70d1a4;
+  box-shadow: 0 0 0 2px rgb(112 209 164 / 22%);
 }
 
 :global(html[data-ui-density="compact"]) .item {

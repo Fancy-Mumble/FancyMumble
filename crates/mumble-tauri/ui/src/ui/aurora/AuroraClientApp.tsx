@@ -499,6 +499,7 @@ export default function AuroraClientApp() {
         talkingSessions={talkingSessions}
         query={channelQuery}
         onQueryChange={setChannelQuery}
+        ownSession={ownSession}
         ownName={users.find((user) => user.session === ownSession)?.name ?? activeSession?.username ?? "You"}
         inCall={inCall}
         onOpenServerInfo={() => setSurface("server-info")}

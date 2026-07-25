@@ -14,6 +14,7 @@ export interface ChannelListProps {
   listenedChannels: ReadonlySet<number>;
   unreadCounts: Record<number, number>;
   talkingSessions: ReadonlySet<number>;
+  ownSession?: number | null;
   onSelect: (channel: ChannelEntry) => void;
   onJoin: (channel: ChannelEntry) => void;
   onContextMenu?: (channel: ChannelEntry, event: MouseEvent<HTMLElement>) => void;
@@ -28,6 +29,7 @@ export default function ChannelList({
   listenedChannels,
   unreadCounts,
   talkingSessions,
+  ownSession,
   onSelect,
   onJoin,
   onContextMenu,
@@ -57,6 +59,7 @@ export default function ChannelList({
           />
         ) : (
           <ChannelListItem
+            ownSession={ownSession}
             key={channel.id}
             channel={channel}
             users={usersByChannel.get(channel.id) ?? []}
