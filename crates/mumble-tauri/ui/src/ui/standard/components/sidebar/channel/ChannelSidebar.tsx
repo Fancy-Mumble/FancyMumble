@@ -1,4 +1,30 @@
-import { BellIcon, BellOffIcon, ChevronRightIcon, CloseIcon, DatabaseIcon, EditIcon, HeadphonesIcon, HeadphonesOffIcon, InfoIcon, ListenBadgeIcon, LockIcon, LogoutIcon, MenuIcon, MicIcon, MicOffIcon, MicOffSmallIcon, PhoneIcon, PhoneOffIcon, PlusIcon, RecordIcon, SettingsIcon, ShieldIcon, TrashIcon, UsersGroupIcon, WarningIcon } from "../../../icons";
+import {
+  BellIcon,
+  BellOffIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  DatabaseIcon,
+  EditIcon,
+  HeadphonesIcon,
+  HeadphonesOffIcon,
+  InfoIcon,
+  ListenBadgeIcon,
+  LockIcon,
+  LogoutIcon,
+  MenuIcon,
+  MicIcon,
+  MicOffIcon,
+  MicOffSmallIcon,
+  PhoneIcon,
+  PhoneOffIcon,
+  PlusIcon,
+  RecordIcon,
+  SettingsIcon,
+  ShieldIcon,
+  TrashIcon,
+  UsersGroupIcon,
+  WarningIcon,
+} from "../../../icons";
 import { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -8,14 +34,28 @@ import { selectSelfDeafened } from "@core/store/voiceSelectors";
 import { listen } from "@tauri-apps/api/event";
 import type { ChannelEntry, UserEntry, SidebarSections } from "@core/types";
 import { getPreferences, updatePreferences } from "@core/preferencesStorage";
-const SidebarSearchView = lazy(() => import("../SidebarSearchView").then((m) => ({ default: m.SidebarSearchView })));
-import { UserListItem, RoleColorsContext, RoleGroupsContext, buildRoleColorMap, buildRoleGroupsMap } from "../user/UserListItem";
+const SidebarSearchView = lazy(() =>
+  import("../SidebarSearchView").then((m) => ({ default: m.SidebarSearchView })),
+);
+import {
+  UserListItem,
+  RoleColorsContext,
+  RoleGroupsContext,
+  buildRoleColorMap,
+  buildRoleGroupsMap,
+} from "../user/UserListItem";
 import { useAclGroups } from "../../../hooks/useAclGroups";
 import { useCaptureError, captureHolders } from "../../../hooks/useCaptureError";
 import { Tooltip } from "../../elements/Tooltip";
 import { UserContextMenu } from "../user/UserContextMenu";
 import type { UserContextMenuState } from "../user/UserContextMenu";
-import ChannelEditorDialog, { canEditChannel, canCreateChannel, canOnlyCreateTemp, canDeleteChannel, canDeleteMessages } from "./ChannelEditorDialog";
+import ChannelEditorDialog, {
+  canEditChannel,
+  canCreateChannel,
+  canOnlyCreateTemp,
+  canDeleteChannel,
+  canDeleteMessages,
+} from "./ChannelEditorDialog";
 import ConfirmDialog from "../../elements/ConfirmDialog";
 import { MoveUsersDialog } from "../move/MoveUsersDialog";
 import { ChannelPasswordDialog } from "./ChannelPasswordDialog";
@@ -29,7 +69,15 @@ const MembersTab = lazy(() => import("../MembersTab").then((m) => ({ default: m.
 const RecordingModal = lazy(() => import("../RecordingModal"));
 import { SidebarTabs } from "../SidebarTabs";
 import { PERM_LISTEN, PERM_WRITE } from "@core/utils/permissions";
-import { filterVisibleChannels, channelDisplayName, filterMeetingChannels, isDmChannel, meetingRooms, dmPeerUserId, usersForChannelTree } from "@core/utils/channelVisibility";
+import {
+  filterVisibleChannels,
+  channelDisplayName,
+  filterMeetingChannels,
+  isDmChannel,
+  meetingRooms,
+  dmPeerUserId,
+  usersForChannelTree,
+} from "@core/utils/channelVisibility";
 import { requestLeaveMeeting } from "@core/features/chat/calendar/meetings";
 import { TID } from "@core/testids";
 import { SidebarSearch } from "../../elements/SearchFields";
@@ -61,68 +109,89 @@ interface SelfVoiceControlsProps {
   readonly micInUseTitle?: string;
 }
 
-function SelfVoiceControls({ voiceState, inCall, toggleMute, toggleDeafen, deafened, enableVoice, disableVoice, onCollapse, micInUse, micInUseTitle }: Readonly<SelfVoiceControlsProps>) {
+function SelfVoiceControls({
+  voiceState,
+  inCall,
+  toggleMute,
+  toggleDeafen,
+  deafened,
+  enableVoice,
+  disableVoice,
+  onCollapse,
+  micInUse,
+  micInUseTitle,
+}: Readonly<SelfVoiceControlsProps>) {
   const { t } = useTranslation(["sidebar", "common"]);
   const isActive = voiceState === "active";
   const muteTitle = micInUse
-    ? micInUseTitle ?? t("channelSidebar.micInUse")
-    : isActive ? t("channelSidebar.mute") : t("channelSidebar.unmute");
+    ? (micInUseTitle ?? t("channelSidebar.micInUse"))
+    : isActive
+      ? t("channelSidebar.mute")
+      : t("channelSidebar.unmute");
 
-  return (<>
-    {/* Desktop: mute + deaf toggles (hidden on mobile via CSS) */}
-    <div className={`${styles.selfVoiceActions} ${styles.desktopOnly}`}>
-      <Tooltip label={muteTitle}>
+  return (
+    <>
+      {/* Desktop: mute + deaf toggles (hidden on mobile via CSS) */}
+      <div className={`${styles.selfVoiceActions} ${styles.desktopOnly}`}>
+        <Tooltip label={muteTitle}>
+          <button
+            className={`${styles.voiceToggle} ${isActive ? styles.voiceActive : styles.voiceMuted} ${micInUse ? styles.voiceInUse : ""}`}
+            data-testid={TID.toggleMute}
+            data-mic-in-use={micInUse ? "true" : undefined}
+            onClick={toggleMute}
+            aria-label={muteTitle}
+          >
+            {micInUse ? (
+              <WarningIcon width={18} height={18} />
+            ) : isActive ? (
+              <MicIcon width={18} height={18} />
+            ) : (
+              <MicOffIcon width={18} height={18} />
+            )}
+          </button>
+        </Tooltip>
         <button
-          className={`${styles.voiceToggle} ${isActive ? styles.voiceActive : styles.voiceMuted} ${micInUse ? styles.voiceInUse : ""}`}
-          data-testid={TID.toggleMute}
-          data-mic-in-use={micInUse ? "true" : undefined}
-          onClick={toggleMute}
-          aria-label={muteTitle}
+          className={`${styles.voiceToggle} ${deafened ? styles.voiceMuted : styles.voiceActive}`}
+          data-testid={TID.toggleDeafen}
+          onClick={toggleDeafen}
+          title={deafened ? t("userMenu.undeafen") : t("userMenu.deafen")}
+          aria-pressed={deafened}
         >
-          {micInUse ? (
-            <WarningIcon width={18} height={18} />
-          ) : isActive ? (
-            <MicIcon width={18} height={18} />
+          {deafened ? (
+            <HeadphonesOffIcon width={18} height={18} />
           ) : (
-            <MicOffIcon width={18} height={18} />
+            <HeadphonesIcon width={18} height={18} />
           )}
         </button>
-      </Tooltip>
-      <button
-        className={`${styles.voiceToggle} ${deafened ? styles.voiceMuted : styles.voiceActive}`}
-        data-testid={TID.toggleDeafen}
-        onClick={toggleDeafen}
-        title={deafened ? t("userMenu.undeafen") : t("userMenu.deafen")}
-        aria-pressed={deafened}
-      >
-        {deafened ? (
-          <HeadphonesOffIcon width={18} height={18} />
+      </div>
+      {/* Mobile: single call / hang-up button (hidden on desktop via CSS) */}
+      <div className={`${styles.selfVoiceActions} ${styles.mobileOnly}`}>
+        {inCall ? (
+          <button
+            className={`${styles.voiceToggle} ${styles.callBtnEnd}`}
+            onClick={() => {
+              disableVoice();
+              onCollapse?.();
+            }}
+            title={t("channelSidebar.endCall")}
+          >
+            <PhoneOffIcon width={18} height={18} />
+          </button>
         ) : (
-          <HeadphonesIcon width={18} height={18} />
+          <button
+            className={`${styles.voiceToggle} ${styles.callBtnStart}`}
+            onClick={() => {
+              enableVoice();
+              onCollapse?.();
+            }}
+            title={t("channelSidebar.startCall")}
+          >
+            <PhoneIcon width={18} height={18} />
+          </button>
         )}
-      </button>
-    </div>
-    {/* Mobile: single call / hang-up button (hidden on desktop via CSS) */}
-    <div className={`${styles.selfVoiceActions} ${styles.mobileOnly}`}>
-      {inCall ? (
-        <button
-          className={`${styles.voiceToggle} ${styles.callBtnEnd}`}
-          onClick={() => { disableVoice(); onCollapse?.(); }}
-          title={t("channelSidebar.endCall")}
-        >
-          <PhoneOffIcon width={18} height={18} />
-        </button>
-      ) : (
-        <button
-          className={`${styles.voiceToggle} ${styles.callBtnStart}`}
-          onClick={() => { enableVoice(); onCollapse?.(); }}
-          title={t("channelSidebar.startCall")}
-        >
-          <PhoneIcon width={18} height={18} />
-        </button>
-      )}
-    </div>
-  </>);
+      </div>
+    </>
+  );
 }
 
 // --- Main component -----------------------------------------------
@@ -142,7 +211,14 @@ interface ChannelSidebarProps {
   onSelectMessage?: (channelId: number, messageId: string) => void;
 }
 
-export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, onCollapse, searchChannelId, onSearchChannelClear, onSelectMessage }: Readonly<ChannelSidebarProps>) {
+export default function ChannelSidebar({
+  onChannelSelect,
+  onServerInfoToggle,
+  onCollapse,
+  searchChannelId,
+  onSearchChannelClear,
+  onSelectMessage,
+}: Readonly<ChannelSidebarProps>) {
   const { t } = useTranslation(["sidebar", "common"]);
   const channels = useAppStore((s) => s.channels);
   const users = useAppStore((s) => s.users);
@@ -360,14 +436,11 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
   } | null>(null);
   const ctxRef = useRef<HTMLDivElement>(null);
 
-  const openCtxMenu = useCallback(
-    (e: React.MouseEvent, channelId: number) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setCtxMenu({ x: e.clientX, y: e.clientY, channelId });
-    },
-    [],
-  );
+  const openCtxMenu = useCallback((e: React.MouseEvent, channelId: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ x: e.clientX, y: e.clientY, channelId });
+  }, []);
 
   // Close context menu on outside click or Escape.
   useEffect(() => {
@@ -391,40 +464,46 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
   // -- User context menu state ------------------------------------
   const [userCtxMenu, setUserCtxMenu] = useState<UserContextMenuState | null>(null);
 
-  const openUserCtxMenu = useCallback(
-    (e: React.MouseEvent, user: UserEntry) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setUserCtxMenu({ x: e.clientX, y: e.clientY, user });
-    },
-    [],
-  );
+  const openUserCtxMenu = useCallback((e: React.MouseEvent, user: UserEntry) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setUserCtxMenu({ x: e.clientX, y: e.clientY, user });
+  }, []);
 
   // Stable callbacks for the list components below: avoid passing fresh
   // arrow functions on every render so React.memo on MemberItem/MemberRow
   // can short-circuit when nothing about a row actually changed.
-  const handleSelectChannel = useCallback((id: number) => {
-    selectChannel(id);
-    onChannelSelect?.();
-  }, [selectChannel, onChannelSelect]);
-  const handleJoinChannel = useCallback((id: number) => {
-    const ch = channels.find((c) => c.id === id);
-    // Hidden/private rooms (invitee-gated private rooms + meeting rooms) deny
-    // Enter to @all but grant it to invited users by id - so an invited user
-    // enters with no password. Don't pop the password prompt for them (older
-    // servers still mark them is_enter_restricted); just attempt the join.
-    if (ch?.is_enter_restricted && !ch.hidden) {
-      setPasswordChannel(ch);
-      return;
-    }
-    joinChannel(id);
-    selectChannel(id);
-    onChannelSelect?.();
-  }, [channels, joinChannel, selectChannel, onChannelSelect]);
-  const handleUserClick = useCallback((session: number) => {
-    selectDmUser(session);
-    onChannelSelect?.();
-  }, [selectDmUser, onChannelSelect]);
+  const handleSelectChannel = useCallback(
+    (id: number) => {
+      selectChannel(id);
+      onChannelSelect?.();
+    },
+    [selectChannel, onChannelSelect],
+  );
+  const handleJoinChannel = useCallback(
+    (id: number) => {
+      const ch = channels.find((c) => c.id === id);
+      // Hidden/private rooms (invitee-gated private rooms + meeting rooms) deny
+      // Enter to @all but grant it to invited users by id - so an invited user
+      // enters with no password. Don't pop the password prompt for them (older
+      // servers still mark them is_enter_restricted); just attempt the join.
+      if (ch?.is_enter_restricted && !ch.hidden) {
+        setPasswordChannel(ch);
+        return;
+      }
+      joinChannel(id);
+      selectChannel(id);
+      onChannelSelect?.();
+    },
+    [channels, joinChannel, selectChannel, onChannelSelect],
+  );
+  const handleUserClick = useCallback(
+    (session: number) => {
+      selectDmUser(session);
+      onChannelSelect?.();
+    },
+    [selectDmUser, onChannelSelect],
+  );
 
   /** Get the (display) channel name for a user's current channel. Meeting rooms
    *  show their meeting name; a friend-chat (`__dm:`) channel shows the peer's
@@ -481,610 +560,631 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
 
   return (
     <RoleColorsContext.Provider value={roleColors}>
-    <RoleGroupsContext.Provider value={roleGroups}>
-    <aside ref={sidebarRef} className={styles.sidebar}>
-      {/* Header */}
-      <div className={styles.header}>
-        {onCollapse && (
-          <button
-            type="button"
-            className={styles.collapseBtn}
-            onClick={onCollapse}
-            aria-label={t("channelSidebar.collapse")}
-            title={t("channelSidebar.collapse")}
-          >
-            <MenuIcon width={18} height={18} />
-          </button>
-        )}
-        <div className={styles.searchBar}>
-          <SidebarSearch
-            ref={searchInputRef}
-            placeholder={t("channelSidebar.searchPlaceholder")}
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              if (!showSearch) setShowSearch(true);
-            }}
-            onFocus={() => { if (!showSearch) setShowSearch(true); }}
-            onKeyDown={(e) => { if (e.key === "Escape") closeSearch(); }}
-            trailing={
-              showSearch ? (
-                <button
-                  type="button"
-                  className={styles.searchBarClose}
-                  onClick={closeSearch}
-                  aria-label={t("channelSidebar.closeSearch")}
-                  title={t("channelSidebar.closeSearchTooltip")}
-                >
-                  <CloseIcon width={14} height={14} />
-                </button>
-              ) : (
-                <span className={styles.searchShortcut}>Ctrl+K</span>
-              )
-            }
-          />
-        </div>
-      </div>
-
-      {/* -- Search mode replaces channel/group/online content -- */}
-      {showSearch ? (
-        <Suspense fallback={null}>
-          <SidebarSearchView
-            query={searchQuery}
-            channelId={searchChannelId}
-            channelName={searchChannelName}
-            onSelectChannel={(id) => {
-              selectChannel(id);
-              setHighlightChannelId(id);
-              setTimeout(() => setHighlightChannelId(undefined), 1500);
-              onChannelSelect?.();
-            }}
-            onSelectUser={(session) => {
-              const user = users.find((u) => u.session === session);
-              const channelId = user?.channel_id;
-              if (channelId != null) {
-                selectChannel(channelId);
-                setHighlightChannelId(channelId);
-                setTimeout(() => setHighlightChannelId(undefined), 1500);
-              }
-              setHighlightUserSession(session);
-              setTimeout(() => setHighlightUserSession(undefined), 1500);
-              onChannelSelect?.();
-            }}
-            onSelectMessage={(channelId, messageId) => {
-              selectChannel(channelId);
-              setHighlightChannelId(channelId);
-              setTimeout(() => setHighlightChannelId(undefined), 1500);
-              onSelectMessage?.(channelId, messageId);
-              onChannelSelect?.();
-            }}
-          />
-        </Suspense>
-      ) : (<>
-
-      <SidebarTabs
-        onMembersFirstShown={handleMembersFirstShown}
-        membersPane={membersMounted ? (
-          <Suspense fallback={null}>
-            <MembersTab
-              users={users}
-              channels={channels}
-              ownSession={ownSession}
-              selectedDmUser={selectedDmUser}
-              talkingSessions={talkingSessions}
-              onSelectDm={handleUserClick}
-              onUserContextMenu={openUserCtxMenu}
-            />
-          </Suspense>
-        ) : null}
-        channelsPane={(<>
-      {/* Private/hidden rooms (invitee-only private rooms + meeting rooms) as a
-          flat list, reusing the flat channel-list component. */}
-      {privateRoomChannels.length > 0 && (
-        <div className={styles.meetingsSection} data-testid={TID.privateChannelsViewer}>
-          <div className={styles.sectionHeaderBar}>
-            <button
-              className={styles.collapsibleHeader}
-              onClick={() => toggleSection("privateRooms", privateRoomsOpen, setPrivateRoomsOpen)}
-              type="button"
-            >
-              <ChevronRightIcon
-                className={`${styles.collapseChevron} ${privateRoomsOpen ? styles.collapseChevronOpen : ""}`}
-                width={12}
-                height={12}
-              />
-              <LockIcon width={12} height={12} />
-              <span>{t("channelSidebar.meetings", { defaultValue: "Meetings" })}</span>
-            </button>
-          </div>
-          <div className={`${styles.channelList} ${privateRoomsOpen ? "" : styles.sectionCollapsed}`}>
-            {privateRoomsOpen && (
-              <Suspense fallback={null}>
-                <ModernChannelList
-                  channels={privateRoomChannels}
-                  reorderable={false}
-                  expandableRows={false}
-                  users={treeUsers}
-                  selectedChannel={selectedChannel}
-                  currentChannel={currentChannel}
-                  listenedChannels={listenedChannels}
-                  unreadCounts={unreadCounts}
-                  talkingSessions={talkingSessions}
-                  broadcastingSessions={broadcastingSessions}
-                  shakingChannelId={shakingChannelId}
-                  highlightChannelId={highlightChannelId}
-                  highlightUserSession={highlightUserSession}
-                  onSelectChannel={handleSelectChannel}
-                  onJoinChannel={handleJoinChannel}
-                  onContextMenu={openCtxMenu}
-                  onUserContextMenu={openUserCtxMenu}
-                  onUserClick={handleUserClick}
-                />
-              </Suspense>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Channel list header (always visible) */}
-      <div className={styles.sectionHeaderBar}>
-        <button
-          className={styles.collapsibleHeader}
-          onClick={() => toggleSection("channels", channelsOpen, setChannelsOpen)}
-          type="button"
-        >
-          <ChevronRightIcon
-            className={`${styles.collapseChevron} ${channelsOpen ? styles.collapseChevronOpen : ""}`}
-            width={12}
-            height={12}
-          />
-          <span>{t("channelSidebar.channels")}</span>
-        </button>
-        <button
-          type="button"
-          className={`${styles.sectionHeaderAction} ${hideEmptyChannels ? styles.sectionHeaderActionActive : ""}`}
-          onClick={toggleHideEmptyChannels}
-          aria-pressed={hideEmptyChannels}
-          title={hideEmptyChannels ? t("channelSidebar.showAllChannels") : t("channelSidebar.hideEmptyChannels")}
-          aria-label={hideEmptyChannels ? t("channelSidebar.showAllChannels") : t("channelSidebar.hideEmptyChannels")}
-        >
-          <UsersGroupIcon width={14} height={14} />
-        </button>
-      </div>
-
-      {/* Channel list */}
-      <div className={`${styles.channelList} ${channelsOpen ? "" : styles.sectionCollapsed}`}>
-
-        <Suspense fallback={null}>
-        {channelsOpen && channelViewerStyle === "flat" && (
-          <ModernChannelList
-            channels={visibleChannels}
-            users={treeUsers}
-            selectedChannel={selectedChannel}
-            currentChannel={currentChannel}
-            listenedChannels={listenedChannels}
-            unreadCounts={unreadCounts}
-            talkingSessions={talkingSessions}
-            broadcastingSessions={broadcastingSessions}
-            shakingChannelId={shakingChannelId}
-            highlightChannelId={highlightChannelId}
-            highlightUserSession={highlightUserSession}
-            onSelectChannel={handleSelectChannel}
-            onJoinChannel={handleJoinChannel}
-            onContextMenu={openCtxMenu}
-            onUserContextMenu={openUserCtxMenu}
-            onUserClick={handleUserClick}
-          />
-        )}
-
-        {channelsOpen && channelViewerStyle === "modern" && (
-          <ChannelIconList
-            channels={visibleChannels}
-            users={treeUsers}
-            selectedChannel={selectedChannel}
-            currentChannel={currentChannel}
-            listenedChannels={listenedChannels}
-            unreadCounts={unreadCounts}
-            talkingSessions={talkingSessions}
-            broadcastingSessions={broadcastingSessions}
-            shakingChannelId={shakingChannelId}
-            highlightChannelId={highlightChannelId}
-            highlightUserSession={highlightUserSession}
-            onSelectChannel={handleSelectChannel}
-            onJoinChannel={handleJoinChannel}
-            onContextMenu={openCtxMenu}
-            onUserContextMenu={openUserCtxMenu}
-            onUserClick={handleUserClick}
-          />
-        )}
-
-        {channelsOpen && channelViewerStyle === "classic" && (
-          <ClassicChannelList
-            channels={visibleChannels}
-            users={treeUsers}
-            selectedChannel={selectedChannel}
-            currentChannel={currentChannel}
-            listenedChannels={listenedChannels}
-            unreadCounts={unreadCounts}
-            shakingChannelId={shakingChannelId}
-            highlightChannelId={highlightChannelId}
-            highlightUserSession={highlightUserSession}
-            onSelectChannel={handleSelectChannel}
-            onJoinChannel={handleJoinChannel}
-            onContextMenu={openCtxMenu}
-          />
-        )}
-        </Suspense>
-      </div>
-        </>)}
-      />
-
-      </>)}{/* end search-mode ternary */}
-
-      {/* Self user section - always visible */}
-      {(() => {
-        const self = users.find((u) => u.session === ownSession);
-        if (!self) return null;
-        const selfTalking = talkingSessions.has(self.session);
-        return (
-          <div className={styles.selfUserSection}>
-            <UserListItem
-              user={self}
-              channelName={channelName(self.channel_id)}
-              isSelf
-              isTalking={selfTalking}
-              onClick={() => selectUser(self.session)}
-              onContextMenu={(e) => openUserCtxMenu(e, self)}
-            />
-            {currentChannel != null && (
-              <SelfVoiceControls
-                voiceState={voiceState}
-                inCall={inCall}
-                toggleMute={toggleMute}
-                toggleDeafen={toggleDeafen}
-                deafened={selfDeafened}
-                enableVoice={enableVoice}
-                disableVoice={disableVoice}
-                onCollapse={onCollapse}
-                micInUse={micInUse}
-                micInUseTitle={micInUseTitle}
-              />
-            )}
-          </div>
-        );
-      })()}
-
-      {/* Voice panel */}
-      <div className={styles.voicePanel}>
-        <div className={styles.voiceActions}>
-          {onServerInfoToggle && (
-            <button
-              className={styles.serverInfoBtn}
-              onClick={onServerInfoToggle}
-              title={t("channelSidebar.serverInfo")}
-              aria-label={t("channelSidebar.serverInfo")}
-            >
-              <InfoIcon width={18} height={18} />
-            </button>
-          )}
-          <button
-            className={styles.settingsBtn}
-            onClick={() => navigate("/settings")}
-            title={t("channelSidebar.audioSettings")}
-          >
-            <SettingsIcon width={18} height={18} />
-          </button>
-          {isAdmin && (
-            <button
-              className={styles.adminBtn}
-              onClick={() => navigate("/admin")}
-              title={t("channelSidebar.adminPanel")}
-              aria-label={t("channelSidebar.adminPanel")}
-            >
-              <ShieldIcon width={18} height={18} />
-            </button>
-          )}
-          {devMode && voiceState !== "inactive" && (
-            <button
-              className={`${styles.settingsBtn} ${showRecordingModal ? styles.activeBtn : ""}`}
-              onClick={() => setShowRecordingModal(true)}
-              title={t("channelSidebar.recordAudio")}
-              aria-label={t("channelSidebar.recordAudio")}
-            >
-              <RecordIcon width={18} height={18} />
-            </button>
-          )}
-          <button
-            className={styles.disconnectBtn}
-            onClick={disconnect}
-            title={t("channelSidebar.disconnect")}
-          >
-            <LogoutIcon width={16} height={16} />
-            {t("channelSidebar.disconnect")}
-          </button>
-        </div>
-      </div>
-
-      {/* Context menu */}
-      {ctxMenu && (() => {
-        const ctxChannel = channels.find((c) => c.id === ctxMenu.channelId);
-        const hasListenPerm = canListen(ctxChannel);
-        const isListened = listenedChannels.has(ctxMenu.channelId);
-        const isPushMuted = mutedPushChannels.has(ctxMenu.channelId);
-        const showEdit = canEditChannel(ctxChannel);
-        const showCreate = canCreateChannel(ctxChannel);
-        const showDelete = canDeleteChannel(ctxChannel);
-        const showPurge = canDeleteMessages(ctxChannel) && !!ctxChannel?.pchat_protocol;
-        const channelUserCount = users.filter((u) => u.channel_id === ctxMenu.channelId).length;
-        // Meeting rooms (detached, non-DM) offer "leave": the server revokes
-        // this user's access and the room drops out of their Meetings list.
-        const showLeaveMeeting = !!ctxChannel?.detached && !isDmChannel(ctxChannel);
-
-        return createPortal(
-          <div
-            ref={ctxRef}
-            className={styles.contextMenu}
-            style={{ top: ctxMenu.y, left: ctxMenu.x }}
-          >
-            <button
-              className={styles.contextMenuItem}
-              disabled={!isListened && !hasListenPerm}
-              title={!isListened && !hasListenPerm ? t("channelSidebar.noListenPerm") : undefined}
-              onClick={() => {
-                toggleListen(ctxMenu.channelId);
-                setCtxMenu(null);
-              }}
-            >
-              {isListened ? (
-                <>
-                  <MicOffSmallIcon width={14} height={14} />
-                  {t("channelSidebar.stopListening")}
-                </>
-              ) : (
-                <>
-                  <ListenBadgeIcon width={14} height={14} opacity={hasListenPerm ? 1 : 0.4} />
-                  {t("channelSidebar.listenChannel")}
-                </>
-              )}
-            </button>
-
-            <button
-              className={styles.contextMenuItem}
-              onClick={() => {
-                toggleMutePushChannel(ctxMenu.channelId);
-                setCtxMenu(null);
-              }}
-            >
-              {isPushMuted ? (
-                <>
-                  <BellIcon width={14} height={14} />
-                  {t("channelSidebar.enableNotifications")}
-                </>
-              ) : (
-                <>
-                  <BellOffIcon width={14} height={14} />
-                  {t("channelSidebar.muteNotifications")}
-                </>
-              )}
-            </button>
-
-            {showLeaveMeeting && (
+      <RoleGroupsContext.Provider value={roleGroups}>
+        <aside ref={sidebarRef} className={styles.sidebar}>
+          {/* Header */}
+          <div className={styles.header}>
+            {onCollapse && (
               <button
-                className={`${styles.contextMenuItem} ${styles.contextMenuItemDanger}`}
-                data-testid={TID.leaveMeeting}
-                title={t("channelSidebar.leaveMeetingTitle")}
-                onClick={() => {
-                  requestLeaveMeeting(ctxMenu.channelId);
-                  setCtxMenu(null);
-                }}
+                type="button"
+                className={styles.collapseBtn}
+                onClick={onCollapse}
+                aria-label={t("channelSidebar.collapse")}
+                title={t("channelSidebar.collapse")}
               >
-                <LogoutIcon width={14} height={14} />
-                {t("channelSidebar.leaveMeeting")}
+                <MenuIcon width={18} height={18} />
               </button>
             )}
+            <div className={styles.searchBar}>
+              <SidebarSearch
+                ref={searchInputRef}
+                placeholder={t("channelSidebar.searchPlaceholder")}
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  if (!showSearch) setShowSearch(true);
+                }}
+                onFocus={() => {
+                  if (!showSearch) setShowSearch(true);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") closeSearch();
+                }}
+                trailing={
+                  showSearch ? (
+                    <button
+                      type="button"
+                      className={styles.searchBarClose}
+                      onClick={closeSearch}
+                      aria-label={t("channelSidebar.closeSearch")}
+                      title={t("channelSidebar.closeSearchTooltip")}
+                    >
+                      <CloseIcon width={14} height={14} />
+                    </button>
+                  ) : (
+                    <span className={styles.searchShortcut}>Ctrl+K</span>
+                  )
+                }
+              />
+            </div>
+          </div>
 
-            {showEdit && (
-              <button
-                className={styles.contextMenuItem}
-                onClick={() => {
-                  if (ctxChannel) {
-                    setChannelEditor({ channel: ctxChannel, parentId: ctxChannel.parent_id ?? 0, tempOnly: false });
+          {/* -- Search mode replaces channel/group/online content -- */}
+          {showSearch ? (
+            <Suspense fallback={null}>
+              <SidebarSearchView
+                query={searchQuery}
+                channelId={searchChannelId}
+                channelName={searchChannelName}
+                onSelectChannel={(id) => {
+                  selectChannel(id);
+                  setHighlightChannelId(id);
+                  setTimeout(() => setHighlightChannelId(undefined), 1500);
+                  onChannelSelect?.();
+                }}
+                onSelectUser={(session) => {
+                  const user = users.find((u) => u.session === session);
+                  const channelId = user?.channel_id;
+                  if (channelId != null) {
+                    selectChannel(channelId);
+                    setHighlightChannelId(channelId);
+                    setTimeout(() => setHighlightChannelId(undefined), 1500);
                   }
-                  setCtxMenu(null);
+                  setHighlightUserSession(session);
+                  setTimeout(() => setHighlightUserSession(undefined), 1500);
+                  onChannelSelect?.();
                 }}
-              >
-                <EditIcon width={14} height={14} />
-                {t("channelSidebar.editChannel")}
-              </button>
-            )}
-
-            {showEdit && (
-              <button
-                className={styles.contextMenuItem}
-                onClick={() => {
-                  const channelId = ctxMenu.channelId;
-                  setCtxMenu(null);
-                  navigate(`/admin?tab=acl&channel=${channelId}`);
+                onSelectMessage={(channelId, messageId) => {
+                  selectChannel(channelId);
+                  setHighlightChannelId(channelId);
+                  setTimeout(() => setHighlightChannelId(undefined), 1500);
+                  onSelectMessage?.(channelId, messageId);
+                  onChannelSelect?.();
                 }}
-              >
-                <ShieldIcon width={14} height={14} />
-                {t("channelSidebar.editPermissions")}
-              </button>
-            )}
+              />
+            </Suspense>
+          ) : (
+            <>
+              <SidebarTabs
+                onMembersFirstShown={handleMembersFirstShown}
+                membersPane={
+                  membersMounted ? (
+                    <Suspense fallback={null}>
+                      <MembersTab
+                        users={users}
+                        channels={channels}
+                        ownSession={ownSession}
+                        selectedDmUser={selectedDmUser}
+                        talkingSessions={talkingSessions}
+                        onSelectDm={handleUserClick}
+                        onUserContextMenu={openUserCtxMenu}
+                      />
+                    </Suspense>
+                  ) : null
+                }
+                channelsPane={
+                  <>
+                    {/* Private/hidden rooms (invitee-only private rooms + meeting rooms) as a
+          flat list, reusing the flat channel-list component. */}
+                    {privateRoomChannels.length > 0 && (
+                      <div className={styles.meetingsSection} data-testid={TID.privateChannelsViewer}>
+                        <div className={styles.sectionHeaderBar}>
+                          <button
+                            className={styles.collapsibleHeader}
+                            onClick={() =>
+                              toggleSection("privateRooms", privateRoomsOpen, setPrivateRoomsOpen)
+                            }
+                            type="button"
+                          >
+                            <ChevronRightIcon
+                              className={`${styles.collapseChevron} ${privateRoomsOpen ? styles.collapseChevronOpen : ""}`}
+                              width={12}
+                              height={12}
+                            />
+                            <LockIcon width={12} height={12} />
+                            <span>{t("channelSidebar.meetings", { defaultValue: "Meetings" })}</span>
+                          </button>
+                        </div>
+                        <div
+                          className={`${styles.channelList} ${privateRoomsOpen ? "" : styles.sectionCollapsed}`}
+                        >
+                          {privateRoomsOpen && (
+                            <Suspense fallback={null}>
+                              <ModernChannelList
+                                channels={privateRoomChannels}
+                                reorderable={false}
+                                expandableRows={false}
+                                users={treeUsers}
+                                selectedChannel={selectedChannel}
+                                currentChannel={currentChannel}
+                                listenedChannels={listenedChannels}
+                                unreadCounts={unreadCounts}
+                                talkingSessions={talkingSessions}
+                                broadcastingSessions={broadcastingSessions}
+                                shakingChannelId={shakingChannelId}
+                                highlightChannelId={highlightChannelId}
+                                highlightUserSession={highlightUserSession}
+                                onSelectChannel={handleSelectChannel}
+                                onJoinChannel={handleJoinChannel}
+                                onContextMenu={openCtxMenu}
+                                onUserContextMenu={openUserCtxMenu}
+                                onUserClick={handleUserClick}
+                              />
+                            </Suspense>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
-            {showCreate && (
+                    {/* Channel list header (always visible) */}
+                    <div className={styles.sectionHeaderBar}>
+                      <button
+                        className={styles.collapsibleHeader}
+                        onClick={() => toggleSection("channels", channelsOpen, setChannelsOpen)}
+                        type="button"
+                      >
+                        <ChevronRightIcon
+                          className={`${styles.collapseChevron} ${channelsOpen ? styles.collapseChevronOpen : ""}`}
+                          width={12}
+                          height={12}
+                        />
+                        <span>{t("channelSidebar.channels")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`${styles.sectionHeaderAction} ${hideEmptyChannels ? styles.sectionHeaderActionActive : ""}`}
+                        onClick={toggleHideEmptyChannels}
+                        aria-pressed={hideEmptyChannels}
+                        title={
+                          hideEmptyChannels
+                            ? t("channelSidebar.showAllChannels")
+                            : t("channelSidebar.hideEmptyChannels")
+                        }
+                        aria-label={
+                          hideEmptyChannels
+                            ? t("channelSidebar.showAllChannels")
+                            : t("channelSidebar.hideEmptyChannels")
+                        }
+                      >
+                        <UsersGroupIcon width={14} height={14} />
+                      </button>
+                    </div>
+
+                    {/* Channel list */}
+                    <div className={`${styles.channelList} ${channelsOpen ? "" : styles.sectionCollapsed}`}>
+                      <Suspense fallback={null}>
+                        {channelsOpen && channelViewerStyle === "flat" && (
+                          <ModernChannelList
+                            channels={visibleChannels}
+                            users={treeUsers}
+                            selectedChannel={selectedChannel}
+                            currentChannel={currentChannel}
+                            listenedChannels={listenedChannels}
+                            unreadCounts={unreadCounts}
+                            talkingSessions={talkingSessions}
+                            broadcastingSessions={broadcastingSessions}
+                            shakingChannelId={shakingChannelId}
+                            highlightChannelId={highlightChannelId}
+                            highlightUserSession={highlightUserSession}
+                            onSelectChannel={handleSelectChannel}
+                            onJoinChannel={handleJoinChannel}
+                            onContextMenu={openCtxMenu}
+                            onUserContextMenu={openUserCtxMenu}
+                            onUserClick={handleUserClick}
+                          />
+                        )}
+
+                        {channelsOpen && channelViewerStyle === "modern" && (
+                          <ChannelIconList
+                            channels={visibleChannels}
+                            users={treeUsers}
+                            selectedChannel={selectedChannel}
+                            currentChannel={currentChannel}
+                            listenedChannels={listenedChannels}
+                            unreadCounts={unreadCounts}
+                            talkingSessions={talkingSessions}
+                            broadcastingSessions={broadcastingSessions}
+                            shakingChannelId={shakingChannelId}
+                            highlightChannelId={highlightChannelId}
+                            highlightUserSession={highlightUserSession}
+                            onSelectChannel={handleSelectChannel}
+                            onJoinChannel={handleJoinChannel}
+                            onContextMenu={openCtxMenu}
+                            onUserContextMenu={openUserCtxMenu}
+                            onUserClick={handleUserClick}
+                          />
+                        )}
+
+                        {channelsOpen && channelViewerStyle === "classic" && (
+                          <ClassicChannelList
+                            channels={visibleChannels}
+                            users={treeUsers}
+                            selectedChannel={selectedChannel}
+                            currentChannel={currentChannel}
+                            listenedChannels={listenedChannels}
+                            unreadCounts={unreadCounts}
+                            shakingChannelId={shakingChannelId}
+                            highlightChannelId={highlightChannelId}
+                            highlightUserSession={highlightUserSession}
+                            onSelectChannel={handleSelectChannel}
+                            onJoinChannel={handleJoinChannel}
+                            onContextMenu={openCtxMenu}
+                          />
+                        )}
+                      </Suspense>
+                    </div>
+                  </>
+                }
+              />
+            </>
+          )}
+          {/* end search-mode ternary */}
+
+          {/* Self user section - always visible */}
+          {(() => {
+            const self = users.find((u) => u.session === ownSession);
+            if (!self) return null;
+            const selfTalking = talkingSessions.has(self.session);
+            return (
+              <div className={styles.selfUserSection}>
+                <UserListItem
+                  user={self}
+                  channelName={channelName(self.channel_id)}
+                  isSelf
+                  isTalking={selfTalking}
+                  onClick={() => selectUser(self.session)}
+                  onContextMenu={(e) => openUserCtxMenu(e, self)}
+                />
+                {currentChannel != null && (
+                  <SelfVoiceControls
+                    voiceState={voiceState}
+                    inCall={inCall}
+                    toggleMute={toggleMute}
+                    toggleDeafen={toggleDeafen}
+                    deafened={selfDeafened}
+                    enableVoice={enableVoice}
+                    disableVoice={disableVoice}
+                    onCollapse={onCollapse}
+                    micInUse={micInUse}
+                    micInUseTitle={micInUseTitle}
+                  />
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Voice panel */}
+          <div className={styles.voicePanel}>
+            <div className={styles.voiceActions}>
+              {onServerInfoToggle && (
+                <button
+                  className={styles.serverInfoBtn}
+                  onClick={onServerInfoToggle}
+                  title={t("channelSidebar.serverInfo")}
+                  aria-label={t("channelSidebar.serverInfo")}
+                >
+                  <InfoIcon width={18} height={18} />
+                </button>
+              )}
               <button
-                className={styles.contextMenuItem}
-                onClick={() => {
-                  setChannelEditor({
-                    channel: null,
-                    parentId: ctxMenu.channelId,
-                    tempOnly: canOnlyCreateTemp(ctxChannel),
-                  });
-                  setCtxMenu(null);
-                }}
+                className={styles.settingsBtn}
+                onClick={() => navigate("/settings")}
+                title={t("channelSidebar.audioSettings")}
               >
-                <PlusIcon width={14} height={14} />
-                {t("channelSidebar.createSubchannel")}
+                <SettingsIcon width={18} height={18} />
               </button>
-            )}
-
-            {showEdit && channelUserCount > 0 && (
+              {isAdmin && (
+                <button
+                  className={styles.adminBtn}
+                  onClick={() => navigate("/admin")}
+                  title={t("channelSidebar.adminPanel")}
+                  aria-label={t("channelSidebar.adminPanel")}
+                >
+                  <ShieldIcon width={18} height={18} />
+                </button>
+              )}
+              {devMode && voiceState !== "inactive" && (
+                <button
+                  className={`${styles.settingsBtn} ${showRecordingModal ? styles.activeBtn : ""}`}
+                  onClick={() => setShowRecordingModal(true)}
+                  title={t("channelSidebar.recordAudio")}
+                  aria-label={t("channelSidebar.recordAudio")}
+                >
+                  <RecordIcon width={18} height={18} />
+                </button>
+              )}
               <button
-                className={styles.contextMenuItem}
-                onClick={() => {
-                  if (ctxChannel) setMoveUsersSource(ctxChannel);
-                  setCtxMenu(null);
-                }}
+                className={styles.disconnectBtn}
+                onClick={disconnect}
+                title={t("channelSidebar.disconnect")}
               >
-                <UsersGroupIcon width={14} height={14} />
-                {t("channelSidebar.moveAllUsers")}
-              </button>
-            )}
-
-            {showPurge && (
-              <button
-                className={`${styles.contextMenuItem} ${styles.contextMenuItemDanger}`}
-                onClick={() => {
-                  setPurgeConfirm({
-                    channelId: ctxMenu.channelId,
-                    channelName: ctxChannel?.name ?? "this channel",
-                  });
-                  setCtxMenu(null);
-                }}
-              >
-                <DatabaseIcon width={14} height={14} />
-                {t("channelSidebar.purgeHistory")}
-              </button>
-            )}
-
-            {showDelete && (
-              <button
-                className={`${styles.contextMenuItem} ${styles.contextMenuItemDanger}`}
-                onClick={() => {
-                  setDeleteConfirm({
-                    channelId: ctxMenu.channelId,
-                    channelName: ctxChannel?.name ?? "this channel",
-                  });
-                  setCtxMenu(null);
-                }}
-              >
-                <TrashIcon width={14} height={14} />
-                {t("channelSidebar.deleteChannel")}
-              </button>
-            )}
-          </div>,
-          document.body,
-        );
-      })()}
-
-      {/* User context menu */}
-      {userCtxMenu && (
-        <UserContextMenu
-          menu={userCtxMenu}
-          onClose={() => setUserCtxMenu(null)}
-        />
-      )}
-
-      {/* Channel editor dialog */}
-      {channelEditor && (
-        <ChannelEditorDialog
-          channel={channelEditor.channel}
-          parentId={channelEditor.parentId}
-          tempOnly={channelEditor.tempOnly}
-          onClose={() => setChannelEditor(null)}
-        />
-      )}
-
-      {/* Delete channel confirmation dialog */}
-      {deleteConfirm && createPortal(
-        <div
-          className={styles.modalOverlay}
-          role="presentation"
-          onClick={() => setDeleteConfirm(null)}
-          onKeyDown={(e) => { if (e.key === "Escape") setDeleteConfirm(null); }}
-        >
-          <div className={styles.deleteConfirmDialog} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.deleteConfirmTitle}>{t("channelSidebar.deleteChannelTitle")}</h3>
-            <p className={styles.deleteConfirmBody}>
-              {t("channelSidebar.deleteChannelBody", { channel: deleteConfirm.channelName })}
-            </p>
-            <div className={styles.deleteConfirmActions}>
-              <button
-                className={styles.deleteConfirmCancel}
-                onClick={() => setDeleteConfirm(null)}
-              >
-                {t("common:actions.cancel")}
-              </button>
-              <button
-                className={styles.deleteConfirmOk}
-                onClick={async () => {
-                  const id = deleteConfirm.channelId;
-                  setDeleteConfirm(null);
-                  await deleteChannel(id);
-                }}
-              >
-                {t("channelSidebar.deleteChannelConfirm")}
+                <LogoutIcon width={16} height={16} />
+                {t("channelSidebar.disconnect")}
               </button>
             </div>
           </div>
-        </div>,
-        document.body,
-      )}
 
-      {/* Recording modal (developer mode) */}
-      {showRecordingModal && (
-        <Suspense fallback={null}>
-          <RecordingModal onClose={() => setShowRecordingModal(false)} />
-        </Suspense>
-      )}
+          {/* Context menu */}
+          {ctxMenu &&
+            (() => {
+              const ctxChannel = channels.find((c) => c.id === ctxMenu.channelId);
+              const hasListenPerm = canListen(ctxChannel);
+              const isListened = listenedChannels.has(ctxMenu.channelId);
+              const isPushMuted = mutedPushChannels.has(ctxMenu.channelId);
+              const showEdit = canEditChannel(ctxChannel);
+              const showCreate = canCreateChannel(ctxChannel);
+              const showDelete = canDeleteChannel(ctxChannel);
+              const showPurge = canDeleteMessages(ctxChannel) && !!ctxChannel?.pchat_protocol;
+              const channelUserCount = users.filter((u) => u.channel_id === ctxMenu.channelId).length;
+              // Meeting rooms (detached, non-DM) offer "leave": the server revokes
+              // this user's access and the room drops out of their Meetings list.
+              const showLeaveMeeting = !!ctxChannel?.detached && !isDmChannel(ctxChannel);
 
-      {/* Purge persistent chat confirmation */}
-      {purgeConfirm && (
-        <ConfirmDialog
-          title={t("channelSidebar.purgeHistoryTitle")}
-          body={t("channelSidebar.purgeHistoryBody", { channel: purgeConfirm.channelName })}
-          confirmLabel={t("channelSidebar.purgeConfirm")}
-          danger
-          onConfirm={async () => {
-            const id = purgeConfirm.channelId;
-            setPurgeConfirm(null);
-            await deletePchatMessages(id, { timeTo: Date.now() });
-          }}
-          onCancel={() => setPurgeConfirm(null)}
-        />
-      )}
+              return createPortal(
+                <div ref={ctxRef} className={styles.contextMenu} style={{ top: ctxMenu.y, left: ctxMenu.x }}>
+                  <button
+                    className={styles.contextMenuItem}
+                    disabled={!isListened && !hasListenPerm}
+                    title={!isListened && !hasListenPerm ? t("channelSidebar.noListenPerm") : undefined}
+                    onClick={() => {
+                      toggleListen(ctxMenu.channelId);
+                      setCtxMenu(null);
+                    }}
+                  >
+                    {isListened ? (
+                      <>
+                        <MicOffSmallIcon width={14} height={14} />
+                        {t("channelSidebar.stopListening")}
+                      </>
+                    ) : (
+                      <>
+                        <ListenBadgeIcon width={14} height={14} opacity={hasListenPerm ? 1 : 0.4} />
+                        {t("channelSidebar.listenChannel")}
+                      </>
+                    )}
+                  </button>
 
-      {/* Move all users to channel picker */}
-      {moveUsersSource && (
-        <MoveUsersDialog
-          sourceChannel={moveUsersSource}
-          channels={channels}
-          onConfirm={async (targetId) => {
-            const srcId = moveUsersSource.id;
-            setMoveUsersSource(null);
-            await moveChannelUsers(srcId, targetId);
-          }}
-          onCancel={() => setMoveUsersSource(null)}
-        />
-      )}
+                  <button
+                    className={styles.contextMenuItem}
+                    onClick={() => {
+                      toggleMutePushChannel(ctxMenu.channelId);
+                      setCtxMenu(null);
+                    }}
+                  >
+                    {isPushMuted ? (
+                      <>
+                        <BellIcon width={14} height={14} />
+                        {t("channelSidebar.enableNotifications")}
+                      </>
+                    ) : (
+                      <>
+                        <BellOffIcon width={14} height={14} />
+                        {t("channelSidebar.muteNotifications")}
+                      </>
+                    )}
+                  </button>
 
-      {/* Channel password dialog */}
-      {passwordChannel && (
-        <ChannelPasswordDialog
-          channel={passwordChannel}
-          onConfirm={async (password) => {
-            const ch = passwordChannel;
-            setPasswordChannel(null);
-            await joinChannelWithPassword(ch.id, password);
-            selectChannel(ch.id);
-            onChannelSelect?.();
-          }}
-          onCancel={() => setPasswordChannel(null)}
-        />
-      )}
-    </aside>
-    </RoleGroupsContext.Provider>
+                  {showLeaveMeeting && (
+                    <button
+                      className={`${styles.contextMenuItem} ${styles.contextMenuItemDanger}`}
+                      data-testid={TID.leaveMeeting}
+                      title={t("channelSidebar.leaveMeetingTitle")}
+                      onClick={() => {
+                        requestLeaveMeeting(ctxMenu.channelId);
+                        setCtxMenu(null);
+                      }}
+                    >
+                      <LogoutIcon width={14} height={14} />
+                      {t("channelSidebar.leaveMeeting")}
+                    </button>
+                  )}
+
+                  {showEdit && (
+                    <button
+                      className={styles.contextMenuItem}
+                      onClick={() => {
+                        if (ctxChannel) {
+                          setChannelEditor({
+                            channel: ctxChannel,
+                            parentId: ctxChannel.parent_id ?? 0,
+                            tempOnly: false,
+                          });
+                        }
+                        setCtxMenu(null);
+                      }}
+                    >
+                      <EditIcon width={14} height={14} />
+                      {t("channelSidebar.editChannel")}
+                    </button>
+                  )}
+
+                  {showEdit && (
+                    <button
+                      className={styles.contextMenuItem}
+                      onClick={() => {
+                        const channelId = ctxMenu.channelId;
+                        setCtxMenu(null);
+                        navigate(`/admin?tab=acl&channel=${channelId}`);
+                      }}
+                    >
+                      <ShieldIcon width={14} height={14} />
+                      {t("channelSidebar.editPermissions")}
+                    </button>
+                  )}
+
+                  {showCreate && (
+                    <button
+                      className={styles.contextMenuItem}
+                      onClick={() => {
+                        setChannelEditor({
+                          channel: null,
+                          parentId: ctxMenu.channelId,
+                          tempOnly: canOnlyCreateTemp(ctxChannel),
+                        });
+                        setCtxMenu(null);
+                      }}
+                    >
+                      <PlusIcon width={14} height={14} />
+                      {t("channelSidebar.createSubchannel")}
+                    </button>
+                  )}
+
+                  {showEdit && channelUserCount > 0 && (
+                    <button
+                      className={styles.contextMenuItem}
+                      onClick={() => {
+                        if (ctxChannel) setMoveUsersSource(ctxChannel);
+                        setCtxMenu(null);
+                      }}
+                    >
+                      <UsersGroupIcon width={14} height={14} />
+                      {t("channelSidebar.moveAllUsers")}
+                    </button>
+                  )}
+
+                  {showPurge && (
+                    <button
+                      className={`${styles.contextMenuItem} ${styles.contextMenuItemDanger}`}
+                      onClick={() => {
+                        setPurgeConfirm({
+                          channelId: ctxMenu.channelId,
+                          channelName: ctxChannel?.name ?? "this channel",
+                        });
+                        setCtxMenu(null);
+                      }}
+                    >
+                      <DatabaseIcon width={14} height={14} />
+                      {t("channelSidebar.purgeHistory")}
+                    </button>
+                  )}
+
+                  {showDelete && (
+                    <button
+                      className={`${styles.contextMenuItem} ${styles.contextMenuItemDanger}`}
+                      onClick={() => {
+                        setDeleteConfirm({
+                          channelId: ctxMenu.channelId,
+                          channelName: ctxChannel?.name ?? "this channel",
+                        });
+                        setCtxMenu(null);
+                      }}
+                    >
+                      <TrashIcon width={14} height={14} />
+                      {t("channelSidebar.deleteChannel")}
+                    </button>
+                  )}
+                </div>,
+                document.body,
+              );
+            })()}
+
+          {/* User context menu */}
+          {userCtxMenu && <UserContextMenu menu={userCtxMenu} onClose={() => setUserCtxMenu(null)} />}
+
+          {/* Channel editor dialog */}
+          {channelEditor && (
+            <ChannelEditorDialog
+              channel={channelEditor.channel}
+              parentId={channelEditor.parentId}
+              tempOnly={channelEditor.tempOnly}
+              onClose={() => setChannelEditor(null)}
+            />
+          )}
+
+          {/* Delete channel confirmation dialog */}
+          {deleteConfirm &&
+            createPortal(
+              <div
+                className={styles.modalOverlay}
+                role="presentation"
+                onClick={() => setDeleteConfirm(null)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setDeleteConfirm(null);
+                }}
+              >
+                <div
+                  className={styles.deleteConfirmDialog}
+                  role="dialog"
+                  aria-modal="true"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h3 className={styles.deleteConfirmTitle}>{t("channelSidebar.deleteChannelTitle")}</h3>
+                  <p className={styles.deleteConfirmBody}>
+                    {t("channelSidebar.deleteChannelBody", { channel: deleteConfirm.channelName })}
+                  </p>
+                  <div className={styles.deleteConfirmActions}>
+                    <button className={styles.deleteConfirmCancel} onClick={() => setDeleteConfirm(null)}>
+                      {t("common:actions.cancel")}
+                    </button>
+                    <button
+                      className={styles.deleteConfirmOk}
+                      onClick={async () => {
+                        const id = deleteConfirm.channelId;
+                        setDeleteConfirm(null);
+                        await deleteChannel(id);
+                      }}
+                    >
+                      {t("channelSidebar.deleteChannelConfirm")}
+                    </button>
+                  </div>
+                </div>
+              </div>,
+              document.body,
+            )}
+
+          {/* Recording modal (developer mode) */}
+          {showRecordingModal && (
+            <Suspense fallback={null}>
+              <RecordingModal onClose={() => setShowRecordingModal(false)} />
+            </Suspense>
+          )}
+
+          {/* Purge persistent chat confirmation */}
+          {purgeConfirm && (
+            <ConfirmDialog
+              title={t("channelSidebar.purgeHistoryTitle")}
+              body={t("channelSidebar.purgeHistoryBody", { channel: purgeConfirm.channelName })}
+              confirmLabel={t("channelSidebar.purgeConfirm")}
+              danger
+              onConfirm={async () => {
+                const id = purgeConfirm.channelId;
+                setPurgeConfirm(null);
+                await deletePchatMessages(id, { timeTo: Date.now() });
+              }}
+              onCancel={() => setPurgeConfirm(null)}
+            />
+          )}
+
+          {/* Move all users to channel picker */}
+          {moveUsersSource && (
+            <MoveUsersDialog
+              sourceChannel={moveUsersSource}
+              channels={channels}
+              onConfirm={async (targetId) => {
+                const srcId = moveUsersSource.id;
+                setMoveUsersSource(null);
+                await moveChannelUsers(srcId, targetId);
+              }}
+              onCancel={() => setMoveUsersSource(null)}
+            />
+          )}
+
+          {/* Channel password dialog */}
+          {passwordChannel && (
+            <ChannelPasswordDialog
+              channel={passwordChannel}
+              onConfirm={async (password) => {
+                const ch = passwordChannel;
+                setPasswordChannel(null);
+                await joinChannelWithPassword(ch.id, password);
+                selectChannel(ch.id);
+                onChannelSelect?.();
+              }}
+              onCancel={() => setPasswordChannel(null)}
+            />
+          )}
+        </aside>
+      </RoleGroupsContext.Provider>
     </RoleColorsContext.Provider>
   );
 }

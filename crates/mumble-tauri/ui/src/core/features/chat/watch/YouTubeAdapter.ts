@@ -1,8 +1,4 @@
-import type {
-  LocalPlayerEvent,
-  PlayerAdapter,
-  PlayerAdapterArgs,
-} from "./PlayerAdapter";
+import type { LocalPlayerEvent, PlayerAdapter, PlayerAdapterArgs } from "./PlayerAdapter";
 
 /**
  * Player adapter for a YouTube video, using the IFrame Player API.
@@ -132,10 +128,7 @@ function loadYouTubeApi(): Promise<void> {
 }
 
 function extractYouTubeId(url: string): string {
-  const m =
-    /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i.exec(
-      url,
-    );
+  const m = /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i.exec(url);
   return m?.[1] ?? "";
 }
 

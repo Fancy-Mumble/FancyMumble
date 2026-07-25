@@ -12,10 +12,7 @@ import { resolveTarget, type RefTarget } from "@core/features/chat/livedoc/liveD
 import { useLiveDocReferences } from "@core/features/chat/livedoc/useLiveDocReferences";
 import styles from "./LiveDocReferences.module.css";
 
-function targetDisplay(
-  target: RefTarget,
-  translate: (key: string) => string,
-): string {
+function targetDisplay(target: RefTarget, translate: (key: string) => string): string {
   if (target.number !== undefined) {
     return `${translate(`liveDoc.references.kind.${target.kind}`)} ${target.number}`;
   }

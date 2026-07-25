@@ -39,14 +39,11 @@ export default function UserHoverCard({ user, children, className }: UserHoverCa
   const streamThumbnail = useStreamThumbnail(user.session, showCard && isBroadcasting);
   const url = useUserAvatar(user.session, user.texture_size);
   const liveComment = useUserComment(user.session, user.comment_size, showCard);
-  const parsed = useMemo(
-    () => {
-      if (!showCard) return null;
-      const c = user.comment ?? liveComment;
-      return c ? parseComment(c) : null;
-    },
-    [showCard, user.comment, liveComment],
-  );
+  const parsed = useMemo(() => {
+    if (!showCard) return null;
+    const c = user.comment ?? liveComment;
+    return c ? parseComment(c) : null;
+  }, [showCard, user.comment, liveComment]);
   const isRegistered = user.user_id != null && user.user_id > 0;
 
   return (
@@ -62,9 +59,13 @@ export default function UserHoverCard({ user, children, className }: UserHoverCa
       >
         {children ?? (
           <span className={styles.default}>
-            {url
-              ? <img src={url} alt="" className={styles.avatar} />
-              : <span className={styles.avatarFallback} style={{ background: colorFor(user.name) }}>{user.name.charAt(0).toUpperCase()}</span>}
+            {url ? (
+              <img src={url} alt="" className={styles.avatar} />
+            ) : (
+              <span className={styles.avatarFallback} style={{ background: colorFor(user.name) }}>
+                {user.name.charAt(0).toUpperCase()}
+              </span>
+            )}
             <span className={styles.name}>{user.name}</span>
           </span>
         )}

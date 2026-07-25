@@ -9,7 +9,15 @@
  * server applies them at runtime and re-broadcasts the updated snapshot.
  */
 
-import { useEffect, useMemo, useState, type CSSProperties, type ComponentType, type ReactElement, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ComponentType,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import * as Flags from "country-flag-icons/react/3x2";
@@ -119,7 +127,9 @@ function EnumField({ setting, value, onChange }: FieldProps) {
     <SelectInput value={value} aria-label={label(setting)} onChange={(e) => onChange(e.target.value)}>
       {!setting.options.includes(value) && value !== "" && <option value={value}>{value}</option>}
       {setting.options.map((o) => (
-        <option key={o} value={o}>{o}</option>
+        <option key={o} value={o}>
+          {o}
+        </option>
       ))}
     </SelectInput>
   );
@@ -135,7 +145,9 @@ function CountryField({ setting, value, onChange }: FieldProps) {
         <option value="">-</option>
         {!known && value !== "" && <option value={lower}>{value}</option>}
         {COUNTRIES.map((c) => (
-          <option key={c.code} value={c.code}>{c.name}</option>
+          <option key={c.code} value={c.code}>
+            {c.name}
+          </option>
         ))}
       </SelectInput>
     </div>
@@ -288,11 +300,17 @@ export function ServerSettingsTab({ setFooter }: Readonly<ServerSettingsTabProps
               return (
                 <div key={s.key} className={styles.row}>
                   <div className={styles.labelCol}>
-                    <label className={styles.label} htmlFor={`set-${s.key}`}>{s.label || s.key}</label>
+                    <label className={styles.label} htmlFor={`set-${s.key}`}>
+                      {s.label || s.key}
+                    </label>
                     {s.help && <div className={styles.help}>{s.help}</div>}
                   </div>
                   <div className={styles.controlCol}>
-                    <Field setting={s} value={valueOf(s)} onChange={(v) => setEdits((p) => ({ ...p, [s.key]: v }))} />
+                    <Field
+                      setting={s}
+                      value={valueOf(s)}
+                      onChange={(v) => setEdits((p) => ({ ...p, [s.key]: v }))}
+                    />
                   </div>
                 </div>
               );

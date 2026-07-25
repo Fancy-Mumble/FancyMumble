@@ -30,8 +30,15 @@ function ch(
 }
 
 function user(session: number, channelId: number): UserEntry {
-  return { session, name: `u${session}`, channel_id: channelId, texture_size: null, comment: null,
-    mute: false, deaf: false } as UserEntry;
+  return {
+    session,
+    name: `u${session}`,
+    channel_id: channelId,
+    texture_size: null,
+    comment: null,
+    mute: false,
+    deaf: false,
+  } as UserEntry;
 }
 
 const NONE = { currentChannel: null, selectedChannel: null, listenedChannels: new Set<number>() };
@@ -96,7 +103,11 @@ describe("meeting rooms (detached channels)", () => {
   ];
 
   it("identifies detached channels as meeting rooms", () => {
-    expect(meetingRooms(tree).map((c) => c.id).sort()).toEqual([3, 4]);
+    expect(
+      meetingRooms(tree)
+        .map((c) => c.id)
+        .sort(),
+    ).toEqual([3, 4]);
   });
 
   it("does not treat an ordinary (non-detached) channel as a meeting room", () => {
@@ -105,7 +116,11 @@ describe("meeting rooms (detached channels)", () => {
   });
 
   it("filterMeetingChannels drops detached channels from the tree", () => {
-    expect(filterMeetingChannels(tree).map((c) => c.id).sort()).toEqual([0, 1]);
+    expect(
+      filterMeetingChannels(tree)
+        .map((c) => c.id)
+        .sort(),
+    ).toEqual([0, 1]);
   });
 
   it("returns the list unchanged when there are no detached channels", () => {
@@ -144,8 +159,7 @@ describe("usersForChannelTree (friend-chat occupants stay in the channel list)",
   // viewer excludes. Without remapping its occupants to root, the local user
   // vanishes from the channel list entirely (vanilla roots them instead).
   const SENTINEL = 0xffffffff; // PRESENCE_HIDDEN_CHANNEL - presence-hidden sentinel
-  const chOf = (users: UserEntry[], session: number) =>
-    users.find((u) => u.session === session)?.channel_id;
+  const chOf = (users: UserEntry[], session: number) => users.find((u) => u.session === session)?.channel_id;
 
   it("remaps a user sitting in their own __dm: self-notepad to the root channel", () => {
     // Channel 7 is the local user's detached self-notepad; they joined it on

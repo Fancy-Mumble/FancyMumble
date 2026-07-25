@@ -78,8 +78,7 @@ export default function ChatPage() {
   const [superSearchOpen, setSuperSearchOpen] = useState(false);
 
   // Whether a connection attempt is actively running right now.
-  const activelyConnecting =
-    status === "connecting" || bootstrapStage !== null || isReconnecting;
+  const activelyConnecting = status === "connecting" || bootstrapStage !== null || isReconnecting;
   // Whether the active session is mid-(re)connect - actively connecting OR
   // waiting out the backoff before the next auto-reconnect attempt. Drives
   // the reconnect overlay so it stays visible between attempts instead of
@@ -96,9 +95,7 @@ export default function ChatPage() {
     return () => window.clearInterval(id);
   }, [reconnecting, connectionLostAt]);
 
-  const { handleSubmit: handlePasswordSubmit, handleChangeUsername, showSaveOption } =
-    usePasswordPrompt();
-
+  const { handleSubmit: handlePasswordSubmit, handleChangeUsername, showSaveOption } = usePasswordPrompt();
 
   // On desktop, track whether the viewport is narrow (<= 768px).
   // When narrow, the sidebar uses the same slide-out drawer as mobile.
@@ -155,7 +152,9 @@ export default function ChatPage() {
 
   // Load shortcuts from storage on mount and re-sync when settings change.
   useEffect(() => {
-    loadShortcuts().then(setShortcuts).catch(() => undefined);
+    loadShortcuts()
+      .then(setShortcuts)
+      .catch(() => undefined);
     const handler = (e: Event) => {
       const sc = (e as CustomEvent<ShortcutBindings>).detail;
       if (sc) setShortcuts(sc);
@@ -323,8 +322,7 @@ export default function ChatPage() {
       : error
         ? t("page.reconnect.titleDisconnected")
         : t("page.reconnect.titleLost");
-    const elapsed =
-      connectionLostAt !== null ? formatElapsed(nowTick - connectionLostAt) : null;
+    const elapsed = connectionLostAt !== null ? formatElapsed(nowTick - connectionLostAt) : null;
     // Seconds until the next queued auto-reconnect attempt (backoff window).
     const nextRetrySec =
       !activelyConnecting && reconnectScheduled && nextReconnectAt !== null
@@ -451,7 +449,9 @@ export default function ChatPage() {
           styles.sidebarContainer,
           sidebarOpen ? styles.sidebarOpen : "",
           !sidebarOpen && !useDrawer ? styles.sidebarCollapsed : "",
-        ].filter(Boolean).join(" ")}
+        ]
+          .filter(Boolean)
+          .join(" ")}
       >
         <ChannelSidebar
           onChannelSelect={closeSidebar}
@@ -484,7 +484,10 @@ export default function ChatPage() {
       <Suspense fallback={null}>
         {showServerInfo && !isMobile && <ServerInfoPanel onClose={() => setShowServerInfo(false)} />}
         {showChannelInfo && !isMobile && <ChannelInfoPanel onClose={() => setShowChannelInfo(false)} />}
-        {(selectedUser !== null || selectedDmUser !== null) && !showServerInfo && !showChannelInfo && !isMobile && <UserProfileView />}
+        {(selectedUser !== null || selectedDmUser !== null) &&
+          !showServerInfo &&
+          !showChannelInfo &&
+          !isMobile && <UserProfileView />}
         {isMobile && (
           <>
             <MobileProfileSheet />

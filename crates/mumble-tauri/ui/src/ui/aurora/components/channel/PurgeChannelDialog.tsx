@@ -16,10 +16,14 @@ export default function PurgeChannelDialog({ channel, onClose }: PurgeChannelDia
   return (
     <ModalSurface title={`Purge #${channel.name}`} eyebrow="DESTRUCTIVE ACTION" onClose={onClose}>
       <div className={styles.purgeConfirm}>
-        <p>This removes all persistent messages in the channel up to the current time. This cannot be undone.</p>
+        <p>
+          This removes all persistent messages in the channel up to the current time. This cannot be undone.
+        </p>
         <footer>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="danger" onClick={purge}>Purge history</Button>
+          <Button variant="danger" onClick={purge}>
+            Purge history
+          </Button>
         </footer>
       </div>
     </ModalSurface>

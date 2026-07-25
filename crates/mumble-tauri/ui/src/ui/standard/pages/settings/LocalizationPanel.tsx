@@ -42,12 +42,7 @@ const FLAG_STYLE: React.CSSProperties = { width: 22, height: 16, borderRadius: 2
 
 const TIME_FORMAT_OPTIONS: TimeFormat[] = ["auto", "12h", "24h"];
 const DATE_FORMAT_OPTIONS: DateFormat[] = ["auto", "dmy", "mdy", "ymd"];
-const NUMBER_FORMAT_OPTIONS: NumberFormat[] = [
-  "auto",
-  "comma-period",
-  "period-comma",
-  "space-comma",
-];
+const NUMBER_FORMAT_OPTIONS: NumberFormat[] = ["auto", "comma-period", "period-comma", "space-comma"];
 
 const SAMPLE_NUMBER = 1234567.89;
 
@@ -146,8 +141,7 @@ export function LocalizationPanel({
     [],
   );
 
-  const selectedLanguage =
-    languageOptions.find((o) => o.value === currentLanguage) ?? null;
+  const selectedLanguage = languageOptions.find((o) => o.value === currentLanguage) ?? null;
 
   const handleLanguageChange = useCallback(
     (opt: AutocompleteOption<BuiltInLanguage> | null) => {
@@ -199,10 +193,7 @@ export function LocalizationPanel({
             <label className={styles.fieldLabel}>{t("time.localLabel")}</label>
             <p className={styles.fieldHint}>{t("time.localDescription")}</p>
           </div>
-          <Toggle
-            checked={convertToLocalTime}
-            onChange={onConvertToLocalTimeChange}
-          />
+          <Toggle checked={convertToLocalTime} onChange={onConvertToLocalTimeChange} />
         </div>
       </section>
 

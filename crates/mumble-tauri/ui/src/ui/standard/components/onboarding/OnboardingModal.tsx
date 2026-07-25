@@ -4,11 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { Modal } from "../elements/Modal";
 import { useAppStore } from "@core/store";
-import type {
-  OnboardingAnswer,
-  OnboardingQuestion,
-  OnboardingSelection,
-} from "@core/types";
+import type { OnboardingAnswer, OnboardingQuestion, OnboardingSelection } from "@core/types";
 import {
   dismissOnboardingForServer,
   isOnboardingSupported,
@@ -38,7 +34,7 @@ export default function OnboardingModal() {
 
   const [stepIndex, setStepIndex] = useState(0);
   const [selections, setSelections] = useState<Record<string, Set<string>>>({});
-  const { t } = useTranslation("settings");;
+  const { t } = useTranslation("settings");
 
   // Seed with previous answers when the modal opens.
   useEffect(() => {
@@ -116,11 +112,7 @@ export default function OnboardingModal() {
 
   return (
     <Modal onClose={handleSkip} closeOnEsc={false} closeOnOverlayClick={false} zIndex={9000}>
-      <div
-        className={styles.dialog}
-        role="dialog"
-        aria-labelledby="onboarding-title"
-      >
+      <div className={styles.dialog} role="dialog" aria-labelledby="onboarding-title">
         <div className={styles.header}>
           <span className={styles.headerIcon} aria-hidden="true">
             <SparklesIcon width={18} height={18} />
@@ -132,8 +124,8 @@ export default function OnboardingModal() {
             {isPreview
               ? t("onboarding.modal.welcomeSubtitle")
               : question?.multi_select
-              ? t("onboarding.modal.pickMultiple")
-              : t("onboarding.modal.pickOne")}
+                ? t("onboarding.modal.pickMultiple")
+                : t("onboarding.modal.pickOne")}
           </p>
         </div>
 
@@ -141,24 +133,17 @@ export default function OnboardingModal() {
           {Array.from({ length: stepCount }, (_, i) => (
             <div
               key={i}
-              className={`${styles.progressStep} ${
-                i <= stepIndex ? styles.progressStepActive : ""
-              }`}
+              className={`${styles.progressStep} ${i <= stepIndex ? styles.progressStepActive : ""}`}
             />
           ))}
         </div>
 
         <div className={styles.body}>
           {isPreview ? (
-            <DefaultChannelsPreview
-              defaultIds={config.default_channel_ids}
-              channelLookup={channelLookup}
-            />
+            <DefaultChannelsPreview defaultIds={config.default_channel_ids} channelLookup={channelLookup} />
           ) : question ? (
             <>
-              {question.required && (
-                <p className={styles.questionMeta}>{t("onboarding.modal.required")}</p>
-              )}
+              {question.required && <p className={styles.questionMeta}>{t("onboarding.modal.required")}</p>}
               <div className={styles.answers}>
                 {question.answers.map((a) => {
                   const selected = selections[question.id]?.has(a.id) ?? false;
@@ -166,27 +151,15 @@ export default function OnboardingModal() {
                     <button
                       key={a.id}
                       type="button"
-                      className={`${styles.answer} ${
-                        selected ? styles.answerSelected : ""
-                      }`}
+                      className={`${styles.answer} ${selected ? styles.answerSelected : ""}`}
                       onClick={() => toggleAnswer(question, a)}
                     >
-                      {a.emoji ? (
-                        <span className={styles.answerEmoji}>{a.emoji}</span>
-                      ) : null}
+                      {a.emoji ? <span className={styles.answerEmoji}>{a.emoji}</span> : null}
                       <div className={styles.answerBody}>
                         <span className={styles.answerLabel}>{a.label}</span>
-                        {a.description ? (
-                          <span className={styles.answerDesc}>
-                            {a.description}
-                          </span>
-                        ) : null}
+                        {a.description ? <span className={styles.answerDesc}>{a.description}</span> : null}
                       </div>
-                      <span
-                        className={`${styles.checkmark} ${
-                          selected ? styles.checkmarkSelected : ""
-                        }`}
-                      >
+                      <span className={`${styles.checkmark} ${selected ? styles.checkmarkSelected : ""}`}>
                         {selected ? <CheckIcon width={14} height={14} /> : null}
                       </span>
                     </button>
@@ -205,11 +178,7 @@ export default function OnboardingModal() {
           </button>
           <div className={styles.spacer} />
           {stepIndex > 0 ? (
-            <button
-              className={styles.btn}
-              onClick={() => setStepIndex((i) => i - 1)}
-              disabled={busy}
-            >
+            <button className={styles.btn} onClick={() => setStepIndex((i) => i - 1)} disabled={busy}>
               {t("onboarding.modal.backBtn")}
             </button>
           ) : null}
@@ -234,17 +203,11 @@ interface PreviewProps {
 function DefaultChannelsPreview({ defaultIds, channelLookup }: PreviewProps) {
   const { t } = useTranslation("settings");
   if (defaultIds.length === 0) {
-    return (
-      <p className={styles.questionMeta}>
-        {t("onboarding.modal.defaultChannelsEmpty")}
-      </p>
-    );
+    return <p className={styles.questionMeta}>{t("onboarding.modal.defaultChannelsEmpty")}</p>;
   }
   return (
     <div className={styles.defaultChannels}>
-      <p className={styles.defaultChannelsTitle}>
-        {t("onboarding.modal.defaultChannelsTitle")}
-      </p>
+      <p className={styles.defaultChannelsTitle}>{t("onboarding.modal.defaultChannelsTitle")}</p>
       <div className={styles.defaultChannelsList}>
         {defaultIds.map((id) => (
           <span key={id} className={styles.defaultChannelChip}>

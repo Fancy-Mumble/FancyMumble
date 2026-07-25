@@ -64,10 +64,7 @@ describe("extractEndnotes", () => {
   it("reports ascending positions", () => {
     const ed = makeEditor({
       type: "doc",
-      content: [
-        paragraph({ type: "text", text: "x" }, marker("a", "")),
-        paragraph(marker("b", "")),
-      ],
+      content: [paragraph({ type: "text", text: "x" }, marker("a", "")), paragraph(marker("b", ""))],
     });
     const entries = extractEndnotes(ed.state.doc);
     expect(entries[0].pos).toBeLessThan(entries[1].pos);

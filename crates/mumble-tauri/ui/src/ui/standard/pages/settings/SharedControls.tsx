@@ -142,11 +142,7 @@ export function ShortcutRecorder({
           onBlur={() => setRecording(false)}
         />
       ) : (
-        <button
-          type="button"
-          className={styles.recorderBtn}
-          onClick={() => setRecording(true)}
-        >
+        <button type="button" className={styles.recorderBtn} onClick={() => setRecording(true)}>
           {value || t("shared.shortcutNotSet")}
         </button>
       )}

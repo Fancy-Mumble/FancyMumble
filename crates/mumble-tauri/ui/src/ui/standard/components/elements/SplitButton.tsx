@@ -43,16 +43,8 @@ export function SplitButton({ options, variant = "primary", dropDirection = "up"
   };
 
   return (
-    <div
-      className={`${styles.root} ${styles[variant]}`}
-      ref={containerRef}
-      onKeyDown={handleKeyDown}
-    >
-      <button
-        type="button"
-        className={`${styles.btnMain}`}
-        onClick={defaultOpt.onSelect}
-      >
+    <div className={`${styles.root} ${styles[variant]}`} ref={containerRef} onKeyDown={handleKeyDown}>
+      <button type="button" className={`${styles.btnMain}`} onClick={defaultOpt.onSelect}>
         {defaultOpt.label}
       </button>
       <button
@@ -74,12 +66,13 @@ export function SplitButton({ options, variant = "primary", dropDirection = "up"
               type="button"
               className={styles.menuItem}
               role="menuitem"
-              onClick={() => { setOpen(false); opt.onSelect(); }}
+              onClick={() => {
+                setOpen(false);
+                opt.onSelect();
+              }}
             >
               <span className={styles.menuLabel}>{opt.label}</span>
-              {opt.hint !== undefined && (
-                <span className={styles.menuHint}>{opt.hint}</span>
-              )}
+              {opt.hint !== undefined && <span className={styles.menuHint}>{opt.hint}</span>}
             </button>
           ))}
         </div>

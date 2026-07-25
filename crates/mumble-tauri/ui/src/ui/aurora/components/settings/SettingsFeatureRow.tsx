@@ -8,5 +8,13 @@ export interface SettingsFeatureRowProps {
 }
 
 export default function SettingsFeatureRow({ title, detail, children }: SettingsFeatureRowProps) {
-  return <div className={styles.settingsFeature}><span><strong>{title}</strong><small>{detail}</small></span>{children}</div>;
+  return (
+    <div className={styles.settingsFeature}>
+      <span>
+        <strong>{title}</strong>
+        <small>{detail}</small>
+      </span>
+      {children}
+    </div>
+  );
 }

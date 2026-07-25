@@ -32,32 +32,51 @@ export function useSurfaceRouting() {
   }, []);
 
   return {
-    surface, setSurface,
-    marketplacePluginId, openMarketplace,
-    quickSwitcherOpen, setQuickSwitcherOpen,
-    showPollCreator, setShowPollCreator,
+    surface,
+    setSurface,
+    marketplacePluginId,
+    openMarketplace,
+    quickSwitcherOpen,
+    setQuickSwitcherOpen,
+    showPollCreator,
+    setShowPollCreator,
   };
 }
 
 /** Channel create/edit/move/purge dialogs and the two floating context menus. */
 export function useChannelModeration() {
-  const [channelEditor, setChannelEditor] = useState<{ channel: ChannelEntry | null; parentId: number; structural?: boolean } | null>(null);
-  const [channelMenu, setChannelMenu] = useState<{ channel: ChannelEntry; x: number; y: number } | null>(null);
+  const [channelEditor, setChannelEditor] = useState<{
+    channel: ChannelEntry | null;
+    parentId: number;
+    structural?: boolean;
+  } | null>(null);
+  const [channelMenu, setChannelMenu] = useState<{ channel: ChannelEntry; x: number; y: number } | null>(
+    null,
+  );
   const [sidebarMenu, setSidebarMenu] = useState<{ x: number; y: number } | null>(null);
   const [moveUsersSource, setMoveUsersSource] = useState<ChannelEntry | null>(null);
   const [purgeChannel, setPurgeChannel] = useState<ChannelEntry | null>(null);
   const [restrictedChannel, setRestrictedChannel] = useState<ChannelEntry | null>(null);
 
-  const closeFloatingMenus = useCallback(() => { setChannelMenu(null); setSidebarMenu(null); }, []);
+  const closeFloatingMenus = useCallback(() => {
+    setChannelMenu(null);
+    setSidebarMenu(null);
+  }, []);
   useDismissOnInteraction(!!channelMenu || !!sidebarMenu, closeFloatingMenus);
 
   return {
-    channelEditor, setChannelEditor,
-    channelMenu, setChannelMenu,
-    sidebarMenu, setSidebarMenu,
-    moveUsersSource, setMoveUsersSource,
-    purgeChannel, setPurgeChannel,
-    restrictedChannel, setRestrictedChannel,
+    channelEditor,
+    setChannelEditor,
+    channelMenu,
+    setChannelMenu,
+    sidebarMenu,
+    setSidebarMenu,
+    moveUsersSource,
+    setMoveUsersSource,
+    purgeChannel,
+    setPurgeChannel,
+    restrictedChannel,
+    setRestrictedChannel,
     closeFloatingMenus,
   };
 }
@@ -87,10 +106,14 @@ export function useChatSearch(selectedChannel: number | null, selectedDmUser: nu
   }, []);
 
   return {
-    chatSearchOpen, setChatSearchOpen,
-    chatQuery, setChatQuery,
-    showPinned, setShowPinned,
-    selectedMessageIds, setSelectedMessageIds,
+    chatSearchOpen,
+    setChatSearchOpen,
+    chatQuery,
+    setChatQuery,
+    showPinned,
+    setShowPinned,
+    selectedMessageIds,
+    setSelectedMessageIds,
     toggleMessageSelection,
   };
 }
@@ -112,8 +135,10 @@ export function useRailExpansion() {
   const [connectedRailExpanded, setConnectedRailExpanded] = useState(false);
   const toggleConnectedRail = useCallback(() => setConnectedRailExpanded((value) => !value), []);
   return {
-    launcherRailExpanded, setLauncherRailExpanded,
-    connectedRailExpanded, setConnectedRailExpanded,
+    launcherRailExpanded,
+    setLauncherRailExpanded,
+    connectedRailExpanded,
+    setConnectedRailExpanded,
     toggleConnectedRail,
   };
 }

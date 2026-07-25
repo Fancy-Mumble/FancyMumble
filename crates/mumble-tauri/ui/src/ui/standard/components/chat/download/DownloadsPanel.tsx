@@ -5,12 +5,8 @@ import { useTranslation } from "react-i18next";
 import { useAppStore } from "@core/store";
 import type { DownloadEntry } from "@core/types";
 import { formatBytes } from "@core/utils/format";
-import {
-  previewKindForFilename,
-  type PreviewKind,
-} from "../file/FileAttachmentCard";
+import { previewKindForFilename, type PreviewKind } from "../file/FileAttachmentCard";
 import styles from "./DownloadsPanel.module.css";
-
 
 function PreviewMedia({ entry, kind }: { entry: DownloadEntry; kind: PreviewKind }) {
   const src = convertFileSrc(entry.destPath);
@@ -37,13 +33,17 @@ function PreviewMedia({ entry, kind }: { entry: DownloadEntry; kind: PreviewKind
 function FileTypeIcon({ kind }: { kind: PreviewKind }) {
   // Compact emoji-based glyphs to avoid pulling in extra SVGs.
   const map: Record<PreviewKind, string> = {
-    image: "\u{1F5BC}",  // framed picture
-    audio: "\u{1F3B5}",  // musical note
-    video: "\u{1F3AC}",  // clapper board
-    text:  "\u{1F4C4}",  // page facing up
-    other: "\u{1F4E6}",  // package
+    image: "\u{1F5BC}", // framed picture
+    audio: "\u{1F3B5}", // musical note
+    video: "\u{1F3AC}", // clapper board
+    text: "\u{1F4C4}", // page facing up
+    other: "\u{1F4E6}", // package
   };
-  return <span className={styles.typeIcon} aria-hidden="true">{map[kind]}</span>;
+  return (
+    <span className={styles.typeIcon} aria-hidden="true">
+      {map[kind]}
+    </span>
+  );
 }
 
 export default function DownloadsPanel() {
@@ -57,16 +57,19 @@ export default function DownloadsPanel() {
   // makes tsc try to match the (huge, overloaded) typed-i18next `t` against the
   // loose type, which blows past the type-instantiation limit and crashes the
   // compiler ("Debug Failure. No error for last overload signature").
-  const formatRelativeTime = useCallback((ts: number): string => {
-    const diff = Date.now() - ts;
-    const sec = Math.round(diff / 1000);
-    if (sec < 60) return t("downloads.relTime.justNow");
-    const min = Math.round(sec / 60);
-    if (min < 60) return t("downloads.relTime.minAgo", { count: min });
-    const hr = Math.round(min / 60);
-    if (hr < 24) return t("downloads.relTime.hAgo", { count: hr });
-    return new Date(ts).toLocaleString();
-  }, [t]);
+  const formatRelativeTime = useCallback(
+    (ts: number): string => {
+      const diff = Date.now() - ts;
+      const sec = Math.round(diff / 1000);
+      if (sec < 60) return t("downloads.relTime.justNow");
+      const min = Math.round(sec / 60);
+      if (min < 60) return t("downloads.relTime.minAgo", { count: min });
+      const hr = Math.round(min / 60);
+      if (hr < 24) return t("downloads.relTime.hAgo", { count: hr });
+      return new Date(ts).toLocaleString();
+    },
+    [t],
+  );
 
   const handleOpen = useCallback(async (entry: DownloadEntry) => {
     try {
@@ -89,9 +92,7 @@ export default function DownloadsPanel() {
       <div className={styles.header}>
         <span className={styles.title}>
           {t("downloads.title")}
-          {downloads.length > 0 && (
-            <span className={styles.count}>{downloads.length}</span>
-          )}
+          {downloads.length > 0 && <span className={styles.count}>{downloads.length}</span>}
         </span>
         <div className={styles.headerActions}>
           {downloads.length > 0 && (
@@ -139,7 +140,9 @@ export default function DownloadsPanel() {
 
                 <div className={styles.meta}>
                   <span>{formatBytes(entry.sizeBytes)}</span>
-                  <span className={styles.path} title={entry.destPath}>{entry.destPath}</span>
+                  <span className={styles.path} title={entry.destPath}>
+                    {entry.destPath}
+                  </span>
                 </div>
 
                 <div className={styles.actions}>

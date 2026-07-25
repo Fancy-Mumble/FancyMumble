@@ -109,7 +109,9 @@ function MenuButton({ label, icon, compact, children, width = 240 }: MenuButtonP
         aria-haspopup="dialog"
         aria-expanded={open}
       >
-        <span className={compact ? undefined : ribbon.btnLargeIcon} aria-hidden="true">{icon}</span>
+        <span className={compact ? undefined : ribbon.btnLargeIcon} aria-hidden="true">
+          {icon}
+        </span>
         <span className={compact ? ribbon.btnSmallLabel : ribbon.btnLargeLabel}>{label}</span>
       </button>
       {open &&
@@ -139,7 +141,11 @@ const sz = (compact?: boolean) => (compact ? 16 : 22);
 export function ShapesButton({ editor, compact }: WidgetProps) {
   const { t } = useTranslation("chat");
   return (
-    <MenuButton compact={compact} label={t("liveDoc.insert.shapes", { defaultValue: "Shapes" })} icon={<SquareIcon width={sz(compact)} height={sz(compact)} />}>
+    <MenuButton
+      compact={compact}
+      label={t("liveDoc.insert.shapes", { defaultValue: "Shapes" })}
+      icon={<SquareIcon width={sz(compact)} height={sz(compact)} />}
+    >
       {(close) => (
         <div className={styles.grid}>
           {SHAPES.map((s) => (
@@ -149,7 +155,10 @@ export function ShapesButton({ editor, compact }: WidgetProps) {
               className={styles.gridCell}
               title={s.label}
               aria-label={s.label}
-              onClick={() => { insertImage(editor, shapeDataUrl(s.id)); close(); }}
+              onClick={() => {
+                insertImage(editor, shapeDataUrl(s.id));
+                close();
+              }}
             >
               <img src={shapeDataUrl(s.id)} alt="" width={32} height={32} />
             </button>
@@ -189,7 +198,12 @@ export function IconsButton({ editor, compact }: WidgetProps) {
   }, [query]);
 
   return (
-    <MenuButton compact={compact} label={t("liveDoc.insert.icons", { defaultValue: "Icons" })} icon={<SparklesIcon width={sz(compact)} height={sz(compact)} />} width={312}>
+    <MenuButton
+      compact={compact}
+      label={t("liveDoc.insert.icons", { defaultValue: "Icons" })}
+      icon={<SparklesIcon width={sz(compact)} height={sz(compact)} />}
+      width={312}
+    >
       {(close) => (
         <div className={styles.iconPicker}>
           <div className={styles.searchRow}>
@@ -199,7 +213,7 @@ export function IconsButton({ editor, compact }: WidgetProps) {
               autoFocus
               placeholder={t("liveDoc.insert.iconSearch", { defaultValue: "Search icons…" })}
               onChange={(e) => setQuery(e.target.value)}
-          />
+            />
           </div>
           <div className={styles.iconGrid}>
             {results.map(({ name, label, Comp }) => (
@@ -219,7 +233,9 @@ export function IconsButton({ editor, compact }: WidgetProps) {
               </button>
             ))}
             {results.length === 0 && (
-              <p className={styles.noResults}>{t("liveDoc.insert.iconNoResults", { defaultValue: "No icons found" })}</p>
+              <p className={styles.noResults}>
+                {t("liveDoc.insert.iconNoResults", { defaultValue: "No icons found" })}
+              </p>
             )}
           </div>
         </div>
@@ -232,7 +248,10 @@ export function IconsButton({ editor, compact }: WidgetProps) {
 // Symbols
 // ---------------------------------------------------------------------------
 
-const SYMBOLS = "© ® ™ § ¶ † ‡ • … ° ± × ÷ ≠ ≤ ≥ ≈ ∞ µ π Ω √ ∑ ∫ ∂ € £ ¥ ¢ ½ ¼ ¾ № ← → ↑ ↓ ↔ ⇒ ★ ☆ ♥ ♦ ♣ ♠ ✓ ✗ ☐ ☑".split(" ");
+const SYMBOLS =
+  "© ® ™ § ¶ † ‡ • … ° ± × ÷ ≠ ≤ ≥ ≈ ∞ µ π Ω √ ∑ ∫ ∂ € £ ¥ ¢ ½ ¼ ¾ № ← → ↑ ↓ ↔ ⇒ ★ ☆ ♥ ♦ ♣ ♠ ✓ ✗ ☐ ☑".split(
+    " ",
+  );
 
 export function SymbolButton({ editor, compact }: WidgetProps) {
   const { t } = useTranslation("chat");
@@ -250,7 +269,10 @@ export function SymbolButton({ editor, compact }: WidgetProps) {
               key={sym}
               type="button"
               className={styles.symbolCell}
-              onClick={() => { editor.chain().focus().insertContent(sym).run(); close(); }}
+              onClick={() => {
+                editor.chain().focus().insertContent(sym).run();
+                close();
+              }}
             >
               {sym}
             </button>
@@ -269,7 +291,20 @@ function dateFormats(): { label: string; value: string }[] {
   const now = new Date();
   return [
     { label: now.toLocaleDateString(), value: now.toLocaleDateString() },
-    { label: now.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" }), value: now.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" }) },
+    {
+      label: now.toLocaleDateString(undefined, {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }),
+      value: now.toLocaleDateString(undefined, {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }),
+    },
     { label: now.toLocaleString(), value: now.toLocaleString() },
     { label: now.toLocaleTimeString(), value: now.toLocaleTimeString() },
     { label: now.toISOString().slice(0, 10), value: now.toISOString().slice(0, 10) },
@@ -279,7 +314,12 @@ function dateFormats(): { label: string; value: string }[] {
 export function DateTimeButton({ editor, compact }: WidgetProps) {
   const { t } = useTranslation("chat");
   return (
-    <MenuButton compact={compact} label={t("liveDoc.insert.dateTime", { defaultValue: "Date & Time" })} icon={<HistoryIcon width={sz(compact)} height={sz(compact)} />} width={280}>
+    <MenuButton
+      compact={compact}
+      label={t("liveDoc.insert.dateTime", { defaultValue: "Date & Time" })}
+      icon={<HistoryIcon width={sz(compact)} height={sz(compact)} />}
+      width={280}
+    >
       {(close) => (
         <div className={styles.list}>
           {dateFormats().map((f) => (
@@ -287,7 +327,10 @@ export function DateTimeButton({ editor, compact }: WidgetProps) {
               key={f.label}
               type="button"
               className={styles.listItem}
-              onClick={() => { editor.chain().focus().insertContent(f.value).run(); close(); }}
+              onClick={() => {
+                editor.chain().focus().insertContent(f.value).run();
+                close();
+              }}
             >
               {f.label}
             </button>
@@ -309,10 +352,17 @@ export function QuickPartsButton({ editor, compact }: WidgetProps) {
     { label: t("liveDoc.insert.quickParts.title", { defaultValue: "Title" }), value: "[Title]" },
     { label: t("liveDoc.insert.quickParts.subject", { defaultValue: "Subject" }), value: "[Subject]" },
     { label: t("liveDoc.insert.quickParts.company", { defaultValue: "Company" }), value: "[Company]" },
-    { label: t("liveDoc.insert.quickParts.date", { defaultValue: "Date" }), value: new Date().toLocaleDateString() },
+    {
+      label: t("liveDoc.insert.quickParts.date", { defaultValue: "Date" }),
+      value: new Date().toLocaleDateString(),
+    },
   ];
   return (
-    <MenuButton compact={compact} label={t("liveDoc.insert.quickParts.title2", { defaultValue: "Quick Parts" })} icon={<PuzzleIcon width={sz(compact)} height={sz(compact)} />}>
+    <MenuButton
+      compact={compact}
+      label={t("liveDoc.insert.quickParts.title2", { defaultValue: "Quick Parts" })}
+      icon={<PuzzleIcon width={sz(compact)} height={sz(compact)} />}
+    >
       {(close) => (
         <div className={styles.list}>
           {parts.map((p) => (
@@ -320,7 +370,10 @@ export function QuickPartsButton({ editor, compact }: WidgetProps) {
               key={p.label}
               type="button"
               className={styles.listItem}
-              onClick={() => { editor.chain().focus().insertContent(p.value).run(); close(); }}
+              onClick={() => {
+                editor.chain().focus().insertContent(p.value).run();
+                close();
+              }}
             >
               {p.label}
             </button>
@@ -342,7 +395,12 @@ export function ChartButton({ editor, compact }: WidgetProps) {
   const insert = (chartType: LiveDocChartType) =>
     editor.chain().focus().insertLiveDocChart({ chartType }).run();
   return (
-    <MenuButton compact={compact} label={t("liveDoc.insert.chart", { defaultValue: "Chart" })} icon={<ActivityIcon width={sz(compact)} height={sz(compact)} />} width={220}>
+    <MenuButton
+      compact={compact}
+      label={t("liveDoc.insert.chart", { defaultValue: "Chart" })}
+      icon={<ActivityIcon width={sz(compact)} height={sz(compact)} />}
+      width={220}
+    >
       {(close) => (
         <div className={styles.list}>
           {CHART_TYPES.map((ct) => (
@@ -350,7 +408,10 @@ export function ChartButton({ editor, compact }: WidgetProps) {
               key={ct}
               type="button"
               className={styles.listItem}
-              onClick={() => { insert(ct); close(); }}
+              onClick={() => {
+                insert(ct);
+                close();
+              }}
             >
               {t(`liveDoc.insert.chartType.${ct}`, { defaultValue: ct })}
             </button>
@@ -375,23 +436,41 @@ export function OnlineVideoButton({ editor, compact }: WidgetProps) {
   const label = t("liveDoc.insert.onlineVideo", { defaultValue: "Online Video" });
 
   return (
-    <MenuButton compact={compact} label={label} icon={<PlayIcon width={sz(compact)} height={sz(compact)} />} width={320}>
+    <MenuButton
+      compact={compact}
+      label={label}
+      icon={<PlayIcon width={sz(compact)} height={sz(compact)} />}
+      width={320}
+    >
       {(close) => (
         <div className={styles.form}>
           <label className={styles.formLabel}>
             {t("liveDoc.insert.videoUrl", { defaultValue: "Video URL (YouTube, Vimeo, …)" })}
-            <input className={styles.input} value={url} autoFocus placeholder="https://youtu.be/…" onChange={(e) => setUrl(e.target.value)} />
+            <input
+              className={styles.input}
+              value={url}
+              autoFocus
+              placeholder="https://youtu.be/…"
+              onChange={(e) => setUrl(e.target.value)}
+            />
           </label>
           <div className={`${styles.videoPreview} ${styles[`frame_${frame}`] ?? ""}`}>
             {preview ? (
               <iframe src={preview} title="preview" allow="encrypted-media" loading="lazy" />
             ) : (
-              <span className={styles.previewEmpty}>{t("liveDoc.insert.videoPreviewEmpty", { defaultValue: "Preview appears here" })}</span>
+              <span className={styles.previewEmpty}>
+                {t("liveDoc.insert.videoPreviewEmpty", { defaultValue: "Preview appears here" })}
+              </span>
             )}
           </div>
           <div className={styles.chartTypes}>
             {VIDEO_FRAMES.map((f) => (
-              <button key={f} type="button" className={`${styles.chartType} ${frame === f ? styles.chartTypeActive : ""}`} onClick={() => setFrame(f)}>
+              <button
+                key={f}
+                type="button"
+                className={`${styles.chartType} ${frame === f ? styles.chartTypeActive : ""}`}
+                onClick={() => setFrame(f)}
+              >
                 {t(`liveDoc.insert.videoFrame.${f}`, { defaultValue: f })}
               </button>
             ))}
@@ -401,7 +480,8 @@ export function OnlineVideoButton({ editor, compact }: WidgetProps) {
             className={styles.primaryBtn}
             disabled={!preview}
             onClick={() => {
-              if (preview) editor.chain().focus().insertLiveDocEmbed({ kind: "video", src: url, frame }).run();
+              if (preview)
+                editor.chain().focus().insertLiveDocEmbed({ kind: "video", src: url, frame }).run();
               close();
             }}
           >
@@ -442,7 +522,9 @@ export function Model3DButton({ editor, compact }: WidgetProps) {
       const { fileServerConfig: config, currentChannel: channelId } = useAppStore.getState();
       if (!config || channelId == null) {
         await message(
-          t("liveDoc.insert.modelNoServer", { defaultValue: "File sharing is not available on this server." }),
+          t("liveDoc.insert.modelNoServer", {
+            defaultValue: "File sharing is not available on this server.",
+          }),
           { title, kind: "warning" },
         );
         return;
@@ -480,7 +562,12 @@ export function Model3DButton({ editor, compact }: WidgetProps) {
         editor
           .chain()
           .focus()
-          .insertLiveDocEmbed({ kind: "model3d", fileName: file.name, title: file.name, src: res.download_url })
+          .insertLiveDocEmbed({
+            kind: "model3d",
+            fileName: file.name,
+            title: file.name,
+            src: res.download_url,
+          })
           .run();
       } catch (e) {
         await message(`${e instanceof Error ? e.message : String(e)}`, {
@@ -501,9 +588,21 @@ export function Model3DButton({ editor, compact }: WidgetProps) {
         type="file"
         accept=".glb,.gltf,model/gltf-binary,model/gltf+json"
         hidden
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void onFile(f);
+          e.target.value = "";
+        }}
       />
-      <RibbonButton variant={compact ? "small" : "large"} showLabel disabled={busy} label={title} caption={title} icon={<CircleIcon width={sz(compact)} height={sz(compact)} />} onClick={() => inputRef.current?.click()} />
+      <RibbonButton
+        variant={compact ? "small" : "large"}
+        showLabel
+        disabled={busy}
+        label={title}
+        caption={title}
+        icon={<CircleIcon width={sz(compact)} height={sz(compact)} />}
+        onClick={() => inputRef.current?.click()}
+      />
     </>
   );
 }
@@ -516,7 +615,11 @@ export function ObjectButton({ editor, compact }: WidgetProps) {
   const onFile = useCallback(
     (file: File) => {
       const insert = (src: string) =>
-        editor.chain().focus().insertLiveDocEmbed({ kind: "object", fileName: file.name, src, title: file.name }).run();
+        editor
+          .chain()
+          .focus()
+          .insertLiveDocEmbed({ kind: "object", fileName: file.name, src, title: file.name })
+          .run();
       if (file.size <= MAX_EMBED_OBJECT_BYTES) {
         const reader = new FileReader();
         reader.onload = () => insert(typeof reader.result === "string" ? reader.result : "");
@@ -535,9 +638,20 @@ export function ObjectButton({ editor, compact }: WidgetProps) {
         ref={inputRef}
         type="file"
         hidden
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onFile(f);
+          e.target.value = "";
+        }}
       />
-      <RibbonButton variant={compact ? "small" : "large"} showLabel label={label} caption={label} icon={<FileIcon width={sz(compact)} height={sz(compact)} />} onClick={() => inputRef.current?.click()} />
+      <RibbonButton
+        variant={compact ? "small" : "large"}
+        showLabel
+        label={label}
+        caption={label}
+        icon={<FileIcon width={sz(compact)} height={sz(compact)} />}
+        onClick={() => inputRef.current?.click()}
+      />
     </>
   );
 }
@@ -570,7 +684,14 @@ export function CommentButton({ editor, compact }: WidgetProps) {
   }, [editor, t]);
   const label = t("liveDoc.insert.comment", { defaultValue: "Comment" });
   return (
-    <RibbonButton variant={compact ? "small" : "large"} showLabel label={label} caption={label} icon={<MessageCircleIcon width={sz(compact)} height={sz(compact)} />} onClick={onClick} />
+    <RibbonButton
+      variant={compact ? "small" : "large"}
+      showLabel
+      label={label}
+      caption={label}
+      icon={<MessageCircleIcon width={sz(compact)} height={sz(compact)} />}
+      onClick={onClick}
+    />
   );
 }
 
@@ -587,7 +708,10 @@ export function DigitalSignatureButton({ editor, compact }: WidgetProps) {
 
   const onClick = useCallback(() => {
     const ownName = users.find((u) => u.session === ownSession)?.name;
-    const name = ownName || window.prompt(t("liveDoc.insert.signaturePrompt", { defaultValue: "Signer name" }), "") || "";
+    const name =
+      ownName ||
+      window.prompt(t("liveDoc.insert.signaturePrompt", { defaultValue: "Signer name" }), "") ||
+      "";
     if (!name) return;
     setBusy(true);
     // Sign with the user's real Mumble identity (the connected cert, or the
@@ -611,7 +735,9 @@ export function DigitalSignatureButton({ editor, compact }: WidgetProps) {
       })
       .catch((e) => {
         console.warn("live-doc sign failed:", e);
-        window.alert(t("liveDoc.insert.signError", { defaultValue: "Could not sign: no Mumble identity available." }));
+        window.alert(
+          t("liveDoc.insert.signError", { defaultValue: "Could not sign: no Mumble identity available." }),
+        );
       })
       .finally(() => setBusy(false));
   }, [editor, t, users, ownSession, certLabel]);
@@ -637,7 +763,10 @@ export function CrossReferenceButton({ editor, compact }: WidgetProps) {
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
   const triggerRef = useRef<HTMLSpanElement>(null);
   const insert = useCallback(
-    (target: RefTarget) => { setOpen(false); editor.chain().focus().insertCrossReference(target.id).run(); },
+    (target: RefTarget) => {
+      setOpen(false);
+      editor.chain().focus().insertCrossReference(target.id).run();
+    },
     [editor],
   );
   const toggle = () => {
@@ -651,7 +780,15 @@ export function CrossReferenceButton({ editor, compact }: WidgetProps) {
   const caption = t("liveDoc.insert.crossRef", { defaultValue: "Cross-ref" });
   return (
     <span className={styles.menuWrap} ref={triggerRef}>
-      <RibbonButton variant={compact ? "small" : "large"} showLabel label={label} caption={caption} icon={<Link2Icon width={sz(compact)} height={sz(compact)} />} active={open} onClick={toggle} />
+      <RibbonButton
+        variant={compact ? "small" : "large"}
+        showLabel
+        label={label}
+        caption={caption}
+        icon={<Link2Icon width={sz(compact)} height={sz(compact)} />}
+        active={open}
+        onClick={toggle}
+      />
       {open &&
         createPortal(
           <div style={{ position: "fixed", left: pos.left, top: pos.top, zIndex: 9999 }}>
@@ -677,7 +814,12 @@ export function HeaderTemplateButton({ doc, compact }: DocWidgetProps) {
   const hf = useLiveDocHeaderFooter(doc);
   const label = t("liveDoc.insert.header", { defaultValue: "Header" });
   return (
-    <MenuButton compact={compact} label={label} icon={<FileTextIcon width={sz(compact)} height={sz(compact)} />} width={220}>
+    <MenuButton
+      compact={compact}
+      label={label}
+      icon={<FileTextIcon width={sz(compact)} height={sz(compact)} />}
+      width={220}
+    >
       {(close) => (
         <div className={styles.list}>
           {BAND_STYLES.map((s) => (
@@ -685,13 +827,23 @@ export function HeaderTemplateButton({ doc, compact }: DocWidgetProps) {
               key={s}
               type="button"
               className={`${styles.listItem} ${hf.headerEnabled && hf.headerStyle === s ? styles.listItemActive : ""}`}
-              onClick={() => { setLiveDocHeaderFooter(doc, { headerEnabled: true, headerStyle: s }); close(); }}
+              onClick={() => {
+                setLiveDocHeaderFooter(doc, { headerEnabled: true, headerStyle: s });
+                close();
+              }}
             >
               {t(`liveDoc.insert.bandStyle.${s}`, { defaultValue: s })}
             </button>
           ))}
           <hr className={styles.listSep} />
-          <button type="button" className={styles.listItem} onClick={() => { setLiveDocHeaderFooter(doc, { headerEnabled: false }); close(); }}>
+          <button
+            type="button"
+            className={styles.listItem}
+            onClick={() => {
+              setLiveDocHeaderFooter(doc, { headerEnabled: false });
+              close();
+            }}
+          >
             {t("liveDoc.insert.removeHeader", { defaultValue: "Remove header" })}
           </button>
         </div>
@@ -705,7 +857,12 @@ export function FooterTemplateButton({ doc, compact }: DocWidgetProps) {
   const hf = useLiveDocHeaderFooter(doc);
   const label = t("liveDoc.insert.footer", { defaultValue: "Footer" });
   return (
-    <MenuButton compact={compact} label={label} icon={<SeparatorHorizontalIcon width={sz(compact)} height={sz(compact)} />} width={220}>
+    <MenuButton
+      compact={compact}
+      label={label}
+      icon={<SeparatorHorizontalIcon width={sz(compact)} height={sz(compact)} />}
+      width={220}
+    >
       {(close) => (
         <div className={styles.list}>
           {BAND_STYLES.map((s) => (
@@ -713,13 +870,23 @@ export function FooterTemplateButton({ doc, compact }: DocWidgetProps) {
               key={s}
               type="button"
               className={`${styles.listItem} ${hf.footerEnabled && hf.footerStyle === s ? styles.listItemActive : ""}`}
-              onClick={() => { setLiveDocHeaderFooter(doc, { footerEnabled: true, footerStyle: s }); close(); }}
+              onClick={() => {
+                setLiveDocHeaderFooter(doc, { footerEnabled: true, footerStyle: s });
+                close();
+              }}
             >
               {t(`liveDoc.insert.bandStyle.${s}`, { defaultValue: s })}
             </button>
           ))}
           <hr className={styles.listSep} />
-          <button type="button" className={styles.listItem} onClick={() => { setLiveDocHeaderFooter(doc, { footerEnabled: false }); close(); }}>
+          <button
+            type="button"
+            className={styles.listItem}
+            onClick={() => {
+              setLiveDocHeaderFooter(doc, { footerEnabled: false });
+              close();
+            }}
+          >
             {t("liveDoc.insert.removeFooter", { defaultValue: "Remove footer" })}
           </button>
         </div>
@@ -733,7 +900,12 @@ export function PageNumberTemplateButton({ doc, compact }: DocWidgetProps) {
   const hf = useLiveDocHeaderFooter(doc);
   const label = t("liveDoc.insert.pageNumber", { defaultValue: "Page Number" });
   return (
-    <MenuButton compact={compact} label={label} icon={<HashIcon width={sz(compact)} height={sz(compact)} />} width={220}>
+    <MenuButton
+      compact={compact}
+      label={label}
+      icon={<HashIcon width={sz(compact)} height={sz(compact)} />}
+      width={220}
+    >
       {(close) => (
         <div className={styles.list}>
           {PAGE_NUMBER_STYLES.map((s) => (
@@ -741,13 +913,23 @@ export function PageNumberTemplateButton({ doc, compact }: DocWidgetProps) {
               key={s}
               type="button"
               className={`${styles.listItem} ${hf.showPageNumber && hf.pageNumberStyle === s ? styles.listItemActive : ""}`}
-              onClick={() => { setLiveDocHeaderFooter(doc, { showPageNumber: true, pageNumberStyle: s }); close(); }}
+              onClick={() => {
+                setLiveDocHeaderFooter(doc, { showPageNumber: true, pageNumberStyle: s });
+                close();
+              }}
             >
               {t(`liveDoc.insert.pageNumberStyle.${s}`, { defaultValue: s })}
             </button>
           ))}
           <hr className={styles.listSep} />
-          <button type="button" className={styles.listItem} onClick={() => { setLiveDocHeaderFooter(doc, { showPageNumber: false }); close(); }}>
+          <button
+            type="button"
+            className={styles.listItem}
+            onClick={() => {
+              setLiveDocHeaderFooter(doc, { showPageNumber: false });
+              close();
+            }}
+          >
             {t("liveDoc.insert.pageNumberNone", { defaultValue: "No page number" })}
           </button>
         </div>

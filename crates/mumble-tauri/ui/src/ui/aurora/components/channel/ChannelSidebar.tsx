@@ -26,19 +26,42 @@ export interface ChannelSidebarProps {
 
 /** Initials from a display name, for the voice dock avatar. */
 function initials(name: string): string {
-  return name.split(/\s+/).slice(0, 2).map((part) => part[0] ?? "").join("").toUpperCase();
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0] ?? "")
+    .join("")
+    .toUpperCase();
 }
 
 /** Server header, channel tree, and the user's own voice dock. */
 export default function ChannelSidebar({
-  serverLabel, channels, users, selectedChannel, currentChannel, listenedChannels, unreadCounts,
-  talkingSessions, query, onQueryChange, ownName, inCall, onOpenServerInfo, onCreateChannel,
-  onSelectChannel, onJoinChannel, onChannelContextMenu, onSidebarContextMenu,
+  serverLabel,
+  channels,
+  users,
+  selectedChannel,
+  currentChannel,
+  listenedChannels,
+  unreadCounts,
+  talkingSessions,
+  query,
+  onQueryChange,
+  ownName,
+  inCall,
+  onOpenServerInfo,
+  onCreateChannel,
+  onSelectChannel,
+  onJoinChannel,
+  onChannelContextMenu,
+  onSidebarContextMenu,
 }: ChannelSidebarProps) {
   return (
     <aside className={styles.channels}>
       <div className={styles.panelHeader}>
-        <div><small>SERVER</small><strong>{serverLabel}</strong></div>
+        <div>
+          <small>SERVER</small>
+          <strong>{serverLabel}</strong>
+        </div>
         <IconButton icon={<InfoIcon />} label="Server information" onClick={onOpenServerInfo} />
       </div>
       <SearchField
@@ -51,11 +74,13 @@ export default function ChannelSidebar({
         <span>CHANNELS</span>
         <IconButton icon={<PlusIcon />} label="Create channel" onClick={onCreateChannel} />
       </div>
-      <nav onContextMenu={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onSidebarContextMenu({ x: event.clientX, y: event.clientY });
-      }}>
+      <nav
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onSidebarContextMenu({ x: event.clientX, y: event.clientY });
+        }}
+      >
         <ChannelList
           channels={channels}
           users={users}
@@ -73,7 +98,10 @@ export default function ChannelSidebar({
       <div className={styles.voiceDock}>
         <div>
           <span className={styles.avatar}>{initials(ownName)}</span>
-          <span><strong>{ownName}</strong><small>{inCall ? "Voice connected" : "Voice available"}</small></span>
+          <span>
+            <strong>{ownName}</strong>
+            <small>{inCall ? "Voice connected" : "Voice available"}</small>
+          </span>
         </div>
         <SelfVoiceControls />
       </div>

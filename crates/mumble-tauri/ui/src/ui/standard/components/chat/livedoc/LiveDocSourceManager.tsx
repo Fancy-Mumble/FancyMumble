@@ -12,7 +12,11 @@ import { useTranslation } from "react-i18next";
 import type * as Y from "yjs";
 import { ArrowRightIcon, ArrowLeftIcon, CloseIcon, EditIcon, TrashIcon, PlusIcon } from "../../../icons";
 import { sourceLabel, type CslItem } from "@core/features/chat/livedoc/liveDocCslTypes";
-import { useLiveDocSources, setLiveDocSource, deleteLiveDocSource } from "@core/features/chat/livedoc/useLiveDocSources";
+import {
+  useLiveDocSources,
+  setLiveDocSource,
+  deleteLiveDocSource,
+} from "@core/features/chat/livedoc/useLiveDocSources";
 import { useLiveDocMasterSourcesStore } from "@core/features/chat/livedoc/liveDocMasterSourcesStore";
 import { parseBibtex, toBibtex } from "@core/features/chat/livedoc/liveDocBibtex";
 import LiveDocSourceEditor from "./LiveDocSourceEditor";
@@ -69,7 +73,12 @@ export default function LiveDocSourceManager({ doc, onClose }: LiveDocSourceMana
       <div className={styles.dialog} role="dialog" aria-modal="true">
         <div className={styles.dialogHeader}>
           <span className={styles.dialogTitle}>{tb("manageSources", "Manage Sources")}</span>
-          <button type="button" className={styles.dialogClose} onClick={onClose} aria-label={tb("close", "Close")}>
+          <button
+            type="button"
+            className={styles.dialogClose}
+            onClick={onClose}
+            aria-label={tb("close", "Close")}
+          >
             <CloseIcon width={16} height={16} />
           </button>
         </div>
@@ -85,7 +94,11 @@ export default function LiveDocSourceManager({ doc, onClose }: LiveDocSourceMana
             hidden
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) void file.text().then(importBibtex).catch((err) => console.warn("bibtex import failed:", err));
+              if (file)
+                void file
+                  .text()
+                  .then(importBibtex)
+                  .catch((err) => console.warn("bibtex import failed:", err));
               e.target.value = "";
             }}
           />
@@ -95,7 +108,12 @@ export default function LiveDocSourceManager({ doc, onClose }: LiveDocSourceMana
           <button type="button" className={styles.btn} onClick={() => fileRef.current?.click()}>
             {tb("importBibtex", "Import BibTeX")}
           </button>
-          <button type="button" className={styles.btn} onClick={() => download("references.bib", toBibtex(current))} disabled={current.length === 0}>
+          <button
+            type="button"
+            className={styles.btn}
+            onClick={() => download("references.bib", toBibtex(current))}
+            disabled={current.length === 0}
+          >
             {tb("exportBibtex", "Export BibTeX")}
           </button>
           <span className={styles.spacer} />
@@ -119,13 +137,28 @@ export default function LiveDocSourceManager({ doc, onClose }: LiveDocSourceMana
                       {sourceLabel(item)}
                     </span>
                     <span className={styles.itemActions}>
-                      <button type="button" className={styles.iconBtn} title={tb("copyToCurrent", "Copy to document")} onClick={() => setLiveDocSource(doc, item)}>
+                      <button
+                        type="button"
+                        className={styles.iconBtn}
+                        title={tb("copyToCurrent", "Copy to document")}
+                        onClick={() => setLiveDocSource(doc, item)}
+                      >
                         <ArrowRightIcon width={14} height={14} />
                       </button>
-                      <button type="button" className={styles.iconBtn} title={tb("edit", "Edit")} onClick={() => setEditing({ item })}>
+                      <button
+                        type="button"
+                        className={styles.iconBtn}
+                        title={tb("edit", "Edit")}
+                        onClick={() => setEditing({ item })}
+                      >
                         <EditIcon width={14} height={14} />
                       </button>
-                      <button type="button" className={styles.iconBtn} title={tb("delete", "Delete")} onClick={() => removeMaster(item.id)}>
+                      <button
+                        type="button"
+                        className={styles.iconBtn}
+                        title={tb("delete", "Delete")}
+                        onClick={() => removeMaster(item.id)}
+                      >
                         <TrashIcon width={14} height={14} />
                       </button>
                     </span>
@@ -150,17 +183,32 @@ export default function LiveDocSourceManager({ doc, onClose }: LiveDocSourceMana
               <ul className={styles.list}>
                 {current.map((item) => (
                   <li key={item.id} className={styles.item}>
-                    <button type="button" className={styles.iconBtn} title={tb("copyToMaster", "Copy to master")} onClick={() => upsertMaster(item)}>
+                    <button
+                      type="button"
+                      className={styles.iconBtn}
+                      title={tb("copyToMaster", "Copy to master")}
+                      onClick={() => upsertMaster(item)}
+                    >
                       <ArrowLeftIcon width={14} height={14} />
                     </button>
                     <span className={styles.itemLabel} title={sourceLabel(item)}>
                       {sourceLabel(item)}
                     </span>
                     <span className={styles.itemActions}>
-                      <button type="button" className={styles.iconBtn} title={tb("edit", "Edit")} onClick={() => setEditing({ item })}>
+                      <button
+                        type="button"
+                        className={styles.iconBtn}
+                        title={tb("edit", "Edit")}
+                        onClick={() => setEditing({ item })}
+                      >
                         <EditIcon width={14} height={14} />
                       </button>
-                      <button type="button" className={styles.iconBtn} title={tb("delete", "Delete")} onClick={() => deleteLiveDocSource(doc, item.id)}>
+                      <button
+                        type="button"
+                        className={styles.iconBtn}
+                        title={tb("delete", "Delete")}
+                        onClick={() => deleteLiveDocSource(doc, item.id)}
+                      >
                         <TrashIcon width={14} height={14} />
                       </button>
                     </span>
@@ -173,7 +221,12 @@ export default function LiveDocSourceManager({ doc, onClose }: LiveDocSourceMana
 
         {/* Per-master-item copy-to-current: rendered as a hint row below. */}
         <div className={styles.toolbar}>
-          <span className={styles.fieldLabel}>{tb("copyHint", "Tip: use the arrows to copy a source into this document or back to your library.")}</span>
+          <span className={styles.fieldLabel}>
+            {tb(
+              "copyHint",
+              "Tip: use the arrows to copy a source into this document or back to your library.",
+            )}
+          </span>
         </div>
       </div>
 

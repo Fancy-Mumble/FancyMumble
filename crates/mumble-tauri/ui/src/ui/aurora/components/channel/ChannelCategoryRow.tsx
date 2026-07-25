@@ -12,5 +12,9 @@ export interface ChannelCategoryRowProps {
  * as a heading for the channels beneath it rather than a selectable row.
  */
 export default function ChannelCategoryRow({ channel, onContextMenu }: ChannelCategoryRowProps) {
-  return <h3 className={styles.category} onContextMenu={onContextMenu}>{channel.name}</h3>;
+  return (
+    <h3 className={styles.category} onContextMenu={onContextMenu}>
+      {channel.name}
+    </h3>
+  );
 }

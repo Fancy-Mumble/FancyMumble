@@ -9,18 +9,11 @@
 //   - PluginModalForm.tsx       for modal contexts (owns typed state)
 
 import { createPortal } from "react-dom";
-import {
-  dismissPluginCard,
-  dismissPluginToast,
-  useAppStore,
-} from "@core/store";
+import { dismissPluginCard, dismissPluginToast, useAppStore } from "@core/store";
 import Toast from "../elements/Toast";
 import { CloseIcon } from "../../icons";
 import type { ActionRow, ToastLevel } from "@core/plugins/tier1/types";
-import type {
-  PluginMessageCard,
-  PluginToastState,
-} from "@core/plugins/tier1/store";
+import type { PluginMessageCard, PluginToastState } from "@core/plugins/tier1/store";
 import PluginTrustPrompt from "./PluginTrustPrompt";
 import { RenderComponent } from "./PluginComponentRenderer";
 import PluginModalForm from "./PluginModalForm";
@@ -95,11 +88,7 @@ function ComponentRow({
   return (
     <div className={styles.componentRow}>
       {row.components.map((c, i) => (
-        <RenderComponent
-          key={`${pluginName}:${i}`}
-          component={c}
-          ctx={{ pluginName, channelId }}
-        />
+        <RenderComponent key={`${pluginName}:${i}`} component={c} ctx={{ pluginName, channelId }} />
       ))}
     </div>
   );

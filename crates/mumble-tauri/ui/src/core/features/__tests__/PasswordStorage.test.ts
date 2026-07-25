@@ -17,9 +17,7 @@ vi.mock("@tauri-apps/plugin-store", () => ({
     if (!storeFiles[fileName]) storeFiles[fileName] = {};
     const data = storeFiles[fileName];
     return Promise.resolve({
-      get: vi.fn().mockImplementation((key: string) =>
-        Promise.resolve(data[key] ?? null),
-      ),
+      get: vi.fn().mockImplementation((key: string) => Promise.resolve(data[key] ?? null)),
       set: vi.fn().mockImplementation((key: string, value: unknown) => {
         data[key] = value;
         return Promise.resolve();

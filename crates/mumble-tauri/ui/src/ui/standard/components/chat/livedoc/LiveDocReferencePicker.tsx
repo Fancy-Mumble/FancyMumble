@@ -17,10 +17,7 @@ interface LiveDocReferencePickerProps {
   readonly onClose: () => void;
 }
 
-function targetRowLabel(
-  target: RefTarget,
-  translate: (key: string) => string,
-): string {
+function targetRowLabel(target: RefTarget, translate: (key: string) => string): string {
   if (target.number !== undefined) {
     const kindLabel = translate(`liveDoc.references.kind.${target.kind}`);
     const text = target.label.trim();
@@ -29,11 +26,7 @@ function targetRowLabel(
   return target.label.trim() || translate("liveDoc.references.untitledTarget");
 }
 
-export default function LiveDocReferencePicker({
-  targets,
-  onPick,
-  onClose,
-}: LiveDocReferencePickerProps) {
+export default function LiveDocReferencePicker({ targets, onPick, onClose }: LiveDocReferencePickerProps) {
   const { t } = useTranslation("chat");
   const translate = t as (key: string) => string;
   const ref = useRef<HTMLDivElement>(null);
@@ -72,11 +65,7 @@ export default function LiveDocReferencePicker({
         <ul className={styles.pickerList}>
           {targets.map((target) => (
             <li key={target.id}>
-              <button
-                type="button"
-                className={styles.pickerItem}
-                onClick={() => onPick(target)}
-              >
+              <button type="button" className={styles.pickerItem} onClick={() => onPick(target)}>
                 <span className={styles.pickerKind}>
                   {translate(`liveDoc.references.kind.${target.kind}`)}
                 </span>

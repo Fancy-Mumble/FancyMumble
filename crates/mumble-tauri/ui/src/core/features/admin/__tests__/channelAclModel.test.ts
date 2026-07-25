@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  buildChannelTree,
-  computeChannelAccess,
-  hasCustomAcl,
-  limitTreeDepth,
-} from "../channelAclModel";
+import { buildChannelTree, computeChannelAccess, hasCustomAcl, limitTreeDepth } from "../channelAclModel";
 import type { AclData, AclEntry, AclGroup, ChannelEntry } from "../../../types";
 import { PERM_ENTER, PERM_SPEAK } from "../../../utils/permissions";
 
@@ -78,9 +73,7 @@ describe("buildChannelTree", () => {
   });
 
   it("still lists detached channels even when there is no root", () => {
-    const tree = buildChannelTree([
-      chan({ id: 7, parent_id: 7, name: "Private", detached: true }),
-    ]);
+    const tree = buildChannelTree([chan({ id: 7, parent_id: 7, name: "Private", detached: true })]);
     expect(tree.map((n) => n.channel.name)).toEqual(["Private"]);
   });
 });
@@ -169,10 +162,7 @@ describe("computeChannelAccess", () => {
 
   it("lets a deny entry cancel a grant", () => {
     const access = computeChannelAccess(
-      [
-        acl({ user_id: 3, grant: PERM_ENTER }),
-        acl({ user_id: 3, deny: PERM_ENTER }),
-      ],
+      [acl({ user_id: 3, grant: PERM_ENTER }), acl({ user_id: 3, deny: PERM_ENTER })],
       [],
     );
     expect(access.granted).toEqual([]);
@@ -180,9 +170,7 @@ describe("computeChannelAccess", () => {
 
   it("flags @all and @auth Enter grants", () => {
     expect(computeChannelAccess([acl({ group: "all", grant: PERM_ENTER })], []).allUsers).toBe(true);
-    expect(
-      computeChannelAccess([acl({ group: "auth", grant: PERM_ENTER })], []).allRegistered,
-    ).toBe(true);
+    expect(computeChannelAccess([acl({ group: "auth", grant: PERM_ENTER })], []).allRegistered).toBe(true);
   });
 
   it("resolves the members of a granting group", () => {

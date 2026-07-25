@@ -3,9 +3,7 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import ConfirmDialog from "../../components/elements/ConfirmDialog";
-import {
-  PuzzleIcon, PowerIcon, TrashIcon, RefreshCwIcon,
-} from "../../icons";
+import { PuzzleIcon, PowerIcon, TrashIcon, RefreshCwIcon } from "../../icons";
 import { useAppStore } from "@core/store";
 import { isPluginAdminSupported } from "./";
 import styles from "./AdminPanel.module.css";
@@ -174,121 +172,109 @@ export function ServerPluginsTab() {
 
   return (
     <>
-    <div>
-      <h2 className={styles.panelTitle}>{t("serverPlugins.title")}</h2>
-      <div className={styles.toolbar}>
-        <button
-          type="button"
-          className={styles.refreshBtn}
-          onClick={refresh}
-          disabled={loading}
-        >
-          <RefreshCwIcon width={14} height={14} />
-          {t("serverPlugins.refresh")}
-        </button>
-        {pluginsDir && (
-          <span className={sp.pluginsDir}>
-            {t("serverPlugins.pluginsDir")}: <code>{pluginsDir}</code>
-          </span>
-        )}
-      </div>
-
-      {lastError && (
-        <div className={sp.errorBanner}>{lastError}</div>
-      )}
-
-      {loading && plugins.length === 0 ? (
-        <div className={sp.empty}>{t("serverPlugins.loading")}</div>
-      ) : plugins.length === 0 ? (
-        <div className={sp.empty}>
-          <PuzzleIcon width={36} height={36} />
-          <p>{t("serverPlugins.empty")}</p>
+      <div>
+        <h2 className={styles.panelTitle}>{t("serverPlugins.title")}</h2>
+        <div className={styles.toolbar}>
+          <button type="button" className={styles.refreshBtn} onClick={refresh} disabled={loading}>
+            <RefreshCwIcon width={14} height={14} />
+            {t("serverPlugins.refresh")}
+          </button>
+          {pluginsDir && (
+            <span className={sp.pluginsDir}>
+              {t("serverPlugins.pluginsDir")}: <code>{pluginsDir}</code>
+            </span>
+          )}
         </div>
-      ) : (
-        <ul className={sp.list}>
-          {plugins.map((p) => (
-            <li key={p.plugin_name} className={sp.row}>
-              <div className={sp.iconCol}>
-                <PuzzleIcon width={28} height={28} />
-              </div>
-              <div className={sp.bodyCol}>
-                <div className={sp.title}>
-                  <span className={sp.name}>{p.plugin_name}</span>
-                  {!p.load_error && p.version && (
-                    <span className={sp.version}>v{p.version}</span>
+
+        {lastError && <div className={sp.errorBanner}>{lastError}</div>}
+
+        {loading && plugins.length === 0 ? (
+          <div className={sp.empty}>{t("serverPlugins.loading")}</div>
+        ) : plugins.length === 0 ? (
+          <div className={sp.empty}>
+            <PuzzleIcon width={36} height={36} />
+            <p>{t("serverPlugins.empty")}</p>
+          </div>
+        ) : (
+          <ul className={sp.list}>
+            {plugins.map((p) => (
+              <li key={p.plugin_name} className={sp.row}>
+                <div className={sp.iconCol}>
+                  <PuzzleIcon width={28} height={28} />
+                </div>
+                <div className={sp.bodyCol}>
+                  <div className={sp.title}>
+                    <span className={sp.name}>{p.plugin_name}</span>
+                    {!p.load_error && p.version && <span className={sp.version}>v{p.version}</span>}
+                    {p.marketplace_id && (
+                      <span className={sp.badge}>{t("serverPlugins.marketplaceBadge")}</span>
+                    )}
+                    {!p.loaded && p.enabled && (
+                      <span className={`${sp.badge} ${sp.badgeWarn}`}>{t("serverPlugins.staleBadge")}</span>
+                    )}
+                    {p.load_error && (
+                      <span className={`${sp.badge} ${sp.badgeError}`} title={p.load_error}>
+                        {t("serverPlugins.brokenBadge")}
+                      </span>
+                    )}
+                  </div>
+                  {p.path && <div className={sp.path}>{p.path}</div>}
+                </div>
+                <div className={sp.actions}>
+                  <button
+                    type="button"
+                    className={p.enabled ? sp.btnEnabled : sp.btnDisabled}
+                    onClick={() => handleToggle(p)}
+                    disabled={busy === p.plugin_name || !!p.load_error}
+                    title={
+                      p.load_error
+                        ? t("serverPlugins.incompatibleTitle", {
+                            defaultValue: "Incompatible with this server - cannot be enabled.",
+                          })
+                        : p.enabled
+                          ? t("serverPlugins.disable")
+                          : t("serverPlugins.enable")
+                    }
+                  >
+                    <PowerIcon width={14} height={14} />
+                    {p.load_error
+                      ? t("serverPlugins.incompatible", { defaultValue: "Incompatible" })
+                      : p.enabled
+                        ? t("serverPlugins.enabled")
+                        : t("serverPlugins.disabled")}
+                  </button>
+                  {p.enabled && (
+                    <button
+                      type="button"
+                      className={styles.refreshBtn}
+                      onClick={() => handleReload(p)}
+                      disabled={busy === p.plugin_name}
+                      title={t("serverPlugins.reloadTitle", {
+                        defaultValue:
+                          "Reload the plugin to apply configuration changes without restarting the server.",
+                      })}
+                    >
+                      <RefreshCwIcon width={14} height={14} />
+                      {t("serverPlugins.reload", { defaultValue: "Reload" })}
+                    </button>
                   )}
-                  {p.marketplace_id && (
-                    <span className={sp.badge}>
-                      {t("serverPlugins.marketplaceBadge")}
-                    </span>
-                  )}
-                  {!p.loaded && p.enabled && (
-                    <span className={`${sp.badge} ${sp.badgeWarn}`}>
-                      {t("serverPlugins.staleBadge")}
-                    </span>
-                  )}
-                  {p.load_error && (
-                    <span className={`${sp.badge} ${sp.badgeError}`} title={p.load_error}>
-                      {t("serverPlugins.brokenBadge")}
-                    </span>
+                  {!p.builtin && (
+                    <button
+                      type="button"
+                      className={styles.removeBtn}
+                      onClick={() => handleUninstall(p)}
+                      disabled={busy === p.plugin_name}
+                      title={t("serverPlugins.uninstall")}
+                    >
+                      <TrashIcon width={14} height={14} />
+                    </button>
                   )}
                 </div>
-                {p.path && <div className={sp.path}>{p.path}</div>}
-              </div>
-              <div className={sp.actions}>
-                <button
-                  type="button"
-                  className={p.enabled ? sp.btnEnabled : sp.btnDisabled}
-                  onClick={() => handleToggle(p)}
-                  disabled={busy === p.plugin_name || !!p.load_error}
-                  title={
-                    p.load_error
-                      ? t("serverPlugins.incompatibleTitle", {
-                          defaultValue: "Incompatible with this server - cannot be enabled.",
-                        })
-                      : p.enabled
-                        ? t("serverPlugins.disable")
-                        : t("serverPlugins.enable")
-                  }
-                >
-                  <PowerIcon width={14} height={14} />
-                  {p.load_error
-                    ? t("serverPlugins.incompatible", { defaultValue: "Incompatible" })
-                    : p.enabled
-                      ? t("serverPlugins.enabled")
-                      : t("serverPlugins.disabled")}
-                </button>
-                {p.enabled && (
-                  <button
-                    type="button"
-                    className={styles.refreshBtn}
-                    onClick={() => handleReload(p)}
-                    disabled={busy === p.plugin_name}
-                    title={t("serverPlugins.reloadTitle", {
-                      defaultValue: "Reload the plugin to apply configuration changes without restarting the server.",
-                    })}
-                  >
-                    <RefreshCwIcon width={14} height={14} />
-                    {t("serverPlugins.reload", { defaultValue: "Reload" })}
-                  </button>
-                )}
-                {!p.builtin && (
-                  <button
-                    type="button"
-                    className={styles.removeBtn}
-                    onClick={() => handleUninstall(p)}
-                    disabled={busy === p.plugin_name}
-                    title={t("serverPlugins.uninstall")}
-                  >
-                    <TrashIcon width={14} height={14} />
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {pendingUninstall && (
         <ConfirmDialog
@@ -297,7 +283,9 @@ export function ServerPluginsTab() {
           confirmLabel={t("serverPlugins.uninstall")}
           danger
           isConfirming={busy === pendingUninstall.plugin_name}
-          onConfirm={() => { void handleConfirmUninstall(); }}
+          onConfirm={() => {
+            void handleConfirmUninstall();
+          }}
           onCancel={() => setPendingUninstall(null)}
         />
       )}

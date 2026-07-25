@@ -34,9 +34,7 @@ function regionName(cc: string): string {
 }
 
 /** Every ISO-3166 alpha-2 code `country-flag-icons` ships a flag for. */
-export const COUNTRY_CODES: readonly string[] = Object.keys(Flags).filter((k) =>
-  /^[A-Z]{2}$/.test(k),
-);
+export const COUNTRY_CODES: readonly string[] = Object.keys(Flags).filter((k) => /^[A-Z]{2}$/.test(k));
 
 export const COUNTRIES: readonly Country[] = COUNTRY_CODES.map((cc) => ({
   code: cc.toLowerCase(),

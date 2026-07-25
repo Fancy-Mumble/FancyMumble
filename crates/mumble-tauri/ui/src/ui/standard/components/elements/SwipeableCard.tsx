@@ -106,8 +106,7 @@ export default function SwipeableCard({
       // Apply rubber-band resistance past the threshold
       const sign = Math.sign(clamped);
       const abs = Math.abs(clamped);
-      const dampened =
-        abs <= threshold ? abs : threshold + (abs - threshold) * 0.3;
+      const dampened = abs <= threshold ? abs : threshold + (abs - threshold) * 0.3;
       setOffset(sign * dampened);
     };
 
@@ -156,13 +155,7 @@ export default function SwipeableCard({
       el.removeEventListener("touchend", onTouchEnd);
       el.removeEventListener("touchcancel", () => reset());
     };
-  }, [
-    disabled,
-    leftSwipeAction,
-    rightSwipeAction,
-    threshold,
-    reset,
-  ]);
+  }, [disabled, leftSwipeAction, rightSwipeAction, threshold, reset]);
 
   const showLeft = offset < 0 || triggered === "left";
   const showRight = offset > 0 || triggered === "right";
@@ -173,19 +166,12 @@ export default function SwipeableCard({
   const labelOpacity = Math.max(0, (progress - 0.4) / 0.6);
 
   return (
-    <div
-      className={`${styles.wrapper} ${className ?? ""}`}
-    >
+    <div className={`${styles.wrapper} ${className ?? ""}`}>
       {/* Left-swipe action (appears on the right) */}
       {leftSwipeAction && showLeft && (
-        <div
-          className={styles.actionRight}
-          style={{ background: leftSwipeAction.color, opacity: progress }}
-        >
+        <div className={styles.actionRight} style={{ background: leftSwipeAction.color, opacity: progress }}>
           <span className={styles.actionLabel} style={{ opacity: labelOpacity }}>
-            {leftSwipeAction.icon && (
-              <span className={styles.actionIcon}>{leftSwipeAction.icon}</span>
-            )}
+            {leftSwipeAction.icon && <span className={styles.actionIcon}>{leftSwipeAction.icon}</span>}
             {leftSwipeAction.label}
           </span>
         </div>
@@ -193,14 +179,9 @@ export default function SwipeableCard({
 
       {/* Right-swipe action (appears on the left) */}
       {rightSwipeAction && showRight && (
-        <div
-          className={styles.actionLeft}
-          style={{ background: rightSwipeAction.color, opacity: progress }}
-        >
+        <div className={styles.actionLeft} style={{ background: rightSwipeAction.color, opacity: progress }}>
           <span className={styles.actionLabel} style={{ opacity: labelOpacity }}>
-            {rightSwipeAction.icon && (
-              <span className={styles.actionIcon}>{rightSwipeAction.icon}</span>
-            )}
+            {rightSwipeAction.icon && <span className={styles.actionIcon}>{rightSwipeAction.icon}</span>}
             {rightSwipeAction.label}
           </span>
         </div>

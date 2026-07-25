@@ -21,15 +21,10 @@ const FANCY_PREFIX = "<!--FANCY:";
 const FANCY_SUFFIX = "-->";
 
 /** Build a Mumble comment string from profile data + bio. */
-export function serializeProfile(
-  profile: FancyProfile,
-  bio: string,
-): string {
+export function serializeProfile(profile: FancyProfile, bio: string): string {
   const payload: FancyProfile = { ...profile, v: 1 };
   // Strip undefined keys for a compact string.
-  const json = JSON.stringify(payload, (_k, v) =>
-    v === undefined ? undefined : v,
-  );
+  const json = JSON.stringify(payload, (_k, v) => (v === undefined ? undefined : v));
   const marker = `${FANCY_PREFIX}${json}${FANCY_SUFFIX}`;
   return bio ? `${marker}\n${bio}` : marker;
 }
@@ -94,10 +89,7 @@ export function dataUrlToBytes(dataUrl: string): number[] {
  */
 export function textureToDataUrl(bytes: number[]): string {
   if (bytes.length === 0) return "";
-  const mime =
-    bytes[0] === 0xff && bytes[1] === 0xd8
-      ? "image/jpeg"
-      : "image/png";
+  const mime = bytes[0] === 0xff && bytes[1] === 0xd8 ? "image/jpeg" : "image/png";
   let binary = "";
   for (let i = 0; i < bytes.length; i++) {
     binary += String.fromCharCode(bytes[i]);

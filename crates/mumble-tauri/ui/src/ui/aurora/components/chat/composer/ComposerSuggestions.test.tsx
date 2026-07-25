@@ -12,21 +12,28 @@ describe("composer suggestion popups", () => {
   });
 
   it("labels every mention kind and marks the active row", () => {
-    render(<MentionSuggestions
-      candidates={[
-        { kind: "user", session: 7, name: "Morgan" },
-        { kind: "role", name: "moderators" },
-        { kind: "everyone" },
-        { kind: "here" },
-      ]}
-      activeIndex={2}
-      onPick={vi.fn()}
-    />);
+    render(
+      <MentionSuggestions
+        candidates={[
+          { kind: "user", session: 7, name: "Morgan" },
+          { kind: "role", name: "moderators" },
+          { kind: "everyone" },
+          { kind: "here" },
+        ]}
+        activeIndex={2}
+        onPick={vi.fn()}
+      />,
+    );
     expect(screen.getByText("Morgan")).toBeTruthy();
     expect(screen.getByText("@moderators")).toBeTruthy();
     expect(screen.getByText("@here")).toBeTruthy();
     const options = screen.getAllByRole("option");
-    expect(options.map((option) => option.getAttribute("aria-selected"))).toEqual(["false", "false", "true", "false"]);
+    expect(options.map((option) => option.getAttribute("aria-selected"))).toEqual([
+      "false",
+      "false",
+      "true",
+      "false",
+    ]);
   });
 
   it("picks a mention without stealing focus from the editor", () => {
@@ -41,14 +48,27 @@ describe("composer suggestion popups", () => {
   });
 
   it("shows a command's argument shape and owning plugin", () => {
-    render(<SlashSuggestions
-      entries={[{
-        pluginName: "fancy-poll",
-        command: { name: "poll", description: "Start a poll", options: [{ name: "question", required: true }, { name: "duration", required: false }] },
-      }] as never}
-      activeIndex={0}
-      onPick={vi.fn()}
-    />);
+    render(
+      <SlashSuggestions
+        entries={
+          [
+            {
+              pluginName: "fancy-poll",
+              command: {
+                name: "poll",
+                description: "Start a poll",
+                options: [
+                  { name: "question", required: true },
+                  { name: "duration", required: false },
+                ],
+              },
+            },
+          ] as never
+        }
+        activeIndex={0}
+        onPick={vi.fn()}
+      />,
+    );
     expect(screen.getByText("/poll <question> [duration]")).toBeTruthy();
     expect(screen.getByText("Start a poll")).toBeTruthy();
     expect(screen.getByText("fancy-poll")).toBeTruthy();

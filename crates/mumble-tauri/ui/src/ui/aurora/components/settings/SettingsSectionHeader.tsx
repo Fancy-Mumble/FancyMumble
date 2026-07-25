@@ -4,5 +4,10 @@ export interface SettingsSectionHeaderProps {
 }
 
 export default function SettingsSectionHeader({ title, description }: SettingsSectionHeaderProps) {
-  return <><h3>{title}</h3><p>{description}</p></>;
+  return (
+    <>
+      <h3>{title}</h3>
+      <p>{description}</p>
+    </>
+  );
 }

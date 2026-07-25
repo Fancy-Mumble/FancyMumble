@@ -1,4 +1,14 @@
-import { ArrowUpRightIcon, CheckboxIcon, CopyIcon, EditIcon, EmojiPlusIcon, PinIcon, PlayIcon, QuoteIcon, TrashIcon } from "../../../icons";
+import {
+  ArrowUpRightIcon,
+  CheckboxIcon,
+  CopyIcon,
+  EditIcon,
+  EmojiPlusIcon,
+  PinIcon,
+  PlayIcon,
+  QuoteIcon,
+  TrashIcon,
+} from "../../../icons";
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -12,13 +22,12 @@ import styles from "./MessageContextMenu.module.css";
 
 // -- Overflow-aware position computation --------------------------
 
-interface MenuPosition { top: number; left: number }
+interface MenuPosition {
+  top: number;
+  left: number;
+}
 
-function computePosition(
-  clickX: number,
-  clickY: number,
-  menuEl: HTMLElement,
-): MenuPosition {
+function computePosition(clickX: number, clickY: number, menuEl: HTMLElement): MenuPosition {
   const { innerWidth: vw, innerHeight: vh } = window;
   const { width: w, height: h } = menuEl.getBoundingClientRect();
   const margin = 4;
@@ -91,10 +100,11 @@ export default function MessageContextMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<MenuPosition | null>(null);
   const { t } = useTranslation("chat");
-  const { canStart: canWatchTogether, busy: watchBusy, start: startWatch } = useWatchStart(
-    menu.message.body,
-    menu.message.channel_id,
-  );
+  const {
+    canStart: canWatchTogether,
+    busy: watchBusy,
+    start: startWatch,
+  } = useWatchStart(menu.message.body, menu.message.channel_id);
 
   useEffect(() => {
     if (menuRef.current) {
@@ -138,7 +148,8 @@ export default function MessageContextMenu({
   const users = useAppStore((s) => s.users);
   const ownHash = useMemo(() => users.find((u) => u.session === ownSession)?.hash, [users, ownSession]);
 
-  const isOwnWithId = menu.message.is_own && !!menu.message.message_id && channelId != null && !!allMessageIds;
+  const isOwnWithId =
+    menu.message.is_own && !!menu.message.message_id && channelId != null && !!allMessageIds;
 
   const readerEntries = useMemo(() => {
     const msgId = menu.message.message_id;
@@ -146,12 +157,24 @@ export default function MessageContextMenu({
     const readers = getReadersForMessage(channelId, msgId, allMessageIds);
     return readers
       .filter((r) => r.name && (!ownHash || r.cert_hash !== ownHash))
-      .map((r) => ({ certHash: r.cert_hash, name: r.name, isOnline: r.is_online, avatarUrl: avatarByHash?.get(r.cert_hash) }));
+      .map((r) => ({
+        certHash: r.cert_hash,
+        name: r.name,
+        isOnline: r.is_online,
+        avatarUrl: avatarByHash?.get(r.cert_hash),
+      }));
   }, [menu.message, channelId, allMessageIds, avatarByHash, ownHash, readReceiptVersion]);
 
   return createPortal(
     <>
-      <div className={styles.overlay} onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
+      <div
+        className={styles.overlay}
+        onClick={onClose}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onClose();
+        }}
+      />
       <div
         ref={menuRef}
         className={styles.menu}
@@ -166,7 +189,10 @@ export default function MessageContextMenu({
                 type="button"
                 className={styles.reactionBtn}
                 aria-label={t(`quickReactions.${r.key}`)}
-                onClick={() => { onReaction(menu.message, r.emoji); onClose(); }}
+                onClick={() => {
+                  onReaction(menu.message, r.emoji);
+                  onClose();
+                }}
               >
                 {r.emoji}
               </button>
@@ -176,7 +202,10 @@ export default function MessageContextMenu({
                 type="button"
                 className={styles.reactionBtn}
                 aria-label={t("contextMenu.moreReactions")}
-                onClick={(e) => { onMoreReactions(menu.message, e); onClose(); }}
+                onClick={(e) => {
+                  onMoreReactions(menu.message, e);
+                  onClose();
+                }}
               >
                 <EmojiPlusIcon width={16} height={16} />
               </button>
@@ -185,7 +214,14 @@ export default function MessageContextMenu({
         )}
         {onReaction && <div className={styles.divider} />}
         {onCite && (
-          <button type="button" className={styles.menuItem} onClick={() => { onCite(menu.message); onClose(); }}>
+          <button
+            type="button"
+            className={styles.menuItem}
+            onClick={() => {
+              onCite(menu.message);
+              onClose();
+            }}
+          >
             <span className={styles.menuIcon}>
               <QuoteIcon width={14} height={14} />
             </span>
@@ -197,7 +233,10 @@ export default function MessageContextMenu({
             type="button"
             className={styles.menuItem}
             disabled={watchBusy}
-            onClick={() => { void startWatch(); onClose(); }}
+            onClick={() => {
+              void startWatch();
+              onClose();
+            }}
           >
             <span className={styles.menuIcon}>
               <PlayIcon width={14} height={14} />
@@ -206,7 +245,14 @@ export default function MessageContextMenu({
           </button>
         )}
         {onCopyText && (
-          <button type="button" className={styles.menuItem} onClick={() => { onCopyText(menu.message); onClose(); }}>
+          <button
+            type="button"
+            className={styles.menuItem}
+            onClick={() => {
+              onCopyText(menu.message);
+              onClose();
+            }}
+          >
             <span className={styles.menuIcon}>
               <CopyIcon width={14} height={14} />
             </span>
@@ -214,7 +260,14 @@ export default function MessageContextMenu({
           </button>
         )}
         {onEdit && menu.message.is_own && menu.message.message_id && (
-          <button type="button" className={styles.menuItem} onClick={() => { onEdit(menu.message); onClose(); }}>
+          <button
+            type="button"
+            className={styles.menuItem}
+            onClick={() => {
+              onEdit(menu.message);
+              onClose();
+            }}
+          >
             <span className={styles.menuIcon}>
               <EditIcon width={14} height={14} />
             </span>
@@ -222,13 +275,29 @@ export default function MessageContextMenu({
           </button>
         )}
         {onPin && menu.message.message_id && (
-          <button type="button" className={styles.menuItem} onClick={() => { onPin(menu.message); onClose(); }}>
-            <span className={styles.menuIcon}><PinIcon width={14} height={14} /></span>
+          <button
+            type="button"
+            className={styles.menuItem}
+            onClick={() => {
+              onPin(menu.message);
+              onClose();
+            }}
+          >
+            <span className={styles.menuIcon}>
+              <PinIcon width={14} height={14} />
+            </span>
             {menu.message.pinned ? t("contextMenu.unpin") : t("contextMenu.pin")}
           </button>
         )}
         {onPopOutImage && popOutImageSrc && (
-          <button type="button" className={styles.menuItem} onClick={() => { onPopOutImage(menu.message, popOutImageSrc); onClose(); }}>
+          <button
+            type="button"
+            className={styles.menuItem}
+            onClick={() => {
+              onPopOutImage(menu.message, popOutImageSrc);
+              onClose();
+            }}
+          >
             <span className={styles.menuIcon}>
               <ArrowUpRightIcon width={14} height={14} />
             </span>
@@ -236,7 +305,11 @@ export default function MessageContextMenu({
           </button>
         )}
         {canDelete && (
-          <button type="button" className={`${styles.menuItem} ${styles.menuItemDanger}`} onClick={handleDelete}>
+          <button
+            type="button"
+            className={`${styles.menuItem} ${styles.menuItemDanger}`}
+            onClick={handleDelete}
+          >
             <span className={styles.menuIcon}>
               <TrashIcon width={14} height={14} />
             </span>
@@ -269,9 +342,7 @@ export default function MessageContextMenu({
                     {entry.avatarUrl ? (
                       <img src={entry.avatarUrl} alt="" className={styles.reactorAvatar} />
                     ) : (
-                      <div className={styles.reactorAvatarFallback}>
-                        {entry.name.charAt(0).toUpperCase()}
-                      </div>
+                      <div className={styles.reactorAvatarFallback}>{entry.name.charAt(0).toUpperCase()}</div>
                     )}
                     <span className={styles.reactorName}>{entry.name}</span>
                   </div>
@@ -289,13 +360,14 @@ export default function MessageContextMenu({
             {readerEntries.length > 0 ? (
               <div className={styles.reactorSection}>
                 {readerEntries.map((entry) => (
-                  <div key={entry.certHash} className={`${styles.reactorItem} ${entry.isOnline ? "" : styles.offlineReader}`}>
+                  <div
+                    key={entry.certHash}
+                    className={`${styles.reactorItem} ${entry.isOnline ? "" : styles.offlineReader}`}
+                  >
                     {entry.avatarUrl ? (
                       <img src={entry.avatarUrl} alt="" className={styles.reactorAvatar} />
                     ) : (
-                      <div className={styles.reactorAvatarFallback}>
-                        {entry.name.charAt(0).toUpperCase()}
-                      </div>
+                      <div className={styles.reactorAvatarFallback}>{entry.name.charAt(0).toUpperCase()}</div>
                     )}
                     <span className={styles.reactorName}>{entry.name}</span>
                   </div>

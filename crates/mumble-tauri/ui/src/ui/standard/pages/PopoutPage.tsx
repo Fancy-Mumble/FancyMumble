@@ -68,12 +68,16 @@ export default function PopoutPage() {
       mediaReady={imageLoaded}
       mediaLabel={t("pages.popout.mediaLabel")}
       error={error}
-      infoBar={payload ? {
-        name: payload.sender_name,
-        avatar: payload.sender_avatar,
-        caption: payload.caption,
-        timestamp: payload.timestamp_ms,
-      } : null}
+      infoBar={
+        payload
+          ? {
+              name: payload.sender_name,
+              avatar: payload.sender_avatar,
+              caption: payload.caption,
+              timestamp: payload.timestamp_ms,
+            }
+          : null
+      }
     >
       {payload && (
         <img

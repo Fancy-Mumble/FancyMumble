@@ -48,9 +48,7 @@ function ModelEmbed({ attrs }: { attrs: LiveDocEmbedAttrs }) {
     void (async () => {
       try {
         const config = useAppStore.getState().fileServerConfig;
-        const credential = config?.sessionJwt
-          ? { kind: "session", value: config.sessionJwt }
-          : undefined;
+        const credential = config?.sessionJwt ? { kind: "session", value: config.sessionJwt } : undefined;
         // Allow any model the server itself would accept (its advertised
         // upload limit); only fall back to a fixed cap when it advertised none.
         const maxBytes =
@@ -83,7 +81,9 @@ function ModelEmbed({ attrs }: { attrs: LiveDocEmbedAttrs }) {
   if (!src) {
     return (
       <div className="ld-embed-card ld-embed-model">
-        <span className="ld-embed-icon" aria-hidden="true">◰</span>
+        <span className="ld-embed-icon" aria-hidden="true">
+          ◰
+        </span>
         <span className="ld-embed-meta">
           <span className="ld-embed-title">{name}</span>
         </span>
@@ -96,7 +96,9 @@ function ModelEmbed({ attrs }: { attrs: LiveDocEmbedAttrs }) {
   return (
     <div className="ld-embed-model-viewer">
       <div className="ld-embed-model-bar">
-        <span className="ld-embed-icon" aria-hidden="true">◰</span>
+        <span className="ld-embed-icon" aria-hidden="true">
+          ◰
+        </span>
         <span className="ld-embed-title">{name}</span>
       </div>
       {status === "ready" && objectUrl ? (
@@ -174,15 +176,28 @@ function SignatureCard({ attrs, editor }: { attrs: LiveDocEmbedAttrs; editor: No
 
   return (
     <div className={`ld-sig-digital ld-sig-status-${status}`}>
-      <span className="ld-sig-digital-seal" aria-hidden="true">{seal}</span>
+      <span className="ld-sig-digital-seal" aria-hidden="true">
+        {seal}
+      </span>
       <span className="ld-sig-digital-body">
         <span className="ld-sig-digital-name">
-          {t("liveDoc.insert.signedBy", { defaultValue: "Digitally signed by {{name}}", name: attrs.name || "Unknown" })}
+          {t("liveDoc.insert.signedBy", {
+            defaultValue: "Digitally signed by {{name}}",
+            name: attrs.name || "Unknown",
+          })}
         </span>
-        <span className="ld-sig-digital-meta">{t("liveDoc.insert.sigKey", { defaultValue: "Key" })} {attrs.fingerprint || "-"}</span>
-        {when && <span className="ld-sig-digital-meta">{t("liveDoc.insert.sigSigned", { defaultValue: "Signed" })} {when}</span>}
+        <span className="ld-sig-digital-meta">
+          {t("liveDoc.insert.sigKey", { defaultValue: "Key" })} {attrs.fingerprint || "-"}
+        </span>
+        {when && (
+          <span className="ld-sig-digital-meta">
+            {t("liveDoc.insert.sigSigned", { defaultValue: "Signed" })} {when}
+          </span>
+        )}
       </span>
-      <span className="ld-sig-digital-badge" title={attrs.algorithm || ""}>{badge}</span>
+      <span className="ld-sig-digital-badge" title={attrs.algorithm || ""}>
+        {badge}
+      </span>
     </div>
   );
 }
@@ -209,11 +224,19 @@ function EmbedBody({ attrs, editor }: { attrs: LiveDocEmbedAttrs; editor: NodeVi
     case "object":
       return (
         <div className="ld-embed-card ld-embed-object">
-          <span className="ld-embed-icon" aria-hidden="true">🗎</span>
+          <span className="ld-embed-icon" aria-hidden="true">
+            🗎
+          </span>
           <span className="ld-embed-meta">
             <span className="ld-embed-title">{attrs.fileName || attrs.title || "Object"}</span>
             {attrs.src && (
-              <a className="ld-embed-link" href={attrs.src} download={attrs.fileName || ""} target="_blank" rel="noopener noreferrer">
+              <a
+                className="ld-embed-link"
+                href={attrs.src}
+                download={attrs.fileName || ""}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 Open
               </a>
             )}
@@ -236,7 +259,9 @@ function EmbedBody({ attrs, editor }: { attrs: LiveDocEmbedAttrs; editor: NodeVi
     default: // signatureLine
       return (
         <div className="ld-sig-line">
-          <span className="ld-sig-x" aria-hidden="true">✕</span>
+          <span className="ld-sig-x" aria-hidden="true">
+            ✕
+          </span>
           <span className="ld-sig-rule" />
           <span className="ld-sig-caption">{attrs.name || attrs.title || "Signature"}</span>
         </div>
@@ -247,7 +272,11 @@ function EmbedBody({ attrs, editor }: { attrs: LiveDocEmbedAttrs; editor: NodeVi
 export default function LiveDocEmbedView({ node, editor }: NodeViewProps) {
   const attrs = node.attrs as LiveDocEmbedAttrs;
   return (
-    <NodeViewWrapper className={`ld-embed ld-embed-${attrs.kind}`} contentEditable={false} data-livedoc-embed={attrs.kind}>
+    <NodeViewWrapper
+      className={`ld-embed ld-embed-${attrs.kind}`}
+      contentEditable={false}
+      data-livedoc-embed={attrs.kind}
+    >
       <EmbedBody attrs={attrs} editor={editor} />
     </NodeViewWrapper>
   );

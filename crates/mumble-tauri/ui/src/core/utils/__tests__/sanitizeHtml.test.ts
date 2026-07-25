@@ -13,10 +13,7 @@ import { sanitizeHtml } from "../sanitizeHtml";
 
 /** Parse the output into a temporary DOM so we can query it. */
 function parse(html: string): Document {
-  return new DOMParser().parseFromString(
-    `<body>${sanitizeHtml(html)}</body>`,
-    "text/html",
-  );
+  return new DOMParser().parseFromString(`<body>${sanitizeHtml(html)}</body>`, "text/html");
 }
 
 /** Shorthand: sanitize and check the result contains no trace of `needle`. */
@@ -86,15 +83,15 @@ describe("script injection", () => {
   });
 
   it("strips nested scripts", () => {
-    expectStripped('<div><script>document.cookie</script></div>', "document.cookie");
+    expectStripped("<div><script>document.cookie</script></div>", "document.cookie");
   });
 
   it("strips <script> with unusual casing", () => {
-    expectStripped('<ScRiPt>alert(1)</sCrIpT>', "alert");
+    expectStripped("<ScRiPt>alert(1)</sCrIpT>", "alert");
   });
 
   it("strips <script> with extra whitespace", () => {
-    expectStripped('<script  \n >alert(1)</script >', "alert");
+    expectStripped("<script  \n >alert(1)</script >", "alert");
   });
 
   it("strips scripts hidden inside other tags", () => {
@@ -189,14 +186,11 @@ describe("dangerous tags", () => {
   });
 
   it("strips <svg> (potential XSS vector)", () => {
-    expectStripped(
-      '<svg onload="alert(1)"><circle r="40"></circle></svg>',
-      "<svg",
-    );
+    expectStripped('<svg onload="alert(1)"><circle r="40"></circle></svg>', "<svg");
   });
 
   it("strips <math> (potential XSS vector)", () => {
-    expectStripped("<math><maction actiontype=\"statusline\">xss</maction></math>", "<math");
+    expectStripped('<math><maction actiontype="statusline">xss</maction></math>', "<math");
   });
 
   it("strips <video> and <audio> tags", () => {
@@ -299,8 +293,8 @@ describe("anchor href attacks", () => {
   it("handles multiple anchors with mixed hrefs", () => {
     const out = sanitizeHtml(
       '<a href="https://good.com">good</a> ' +
-      '<a href="javascript:alert(1)">bad</a> ' +
-      '<a href="https://also-good.com">also good</a>',
+        '<a href="javascript:alert(1)">bad</a> ' +
+        '<a href="https://also-good.com">also good</a>',
     );
     const doc = new DOMParser().parseFromString(`<body>${out}</body>`, "text/html");
     const anchors = doc.querySelectorAll("a");
@@ -491,7 +485,7 @@ describe("encoding and obfuscation attacks", () => {
   });
 
   it("handles null byte injection attempts", () => {
-    const out = sanitizeHtml('<scr\0ipt>alert(1)</scr\0ipt>');
+    const out = sanitizeHtml("<scr\0ipt>alert(1)</scr\0ipt>");
     // The broken tag is stripped; the inner text may survive as plain
     // text which is safe (not executable). The key assertion is that
     // no <script> element is produced.
@@ -505,7 +499,7 @@ describe("encoding and obfuscation attacks", () => {
   });
 
   it("handles backtick in event handler (IE quirk)", () => {
-    const out = sanitizeHtml('<div onclick=`alert(1)`>test</div>');
+    const out = sanitizeHtml("<div onclick=`alert(1)`>test</div>");
     expect(out).not.toContain("onclick");
     expect(out).not.toContain("alert");
   });
@@ -585,7 +579,7 @@ describe("nested and chained attacks", () => {
   it("handles style tag trying to restyle the page", () => {
     const out = sanitizeHtml(
       "<style>* { visibility: hidden } .evil { visibility: visible; position: fixed; top: 0 }</style>" +
-      '<div class="evil">Phishing content</div>',
+        '<div class="evil">Phishing content</div>',
     );
     expect(out).not.toContain("<style");
     expect(out).not.toContain("visibility");

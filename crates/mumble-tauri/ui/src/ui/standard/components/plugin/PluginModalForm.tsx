@@ -6,17 +6,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import {
-  dismissPluginModal,
-  sendPluginInteraction,
-  useAppStore,
-} from "@core/store";
+import { dismissPluginModal, sendPluginInteraction, useAppStore } from "@core/store";
 import { useAclGroups } from "../../hooks/useAclGroups";
 import { CloseIcon } from "../../icons";
-import type {
-  Component,
-  ModalFieldValue,
-} from "@core/plugins/tier1/types";
+import type { Component, ModalFieldValue } from "@core/plugins/tier1/types";
 import type { PluginModalState } from "@core/plugins/tier1/store";
 import { RenderComponent } from "./PluginComponentRenderer";
 import styles from "./PluginInteractionLayer.module.css";
@@ -25,11 +18,7 @@ type FieldMap = Record<string, ModalFieldValue>;
 
 /** Top-level modal renderer.  Walks the component tree once to compute
  *  initial field values, then renders the form rows. */
-export default function PluginModalForm({
-  modal,
-}: {
-  readonly modal: PluginModalState;
-}) {
+export default function PluginModalForm({ modal }: { readonly modal: PluginModalState }) {
   const { t } = useTranslation(["common", "settings"]);
   const [fields, setFields] = useState<FieldMap>(() => initialFields(modal));
   useEffect(() => {
@@ -37,8 +26,7 @@ export default function PluginModalForm({
   }, [modal]);
 
   const setField = useCallback(
-    (customId: string, value: ModalFieldValue) =>
-      setFields((prev) => ({ ...prev, [customId]: value })),
+    (customId: string, value: ModalFieldValue) => setFields((prev) => ({ ...prev, [customId]: value })),
     [],
   );
 
@@ -100,11 +88,7 @@ export default function PluginModalForm({
           >
             {t("common:actions.cancel")}
           </button>
-          <button
-            type="button"
-            className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={onSubmit}
-          >
+          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={onSubmit}>
             Submit
           </button>
         </div>
@@ -142,10 +126,7 @@ function collectInitial(component: Component, out: FieldMap): void {
       };
       return;
     case "radio-group": {
-      const initial =
-        component.options.find((o) => o.default)?.value ??
-        component.options[0]?.value ??
-        "";
+      const initial = component.options.find((o) => o.default)?.value ?? component.options[0]?.value ?? "";
       out[component.custom_id] = { kind: "string", value: initial };
       return;
     }
@@ -221,9 +202,7 @@ function legacyValuesFrom(fields: FieldMap): Record<string, string> {
         out[id] = value.values.map(String).join(",");
         break;
       case "mentionables":
-        out[id] = value.values
-          .map((m) => (m.kind === "user" ? `user:${m.id}` : `role:${m.name}`))
-          .join(",");
+        out[id] = value.values.map((m) => (m.kind === "user" ? `user:${m.id}` : `role:${m.name}`)).join(",");
         break;
     }
   }
@@ -245,91 +224,32 @@ interface NodeProps {
 function ModalNode({ component, fields, setField, channelId, pluginName }: NodeProps) {
   switch (component.type) {
     case "text-input":
-      return (
-        <ModalTextInput
-          component={component}
-          fields={fields}
-          setField={setField}
-        />
-      );
+      return <ModalTextInput component={component} fields={fields} setField={setField} />;
     case "checkbox":
-      return (
-        <ModalCheckbox component={component} fields={fields} setField={setField} />
-      );
+      return <ModalCheckbox component={component} fields={fields} setField={setField} />;
     case "checkbox-group":
-      return (
-        <ModalCheckboxGroup
-          component={component}
-          fields={fields}
-          setField={setField}
-        />
-      );
+      return <ModalCheckboxGroup component={component} fields={fields} setField={setField} />;
     case "radio-group":
-      return (
-        <ModalRadioGroup
-          component={component}
-          fields={fields}
-          setField={setField}
-        />
-      );
+      return <ModalRadioGroup component={component} fields={fields} setField={setField} />;
     case "file-upload":
       return (
-        <ModalFileUpload
-          component={component}
-          fields={fields}
-          setField={setField}
-          channelId={channelId}
-        />
+        <ModalFileUpload component={component} fields={fields} setField={setField} channelId={channelId} />
       );
     case "user-select":
-      return (
-        <ModalUserSelect
-          component={component}
-          fields={fields}
-          setField={setField}
-        />
-      );
+      return <ModalUserSelect component={component} fields={fields} setField={setField} />;
     case "channel-select":
-      return (
-        <ModalChannelSelect
-          component={component}
-          fields={fields}
-          setField={setField}
-        />
-      );
+      return <ModalChannelSelect component={component} fields={fields} setField={setField} />;
     case "role-select":
-      return (
-        <ModalRoleSelect
-          component={component}
-          fields={fields}
-          setField={setField}
-        />
-      );
+      return <ModalRoleSelect component={component} fields={fields} setField={setField} />;
     case "mentionable-select":
-      return (
-        <ModalMentionableSelect
-          component={component}
-          fields={fields}
-          setField={setField}
-        />
-      );
+      return <ModalMentionableSelect component={component} fields={fields} setField={setField} />;
     case "string-select":
-      return (
-        <ModalStringSelect
-          component={component}
-          fields={fields}
-          setField={setField}
-        />
-      );
+      return <ModalStringSelect component={component} fields={fields} setField={setField} />;
     case "label":
       return (
         <div className={styles.label}>
           <span className={styles.labelTitle}>{component.label}</span>
-          {component.description && (
-            <span className={styles.labelDescription}>
-              {component.description}
-            </span>
-          )}
+          {component.description && <span className={styles.labelDescription}>{component.description}</span>}
           <ModalNode
             component={component.component}
             fields={fields}
@@ -369,10 +289,7 @@ function ModalNode({ component, fields, setField, channelId, pluginName }: NodeP
               />
             ))}
           </div>
-          <RenderComponent
-            component={component.accessory}
-            ctx={{ pluginName, channelId }}
-          />
+          <RenderComponent component={component.accessory} ctx={{ pluginName, channelId }} />
         </div>
       );
     case "button":
@@ -381,12 +298,7 @@ function ModalNode({ component, fields, setField, channelId, pluginName }: NodeP
     case "media-gallery":
     case "file":
     case "separator":
-      return (
-        <RenderComponent
-          component={component}
-          ctx={{ pluginName, channelId }}
-        />
-      );
+      return <RenderComponent component={component} ctx={{ pluginName, channelId }} />;
   }
 }
 
@@ -430,13 +342,10 @@ function ModalTextInput({
   readonly setField: (id: string, value: ModalFieldValue) => void;
 }) {
   const value = getString(fields, component.custom_id);
-  const max =
-    component.max_length && component.max_length > 0 ? component.max_length : undefined;
-  const min =
-    component.min_length && component.min_length > 0 ? component.min_length : undefined;
+  const max = component.max_length && component.max_length > 0 ? component.max_length : undefined;
+  const min = component.min_length && component.min_length > 0 ? component.min_length : undefined;
   const required = component.required !== false;
-  const onChange = (next: string) =>
-    setField(component.custom_id, { kind: "string", value: next });
+  const onChange = (next: string) => setField(component.custom_id, { kind: "string", value: next });
   return (
     <label className={styles.field}>
       <span className={styles.fieldLabel}>
@@ -484,9 +393,7 @@ function ModalCheckbox({
       <input
         type="checkbox"
         checked={checked}
-        onChange={(e) =>
-          setField(component.custom_id, { kind: "bool", value: e.target.checked })
-        }
+        onChange={(e) => setField(component.custom_id, { kind: "bool", value: e.target.checked })}
       />
       <span>{component.label ?? component.custom_id}</span>
     </label>
@@ -523,9 +430,7 @@ function ModalCheckboxGroup({
           />
           <span>
             {o.label}
-            {o.description && (
-              <span className={styles.choiceDescription}>{o.description}</span>
-            )}
+            {o.description && <span className={styles.choiceDescription}>{o.description}</span>}
           </span>
         </label>
       ))}
@@ -552,15 +457,11 @@ function ModalRadioGroup({
             name={component.custom_id}
             value={o.value}
             checked={selected === o.value}
-            onChange={() =>
-              setField(component.custom_id, { kind: "string", value: o.value })
-            }
+            onChange={() => setField(component.custom_id, { kind: "string", value: o.value })}
           />
           <span>
             {o.label}
-            {o.description && (
-              <span className={styles.choiceDescription}>{o.description}</span>
-            )}
+            {o.description && <span className={styles.choiceDescription}>{o.description}</span>}
           </span>
         </label>
       ))}
@@ -606,11 +507,7 @@ function ModalFileUpload({
   };
   return (
     <div className={styles.fileUpload}>
-      <button
-        type="button"
-        className={`${styles.btn} ${styles.btnSecondary}`}
-        onClick={() => void pick()}
-      >
+      <button type="button" className={`${styles.btn} ${styles.btnSecondary}`} onClick={() => void pick()}>
         {multi ? t("pluginModalForm.addFiles") : t("pluginModalForm.chooseFile")}
       </button>
       {ids.length > 0 && (
@@ -719,9 +616,7 @@ function ModalRoleSelect({
       disabled={component.disabled}
       value={multi ? Array.from(selected) : (Array.from(selected)[0] ?? "")}
       onChange={(e) => {
-        const sel = multi
-          ? Array.from(e.target.selectedOptions, (o) => o.value)
-          : [e.target.value];
+        const sel = multi ? Array.from(e.target.selectedOptions, (o) => o.value) : [e.target.value];
         setField(component.custom_id, { kind: "roles", values: sel });
       }}
     >
@@ -764,9 +659,7 @@ function ModalMentionableSelect({
       disabled={component.disabled}
       value={multi ? Array.from(selectedKeys) : (Array.from(selectedKeys)[0] ?? "")}
       onChange={(e) => {
-        const keys = multi
-          ? Array.from(e.target.selectedOptions, (o) => o.value)
-          : [e.target.value];
+        const keys = multi ? Array.from(e.target.selectedOptions, (o) => o.value) : [e.target.value];
         const decoded = keys
           .map((k): { kind: "user"; id: number } | { kind: "role"; name: string } | null => {
             if (k.startsWith("user:")) return { kind: "user", id: Number(k.slice(5)) };
@@ -818,9 +711,7 @@ function ModalStringSelect({
       disabled={component.disabled}
       value={multi ? Array.from(selected) : (Array.from(selected)[0] ?? "")}
       onChange={(e) => {
-        const sel = multi
-          ? Array.from(e.target.selectedOptions, (o) => o.value)
-          : [e.target.value];
+        const sel = multi ? Array.from(e.target.selectedOptions, (o) => o.value) : [e.target.value];
         setField(component.custom_id, { kind: "strings", values: sel });
       }}
     >

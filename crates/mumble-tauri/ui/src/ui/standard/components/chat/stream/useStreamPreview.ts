@@ -16,10 +16,7 @@ const SIGNAL_SDP_OFFER = 2;
 const SIGNAL_ICE_CANDIDATE = 4;
 
 const RTC_CONFIG: RTCConfiguration = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-  ],
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }],
 };
 
 const THUMBNAIL_TTL = 60_000;
@@ -69,9 +66,7 @@ export function closePreview(): void {
 function flushPreviewIce(): void {
   if (!previewPc) return;
   for (const c of previewPendingIce) {
-    previewPc.addIceCandidate(c).catch((e) =>
-      console.error("[sfu-preview] addIceCandidate error:", e),
-    );
+    previewPc.addIceCandidate(c).catch((e) => console.error("[sfu-preview] addIceCandidate error:", e));
   }
   previewPendingIce = [];
 }
@@ -116,17 +111,21 @@ function captureFrame(track: MediaStreamTrack): Promise<string | null> {
       }
     };
 
-    video.play().then(() => {
-      if ("requestVideoFrameCallback" in video) {
-        (video as HTMLVideoElement & { requestVideoFrameCallback: (cb: () => void) => void })
-          .requestVideoFrameCallback(grabFrame);
-      } else {
-        setTimeout(grabFrame, 500);
-      }
-    }).catch(() => {
-      cleanup();
-      resolve(null);
-    });
+    video
+      .play()
+      .then(() => {
+        if ("requestVideoFrameCallback" in video) {
+          (
+            video as HTMLVideoElement & { requestVideoFrameCallback: (cb: () => void) => void }
+          ).requestVideoFrameCallback(grabFrame);
+        } else {
+          setTimeout(grabFrame, 500);
+        }
+      })
+      .catch(() => {
+        cleanup();
+        resolve(null);
+      });
   });
 }
 

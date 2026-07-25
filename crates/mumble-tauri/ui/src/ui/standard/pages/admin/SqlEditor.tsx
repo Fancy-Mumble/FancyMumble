@@ -32,12 +32,7 @@ export function SqlEditor({ value, onChange, placeholder }: SqlEditorProps) {
 
   return (
     <div className={styles.sqlWrap}>
-      <HighlightBackdrop
-        ref={backdropRef}
-        value={value}
-        language="sql"
-        variantClass={styles.sqlBackdrop}
-      />
+      <HighlightBackdrop ref={backdropRef} value={value} language="sql" variantClass={styles.sqlBackdrop} />
       <textarea
         ref={taRef}
         className={styles.sqlEditor}

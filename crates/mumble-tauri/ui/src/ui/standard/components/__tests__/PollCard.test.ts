@@ -160,7 +160,7 @@ describe("PollPayload", () => {
   it("channelId defaults to 0 via nullish coalescing", () => {
     // Simulate receiving a poll without channelId (backward compat).
     const payload = JSON.parse(
-      '{"type":"poll","id":"old","question":"Q?","options":["A","B"],"multiple":false,"creator":1,"creatorName":"X","createdAt":"2025-01-01T00:00:00Z"}'
+      '{"type":"poll","id":"old","question":"Q?","options":["A","B"],"multiple":false,"creator":1,"creatorName":"X","createdAt":"2025-01-01T00:00:00Z"}',
     );
     const channelId: number = payload.channelId ?? 0;
     expect(channelId).toBe(0);

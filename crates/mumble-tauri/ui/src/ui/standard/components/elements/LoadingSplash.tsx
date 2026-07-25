@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import styles from "./LoadingSplash.module.css";
 import enCommon from "@core/locales/en/common.json";
 
-export const __TEST_FUNNY_MESSAGES: readonly string[] = (enCommon as unknown as { loadingSplash: { messages: string[] } }).loadingSplash.messages;
+export const __TEST_FUNNY_MESSAGES: readonly string[] = (
+  enCommon as unknown as { loadingSplash: { messages: string[] } }
+).loadingSplash.messages;
 
 export interface LoadingSplashProps {
   /** Override the headline.  Defaults to the brand name. */

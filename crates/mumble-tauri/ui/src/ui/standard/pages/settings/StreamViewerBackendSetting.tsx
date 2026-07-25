@@ -71,8 +71,7 @@ export function StreamViewerBackendSetting() {
   const handleChange = (value: string) => {
     // The DOM hands back a raw string; the strategy layer's parser is the
     // one place that may turn it into an enum member.
-    const next: StreamViewerStrategyPreference =
-      parseStreamViewerStrategyId(value) ?? STRATEGY_AUTO;
+    const next: StreamViewerStrategyPreference = parseStreamViewerStrategyId(value) ?? STRATEGY_AUTO;
     setStreamViewerStrategyPreference(next);
     setPreference(next);
     setChanged(true);
@@ -82,11 +81,7 @@ export function StreamViewerBackendSetting() {
     <section className={styles.section}>
       <h3 className={styles.sectionTitle}>{t("advanced.streamBackend")}</h3>
       <p className={styles.fieldHint}>{t("advanced.streamBackendHint")}</p>
-      <select
-        className={styles.select}
-        value={preference}
-        onChange={(e) => handleChange(e.target.value)}
-      >
+      <select className={styles.select} value={preference} onChange={(e) => handleChange(e.target.value)}>
         {OPTIONS.map(({ value, labelKey }) => (
           <option key={value} value={value}>
             {t(labelKey)}
@@ -99,11 +94,7 @@ export function StreamViewerBackendSetting() {
             {t("advanced.streamBackendReloadHint")}
           </p>
           <div className={styles.confirmBtns}>
-            <button
-              type="button"
-              className={styles.ghostBtn}
-              onClick={() => window.location.reload()}
-            >
+            <button type="button" className={styles.ghostBtn} onClick={() => window.location.reload()}>
               {t("advanced.streamBackendReloadBtn")}
             </button>
           </div>

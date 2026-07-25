@@ -46,7 +46,11 @@ import {
 } from "@core/features/chat/poll/model";
 import type { WatchSession, WatchSyncPayload } from "../features/chat/watch/watchTypes";
 import { applyWatchSyncEvent } from "../features/chat/watch/watchStore";
-import { resetReactions, setServerCustomReactions, type ServerCustomReaction } from "../features/chat/reaction/reactionStore";
+import {
+  resetReactions,
+  setServerCustomReactions,
+  type ServerCustomReaction,
+} from "../features/chat/reaction/reactionStore";
 import {
   applyInteractionResponse,
   decodeInteractionResponse,
@@ -60,7 +64,13 @@ import { applyReadStates, clearReadReceipts } from "../features/chat/readreceipt
 import { useOnboardingStore } from "../features/onboarding/onboardingStore";
 import type { OnboardingConfigEvent, OnboardingResponseEvent } from "../types";
 import { offloadManager } from "../messageOffload";
-import { getSilencedChannels, getUserVolumes, getMutedPushChannels, getPreferences, updatePreferences } from "../preferencesStorage";
+import {
+  getSilencedChannels,
+  getUserVolumes,
+  getMutedPushChannels,
+  getPreferences,
+  updatePreferences,
+} from "../preferencesStorage";
 import { createDmSlice, dmInitialState, type DmSlice } from "./slices/dm";
 import { createVoiceSlice, voiceInitialState, type VoiceSlice } from "./slices/voice";
 import {
@@ -68,11 +78,7 @@ import {
   notificationsInitialState,
   type NotificationsSlice,
 } from "./slices/notifications";
-import {
-  createDownloadsSlice,
-  downloadsInitialState,
-  type DownloadsSlice,
-} from "./slices/downloads";
+import { createDownloadsSlice, downloadsInitialState, type DownloadsSlice } from "./slices/downloads";
 import { loadProfileData, loadServerProfileData } from "../features/settings/profileData";
 import { base64ToBytes } from "../utils/base64";
 import { serializeProfile, dataUrlToBytes } from "../profileFormat";
@@ -86,30 +92,16 @@ import {
   friendlyPluginName,
 } from "../constants/pluginData";
 import i18next from "i18next";
-import {
-  probeFileServerCapabilities,
-  rebaseFileServerUrl,
-} from "./fileServer";
+import { probeFileServerCapabilities, rebaseFileServerUrl } from "./fileServer";
 export {
   DEFAULT_FILE_SERVER_PORT,
   fileServerBaseUrl,
   probeFileServerCapabilities,
   rebaseFileServerUrl,
 } from "./fileServer";
-import type {
-  PluginRegistryEntry,
-  PluginRegistryEvent,
-} from "./plugins";
-import {
-  reconcilePluginRegistry,
-  sendPluginMessage,
-  sliceFromState,
-  slicePatch,
-} from "./plugins";
-export type {
-  PluginRegistryEntry,
-  PluginRegistryEvent,
-} from "./plugins";
+import type { PluginRegistryEntry, PluginRegistryEvent } from "./plugins";
+import { reconcilePluginRegistry, sendPluginMessage, sliceFromState, slicePatch } from "./plugins";
+export type { PluginRegistryEntry, PluginRegistryEvent } from "./plugins";
 export {
   allowPlugin,
   dismissPluginCard,
@@ -193,9 +185,12 @@ function clearAutoReconnectTimer(): void {
   useAppStore.setState({ reconnectScheduled: false, nextReconnectAt: null });
 }
 
-async function attemptAutoReconnect(
-  fallbackTarget: { host: string; port: number; username: string; certLabel: string | null },
-): Promise<void> {
+async function attemptAutoReconnect(fallbackTarget: {
+  host: string;
+  port: number;
+  username: string;
+  certLabel: string | null;
+}): Promise<void> {
   autoReconnectTimer = null;
   if (manualDisconnectRequested || !autoReconnectEnabled) {
     useAppStore.setState({ reconnectScheduled: false, nextReconnectAt: null });
@@ -227,18 +222,21 @@ async function attemptAutoReconnect(
   // the ServerConnected / server-disconnected event to drive the next step.
   const after = useAppStore.getState();
   if (
-    after.status === "disconnected"
-    && !after.passwordRequired
-    && !manualDisconnectRequested
-    && autoReconnectEnabled
+    after.status === "disconnected" &&
+    !after.passwordRequired &&
+    !manualDisconnectRequested &&
+    autoReconnectEnabled
   ) {
     scheduleAutoReconnect(target);
   }
 }
 
-function scheduleAutoReconnect(
-  fallbackTarget: { host: string; port: number; username: string; certLabel: string | null },
-): void {
+function scheduleAutoReconnect(fallbackTarget: {
+  host: string;
+  port: number;
+  username: string;
+  certLabel: string | null;
+}): void {
   clearAutoReconnectTimer();
   if (!autoReconnectEnabled || manualDisconnectRequested) return;
   const delay = reconnectDelayMs(useAppStore.getState().reconnectAttempts);
@@ -299,16 +297,14 @@ export interface LiveDocAnnounceInfo {
 }
 
 /** Composite map key for live-doc state, scoped to a server tab. */
-export function liveDocKey(
-  appServerId: import("../types").ServerId | null,
-  channelId: number,
-): string {
+export function liveDocKey(appServerId: import("../types").ServerId | null, channelId: number): string {
   return `${appServerId ?? ""}|${channelId}`;
 }
 
 // --- Store shape --------------------------------------------------
 
-export interface AppState extends PersistentChatSlice, DmSlice, VoiceSlice, NotificationsSlice, DownloadsSlice {
+export interface AppState
+  extends PersistentChatSlice, DmSlice, VoiceSlice, NotificationsSlice, DownloadsSlice {
   // Reactive state
   status: ConnectionStatus;
   channels: ChannelEntry[];
@@ -532,7 +528,14 @@ export interface AppState extends PersistentChatSlice, DmSlice, VoiceSlice, Noti
   nextReconnectAt: number | null;
 
   // Actions
-  connect: (host: string, port: number, username: string, certLabel?: string | null, password?: string | null, totp?: string | null) => Promise<void>;
+  connect: (
+    host: string,
+    port: number,
+    username: string,
+    certLabel?: string | null,
+    password?: string | null,
+    totp?: string | null,
+  ) => Promise<void>;
   disconnect: () => Promise<void>;
   selectChannel: (id: number) => Promise<void>;
   joinChannel: (id: number) => Promise<void>;
@@ -559,44 +562,51 @@ export interface AppState extends PersistentChatSlice, DmSlice, VoiceSlice, Noti
   editMessage: (channelId: number, messageId: string, newBody: string) => Promise<void>;
 
   // Channel management
-  createChannel: (parentId: number, name: string, opts?: {
-    description?: string;
-    position?: number;
-    temporary?: boolean;
-    maxUsers?: number;
-    pchatProtocol?: PchatProtocol;
-    pchatMaxHistory?: number;
-    pchatRetentionDays?: number;
-    password?: string;
-    hidden?: boolean;
-    expiryMode?: number;
-    expiryDurationSecs?: number;
-    /** Registered user_ids to invite (private meeting room). Create-only. */
-    invitees?: number[];
-    /** `ChannelAttribute` discriminants to set on the new channel. Generic on
-     *  purpose - any settable attribute travels here, no field per trait. */
-    attributes?: number[];
-  }) => Promise<void>;
-  updateChannel: (channelId: number, opts: {
-    parentId?: number;
-    name?: string;
-    description?: string;
-    position?: number;
-    temporary?: boolean;
-    maxUsers?: number;
-    pchatProtocol?: PchatProtocol;
-    pchatMaxHistory?: number;
-    pchatRetentionDays?: number;
-    password?: string;
-    hidden?: boolean;
-    expiryMode?: number;
-    expiryDurationSecs?: number;
-    /** `ChannelAttribute` discriminants to assign, paired with `attributeMask`. */
-    attributes?: number[];
-    /** Which attributes this update asserts: each is set when listed in
-     *  `attributes` and cleared otherwise. Omit to leave all of them alone. */
-    attributeMask?: number[];
-  }) => Promise<void>;
+  createChannel: (
+    parentId: number,
+    name: string,
+    opts?: {
+      description?: string;
+      position?: number;
+      temporary?: boolean;
+      maxUsers?: number;
+      pchatProtocol?: PchatProtocol;
+      pchatMaxHistory?: number;
+      pchatRetentionDays?: number;
+      password?: string;
+      hidden?: boolean;
+      expiryMode?: number;
+      expiryDurationSecs?: number;
+      /** Registered user_ids to invite (private meeting room). Create-only. */
+      invitees?: number[];
+      /** `ChannelAttribute` discriminants to set on the new channel. Generic on
+       *  purpose - any settable attribute travels here, no field per trait. */
+      attributes?: number[];
+    },
+  ) => Promise<void>;
+  updateChannel: (
+    channelId: number,
+    opts: {
+      parentId?: number;
+      name?: string;
+      description?: string;
+      position?: number;
+      temporary?: boolean;
+      maxUsers?: number;
+      pchatProtocol?: PchatProtocol;
+      pchatMaxHistory?: number;
+      pchatRetentionDays?: number;
+      password?: string;
+      hidden?: boolean;
+      expiryMode?: number;
+      expiryDurationSecs?: number;
+      /** `ChannelAttribute` discriminants to assign, paired with `attributeMask`. */
+      attributes?: number[];
+      /** Which attributes this update asserts: each is set when listed in
+       *  `attributes` and cleared otherwise. Omit to leave all of them alone. */
+      attributeMask?: number[];
+    },
+  ) => Promise<void>;
   deleteChannel: (channelId: number) => Promise<void>;
   moveChannelUsers: (fromChannelId: number, toChannelId: number) => Promise<void>;
 
@@ -657,9 +667,19 @@ export interface AppState extends PersistentChatSlice, DmSlice, VoiceSlice, Noti
     password?: string;
   }) => Promise<number>;
   /** Send a WebRTC screen-sharing signaling message via native proto. */
-  sendWebRtcSignal: (targetSession: number, signalType: number, payload: string, serverId?: string | null) => Promise<void>;
+  sendWebRtcSignal: (
+    targetSession: number,
+    signalType: number,
+    payload: string,
+    serverId?: string | null,
+  ) => Promise<void>;
   /** Send a reaction (add/remove) on a persistent chat message via native proto. */
-  sendReaction: (channelId: number, messageId: string, emoji: string, action: "add" | "remove") => Promise<void>;
+  sendReaction: (
+    channelId: number,
+    messageId: string,
+    emoji: string,
+    action: "add" | "remove",
+  ) => Promise<void>;
   /** Pin or unpin a message in a persistent channel. */
   pinMessage: (channelId: number, messageId: string, unpin: boolean) => Promise<void>;
   /** Mark all unseen pin notifications as seen for a channel. */
@@ -705,18 +725,12 @@ export interface AppState extends PersistentChatSlice, DmSlice, VoiceSlice, Noti
    *  Pass `appServerId` to target a specific server tab instead of the
    *  currently active one (essential when the panel session belongs to
    *  a tab that may not be the foreground tab at click time). */
-  closeActiveLiveDoc: (
-    channelId: number,
-    appServerId?: import("../types").ServerId | null,
-  ) => void;
+  closeActiveLiveDoc: (channelId: number, appServerId?: import("../types").ServerId | null) => void;
   /** Record a pending Live Doc announce so the chat banner can render. */
   setLiveDocAnnounce: (announce: LiveDocAnnounceInfo) => void;
   /** Dismiss a pending Live Doc announce for a channel.  Pass
    *  `appServerId` to target a specific server tab. */
-  clearLiveDocAnnounce: (
-    channelId: number,
-    appServerId?: import("../types").ServerId | null,
-  ) => void;
+  clearLiveDocAnnounce: (channelId: number, appServerId?: import("../types").ServerId | null) => void;
   /** Ask the server to open a Live Doc by slug.  Server validates and
    *  replies with a `fancy-live-doc/invite` PluginDataTransmission that
    *  the plugin-data dispatcher turns into an `openLiveDoc` call. */
@@ -959,8 +973,7 @@ export function bodyNeedsProgressUI(body: string): boolean {
 }
 
 export function newPendingId(): string {
-  return globalThis.crypto?.randomUUID?.()
-    ?? `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return globalThis.crypto?.randomUUID?.() ?? `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 /** Update the taskbar badge with the total unread count (channels + DMs). */
@@ -1016,8 +1029,16 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
         }
         const activeMeta = activeServerId ? sessions.find((s) => s.id === activeServerId) : undefined;
         const status = activeMeta?.status ?? prev.status;
-        const error = activeMeta?.status === "connected" ? null : (nextErrors[activeServerId ?? ""] ?? prev.error);
-        return { sessions, activeServerId, sessionUnreadTotals: next, sessionErrors: nextErrors, status, error };
+        const error =
+          activeMeta?.status === "connected" ? null : (nextErrors[activeServerId ?? ""] ?? prev.error);
+        return {
+          sessions,
+          activeServerId,
+          sessionUnreadTotals: next,
+          sessionErrors: nextErrors,
+          status,
+          error,
+        };
       });
     } catch (e) {
       console.error("refreshSessions error:", e);
@@ -1039,7 +1060,9 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
       // Sync global status/error from this session's own metadata so the
       // ChatPage overlay reflects the tab the user just switched to,
       // not whatever the previously-active tab's status was.
-      await get().refreshSessions().catch(() => {});
+      await get()
+        .refreshSessions()
+        .catch(() => {});
       const { sessions, sessionErrors } = get();
       const meta = sessions.find((s) => s.id === id);
       const sessionStatus = meta?.status ?? "disconnected";
@@ -1094,7 +1117,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     // bleed into another tab on the same channel id.
     set((prev) => {
       const prefix = `${id}|`;
-      const filter = <V,>(m: Map<string, V>): Map<string, V> => {
+      const filter = <V>(m: Map<string, V>): Map<string, V> => {
         let changed = false;
         const next = new Map(m);
         for (const k of m.keys()) {
@@ -1113,13 +1136,17 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     });
     // Refresh the sessions list and learn which session (if any) the
     // backend made active in place of the one we just closed.
-    await get().refreshSessions().catch(() => {});
+    await get()
+      .refreshSessions()
+      .catch(() => {});
     const { sessions: nextSessions, activeServerId: nextActive } = get();
     if (wasActive) {
       if (nextActive && nextSessions.some((s) => s.id === nextActive)) {
         // The backend rebound the active session to a remaining one.
         // Reflect its status / error / data in the global store.
-        await get().switchServer(nextActive).catch(() => {});
+        await get()
+          .switchServer(nextActive)
+          .catch(() => {});
       } else {
         // No sessions left - reset to the empty connect-page state.
         manualDisconnectRequested = true;
@@ -1160,7 +1187,9 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
       });
       // Sync activeServerId before rejection events arrive, so listener
       // routing works even if the new session id isn't known yet.
-      await get().refreshSessions().catch(() => {});
+      await get()
+        .refreshSessions()
+        .catch(() => {});
     } catch (e) {
       set({
         status: "disconnected",
@@ -1201,7 +1230,10 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     useOnboardingStore.getState().clear();
     set({ ...INITIAL });
     invoke("update_badge_count", { count: null }).catch(() => {});
-    useAppStore.getState().refreshSessions().catch(() => {});
+    useAppStore
+      .getState()
+      .refreshSessions()
+      .catch(() => {});
   },
 
   selectChannel: async (id) => {
@@ -1359,9 +1391,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
         const detail = e instanceof Error ? e.message : String(e);
         set((s) => ({
           pendingMessages: s.pendingMessages.map((p) =>
-            p.pendingId === pendingId
-              ? { ...p, state: "failed" as const, errorMessage: detail }
-              : p,
+            p.pendingId === pendingId ? { ...p, state: "failed" as const, errorMessage: detail } : p,
           ),
         }));
       }
@@ -1395,9 +1425,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
   markPendingFailed: (pendingId, errorMessage) => {
     set((s) => ({
       pendingMessages: s.pendingMessages.map((p) =>
-        p.pendingId === pendingId
-          ? { ...p, state: "failed" as const, errorMessage }
-          : p,
+        p.pendingId === pendingId ? { ...p, state: "failed" as const, errorMessage } : p,
       ),
     }));
   },
@@ -1455,7 +1483,12 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
           };
         }
       }
-      set({ channels, users, channelPersistence: nextPersistence, pushSubscribedChannels: new Set(pushSubscribed) });
+      set({
+        channels,
+        users,
+        channelPersistence: nextPersistence,
+        pushSubscribedChannels: new Set(pushSubscribed),
+      });
 
       // Clean up broadcastingSessions for users that are no longer connected.
       const currentSessions = new Set(users.map((u) => u.session));
@@ -1467,9 +1500,11 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
           // disconnected users without coupling shared state to a UI pack.
           const dropped = [...broadcastingSessions].filter((s) => !currentSessions.has(s));
           for (const senderSession of dropped) {
-            globalThis.dispatchEvent(new CustomEvent("drawing:clear-sender", {
-              detail: { senderSession },
-            }));
+            globalThis.dispatchEvent(
+              new CustomEvent("drawing:clear-sender", {
+                detail: { senderSession },
+              }),
+            );
           }
           set({ broadcastingSessions: pruned });
         }
@@ -1503,9 +1538,9 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     // `send_fancy_*` Tauri commands).
     const err = new Error(
       `PluginDataTransmission is forbidden in Fancy Mumble (dataId=${dataId}). ` +
-      `Use a typed protobuf message instead: see proto/Mumble.proto IDs 141-145 ` +
-      `and the send_fancy_* Tauri commands.  Add a new message (>= 146) if you ` +
-      `need a new payload.`,
+        `Use a typed protobuf message instead: see proto/Mumble.proto IDs 141-145 ` +
+        `and the send_fancy_* Tauri commands.  Add a new message (>= 146) if you ` +
+        `need a new payload.`,
     );
     console.error("sendPluginData is BRICKED:", err);
     throw err;
@@ -1669,7 +1704,13 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
   },
 
   dismissPasswordPrompt: () => {
-    set({ passwordRequired: false, passwordAttempted: false, totpRequired: false, pendingConnect: null, connectedCertLabel: null });
+    set({
+      passwordRequired: false,
+      passwordAttempted: false,
+      totpRequired: false,
+      pendingConnect: null,
+      connectedCertLabel: null,
+    });
   },
 
   // -- Plugin lifecycle -------------------------------------------
@@ -1819,19 +1860,26 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     const activeServerId = get().activeServerId;
     if (get().activeLiveDocs.has(liveDocKey(activeServerId, channelId))) {
       console.log("[store] requestOpenLiveDoc: channel already has active doc; skipping wait");
-      await sendPluginMessage("fancy-live-doc", "OpenRequest", { channelId, slug: sanitised, title: trimmedTitle, mode });
+      await sendPluginMessage("fancy-live-doc", "OpenRequest", {
+        channelId,
+        slug: sanitised,
+        title: trimmedTitle,
+        mode,
+      });
       return;
     }
     const waitForInvite = new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         pendingLiveDocOpens.delete(key);
         console.warn("[store] requestOpenLiveDoc: timed out waiting for invite", { key });
-        reject(new Error(
-          "Server did not reply with a document invite within 8s. " +
-          "The live-doc plugin may be disabled on this server " +
-          "(set plugin.live-doc.enabled=true and plugin.live-doc.state_path in mumble-server.ini), " +
-          "or you may lack permission in this channel.",
-        ));
+        reject(
+          new Error(
+            "Server did not reply with a document invite within 8s. " +
+              "The live-doc plugin may be disabled on this server " +
+              "(set plugin.live-doc.enabled=true and plugin.live-doc.state_path in mumble-server.ini), " +
+              "or you may lack permission in this channel.",
+          ),
+        );
       }, 8000);
       pendingLiveDocOpens.set(key, {
         silent,
@@ -1843,7 +1891,12 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
         },
       });
     });
-    await sendPluginMessage("fancy-live-doc", "OpenRequest", { channelId, slug: sanitised, title: trimmedTitle, mode });
+    await sendPluginMessage("fancy-live-doc", "OpenRequest", {
+      channelId,
+      slug: sanitised,
+      title: trimmedTitle,
+      mode,
+    });
     console.log("[store] requestOpenLiveDoc: open dispatched, awaiting invite");
     await waitForInvite;
     console.log("[store] requestOpenLiveDoc: invite received");
@@ -1946,9 +1999,9 @@ function dispatchLiveDocInvite(p: LiveDocInviteEvent): void {
     // Post a persistent chat invite so users who were not in the channel
     // when the announce flew can still join.
     const payload = encodeLiveDocInviteMarker(p.slug, p.title);
-    void state.sendMessage(p.channelId, payload).catch((e) =>
-      console.warn("live-doc auto-invite message failed:", e),
-    );
+    void state
+      .sendMessage(p.channelId, payload)
+      .catch((e) => console.warn("live-doc auto-invite message failed:", e));
   }
 }
 
@@ -2005,11 +2058,7 @@ function decodePluginPayload<T>(b64: string): T | null {
  *
  *  Evaluated before any side effect so a blocked / under-declared plugin
  *  cannot inject or rewrite local chat. */
-function pluginResponseAllowed(
-  s: AppState,
-  pluginName: string,
-  kind: InteractionResponse["kind"],
-): boolean {
+function pluginResponseAllowed(s: AppState, pluginName: string, kind: InteractionResponse["kind"]): boolean {
   const manifest = s.pluginManifests.get(pluginName);
   if (manifest) {
     return manifestPermitsResponse(manifest, kind);
@@ -2089,9 +2138,9 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
       }>(p.payload);
       if (!data) return;
       const fallbackHost =
-        useAppStore.getState().sessions.find(
-          (s) => s.id === useAppStore.getState().activeServerId,
-        )?.host ?? useAppStore.getState().pendingConnect?.host ?? null;
+        useAppStore.getState().sessions.find((s) => s.id === useAppStore.getState().activeServerId)?.host ??
+        useAppStore.getState().pendingConnect?.host ??
+        null;
       dispatchLiveDocInvite({
         channelId: data.channelId,
         slug: data.slug,
@@ -2126,11 +2175,9 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
         sharedWith?: import("../types").LiveDocSharedMember[];
       }>(p.payload);
       if (!data) return;
-      void import("../features/chat/livedoc/sharedWithStore").then(
-        ({ useLiveDocSharedWithStore }) => {
-          useLiveDocSharedWithStore.getState().setSharedWith(data.slug, data.sharedWith ?? []);
-        },
-      );
+      void import("../features/chat/livedoc/sharedWithStore").then(({ useLiveDocSharedWithStore }) => {
+        useLiveDocSharedWithStore.getState().setSharedWith(data.slug, data.sharedWith ?? []);
+      });
       return;
     }
   }
@@ -2154,9 +2201,7 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
         messageId: response.message_id,
         content: response.content ?? "",
         components: response.components ?? null,
-      }).catch((e) =>
-        console.warn("[store] plugin_inject_chat_message failed:", e),
-      );
+      }).catch((e) => console.warn("[store] plugin_inject_chat_message failed:", e));
     }
     // Side effect for update-message: also try to update any
     // matching plugin-authored chat bubble.  The tier1 reducer in
@@ -2167,22 +2212,12 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
         pluginName: p.pluginName,
         messageId: response.message_id,
         content: response.content ?? null,
-        components:
-          response.components === null
-            ? null
-            : (response.components ?? null),
+        components: response.components === null ? null : (response.components ?? null),
         clearComponents: response.components === null,
-      }).catch((e) =>
-        console.warn("[store] plugin_update_chat_message failed:", e),
-      );
+      }).catch((e) => console.warn("[store] plugin_update_chat_message failed:", e));
     }
     useAppStore.setState((s) => {
-      const next = applyInteractionResponse(
-        sliceFromState(s),
-        p.pluginName,
-        response,
-        p.channelId,
-      );
+      const next = applyInteractionResponse(sliceFromState(s), p.pluginName, response, p.channelId);
       return slicePatch(next);
     });
     return;
@@ -2190,15 +2225,24 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
   console.debug("[store] unhandled plugin-message:", p.pluginName, p.payloadType);
 }
 
-
 /** Deterministic palette mirror of `pickCursorColor` in ChatView.tsx. */
 const LIVE_DOC_COLORS = [
-  "#2aabee", "#ff6f61", "#7cd66c", "#ffb74d",
-  "#b388ff", "#ff66cc", "#00bfa5", "#ffd54f",
-  "#90caf9", "#f48fb1", "#80deea", "#ce93d8",
+  "#2aabee",
+  "#ff6f61",
+  "#7cd66c",
+  "#ffb74d",
+  "#b388ff",
+  "#ff66cc",
+  "#00bfa5",
+  "#ffd54f",
+  "#90caf9",
+  "#f48fb1",
+  "#80deea",
+  "#ce93d8",
 ] as const;
 function pickLiveDocCursorColor(session: number): string {
-  return LIVE_DOC_COLORS[Math.abs(session) % LIVE_DOC_COLORS.length];}
+  return LIVE_DOC_COLORS[Math.abs(session) % LIVE_DOC_COLORS.length];
+}
 
 /** Encode a live-doc invite marker for use in a chat message body.
  *  Recognised by `MessageItem` and rendered as a `LiveDocInviteCard`
@@ -2250,7 +2294,13 @@ export function onPluginData(handler: PluginDataHandler): () => void {
 
 // --- WebRTC signal handler registry ---
 
-type WebRtcSignalHandler = (senderSession: number | null, targetSession: number | null, signalType: number, payload: string, serverId: string | null) => void;
+type WebRtcSignalHandler = (
+  senderSession: number | null,
+  targetSession: number | null,
+  signalType: number,
+  payload: string,
+  serverId: string | null,
+) => void;
 const webRtcSignalHandlers: WebRtcSignalHandler[] = [];
 
 /** Register a handler for incoming WebRTC screen-sharing signals. */
@@ -2298,9 +2348,11 @@ export async function requestLinkPreview(urls: string[], requestId: string): Pro
  * HMR full reload they must be replayed from the backend cache through
  * this same code to re-hydrate the store without a full reconnect.
  */
-function processPluginDataEvent(
-  payload: { sender_session: number | null; data: string; data_id: string },
-): void {
+function processPluginDataEvent(payload: {
+  sender_session: number | null;
+  data: string;
+  data_id: string;
+}): void {
   const { data_id, data, sender_session } = payload;
   // `data` is base64: a number[] would inflate the IPC JSON (and the
   // backend-side serde_json::Value) by more than an order of magnitude
@@ -2318,9 +2370,7 @@ function processPluginDataEvent(
       // hostname than the Mumble TCP port.
       const override = useAppStore.getState().serverConfig.fancy_rest_api_url;
       const internalBaseUrl = String(raw.base_url).replace(/\/+$/, "");
-      const baseUrl = (override && override.length > 0)
-        ? override.replace(/\/+$/, "")
-        : internalBaseUrl;
+      const baseUrl = override && override.length > 0 ? override.replace(/\/+$/, "") : internalBaseUrl;
       const cfg: FileServerConfig = {
         baseUrl,
         internalBaseUrl,
@@ -2349,9 +2399,9 @@ function processPluginDataEvent(
       const json = new TextDecoder().decode(bytes);
       const raw = JSON.parse(json) as { version: string; ws_base_url: string };
       const fallbackHost =
-        useAppStore.getState().sessions.find(
-          (s) => s.id === useAppStore.getState().activeServerId,
-        )?.host ?? useAppStore.getState().pendingConnect?.host ?? null;
+        useAppStore.getState().sessions.find((s) => s.id === useAppStore.getState().activeServerId)?.host ??
+        useAppStore.getState().pendingConnect?.host ??
+        null;
       useAppStore.setState({
         liveDocPluginConfig: {
           version: raw.version,
@@ -2383,12 +2433,14 @@ function processPluginDataEvent(
   if (data_id === PluginDataId.ServerEmotes) {
     try {
       const json = new TextDecoder().decode(bytes);
-      const raw = JSON.parse(json) as { emotes: Array<{
-        shortcode: string;
-        alias_emoji: string;
-        description?: string;
-        image_data_url: string;
-      }> };
+      const raw = JSON.parse(json) as {
+        emotes: Array<{
+          shortcode: string;
+          alias_emoji: string;
+          description?: string;
+          image_data_url: string;
+        }>;
+      };
       const emotes: CustomServerEmote[] = (raw.emotes ?? []).map((e) => ({
         shortcode: e.shortcode,
         aliasEmoji: e.alias_emoji,
@@ -2425,9 +2477,7 @@ function processPluginDataEvent(
   }
 }
 
-export async function initEventListeners(
-  navigate: (path: string) => void,
-): Promise<UnlistenFn[]> {
+export async function initEventListeners(navigate: (path: string) => void): Promise<UnlistenFn[]> {
   navigateRef = navigate;
   const unlisteners: UnlistenFn[] = [];
 
@@ -2437,7 +2487,9 @@ export async function initEventListeners(
   // remount), also pull channels/users/current-channel/messages/ownSession
   // so the UI restores the chat view instead of showing the empty/
   // disconnected fallback.
-  useAppStore.getState().refreshSessions()
+  useAppStore
+    .getState()
+    .refreshSessions()
     .then(async () => {
       const { activeServerId, sessions, refreshState } = useAppStore.getState();
       const active = sessions.find((s) => s.id === activeServerId);
@@ -2489,9 +2541,10 @@ export async function initEventListeners(
       // real reconnect.  Replay the backend-cached payloads through the
       // same processing path so the store re-hydrates in place.
       try {
-        const broadcasts = await invoke<
-          { sender_session: number | null; data: string; data_id: string }[]
-        >("get_plugin_broadcasts");
+        const broadcasts =
+          await invoke<{ sender_session: number | null; data: string; data_id: string }[]>(
+            "get_plugin_broadcasts",
+          );
         for (const payload of broadcasts) {
           processPluginDataEvent(payload);
         }
@@ -2594,21 +2647,25 @@ export async function initEventListeners(
 
       // Refresh the multi-server session list so any newly-connected
       // server appears in the sessions slice immediately.
-      useAppStore.getState().refreshSessions().catch(() => {
-        // best-effort; the sessions list will be repopulated on next event.
-      }).then(() => {
-        // Clear any stale per-session error stored from a prior disconnect
-        // for this newly-connected session.
-        const { activeServerId } = useAppStore.getState();
-        if (activeServerId) {
-          useAppStore.setState((prev) => {
-            if (prev.sessionErrors[activeServerId] == null) return prev;
-            const next = { ...prev.sessionErrors };
-            delete next[activeServerId];
-            return { sessionErrors: next };
-          });
-        }
-      });
+      useAppStore
+        .getState()
+        .refreshSessions()
+        .catch(() => {
+          // best-effort; the sessions list will be repopulated on next event.
+        })
+        .then(() => {
+          // Clear any stale per-session error stored from a prior disconnect
+          // for this newly-connected session.
+          const { activeServerId } = useAppStore.getState();
+          if (activeServerId) {
+            useAppStore.setState((prev) => {
+              if (prev.sessionErrors[activeServerId] == null) return prev;
+              const next = { ...prev.sessionErrors };
+              delete next[activeServerId];
+              return { sessionErrors: next };
+            });
+          }
+        });
 
       // Load channels/users/messages, then resolve identity, then
       // hand off to the chat view.  We delay `navigate("/chat")` until
@@ -2647,8 +2704,11 @@ export async function initEventListeners(
             if (!isRegistered) {
               const identityLabel = useAppStore.getState().connectedCertLabel ?? null;
               const activeServerId = useAppStore.getState().activeServerId;
-              const profileRequest = activeServerId ? loadServerProfileData(activeServerId, identityLabel).then(({ data }) => data) : loadProfileData(identityLabel);
-              profileRequest.then(async ({ profile, bio, avatarDataUrl }) => {
+              const profileRequest = activeServerId
+                ? loadServerProfileData(activeServerId, identityLabel).then(({ data }) => data)
+                : loadProfileData(identityLabel);
+              profileRequest
+                .then(async ({ profile, bio, avatarDataUrl }) => {
                   const comment = serializeProfile(profile, bio);
                   if (comment) {
                     await invoke("set_user_comment", { comment });
@@ -2676,9 +2736,7 @@ export async function initEventListeners(
           // Mumble - the store gates on serverFancyVersion >= 0.3.1).
           try {
             const { activeServerId, serverFancyVersion } = useAppStore.getState();
-            await useOnboardingStore
-              .getState()
-              .hydrate(activeServerId ?? null, serverFancyVersion);
+            await useOnboardingStore.getState().hydrate(activeServerId ?? null, serverFancyVersion);
           } catch {
             // best-effort; hydrate already swallows decode failures.
           }
@@ -2746,12 +2804,14 @@ export async function initEventListeners(
         // Normalise: backend now always sends an object payload, but tolerate
         // a bare reason string for forwards/backwards compatibility.
         const payload = event.payload;
-        const eventServerId = typeof payload === "object" && payload !== null
-          ? (payload.serverId ?? null)
-          : null;
-        const eventReason = typeof payload === "string"
-          ? payload
-          : (typeof payload === "object" && payload !== null ? payload.reason : null);
+        const eventServerId =
+          typeof payload === "object" && payload !== null ? (payload.serverId ?? null) : null;
+        const eventReason =
+          typeof payload === "string"
+            ? payload
+            : typeof payload === "object" && payload !== null
+              ? payload.reason
+              : null;
 
         const { activeServerId, pendingConnect: pendingForActive } = useAppStore.getState();
         // Only treat the event as affecting the active session if the
@@ -2776,8 +2836,7 @@ export async function initEventListeners(
           activeServerId === null &&
           (eventServerId === null || eventServerId !== activeServerId);
         const isActiveSession =
-          (eventServerId !== null && eventServerId === activeServerId) ||
-          pendingFallbackApplies;
+          (eventServerId !== null && eventServerId === activeServerId) || pendingFallbackApplies;
 
         // If the user explicitly closed this session via the tab close
         // button, the `disconnectSession` action manages the UI handoff
@@ -2785,13 +2844,19 @@ export async function initEventListeners(
         // own state-clobbering cleanup so we don't flash a misleading
         // "Connection lost" overlay on the *next* tab.
         if (eventServerId && intentionallyClosingSessions.has(eventServerId)) {
-          await useAppStore.getState().refreshSessions().catch(() => {});
+          await useAppStore
+            .getState()
+            .refreshSessions()
+            .catch(() => {});
           return;
         }
 
         // Always refresh the sessions list so the disconnected tab updates
         // its status dot / badge regardless of which tab was affected.
-        await useAppStore.getState().refreshSessions().catch(() => {});
+        await useAppStore
+          .getState()
+          .refreshSessions()
+          .catch(() => {});
 
         // Always remember the disconnect reason for this specific session
         // so the user sees the correct reason when they switch tabs.
@@ -2816,14 +2881,17 @@ export async function initEventListeners(
         volumeAppliedSessions.clear();
         clearReadReceipts();
         useOnboardingStore.getState().clear();
-        const { error: currentError, passwordRequired: pwRequired, pendingConnect: pending } = useAppStore.getState();
+        const {
+          error: currentError,
+          passwordRequired: pwRequired,
+          pendingConnect: pending,
+        } = useAppStore.getState();
         // If a password prompt is already pending, keep the rejection error
         // instead of overwriting it with a generic disconnect message.
         const reason = pwRequired ? currentError : (eventReason ?? currentError);
         // Will we auto-reconnect? Only when enabled and this wasn't a
         // user-initiated disconnect or a password rejection.
-        const willReconnect =
-          !manualDisconnectRequested && !pwRequired && !!pending && autoReconnectEnabled;
+        const willReconnect = !manualDisconnectRequested && !pwRequired && !!pending && autoReconnectEnabled;
         // Preserve the downtime clock and attempt count across a reconnect
         // *sequence* (multiple failures) so they accumulate rather than
         // resetting on every failed attempt; a fresh loss starts the clock.
@@ -2833,9 +2901,7 @@ export async function initEventListeners(
           error: reason,
           passwordRequired: pwRequired,
           pendingConnect: pending,
-          connectionLostAt: willReconnect
-            ? (prevReconnect.connectionLostAt ?? Date.now())
-            : null,
+          connectionLostAt: willReconnect ? (prevReconnect.connectionLostAt ?? Date.now()) : null,
           reconnectAttempts: willReconnect ? prevReconnect.reconnectAttempts : 0,
         });
         invoke("update_badge_count", { count: null }).catch(() => {});
@@ -2871,18 +2937,15 @@ export async function initEventListeners(
   // The server rejected one of our (optimistically shown) messages -
   // flag it as not delivered so the sender isn't misled.
   unlisteners.push(
-    await listen<{ message_ids: string[]; reason?: string | null }>(
-      TauriEvent.PchatSendRejected,
-      (event) => {
-        const ids = new Set(event.payload.message_ids);
-        if (ids.size === 0) return;
-        useAppStore.setState((prev) => ({
-          messages: prev.messages.map((m) =>
-            m.message_id && ids.has(m.message_id) ? { ...m, send_failed: true } : m,
-          ),
-        }));
-      },
-    ),
+    await listen<{ message_ids: string[]; reason?: string | null }>(TauriEvent.PchatSendRejected, (event) => {
+      const ids = new Set(event.payload.message_ids);
+      if (ids.size === 0) return;
+      useAppStore.setState((prev) => ({
+        messages: prev.messages.map((m) =>
+          m.message_id && ids.has(m.message_id) ? { ...m, send_failed: true } : m,
+        ),
+      }));
+    }),
   );
 
   // Messages, unreads, groups, connection events.
@@ -2900,68 +2963,66 @@ export async function initEventListeners(
     }),
 
     // New text message arrived.
-    await listen<{ channel_id: number; sender_session: number | null }>(TauriEvent.NewMessage, async (event) => {
-      const { channel_id, sender_session } = event.payload;
+    await listen<{ channel_id: number; sender_session: number | null }>(
+      TauriEvent.NewMessage,
+      async (event) => {
+        const { channel_id, sender_session } = event.payload;
 
-      // Clear the sender's typing indicator immediately.
-      if (sender_session != null) {
-        useAppStore.setState((prev) => {
-          const channelSet = prev.typingUsers.get(channel_id);
-          if (!channelSet?.has(sender_session)) return prev;
-          const next = new Map(prev.typingUsers);
-          const updated = new Set(channelSet);
-          updated.delete(sender_session);
-          if (updated.size === 0) {
-            next.delete(channel_id);
-          } else {
-            next.set(channel_id, updated);
-          }
-          return { typingUsers: next };
-        });
-      }
+        // Clear the sender's typing indicator immediately.
+        if (sender_session != null) {
+          useAppStore.setState((prev) => {
+            const channelSet = prev.typingUsers.get(channel_id);
+            if (!channelSet?.has(sender_session)) return prev;
+            const next = new Map(prev.typingUsers);
+            const updated = new Set(channelSet);
+            updated.delete(sender_session);
+            if (updated.size === 0) {
+              next.delete(channel_id);
+            } else {
+              next.set(channel_id, updated);
+            }
+            return { typingUsers: next };
+          });
+        }
 
-      const { selectedChannel } = useAppStore.getState();
-      if (selectedChannel === channel_id) {
-        await useAppStore.getState().refreshMessages(channel_id);
-      }
-    }),
+        const { selectedChannel } = useAppStore.getState();
+        if (selectedChannel === channel_id) {
+          await useAppStore.getState().refreshMessages(channel_id);
+        }
+      },
+    ),
 
     // New direct message arrived.
     await listen<{ session: number }>(TauriEvent.NewDm, async (event) => {
       const { selectedDmUser } = useAppStore.getState();
       if (selectedDmUser === event.payload.session) {
-        await useAppStore
-          .getState()
-          .refreshDmMessages(event.payload.session);
+        await useAppStore.getState().refreshDmMessages(event.payload.session);
       }
     }),
 
     // Unread counts changed.
-    await listen<{ unreads: Record<number, number>; serverId?: string | null }>(
-      "unread-changed",
-      (event) => {
-        const { activeServerId } = useAppStore.getState();
-        const eventServerId = event.payload.serverId ?? null;
-        // Compute total for this session (sum of unreads).
-        const total = Object.values(event.payload.unreads).reduce((a, b) => a + b, 0);
-        if (eventServerId && eventServerId !== activeServerId) {
-          // Non-active session: only update its per-tab badge total.
-          useAppStore.setState((prev) => {
-            // Combine channel total with whatever DM total we last saw
-            // for this session (we store the channel total alone here;
-            // dm-unread updates merge in the same way).
-            const next = { ...prev.sessionUnreadTotals };
-            const prevDm = next[`${eventServerId}:dm`] ?? 0;
-            next[`${eventServerId}:ch`] = total;
-            next[eventServerId] = total + prevDm;
-            return { sessionUnreadTotals: next };
-          });
-          return;
-        }
-        useAppStore.setState({ unreadCounts: event.payload.unreads });
-        updateBadgeCount();
-      },
-    ),
+    await listen<{ unreads: Record<number, number>; serverId?: string | null }>("unread-changed", (event) => {
+      const { activeServerId } = useAppStore.getState();
+      const eventServerId = event.payload.serverId ?? null;
+      // Compute total for this session (sum of unreads).
+      const total = Object.values(event.payload.unreads).reduce((a, b) => a + b, 0);
+      if (eventServerId && eventServerId !== activeServerId) {
+        // Non-active session: only update its per-tab badge total.
+        useAppStore.setState((prev) => {
+          // Combine channel total with whatever DM total we last saw
+          // for this session (we store the channel total alone here;
+          // dm-unread updates merge in the same way).
+          const next = { ...prev.sessionUnreadTotals };
+          const prevDm = next[`${eventServerId}:dm`] ?? 0;
+          next[`${eventServerId}:ch`] = total;
+          next[eventServerId] = total + prevDm;
+          return { sessionUnreadTotals: next };
+        });
+        return;
+      }
+      useAppStore.setState({ unreadCounts: event.payload.unreads });
+      updateBadgeCount();
+    }),
 
     // DM unread counts changed.
     await listen<{ unreads: Record<number, number>; serverId?: string | null }>(
@@ -2986,107 +3047,121 @@ export async function initEventListeners(
     ),
 
     // Server rejected the connection.
-    await listen<{ serverId?: string | null; reason: string; reject_type: number | null }>(TauriEvent.ConnectionRejected, async (event) => {
-      // Always remember the rejection reason for this session so the
-      // user sees it when they switch to its tab.
-      const eventServerId = event.payload.serverId ?? null;
-      if (eventServerId) {
-        useAppStore.setState((prev) => ({
-          sessionErrors: { ...prev.sessionErrors, [eventServerId]: event.payload.reason },
-        }));
-      }
-      // Ignore rejections targeting non-active sessions: the matching
-      // server-disconnected event will surface them via the per-session
-      // status and the reconnect overlay when the user opens that tab.
-      //
-      // Exception: if a `pendingConnect` is in flight AND we have no
-      // active session yet (initial connect race - backend fired the
-      // rejection before `refreshSessions()` returned), fall back to
-      // assuming the rejection belongs to the pending connect so the
-      // user sees the error instead of being stuck on a "connecting"
-      // skeleton. We do NOT apply this fallback when the user already
-      // has an active session AND `eventServerId` differs - that would
-      // clobber the foreground server's tab when a *different* tab's
-      // connection attempt was rejected.
-      const { activeServerId, pendingConnect } = useAppStore.getState();
-      const pendingFallbackApplies =
-        pendingConnect !== null &&
-        activeServerId === null &&
-        (eventServerId === null || eventServerId !== activeServerId);
-      if (eventServerId !== null && eventServerId !== activeServerId && !pendingFallbackApplies) {
-        return;
-      }
-      const rt = event.payload.reject_type;
-      // WrongUserPW = 3, WrongServerPW = 4.  Some server implementations
-      // (notably older Fancy Mumble servers) reject auth without setting
-      // the `type` field - fall back to a reason-string heuristic so the
-      // password prompt still appears instead of silently retrying with
-      // the wrong credentials.
-      const reasonText = event.payload.reason ?? "";
-      // TOTPRequired = 10, TOTPInvalid = 11 (Fancy extension: the account
-      // has 2FA enabled and needs a code from the authenticator app).
-      const isTotpError =
-        rt === 10 || rt === 11
-        || (rt == null && /two-factor|authentication code/i.test(reasonText));
-      const reasonLooksLikePwError =
-        /password|wrong\s+(?:user|server)|certificate/i.test(reasonText);
-      const isPasswordError =
-        !isTotpError && (rt === 3 || rt === 4 || (rt == null && reasonLooksLikePwError));
-      if (isPasswordError || isTotpError) {
-        const { passwordAttempted } = useAppStore.getState();
-        // For 2FA: only surface an error when the code was actually wrong
-        // (rt 11), not on the initial "code required" round-trip.
-        const credError = isTotpError
-          ? (rt === 11 ? event.payload.reason : null)
-          : (passwordAttempted ? event.payload.reason : null);
-        useAppStore.setState({
-          status: "disconnected",
-          error: credError,
-          passwordRequired: isPasswordError,
-          totpRequired: isTotpError,
-          bootstrapStage: null,
-          // pendingConnect was set by the connect action - keep it
-          // so the dialog can re-issue the connect with the password.
-        });
-        // Make sure the failed-session tab is the active one so the
-        // PasswordDialog (rendered on /chat over the disconnected
-        // session card) appears anchored to it.  Otherwise the user
-        // is left on "/" which renders an extra synthetic "New
-        // connection" tab alongside the real failed-session tab.
-        await useAppStore.getState().refreshSessions().catch(() => {});
-        const { sessions } = useAppStore.getState();
-        if (eventServerId && sessions.some((s) => s.id === eventServerId)) {
-          await useAppStore.getState().switchServer(eventServerId).catch(() => {});
-          // switchServer re-syncs status/error from the session
-          // metadata, which would clobber passwordRequired.  Restore.
+    await listen<{ serverId?: string | null; reason: string; reject_type: number | null }>(
+      TauriEvent.ConnectionRejected,
+      async (event) => {
+        // Always remember the rejection reason for this session so the
+        // user sees it when they switch to its tab.
+        const eventServerId = event.payload.serverId ?? null;
+        if (eventServerId) {
+          useAppStore.setState((prev) => ({
+            sessionErrors: { ...prev.sessionErrors, [eventServerId]: event.payload.reason },
+          }));
+        }
+        // Ignore rejections targeting non-active sessions: the matching
+        // server-disconnected event will surface them via the per-session
+        // status and the reconnect overlay when the user opens that tab.
+        //
+        // Exception: if a `pendingConnect` is in flight AND we have no
+        // active session yet (initial connect race - backend fired the
+        // rejection before `refreshSessions()` returned), fall back to
+        // assuming the rejection belongs to the pending connect so the
+        // user sees the error instead of being stuck on a "connecting"
+        // skeleton. We do NOT apply this fallback when the user already
+        // has an active session AND `eventServerId` differs - that would
+        // clobber the foreground server's tab when a *different* tab's
+        // connection attempt was rejected.
+        const { activeServerId, pendingConnect } = useAppStore.getState();
+        const pendingFallbackApplies =
+          pendingConnect !== null &&
+          activeServerId === null &&
+          (eventServerId === null || eventServerId !== activeServerId);
+        if (eventServerId !== null && eventServerId !== activeServerId && !pendingFallbackApplies) {
+          return;
+        }
+        const rt = event.payload.reject_type;
+        // WrongUserPW = 3, WrongServerPW = 4.  Some server implementations
+        // (notably older Fancy Mumble servers) reject auth without setting
+        // the `type` field - fall back to a reason-string heuristic so the
+        // password prompt still appears instead of silently retrying with
+        // the wrong credentials.
+        const reasonText = event.payload.reason ?? "";
+        // TOTPRequired = 10, TOTPInvalid = 11 (Fancy extension: the account
+        // has 2FA enabled and needs a code from the authenticator app).
+        const isTotpError =
+          rt === 10 || rt === 11 || (rt == null && /two-factor|authentication code/i.test(reasonText));
+        const reasonLooksLikePwError = /password|wrong\s+(?:user|server)|certificate/i.test(reasonText);
+        const isPasswordError =
+          !isTotpError && (rt === 3 || rt === 4 || (rt == null && reasonLooksLikePwError));
+        if (isPasswordError || isTotpError) {
+          const { passwordAttempted } = useAppStore.getState();
+          // For 2FA: only surface an error when the code was actually wrong
+          // (rt 11), not on the initial "code required" round-trip.
+          const credError = isTotpError
+            ? rt === 11
+              ? event.payload.reason
+              : null
+            : passwordAttempted
+              ? event.payload.reason
+              : null;
           useAppStore.setState({
             status: "disconnected",
+            error: credError,
             passwordRequired: isPasswordError,
             totpRequired: isTotpError,
-            error: credError,
-            pendingConnect: useAppStore.getState().pendingConnect,
+            bootstrapStage: null,
+            // pendingConnect was set by the connect action - keep it
+            // so the dialog can re-issue the connect with the password.
           });
-          navigate("/chat");
+          // Make sure the failed-session tab is the active one so the
+          // PasswordDialog (rendered on /chat over the disconnected
+          // session card) appears anchored to it.  Otherwise the user
+          // is left on "/" which renders an extra synthetic "New
+          // connection" tab alongside the real failed-session tab.
+          await useAppStore
+            .getState()
+            .refreshSessions()
+            .catch(() => {});
+          const { sessions } = useAppStore.getState();
+          if (eventServerId && sessions.some((s) => s.id === eventServerId)) {
+            await useAppStore
+              .getState()
+              .switchServer(eventServerId)
+              .catch(() => {});
+            // switchServer re-syncs status/error from the session
+            // metadata, which would clobber passwordRequired.  Restore.
+            useAppStore.setState({
+              status: "disconnected",
+              passwordRequired: isPasswordError,
+              totpRequired: isTotpError,
+              error: credError,
+              pendingConnect: useAppStore.getState().pendingConnect,
+            });
+            navigate("/chat");
+          }
+          return;
         }
-        return;
-      }
-      useAppStore.setState({
-        status: "disconnected",
-        error: event.payload.reason,
-        // Keep `pendingConnect` so the auto-reconnect loop (driven by the
-        // matching `server-disconnected` event) still has a target and its
-        // attempt counter / backoff are not reset. A user-initiated
-        // disconnect suppresses reconnect via `manualDisconnectRequested`,
-        // and the next `connect()` overwrites this value.
-        bootstrapStage: null,
-      });
-      // Stay on /chat when other tabs remain so the reconnect overlay
-      // surfaces the kick/ban reason via `error`.  Connect-time failures
-      // (no other sessions) fall back to the connect page.
-      await useAppStore.getState().refreshSessions().catch(() => {});
-      const { sessions } = useAppStore.getState();
-      navigate(sessions.length > 0 ? "/chat" : "/");
-    }),
+        useAppStore.setState({
+          status: "disconnected",
+          error: event.payload.reason,
+          // Keep `pendingConnect` so the auto-reconnect loop (driven by the
+          // matching `server-disconnected` event) still has a target and its
+          // attempt counter / backoff are not reset. A user-initiated
+          // disconnect suppresses reconnect via `manualDisconnectRequested`,
+          // and the next `connect()` overwrites this value.
+          bootstrapStage: null,
+        });
+        // Stay on /chat when other tabs remain so the reconnect overlay
+        // surfaces the kick/ban reason via `error`.  Connect-time failures
+        // (no other sessions) fall back to the connect page.
+        await useAppStore
+          .getState()
+          .refreshSessions()
+          .catch(() => {});
+        const { sessions } = useAppStore.getState();
+        navigate(sessions.length > 0 ? "/chat" : "/");
+      },
+    ),
 
     // Listen request was denied by the server - revert the UI.
     await listen<{ channel_id: number }>(TauriEvent.ListenDenied, (event) => {
@@ -3135,7 +3210,8 @@ export async function initEventListeners(
       const { session, opened } = event.payload;
       const prev = useAppStore.getState().poppedOutStreamSessions;
       const next = new Set(prev);
-      if (opened) next.add(session); else next.delete(session);
+      if (opened) next.add(session);
+      else next.delete(session);
       useAppStore.setState({ poppedOutStreamSessions: next });
     }),
 
@@ -3174,7 +3250,9 @@ export async function initEventListeners(
       try {
         const cfg = await invoke<MumbleServerConfig>("get_server_config");
         useAppStore.setState((state) => {
-          const next: { serverConfig: MumbleServerConfig; fileServerConfig?: FileServerConfig } = { serverConfig: cfg };
+          const next: { serverConfig: MumbleServerConfig; fileServerConfig?: FileServerConfig } = {
+            serverConfig: cfg,
+          };
           const override = cfg.fancy_rest_api_url;
           if (override && override.length > 0 && state.fileServerConfig) {
             next.fileServerConfig = { ...state.fileServerConfig, baseUrl: override.replace(/\/+$/, "") };
@@ -3227,9 +3305,7 @@ export async function initEventListeners(
     }>(TauriEvent.FancyPoll, (event) => {
       const e = event.payload;
       const users = useAppStore.getState().users;
-      const resolvedName = e.creatorName
-        || users.find((u) => u.session === e.creatorSession)?.name
-        || "";
+      const resolvedName = e.creatorName || users.find((u) => u.session === e.creatorSession)?.name || "";
       const poll: PollPayload = {
         type: "poll",
         id: e.pollId,
@@ -3254,9 +3330,7 @@ export async function initEventListeners(
     }>(TauriEvent.FancyPollVote, (event) => {
       const e = event.payload;
       const users = useAppStore.getState().users;
-      const resolvedName = e.voterName
-        || users.find((u) => u.session === e.voterSession)?.name
-        || "";
+      const resolvedName = e.voterName || users.find((u) => u.session === e.voterSession)?.name || "";
       const vote: PollVotePayload = {
         type: "poll_vote",
         pollId: e.pollId,
@@ -3272,27 +3346,30 @@ export async function initEventListeners(
   // -- WebRTC signal events ----------------------------------------
 
   unlisteners.push(
-    await listen<{ sender_session: number | null; target_session: number | null; signal_type: number; payload: string; serverId?: string | null }>(
-      TauriEvent.WebrtcSignal,
-      (event) => {
-        const { sender_session, target_session, signal_type, payload } = event.payload;
-        const serverId = event.payload.serverId ?? null;
-        // Broadcast presence is application state, not a concern of any one
-        // visual implementation. Keep it current even when a UI has not
-        // mounted a WebRTC viewer yet (START=0, STOP=1).
-        const state = useAppStore.getState();
-        const belongsToActiveServer = serverId === null || serverId === state.activeServerId;
-        if (sender_session !== null && belongsToActiveServer && (signal_type === 0 || signal_type === 1)) {
-          const next = new Set(state.broadcastingSessions);
-          if (signal_type === 0) next.add(sender_session);
-          else next.delete(sender_session);
-          useAppStore.setState({ broadcastingSessions: next });
-        }
-        for (const handler of webRtcSignalHandlers) {
-          handler(sender_session, target_session, signal_type, payload, serverId);
-        }
-      },
-    ),
+    await listen<{
+      sender_session: number | null;
+      target_session: number | null;
+      signal_type: number;
+      payload: string;
+      serverId?: string | null;
+    }>(TauriEvent.WebrtcSignal, (event) => {
+      const { sender_session, target_session, signal_type, payload } = event.payload;
+      const serverId = event.payload.serverId ?? null;
+      // Broadcast presence is application state, not a concern of any one
+      // visual implementation. Keep it current even when a UI has not
+      // mounted a WebRTC viewer yet (START=0, STOP=1).
+      const state = useAppStore.getState();
+      const belongsToActiveServer = serverId === null || serverId === state.activeServerId;
+      if (sender_session !== null && belongsToActiveServer && (signal_type === 0 || signal_type === 1)) {
+        const next = new Set(state.broadcastingSessions);
+        if (signal_type === 0) next.add(sender_session);
+        else next.delete(sender_session);
+        useAppStore.setState({ broadcastingSessions: next });
+      }
+      for (const handler of webRtcSignalHandlers) {
+        handler(sender_session, target_session, signal_type, payload, serverId);
+      }
+    }),
   );
 
   // -- Link preview response events --------------------------------
@@ -3314,30 +3391,24 @@ export async function initEventListeners(
   // -- Custom reactions config event --------------------------------
 
   unlisteners.push(
-    await listen<ServerCustomReaction[]>(
-      TauriEvent.CustomReactionsConfig,
-      (event) => {
-        const reactions = event.payload;
-        if (Array.isArray(reactions)) {
-          setServerCustomReactions(reactions);
-        }
-      },
-    ),
+    await listen<ServerCustomReaction[]>(TauriEvent.CustomReactionsConfig, (event) => {
+      const reactions = event.payload;
+      if (Array.isArray(reactions)) {
+        setServerCustomReactions(reactions);
+      }
+    }),
   );
 
   // -- Read receipt events -----------------------------------------
 
   unlisteners.push(
-    await listen<ReadReceiptDeliverPayload>(
-      TauriEvent.ReadReceiptDeliver,
-      (event) => {
-        const { channel_id, read_states } = event.payload;
-        applyReadStates(channel_id, read_states);
-        useAppStore.setState((prev) => ({
-          readReceiptVersion: prev.readReceiptVersion + 1,
-        }));
-      },
-    ),
+    await listen<ReadReceiptDeliverPayload>(TauriEvent.ReadReceiptDeliver, (event) => {
+      const { channel_id, read_states } = event.payload;
+      applyReadStates(channel_id, read_states);
+      useAppStore.setState((prev) => ({
+        readReceiptVersion: prev.readReceiptVersion + 1,
+      }));
+    }),
   );
 
   // -- Onboarding workflow events ---------------------------------
@@ -3351,10 +3422,7 @@ export async function initEventListeners(
       // If a fresh config arrived and the user has not answered the
       // current revision yet, surface the modal automatically.
       const { response } = useOnboardingStore.getState();
-      if (
-        config?.enabled &&
-        (!response || response.config_revision < config.revision)
-      ) {
+      if (config?.enabled && (!response || response.config_revision < config.revision)) {
         const serverId = useAppStore.getState().activeServerId ?? null;
         const dismissed = serverId
           ? sessionStorage.getItem(`onboarding-dismissed:${serverId}`) === "1"
@@ -3375,36 +3443,33 @@ export async function initEventListeners(
   // -- Typing indicator events ------------------------------------
 
   unlisteners.push(
-    await listen<{ session: number; channel_id: number }>(
-      TauriEvent.TypingIndicator,
-      (event) => {
-        const { session, channel_id } = event.payload;
+    await listen<{ session: number; channel_id: number }>(TauriEvent.TypingIndicator, (event) => {
+      const { session, channel_id } = event.payload;
+      useAppStore.setState((prev) => {
+        const next = new Map(prev.typingUsers);
+        const channelSet = new Set(next.get(channel_id));
+        channelSet.add(session);
+        next.set(channel_id, channelSet);
+        return { typingUsers: next };
+      });
+
+      // Auto-expire after 5 seconds.
+      setTimeout(() => {
         useAppStore.setState((prev) => {
           const next = new Map(prev.typingUsers);
-          const channelSet = new Set(next.get(channel_id));
-          channelSet.add(session);
-          next.set(channel_id, channelSet);
+          const channelSet = next.get(channel_id);
+          if (!channelSet) return prev;
+          const updated = new Set(channelSet);
+          updated.delete(session);
+          if (updated.size === 0) {
+            next.delete(channel_id);
+          } else {
+            next.set(channel_id, updated);
+          }
           return { typingUsers: next };
         });
-
-        // Auto-expire after 5 seconds.
-        setTimeout(() => {
-          useAppStore.setState((prev) => {
-            const next = new Map(prev.typingUsers);
-            const channelSet = next.get(channel_id);
-            if (!channelSet) return prev;
-            const updated = new Set(channelSet);
-            updated.delete(session);
-            if (updated.size === 0) {
-              next.delete(channel_id);
-            } else {
-              next.set(channel_id, updated);
-            }
-            return { typingUsers: next };
-          });
-        }, 5000);
-      },
-    ),
+      }, 5000);
+    }),
   );
 
   // -- Watch-together (FancyWatchSync) events ---------------------

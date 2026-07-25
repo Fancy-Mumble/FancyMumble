@@ -46,7 +46,8 @@ export function Tooltip({ label, placement = "top", children }: TooltipProps) {
       onBlur={hide}
     >
       {children}
-      {label && coords &&
+      {label &&
+        coords &&
         createPortal(
           <div
             role="tooltip"

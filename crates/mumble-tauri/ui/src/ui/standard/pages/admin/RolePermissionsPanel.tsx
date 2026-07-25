@@ -12,9 +12,7 @@ export interface RolePermissionsPanelProps {
 
 /** Returns the index of the ACL entry that targets this role at apply_here, or -1. */
 function findRoleAclIndex(acl: AclData, roleName: string): number {
-  return acl.acls.findIndex(
-    (a) => a.group === roleName && a.user_id == null && a.apply_here && !a.inherited,
-  );
+  return acl.acls.findIndex((a) => a.group === roleName && a.user_id == null && a.apply_here && !a.inherited);
 }
 
 function ensureRoleAcl(acl: AclData, roleName: string): { acl: AclData; idx: number } {
@@ -56,19 +54,15 @@ export function RolePermissionsPanel({ acl, roleName, onAclChange, disabled }: R
 
   return (
     <div className={styles.editorMain}>
-      <p className={styles.dimText}>
-        {t("rolePermissions.description", { role: roleName })}
-      </p>
+      <p className={styles.dimText}>{t("rolePermissions.description", { role: roleName })}</p>
 
-      {entry === null && (
-        <div className={styles.dimText}>{t("rolePermissions.noExplicitPerms")}</div>
-      )}
+      {entry === null && <div className={styles.dimText}>{t("rolePermissions.noExplicitPerms")}</div>}
 
       <ul className={styles.permList}>
         {PERMISSIONS.map(({ bit, label, ident }) => {
           const title = tAny(`permissionMeta.${ident}.title`) || label;
-          const description = tAny(`permissionMeta.${ident}.description`)
-            || t("rolePermissions.defaultDescription", { label });
+          const description =
+            tAny(`permissionMeta.${ident}.description`) || t("rolePermissions.defaultDescription", { label });
           const checked = entry !== null && (entry.grant & bit) !== 0;
           const switchId = `perm-toggle-${bit}`;
           return (

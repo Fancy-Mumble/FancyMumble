@@ -26,8 +26,14 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
       ms,
     );
     p.then(
-      (v) => { clearTimeout(timer); resolve(v); },
-      (e) => { clearTimeout(timer); reject(e instanceof Error ? e : new Error(String(e))); },
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e instanceof Error ? e : new Error(String(e)));
+      },
     );
   });
 }

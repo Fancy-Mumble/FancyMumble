@@ -38,7 +38,6 @@ interface FileShareDialogProps {
   readonly onCancel: () => void;
 }
 
-
 export default function FileShareDialog({
   open,
   filename,
@@ -138,9 +137,7 @@ export default function FileShareDialog({
         </div>
 
         <form className={styles.body} onSubmit={handleSubmit}>
-          <p className={styles.message}>
-            {t("fileShare.prompt", { filename })}
-          </p>
+          <p className={styles.message}>{t("fileShare.prompt", { filename })}</p>
 
           <div className={styles.modeList} role="radiogroup" aria-label={t("fileShare.accessMode")}>
             {(["public", "password", "session"] as const).map((m) => {
@@ -149,9 +146,15 @@ export default function FileShareDialog({
                 styles.modeOption,
                 mode === m ? styles.modeOptionActive : "",
                 restricted ? styles.modeOptionDisabled : "",
-              ].filter(Boolean).join(" ");
+              ]
+                .filter(Boolean)
+                .join(" ");
               return (
-                <label key={m} className={optionClasses} title={restricted ? t("fileShare.restrictedHint") : undefined}>
+                <label
+                  key={m}
+                  className={optionClasses}
+                  title={restricted ? t("fileShare.restrictedHint") : undefined}
+                >
                   <input
                     type="radio"
                     name="file-share-mode"
@@ -188,7 +191,8 @@ export default function FileShareDialog({
 
           <div className={styles.field}>
             <label className={styles.label} htmlFor="file-share-message">
-                {t("fileShare.messageLabel")} <span className={styles.labelOptional}>{tc("actions.optional")}</span>
+              {t("fileShare.messageLabel")}{" "}
+              <span className={styles.labelOptional}>{tc("actions.optional")}</span>
             </label>
             <textarea
               ref={messageRef}

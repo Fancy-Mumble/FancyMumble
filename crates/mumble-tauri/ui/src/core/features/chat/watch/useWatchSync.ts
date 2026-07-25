@@ -70,8 +70,7 @@ export function useWatchSync({ adapter, session, ownSession }: Args): UseWatchSy
       const now = Date.now();
       const last = lastSentRef.current;
       const stateChanged = last == null || last.state !== event.state;
-      const seeked =
-        last != null && Math.abs(last.currentTime - event.currentTime) > SEEK_THRESHOLD_SECONDS;
+      const seeked = last != null && Math.abs(last.currentTime - event.currentTime) > SEEK_THRESHOLD_SECONDS;
       const isImportant = stateChanged || seeked;
       // Throttle only steady-state heartbeats; transitions and seeks
       // must always go through so receivers can follow scrubs (which

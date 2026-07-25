@@ -11,16 +11,34 @@ import {
 import type { RailSession } from "./clientSelectors";
 import type { ChannelEntry, RegisteredUser, SavedServer, UserEntry } from "@core/types";
 
-const channel = (over: Partial<ChannelEntry> & { id: number; name: string }) => ({
-  parent_id: null, position: 0, user_count: 0, detached: false, ...over,
-}) as ChannelEntry;
+const channel = (over: Partial<ChannelEntry> & { id: number; name: string }) =>
+  ({
+    parent_id: null,
+    position: 0,
+    user_count: 0,
+    detached: false,
+    ...over,
+  }) as ChannelEntry;
 
-const user = (over: Partial<UserEntry> & { session: number; name: string }) => ({
-  channel_id: 0, user_id: null, ...over,
-}) as UserEntry;
+const user = (over: Partial<UserEntry> & { session: number; name: string }) =>
+  ({
+    channel_id: 0,
+    user_id: null,
+    ...over,
+  }) as UserEntry;
 
-const message = (over: { sender_name: string; body?: string; sender_hash?: string | null; channel_id?: number | null; dm_session?: number | null }) => ({
-  body: "<p>hello</p>", sender_hash: null, channel_id: 1, dm_session: null, ...over,
+const message = (over: {
+  sender_name: string;
+  body?: string;
+  sender_hash?: string | null;
+  channel_id?: number | null;
+  dm_session?: number | null;
+}) => ({
+  body: "<p>hello</p>",
+  sender_hash: null,
+  channel_id: 1,
+  dm_session: null,
+  ...over,
 });
 
 describe("senderRelationKey", () => {
@@ -55,22 +73,46 @@ describe("filterVisibleChannels", () => {
   ];
 
   it("keeps ancestors of a match so the tree stays reachable", () => {
-    const out = filterVisibleChannels({ channels, query: "design", hideEmpty: false, currentChannel: null, selectedChannel: null });
+    const out = filterVisibleChannels({
+      channels,
+      query: "design",
+      hideEmpty: false,
+      currentChannel: null,
+      selectedChannel: null,
+    });
     expect(out.map((c) => c.id).sort()).toEqual([0, 1]);
   });
 
   it("drops detached channels", () => {
-    const out = filterVisibleChannels({ channels, query: "", hideEmpty: false, currentChannel: null, selectedChannel: null });
+    const out = filterVisibleChannels({
+      channels,
+      query: "",
+      hideEmpty: false,
+      currentChannel: null,
+      selectedChannel: null,
+    });
     expect(out.map((c) => c.id)).not.toContain(3);
   });
 
   it("keeps an empty channel when it is the selected one", () => {
-    const out = filterVisibleChannels({ channels, query: "", hideEmpty: true, currentChannel: null, selectedChannel: 2 });
+    const out = filterVisibleChannels({
+      channels,
+      query: "",
+      hideEmpty: true,
+      currentChannel: null,
+      selectedChannel: 2,
+    });
     expect(out.map((c) => c.id)).toContain(2);
   });
 
   it("hides empty channels otherwise", () => {
-    const out = filterVisibleChannels({ channels, query: "", hideEmpty: true, currentChannel: null, selectedChannel: null });
+    const out = filterVisibleChannels({
+      channels,
+      query: "",
+      hideEmpty: true,
+      currentChannel: null,
+      selectedChannel: null,
+    });
     expect(out.map((c) => c.id)).not.toContain(2);
   });
 });
@@ -87,17 +129,38 @@ describe("listChannelMembers", () => {
   ] as RegisteredUser[];
 
   it("scopes to the selected channel", () => {
-    const out = listChannelMembers({ users, registeredUsers: [], scope: "channel", query: "", selectedChannel: 1, talkingSessions: new Set() });
+    const out = listChannelMembers({
+      users,
+      registeredUsers: [],
+      scope: "channel",
+      query: "",
+      selectedChannel: 1,
+      talkingSessions: new Set(),
+    });
     expect(out.map((u) => u.name)).toEqual(["Alex", "Zoe"]);
   });
 
   it("sorts talkers ahead of the rest", () => {
-    const out = listChannelMembers({ users, registeredUsers: [], scope: "channel", query: "", selectedChannel: 1, talkingSessions: new Set([1]) });
+    const out = listChannelMembers({
+      users,
+      registeredUsers: [],
+      scope: "channel",
+      query: "",
+      selectedChannel: 1,
+      talkingSessions: new Set([1]),
+    });
     expect(out[0].name).toBe("Zoe");
   });
 
   it("adds offline registered users last in server scope, skipping ones already online", () => {
-    const out = listChannelMembers({ users, registeredUsers: registered, scope: "server", query: "", selectedChannel: 1, talkingSessions: new Set() });
+    const out = listChannelMembers({
+      users,
+      registeredUsers: registered,
+      scope: "server",
+      query: "",
+      selectedChannel: 1,
+      talkingSessions: new Set(),
+    });
     expect(out.at(-1)!.name).toBe("Offline Pat");
     expect(out.filter((u) => u.name === "Alex")).toHaveLength(1);
   });
@@ -126,7 +189,9 @@ describe("filterChannelMessages", () => {
     const out = filterChannelMessages({
       messages: [message({ sender_name: "A" })],
       pollMessages: [message({ sender_name: "Poll" })],
-      selectedChannel: 1, relations: {}, query: "",
+      selectedChannel: 1,
+      relations: {},
+      query: "",
     });
     expect(out).toHaveLength(2);
   });
@@ -135,7 +200,10 @@ describe("filterChannelMessages", () => {
 describe("filterDmMessages", () => {
   it("returns nothing at all when the peer is blocked", () => {
     const out = filterDmMessages({
-      dmMessages: [message({ sender_name: "A" })], blocked: true, relations: {}, query: "",
+      dmMessages: [message({ sender_name: "A" })],
+      blocked: true,
+      relations: {},
+      query: "",
     });
     expect(out).toEqual([]);
   });
@@ -146,7 +214,9 @@ describe("filterDmMessages", () => {
         message({ sender_name: "A", body: "<p>keep this</p>" }),
         message({ sender_name: "A", body: "<p>drop</p>" }),
       ],
-      blocked: false, relations: {}, query: "keep",
+      blocked: false,
+      relations: {},
+      query: "keep",
     });
     expect(out).toHaveLength(1);
   });
@@ -170,13 +240,17 @@ describe("groupServersForRail", () => {
   });
 
   it("links a live session to its saved identity", () => {
-    const sessions: RailSession[] = [{ id: "live", host: "a.example", port: 64738, username: "morgan", label: "Studio" }];
+    const sessions: RailSession[] = [
+      { id: "live", host: "a.example", port: 64738, username: "morgan", label: "Studio" },
+    ];
     const studio = groupServersForRail(saved, sessions).find((g) => g.host === "a.example")!;
     expect(studio.identities.find((i) => i.username === "morgan")!.sessionId).toBe("live");
   });
 
   it("gives a direct-connect session its own tile", () => {
-    const sessions: RailSession[] = [{ id: "live", host: "c.example", port: 64738, username: "x", label: "Direct" }];
+    const sessions: RailSession[] = [
+      { id: "live", host: "c.example", port: 64738, username: "x", label: "Direct" },
+    ];
     expect(groupServersForRail(saved, sessions).some((g) => g.host === "c.example")).toBe(true);
   });
 });

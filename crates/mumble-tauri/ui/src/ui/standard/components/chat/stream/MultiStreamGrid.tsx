@@ -25,15 +25,20 @@ function StreamCard({ session, name, onWatch }: StreamCardProps) {
   const { t } = useTranslation("chat");
 
   return (
-    <button type="button" className={styles.card} onClick={handleClick} aria-label={t("multiStream.watchStream", { name })}>
+    <button
+      type="button"
+      className={styles.card}
+      onClick={handleClick}
+      aria-label={t("multiStream.watchStream", { name })}
+    >
       <div className={styles.cardThumb}>
-        {thumbnail
-          ? <img src={thumbnail} alt="" className={styles.cardImg} />
-          : (
-            <div className={styles.cardPlaceholder}>
-              <ScreenShareIcon width={36} height={36} />
-            </div>
-          )}
+        {thumbnail ? (
+          <img src={thumbnail} alt="" className={styles.cardImg} />
+        ) : (
+          <div className={styles.cardPlaceholder}>
+            <ScreenShareIcon width={36} height={36} />
+          </div>
+        )}
 
         <div className={styles.cardOverlay}>
           <span className={styles.playBtn}>
@@ -74,9 +79,7 @@ export default function MultiStreamGrid({ broadcasters, onWatch }: MultiStreamGr
         aria-expanded={expanded}
       >
         <ScreenShareIcon width={14} height={14} />
-        <span>
-          {t("multiStream.activeStreams", { count: broadcasters.length })}
-        </span>
+        <span>{t("multiStream.activeStreams", { count: broadcasters.length })}</span>
         <ChevronDownIcon
           width={13}
           height={13}
@@ -87,12 +90,7 @@ export default function MultiStreamGrid({ broadcasters, onWatch }: MultiStreamGr
       {expanded && (
         <div className={styles.grid}>
           {broadcasters.map((b) => (
-            <StreamCard
-              key={b.session}
-              session={b.session}
-              name={b.name}
-              onWatch={onWatch}
-            />
+            <StreamCard key={b.session} session={b.session} name={b.name} onWatch={onWatch} />
           ))}
         </div>
       )}

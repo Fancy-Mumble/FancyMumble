@@ -14,12 +14,26 @@ export interface SearchFieldProps extends InputHTMLAttributes<HTMLInputElement> 
   dismissLabel?: string;
 }
 
-export default function SearchField({ onDismiss, dismissLabel = "Close", className = "", ...props }: SearchFieldProps) {
+export default function SearchField({
+  onDismiss,
+  dismissLabel = "Close",
+  className = "",
+  ...props
+}: SearchFieldProps) {
   // A <button> is interactive content, so label activation is not forwarded to
   // the input from it - clicking the icon dismisses without stealing focus.
-  return <label className={`${styles.search} ${onDismiss ? styles.searchDismissable : ""} ${className}`}>
-    <SearchIcon />
-    <input type="search" {...props} />
-    {onDismiss && <IconButton icon={<CloseIcon />} label={dismissLabel} className={styles.searchDismiss} onClick={onDismiss} />}
-  </label>;
+  return (
+    <label className={`${styles.search} ${onDismiss ? styles.searchDismissable : ""} ${className}`}>
+      <SearchIcon />
+      <input type="search" {...props} />
+      {onDismiss && (
+        <IconButton
+          icon={<CloseIcon />}
+          label={dismissLabel}
+          className={styles.searchDismiss}
+          onClick={onDismiss}
+        />
+      )}
+    </label>
+  );
 }

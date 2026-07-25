@@ -85,18 +85,13 @@ const ROOT_CHANNEL_ID = 0;
  * and only the remapped users are cloned, so the store's entries are never
  * mutated.
  */
-export function usersForChannelTree(
-  channels: ChannelEntry[],
-  users: UserEntry[],
-): UserEntry[] {
+export function usersForChannelTree(channels: ChannelEntry[], users: UserEntry[]): UserEntry[] {
   const dmChannelIds = new Set<number>();
   for (const c of channels) {
     if (isDmChannel(c)) dmChannelIds.add(c.id);
   }
   if (dmChannelIds.size === 0) return users;
-  return users.map((u) =>
-    dmChannelIds.has(u.channel_id) ? { ...u, channel_id: ROOT_CHANNEL_ID } : u,
-  );
+  return users.map((u) => (dmChannelIds.has(u.channel_id) ? { ...u, channel_id: ROOT_CHANNEL_ID } : u));
 }
 
 /** Channels that should stay visible even when empty (the user's own context). */

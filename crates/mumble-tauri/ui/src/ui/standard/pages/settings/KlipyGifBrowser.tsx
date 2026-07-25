@@ -124,10 +124,24 @@ interface KlipyGifBrowserProps {
 type View = { kind: "categories" } | { kind: "category"; name: string };
 
 const GIF_CATEGORIES = [
-  "trending", "thumbs up", "happy", "sad", "angry",
-  "love", "laugh", "shrug", "dance", "excited",
-  "applause", "bye", "crying", "confused", "cool",
-  "facepalm", "high five", "hug",
+  "trending",
+  "thumbs up",
+  "happy",
+  "sad",
+  "angry",
+  "love",
+  "laugh",
+  "shrug",
+  "dance",
+  "excited",
+  "applause",
+  "bye",
+  "crying",
+  "confused",
+  "cool",
+  "facepalm",
+  "high five",
+  "hug",
 ];
 
 async function fetchCategoryPreview(name: string): Promise<string | null> {
@@ -221,9 +235,7 @@ export function KlipyGifBrowser({ onSelect }: Readonly<KlipyGifBrowserProps>) {
   const loadCategoryResults = useCallback((categoryName: string, query: string) => {
     setLoading(true);
     setResults([]);
-    const searchTerm = query.trim()
-      ? `${categoryName} ${query}`
-      : categoryName;
+    const searchTerm = query.trim() ? `${categoryName} ${query}` : categoryName;
     searchGifs(searchTerm, 1)
       .then(({ items, hasNext: hn }) => {
         setResults(items);
@@ -255,9 +267,12 @@ export function KlipyGifBrowser({ onSelect }: Readonly<KlipyGifBrowserProps>) {
   useEffect(() => {
     if (view.kind !== "category") return;
     clearTimeout(searchTimerRef.current);
-    searchTimerRef.current = setTimeout(() => {
-      loadCategoryResults(view.name, searchQuery);
-    }, searchQuery.trim() ? 350 : 0);
+    searchTimerRef.current = setTimeout(
+      () => {
+        loadCategoryResults(view.name, searchQuery);
+      },
+      searchQuery.trim() ? 350 : 0,
+    );
     return () => clearTimeout(searchTimerRef.current);
   }, [searchQuery, view, loadCategoryResults]);
 
@@ -276,9 +291,7 @@ export function KlipyGifBrowser({ onSelect }: Readonly<KlipyGifBrowserProps>) {
       const nextPage = page + 1;
       setLoadingMore(true);
 
-      const fetchPage = isTrendingView
-        ? fetchTrending(nextPage)
-        : searchGifs(effectiveQuery, nextPage);
+      const fetchPage = isTrendingView ? fetchTrending(nextPage) : searchGifs(effectiveQuery, nextPage);
 
       fetchPage
         .then(({ items, hasNext: hn }) => {
@@ -333,7 +346,7 @@ export function KlipyGifBrowser({ onSelect }: Readonly<KlipyGifBrowserProps>) {
           placeholder={searchPlaceholder}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          />
+        />
       </div>
 
       <div className={styles.content}>
@@ -374,26 +387,17 @@ export function KlipyGifBrowser({ onSelect }: Readonly<KlipyGifBrowserProps>) {
                 onClick={() => onSelect(gif.url)}
                 title={gif.title}
               >
-                <img
-                  src={gif.preview}
-                  alt={gif.title}
-                  loading="lazy"
-                  className={styles.gifImg}
-                />
+                <img src={gif.preview} alt={gif.title} loading="lazy" className={styles.gifImg} />
               </button>
             ))}
             <div ref={sentinelCallbackRef} className={styles.sentinel} />
           </div>
         )}
 
-        {loadingMore && (
-          <div className={styles.statusMsg}>{t("klipyBrowser.loading")}</div>
-        )}
+        {loadingMore && <div className={styles.statusMsg}>{t("klipyBrowser.loading")}</div>}
 
         {!loading && results.length === 0 && searchQuery.trim() && (
-          <div className={styles.statusMsg}>
-            {t("klipyBrowser.noResults", { query: searchQuery })}
-          </div>
+          <div className={styles.statusMsg}>{t("klipyBrowser.noResults", { query: searchQuery })}</div>
         )}
 
         {!loading && error && results.length === 0 && categories.length === 0 && (

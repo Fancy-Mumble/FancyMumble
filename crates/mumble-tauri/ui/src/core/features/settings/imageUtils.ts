@@ -64,9 +64,7 @@ export async function resizeImage(
   for (let quality = 0.85; quality >= 0.3; quality -= 0.1) {
     const result = canvas.toDataURL(outFormat, quality);
     // Estimate raw byte count from base64 length.
-    const bytes = Math.ceil(
-      (result.length - result.indexOf(",") - 1) * 0.75,
-    );
+    const bytes = Math.ceil((result.length - result.indexOf(",") - 1) * 0.75);
     if (bytes <= maxBytes) return result;
   }
 

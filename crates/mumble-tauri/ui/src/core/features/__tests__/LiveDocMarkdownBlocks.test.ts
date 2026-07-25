@@ -18,9 +18,7 @@ describe("block sentinels", () => {
 
   it("records the offset where each top-level block starts", () => {
     const html = "<p>Alpha</p><h1>Title</h1><p>Beta gamma</p>";
-    const { text, blockStarts } = stripBlockSentinels(
-      editorHtmlToMarkdown(html, { markBlocks: true }),
-    );
+    const { text, blockStarts } = stripBlockSentinels(editorHtmlToMarkdown(html, { markBlocks: true }));
     expect(blockStarts[0]).toBe(0);
     expect(text.slice(blockStarts[1])).toMatch(/^# Title/);
     expect(text.slice(blockStarts[2])).toMatch(/^Beta gamma/);

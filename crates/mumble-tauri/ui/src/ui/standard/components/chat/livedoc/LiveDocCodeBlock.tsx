@@ -5,12 +5,7 @@ import styles from "./LiveDocCodeBlock.module.css";
 
 type CodeBlockLowlightOptions = (typeof CodeBlockLowlight)["options"];
 
-export default function LiveDocCodeBlock({
-  node,
-  updateAttributes,
-  extension,
-  editor,
-}: NodeViewProps) {
+export default function LiveDocCodeBlock({ node, updateAttributes, extension, editor }: NodeViewProps) {
   const language = (node.attrs.language as string | null) ?? "";
   const languages: string[] = (extension.options as CodeBlockLowlightOptions).lowlight.listLanguages();
   const isEditable = editor.isEditable;

@@ -13,13 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  DownloadIcon,
-  RefreshIcon,
-  SearchIcon,
-} from "../../icons";
+import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, RefreshIcon, SearchIcon } from "../../icons";
 import { useAppStore } from "@core/store";
 import type { AuditEntry } from "@core/types";
 import { TID } from "@core/testids";
@@ -39,12 +33,7 @@ import {
 import { Field, SelectInput, TextInput } from "../../components/elements/TextInput";
 import { Toggle } from "../settings/SharedControls";
 import { useAuditStore, AUDIT_PAGE_LIMIT } from "@core/features/admin/auditStore";
-import {
-  PREF_ENDLESS,
-  PREF_RAIL_OPEN,
-  readBoolPref,
-  writeBoolPref,
-} from "@core/features/admin/auditPrefs";
+import { PREF_ENDLESS, PREF_RAIL_OPEN, readBoolPref, writeBoolPref } from "@core/features/admin/auditPrefs";
 import styles from "./AuditLogTab.module.css";
 
 /** Validated categorical palette (dark surface; six-checks pass). */
@@ -68,30 +57,49 @@ const SURFACE = "#22262e";
  * verbatim; custom ones still appear from results.
  */
 const KNOWN_CATEGORIES = [
-  "audit.ban", "audit.kick", "audit.mute_deafen_suppress", "audit.move",
-  "audit.acl", "audit.channel", "audit.register", "audit.config",
-  "audit.plugin_admin", "audit.plugin_action", "audit.pchat_moderation",
+  "audit.ban",
+  "audit.kick",
+  "audit.mute_deafen_suppress",
+  "audit.move",
+  "audit.acl",
+  "audit.channel",
+  "audit.register",
+  "audit.config",
+  "audit.plugin_admin",
+  "audit.plugin_action",
+  "audit.pchat_moderation",
   "audit.access",
-  "signal.report", "signal.mute", "signal.block", "signal.hide",
-  "signal.deafen_from", "signal.raw_edges",
+  "signal.report",
+  "signal.mute",
+  "signal.block",
+  "signal.hide",
+  "signal.deafen_from",
+  "signal.raw_edges",
 ];
 
 const SINCE_OPTIONS = ["", "1h", "24h", "7d", "30d"] as const;
 
 function severityClass(sev: string): string {
   switch (sev) {
-    case "critical": return styles.sevCritical;
-    case "warning": return styles.sevWarning;
-    case "notice": return styles.sevNotice;
-    default: return styles.sevInfo;
+    case "critical":
+      return styles.sevCritical;
+    case "warning":
+      return styles.sevWarning;
+    case "notice":
+      return styles.sevNotice;
+    default:
+      return styles.sevInfo;
   }
 }
 
 function sourceClass(src: string): string {
   switch (src) {
-    case "client": return styles.srcClient;
-    case "plugin": return styles.srcPlugin;
-    default: return styles.srcServer;
+    case "client":
+      return styles.srcClient;
+    case "plugin":
+      return styles.srcPlugin;
+    default:
+      return styles.srcServer;
   }
 }
 
@@ -111,8 +119,18 @@ function download(filename: string, mime: string, content: string): void {
 
 function toCsv(entries: readonly AuditEntry[]): string {
   const cols = [
-    "id", "ts", "source", "category", "severity", "actorName", "actorUserId",
-    "targetName", "targetUserId", "channelId", "reason", "detailJson",
+    "id",
+    "ts",
+    "source",
+    "category",
+    "severity",
+    "actorName",
+    "actorUserId",
+    "targetName",
+    "targetUserId",
+    "channelId",
+    "reason",
+    "detailJson",
   ] as const;
   const esc = (v: unknown) => `"${String(v ?? "").replaceAll('"', '""')}"`;
   const rows = entries.map((e) => cols.map((c) => esc(e[c])).join(","));
@@ -143,7 +161,10 @@ function timeSeries(entries: readonly AuditEntry[]): { labels: string[]; counts:
 }
 
 /** Top-N categories + "other" fold (fixed palette order, never cycled). */
-function categoryBreakdown(entries: readonly AuditEntry[], topN: number): { labels: string[]; counts: number[] } {
+function categoryBreakdown(
+  entries: readonly AuditEntry[],
+  topN: number,
+): { labels: string[]; counts: number[] } {
   const byCat = new Map<string, number>();
   for (const e of entries) byCat.set(e.category || "?", (byCat.get(e.category || "?") ?? 0) + 1);
   const sorted = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
@@ -333,12 +354,14 @@ export function AuditViewer({ advancedSqlAvailable, view, onRan }: AuditViewerPr
       type: "bar",
       data: {
         labels,
-        datasets: [{
-          data: counts,
-          backgroundColor: PALETTE[0],
-          borderRadius: 4,
-          maxBarThickness: 18,
-        }],
+        datasets: [
+          {
+            data: counts,
+            backgroundColor: PALETTE[0],
+            borderRadius: 4,
+            maxBarThickness: 18,
+          },
+        ],
       },
       options: {
         responsive: true,
@@ -358,12 +381,14 @@ export function AuditViewer({ advancedSqlAvailable, view, onRan }: AuditViewerPr
       type: "bar",
       data: {
         labels,
-        datasets: [{
-          data: counts,
-          backgroundColor: labels.map((_, i) => PALETTE[i % PALETTE.length]),
-          borderRadius: 4,
-          maxBarThickness: 16,
-        }],
+        datasets: [
+          {
+            data: counts,
+            backgroundColor: labels.map((_, i) => PALETTE[i % PALETTE.length]),
+            borderRadius: 4,
+            maxBarThickness: 16,
+          },
+        ],
       },
       options: {
         indexAxis: "y",
@@ -386,17 +411,21 @@ export function AuditViewer({ advancedSqlAvailable, view, onRan }: AuditViewerPr
       type: "doughnut",
       data: {
         labels,
-        datasets: [{
-          data: labels.map((s) => bySev.get(s) ?? 0),
-          backgroundColor: labels.map((s) => SEVERITY_COLORS[s]),
-          borderColor: SURFACE,
-          borderWidth: 2,
-        }],
+        datasets: [
+          {
+            data: labels.map((s) => bySev.get(s) ?? 0),
+            backgroundColor: labels.map((s) => SEVERITY_COLORS[s]),
+            borderColor: SURFACE,
+            borderWidth: 2,
+          },
+        ],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { display: true, position: "bottom", labels: { color: TICK_COLOR, boxWidth: 12 } } },
+        plugins: {
+          legend: { display: true, position: "bottom", labels: { color: TICK_COLOR, boxWidth: 12 } },
+        },
       },
     };
   }, [entries]);
@@ -425,7 +454,9 @@ export function AuditViewer({ advancedSqlAvailable, view, onRan }: AuditViewerPr
           <SqlEditor
             value={queryText}
             onChange={setQueryText}
-            placeholder={t("audit.sqlPlaceholder", { defaultValue: "SELECT ... FROM audit_entries WHERE ..." })}
+            placeholder={t("audit.sqlPlaceholder", {
+              defaultValue: "SELECT ... FROM audit_entries WHERE ...",
+            })}
           />
         ) : (
           <QueryAutocomplete
@@ -436,8 +467,8 @@ export function AuditViewer({ advancedSqlAvailable, view, onRan }: AuditViewerPr
             context={suggestContext}
             placeholder={t("audit.queryPlaceholder", {
               defaultValue: advancedSqlAvailable
-                ? 'category ~ kick and ts > now-7d   (or start with SELECT for SQL)'
-                : 'category ~ kick and ts > now-7d',
+                ? "category ~ kick and ts > now-7d   (or start with SELECT for SQL)"
+                : "category ~ kick and ts > now-7d",
             })}
           />
         )}
@@ -565,11 +596,15 @@ function AuditDashboard({
       <div className={styles.kpiRow} data-testid={TID.auditKpiRow}>
         <div className={styles.statCard}>
           <span className={styles.statValue}>{kpis.last24h}</span>
-          <span className={styles.statLabel}>{t("audit.kpiActions24h", { defaultValue: "Actions (24h)" })}</span>
+          <span className={styles.statLabel}>
+            {t("audit.kpiActions24h", { defaultValue: "Actions (24h)" })}
+          </span>
         </div>
         <div className={styles.statCard}>
           <span className={styles.statValue}>{kpis.flagged}</span>
-          <span className={styles.statLabel}>{t("audit.kpiFlagged", { defaultValue: "Warnings & critical" })}</span>
+          <span className={styles.statLabel}>
+            {t("audit.kpiFlagged", { defaultValue: "Warnings & critical" })}
+          </span>
         </div>
         <div className={styles.statCard}>
           <span className={styles.statValue}>{kpis.reports}</span>
@@ -577,31 +612,44 @@ function AuditDashboard({
         </div>
         <div className={styles.statCard}>
           <span className={styles.statValue}>{kpis.distinctActors}</span>
-          <span className={styles.statLabel}>{t("audit.kpiActors", { defaultValue: "Distinct actors" })}</span>
+          <span className={styles.statLabel}>
+            {t("audit.kpiActors", { defaultValue: "Distinct actors" })}
+          </span>
         </div>
         <div className={styles.statCard}>
-          <span className={styles.statValue}>{kpis.total}{hasMore ? "+" : ""}</span>
+          <span className={styles.statValue}>
+            {kpis.total}
+            {hasMore ? "+" : ""}
+          </span>
           <span className={styles.statLabel}>{t("audit.kpiLoaded", { defaultValue: "Entries loaded" })}</span>
-          <span className={styles.statSub}>{t("audit.kpiScope", { defaultValue: "in current results" })}</span>
+          <span className={styles.statSub}>
+            {t("audit.kpiScope", { defaultValue: "in current results" })}
+          </span>
         </div>
       </div>
 
       {hasEntries ? (
         <div className={styles.chartsRow}>
           <div className={styles.chartCard}>
-            <span className={styles.chartTitle}>{t("audit.chartOverTime", { defaultValue: "Events over time" })}</span>
+            <span className={styles.chartTitle}>
+              {t("audit.chartOverTime", { defaultValue: "Events over time" })}
+            </span>
             <div className={styles.chartBody}>
               <DashboardChart config={timeChart} ariaLabel="Audit events over time" />
             </div>
           </div>
           <div className={styles.chartCard}>
-            <span className={styles.chartTitle}>{t("audit.chartByCategory", { defaultValue: "By category" })}</span>
+            <span className={styles.chartTitle}>
+              {t("audit.chartByCategory", { defaultValue: "By category" })}
+            </span>
             <div className={styles.chartBody}>
               <DashboardChart config={categoryChart} ariaLabel="Audit events by category" />
             </div>
           </div>
           <div className={styles.chartCard}>
-            <span className={styles.chartTitle}>{t("audit.chartBySeverity", { defaultValue: "By severity" })}</span>
+            <span className={styles.chartTitle}>
+              {t("audit.chartBySeverity", { defaultValue: "By severity" })}
+            </span>
             <div className={styles.chartBody}>
               <DashboardChart config={severityChart} ariaLabel="Audit events by severity" />
             </div>
@@ -701,18 +749,22 @@ function AuditResults({
             <span className={styles.kvKey}>{t("audit.colChannel", { defaultValue: "Channel" })}</span>
             <span className={styles.kvVal}>
               {selected.channelId != null
-                ? channelName(selected.channelId) ?? `#${selected.channelId}`
+                ? (channelName(selected.channelId) ?? `#${selected.channelId}`)
                 : "-"}
             </span>
             <span className={styles.kvKey}>{t("audit.colReason", { defaultValue: "Reason" })}</span>
             <span className={styles.kvVal}>
               {selected.reason || (
-                <span className={styles.noReason}>{t("audit.noReason", { defaultValue: "no reason given" })}</span>
+                <span className={styles.noReason}>
+                  {t("audit.noReason", { defaultValue: "no reason given" })}
+                </span>
               )}
             </span>
             {selected.relatesTo != null && (
               <>
-                <span className={styles.kvKey}>{t("audit.relatesTo", { defaultValue: "Related entry" })}</span>
+                <span className={styles.kvKey}>
+                  {t("audit.relatesTo", { defaultValue: "Related entry" })}
+                </span>
                 <span className={styles.kvVal}>#{selected.relatesTo}</span>
               </>
             )}
@@ -752,7 +804,9 @@ function AuditResults({
                 <td colSpan={8} className={styles.empty}>
                   {loading || loadingMore
                     ? t("audit.loading", { defaultValue: "Loading…" })
-                    : t("audit.noEntries", { defaultValue: "No entries. Run a search, or wait for the live tail." })}
+                    : t("audit.noEntries", {
+                        defaultValue: "No entries. Run a search, or wait for the live tail.",
+                      })}
                 </td>
               </tr>
             )}
@@ -765,14 +819,22 @@ function AuditResults({
                 onClick={() => onSelect(e)}
               >
                 <td className={styles.tdTime}>{fmtTime(e.ts)}</td>
-                <td><span className={`${styles.badge} ${severityClass(e.severity)}`}>{e.severity}</span></td>
-                <td><span className={`${styles.badge} ${sourceClass(e.source)}`}>{e.source}</span></td>
+                <td>
+                  <span className={`${styles.badge} ${severityClass(e.severity)}`}>{e.severity}</span>
+                </td>
+                <td>
+                  <span className={`${styles.badge} ${sourceClass(e.source)}`}>{e.source}</span>
+                </td>
                 <td>{e.category}</td>
                 <td>{e.actorName ?? (e.actorUserId != null ? `#${e.actorUserId}` : "-")}</td>
                 <td>{e.targetName ?? (e.targetUserId != null ? `#${e.targetUserId}` : "-")}</td>
-                <td>{e.channelId != null ? channelName(e.channelId) ?? `#${e.channelId}` : "-"}</td>
+                <td>{e.channelId != null ? (channelName(e.channelId) ?? `#${e.channelId}`) : "-"}</td>
                 <td className={styles.tdReason}>
-                  {e.reason || <span className={styles.noReason}>{t("audit.noReason", { defaultValue: "no reason given" })}</span>}
+                  {e.reason || (
+                    <span className={styles.noReason}>
+                      {t("audit.noReason", { defaultValue: "no reason given" })}
+                    </span>
+                  )}
                 </td>
               </tr>
             ))}
@@ -968,7 +1030,9 @@ function AuditFilterRail({
           </Field>
 
           <div className={styles.railGroup}>
-            <span className={styles.pillLabel}>{t("audit.filterCategory", { defaultValue: "Categories" })}</span>
+            <span className={styles.pillLabel}>
+              {t("audit.filterCategory", { defaultValue: "Categories" })}
+            </span>
             <div className={styles.railChips}>
               {categories.map((c) => {
                 const on = filters.categories.includes(c);

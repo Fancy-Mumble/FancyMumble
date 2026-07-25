@@ -52,11 +52,7 @@ interface LiveDocLaunchDialogProps {
 
 const MAX_SEED_BYTES = 1 * 1024 * 1024;
 
-export default function LiveDocLaunchDialog({
-  open,
-  onSubmit,
-  onCancel,
-}: LiveDocLaunchDialogProps) {
+export default function LiveDocLaunchDialog({ open, onSubmit, onCancel }: LiveDocLaunchDialogProps) {
   const { t } = useTranslation("chat");
   const { t: tc } = useTranslation("common");
   const [mode, setMode] = useState<LaunchMode>("new");
@@ -121,7 +117,13 @@ export default function LiveDocLaunchDialog({
   if (!open) return null;
 
   return (
-    <Modal onClose={onCancel} closeOnEsc={false} closeOnOverlayClick={false} zIndex={200} overlayClassName={styles.overlayBlur}>
+    <Modal
+      onClose={onCancel}
+      closeOnEsc={false}
+      closeOnOverlayClick={false}
+      zIndex={200}
+      overlayClassName={styles.overlayBlur}
+    >
       <div className={styles.dialog} role="dialog" aria-modal="true" aria-label={t("liveDoc.launch.title")}>
         <div className={styles.header}>
           <h2 className={styles.title}>{t("liveDoc.launch.title")}</h2>
@@ -166,7 +168,9 @@ export default function LiveDocLaunchDialog({
               <div className={styles.modeList} role="radiogroup" aria-label={t("liveDoc.launch.modeLabel")}>
                 {(["new", "existing"] as const).map((m) => {
                   const active = mode === m;
-                  const cls = [styles.modeOption, active ? styles.modeOptionActive : ""].filter(Boolean).join(" ");
+                  const cls = [styles.modeOption, active ? styles.modeOptionActive : ""]
+                    .filter(Boolean)
+                    .join(" ");
                   return (
                     <label key={m} className={cls}>
                       <input
@@ -182,7 +186,9 @@ export default function LiveDocLaunchDialog({
                           {m === "new" ? t("liveDoc.launch.modeNew") : t("liveDoc.launch.modeExisting")}
                         </div>
                         <div className={styles.modeDesc}>
-                          {m === "new" ? t("liveDoc.launch.modeNewDesc") : t("liveDoc.launch.modeExistingDesc")}
+                          {m === "new"
+                            ? t("liveDoc.launch.modeNewDesc")
+                            : t("liveDoc.launch.modeExistingDesc")}
                         </div>
                       </div>
                     </label>
@@ -190,10 +196,16 @@ export default function LiveDocLaunchDialog({
                 })}
               </div>
 
-              <div className={styles.modeList} role="radiogroup" aria-label={t("liveDoc.launch.visibilityLabel")}>
+              <div
+                className={styles.modeList}
+                role="radiogroup"
+                aria-label={t("liveDoc.launch.visibilityLabel")}
+              >
                 {(["publish", "private"] as const).map((v) => {
                   const active = visibility === v;
-                  const cls = [styles.modeOption, active ? styles.modeOptionActive : ""].filter(Boolean).join(" ");
+                  const cls = [styles.modeOption, active ? styles.modeOptionActive : ""]
+                    .filter(Boolean)
+                    .join(" ");
                   return (
                     <label key={v} className={cls}>
                       <input
@@ -209,7 +221,9 @@ export default function LiveDocLaunchDialog({
                           {v === "publish" ? t("liveDoc.launch.visPublish") : t("liveDoc.launch.visPrivate")}
                         </div>
                         <div className={styles.modeDesc}>
-                          {v === "publish" ? t("liveDoc.launch.visPublishDesc") : t("liveDoc.launch.visPrivateDesc")}
+                          {v === "publish"
+                            ? t("liveDoc.launch.visPublishDesc")
+                            : t("liveDoc.launch.visPrivateDesc")}
                         </div>
                       </div>
                     </label>
@@ -245,7 +259,11 @@ export default function LiveDocLaunchDialog({
                         : undefined
                     }
                   />
-                  {seedError && <p className={styles.message} role="alert">{seedError}</p>}
+                  {seedError && (
+                    <p className={styles.message} role="alert">
+                      {seedError}
+                    </p>
+                  )}
                 </div>
               )}
             </>

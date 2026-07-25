@@ -1,4 +1,18 @@
-import { BlockIcon, HashIcon, HeadphonesIcon, HeadphonesOffIcon, ImageIcon, MessageMinusIcon, MicIcon, MicOffIcon, StarIcon, TrashIcon, UserPlusIcon, UserXIcon, VolumeIcon } from "../../../icons";
+import {
+  BlockIcon,
+  HashIcon,
+  HeadphonesIcon,
+  HeadphonesOffIcon,
+  ImageIcon,
+  MessageMinusIcon,
+  MicIcon,
+  MicOffIcon,
+  StarIcon,
+  TrashIcon,
+  UserPlusIcon,
+  UserXIcon,
+  VolumeIcon,
+} from "../../../icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
@@ -18,7 +32,14 @@ import ConfirmDialog from "../../elements/ConfirmDialog";
 import Toast, { type ToastData } from "../../elements/Toast";
 import styles from "./UserContextMenu.module.css";
 import pickerStyles from "../move/MoveUserPicker.module.css";
-import { PERM_BAN, PERM_KICK, PERM_MOVE, PERM_MUTE_DEAFEN, PERM_REGISTER, PERM_RESET_USER_CONTENT } from "@core/utils/permissions";
+import {
+  PERM_BAN,
+  PERM_KICK,
+  PERM_MOVE,
+  PERM_MUTE_DEAFEN,
+  PERM_REGISTER,
+  PERM_RESET_USER_CONTENT,
+} from "@core/utils/permissions";
 import { SidebarSearch } from "../../elements/SearchFields";
 
 // -- Local per-session state --------------------------------------
@@ -36,11 +57,7 @@ interface MenuPosition {
   left: number;
 }
 
-function computePosition(
-  clickX: number,
-  clickY: number,
-  menuEl: HTMLElement,
-): MenuPosition {
+function computePosition(clickX: number, clickY: number, menuEl: HTMLElement): MenuPosition {
   const { innerWidth: vw, innerHeight: vh } = window;
   const rect = menuEl.getBoundingClientRect();
   const w = rect.width;
@@ -87,7 +104,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
   const sessions = useAppStore((s) => s.sessions);
   const deletePchatMessages = useAppStore((s) => s.deletePchatMessages);
   const setUserVolume = useAppStore((s) => s.setUserVolume);
-  const storedVolume = useAppStore((s) => user.hash ? (s.userVolumes[user.hash] ?? 100) : 100);
+  const storedVolume = useAppStore((s) => (user.hash ? (s.userVolumes[user.hash] ?? 100) : 100));
   const isSelf = user.session === ownSession;
 
   const channel = channels.find((c) => c.id === selectedChannel);
@@ -117,7 +134,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
 
   // Kick / Ban - checked at root channel.
   const canKick = !isSelf && (rootPerms & PERM_KICK) !== 0;
-  const canBan  = !isSelf && (rootPerms & PERM_BAN) !== 0;
+  const canBan = !isSelf && (rootPerms & PERM_BAN) !== 0;
 
   // Reset comment / Remove avatar - RESET_USER_CONTENT at root channel.
   const canResetContent = !isSelf && (rootPerms & PERM_RESET_USER_CONTENT) !== 0;
@@ -148,17 +165,15 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
       const match =
         friends.find((f) => user.hash && f.userHash === user.hash) ??
         friends.find(
-          (f) =>
-            !f.userHash &&
-            !user.hash &&
-            f.userName === user.name &&
-            f.serverId === activeServerId,
+          (f) => !f.userHash && !user.hash && f.userName === user.name && f.serverId === activeServerId,
         ) ??
         null;
       if (!cancelled) setFriendEntry(match);
     };
     refresh().catch((e) => console.error("load friends failed", e));
-    const onChange = () => { refresh().catch(() => {}); };
+    const onChange = () => {
+      refresh().catch(() => {});
+    };
     globalThis.addEventListener(FRIENDS_CHANGED_EVENT, onChange);
     return () => {
       cancelled = true;
@@ -293,7 +308,14 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
   return createPortal(
     <>
       {/* Invisible overlay to catch clicks outside */}
-      <div className={styles.overlay} onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
+      <div
+        className={styles.overlay}
+        onClick={onClose}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onClose();
+        }}
+      />
       <div
         ref={menuRef}
         className={styles.menu}
@@ -302,7 +324,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
         {/* -- Local settings -- */}
         {!isSelf && (
           <>
-            <div className={styles.sectionLabel}>{ t("userMenu.sectionLocal") }</div>
+            <div className={styles.sectionLabel}>{t("userMenu.sectionLocal")}</div>
             <div className={styles.volumeRow}>
               <span className={styles.menuIcon}>
                 <VolumeIcon width={14} height={14} />
@@ -322,12 +344,12 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
               type="button"
               className={styles.menuItem}
               data-testid={TID.userMenuFriendToggle}
-              onClick={() => { void handleFriendToggle(); }}
+              onClick={() => {
+                void handleFriendToggle();
+              }}
             >
               <span className={styles.menuIcon}>
-                {friendEntry
-                  ? <UserXIcon width={14} height={14} />
-                  : <UserPlusIcon width={14} height={14} />}
+                {friendEntry ? <UserXIcon width={14} height={14} /> : <UserPlusIcon width={14} height={14} />}
               </span>
               {friendEntry ? t("userMenu.removeFriend") : t("userMenu.addFriend")}
             </button>
@@ -353,15 +375,11 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
         {!isSelf && hasAnyAdminAction && (
           <>
             <div className={styles.divider} />
-            <div className={styles.sectionLabel}>{ t("userMenu.sectionAdmin") }</div>
+            <div className={styles.sectionLabel}>{t("userMenu.sectionAdmin")}</div>
             {canMuteDeafen && (
               <button type="button" className={styles.menuItem} onClick={() => handleAction("mute")}>
                 <span className={styles.menuIcon}>
-                  {user.mute ? (
-                    <MicIcon width={14} height={14} />
-                  ) : (
-                    <MicOffIcon width={14} height={14} />
-                  )}
+                  {user.mute ? <MicIcon width={14} height={14} /> : <MicOffIcon width={14} height={14} />}
                 </span>
                 {user.mute ? t("userMenu.unmute") : t("userMenu.mute")}
               </button>
@@ -379,11 +397,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
               </button>
             )}
             {canMuteDeafen && (
-              <button
-                type="button"
-                className={styles.menuItem}
-                onClick={() => handleAction("priority")}
-              >
+              <button type="button" className={styles.menuItem} onClick={() => handleAction("priority")}>
                 <span className={styles.menuIcon}>
                   <StarIcon width={14} height={14} />
                 </span>
@@ -391,11 +405,7 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
               </button>
             )}
             {canMoveUser && (
-              <button
-                type="button"
-                className={styles.menuItem}
-                onClick={() => setShowMoveSheet(true)}
-              >
+              <button type="button" className={styles.menuItem} onClick={() => setShowMoveSheet(true)}>
                 <span className={styles.menuIcon}>
                   <HashIcon width={14} height={14} />
                 </span>
@@ -425,13 +435,21 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
             {canResetContent && (
               <>
                 <div className={styles.divider} />
-                <button type="button" className={styles.menuItem} onClick={() => handleAction("reset_comment")}>
+                <button
+                  type="button"
+                  className={styles.menuItem}
+                  onClick={() => handleAction("reset_comment")}
+                >
                   <span className={styles.menuIcon}>
                     <MessageMinusIcon width={14} height={14} />
                   </span>
                   {t("userMenu.resetComment")}
                 </button>
-                <button type="button" className={styles.menuItem} onClick={() => handleAction("remove_avatar")}>
+                <button
+                  type="button"
+                  className={styles.menuItem}
+                  onClick={() => handleAction("remove_avatar")}
+                >
                   <span className={styles.menuIcon}>
                     <ImageIcon width={14} height={14} />
                   </span>
@@ -441,7 +459,11 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
             )}
             {(canKick || canBan) && <div className={styles.divider} />}
             {showDeleteMessages && (
-              <button type="button" className={`${styles.menuItem} ${styles.menuItemDanger}`} onClick={() => setDeleteUserConfirm(true)}>
+              <button
+                type="button"
+                className={`${styles.menuItem} ${styles.menuItemDanger}`}
+                onClick={() => setDeleteUserConfirm(true)}
+              >
                 <span className={styles.menuIcon}>
                   <TrashIcon width={14} height={14} />
                 </span>
@@ -449,7 +471,11 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
               </button>
             )}
             {canKick && (
-              <button type="button" className={`${styles.menuItem} ${styles.menuItemDanger}`} onClick={() => handleAction("kick")}>
+              <button
+                type="button"
+                className={`${styles.menuItem} ${styles.menuItemDanger}`}
+                onClick={() => handleAction("kick")}
+              >
                 <span className={styles.menuIcon}>
                   <UserXIcon width={14} height={14} />
                 </span>
@@ -457,7 +483,11 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
               </button>
             )}
             {canBan && (
-              <button type="button" className={`${styles.menuItem} ${styles.menuItemDanger}`} onClick={() => handleAction("ban")}>
+              <button
+                type="button"
+                className={`${styles.menuItem} ${styles.menuItemDanger}`}
+                onClick={() => handleAction("ban")}
+              >
                 <span className={styles.menuIcon}>
                   <BlockIcon width={14} height={14} />
                 </span>
@@ -486,7 +516,10 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
             if (selectedChannel !== null && user.hash) {
               try {
                 await deletePchatMessages(selectedChannel, { senderHash: user.hash });
-                setToast({ message: t("userMenu.toastMessagesDeleted", { name: user.name }), variant: "success" });
+                setToast({
+                  message: t("userMenu.toastMessagesDeleted", { name: user.name }),
+                  variant: "success",
+                });
               } catch (err) {
                 console.error("delete user messages error:", err);
                 setToast({ message: t("userMenu.toastDeleteFailed"), variant: "error" });
@@ -535,7 +568,10 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
           onClose={() => setShowMoveSheet(false)}
           onMoved={(name) => {
             setShowMoveSheet(false);
-            setToast({ message: t("userMenu.toastUserMoved", { name: user.name, channel: name }), variant: "success" });
+            setToast({
+              message: t("userMenu.toastUserMoved", { name: user.name, channel: name }),
+              variant: "success",
+            });
             onClose();
           }}
           onError={() => {
@@ -561,13 +597,7 @@ interface MoveUserChannelPickerProps {
   readonly onError: () => void;
 }
 
-function MoveUserChannelPicker({
-  user,
-  channels,
-  onClose,
-  onMoved,
-  onError,
-}: MoveUserChannelPickerProps) {
+function MoveUserChannelPicker({ user, channels, onClose, onMoved, onError }: MoveUserChannelPickerProps) {
   const { t } = useTranslation(["sidebar", "common"]);
   const [filter, setFilter] = useState("");
   const users = useAppStore((s) => s.users);
@@ -583,9 +613,7 @@ function MoveUserChannelPicker({
       channels
         .filter((c) => c.id !== user.channel_id)
         .filter((c) =>
-          filter.trim() === ""
-            ? true
-            : (c.name ?? "").toLowerCase().includes(filter.toLowerCase()),
+          filter.trim() === "" ? true : (c.name ?? "").toLowerCase().includes(filter.toLowerCase()),
         )
         .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")),
     [channels, filter, user.channel_id],
@@ -623,9 +651,7 @@ function MoveUserChannelPicker({
       >
         <div className={pickerStyles.header}>
           <span className={pickerStyles.title}>{t("movePicker.title")}</span>
-          <span className={pickerStyles.subtitle}>
-            {t("movePicker.subtitle", { name: user.name })}
-          </span>
+          <span className={pickerStyles.subtitle}>{t("movePicker.subtitle", { name: user.name })}</span>
         </div>
         <div className={pickerStyles.searchWrap}>
           <SidebarSearch
@@ -655,9 +681,7 @@ function MoveUserChannelPicker({
                   </span>
                   <span className={pickerStyles.itemName}>{c.name || t("movePicker.root")}</span>
                   {count > 0 && (
-                    <span className={pickerStyles.itemMeta}>
-                      {t("movePicker.member", { count })}
-                    </span>
+                    <span className={pickerStyles.itemMeta}>{t("movePicker.member", { count })}</span>
                   )}
                 </button>
               );
@@ -665,11 +689,7 @@ function MoveUserChannelPicker({
           )}
         </div>
         <div className={pickerStyles.footer}>
-          <button
-            type="button"
-            className={pickerStyles.cancelBtn}
-            onClick={onClose}
-          >
+          <button type="button" className={pickerStyles.cancelBtn} onClick={onClose}>
             {t("common:actions.cancel")}
           </button>
         </div>

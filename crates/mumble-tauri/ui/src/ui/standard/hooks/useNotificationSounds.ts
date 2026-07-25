@@ -15,10 +15,7 @@ function playSound(url: string, volume: number) {
   audio.play().catch(() => {});
 }
 
-export function playSoundForEvent(
-  settings: NotificationSoundSettings,
-  event: NotificationEvent,
-) {
+export function playSoundForEvent(settings: NotificationSoundSettings, event: NotificationEvent) {
   if (!settings.masterEnabled) return;
   const cfg = settings.events[event];
   if (!cfg?.enabled || cfg.sound === "none") return;
@@ -26,9 +23,7 @@ export function playSoundForEvent(
   playSound(url, cfg.volume);
 }
 
-export function useNotificationSounds(
-  settings: NotificationSoundSettings,
-) {
+export function useNotificationSounds(settings: NotificationSoundSettings) {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
@@ -154,10 +149,7 @@ export function useNotificationSounds(
 
       // Server-wide user join/leave (own session excluded so connecting doesn't trigger it)
       if (usersChanged || ownChanged) {
-        const userCount = state.users.reduce(
-          (acc, u) => (u.session !== state.ownSession ? acc + 1 : acc),
-          0,
-        );
+        const userCount = state.users.reduce((acc, u) => (u.session !== state.ownSession ? acc + 1 : acc), 0);
         const prev = prevUserCountRef.current;
         if (prev === null) {
           prevUserCountRef.current = userCount;

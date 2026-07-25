@@ -13,8 +13,7 @@ import styles from "./SettingsPage.module.css";
 import panelStyles from "./UserShortcutsSection.module.css";
 
 function newId(): string {
-  return globalThis.crypto?.randomUUID?.()
-    ?? `us-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return globalThis.crypto?.randomUUID?.() ?? `us-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 /** Settings section that lets the user bind global hotkeys to specific
@@ -36,9 +35,7 @@ export default function UserShortcutsSection() {
 
   const activeSession = sessions.find((s) => s.id === activeServerId);
   const candidateUsers = useMemo(
-    () => users
-      .filter((u) => u.session !== ownSession)
-      .sort((a, b) => a.name.localeCompare(b.name)),
+    () => users.filter((u) => u.session !== ownSession).sort((a, b) => a.name.localeCompare(b.name)),
     [users, ownSession],
   );
 
@@ -64,25 +61,31 @@ export default function UserShortcutsSection() {
     setPickSession("");
   }, [activeServerId, activeSession, pickSession, candidateUsers, shortcuts, persist]);
 
-  const handleHotkeyChange = useCallback(async (id: string, hotkey: string) => {
-    const prev = shortcuts.find((s) => s.id === id);
-    if (!prev) return;
-    if (prev.hotkey && prev.hotkey !== hotkey) {
-      await clearUserShortcut(prev.hotkey);
-    }
-    const next = shortcuts.map((s) => (s.id === id ? { ...s, hotkey } : s));
-    await persist(next);
-    const updated = next.find((s) => s.id === id);
-    if (updated?.hotkey) {
-      await applyUserShortcut(updated);
-    }
-  }, [shortcuts, persist]);
+  const handleHotkeyChange = useCallback(
+    async (id: string, hotkey: string) => {
+      const prev = shortcuts.find((s) => s.id === id);
+      if (!prev) return;
+      if (prev.hotkey && prev.hotkey !== hotkey) {
+        await clearUserShortcut(prev.hotkey);
+      }
+      const next = shortcuts.map((s) => (s.id === id ? { ...s, hotkey } : s));
+      await persist(next);
+      const updated = next.find((s) => s.id === id);
+      if (updated?.hotkey) {
+        await applyUserShortcut(updated);
+      }
+    },
+    [shortcuts, persist],
+  );
 
-  const handleRemove = useCallback(async (id: string) => {
-    const target = shortcuts.find((s) => s.id === id);
-    if (target?.hotkey) await clearUserShortcut(target.hotkey);
-    await persist(shortcuts.filter((s) => s.id !== id));
-  }, [shortcuts, persist]);
+  const handleRemove = useCallback(
+    async (id: string) => {
+      const target = shortcuts.find((s) => s.id === id);
+      if (target?.hotkey) await clearUserShortcut(target.hotkey);
+      await persist(shortcuts.filter((s) => s.id !== id));
+    },
+    [shortcuts, persist],
+  );
 
   return (
     <section className={styles.section}>
@@ -90,9 +93,7 @@ export default function UserShortcutsSection() {
       <p className={styles.fieldHint}>{t("userShortcuts.hint")}</p>
 
       <div className={styles.shortcutList}>
-        {shortcuts.length === 0 && (
-          <p className={styles.fieldHint}>{t("userShortcuts.empty")}</p>
-        )}
+        {shortcuts.length === 0 && <p className={styles.fieldHint}>{t("userShortcuts.empty")}</p>}
         {shortcuts.map((s) => {
           const scopeLabel = (() => {
             if (s.userHash) return t("userShortcuts.anyServer");
@@ -100,25 +101,25 @@ export default function UserShortcutsSection() {
             return t("userShortcuts.serverScopedUnknown");
           })();
           return (
-          <div key={s.id} className={panelStyles.userShortcutRow}>
-            <div className={panelStyles.userShortcutMeta}>
-              <span className={panelStyles.userShortcutName}>{s.userName}</span>
-              <span className={panelStyles.userShortcutServer}>{scopeLabel}</span>
+            <div key={s.id} className={panelStyles.userShortcutRow}>
+              <div className={panelStyles.userShortcutMeta}>
+                <span className={panelStyles.userShortcutName}>{s.userName}</span>
+                <span className={panelStyles.userShortcutServer}>{scopeLabel}</span>
+              </div>
+              <ShortcutRecorder
+                label={t("userShortcuts.hotkeyLabel")}
+                value={s.hotkey}
+                onChange={(v) => void handleHotkeyChange(s.id, v)}
+              />
+              <button
+                type="button"
+                className={panelStyles.userShortcutRemove}
+                onClick={() => void handleRemove(s.id)}
+                title={t("userShortcuts.remove")}
+              >
+                {t("userShortcuts.remove")}
+              </button>
             </div>
-            <ShortcutRecorder
-              label={t("userShortcuts.hotkeyLabel")}
-              value={s.hotkey}
-              onChange={(v) => void handleHotkeyChange(s.id, v)}
-            />
-            <button
-              type="button"
-              className={panelStyles.userShortcutRemove}
-              onClick={() => void handleRemove(s.id)}
-              title={t("userShortcuts.remove")}
-            >
-              {t("userShortcuts.remove")}
-            </button>
-          </div>
           );
         })}
       </div>
@@ -128,9 +129,7 @@ export default function UserShortcutsSection() {
           <label className={styles.fieldLabel} htmlFor="user-shortcut-pick">
             {t("userShortcuts.pickUser")}
           </label>
-          {!activeServerId && (
-            <p className={styles.fieldHint}>{t("userShortcuts.noActiveServer")}</p>
-          )}
+          {!activeServerId && <p className={styles.fieldHint}>{t("userShortcuts.noActiveServer")}</p>}
           {activeServerId && candidateUsers.length === 0 && (
             <p className={styles.fieldHint}>{t("userShortcuts.noUsersOnline")}</p>
           )}
@@ -144,7 +143,8 @@ export default function UserShortcutsSection() {
             <option value="">{t("userShortcuts.selectPrompt")}</option>
             {candidateUsers.map((u) => (
               <option key={u.session} value={String(u.session)}>
-                {u.name}{u.hash ? "" : ` (${t("userShortcuts.noHashBadge")})`}
+                {u.name}
+                {u.hash ? "" : ` (${t("userShortcuts.noHashBadge")})`}
               </option>
             ))}
           </select>
@@ -153,7 +153,10 @@ export default function UserShortcutsSection() {
             <button
               type="button"
               className={panelStyles.userShortcutCancel}
-              onClick={() => { setPicking(false); setPickSession(""); }}
+              onClick={() => {
+                setPicking(false);
+                setPickSession("");
+              }}
             >
               {t("common:actions.cancel")}
             </button>
@@ -168,15 +171,10 @@ export default function UserShortcutsSection() {
           </div>
         </div>
       ) : (
-        <button
-          type="button"
-          className={panelStyles.userShortcutAdd}
-          onClick={() => setPicking(true)}
-        >
+        <button type="button" className={panelStyles.userShortcutAdd} onClick={() => setPicking(true)}>
           {t("userShortcuts.addBtn")}
         </button>
       )}
     </section>
   );
 }
-

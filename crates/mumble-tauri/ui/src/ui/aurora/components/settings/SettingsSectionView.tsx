@@ -9,7 +9,12 @@ import PrivacySettingsPanel from "./PrivacySettingsPanel";
 import ProfileIdentitySettings from "./ProfileIdentitySettings";
 import ShortcutSettings from "./ShortcutSettings";
 import VoiceSettingsPanel from "./VoiceSettingsPanel";
-import type { LocalPreferenceHandler, PreferencePatchHandler, PreferenceToggleHandler, SettingsSectionId } from "./settingsModel";
+import type {
+  LocalPreferenceHandler,
+  PreferencePatchHandler,
+  PreferenceToggleHandler,
+  SettingsSectionId,
+} from "./settingsModel";
 
 export interface SettingsSectionViewProps {
   section: SettingsSectionId;
@@ -19,10 +24,23 @@ export interface SettingsSectionViewProps {
   onLocalChange: LocalPreferenceHandler;
 }
 
-export default function SettingsSectionView({ section, prefs, onToggle, onPatch, onLocalChange }: SettingsSectionViewProps) {
+export default function SettingsSectionView({
+  section,
+  prefs,
+  onToggle,
+  onPatch,
+  onLocalChange,
+}: SettingsSectionViewProps) {
   switch (section) {
     case "general":
-      return <GeneralSettingsPanel prefs={prefs} onToggle={onToggle} onPatch={onPatch} onLocalChange={onLocalChange} />;
+      return (
+        <GeneralSettingsPanel
+          prefs={prefs}
+          onToggle={onToggle}
+          onPatch={onPatch}
+          onLocalChange={onLocalChange}
+        />
+      );
     case "profile":
       return <ProfileIdentitySettings />;
     case "voice":
@@ -40,6 +58,13 @@ export default function SettingsSectionView({ section, prefs, onToggle, onPatch,
     case "appearance":
       return <AppearanceSettings />;
     case "advanced":
-      return <AdvancedSettingsPanel prefs={prefs} onToggle={onToggle} onPatch={onPatch} onLocalChange={onLocalChange} />;
+      return (
+        <AdvancedSettingsPanel
+          prefs={prefs}
+          onToggle={onToggle}
+          onPatch={onPatch}
+          onLocalChange={onLocalChange}
+        />
+      );
   }
 }

@@ -5,5 +5,9 @@ export interface ToggleSwitchProps {
 }
 
 export default function ToggleSwitch({ on }: ToggleSwitchProps) {
-  return <i className={on ? styles.switchOn : styles.switch}><b /></i>;
+  return (
+    <i className={on ? styles.switchOn : styles.switch}>
+      <b />
+    </i>
+  );
 }

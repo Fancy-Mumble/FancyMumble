@@ -187,13 +187,7 @@ function operatorSuggestions(field: string): AuditSuggestion[] {
     apply: `${op} `,
     kind: op === "in" ? ("keyword" as const) : ("operator" as const),
     detail:
-      op === "in"
-        ? "match any of a list"
-        : op === "~"
-          ? "fuzzy / contains"
-          : op === "="
-            ? "equals"
-            : "after",
+      op === "in" ? "match any of a list" : op === "~" ? "fuzzy / contains" : op === "=" ? "equals" : "after",
   }));
 }
 
@@ -237,9 +231,7 @@ function resolveContext(toks: ScanTok[]): Ctx {
   switch (last.kind) {
     case "and":
     case "paren": // after "," or "(" (non-in) -> a fresh field reads best
-      return last.kind === "paren" && last.value === ")"
-        ? { where: "and" }
-        : { where: "field" };
+      return last.kind === "paren" && last.value === ")" ? { where: "and" } : { where: "field" };
     case "field":
       return { where: "operator", field: last.value };
     case "in":
@@ -288,11 +280,7 @@ function rank(list: AuditSuggestion[], word: string): AuditSuggestion[] {
  * partial word under the caret, including a leading quote if the value is being
  * typed inside one) and the ranked, prefix-filtered suggestion list.
  */
-export function suggestAudit(
-  text: string,
-  caret: number,
-  ctx: AuditSuggestContext,
-): AuditSuggestResult {
+export function suggestAudit(text: string, caret: number, ctx: AuditSuggestContext): AuditSuggestResult {
   const pos = Math.max(0, Math.min(caret, text.length));
 
   // Span of the partial word immediately left of the caret.

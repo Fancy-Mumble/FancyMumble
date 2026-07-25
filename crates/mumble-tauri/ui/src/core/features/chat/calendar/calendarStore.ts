@@ -112,9 +112,7 @@ interface CalendarState {
   openEditEvent: (id: string) => void;
   closeDialog: () => void;
 
-  upsertEvent: (
-    e: Omit<CalendarEvent, "id" | "createdAt" | "updatedAt"> & { id?: string },
-  ) => CalendarEvent;
+  upsertEvent: (e: Omit<CalendarEvent, "id" | "createdAt" | "updatedAt"> & { id?: string }) => CalendarEvent;
   deleteEvent: (id: string) => void;
 
   setAvailability: (a: AvailabilityBlock) => void;
@@ -163,12 +161,9 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
     }
   },
 
-  openNewEvent: (start) =>
-    set({ dialogOpen: true, editingEventId: null, draftStart: start ?? null }),
-  openEditEvent: (id) =>
-    set({ dialogOpen: true, editingEventId: id, draftStart: null }),
-  closeDialog: () =>
-    set({ dialogOpen: false, editingEventId: null, draftStart: null }),
+  openNewEvent: (start) => set({ dialogOpen: true, editingEventId: null, draftStart: start ?? null }),
+  openEditEvent: (id) => set({ dialogOpen: true, editingEventId: id, draftStart: null }),
+  closeDialog: () => set({ dialogOpen: false, editingEventId: null, draftStart: null }),
 
   upsertEvent: (input) => {
     const now = Date.now();
@@ -180,9 +175,7 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
       updatedAt: now,
     };
     set((s) => ({
-      events: existing
-        ? s.events.map((e) => (e.id === event.id ? event : e))
-        : [...s.events, event],
+      events: existing ? s.events.map((e) => (e.id === event.id ? event : e)) : [...s.events, event],
     }));
     persistCalendar();
     sendCalendar("calendar.upsert", toShared(event));
@@ -211,8 +204,7 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
   },
 
   detail: null,
-  openDetail: (eventId, occStart, rect) =>
-    set({ detail: { eventId, occStart, rect }, menu: null }),
+  openDetail: (eventId, occStart, rect) => set({ detail: { eventId, occStart, rect }, menu: null }),
   closeDetail: () => set({ detail: null }),
 
   menu: null,
@@ -231,8 +223,7 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
       return { workHours: next };
     }),
 
-  hydrate: (events, availability) =>
-    set({ events, availability: availability ?? [] }),
+  hydrate: (events, availability) => set({ events, availability: availability ?? [] }),
 }));
 
 /**
@@ -270,9 +261,7 @@ export function applyCalendarInbound(payloadType: string, data: Record<string, u
         updatedAt: shared.updatedAt ?? Date.now(),
       };
       return {
-        events: existing
-          ? s.events.map((e) => (e.id === merged.id ? merged : e))
-          : [...s.events, merged],
+        events: existing ? s.events.map((e) => (e.id === merged.id ? merged : e)) : [...s.events, merged],
       };
     });
 

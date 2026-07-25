@@ -10,8 +10,7 @@ export const FONT_FAMILIES: readonly { id: string; label: string; css: string }[
   { id: "rounded", label: "Rounded", css: "'Nunito', 'Quicksand', 'Comfortaa', sans-serif" },
 ] as const;
 
-const SYSTEM_DEFAULT_STACK =
-  "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif";
+const SYSTEM_DEFAULT_STACK = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif";
 
 const fontCssById = new Map(FONT_FAMILIES.map((f) => [f.id, f.css]));
 

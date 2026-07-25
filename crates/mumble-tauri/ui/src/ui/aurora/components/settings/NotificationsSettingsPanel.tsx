@@ -8,5 +8,7 @@ export interface NotificationsSettingsPanelProps {
 }
 
 export default function NotificationsSettingsPanel({ prefs, onToggle }: NotificationsSettingsPanelProps) {
-  return <PreferenceToggleList keys={sectionPreferenceKeys.notifications} prefs={prefs} onToggle={onToggle} />;
+  return (
+    <PreferenceToggleList keys={sectionPreferenceKeys.notifications} prefs={prefs} onToggle={onToggle} />
+  );
 }

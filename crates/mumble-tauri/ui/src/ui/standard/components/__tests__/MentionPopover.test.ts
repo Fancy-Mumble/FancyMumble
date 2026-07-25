@@ -51,12 +51,7 @@ describe("MentionPopover helpers", () => {
 
   describe("membersForRole", () => {
     it("returns matching online users from add + inherited minus remove", () => {
-      const users = [
-        user(1, 0, 100),
-        user(2, 0, 101),
-        user(3, 0, 102),
-        user(4, 0, 103),
-      ];
+      const users = [user(1, 0, 100), user(2, 0, 101), user(3, 0, 102), user(4, 0, 103)];
       const groups = [group("admin", [100, 101], [102], [101])];
       const out = membersForRole(users, "admin", groups);
       // 100 from add, 102 from inherited, 101 removed.

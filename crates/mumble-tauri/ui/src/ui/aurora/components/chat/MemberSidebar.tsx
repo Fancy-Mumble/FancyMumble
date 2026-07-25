@@ -17,14 +17,23 @@ export interface MemberSidebarProps {
 
 /** Roster for the current channel, or the whole server. */
 export default function MemberSidebar({
-  members, scope, onScopeChange, query, onQueryChange, ownSession, talkingSessions, onHoverMember,
+  members,
+  scope,
+  onScopeChange,
+  query,
+  onQueryChange,
+  ownSession,
+  talkingSessions,
+  onHoverMember,
 }: MemberSidebarProps) {
   return (
     <aside className={styles.members}>
       <div className={styles.panelHeader}>
         <div>
           <small>{scope === "channel" ? "IN THIS CHANNEL" : "SERVER MEMBERS"}</small>
-          <strong>{members.length} {scope === "channel" ? "online" : "members"}</strong>
+          <strong>
+            {members.length} {scope === "channel" ? "online" : "members"}
+          </strong>
         </div>
         <UsersGroupIcon />
       </div>
@@ -36,8 +45,15 @@ export default function MemberSidebar({
           aria-label="Search members"
         />
         <div>
-          <Button variant={scope === "channel" ? "secondary" : "bare"} onClick={() => onScopeChange("channel")}>Channel</Button>
-          <Button variant={scope === "server" ? "secondary" : "bare"} onClick={() => onScopeChange("server")}>Server</Button>
+          <Button
+            variant={scope === "channel" ? "secondary" : "bare"}
+            onClick={() => onScopeChange("channel")}
+          >
+            Channel
+          </Button>
+          <Button variant={scope === "server" ? "secondary" : "bare"} onClick={() => onScopeChange("server")}>
+            Server
+          </Button>
         </div>
       </div>
       <div className={styles.memberList}>

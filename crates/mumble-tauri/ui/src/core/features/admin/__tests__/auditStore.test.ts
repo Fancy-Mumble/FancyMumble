@@ -183,7 +183,17 @@ describe("config", () => {
   });
 
   it("saveConfig sends the changed settings and clears busy", async () => {
-    const changed = [{ key: "audit.ban.collect", type: "bool", group: "Audit", label: "", options: [], secret: false, value: "false" }];
+    const changed = [
+      {
+        key: "audit.ban.collect",
+        type: "bool",
+        group: "Audit",
+        label: "",
+        options: [],
+        secret: false,
+        value: "false",
+      },
+    ];
     await useAuditStore.getState().saveConfig(changed);
     expect(invokeMock).toHaveBeenCalledWith("save_audit_config", { changed });
     expect(useAuditStore.getState().configBusy).toBe(false);

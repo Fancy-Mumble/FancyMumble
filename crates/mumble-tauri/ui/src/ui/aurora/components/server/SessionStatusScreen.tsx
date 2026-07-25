@@ -29,25 +29,27 @@ export default function SessionStatusScreen({ onOpenServers }: SessionStatusScre
   // wrong, so it carries the message. Adding our own cause would contradict
   // it whenever the guess is wrong (a dropped link is not a refusal).
   const title = reconnectScheduled ? "Reconnecting…" : error ? "Connection failed" : "Disconnected";
-  const reason = reconnectScheduled
-    ? `Attempt ${reconnectAttempts + 1} · retrying automatically.`
-    : error;
+  const reason = reconnectScheduled ? `Attempt ${reconnectAttempts + 1} · retrying automatically.` : error;
 
   const retry = () => {
     if (!active) return;
     void useAppStore.getState().connect(active.host, active.port, active.username, active.certLabel);
   };
 
-  return <SessionStatusCard
-    pending={reconnectScheduled}
-    title={title}
-    server={server}
-    reason={reason}
-    actions={<SessionStatusActions
-      retryLabel={reconnectScheduled ? "Retry now" : "Try again"}
-      onRetry={retry}
-      onOpenServers={onOpenServers}
-      onClose={() => void useAppStore.getState().disconnect()}
-    />}
-  />;
+  return (
+    <SessionStatusCard
+      pending={reconnectScheduled}
+      title={title}
+      server={server}
+      reason={reason}
+      actions={
+        <SessionStatusActions
+          retryLabel={reconnectScheduled ? "Retry now" : "Try again"}
+          onRetry={retry}
+          onOpenServers={onOpenServers}
+          onClose={() => void useAppStore.getState().disconnect()}
+        />
+      }
+    />
+  );
 }

@@ -7,5 +7,12 @@ export interface SessionStatusReasonProps {
 }
 
 export default function SessionStatusReason({ message, pending }: SessionStatusReasonProps) {
-  return <p className={`${styles.reason} ${pending ? styles.reasonPending : ""}`} role={pending ? "status" : "alert"}>{message}</p>;
+  return (
+    <p
+      className={`${styles.reason} ${pending ? styles.reasonPending : ""}`}
+      role={pending ? "status" : "alert"}
+    >
+      {message}
+    </p>
+  );
 }

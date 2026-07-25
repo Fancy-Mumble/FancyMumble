@@ -9,7 +9,19 @@ export interface PreferenceToggleListProps {
 }
 
 export default function PreferenceToggleList({ keys, prefs, onToggle }: PreferenceToggleListProps) {
-  return <>{settingRows
-    .filter((row) => keys.includes(row.key))
-    .map((row) => <PreferenceToggleRow key={row.key} title={row.title} detail={row.detail} checked={!!prefs[row.key]} onToggle={() => onToggle(row.key)} />)}</>;
+  return (
+    <>
+      {settingRows
+        .filter((row) => keys.includes(row.key))
+        .map((row) => (
+          <PreferenceToggleRow
+            key={row.key}
+            title={row.title}
+            detail={row.detail}
+            checked={!!prefs[row.key]}
+            onToggle={() => onToggle(row.key)}
+          />
+        ))}
+    </>
+  );
 }

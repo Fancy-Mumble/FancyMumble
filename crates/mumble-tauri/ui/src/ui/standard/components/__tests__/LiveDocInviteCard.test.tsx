@@ -35,14 +35,7 @@ describe("LiveDocInviteCard", () => {
   });
 
   it("passes silent:true when the Join button is clicked", () => {
-    render(
-      <LiveDocInviteCard
-        channelId={7}
-        slug="notes"
-        title="Team Notes"
-        senderName="Alice"
-      />,
-    );
+    render(<LiveDocInviteCard channelId={7} slug="notes" title="Team Notes" senderName="Alice" />);
     fireEvent.click(screen.getByRole("button"));
     expect(requestOpenLiveDoc).toHaveBeenCalledTimes(1);
     expect(requestOpenLiveDoc).toHaveBeenCalledWith(7, "notes", "Team Notes", {
@@ -53,28 +46,24 @@ describe("LiveDocInviteCard", () => {
   it("disables the button when the user is already in the same doc", () => {
     useAppStore.setState({
       activeLiveDocs: new Map([
-        ["srv-1|7", {
-          serverId: 1,
-          appServerId: "srv-1",
-          channelId: 7,
-          slug: "notes",
-          title: "Team Notes",
-          wsUrl: "",
-          token: "",
-          ownSession: 1,
-          ownName: "me",
-          ownColor: "#000",
-        }],
+        [
+          "srv-1|7",
+          {
+            serverId: 1,
+            appServerId: "srv-1",
+            channelId: 7,
+            slug: "notes",
+            title: "Team Notes",
+            wsUrl: "",
+            token: "",
+            ownSession: 1,
+            ownName: "me",
+            ownColor: "#000",
+          },
+        ],
       ]),
     });
-    render(
-      <LiveDocInviteCard
-        channelId={7}
-        slug="notes"
-        title="Team Notes"
-        senderName="Alice"
-      />,
-    );
+    render(<LiveDocInviteCard channelId={7} slug="notes" title="Team Notes" senderName="Alice" />);
     const btn = screen.getByRole("button") as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
     fireEvent.click(btn);

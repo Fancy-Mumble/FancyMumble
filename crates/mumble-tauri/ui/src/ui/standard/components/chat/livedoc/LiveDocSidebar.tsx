@@ -66,9 +66,7 @@ export default function LiveDocSidebar({
   // asynchronously after connecting.  Reload whenever they become available
   // so an early load (which fell back to an empty in-memory index) is
   // corrected once the user's registered session is ready.
-  const credsReady = useAppStore(
-    (s) => !!(s.fileServerConfig?.registered && s.fileServerConfig?.sessionJwt),
-  );
+  const credsReady = useAppStore((s) => !!(s.fileServerConfig?.registered && s.fileServerConfig?.sessionJwt));
 
   useEffect(() => {
     if (!loaded || credsReady) void load();
@@ -158,7 +156,10 @@ export default function LiveDocSidebar({
         )}
         {!available && loaded && reason === "error" && (
           <div className={styles.warning} role="alert">
-            ⚠ {t("liveDoc.sidebar.errorHint", { defaultValue: "Couldn't load your documents from the server." })}{" "}
+            ⚠{" "}
+            {t("liveDoc.sidebar.errorHint", {
+              defaultValue: "Couldn't load your documents from the server.",
+            })}{" "}
             <button type="button" className={styles.retryBtn} onClick={() => void load()}>
               {t("liveDoc.sidebar.retry", { defaultValue: "Retry" })}
             </button>

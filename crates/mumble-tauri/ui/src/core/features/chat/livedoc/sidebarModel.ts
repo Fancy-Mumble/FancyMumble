@@ -7,12 +7,7 @@
  * their input, so they compose cleanly with `setState`.
  */
 
-import type {
-  LiveDocDocLink,
-  LiveDocFolder,
-  LiveDocIndex,
-  LiveDocSection,
-} from "../../../types";
+import type { LiveDocDocLink, LiveDocFolder, LiveDocIndex, LiveDocSection } from "../../../types";
 
 /** Current sidebar schema version. */
 export const SIDEBAR_VERSION = 1;
@@ -141,11 +136,7 @@ export function renameDocLink(index: LiveDocIndex, slug: string, title: string):
  *  No-ops when the node is missing, dropped onto itself, or would be
  *  moved into one of its own descendants (which would detach the subtree
  *  from the tree).  The moved node keeps its id, name and contents. */
-export function moveNode(
-  index: LiveDocIndex,
-  nodeId: string,
-  targetParentId: string | null,
-): LiveDocIndex {
+export function moveNode(index: LiveDocIndex, nodeId: string, targetParentId: string | null): LiveDocIndex {
   if (nodeId === targetParentId) return index;
   const node = findFolder(index.sections, nodeId);
   if (!node) return index;
@@ -181,10 +172,7 @@ export function moveDoc(
 }
 
 /** Find a folder/section node by id anywhere in the tree. */
-export function findFolder(
-  sections: ReadonlyArray<LiveDocFolder>,
-  id: string,
-): LiveDocFolder | null {
+export function findFolder(sections: ReadonlyArray<LiveDocFolder>, id: string): LiveDocFolder | null {
   for (const node of sections) {
     if (node.id === id) return node;
     const found = findFolder(node.folders, id);

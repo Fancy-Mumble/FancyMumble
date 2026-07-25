@@ -7,9 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
-import LoadingSplash, {
-  __TEST_FUNNY_MESSAGES,
-} from "../elements/LoadingSplash";
+import LoadingSplash, { __TEST_FUNNY_MESSAGES } from "../elements/LoadingSplash";
 
 describe("LoadingSplash", () => {
   beforeEach(() => {

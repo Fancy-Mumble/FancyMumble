@@ -53,11 +53,7 @@ export default function LiveDocAvatarStack({ peers, max = 5 }: LiveDocAvatarStac
   if (ordered.length === 0) return null;
 
   return (
-    <div
-      className={styles.stack}
-      role="group"
-      aria-label={t("liveDoc.peers", { count: ordered.length })}
-    >
+    <div className={styles.stack} role="group" aria-label={t("liveDoc.peers", { count: ordered.length })}>
       {visible.map((p) => (
         <AvatarChip key={p.session} peer={p} />
       ))}

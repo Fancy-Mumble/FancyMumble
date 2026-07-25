@@ -17,7 +17,9 @@ function auxiliaryWindow(): ReactNode | null {
   if (query.has("popout-dm")) return <DmPopoutPage />;
   if (query.has("popout-translation")) return <TranslationPopoutPage />;
   if (query.has("popout")) return <PopoutPage />;
-  const label = (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__?.metadata?.currentWindow?.label ?? "";
+  const label =
+    (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } })
+      .__TAURI_INTERNALS__?.metadata?.currentWindow?.label ?? "";
   if (label === "draw-overlay") return <DrawOverlayPage />;
   if (label === "popout-translation") return <TranslationPopoutPage />;
   if (label.startsWith("popout-stream-")) return <StreamPopoutPage />;
@@ -30,8 +32,8 @@ export default function AuroraApp() {
   const windowContent = auxiliaryWindow();
   // The design sheet is a development inventory, not a user-facing surface, so
   // it has no button in the client chrome - launch with `?design-sheet`.
-  const [showDesignSheet, setShowDesignSheet] = useState(
-    () => new URLSearchParams(globalThis.location.search).has("design-sheet"),
+  const [showDesignSheet, setShowDesignSheet] = useState(() =>
+    new URLSearchParams(globalThis.location.search).has("design-sheet"),
   );
 
   if (windowContent) return <Suspense fallback={null}>{windowContent}</Suspense>;

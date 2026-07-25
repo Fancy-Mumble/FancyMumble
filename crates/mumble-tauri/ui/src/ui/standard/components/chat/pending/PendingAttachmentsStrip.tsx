@@ -43,7 +43,16 @@ function rawPreviewSrc(att: PendingAttachment): string | null {
   return null;
 }
 
-export default function PendingAttachmentsStrip({ attachments, onRemove, onToggleSpoiler, onSend, quality, onQualityChange, onPreview, disabled }: Props) {
+export default function PendingAttachmentsStrip({
+  attachments,
+  onRemove,
+  onToggleSpoiler,
+  onSend,
+  quality,
+  onQualityChange,
+  onPreview,
+  disabled,
+}: Props) {
   const { t } = useTranslation("chat");
   // Build preview URLs once per attachment set and revoke object URLs on
   // change/unmount so repeated renders don't leak blobs.
@@ -52,18 +61,25 @@ export default function PendingAttachmentsStrip({ attachments, onRemove, onToggl
     for (const att of attachments) map.set(att.id, rawPreviewSrc(att));
     return map;
   }, [attachments]);
-  useEffect(() => () => {
-    for (const url of previews.values()) {
-      if (url?.startsWith("blob:")) URL.revokeObjectURL(url);
-    }
-  }, [previews]);
+  useEffect(
+    () => () => {
+      for (const url of previews.values()) {
+        if (url?.startsWith("blob:")) URL.revokeObjectURL(url);
+      }
+    },
+    [previews],
+  );
 
   if (attachments.length === 0) return null;
   const hasImage = attachments.some((a) => a.isImage);
   const showQuality = hasImage && quality != null && onQualityChange != null;
 
   return (
-    <div className={styles.pendingAttachStrip} role="region" aria-label={t("pendingAttachments.regionAriaLabel")}>
+    <div
+      className={styles.pendingAttachStrip}
+      role="region"
+      aria-label={t("pendingAttachments.regionAriaLabel")}
+    >
       <div className={styles.pendingAttachItems}>
         {attachments.map((att) => {
           const src = previews.get(att.id) ?? null;
@@ -77,21 +93,39 @@ export default function PendingAttachmentsStrip({ attachments, onRemove, onToggl
                   title={t("pendingAttachments.preview")}
                   aria-label={t("pendingAttachments.preview")}
                 >
-                  <img src={src} alt={att.name} className={`${styles.pendingAttachImg} ${att.spoiler ? styles.pendingAttachImgSpoiler : ""}`} />
+                  <img
+                    src={src}
+                    alt={att.name}
+                    className={`${styles.pendingAttachImg} ${att.spoiler ? styles.pendingAttachImgSpoiler : ""}`}
+                  />
                 </button>
               ) : (
                 <div className={styles.pendingAttachThumb}>
-                  {src
-                    ? <img src={src} alt={att.name} className={`${styles.pendingAttachImg} ${att.spoiler ? styles.pendingAttachImgSpoiler : ""}`} />
-                    : <FileIcon width={28} height={28} />}
+                  {src ? (
+                    <img
+                      src={src}
+                      alt={att.name}
+                      className={`${styles.pendingAttachImg} ${att.spoiler ? styles.pendingAttachImgSpoiler : ""}`}
+                    />
+                  ) : (
+                    <FileIcon width={28} height={28} />
+                  )}
                 </div>
               )}
               <div className={styles.pendingAttachMeta}>
-                <span className={styles.pendingAttachName} title={att.name}>{att.name}</span>
+                <span className={styles.pendingAttachName} title={att.name}>
+                  {att.name}
+                </span>
                 <span className={styles.pendingAttachKind}>
-                  {att.isImage
-                    ? <><ImageIcon width={12} height={12} /> {t("pendingAttachments.kindImage")}</>
-                    : <><FileIcon width={12} height={12} /> {t("pendingAttachments.kindFile")}</>}
+                  {att.isImage ? (
+                    <>
+                      <ImageIcon width={12} height={12} /> {t("pendingAttachments.kindImage")}
+                    </>
+                  ) : (
+                    <>
+                      <FileIcon width={12} height={12} /> {t("pendingAttachments.kindFile")}
+                    </>
+                  )}
                 </span>
               </div>
               {att.isImage && onToggleSpoiler && (
@@ -100,12 +134,14 @@ export default function PendingAttachmentsStrip({ attachments, onRemove, onToggl
                   className={`${styles.pendingAttachSpoiler} ${att.spoiler ? styles.pendingAttachSpoilerActive : ""}`}
                   onClick={() => onToggleSpoiler(att.id)}
                   aria-pressed={att.spoiler ?? false}
-                  aria-label={att.spoiler ? t("pendingAttachments.unmarkSpoiler") : t("pendingAttachments.markSpoiler")}
-                  title={att.spoiler ? t("pendingAttachments.unmarkSpoiler") : t("pendingAttachments.markSpoiler")}
+                  aria-label={
+                    att.spoiler ? t("pendingAttachments.unmarkSpoiler") : t("pendingAttachments.markSpoiler")
+                  }
+                  title={
+                    att.spoiler ? t("pendingAttachments.unmarkSpoiler") : t("pendingAttachments.markSpoiler")
+                  }
                 >
-                  {att.spoiler
-                    ? <EyeOffIcon width={14} height={14} />
-                    : <EyeIcon width={14} height={14} />}
+                  {att.spoiler ? <EyeOffIcon width={14} height={14} /> : <EyeIcon width={14} height={14} />}
                 </button>
               )}
               <button
@@ -123,7 +159,11 @@ export default function PendingAttachmentsStrip({ attachments, onRemove, onToggl
       </div>
       <div className={styles.pendingAttachActions}>
         {showQuality && (
-          <div className={styles.pendingAttachQuality} role="group" aria-label={t("pendingAttachments.qualityLabel")}>
+          <div
+            className={styles.pendingAttachQuality}
+            role="group"
+            aria-label={t("pendingAttachments.qualityLabel")}
+          >
             <button
               type="button"
               className={`${styles.pendingAttachQualityBtn} ${quality === "full" ? styles.pendingAttachQualityActive : ""}`}

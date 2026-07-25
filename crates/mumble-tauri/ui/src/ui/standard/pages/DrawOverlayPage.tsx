@@ -64,11 +64,7 @@ export default function DrawOverlayPage() {
 
   return (
     <div className={styles.root}>
-      <DrawingOverlay
-        channelId={ctx.channel_id}
-        ownSession={ctx.own_session}
-        hideToolbar
-      />
+      <DrawingOverlay channelId={ctx.channel_id} ownSession={ctx.own_session} hideToolbar />
     </div>
   );
 }

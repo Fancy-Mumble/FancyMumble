@@ -51,7 +51,11 @@ function bufToHex(buf: ArrayBuffer): string {
 /** Short, human-comparable fingerprint of a raw public key (SHA-256). */
 async function fingerprintOf(publicKeyB64: string): Promise<string> {
   const hash = await crypto.subtle.digest("SHA-256", b64ToBuf(publicKeyB64));
-  return bufToHex(hash).slice(0, 32).toUpperCase().replace(/(.{4})(?=.)/g, "$1 ").trim();
+  return bufToHex(hash)
+    .slice(0, 32)
+    .toUpperCase()
+    .replace(/(.{4})(?=.)/g, "$1 ")
+    .trim();
 }
 
 /** SHA-512 (hex) of the document's whitespace-normalised text.  Normalising

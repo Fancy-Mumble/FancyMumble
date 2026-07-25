@@ -27,19 +27,67 @@ export interface SettingsSection {
 
 /** Boolean preferences rendered as toggle rows, with their copy. */
 export const settingRows: PreferenceRow[] = [
-  { key: "enableNotifications", title: "Desktop notifications", detail: "Show native notifications for messages and calls." },
-  { key: "autoReconnect", title: "Automatic reconnect", detail: "Reconnect when a server connection is interrupted." },
-  { key: "disableTypingIndicators", title: "Disable typing indicators", detail: "Do not send or display typing activity." },
-  { key: "disableLinkPreviews", title: "Disable link previews", detail: "Hide rich metadata cards below messages." },
-  { key: "enableExternalEmbeds", title: "Allow external media", detail: "Permit remote players after preview metadata arrives." },
-  { key: "streamerMode", title: "Streamer mode", detail: "Hide sensitive connection information while recording." },
+  {
+    key: "enableNotifications",
+    title: "Desktop notifications",
+    detail: "Show native notifications for messages and calls.",
+  },
+  {
+    key: "autoReconnect",
+    title: "Automatic reconnect",
+    detail: "Reconnect when a server connection is interrupted.",
+  },
+  {
+    key: "disableTypingIndicators",
+    title: "Disable typing indicators",
+    detail: "Do not send or display typing activity.",
+  },
+  {
+    key: "disableLinkPreviews",
+    title: "Disable link previews",
+    detail: "Hide rich metadata cards below messages.",
+  },
+  {
+    key: "enableExternalEmbeds",
+    title: "Allow external media",
+    detail: "Permit remote players after preview metadata arrives.",
+  },
+  {
+    key: "streamerMode",
+    title: "Streamer mode",
+    detail: "Hide sensitive connection information while recording.",
+  },
   { key: "hideEmptyChannels", title: "Hide empty channels", detail: "Reduce channel lists to active rooms." },
-  { key: "persistDms", title: "Keep direct-message history", detail: "Store encrypted DM history on this device." },
-  { key: "disableReadReceipts", title: "Disable read receipts", detail: "Do not report when messages have been read." },
-  { key: "disableOsmMaps", title: "Disable map requests", detail: "Prevent OpenStreetMap and IP geolocation requests." },
-  { key: "autoUpdateOnStartup", title: "Automatic updates", detail: "Download and install client updates on startup." },
-  { key: "enableDualPath", title: "Encrypted dual-path messages", detail: "Send encrypted content together with a compatible placeholder." },
-  { key: "showDisconnectWarning", title: "Confirm disconnect", detail: "Ask before leaving the active server." },
+  {
+    key: "persistDms",
+    title: "Keep direct-message history",
+    detail: "Store encrypted DM history on this device.",
+  },
+  {
+    key: "disableReadReceipts",
+    title: "Disable read receipts",
+    detail: "Do not report when messages have been read.",
+  },
+  {
+    key: "disableOsmMaps",
+    title: "Disable map requests",
+    detail: "Prevent OpenStreetMap and IP geolocation requests.",
+  },
+  {
+    key: "autoUpdateOnStartup",
+    title: "Automatic updates",
+    detail: "Download and install client updates on startup.",
+  },
+  {
+    key: "enableDualPath",
+    title: "Encrypted dual-path messages",
+    detail: "Send encrypted content together with a compatible placeholder.",
+  },
+  {
+    key: "showDisconnectWarning",
+    title: "Confirm disconnect",
+    detail: "Ask before leaving the active server.",
+  },
   { key: "logToFile", title: "Write logs to file", detail: "Keep date-stamped client logs on this device." },
   { key: "terminalLogging", title: "Terminal logging", detail: "Mirror application logs to stdout." },
   { key: "autoZipLogs", title: "Compress old logs", detail: "Compress log files older than one day." },
@@ -66,7 +114,16 @@ export const sectionPreferenceKeys: Record<SettingsSectionId, Array<keyof UserPr
   shortcuts: [],
   notifications: ["enableNotifications"],
   localization: [],
-  privacy: ["disableTypingIndicators", "disableReadReceipts", "disableOsmMaps", "disableLinkPreviews", "enableExternalEmbeds", "streamerMode", "persistDms", "enableDualPath"],
+  privacy: [
+    "disableTypingIndicators",
+    "disableReadReceipts",
+    "disableOsmMaps",
+    "disableLinkPreviews",
+    "enableExternalEmbeds",
+    "streamerMode",
+    "persistDms",
+    "enableDualPath",
+  ],
   plugins: [],
   appearance: [],
   advanced: ["logToFile", "terminalLogging", "autoZipLogs"],
@@ -84,7 +141,9 @@ export function sectionMatchesQuery(section: SettingsSection, query: string): bo
     .filter((row) => sectionPreferenceKeys[section.id].includes(row.key))
     .map((row) => `${row.title} ${row.detail}`)
     .join(" ");
-  return `${section.id} ${section.label} ${section.keywords ?? ""} ${rowCopy}`.toLocaleLowerCase().includes(needle);
+  return `${section.id} ${section.label} ${section.keywords ?? ""} ${rowCopy}`
+    .toLocaleLowerCase()
+    .includes(needle);
 }
 
 /** Shared handler shapes passed from the SettingsPanel controller down to section panels. */

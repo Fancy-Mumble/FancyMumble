@@ -49,15 +49,10 @@ export function ChannelReorderWrapper({
   children,
 }: ChannelReorderWrapperProps) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const normalizedParentId =
-    channel.parent_id === channel.id ? null : channel.parent_id;
-  const enabled =
-    canReorder ?? (channel.permissions === null || canEditChannel(channel));
+  const normalizedParentId = channel.parent_id === channel.id ? null : channel.parent_id;
+  const enabled = canReorder ?? (channel.permissions === null || canEditChannel(channel));
 
-  const { ref: dropRef, dropPos } = useChannelReorderTarget(
-    channel.id,
-    normalizedParentId,
-  );
+  const { ref: dropRef, dropPos } = useChannelReorderTarget(channel.id, normalizedParentId);
   const { handleProps, cardStyle, overlay, isDragging } = useChannelDrag(
     channel.id,
     normalizedParentId,
@@ -81,9 +76,7 @@ export function ChannelReorderWrapper({
       ref={setRef}
       className={`${styles.reorderWrapper} ${
         showHandle ? "" : styles.noHandle
-      } ${dropPos === "before" ? styles.dropBefore : ""} ${
-        dropPos === "after" ? styles.dropAfter : ""
-      }`}
+      } ${dropPos === "before" ? styles.dropBefore : ""} ${dropPos === "after" ? styles.dropAfter : ""}`}
       style={isDragging ? { opacity: 0.4 } : undefined}
       {...(enabled ? handleProps : {})}
     >
@@ -116,14 +109,9 @@ export function useChannelReorderHandler(channels: ChannelEntry[]) {
       const siblings = channels
         .filter(
           (c) =>
-            c.parent_id === dragged.parent_id ||
-            (c.parent_id === c.id && dragged.parent_id === dragged.id),
+            c.parent_id === dragged.parent_id || (c.parent_id === c.id && dragged.parent_id === dragged.id),
         )
-        .sort((a, b) =>
-          a.position !== b.position
-            ? a.position - b.position
-            : a.name.localeCompare(b.name),
-        );
+        .sort((a, b) => (a.position !== b.position ? a.position - b.position : a.name.localeCompare(b.name)));
       const withoutDragged = siblings.filter((c) => c.id !== draggedId);
       const targetIdx = withoutDragged.findIndex((c) => c.id === targetId);
       if (targetIdx === -1) return;

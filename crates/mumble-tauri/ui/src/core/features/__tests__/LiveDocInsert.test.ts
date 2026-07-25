@@ -5,10 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import {
-  editorHtmlToMarkdown,
-  markdownToEditorHtml,
-} from "../chat/livedoc/liveDocMarkdown";
+import { editorHtmlToMarkdown, markdownToEditorHtml } from "../chat/livedoc/liveDocMarkdown";
 import { toVideoEmbedUrl } from "../chat/livedoc/liveDocInsert";
 import { shapeDataUrl, iconDataUrl, chartDataUrl } from "../chat/livedoc/liveDocInsertSvg";
 import { verifySignature, hashDocument } from "../chat/livedoc/liveDocSignature";
@@ -23,15 +20,11 @@ describe("toVideoEmbedUrl", () => {
   });
 
   it("converts a youtu.be short URL", () => {
-    expect(toVideoEmbedUrl("https://youtu.be/dQw4w9WgXcQ")).toBe(
-      "https://www.youtube.com/embed/dQw4w9WgXcQ",
-    );
+    expect(toVideoEmbedUrl("https://youtu.be/dQw4w9WgXcQ")).toBe("https://www.youtube.com/embed/dQw4w9WgXcQ");
   });
 
   it("converts a Vimeo URL", () => {
-    expect(toVideoEmbedUrl("https://vimeo.com/123456789")).toBe(
-      "https://player.vimeo.com/video/123456789",
-    );
+    expect(toVideoEmbedUrl("https://vimeo.com/123456789")).toBe("https://player.vimeo.com/video/123456789");
   });
 
   it("passes other https URLs through unchanged", () => {
@@ -93,7 +86,8 @@ describe("insert nodes round-trip through markdown", () => {
   });
 
   it("preserves a chart node (type + data)", () => {
-    const data = '{&quot;labels&quot;:[&quot;A&quot;,&quot;B&quot;],&quot;datasets&quot;:[{&quot;label&quot;:&quot;S1&quot;,&quot;data&quot;:[3,7]}]}';
+    const data =
+      "{&quot;labels&quot;:[&quot;A&quot;,&quot;B&quot;],&quot;datasets&quot;:[{&quot;label&quot;:&quot;S1&quot;,&quot;data&quot;:[3,7]}]}";
     const html = `<div data-livedoc-chart="" data-chart-type="line" data-chart="${data}" class="ld-chart"></div>`;
     const md = editorHtmlToMarkdown(html);
     expect(md).toContain("data-livedoc-chart");
@@ -130,7 +124,10 @@ describe.skipIf(!hasSubtle)("digital signature crypto", () => {
 
   it("verifies a well-formed P-256 signature and rejects tampering", async () => {
     // Mirror the Rust backend: ECDSA P-256, raw public key, fixed signature.
-    const kp = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+    const kp = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify",
+    ]);
     const name = "Jane Doe";
     const signedAt = "2026-06-04T00:00:00Z";
     const docHash = await hashDocument("the quick brown fox");

@@ -30,12 +30,7 @@ interface MathEditPopoverProps {
   readonly onCancel: () => void;
 }
 
-export default function MathEditPopover({
-  target,
-  onApply,
-  onDelete,
-  onCancel,
-}: MathEditPopoverProps) {
+export default function MathEditPopover({ target, onApply, onDelete, onCancel }: MathEditPopoverProps) {
   const [value, setValue] = useState(target.latex);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -119,11 +114,7 @@ export default function MathEditPopover({
 
   return createPortal(
     <>
-      <div
-        className={styles.backdrop}
-        onMouseDown={onCancel}
-        aria-hidden="true"
-      />
+      <div className={styles.backdrop} onMouseDown={onCancel} aria-hidden="true" />
       <div
         ref={popoverRef}
         className={styles.popover}
@@ -132,9 +123,7 @@ export default function MathEditPopover({
         aria-label="Edit LaTeX"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className={styles.header}>
-          {target.type === "blockMath" ? "Math block" : "Inline math"}
-        </div>
+        <div className={styles.header}>{target.type === "blockMath" ? "Math block" : "Inline math"}</div>
         <textarea
           ref={textareaRef}
           className={styles.textarea}
@@ -158,11 +147,7 @@ export default function MathEditPopover({
           <button type="button" className={styles.btn} onClick={onCancel}>
             Cancel
           </button>
-          <button
-            type="button"
-            className={`${styles.btn} ${styles.primary}`}
-            onClick={apply}
-          >
+          <button type="button" className={`${styles.btn} ${styles.primary}`} onClick={apply}>
             Apply
           </button>
         </div>

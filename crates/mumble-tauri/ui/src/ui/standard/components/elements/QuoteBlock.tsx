@@ -12,10 +12,7 @@ interface QuoteBlockProps {
 
 /** Decode common HTML entities back to their characters. */
 function decodeEntities(text: string): string {
-  return text
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&amp;", "&");
+  return text.replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
 }
 
 /** Strip HTML tags and comment markers, decode entities, then truncate. */
@@ -47,8 +44,7 @@ function findMessage(
   dmMessages: ChatMessage[],
 ): ChatMessage | undefined {
   return (
-    messages.find((m) => m.message_id === messageId) ??
-    dmMessages.find((m) => m.message_id === messageId)
+    messages.find((m) => m.message_id === messageId) ?? dmMessages.find((m) => m.message_id === messageId)
   );
 }
 
@@ -88,21 +84,12 @@ export default function QuoteBlock({ messageId, onScrollTo }: QuoteBlockProps) {
       onClick={handleClick}
       title={t("quoteBlock.scrollTitle")}
     >
-      <div
-        className={styles.quoteBar}
-        style={{ backgroundColor: colorFor(quoted.sender_name) }}
-      />
+      <div className={styles.quoteBar} style={{ backgroundColor: colorFor(quoted.sender_name) }} />
       <div className={styles.quoteContent}>
-        <span
-          className={styles.quoteSender}
-          style={{ color: colorFor(quoted.sender_name) }}
-        >
+        <span className={styles.quoteSender} style={{ color: colorFor(quoted.sender_name) }}>
           {quoted.sender_name}
           {quoted.timestamp != null && (
-            <time
-              className={styles.quoteTimestamp}
-              dateTime={new Date(quoted.timestamp).toISOString()}
-            >
+            <time className={styles.quoteTimestamp} dateTime={new Date(quoted.timestamp).toISOString()}>
               {formatTimestamp(quoted.timestamp)}
             </time>
           )}
@@ -111,14 +98,7 @@ export default function QuoteBlock({ messageId, onScrollTo }: QuoteBlockProps) {
           {preview || (hasMedia ? t("quoteBlock.photoFallback") : t("quoteBlock.emptyFallback"))}
         </span>
       </div>
-      {thumbnailSrc && (
-        <img
-          src={thumbnailSrc}
-          alt=""
-          className={styles.quoteThumbnail}
-          draggable={false}
-        />
-      )}
+      {thumbnailSrc && <img src={thumbnailSrc} alt="" className={styles.quoteThumbnail} draggable={false} />}
     </button>
   );
 }

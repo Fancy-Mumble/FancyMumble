@@ -143,17 +143,37 @@ export default function ChatMessageList({
     if (prev?.senderId === msg.sender_session && prev.isOwn === msg.is_own && prev.day === msgDay) {
       prev.messages.push(msg);
     } else {
-      groups.push({ senderId: msg.sender_session, senderHash: msgHash, isOwn: msg.is_own, startIdx: i + indexOffset, messages: [msg], day: msgDay });
+      groups.push({
+        senderId: msg.sender_session,
+        senderHash: msgHash,
+        isOwn: msg.is_own,
+        startIdx: i + indexOffset,
+        messages: [msg],
+        day: msgDay,
+      });
     }
   }
 
-  const renderMessage = (msg: ChatMessage, globalIdx: number, j: number, group: MsgGroup, senderUser: UserEntry | undefined, senderAvatar: string | undefined, galleryTile = false) => {
+  const renderMessage = (
+    msg: ChatMessage,
+    globalIdx: number,
+    j: number,
+    group: MsgGroup,
+    senderUser: UserEntry | undefined,
+    senderAvatar: string | undefined,
+    galleryTile = false,
+  ) => {
     const hasMsgId = !!msg.message_id;
     const isSelected = hasMsgId && selectedMsgIds.has(msg.message_id!);
     // Inside a gallery grid the marker is stripped so the tile is pure media.
     const itemMsg = galleryTile ? { ...msg, body: stripGalleryMarker(msg.body) } : msg;
     return (
-      <React.Fragment key={msg.message_id ?? `${msg.channel_id}-${msg.sender_session ?? "s"}-${msg.body.slice(0, 32)}-${globalIdx}`}>
+      <React.Fragment
+        key={
+          msg.message_id ??
+          `${msg.channel_id}-${msg.sender_session ?? "s"}-${msg.body.slice(0, 32)}-${globalIdx}`
+        }
+      >
         <div
           className={[
             styles.actionBarWrapper,
@@ -165,7 +185,9 @@ export default function ChatMessageList({
           data-msg-id={msg.message_id ?? undefined}
           data-msg-heavy={msg.message_id && isHeavyContent(msg.body) ? "" : undefined}
           onContextMenu={hasMsgId && !selectionMode ? (e) => handleMessageContextMenu(e, msg) : undefined}
-          onClick={selectionMode && canDelete && hasMsgId ? () => toggleMsgSelection(msg.message_id!) : undefined}
+          onClick={
+            selectionMode && canDelete && hasMsgId ? () => toggleMsgSelection(msg.message_id!) : undefined
+          }
           onDoubleClick={hasMsgId && !selectionMode && !isMobile ? () => handleCite(msg) : undefined}
           onTouchStart={hasMsgId && !selectionMode ? () => handleTouchStart(msg) : undefined}
           onTouchEnd={selectionMode ? undefined : cancelLongPress}
@@ -201,55 +223,62 @@ export default function ChatMessageList({
             onScrollToMessage={handleScrollToMessage}
             onOpenLightbox={handleOpenLightbox}
             readReceiptIndicator={
-              msg.is_own && msg.message_id && channelId != null
-                ? <ReadReceiptIndicator messageId={msg.message_id} channelId={channelId} allMessageIds={allMessageIds} />
-                : undefined
+              msg.is_own && msg.message_id && channelId != null ? (
+                <ReadReceiptIndicator
+                  messageId={msg.message_id}
+                  channelId={channelId}
+                  allMessageIds={allMessageIds}
+                />
+              ) : undefined
             }
             inlineActions={
-              alwaysShowMessageActions && hasMsgId && !msg.is_legacy
-                ? (
-                  <span className={styles.inlineActions}>
-                    <button
-                      type="button"
-                      className={styles.inlineActionBtn}
-                      onClick={(e) => { e.stopPropagation(); handleCite(msg); }}
-                      title={t("inlineActions.quote")}
-                      aria-label={t("inlineActions.quote")}
-                    >
-                      <QuoteIcon width={12} height={12} />
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.inlineActionBtn}
-                      onClick={(e) => { e.stopPropagation(); handleCopyText(msg); }}
-                      title={t("inlineActions.copy")}
-                      aria-label={t("inlineActions.copy")}
-                    >
-                      <CopyIcon width={12} height={12} />
-                    </button>
-                  </span>
-                )
-                : undefined
+              alwaysShowMessageActions && hasMsgId && !msg.is_legacy ? (
+                <span className={styles.inlineActions}>
+                  <button
+                    type="button"
+                    className={styles.inlineActionBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCite(msg);
+                    }}
+                    title={t("inlineActions.quote")}
+                    aria-label={t("inlineActions.quote")}
+                  >
+                    <QuoteIcon width={12} height={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.inlineActionBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCopyText(msg);
+                    }}
+                    title={t("inlineActions.copy")}
+                    aria-label={t("inlineActions.copy")}
+                  >
+                    <CopyIcon width={12} height={12} />
+                  </button>
+                </span>
+              ) : undefined
             }
           >
-            {msg.message_id && (() => {
-              const reactions = getMessageReactions(msg.message_id!);
-              return reactions.length > 0 ? (
-                <ReactionBar
-                  reactions={reactions}
-                  ownHash={ownHash}
-                  isOwn={group.isOwn}
-                  onToggle={(emoji) => onToggleReaction(msg, emoji)}
-                  onAdd={(e) => onAddReaction(msg, e)}
-                />
-              ) : null;
-            })()}
+            {msg.message_id &&
+              (() => {
+                const reactions = getMessageReactions(msg.message_id!);
+                return reactions.length > 0 ? (
+                  <ReactionBar
+                    reactions={reactions}
+                    ownHash={ownHash}
+                    isOwn={group.isOwn}
+                    onToggle={(emoji) => onToggleReaction(msg, emoji)}
+                    onAdd={(e) => onAddReaction(msg, e)}
+                  />
+                ) : null;
+              })()}
           </MessageItem>
           {selectionMode && canDelete && hasMsgId && (
             <div className={`${styles.selectCheckbox} ${isSelected ? styles.selectCheckboxChecked : ""}`}>
-              {isSelected && (
-                <CheckIcon width={12} height={12} />
-              )}
+              {isSelected && <CheckIcon width={12} height={12} />}
             </div>
           )}
         </div>
@@ -257,9 +286,19 @@ export default function ChatMessageList({
     );
   };
 
-  const renderGroupBlock = (group: MsgGroup, msgs: ChatMessage[], startIdx: number, senderUser: UserEntry | undefined, senderAvatar: string | undefined, keyOverride?: string) => {
+  const renderGroupBlock = (
+    group: MsgGroup,
+    msgs: ChatMessage[],
+    startIdx: number,
+    senderUser: UserEntry | undefined,
+    senderAvatar: string | undefined,
+    keyOverride?: string,
+  ) => {
     const firstMsg = msgs[0];
-    const key = keyOverride ?? firstMsg.message_id ?? `${firstMsg.channel_id}-${firstMsg.sender_session ?? "s"}-${startIdx}`;
+    const key =
+      keyOverride ??
+      firstMsg.message_id ??
+      `${firstMsg.channel_id}-${firstMsg.sender_session ?? "s"}-${startIdx}`;
     return (
       <div key={key} className={`${styles.messageGroup} ${group.isOwn ? styles.messageGroupOwn : ""}`}>
         {(!group.isOwn || bubbleStyle === "flat") && (
@@ -290,7 +329,16 @@ export default function ChatMessageList({
               }
               if (!ref || run.length < 2) {
                 // Not a gallery (or a lone image not yet joined by its peers).
-                nodes.push(renderMessage(msgs[runStart], startIdx + runStart, runStart, group, senderUser, senderAvatar));
+                nodes.push(
+                  renderMessage(
+                    msgs[runStart],
+                    startIdx + runStart,
+                    runStart,
+                    group,
+                    senderUser,
+                    senderAvatar,
+                  ),
+                );
                 if (!ref) j += 1;
                 continue;
               }
@@ -308,9 +356,23 @@ export default function ChatMessageList({
               for (let i = 0; i < total; i += 1) {
                 const m = byIndex.get(i);
                 tiles.push(
-                  m
-                    ? renderMessage(m, startIdx + runStart + i, runStart + i, group, senderUser, senderAvatar, true)
-                    : <div key={`ph-${ref.groupId}-${i}`} className={styles.galleryTilePlaceholder} aria-hidden="true" />,
+                  m ? (
+                    renderMessage(
+                      m,
+                      startIdx + runStart + i,
+                      runStart + i,
+                      group,
+                      senderUser,
+                      senderAvatar,
+                      true,
+                    )
+                  ) : (
+                    <div
+                      key={`ph-${ref.groupId}-${i}`}
+                      className={styles.galleryTilePlaceholder}
+                      aria-hidden="true"
+                    />
+                  ),
                 );
               }
               nodes.push(
@@ -335,11 +397,14 @@ export default function ChatMessageList({
       {groups.map((group) => {
         const firstGlobalIdx = group.startIdx;
         const firstMsg = group.messages[0];
-        const groupKey = firstMsg.message_id ?? `${firstMsg.channel_id}-${firstMsg.sender_session ?? "s"}-${firstGlobalIdx}`;
-        const senderUser = (group.senderId !== null ? userBySession.get(group.senderId) : undefined)
-          ?? (group.senderHash ? userByHash.get(group.senderHash) : undefined);
-        const senderAvatar = (group.senderId !== null ? avatarBySession.get(group.senderId) : undefined)
-          ?? (group.senderHash ? avatarByHash.get(group.senderHash) : undefined);
+        const groupKey =
+          firstMsg.message_id ?? `${firstMsg.channel_id}-${firstMsg.sender_session ?? "s"}-${firstGlobalIdx}`;
+        const senderUser =
+          (group.senderId !== null ? userBySession.get(group.senderId) : undefined) ??
+          (group.senderHash ? userByHash.get(group.senderHash) : undefined);
+        const senderAvatar =
+          (group.senderId !== null ? avatarBySession.get(group.senderId) : undefined) ??
+          (group.senderHash ? avatarByHash.get(group.senderHash) : undefined);
 
         let dateChip: React.ReactNode = null;
         if (group.day && group.day !== lastDay) {
@@ -353,12 +418,17 @@ export default function ChatMessageList({
         }
 
         const groupEnd = firstGlobalIdx + group.messages.length;
-        const dividerInGroup = lastReadIdx !== null && lastReadIdx >= firstGlobalIdx && lastReadIdx < groupEnd;
+        const dividerInGroup =
+          lastReadIdx !== null && lastReadIdx >= firstGlobalIdx && lastReadIdx < groupEnd;
         const dividerAtStart = dividerInGroup && lastReadIdx === firstGlobalIdx;
         const dividerMidGroup = dividerInGroup && !dividerAtStart;
 
         const unreadDivider = (
-          <div key={`unread-${lastReadIdx}`} className={styles.unreadDivider} aria-label={t("dates.newMessages")}>
+          <div
+            key={`unread-${lastReadIdx}`}
+            className={styles.unreadDivider}
+            aria-label={t("dates.newMessages")}
+          >
             <span className={styles.unreadDividerLabel}>{t("dates.newMessages")}</span>
           </div>
         );
@@ -368,9 +438,23 @@ export default function ChatMessageList({
           return (
             <React.Fragment key={groupKey}>
               {dateChip}
-              {renderGroupBlock(group, group.messages.slice(0, splitAt), firstGlobalIdx, senderUser, senderAvatar, `${groupKey}-pre`)}
+              {renderGroupBlock(
+                group,
+                group.messages.slice(0, splitAt),
+                firstGlobalIdx,
+                senderUser,
+                senderAvatar,
+                `${groupKey}-pre`,
+              )}
               {unreadDivider}
-              {renderGroupBlock(group, group.messages.slice(splitAt), lastReadIdx!, senderUser, senderAvatar, `${groupKey}-post`)}
+              {renderGroupBlock(
+                group,
+                group.messages.slice(splitAt),
+                lastReadIdx!,
+                senderUser,
+                senderAvatar,
+                `${groupKey}-post`,
+              )}
             </React.Fragment>
           );
         }

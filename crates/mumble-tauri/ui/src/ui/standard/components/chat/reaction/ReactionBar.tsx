@@ -24,30 +24,19 @@ interface ReactionBarProps {
   readonly onAdd: (e: React.MouseEvent) => void;
 }
 
-export default function ReactionBar({
-  reactions,
-  ownHash,
-  isOwn,
-  onToggle,
-  onAdd,
-}: ReactionBarProps) {
+export default function ReactionBar({ reactions, ownHash, isOwn, onToggle, onAdd }: ReactionBarProps) {
   const { t } = useTranslation("chat");
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
 
-  const handleMouseEnter = useCallback(
-    (e: React.MouseEvent, reaction: ReactionSummary) => {
-      if (isMobile) return;
-      const names = [...reaction.reactorHashNames.values()];
-      const unique = [...new Set(names)];
-      const text =
-        unique.length <= 3
-          ? unique.join(", ")
-          : `${unique.slice(0, 3).join(", ")} +${unique.length - 3}`;
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      setTooltip({ text, x: rect.left + rect.width / 2, y: rect.top - 4 });
-    },
-    [],
-  );
+  const handleMouseEnter = useCallback((e: React.MouseEvent, reaction: ReactionSummary) => {
+    if (isMobile) return;
+    const names = [...reaction.reactorHashNames.values()];
+    const unique = [...new Set(names)];
+    const text =
+      unique.length <= 3 ? unique.join(", ") : `${unique.slice(0, 3).join(", ")} +${unique.length - 3}`;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setTooltip({ text, x: rect.left + rect.width / 2, y: rect.top - 4 });
+  }, []);
 
   const handleMouseLeave = useCallback(() => setTooltip(null), []);
 

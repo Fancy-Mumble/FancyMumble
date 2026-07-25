@@ -6,11 +6,7 @@
  */
 import { describe, it, expect } from "vitest";
 
-import {
-  parseStatsReports,
-  deriveIntervalStats,
-  type StatsSample,
-} from "../chat/stream/StreamStatsPanel";
+import { parseStatsReports, deriveIntervalStats, type StatsSample } from "../chat/stream/StreamStatsPanel";
 
 function makeReports() {
   return [
@@ -121,10 +117,7 @@ describe("parseStatsReports", () => {
     ];
     const sample = parseStatsReports(reports, 1000);
     expect(sample.videos).toHaveLength(2);
-    expect(sample.videos.map((v) => `${v.frameWidth}x${v.frameHeight}`)).toEqual([
-      "1920x1080",
-      "1280x720",
-    ]);
+    expect(sample.videos.map((v) => `${v.frameWidth}x${v.frameHeight}`)).toEqual(["1920x1080", "1280x720"]);
     // Packet counters aggregate across tracks for the connection-level loss %.
     expect(sample.packetsReceived).toBe(900 + 400);
     expect(sample.packetsLost).toBe(10 + 5);

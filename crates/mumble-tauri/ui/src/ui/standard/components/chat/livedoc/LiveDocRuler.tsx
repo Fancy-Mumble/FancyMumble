@@ -37,8 +37,12 @@ function pxToUnit(px: number, unit: LiveDocRulerUnit): string {
 function useAltKey(): boolean {
   const [altDown, setAltDown] = useState(false);
   useEffect(() => {
-    const onDown = (e: KeyboardEvent) => { if (e.key === "Alt") setAltDown(true); };
-    const onUp = (e: KeyboardEvent) => { if (e.key === "Alt") setAltDown(false); };
+    const onDown = (e: KeyboardEvent) => {
+      if (e.key === "Alt") setAltDown(true);
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.key === "Alt") setAltDown(false);
+    };
     const onBlur = () => setAltDown(false);
     window.addEventListener("keydown", onDown);
     window.addEventListener("keyup", onUp);
@@ -144,12 +148,7 @@ function makeKeyDown(props: RulerProps) {
   };
 }
 
-function handleProps(
-  axis: "x" | "y",
-  side: HandleSide,
-  label: string,
-  props: RulerProps,
-) {
+function handleProps(axis: "x" | "y", side: HandleSide, label: string, props: RulerProps) {
   const { marginPx, min, max, interactive } = props;
   if (!interactive) return {};
   return {
@@ -256,10 +255,7 @@ export function LiveDocRulerVertical(props: RulerProps) {
         />
         {altDown && (
           <div className={styles.measureOverlayV} aria-hidden="true">
-            <span
-              className={styles.measureLabelV}
-              style={{ top: `${topPct / 2}%`, maxHeight: `${topPct}%` }}
-            >
+            <span className={styles.measureLabelV} style={{ top: `${topPct / 2}%`, maxHeight: `${topPct}%` }}>
               {pxToUnit(marginPx, rulerUnit)}
             </span>
             <span

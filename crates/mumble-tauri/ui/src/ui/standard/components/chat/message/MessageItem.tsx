@@ -4,7 +4,12 @@ import { useTranslation } from "react-i18next";
 import { marked } from "marked";
 import type { ChatMessage, UserEntry, TimeFormat } from "@core/types";
 import type { PollPayload } from "../poll/PollCreator";
-import { useAppStore, requestLinkPreview, decodeLiveDocInviteMarker, FANCY_LIVEDOC_MARKER_RE } from "@core/store";
+import {
+  useAppStore,
+  requestLinkPreview,
+  decodeLiveDocInviteMarker,
+  FANCY_LIVEDOC_MARKER_RE,
+} from "@core/store";
 import { parseComment } from "@core/profileFormat";
 import { ProfilePreviewCard } from "../../../pages/settings/ProfilePreviewCard";
 import { useUserComment } from "@core/lazyBlobs";
@@ -80,7 +85,6 @@ export function MessageAvatar({
   user,
   onAvatarClick,
 }: Readonly<MessageAvatarProps>) {
-
   const [showCard, setShowCard] = useState(false);
   const [cardPos, setCardPos] = useState<{ top: number; left: number } | null>(null);
   const avatarRef = useRef<HTMLButtonElement>(null);
@@ -88,13 +92,10 @@ export function MessageAvatar({
   // Load the sender's bio only when the hover card is open.
   const liveComment = useUserComment(senderSession, user?.comment_size, showCard);
 
-  const parsed = useMemo(
-    () => {
-      const c = user?.comment ?? liveComment;
-      return c ? parseComment(c) : null;
-    },
-    [user?.comment, liveComment],
-  );
+  const parsed = useMemo(() => {
+    const c = user?.comment ?? liveComment;
+    return c ? parseComment(c) : null;
+  }, [user?.comment, liveComment]);
 
   const handleEnter = useCallback(() => {
     if (isMobile || !avatarRef.current) return;
@@ -135,20 +136,23 @@ export function MessageAvatar({
       >
         {inner}
       </button>
-      {showCard && cardPos && user && createPortal(
-        <div className={styles.avatarPopover} style={{ top: cardPos.top, left: cardPos.left }}>
-          <ProfilePreviewCard
-            profile={parsed?.profile ?? {}}
-            bio={parsed?.bio ?? ""}
-            avatar={avatarUrl ?? null}
-            displayName={user.name}
-            onlinesecs={stats?.onlinesecs}
-            idlesecs={stats?.idlesecs}
-            isRegistered={user.user_id != null && user.user_id > 0}
-          />
-        </div>,
-        document.body,
-      )}
+      {showCard &&
+        cardPos &&
+        user &&
+        createPortal(
+          <div className={styles.avatarPopover} style={{ top: cardPos.top, left: cardPos.left }}>
+            <ProfilePreviewCard
+              profile={parsed?.profile ?? {}}
+              bio={parsed?.bio ?? ""}
+              avatar={avatarUrl ?? null}
+              displayName={user.name}
+              onlinesecs={stats?.onlinesecs}
+              idlesecs={stats?.idlesecs}
+              isRegistered={user.user_id != null && user.user_id > 0}
+            />
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
@@ -163,7 +167,10 @@ function isPureMedia(body: string): boolean {
   if (/<!-- FANCY_FILE:/.test(body)) return false;
   if (/<!-- FANCY_WATCH:/.test(body)) return false;
   if (/<!-- FANCY_LIVEDOC:/.test(body)) return false;
-  if (QUOTE_RE.test(body)) { QUOTE_RE.lastIndex = 0; return false; }
+  if (QUOTE_RE.test(body)) {
+    QUOTE_RE.lastIndex = 0;
+    return false;
+  }
   const hasMedia = /<img|<video/i.test(body);
   if (!hasMedia) return false;
   const textOnly = body
@@ -234,7 +241,7 @@ export default memo(function MessageItem({
   const offloaded = offloadInfo !== null;
   const pureMedia = !offloaded && isPureMedia(msg.body);
 
-  const linkEmbeds = useAppStore((s) => msg.message_id ? s.linkEmbeds.get(msg.message_id) : undefined);
+  const linkEmbeds = useAppStore((s) => (msg.message_id ? s.linkEmbeds.get(msg.message_id) : undefined));
   const disableLinkPreviews = useAppStore((s) => s.disableLinkPreviews);
   const currentChannel = useAppStore((s) => s.currentChannel);
 
@@ -250,8 +257,7 @@ export default memo(function MessageItem({
     if (msg.is_own || ownSession == null) return false;
     return containsSelfMention(msg.body, {
       ownSession,
-      isInMessageChannel:
-        msg.channel_id != null && currentChannel === msg.channel_id,
+      isInMessageChannel: msg.channel_id != null && currentChannel === msg.channel_id,
     });
   }, [msg.body, msg.is_own, msg.channel_id, ownSession, currentChannel]);
 
@@ -287,7 +293,12 @@ export default memo(function MessageItem({
       // Gallery tiles keep a square skeleton so an offloaded image holds its
       // grid slot (no reflow on offload/restore).
       if (galleryTile) {
-        return <div className={styles.skeletonTile} aria-label={isRestoring ? t("dates.decrypting") : t("dates.contentOffloaded")} />;
+        return (
+          <div
+            className={styles.skeletonTile}
+            aria-label={isRestoring ? t("dates.decrypting") : t("dates.contentOffloaded")}
+          />
+        );
       }
       // Estimate skeleton height from the original content byte-length.
       // Images/videos encoded as data-URLs are ~1.37x larger than the
@@ -295,9 +306,8 @@ export default memo(function MessageItem({
       // gives a decent approximation without knowing the actual
       // dimensions.  Clamp to a reasonable range.
       const contentLen = offloadInfo?.contentLength ?? 0;
-      const estimatedHeight = contentLen > 0
-        ? Math.max(80, Math.min(Math.round(contentLen * 0.003), 600))
-        : 80;
+      const estimatedHeight =
+        contentLen > 0 ? Math.max(80, Math.min(Math.round(contentLen * 0.003), 600)) : 80;
 
       return (
         <div>
@@ -312,9 +322,7 @@ export default memo(function MessageItem({
     // Extract quote references before other content checks.
     const quoteIds: string[] = [];
     for (const m of msg.body.matchAll(QUOTE_RE)) quoteIds.push(m[1]);
-    const bodyWithoutQuotes = quoteIds.length > 0
-      ? msg.body.replaceAll(QUOTE_RE, "").trim()
-      : msg.body;
+    const bodyWithoutQuotes = quoteIds.length > 0 ? msg.body.replaceAll(QUOTE_RE, "").trim() : msg.body;
 
     const quoteBlocks = quoteIds.map((id) => (
       <QuoteBlock key={id} messageId={id} onScrollTo={onScrollToMessage} />
@@ -328,12 +336,7 @@ export default memo(function MessageItem({
         return (
           <>
             {quoteBlocks}
-            <PollCard
-              poll={poll}
-              ownSession={ownSession}
-              isOwn={msg.is_own}
-              onVote={onVote}
-            />
+            <PollCard poll={poll} ownSession={ownSession} isOwn={msg.is_own} onVote={onVote} />
           </>
         );
       }
@@ -366,7 +369,17 @@ export default memo(function MessageItem({
           <>
             {quoteBlocks}
             {textBeforeFile && (
-              <MediaPreview html={textBeforeFile} messageId={`${index}-text`} compact={false} timeFormat={timeFormat} convertToLocalTime={convertToLocalTime} systemUses24h={systemUses24h} senderName={msg.sender_name} messageTimestamp={displayTimestamp} onOpenLightbox={onOpenLightbox} />
+              <MediaPreview
+                html={textBeforeFile}
+                messageId={`${index}-text`}
+                compact={false}
+                timeFormat={timeFormat}
+                convertToLocalTime={convertToLocalTime}
+                systemUses24h={systemUses24h}
+                senderName={msg.sender_name}
+                messageTimestamp={displayTimestamp}
+                onOpenLightbox={onOpenLightbox}
+              />
             )}
             <FileAttachmentCard info={info} />
           </>
@@ -382,7 +395,17 @@ export default memo(function MessageItem({
         <>
           {quoteBlocks}
           {textAround && (
-            <MediaPreview html={textAround} messageId={`${index}-watch-text`} compact={false} timeFormat={timeFormat} convertToLocalTime={convertToLocalTime} systemUses24h={systemUses24h} senderName={msg.sender_name} messageTimestamp={displayTimestamp} onOpenLightbox={onOpenLightbox} />
+            <MediaPreview
+              html={textAround}
+              messageId={`${index}-watch-text`}
+              compact={false}
+              timeFormat={timeFormat}
+              convertToLocalTime={convertToLocalTime}
+              systemUses24h={systemUses24h}
+              senderName={msg.sender_name}
+              messageTimestamp={displayTimestamp}
+              onOpenLightbox={onOpenLightbox}
+            />
           )}
           <WatchTogetherCard sessionId={watchSessionId} />
         </>
@@ -402,7 +425,19 @@ export default memo(function MessageItem({
     return (
       <>
         {quoteBlocks}
-        <MediaPreview html={htmlBody} messageId={`${index}`} compact={pureMedia} tile={galleryTile} timestamp={pureMedia ? displayTimestamp : undefined} timeFormat={timeFormat} convertToLocalTime={convertToLocalTime} systemUses24h={systemUses24h} senderName={msg.sender_name} messageTimestamp={displayTimestamp} onOpenLightbox={onOpenLightbox} />
+        <MediaPreview
+          html={htmlBody}
+          messageId={`${index}`}
+          compact={pureMedia}
+          tile={galleryTile}
+          timestamp={pureMedia ? displayTimestamp : undefined}
+          timeFormat={timeFormat}
+          convertToLocalTime={convertToLocalTime}
+          systemUses24h={systemUses24h}
+          senderName={msg.sender_name}
+          messageTimestamp={displayTimestamp}
+          onOpenLightbox={onOpenLightbox}
+        />
       </>
     );
   };
@@ -434,7 +469,9 @@ export default memo(function MessageItem({
               {formatTimestamp(displayTimestamp, timeFormat, convertToLocalTime, systemUses24h)}
             </time>
             {msg.edited_at != null && <span className={styles.editedBadge}>{t("message.editedBadge")}</span>}
-            {msg.send_failed && <span className={styles.sendFailedBadge}>{t("message.sendFailedBadge")}</span>}
+            {msg.send_failed && (
+              <span className={styles.sendFailedBadge}>{t("message.sendFailedBadge")}</span>
+            )}
             {msg.pinned && <span className={styles.pinnedBadge}>{t("message.pinnedBadge")}</span>}
             {inlineActions}
             {msg.is_own && readReceiptIndicator}
@@ -446,7 +483,9 @@ export default memo(function MessageItem({
               {formatTimestamp(displayTimestamp, timeFormat, convertToLocalTime, systemUses24h)}
             </time>
             {msg.edited_at != null && <span className={styles.editedBadge}>{t("message.editedBadge")}</span>}
-            {msg.send_failed && <span className={styles.sendFailedBadge}>{t("message.sendFailedBadge")}</span>}
+            {msg.send_failed && (
+              <span className={styles.sendFailedBadge}>{t("message.sendFailedBadge")}</span>
+            )}
             {msg.pinned && <span className={styles.pinnedBadge}>{t("message.pinnedBadge")}</span>}
             {inlineActions}
             {msg.is_own && readReceiptIndicator}
@@ -490,11 +529,7 @@ function PluginMessageComponents({
       {rows.map((row, i) => (
         <div key={i} className={styles.pluginComponentRow}>
           {row.components.map((c, j) => (
-            <RenderComponent
-              key={`${pluginName}:${i}:${j}`}
-              component={c}
-              ctx={{ pluginName, channelId }}
-            />
+            <RenderComponent key={`${pluginName}:${i}:${j}`} component={c} ctx={{ pluginName, channelId }} />
           ))}
         </div>
       ))}

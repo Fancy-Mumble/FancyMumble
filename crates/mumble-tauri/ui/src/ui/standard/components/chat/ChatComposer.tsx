@@ -1,9 +1,31 @@
-import { AttachIcon, CloseIcon, EditIcon, FileIcon, FileTextIcon, GifIcon, ImageIcon, SendIcon } from "../../icons";
-import { useState, useRef, useCallback, useEffect, useMemo, lazy, Suspense, type ClipboardEvent } from "react";
+import {
+  AttachIcon,
+  CloseIcon,
+  EditIcon,
+  FileIcon,
+  FileTextIcon,
+  GifIcon,
+  ImageIcon,
+  SendIcon,
+} from "../../icons";
+import {
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  lazy,
+  Suspense,
+  type ClipboardEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import MarkdownInput, { type MarkdownInputApi } from "./markdown/MarkdownInput";
 const GifPicker = lazy(() => import("./gif/GifPicker"));
-import MentionAutocomplete, { type MentionCandidate, handleMentionKey, candidateInsertText } from "./mention/MentionAutocomplete";
+import MentionAutocomplete, {
+  type MentionCandidate,
+  handleMentionKey,
+  candidateInsertText,
+} from "./mention/MentionAutocomplete";
 import { useMentionCandidates } from "./mention/useMentionCandidates";
 import styles from "./ChatView.module.css";
 import { isMobile } from "@core/utils/platform";
@@ -78,10 +100,7 @@ export default function ChatComposer({
   const users = useAppStore((s) => s.users);
   const pluginManifests = useAppStore((s) => s.pluginManifests);
   const selectedChannel = useAppStore((s) => s.selectedChannel);
-  const slashAllEntries = useMemo(
-    () => collectSlashCommands(pluginManifests),
-    [pluginManifests],
-  );
+  const slashAllEntries = useMemo(() => collectSlashCommands(pluginManifests), [pluginManifests]);
   const slashQuery = extractSlashQuery(draft);
   const slashEntries = useMemo(
     () => (slashQuery === null ? [] : filterSlashCommands(slashAllEntries, slashQuery)),
@@ -206,8 +225,8 @@ export default function ChatComposer({
       console.warn("[chat] slash command rejected:", parsed.errors.join("; "));
       return false;
     }
-    void sendPluginInteraction(parsed.pluginName, parsed.kind, selectedChannel).catch(
-      (e) => console.warn("[chat] sendPluginInteraction failed:", e),
+    void sendPluginInteraction(parsed.pluginName, parsed.kind, selectedChannel).catch((e) =>
+      console.warn("[chat] sendPluginInteraction failed:", e),
     );
     onChange("");
     return true;
@@ -282,10 +301,7 @@ export default function ChatComposer({
       )}
       {showGifPicker && (
         <Suspense fallback={null}>
-          <GifPicker
-            onSelect={onGifSelect}
-            onClose={() => setShowGifPicker(false)}
-          />
+          <GifPicker onSelect={onGifSelect} onClose={() => setShowGifPicker(false)} />
         </Suspense>
       )}
       <div className={styles.composer}>
@@ -310,12 +326,22 @@ export default function ChatComposer({
           </button>
           {showAttachMenu && (
             <div className={styles.attachMenu} role="menu">
-              <button type="button" className={styles.attachMenuItem} role="menuitem" onClick={handlePickImage}>
+              <button
+                type="button"
+                className={styles.attachMenuItem}
+                role="menuitem"
+                onClick={handlePickImage}
+              >
                 <ImageIcon width={15} height={15} />
                 {t("composer.attachMenuImage")}
               </button>
               {onAttachFile && (
-                <button type="button" className={styles.attachMenuItem} role="menuitem" onClick={handlePickFile}>
+                <button
+                  type="button"
+                  className={styles.attachMenuItem}
+                  role="menuitem"
+                  onClick={handlePickFile}
+                >
                   <FileIcon width={15} height={15} />
                   {t("composer.attachMenuFile")}
                 </button>
@@ -369,7 +395,9 @@ export default function ChatComposer({
             onChange={onChange}
             onSubmit={handleSendIntercept}
             onPaste={onPaste}
-            placeholder={isMobile || isNarrow ? t("composer.placeholderMobile") : t("composer.placeholderDesktop")}
+            placeholder={
+              isMobile || isNarrow ? t("composer.placeholderMobile") : t("composer.placeholderDesktop")
+            }
             disabled={disabled}
             apiRef={inputApi}
             onSelectionChange={handleSelectionChange}

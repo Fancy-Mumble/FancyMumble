@@ -68,7 +68,7 @@ export default function LiveDocModelViewer({ url, className }: LiveDocModelViewe
         model.position.sub(center);
         const maxDim = Math.max(size.x, size.y, size.z) || 1;
         const fov = (camera.fov * Math.PI) / 180;
-        const dist = ((maxDim / 2) / Math.tan(fov / 2)) * 1.6;
+        const dist = (maxDim / 2 / Math.tan(fov / 2)) * 1.6;
         camera.position.set(0, size.y * 0.15, dist);
         camera.near = dist / 100;
         camera.far = dist * 100;

@@ -12,11 +12,7 @@ import SwipeableCard from "../elements/SwipeableCard";
 // --- Helpers -------------------------------------------------------
 
 /** Simulate a touch swipe on an element. */
-function simulateSwipe(
-  el: HTMLElement,
-  deltaX: number,
-  deltaY = 0,
-) {
+function simulateSwipe(el: HTMLElement, deltaX: number, deltaY = 0) {
   const startX = 200;
   const startY = 200;
 

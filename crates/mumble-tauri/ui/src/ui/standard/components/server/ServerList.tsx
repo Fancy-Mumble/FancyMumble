@@ -39,14 +39,10 @@ function latencyTier(ms: number): "great" | "okay" | "poor" {
 function PingDot({ ping }: Readonly<{ ping?: ServerPingResult }>) {
   const { t } = useTranslation("server");
   if (!ping) {
-    return (
-      <span className={`${styles.pingDot} ${styles.dotProbing}`} title={t("list.checking")} />
-    );
+    return <span className={`${styles.pingDot} ${styles.dotProbing}`} title={t("list.checking")} />;
   }
   if (!ping.online) {
-    return (
-      <span className={`${styles.pingDot} ${styles.dotOffline}`} title={t("list.offline")} />
-    );
+    return <span className={`${styles.pingDot} ${styles.dotOffline}`} title={t("list.offline")} />;
   }
   const ms = ping.latency_ms ?? 0;
   const tier = latencyTier(ms);
@@ -62,16 +58,13 @@ function PingDot({ ping }: Readonly<{ ping?: ServerPingResult }>) {
     poor: t("list.latencyPoor", { ms }),
   };
 
-  return (
-    <span className={`${styles.pingDot} ${tierClassMap[tier]}`} title={tierLabelMap[tier]} />
-  );
+  return <span className={`${styles.pingDot} ${tierClassMap[tier]}`} title={tierLabelMap[tier]} />;
 }
 
 function UsersInfo({ ping }: Readonly<{ ping?: ServerPingResult }>) {
   if (!ping?.online || ping.user_count == null) return null;
-  const text = ping.max_user_count != null
-    ? `${ping.user_count}/${ping.max_user_count}`
-    : `${ping.user_count}`;
+  const text =
+    ping.max_user_count != null ? `${ping.user_count}/${ping.max_user_count}` : `${ping.user_count}`;
   return (
     <span className={styles.users}>
       {text}
@@ -150,17 +143,20 @@ function ServerCardItem({
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
   const { t } = useTranslation("server");
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (!isMobile || !onEdit || disabled || isThisConnecting) return;
-    const touch = e.touches[0];
-    if (!touch) return;
-    startPosRef.current = { x: touch.clientX, y: touch.clientY };
-    firedRef.current = false;
-    timerRef.current = setTimeout(() => {
-      firedRef.current = true;
-      onEdit(s);
-    }, LONG_PRESS_MS);
-  }, [onEdit, disabled, isThisConnecting, s]);
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (!isMobile || !onEdit || disabled || isThisConnecting) return;
+      const touch = e.touches[0];
+      if (!touch) return;
+      startPosRef.current = { x: touch.clientX, y: touch.clientY };
+      firedRef.current = false;
+      timerRef.current = setTimeout(() => {
+        firedRef.current = true;
+        onEdit(s);
+      }, LONG_PRESS_MS);
+    },
+    [onEdit, disabled, isThisConnecting, s],
+  );
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!timerRef.current || !startPosRef.current) return;
@@ -181,32 +177,41 @@ function ServerCardItem({
     }
   }, []);
 
-  const cardClasses = [
-    styles.serverCard,
-    isThisConnecting && styles.serverCardConnecting,
-  ].filter(Boolean).join(" ");
+  const cardClasses = [styles.serverCard, isThisConnecting && styles.serverCardConnecting]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <SwipeableCard
-      leftSwipeAction={!isThisConnecting ? {
-        label: t("list.delete"),
-        icon: "\u2715",
-        color: "var(--color-danger, #ef4444)",
-        onTrigger: () => onDelete(s.id),
-      } : undefined}
-      rightSwipeAction={!isThisConnecting ? {
-        label: s.favorite ? t("list.unfavorite") : t("list.favorite"),
-        icon: s.favorite ? "\u2606" : "\u2605",
-        color: "#f59e0b",
-        onTrigger: () => onToggleFavorite(s.id),
-      } : undefined}
+      leftSwipeAction={
+        !isThisConnecting
+          ? {
+              label: t("list.delete"),
+              icon: "\u2715",
+              color: "var(--color-danger, #ef4444)",
+              onTrigger: () => onDelete(s.id),
+            }
+          : undefined
+      }
+      rightSwipeAction={
+        !isThisConnecting
+          ? {
+              label: s.favorite ? t("list.unfavorite") : t("list.favorite"),
+              icon: s.favorite ? "\u2606" : "\u2605",
+              color: "#f59e0b",
+              onTrigger: () => onToggleFavorite(s.id),
+            }
+          : undefined
+      }
       disabled={disabled || isThisConnecting}
     >
       <div
         className={cardClasses}
         data-testid={TID.serverCard}
         data-server-id={s.id}
-        onClick={() => { if (!disabled && !firedRef.current) onConnect(s); }}
+        onClick={() => {
+          if (!disabled && !firedRef.current) onConnect(s);
+        }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -239,7 +244,9 @@ function ServerCardItem({
         {!isThisConnecting && !s.favorite && <UsersInfo ping={ping} />}
 
         {!isThisConnecting && s.favorite && (
-          <span className={styles.favoriteStarBadge} aria-hidden="true">&#x2605;</span>
+          <span className={styles.favoriteStarBadge} aria-hidden="true">
+            &#x2605;
+          </span>
         )}
 
         <div className={styles.cardActions}>
@@ -322,12 +329,7 @@ export default function ServerList({
       {/* Header row */}
       <div className={styles.header}>
         <span className={styles.heading}>{t("list.heading")}</span>
-        <button
-          className={styles.addLink}
-          onClick={onAddNew}
-          disabled={disabled}
-          type="button"
-        >
+        <button className={styles.addLink} onClick={onAddNew} disabled={disabled} type="button">
           {t("list.addServer")}
         </button>
       </div>
@@ -347,30 +349,28 @@ export default function ServerList({
       )}
 
       {servers.length === 0 ? (
-        <div className={styles.empty}>
-          {t("list.emptyState")}
-        </div>
+        <div className={styles.empty}>{t("list.emptyState")}</div>
       ) : displayed.length === 0 ? (
         <div className={styles.noResults}>{t("list.noMatch", { query: searchQuery })}</div>
       ) : (
         <div className={styles.scrollList}>
-        <div className={styles.list}>
-          {displayed.map((s) => (
-            <ServerCardItem
-              key={s.id}
-              server={s}
-              isThisConnecting={connectingId === s.id}
-              ping={pings[s.id]}
-              connectingMessage={connectingMessage}
-              disabled={disabled}
-              onConnect={onConnect}
-              onDelete={onDelete}
-              onToggleFavorite={onToggleFavorite}
-              onEdit={onEdit}
-              onCancelConnect={onCancelConnect}
-            />
-          ))}
-        </div>
+          <div className={styles.list}>
+            {displayed.map((s) => (
+              <ServerCardItem
+                key={s.id}
+                server={s}
+                isThisConnecting={connectingId === s.id}
+                ping={pings[s.id]}
+                connectingMessage={connectingMessage}
+                disabled={disabled}
+                onConnect={onConnect}
+                onDelete={onDelete}
+                onToggleFavorite={onToggleFavorite}
+                onEdit={onEdit}
+                onCancelConnect={onCancelConnect}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>

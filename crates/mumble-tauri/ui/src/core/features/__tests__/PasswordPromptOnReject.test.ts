@@ -24,22 +24,17 @@ interface RejectPayload {
 function isPasswordError(payload: RejectPayload): boolean {
   const rt = payload.reject_type;
   const reasonText = payload.reason ?? "";
-  const reasonLooksLikePwError =
-    /password|wrong\s+(?:user|server)|certificate/i.test(reasonText);
+  const reasonLooksLikePwError = /password|wrong\s+(?:user|server)|certificate/i.test(reasonText);
   return rt === 3 || rt === 4 || (rt == null && reasonLooksLikePwError);
 }
 
 describe("connection-rejected password detection", () => {
   it("treats WrongUserPW (type=3) as password error", () => {
-    expect(isPasswordError({ reason: "Wrong password", reject_type: 3 })).toBe(
-      true,
-    );
+    expect(isPasswordError({ reason: "Wrong password", reject_type: 3 })).toBe(true);
   });
 
   it("treats WrongServerPW (type=4) as password error", () => {
-    expect(
-      isPasswordError({ reason: "Server password required", reject_type: 4 }),
-    ).toBe(true);
+    expect(isPasswordError({ reason: "Server password required", reject_type: 4 })).toBe(true);
   });
 
   it("treats reason-string match as password error when type is missing", () => {
@@ -54,9 +49,7 @@ describe("connection-rejected password detection", () => {
   });
 
   it("treats a plain 'Wrong password' reason as password error when type is missing", () => {
-    expect(
-      isPasswordError({ reason: "Wrong password", reject_type: null }),
-    ).toBe(true);
+    expect(isPasswordError({ reason: "Wrong password", reject_type: null })).toBe(true);
   });
 
   it("does NOT misclassify a kick reason as a password error", () => {
@@ -69,15 +62,11 @@ describe("connection-rejected password detection", () => {
   });
 
   it("does NOT misclassify a ban reason as a password error", () => {
-    expect(
-      isPasswordError({ reason: "You are banned", reject_type: null }),
-    ).toBe(false);
+    expect(isPasswordError({ reason: "You are banned", reject_type: null })).toBe(false);
   });
 
   it("does NOT misclassify a generic connection-refused reason", () => {
-    expect(
-      isPasswordError({ reason: "Connection refused", reject_type: null }),
-    ).toBe(false);
+    expect(isPasswordError({ reason: "Connection refused", reject_type: null })).toBe(false);
   });
 
   it("is case-insensitive on the reason string", () => {

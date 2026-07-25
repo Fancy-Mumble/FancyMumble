@@ -55,7 +55,10 @@ export const updaterApi = {
   dismiss: () => invoke<void>("updater_dismiss"),
   onProgress: (cb: (e: ProgressEvent) => void): Promise<UnlistenFn> =>
     listen<ProgressEvent>(PROGRESS_EVENT, (event) => cb(event.payload)),
-  closeWindow: () => getCurrentWindow().close().catch(() => undefined),
+  closeWindow: () =>
+    getCurrentWindow()
+      .close()
+      .catch(() => undefined),
   setSkippedVersion: persistSkippedVersion,
 };
 

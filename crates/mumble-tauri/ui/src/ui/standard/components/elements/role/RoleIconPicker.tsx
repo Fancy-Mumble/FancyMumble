@@ -43,10 +43,7 @@ export function RoleIconPicker({ value, onChange, maxBytes, disabled }: RoleIcon
   const serverMax = useAppStore((s) => s.serverConfig.max_image_message_length);
   const budget = useMemo(() => clampBudget(maxBytes, serverMax), [maxBytes, serverMax]);
 
-  const previewSrc = useMemo(
-    () => (value && value.length > 0 ? textureToDataUrl(value) : null),
-    [value],
-  );
+  const previewSrc = useMemo(() => (value && value.length > 0 ? textureToDataUrl(value) : null), [value]);
 
   const handlePick = () => {
     if (disabled) return;
@@ -107,9 +104,7 @@ export function RoleIconPicker({ value, onChange, maxBytes, disabled }: RoleIcon
             </button>
           )}
         </div>
-        <span className={styles.hint}>
-          {t("roleDisplay.iconPickerHint", { size: formatBytes(budget) })}
-        </span>
+        <span className={styles.hint}>{t("roleDisplay.iconPickerHint", { size: formatBytes(budget) })}</span>
         {error && <span className={styles.error}>{error}</span>}
       </div>
       <input

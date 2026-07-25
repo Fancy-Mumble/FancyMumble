@@ -104,16 +104,11 @@ describe("Online list sorting (current channel first)", () => {
     expect(sorted[0].name).toBe("Alice");
     expect(sorted[1].name).toBe("Charlie");
     // Bob and Dave are after the current-channel users
-    expect(sorted.slice(2).map((u) => u.name)).toEqual(
-      expect.arrayContaining(["Bob", "Dave"]),
-    );
+    expect(sorted.slice(2).map((u) => u.name)).toEqual(expect.arrayContaining(["Bob", "Dave"]));
   });
 
   it("preserves relative order when no current channel", () => {
-    const users = [
-      makeUser(1, 100, "Alice"),
-      makeUser(2, 200, "Bob"),
-    ];
+    const users = [makeUser(1, 100, "Alice"), makeUser(2, 200, "Bob")];
 
     const sorted = sortOnlineUsers(users, null);
     expect(sorted[0].name).toBe("Alice");
@@ -121,21 +116,14 @@ describe("Online list sorting (current channel first)", () => {
   });
 
   it("preserves relative order among same-channel users", () => {
-    const users = [
-      makeUser(1, 100, "Alice"),
-      makeUser(2, 100, "Bob"),
-      makeUser(3, 100, "Charlie"),
-    ];
+    const users = [makeUser(1, 100, "Alice"), makeUser(2, 100, "Bob"), makeUser(3, 100, "Charlie")];
 
     const sorted = sortOnlineUsers(users, 100);
     expect(sorted.map((u) => u.name)).toEqual(["Alice", "Bob", "Charlie"]);
   });
 
   it("puts all users after when none match current channel", () => {
-    const users = [
-      makeUser(1, 200, "Alice"),
-      makeUser(2, 300, "Bob"),
-    ];
+    const users = [makeUser(1, 200, "Alice"), makeUser(2, 300, "Bob")];
 
     const sorted = sortOnlineUsers(users, 100);
     expect(sorted.map((u) => u.name)).toEqual(["Alice", "Bob"]);

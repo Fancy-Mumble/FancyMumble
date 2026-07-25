@@ -14,9 +14,18 @@ export interface SidebarContextMenuProps {
  * editor as "Create channel" with that attribute pre-set - no separate creation
  * path to keep in step.
  */
-export default function SidebarContextMenu({ x, y, onCreateChannel, onCreateCategory }: SidebarContextMenuProps) {
-  return <ContextMenu x={x} y={y} label="Channel list actions" heading="Channels">
-    <ContextMenuItem onSelect={onCreateChannel}>Create channel</ContextMenuItem>
-    <ContextMenuItem onSelect={onCreateCategory} hint="Groups channels">Create category</ContextMenuItem>
-  </ContextMenu>;
+export default function SidebarContextMenu({
+  x,
+  y,
+  onCreateChannel,
+  onCreateCategory,
+}: SidebarContextMenuProps) {
+  return (
+    <ContextMenu x={x} y={y} label="Channel list actions" heading="Channels">
+      <ContextMenuItem onSelect={onCreateChannel}>Create channel</ContextMenuItem>
+      <ContextMenuItem onSelect={onCreateCategory} hint="Groups channels">
+        Create category
+      </ContextMenuItem>
+    </ContextMenu>
+  );
 }

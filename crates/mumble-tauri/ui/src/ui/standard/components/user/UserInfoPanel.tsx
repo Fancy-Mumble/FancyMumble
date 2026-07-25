@@ -51,9 +51,7 @@ export default function UserInfoPanel({ stats }: Readonly<Props>) {
       <PingStats stats={stats} />
 
       {/* UDP Network Statistics */}
-      {(stats.from_client || stats.from_server) && (
-        <UdpNetworkStats stats={stats} />
-      )}
+      {(stats.from_client || stats.from_server) && <UdpNetworkStats stats={stats} />}
 
       {/* Bandwidth */}
       <BandwidthInfo stats={stats} />
@@ -84,18 +82,16 @@ function ConnectionInfo({ stats }: Readonly<Props>) {
         if (!cancelled) setGeo(result);
       });
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [stats.address, streamerMode]);
 
   if (!hasVersion && !stats.address) return null;
 
-  const osDisplay = [stats.os, stats.os_version]
-    .filter(Boolean)
-    .join(" ");
+  const osDisplay = [stats.os, stats.os_version].filter(Boolean).join(" ");
 
-  const popupLabel = [geo?.city, geo?.region, geo?.country]
-    .filter(Boolean)
-    .join(", ");
+  const popupLabel = [geo?.city, geo?.region, geo?.country].filter(Boolean).join(", ");
 
   return (
     <section className={styles.section}>
@@ -135,9 +131,7 @@ function ConnectionInfo({ stats }: Readonly<Props>) {
         </>
         <>
           <span className={styles.infoLabel}>{t("userInfo.labelOpus")}</span>
-          <span className={styles.infoValue}>
-            {stats.opus ? t("userProfile.yes") : t("userProfile.no")}
-          </span>
+          <span className={styles.infoValue}>{stats.opus ? t("userProfile.yes") : t("userProfile.no")}</span>
         </>
       </div>
       {geo && !streamerMode && (
@@ -205,9 +199,7 @@ function UdpNetworkStats({ stats }: Readonly<Props>) {
           {stats.from_client && (
             <PacketStatsRow label={t("userInfo.rowFromClient")} data={stats.from_client} />
           )}
-          {stats.from_server && (
-            <PacketStatsRow label={t("userInfo.rowToClient")} data={stats.from_server} />
-          )}
+          {stats.from_server && <PacketStatsRow label={t("userInfo.rowToClient")} data={stats.from_server} />}
           {stats.rolling_stats && (
             <>
               <tr className={styles.subHeader}>
@@ -215,14 +207,8 @@ function UdpNetworkStats({ stats }: Readonly<Props>) {
                   {t("userInfo.rollingWindow", { seconds: stats.rolling_stats.time_window })}
                 </td>
               </tr>
-              <PacketStatsRow
-                label={t("userInfo.rowFromClient")}
-                data={stats.rolling_stats.from_client}
-              />
-              <PacketStatsRow
-                label={t("userInfo.rowToClient")}
-                data={stats.rolling_stats.from_server}
-              />
+              <PacketStatsRow label={t("userInfo.rowFromClient")} data={stats.rolling_stats.from_client} />
+              <PacketStatsRow label={t("userInfo.rowToClient")} data={stats.rolling_stats.from_server} />
             </>
           )}
         </tbody>
@@ -231,26 +217,17 @@ function UdpNetworkStats({ stats }: Readonly<Props>) {
   );
 }
 
-function PacketStatsRow({
-  label,
-  data,
-}: Readonly<{ label: string; data: PacketStats }>) {
+function PacketStatsRow({ label, data }: Readonly<{ label: string; data: PacketStats }>) {
   const total = data.good + data.late + data.lost;
   return (
     <tr>
       <td className={styles.rowLabel}>{label}</td>
       <td>{data.good}</td>
       <td>
-        {data.late}{" "}
-        <span className={lossClass(data.late, total)}>
-          ({pct(data.late, total)}%)
-        </span>
+        {data.late} <span className={lossClass(data.late, total)}>({pct(data.late, total)}%)</span>
       </td>
       <td>
-        {data.lost}{" "}
-        <span className={lossClass(data.lost, total)}>
-          ({pct(data.lost, total)}%)
-        </span>
+        {data.lost} <span className={lossClass(data.lost, total)}>({pct(data.lost, total)}%)</span>
       </td>
       <td>{data.resync}</td>
     </tr>
@@ -271,9 +248,7 @@ function BandwidthInfo({ stats }: Readonly<Props>) {
         {hasBandwidth && (
           <>
             <span className={styles.infoLabel}>{t("userInfo.labelCurrent")}</span>
-            <span className={styles.infoValue}>
-              {formatBandwidth(stats.bandwidth! * 8)}
-            </span>
+            <span className={styles.infoValue}>{formatBandwidth(stats.bandwidth! * 8)}</span>
           </>
         )}
         {hasTime && (

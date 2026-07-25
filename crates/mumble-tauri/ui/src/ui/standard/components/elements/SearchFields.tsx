@@ -33,33 +33,21 @@ type BaseProps = Omit<ComponentPropsWithoutRef<typeof SearchInput>, "variant" | 
  * and the settings search lost its bordered wrapper during the migration - so
  * a bare variant here would render a search with no border at all.
  */
-export const SidebarSearch = forwardRef<HTMLInputElement, BaseProps>(function SidebarSearch(
-  props,
-  ref,
-) {
+export const SidebarSearch = forwardRef<HTMLInputElement, BaseProps>(function SidebarSearch(props, ref) {
   return <SearchInput ref={ref} variant="field" size="small" {...props} />;
 });
 
 /** Admin toolbars and list filters: the input is the field. */
-export const ToolbarSearch = forwardRef<HTMLInputElement, BaseProps>(function ToolbarSearch(
-  props,
-  ref,
-) {
+export const ToolbarSearch = forwardRef<HTMLInputElement, BaseProps>(function ToolbarSearch(props, ref) {
   return <SearchInput ref={ref} variant="field" size="medium" {...props} />;
 });
 
 /** Pickers and popovers whose surrounding bar already draws the field. */
-export const PickerSearch = forwardRef<HTMLInputElement, BaseProps>(function PickerSearch(
-  props,
-  ref,
-) {
+export const PickerSearch = forwardRef<HTMLInputElement, BaseProps>(function PickerSearch(props, ref) {
   return <SearchInput ref={ref} variant="bar" size="small" {...props} />;
 });
 
 /** Command palette: bare, set in larger type. */
-export const PaletteSearch = forwardRef<HTMLInputElement, BaseProps>(function PaletteSearch(
-  props,
-  ref,
-) {
+export const PaletteSearch = forwardRef<HTMLInputElement, BaseProps>(function PaletteSearch(props, ref) {
   return <SearchInput ref={ref} variant="palette" size="medium" {...props} />;
 });

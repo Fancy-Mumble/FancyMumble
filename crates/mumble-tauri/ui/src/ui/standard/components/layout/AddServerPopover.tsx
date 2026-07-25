@@ -31,8 +31,6 @@ function pingClass(ping?: ServerPingResult): string {
   return styles.dotPoor;
 }
 
-
-
 export default function AddServerPopover({ anchor, onClose }: Readonly<Props>) {
   const navigate = useNavigate();
   const connect = useAppStore((s) => s.connect);
@@ -156,9 +154,7 @@ export default function AddServerPopover({ anchor, onClose }: Readonly<Props>) {
   };
 
   // Sessions keyed for quick lookup so we can mark already-connected entries.
-  const connectedKeys = new Set(
-    sessions.map((s) => `${s.host}:${s.port}:${s.username}`.toLowerCase()),
-  );
+  const connectedKeys = new Set(sessions.map((s) => `${s.host}:${s.port}:${s.username}`.toLowerCase()));
 
   const filteredServers = (() => {
     if (servers === null) return null;
@@ -183,7 +179,10 @@ export default function AddServerPopover({ anchor, onClose }: Readonly<Props>) {
       <button
         type="button"
         className={styles.friendsRow}
-        onClick={() => { onClose(); navigate("/friends"); }}
+        onClick={() => {
+          onClose();
+          navigate("/friends");
+        }}
         title={t("addPopover.openFriendsTitle")}
       >
         <span className={styles.friendsIcon}>
@@ -232,30 +231,36 @@ export default function AddServerPopover({ anchor, onClose }: Readonly<Props>) {
           ) : (
             <ul className={styles.list} role="list">
               {filteredServers?.map((s) => {
-            const key = `${s.host}:${s.port}:${s.username}`.toLowerCase();
-            const alreadyConnected = connectedKeys.has(key);
-            const ping = pings[s.id];
-            return (
-              <li key={s.id}>
-                <button
-                  type="button"
-                  className={styles.item}
-                  disabled={alreadyConnected}
-                  onClick={() => void handleQuickConnect(s)}
-                  title={alreadyConnected ? t("addPopover.alreadyConnected") : `${s.username}@${s.host}:${s.port}`}
-                >
-                  <span className={`${styles.pingDot} ${pingClass(ping)}`} title={pingTitle(ping)} />
-                  <span className={styles.itemBody}>
-                    <span className={styles.itemLabel}>{s.label || s.host}</span>
-                    <span className={styles.itemMeta}>
-                      {s.username}
-                      {alreadyConnected && <span className={styles.connectedTag}>{t("addPopover.connectedTag")}</span>}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
+                const key = `${s.host}:${s.port}:${s.username}`.toLowerCase();
+                const alreadyConnected = connectedKeys.has(key);
+                const ping = pings[s.id];
+                return (
+                  <li key={s.id}>
+                    <button
+                      type="button"
+                      className={styles.item}
+                      disabled={alreadyConnected}
+                      onClick={() => void handleQuickConnect(s)}
+                      title={
+                        alreadyConnected
+                          ? t("addPopover.alreadyConnected")
+                          : `${s.username}@${s.host}:${s.port}`
+                      }
+                    >
+                      <span className={`${styles.pingDot} ${pingClass(ping)}`} title={pingTitle(ping)} />
+                      <span className={styles.itemBody}>
+                        <span className={styles.itemLabel}>{s.label || s.host}</span>
+                        <span className={styles.itemMeta}>
+                          {s.username}
+                          {alreadyConnected && (
+                            <span className={styles.connectedTag}>{t("addPopover.connectedTag")}</span>
+                          )}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </>

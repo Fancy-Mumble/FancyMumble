@@ -4,12 +4,18 @@ import type { ImageWrapMode } from "./LiveDocImage";
 export function wrapLabel(mode: ImageWrapMode, t: ReturnType<typeof useTranslation>["t"]): string {
   const tr = t as (key: string) => string;
   switch (mode) {
-    case "inline":   return tr("liveDoc.image.inline");
-    case "wrap":     return tr("liveDoc.image.wrap");
-    case "wrapRight":return tr("liveDoc.image.wrapRight");
-    case "break":    return tr("liveDoc.image.break");
-    case "behind":   return tr("liveDoc.image.behind");
-    case "front":    return tr("liveDoc.image.front");
+    case "inline":
+      return tr("liveDoc.image.inline");
+    case "wrap":
+      return tr("liveDoc.image.wrap");
+    case "wrapRight":
+      return tr("liveDoc.image.wrapRight");
+    case "break":
+      return tr("liveDoc.image.break");
+    case "behind":
+      return tr("liveDoc.image.behind");
+    case "front":
+      return tr("liveDoc.image.front");
   }
 }
 

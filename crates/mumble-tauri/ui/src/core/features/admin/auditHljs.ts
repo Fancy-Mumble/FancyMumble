@@ -49,11 +49,7 @@ function registerAuditDsl(hljs: HljsApi): void {
  * overlay). Returns a single plain token when hljs is not yet loaded or the
  * language is unknown, so the backdrop degrades to uncoloured text.
  */
-export function auditTokens(
-  hljs: HljsApi | null,
-  value: string,
-  language: string,
-): HljsToken[] {
+export function auditTokens(hljs: HljsApi | null, value: string, language: string): HljsToken[] {
   if (!hljs) return [{ text: value, cls: "" }];
   if (language === AUDIT_DSL_LANGUAGE) registerAuditDsl(hljs);
   if (!hljs.getLanguage(language)) return [{ text: value, cls: "" }];

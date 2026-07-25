@@ -65,63 +65,47 @@ describe("buildMemberGroups", () => {
       ["OnlineAdmin", false],
       ["OfflineAdmin", true],
     ]);
-    expect(groups[1].rows.map((r) => [r.entry.name, r.offline])).toEqual([
-      ["OfflineMod", true],
-    ]);
+    expect(groups[1].rows.map((r) => [r.entry.name, r.offline])).toEqual([["OfflineMod", true]]);
   });
 
   it("skips system groups starting with ~ and falls through to Members", () => {
-    const groups = buildMemberGroups(
-      [user(1, "Alice", 10)],
-      [],
-      null,
-      [aclGroup("~admin", [10]), aclGroup("~all", [10])],
-    );
+    const groups = buildMemberGroups([user(1, "Alice", 10)], [], null, [
+      aclGroup("~admin", [10]),
+      aclGroup("~all", [10]),
+    ]);
     expect(groups).toHaveLength(1);
     expect(groups[0].label).toBe("Members");
     expect(groups[0].rows[0].entry.name).toBe("Alice");
   });
 
   it("buckets unregistered online users into Guests", () => {
-    const groups = buildMemberGroups(
-      [user(1, "Anon", null), user(2, "Member", 5)],
-      [],
-      null,
-      [aclGroup("staff", [5])],
-    );
+    const groups = buildMemberGroups([user(1, "Anon", null), user(2, "Member", 5)], [], null, [
+      aclGroup("staff", [5]),
+    ]);
     expect(groups.map((g) => g.label)).toEqual(["staff", "Guests"]);
     expect(groups[1].rows[0].entry.name).toBe("Anon");
   });
 
   it("excludes the own session from any bucket", () => {
-    const groups = buildMemberGroups(
-      [user(1, "Me", 10), user(2, "Other", 20)],
-      [],
-      1,
-      [aclGroup("staff", [10, 20])],
-    );
+    const groups = buildMemberGroups([user(1, "Me", 10), user(2, "Other", 20)], [], 1, [
+      aclGroup("staff", [10, 20]),
+    ]);
     expect(groups[0].rows.map((r) => r.entry.name)).toEqual(["Other"]);
   });
 
   it("does not duplicate users present both online and in registered list", () => {
-    const groups = buildMemberGroups(
-      [user(1, "Alice", 10)],
-      regsToOfflineEntries([reg(10, "Alice")]),
-      null,
-      [aclGroup("staff", [10])],
-    );
+    const groups = buildMemberGroups([user(1, "Alice", 10)], regsToOfflineEntries([reg(10, "Alice")]), null, [
+      aclGroup("staff", [10]),
+    ]);
     const total = groups.reduce((s, g) => s + g.rows.length, 0);
     expect(total).toBe(1);
     expect(groups[0].rows[0].offline).toBe(false);
   });
 
   it("propagates the role color from the ACL group", () => {
-    const groups = buildMemberGroups(
-      [user(1, "Alice", 10)],
-      [],
-      null,
-      [aclGroup("staff", [10], [], "#ff00aa")],
-    );
+    const groups = buildMemberGroups([user(1, "Alice", 10)], [], null, [
+      aclGroup("staff", [10], [], "#ff00aa"),
+    ]);
     expect(groups[0].color).toBe("#ff00aa");
   });
 

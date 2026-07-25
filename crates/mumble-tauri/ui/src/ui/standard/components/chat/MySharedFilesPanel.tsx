@@ -16,7 +16,13 @@ import type { AdminFileEntry } from "@core/types";
 import { FolderIcon, RefreshCwIcon, ImageIcon, TrashIcon, LinkIcon } from "../../icons";
 import { categorize, isPreviewable } from "@core/features/fileserver/fileTypes";
 import { CategoryIcon, FileThumb, PreviewModal, ExpiryBadge } from "../fileserver/FilePreview";
-import { myListFiles, deleteMyFile, myFileLink, makeMyFilesSource, dropPreview } from "../fileserver/fileServerMe";
+import {
+  myListFiles,
+  deleteMyFile,
+  myFileLink,
+  makeMyFilesSource,
+  dropPreview,
+} from "../fileserver/fileServerMe";
 import styles from "./MySharedFilesPanel.module.css";
 
 export default function MySharedFilesPanel() {
@@ -47,7 +53,9 @@ export default function MySharedFilesPanel() {
     }
   }, [baseUrl, sessionJwt]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const source = useMemo(
     () => (baseUrl && sessionJwt ? makeMyFilesSource({ baseUrl, sessionJwt }) : null),
@@ -55,7 +63,9 @@ export default function MySharedFilesPanel() {
   );
 
   const channelName = useCallback(
-    (id: number) => channels.find((c) => c.id === id)?.name || t("fileServer.root", { ns: "settings", defaultValue: "Root" }),
+    (id: number) =>
+      channels.find((c) => c.id === id)?.name ||
+      t("fileServer.root", { ns: "settings", defaultValue: "Root" }),
     [channels, t],
   );
 
@@ -79,7 +89,10 @@ export default function MySharedFilesPanel() {
     async (f: AdminFileEntry) => {
       if (!baseUrl || !sessionJwt) return;
       const ok = await askConfirm(
-        t("mySharedFiles.confirmDelete", { defaultValue: "Delete \"{{name}}\"? The shared link will stop working.", name: f.filename }),
+        t("mySharedFiles.confirmDelete", {
+          defaultValue: 'Delete "{{name}}"? The shared link will stop working.',
+          name: f.filename,
+        }),
         { title: t("mySharedFiles.deleteTitle", { defaultValue: "Delete file" }), kind: "warning" },
       );
       if (!ok) return;
@@ -89,7 +102,10 @@ export default function MySharedFilesPanel() {
         dropPreview(f.id);
         setFiles((prev) => prev.filter((x) => x.id !== f.id));
       } catch (e) {
-        await message(e instanceof Error ? e.message : String(e), { title: t("mySharedFiles.deleteFailed", { defaultValue: "Delete failed" }), kind: "error" });
+        await message(e instanceof Error ? e.message : String(e), {
+          title: t("mySharedFiles.deleteFailed", { defaultValue: "Delete failed" }),
+          kind: "error",
+        });
       } finally {
         setDeleting(null);
       }
@@ -99,13 +115,27 @@ export default function MySharedFilesPanel() {
 
   let body: React.ReactNode;
   if (!source) {
-    body = <p className={styles.empty}>{t("mySharedFiles.unavailable", { defaultValue: "File sharing is not enabled on this server." })}</p>;
+    body = (
+      <p className={styles.empty}>
+        {t("mySharedFiles.unavailable", { defaultValue: "File sharing is not enabled on this server." })}
+      </p>
+    );
   } else if (loading && files.length === 0) {
-    body = <p className={styles.empty}>{t("mySharedFiles.loading", { defaultValue: "Loading your files…" })}</p>;
+    body = (
+      <p className={styles.empty}>{t("mySharedFiles.loading", { defaultValue: "Loading your files…" })}</p>
+    );
   } else if (error) {
-    body = <p className={styles.empty}>{t("mySharedFiles.error", { defaultValue: "Could not load your files" })}: {error}</p>;
+    body = (
+      <p className={styles.empty}>
+        {t("mySharedFiles.error", { defaultValue: "Could not load your files" })}: {error}
+      </p>
+    );
   } else if (files.length === 0) {
-    body = <p className={styles.empty}>{t("mySharedFiles.empty", { defaultValue: "You haven't shared any files yet." })}</p>;
+    body = (
+      <p className={styles.empty}>
+        {t("mySharedFiles.empty", { defaultValue: "You haven't shared any files yet." })}
+      </p>
+    );
   } else {
     body = (
       <table className={styles.table}>
@@ -125,13 +155,22 @@ export default function MySharedFilesPanel() {
         <tbody>
           {files.map((f) => (
             <tr key={f.id}>
-              <td><FileThumb file={f} source={source} onOpen={setPreview} /></td>
+              <td>
+                <FileThumb file={f} source={source} onOpen={setPreview} />
+              </td>
               <td className={styles.nameCell}>
-                <span className={styles.fileName} title={f.filename}>{f.filename}</span>
+                <span className={styles.fileName} title={f.filename}>
+                  {f.filename}
+                </span>
               </td>
               <td className={styles.typeCell}>
                 <CategoryIcon cat={categorize(f.mime_type)} size={14} />{" "}
-                <span title={f.mime_type}>{t(`fileServer.category.${categorize(f.mime_type)}`, { ns: "settings", defaultValue: categorize(f.mime_type) })}</span>
+                <span title={f.mime_type}>
+                  {t(`fileServer.category.${categorize(f.mime_type)}`, {
+                    ns: "settings",
+                    defaultValue: categorize(f.mime_type),
+                  })}
+                </span>
               </td>
               <td className={styles.num}>{formatBytes(f.size_bytes)}</td>
               <td>
@@ -142,18 +181,32 @@ export default function MySharedFilesPanel() {
               <td title={`#${f.channel_id}`}>{channelName(f.channel_id)}</td>
               <td className={styles.dateCell}>{new Date(f.uploaded_at).toLocaleString()}</td>
               <td className={styles.dateCell}>
-                {f.expires_at != null
-                  ? <ExpiryBadge expiresAt={f.expires_at} />
-                  : <span className={styles.noExpiry}>{t("mySharedFiles.neverExpires", { defaultValue: "Never" })}</span>}
+                {f.expires_at != null ? (
+                  <ExpiryBadge expiresAt={f.expires_at} />
+                ) : (
+                  <span className={styles.noExpiry}>
+                    {t("mySharedFiles.neverExpires", { defaultValue: "Never" })}
+                  </span>
+                )}
               </td>
               <td className={styles.actionsCell}>
                 {f.access_mode === "public" && (
-                  <button type="button" className={styles.iconBtn} onClick={() => void handleShareLink(f)} title={t("mySharedFiles.openLink", { defaultValue: "Open share link in browser" })}>
+                  <button
+                    type="button"
+                    className={styles.iconBtn}
+                    onClick={() => void handleShareLink(f)}
+                    title={t("mySharedFiles.openLink", { defaultValue: "Open share link in browser" })}
+                  >
                     <LinkIcon width={15} height={15} />
                   </button>
                 )}
                 {isPreviewable(f.mime_type) && f.access_mode !== "password" && (
-                  <button type="button" className={styles.iconBtn} onClick={() => setPreview(f)} title={t("mySharedFiles.preview", { defaultValue: "Preview" })}>
+                  <button
+                    type="button"
+                    className={styles.iconBtn}
+                    onClick={() => setPreview(f)}
+                    title={t("mySharedFiles.preview", { defaultValue: "Preview" })}
+                  >
                     <ImageIcon width={15} height={15} />
                   </button>
                 )}
@@ -178,11 +231,17 @@ export default function MySharedFilesPanel() {
     <div className={styles.panel}>
       <div className={styles.header}>
         <span className={styles.title}>
-          <FolderIcon width={14} height={14} /> {t("mySharedFiles.title", { defaultValue: "My shared files" })}
+          <FolderIcon width={14} height={14} />{" "}
+          {t("mySharedFiles.title", { defaultValue: "My shared files" })}
         </span>
         {files.length > 0 && <span className={styles.count}>{files.length}</span>}
         <div className={styles.headerActions}>
-          <button type="button" className={styles.refreshBtn} onClick={() => void refresh()} disabled={loading}>
+          <button
+            type="button"
+            className={styles.refreshBtn}
+            onClick={() => void refresh()}
+            disabled={loading}
+          >
             <RefreshCwIcon width={14} height={14} /> {t("mySharedFiles.refresh", { defaultValue: "Refresh" })}
           </button>
         </div>

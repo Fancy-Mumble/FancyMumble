@@ -16,6 +16,5 @@ interface SharedWithState {
 
 export const useLiveDocSharedWithStore = create<SharedWithState>((set) => ({
   bySlug: {},
-  setSharedWith: (slug, members) =>
-    set((s) => ({ bySlug: { ...s.bySlug, [slug]: members } })),
+  setSharedWith: (slug, members) => set((s) => ({ bySlug: { ...s.bySlug, [slug]: members } })),
 }));

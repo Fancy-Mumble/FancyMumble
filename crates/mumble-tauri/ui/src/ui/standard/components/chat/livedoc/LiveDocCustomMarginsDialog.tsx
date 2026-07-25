@@ -72,21 +72,14 @@ export default function LiveDocCustomMarginsDialog({
 
   return (
     <Modal onClose={onClose} zIndex={9999}>
-      <div
-        className={styles.dialog}
-        role="dialog"
-        aria-labelledby="custom-margins-title"
-        aria-modal="true"
-      >
+      <div className={styles.dialog} role="dialog" aria-labelledby="custom-margins-title" aria-modal="true">
         <h3 id="custom-margins-title" className={styles.title}>
           {t("liveDoc.pageSetup.customMargins.title")}
         </h3>
 
         <div className={styles.fields}>
           <label className={`${styles.field} ${errorX ? styles.fieldError : ""}`}>
-            <span className={styles.fieldLabel}>
-              {t("liveDoc.pageSetup.customMargins.leftRight")}
-            </span>
+            <span className={styles.fieldLabel}>{t("liveDoc.pageSetup.customMargins.leftRight")}</span>
             <div className={styles.inputWrap}>
               <input
                 type="number"
@@ -94,16 +87,17 @@ export default function LiveDocCustomMarginsDialog({
                 value={draftX}
                 min={0.1}
                 step={0.1}
-                onChange={(e) => { setDraftX(e.target.value); setErrorX(false); }}
+                onChange={(e) => {
+                  setDraftX(e.target.value);
+                  setErrorX(false);
+                }}
               />
               <span className={styles.unitLabel}>{unitLabel}</span>
             </div>
           </label>
 
           <label className={`${styles.field} ${errorY ? styles.fieldError : ""}`}>
-            <span className={styles.fieldLabel}>
-              {t("liveDoc.pageSetup.customMargins.topBottom")}
-            </span>
+            <span className={styles.fieldLabel}>{t("liveDoc.pageSetup.customMargins.topBottom")}</span>
             <div className={styles.inputWrap}>
               <input
                 type="number"
@@ -111,7 +105,10 @@ export default function LiveDocCustomMarginsDialog({
                 value={draftY}
                 min={0.1}
                 step={0.1}
-                onChange={(e) => { setDraftY(e.target.value); setErrorY(false); }}
+                onChange={(e) => {
+                  setDraftY(e.target.value);
+                  setErrorY(false);
+                }}
               />
               <span className={styles.unitLabel}>{unitLabel}</span>
             </div>

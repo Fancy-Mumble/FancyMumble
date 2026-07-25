@@ -25,10 +25,7 @@ export function parseClientManifest(infoJson: string | null): ClientManifest | n
   if (!manifest || typeof manifest !== "object") return null;
   const version = manifest.schema_version ?? CLIENT_MANIFEST_SCHEMA_VERSION;
   if (version > CLIENT_MANIFEST_SCHEMA_VERSION) {
-    console.warn(
-      "[plugin-tier1] ignoring manifest with unsupported schema_version",
-      version,
-    );
+    console.warn("[plugin-tier1] ignoring manifest with unsupported schema_version", version);
     return null;
   }
   return manifest;
@@ -36,9 +33,7 @@ export function parseClientManifest(infoJson: string | null): ClientManifest | n
 
 /** Flatten every plugin's slash commands into a single lookup list.
  *  Used by the composer's `/` picker. */
-export function collectSlashCommands(
-  manifests: ReadonlyMap<string, ClientManifest>,
-): SlashCommandEntry[] {
+export function collectSlashCommands(manifests: ReadonlyMap<string, ClientManifest>): SlashCommandEntry[] {
   const out: SlashCommandEntry[] = [];
   for (const [pluginName, manifest] of manifests) {
     for (const command of manifest.slash_commands ?? []) {

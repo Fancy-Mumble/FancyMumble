@@ -43,8 +43,9 @@ describe("htmlToMarkdown", () => {
   });
 
   it("strips anchor tags keeping text", () => {
-    expect(htmlToMarkdown('<a href="https://example.com">https://example.com</a>'))
-      .toBe("https://example.com");
+    expect(htmlToMarkdown('<a href="https://example.com">https://example.com</a>')).toBe(
+      "https://example.com",
+    );
   });
 
   it("unescapes HTML entities", () => {
@@ -99,7 +100,7 @@ describe("markdownToHtml -> htmlToMarkdown round-trip", () => {
     expect(html).toContain('<span class="spoiler">boo</span>');
   });
 
-  it("converts fenced code blocks with a language hint to <pre><code class=\"language-...\">", () => {
+  it('converts fenced code blocks with a language hint to <pre><code class="language-...">', () => {
     const html = markdownToHtml("```rust\nfn main() {}\n```");
     expect(html).toContain('<pre><code class="language-rust">fn main() {}</code></pre>');
   });

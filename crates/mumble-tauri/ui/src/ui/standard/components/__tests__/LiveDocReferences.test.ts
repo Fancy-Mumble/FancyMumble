@@ -61,11 +61,7 @@ describe("extractReferenceTargets", () => {
   it("extracts headings, bookmarks and captions in document order", () => {
     const e = makeEditor({
       type: "doc",
-      content: [
-        heading(1, "Intro"),
-        bookmark("bm1", "Key point"),
-        caption("figure", "c1", "A diagram"),
-      ],
+      content: [heading(1, "Intro"), bookmark("bm1", "Key point"), caption("figure", "c1", "A diagram")],
     });
     const targets = extractReferenceTargets(e.state.doc);
     expect(targets.map((x) => x.kind)).toEqual(["heading", "bookmark", "figure"]);
@@ -138,11 +134,7 @@ describe("isNumberedTarget", () => {
   it("is true only for caption kinds", () => {
     const e = makeEditor({
       type: "doc",
-      content: [
-        heading(1, "H"),
-        bookmark("b", "B"),
-        caption("figure", "f", "F"),
-      ],
+      content: [heading(1, "H"), bookmark("b", "B"), caption("figure", "f", "F")],
     });
     const targets = extractReferenceTargets(e.state.doc);
     const kind = (k: string) => targets.find((x) => x.kind === k)!;

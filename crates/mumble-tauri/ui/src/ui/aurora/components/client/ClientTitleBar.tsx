@@ -26,13 +26,36 @@ export interface ClientTitleBarProps {
  * surfaces with no other entry point, plus the settings gear (icon-only, so the
  * bar stays quiet) which every state needs.
  */
-export default function ClientTitleBar({ serverTitle, onOpenSettings, onOpenFriends, onOpenWorkspace, onOpenAdmin, onDisconnect }: ClientTitleBarProps) {
+export default function ClientTitleBar({
+  serverTitle,
+  onOpenSettings,
+  onOpenFriends,
+  onOpenWorkspace,
+  onOpenAdmin,
+  onDisconnect,
+}: ClientTitleBarProps) {
   const actions: readonly TitleBarAction[] = [
-    ...(onOpenFriends ? [{ id: "friends", label: "Friends", icon: <UsersGroupIcon />, onClick: onOpenFriends }] : []),
-    ...(onOpenWorkspace ? [{ id: "workspace", label: "Workspace", icon: <StarIcon />, onClick: onOpenWorkspace }] : []),
-    ...(onOpenAdmin ? [{ id: "admin", label: "Administration", icon: <ShieldCheckIcon />, iconOnly: true, onClick: onOpenAdmin }] : []),
+    ...(onOpenFriends
+      ? [{ id: "friends", label: "Friends", icon: <UsersGroupIcon />, onClick: onOpenFriends }]
+      : []),
+    ...(onOpenWorkspace
+      ? [{ id: "workspace", label: "Workspace", icon: <StarIcon />, onClick: onOpenWorkspace }]
+      : []),
+    ...(onOpenAdmin
+      ? [
+          {
+            id: "admin",
+            label: "Administration",
+            icon: <ShieldCheckIcon />,
+            iconOnly: true,
+            onClick: onOpenAdmin,
+          },
+        ]
+      : []),
     { id: "settings", label: "Settings", icon: <SettingsIcon />, iconOnly: true, onClick: onOpenSettings },
-    ...(onDisconnect ? [{ id: "disconnect", label: "Disconnect", icon: <ArrowLeftIcon />, onClick: onDisconnect }] : []),
+    ...(onDisconnect
+      ? [{ id: "disconnect", label: "Disconnect", icon: <ArrowLeftIcon />, onClick: onDisconnect }]
+      : []),
   ];
   return <WindowTitleBar serverTitle={serverTitle} actions={actions} />;
 }

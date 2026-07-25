@@ -38,10 +38,7 @@ export const PageBreak = Node.create({
   },
 
   renderHTML() {
-    return [
-      "div",
-      mergeAttributes({ "data-page-break": "", class: "livedoc-page-break" }),
-    ];
+    return ["div", mergeAttributes({ "data-page-break": "", class: "livedoc-page-break" })];
   },
 
   addCommands() {
@@ -77,10 +74,7 @@ export const SectionBreak = Node.create({
   },
 
   renderHTML() {
-    return [
-      "div",
-      mergeAttributes({ "data-section-break": "", class: "livedoc-section-break" }),
-    ];
+    return ["div", mergeAttributes({ "data-section-break": "", class: "livedoc-section-break" })];
   },
 
   addCommands() {

@@ -22,10 +22,19 @@ export interface AdminCreds {
  *  dashboard spinning on "Loading…" forever. */
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms);
+    const timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)),
+      ms,
+    );
     p.then(
-      (v) => { clearTimeout(timer); resolve(v); },
-      (e) => { clearTimeout(timer); reject(e instanceof Error ? e : new Error(String(e))); },
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e instanceof Error ? e : new Error(String(e)));
+      },
     );
   });
 }
@@ -47,7 +56,11 @@ export async function checkFileServerHealth(baseUrl: string): Promise<FileServer
     await invoke<string>("fetch_file_server_capabilities", { baseUrl });
     return { ok: true, latencyMs: Math.round(performance.now() - t0) };
   } catch (e) {
-    return { ok: false, latencyMs: Math.round(performance.now() - t0), error: e instanceof Error ? e.message : String(e) };
+    return {
+      ok: false,
+      latencyMs: Math.round(performance.now() - t0),
+      error: e instanceof Error ? e.message : String(e),
+    };
   }
 }
 
