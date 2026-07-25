@@ -138,11 +138,18 @@
 /* Reserve the slot so names do not shift when someone mutes. */
 .occupantState {
   flex: 0 0 auto;
-  min-width: 14px;
+  min-width: 32px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: flex-end;
+  gap: 5px;
   color: #75808d;
+}
+
+/* Something is switched off - warm enough to notice, muted enough not to
+   shout on every row in a busy channel. */
+.stateOff {
+  color: #e0776f;
 }
 
 .occupantState svg {

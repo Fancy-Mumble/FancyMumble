@@ -18,17 +18,19 @@ export interface ChannelOccupantProps {
  * effect is the same, and the distinction belongs in the profile card.
  */
 export default function ChannelOccupant({ user, talking, own }: ChannelOccupantProps) {
-  const muted = user.mute || user.self_mute || user.suppress;
   const deafened = user.deaf || user.self_deaf;
-  const state = deafened ? "Deafened" : muted ? "Muted" : talking ? "Speaking" : "Listening";
+  // Deafening also silences your mic, so a deafened user is always muted too
+  // and shows both icons - one indicator per thing that is off.
+  const muted = user.mute || user.self_mute || user.suppress || deafened;
+  const state = deafened ? "Muted and deafened" : muted ? "Muted" : talking ? "Speaking" : "Listening";
 
   return (
     <span className={`${styles.occupant} ${own ? styles.occupantOwn : ""}`} title={`${user.name} — ${state}`}>
       <ChannelPresenceAvatar name={user.name} talking={talking} />
       <span className={styles.occupantName}>{user.name}</span>
       <span className={styles.occupantState} aria-label={state}>
-        {deafened && <HeadphonesOffIcon />}
-        {muted && !deafened && <MicOffIcon />}
+        {muted && <MicOffIcon className={styles.stateOff} />}
+        {deafened && <HeadphonesOffIcon className={styles.stateOff} />}
       </span>
     </span>
   );
