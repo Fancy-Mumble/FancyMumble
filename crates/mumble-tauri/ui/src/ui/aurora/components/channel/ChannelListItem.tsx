@@ -14,6 +14,7 @@ export interface ChannelListItemProps {
   listened: boolean;
   unread: number;
   talkingSessions: ReadonlySet<number>;
+  ownSession?: number | null;
   onSelect: () => void;
   onJoin: () => void;
   onContextMenu?: (event: MouseEvent<HTMLElement>) => void;
@@ -27,6 +28,7 @@ export default function ChannelListItem({
   listened,
   unread,
   talkingSessions,
+  ownSession,
   onSelect,
   onJoin,
   onContextMenu,
@@ -41,6 +43,7 @@ export default function ChannelListItem({
     .filter(Boolean)
     .join(" ");
   return (
+    <>
     <Button
       variant="bare"
       wrapLabel={false}
@@ -56,7 +59,8 @@ export default function ChannelListItem({
       {listened && <HeadphonesIcon className={styles.badgeIcon} />}
       {unread > 0 && <b className={styles.unread}>{unread > 99 ? "99+" : unread}</b>}
       {users.length > 0 && <span className={styles.count}>{users.length}</span>}
-      <ChannelPresence users={users} talkingSessions={talkingSessions} />
     </Button>
+    <ChannelPresence users={users} talkingSessions={talkingSessions} ownSession={ownSession} />
+    </>
   );
 }
