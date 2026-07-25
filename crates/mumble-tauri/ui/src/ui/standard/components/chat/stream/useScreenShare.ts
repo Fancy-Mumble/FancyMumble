@@ -46,12 +46,7 @@ import { clearAllStrokesInChannel, clearStrokesFromSender } from "../drawing/Dra
 import type { SourceSelection } from "./ScreenSharePickerDialog";
 import { QUALITY_PRESETS, type StreamSettings } from "@core/features/chat/stream/streamSettings";
 import { createPcStatsSampler } from "./StreamStatsPanel";
-import {
-  buildStartPayload,
-  LEGACY_TRACKS,
-  parseStartPayload,
-  trackContentBySession,
-} from "./trackContent";
+import { buildStartPayload, LEGACY_TRACKS, parseStartPayload, trackContentBySession } from "./trackContent";
 import {
   activeStreamViewerStrategy,
   registerStreamViewerStrategy,
@@ -97,10 +92,7 @@ export type { TrackContent, TrackContentMap } from "./trackContent";
 // STUN servers for the client to discover its public address.
 // The server SFU uses ICE-lite and needs no STUN.
 const RTC_CONFIG: RTCConfiguration = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-  ],
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }],
 };
 
 // ---------------------------------------------------------------------------
@@ -116,7 +108,12 @@ const RTC_CONFIG: RTCConfiguration = {
  * would leak through the wrong connection and the SFU handshake would
  * never complete.
  */
-function sendSignal(targetSession: number, signalType: number, payload: string, serverId: string | null): void {
+function sendSignal(
+  targetSession: number,
+  signalType: number,
+  payload: string,
+  serverId: string | null,
+): void {
   const { sendWebRtcSignal } = useAppStore.getState();
   void sendWebRtcSignal(targetSession, signalType, payload, serverId);
 }
@@ -313,10 +310,7 @@ function computeStreams(session: number): RemoteStreams {
   const primaryTrack = screenTrack ?? cameraTrack;
   const pipTrack = screenTrack !== null ? cameraTrack : null;
 
-  syncStreamTracks(state.primaryStream, [
-    ...(primaryTrack ? [primaryTrack] : []),
-    ...state.audioTracks,
-  ]);
+  syncStreamTracks(state.primaryStream, [...(primaryTrack ? [primaryTrack] : []), ...state.audioTracks]);
   syncStreamTracks(state.cameraStream, pipTrack ? [pipTrack] : []);
 
   return {
@@ -351,9 +345,7 @@ function flushViewerIce(session: number): void {
   const state = viewerPcs.get(session);
   if (!state) return;
   for (const c of state.pendingIce) {
-    state.pc.addIceCandidate(c).catch((e) =>
-      console.error("[sfu] viewer addIceCandidate error:", e),
-    );
+    state.pc.addIceCandidate(c).catch((e) => console.error("[sfu] viewer addIceCandidate error:", e));
   }
   state.pendingIce = [];
 }
@@ -382,9 +374,7 @@ function closeViewer(session?: number): void {
 function reconnectOrDropViewer(broadcasterSession: number): void {
   closeViewer(broadcasterSession);
   if (useAppStore.getState().broadcastingSessions.has(broadcasterSession)) {
-    startWatching(broadcasterSession).catch((e) =>
-      console.error("[sfu] viewer reconnect failed:", e),
-    );
+    startWatching(broadcasterSession).catch((e) => console.error("[sfu] viewer reconnect failed:", e));
     return;
   }
   const { watchingSession } = useAppStore.getState();
@@ -426,7 +416,14 @@ interface JitterCtl {
 }
 
 function newJitterCtl(): JitterCtl {
-  return { targetMs: JB_START_MS, lastFreeze: 0, lastDelay: 0, lastEmitted: 0, bufferHist: [], cleanTicks: 0 };
+  return {
+    targetMs: JB_START_MS,
+    lastFreeze: 0,
+    lastDelay: 0,
+    lastEmitted: 0,
+    bufferHist: [],
+    cleanTicks: 0,
+  };
 }
 
 /** Set the jitter-buffer target on a viewer PC's video receivers. Best-effort:
@@ -689,15 +686,12 @@ function routeSdpAnswer(senderSession: number, payload: string): void {
   }
 
   const answerUfrag = /a=ice-ufrag:([^\r\n]+)/.exec(payload)?.[1] ?? "?";
-  console.warn(
-    "[sfu] SDP answer received but no peer is expecting one",
-    {
-      senderSession,
-      viewerSessions: [...viewerPcs.keys()],
-      answerUfrag,
-      payloadLength: payload.length,
-    },
-  );
+  console.warn("[sfu] SDP answer received but no peer is expecting one", {
+    senderSession,
+    viewerSessions: [...viewerPcs.keys()],
+    answerUfrag,
+    payloadLength: payload.length,
+  });
 }
 
 /** Route an ICE candidate to the correct peer (viewer by sender session > preview).
@@ -729,7 +723,12 @@ function routeIceCandidate(senderSession: number, payload: string): void {
   }
 }
 
-function handleSignal(senderSession: number, _targetSession: number | null, signalType: number, payload: string): void {
+function handleSignal(
+  senderSession: number,
+  _targetSession: number | null,
+  signalType: number,
+  payload: string,
+): void {
   // The Mumble server only forwards PluginData to the explicit
   // `receiver_sessions` list, so any signal we receive is already
   // intended for one of *our* connections.  We must NOT filter by
@@ -774,8 +773,9 @@ function handleSignal(senderSession: number, _targetSession: number | null, sign
       clearStrokesFromSender(senderSession);
       // Notify popout windows so they can self-close when their
       // broadcaster stops sharing.
-      emitTauri("screen-share-stopped", { session: senderSession })
-        .catch((e) => console.warn("[screenshare] emit stopped failed", e));
+      emitTauri("screen-share-stopped", { session: senderSession }).catch((e) =>
+        console.warn("[screenshare] emit stopped failed", e),
+      );
       break;
 
     case SIGNAL_SDP_ANSWER:
@@ -870,14 +870,13 @@ export function useScreenShare(): ScreenShareHook {
   // second server tab in the same window would inherit the global
   // `isSharingOwn` flag, causing the desktop-overlay button and a
   // phantom local preview to appear on the wrong tab.
-  const isBroadcasting = broadcastingOwnSession !== null
-    && ownSession !== null
-    && broadcastingOwnSession === ownSession;
+  const isBroadcasting =
+    broadcastingOwnSession !== null && ownSession !== null && broadcastingOwnSession === ownSession;
   // True when a different tab in the same window already owns the
   // singleton broadcast state.  Only one Rust capture runs per app,
   // so attempting to share again from another tab must be blocked.
-  const isBroadcastingFromOtherTab = broadcastingOwnSession !== null
-    && (ownSession === null || broadcastingOwnSession !== ownSession);
+  const isBroadcastingFromOtherTab =
+    broadcastingOwnSession !== null && (ownSession === null || broadcastingOwnSession !== ownSession);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerDeviceOnly, setPickerDeviceOnly] = useState(false);
   const [portalPicker, setPortalPicker] = useState(portalPickerCache ?? false);
@@ -909,47 +908,49 @@ export function useScreenShare(): ScreenShareHook {
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | undefined;
-    void Promise.resolve().then(() => listenTauri<{ state: string; message: string | null }>(
-      "screen-broadcast-state",
-      (event) => {
-        const { state: bcState, message } = event.payload;
-        if (bcState === "connected") {
-          // On a replace, hold the "setting up" overlay a short settle past
-          // "connected" so the reused transceivers finish swapping content
-          // (removing a track otherwise flashes the old frame briefly).
-          if (broadcastReplaceSettling) {
-            broadcastReplaceSettling = false;
-            setTimeout(() => useAppStore.setState({ webrtcConnecting: false }), REPLACE_SETTLE_MS);
-          } else {
-            useAppStore.setState({ webrtcConnecting: false });
+    void Promise.resolve()
+      .then(() =>
+        listenTauri<{ state: string; message: string | null }>("screen-broadcast-state", (event) => {
+          const { state: bcState, message } = event.payload;
+          if (bcState === "connected") {
+            // On a replace, hold the "setting up" overlay a short settle past
+            // "connected" so the reused transceivers finish swapping content
+            // (removing a track otherwise flashes the old frame briefly).
+            if (broadcastReplaceSettling) {
+              broadcastReplaceSettling = false;
+              setTimeout(() => useAppStore.setState({ webrtcConnecting: false }), REPLACE_SETTLE_MS);
+            } else {
+              useAppStore.setState({ webrtcConnecting: false });
+            }
+          } else if (bcState === "failed") {
+            console.error("[screenshare] Rust broadcaster failed:", message);
+            // Guard: popout webviews register this listener too, but only
+            // the realm that owns the broadcast state may react.
+            if (useAppStore.getState().broadcastingOwnSession === null) return;
+            endOwnBroadcast(`broadcaster failed: ${message ?? "unknown"}`);
+            showWebRtcError(
+              message !== null && message !== ""
+                ? `Screen sharing failed: ${message}`
+                : "Screen sharing failed.",
+            );
+          } else if (bcState === "captureStalled" || bcState === "captureResumed") {
+            // Advisory hint for the GNOME/NVIDIA fullscreen direct-scanout
+            // capture stall (Linux monitor shares only; see fancy-screenshare
+            // StallWatch). The broadcast keeps running - just flag it so the
+            // own-preview can suggest sharing the window instead.
+            if (useAppStore.getState().broadcastingOwnSession === null) return;
+            useAppStore.setState({ captureStalled: bcState === "captureStalled" });
           }
-        } else if (bcState === "failed") {
-          console.error("[screenshare] Rust broadcaster failed:", message);
-          // Guard: popout webviews register this listener too, but only
-          // the realm that owns the broadcast state may react.
-          if (useAppStore.getState().broadcastingOwnSession === null) return;
-          endOwnBroadcast(`broadcaster failed: ${message ?? "unknown"}`);
-          showWebRtcError(
-            message !== null && message !== ""
-              ? `Screen sharing failed: ${message}`
-              : "Screen sharing failed.",
-          );
-        } else if (bcState === "captureStalled" || bcState === "captureResumed") {
-          // Advisory hint for the GNOME/NVIDIA fullscreen direct-scanout
-          // capture stall (Linux monitor shares only; see fancy-screenshare
-          // StallWatch). The broadcast keeps running - just flag it so the
-          // own-preview can suggest sharing the window instead.
-          if (useAppStore.getState().broadcastingOwnSession === null) return;
-          useAppStore.setState({ captureStalled: bcState === "captureStalled" });
+        }),
+      )
+      .then((un) => {
+        if (disposed) {
+          un();
+        } else {
+          unlisten = un;
         }
-      },
-    )).then((un) => {
-      if (disposed) {
-        un();
-      } else {
-        unlisten = un;
-      }
-    }).catch((reason) => console.debug("[screenshare] broadcast lifecycle listener unavailable:", reason));
+      })
+      .catch((reason) => console.debug("[screenshare] broadcast lifecycle listener unavailable:", reason));
     return () => {
       disposed = true;
       unlisten?.();
@@ -1014,7 +1015,9 @@ export function useScreenShare(): ScreenShareHook {
       console.info("[screen-share] server has WebRTC SFU - media will be relayed via server");
     } else {
       console.warn("[screen-share] server does NOT have WebRTC SFU - screen sharing may not work");
-      showWebRtcError("This server does not have a WebRTC relay configured. Screen sharing is unlikely to work.");
+      showWebRtcError(
+        "This server does not have a WebRTC relay configured. Screen sharing is unlikely to work.",
+      );
     }
   };
 
@@ -1114,18 +1117,21 @@ export function useScreenShare(): ScreenShareHook {
     [ownSession],
   );
 
-  const changeSettings = useCallback((settings: StreamSettings) => {
-    if (!broadcasterSources) return;
-    if (
-      settings.maxDimension === broadcasterSettings.maxDimension &&
-      settings.maxFps === broadcasterSettings.maxFps
-    ) {
-      return;
-    }
-    // Same sources, new settings: let the portal restore the picked source
-    // silently instead of re-raising its dialog for a quality change.
-    void confirmSource(broadcasterSources, settings, { reuseDisplay: true });
-  }, [confirmSource]);
+  const changeSettings = useCallback(
+    (settings: StreamSettings) => {
+      if (!broadcasterSources) return;
+      if (
+        settings.maxDimension === broadcasterSettings.maxDimension &&
+        settings.maxFps === broadcasterSettings.maxFps
+      ) {
+        return;
+      }
+      // Same sources, new settings: let the portal restore the picked source
+      // silently instead of re-raising its dialog for a quality change.
+      void confirmSource(broadcasterSources, settings, { reuseDisplay: true });
+    },
+    [confirmSource],
+  );
 
   const startSharing = useCallback(() => {
     // Sharing while already broadcasting is allowed: the new pick replaces
@@ -1136,8 +1142,7 @@ export function useScreenShare(): ScreenShareHook {
       // synthetic display source (advisory id 0; the portal chooses the real
       // one and offers its own screen-vs-window tabs) and carry a running
       // camera track across the re-pick.
-      const camera = (isBroadcasting ? broadcasterSources : null)
-        ?.filter((s) => s.kind === "device") ?? [];
+      const camera = (isBroadcasting ? broadcasterSources : null)?.filter((s) => s.kind === "device") ?? [];
       void confirmSource([{ kind: "screen", id: 0 }, ...camera], broadcasterSettings);
       return;
     }
@@ -1182,9 +1187,9 @@ export function useScreenShare(): ScreenShareHook {
       if (session === ownSession) continue;
       const transport = strategy.createReceiveTransport(session);
       if (!transport.isOpen()) {
-        transport.open().catch((e) =>
-          console.error("[screenshare] auto-connect failed for session", session, e),
-        );
+        transport
+          .open()
+          .catch((e) => console.error("[screenshare] auto-connect failed for session", session, e));
       }
     }
     // Enumerating stale sessions needs the webview family's internal map;
@@ -1197,18 +1202,21 @@ export function useScreenShare(): ScreenShareHook {
     }
   }, [broadcastingSessions, ownSession]);
 
-  const watchBroadcast = useCallback((session: number) => {
-    useAppStore.setState({
-      watchingSession: session,
-      watchingOwnSession: ownSession ?? null,
-    });
-    // A no-op if already connected (auto-connect above) or under the
-    // native strategy (viewport-owned).
-    activeStreamViewerStrategy()
-      .createReceiveTransport(session)
-      .open()
-      .catch((e) => console.error("[screenshare] startWatching failed:", e));
-  }, [ownSession]);
+  const watchBroadcast = useCallback(
+    (session: number) => {
+      useAppStore.setState({
+        watchingSession: session,
+        watchingOwnSession: ownSession ?? null,
+      });
+      // A no-op if already connected (auto-connect above) or under the
+      // native strategy (viewport-owned).
+      activeStreamViewerStrategy()
+        .createReceiveTransport(session)
+        .open()
+        .catch((e) => console.error("[screenshare] startWatching failed:", e));
+    },
+    [ownSession],
+  );
 
   const stopWatchingCb = useCallback(() => {
     useAppStore.setState({ watchingSession: null, watchingOwnSession: null });
@@ -1219,11 +1227,10 @@ export function useScreenShare(): ScreenShareHook {
   // guard the broadcaster's tab would mistake the viewer tab's watch
   // state for its own and render a RemoteViewer for its own session,
   // hanging on "Connecting...".
-  const watchingSession = (watchingOwnSession !== null
-    && ownSession !== null
-    && watchingOwnSession === ownSession)
-    ? watchingSessionRaw
-    : null;
+  const watchingSession =
+    watchingOwnSession !== null && ownSession !== null && watchingOwnSession === ownSession
+      ? watchingSessionRaw
+      : null;
 
   return {
     isBroadcasting,

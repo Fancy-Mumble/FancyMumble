@@ -27,12 +27,7 @@ import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 
 export type LiveDocBoxVariant = "textbox" | "wordart";
 export type LiveDocEmbedKind =
-  | "signatureLine"
-  | "signatureFields"
-  | "signatureDigital"
-  | "object"
-  | "video"
-  | "model3d";
+  "signatureLine" | "signatureFields" | "signatureDigital" | "object" | "video" | "model3d";
 
 export interface LiveDocEmbedAttrs {
   kind: LiveDocEmbedKind;
@@ -213,24 +208,37 @@ function embedDom(attrs: LiveDocEmbedAttrs): DOMOutputSpec[] {
     const embed = toVideoEmbedUrl(safeSrc) ?? safeSrc;
     const frame = attrs.frame && attrs.frame !== "plain" ? ` ld-embed-frame-${attrs.frame}` : "";
     return [
-      ["div", { class: `ld-embed-video${frame}` },
-        ["iframe", {
-          src: embed,
-          frameborder: "0",
-          allow: "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture",
-          allowfullscreen: "true",
-          loading: "lazy",
-        }],
+      [
+        "div",
+        { class: `ld-embed-video${frame}` },
+        [
+          "iframe",
+          {
+            src: embed,
+            frameborder: "0",
+            allow: "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture",
+            allowfullscreen: "true",
+            loading: "lazy",
+          },
+        ],
       ],
     ];
   }
   if (kind === "model3d") {
     return [
-      ["div", { class: "ld-embed-card ld-embed-model" },
+      [
+        "div",
+        { class: "ld-embed-card ld-embed-model" },
         ["span", { class: "ld-embed-icon", "aria-hidden": "true" }, "◰"],
-        ["span", { class: "ld-embed-meta" },
+        [
+          "span",
+          { class: "ld-embed-meta" },
           ["span", { class: "ld-embed-title" }, attrs.title || attrs.fileName || "3D model"],
-          ["a", { class: "ld-embed-link", href: safeSrc, target: "_blank", rel: "noopener noreferrer" }, safeSrc],
+          [
+            "a",
+            { class: "ld-embed-link", href: safeSrc, target: "_blank", rel: "noopener noreferrer" },
+            safeSrc,
+          ],
         ],
       ],
     ];
@@ -242,36 +250,44 @@ function embedDom(attrs: LiveDocEmbedAttrs): DOMOutputSpec[] {
     if (safeSrc) {
       meta.push([
         "a",
-        { class: "ld-embed-link", href: safeSrc, download: attrs.fileName || "", target: "_blank", rel: "noopener noreferrer" },
+        {
+          class: "ld-embed-link",
+          href: safeSrc,
+          download: attrs.fileName || "",
+          target: "_blank",
+          rel: "noopener noreferrer",
+        },
         "Open",
       ]);
     }
     return [
-      ["div", { class: "ld-embed-card ld-embed-object" },
+      [
+        "div",
+        { class: "ld-embed-card ld-embed-object" },
         ["span", { class: "ld-embed-icon", "aria-hidden": "true" }, "🗎"],
         ["span", { class: "ld-embed-meta" }, ...meta],
       ],
     ];
   }
   if (kind === "signatureFields") {
-    const field = (label: string) => ["div", { class: "ld-sig-field" },
+    const field = (label: string) => [
+      "div",
+      { class: "ld-sig-field" },
       ["span", { class: "ld-sig-rule" }],
       ["span", { class: "ld-sig-caption" }, label],
     ];
-    return [
-      ["div", { class: "ld-sig-fields" },
-        field("Signature"),
-        field("Name"),
-        field("Date"),
-      ],
-    ];
+    return [["div", { class: "ld-sig-fields" }, field("Signature"), field("Name"), field("Date")]];
   }
   if (kind === "signatureDigital") {
     const when = attrs.signedAt ? new Date(attrs.signedAt).toLocaleString() : "";
     return [
-      ["div", { class: "ld-sig-digital" },
+      [
+        "div",
+        { class: "ld-sig-digital" },
         ["span", { class: "ld-sig-digital-seal", "aria-hidden": "true" }, "🔏"],
-        ["span", { class: "ld-sig-digital-body" },
+        [
+          "span",
+          { class: "ld-sig-digital-body" },
           ["span", { class: "ld-sig-digital-name" }, `Digitally signed by ${attrs.name || "Unknown"}`],
           ["span", { class: "ld-sig-digital-meta" }, `Key ${attrs.fingerprint || "-"}`],
           ["span", { class: "ld-sig-digital-meta" }, when ? `Signed ${when}` : ""],
@@ -282,7 +298,9 @@ function embedDom(attrs: LiveDocEmbedAttrs): DOMOutputSpec[] {
   }
   // signatureLine (default)
   return [
-    ["div", { class: "ld-sig-line" },
+    [
+      "div",
+      { class: "ld-sig-line" },
       ["span", { class: "ld-sig-x", "aria-hidden": "true" }, "✕"],
       ["span", { class: "ld-sig-rule" }],
       ["span", { class: "ld-sig-caption" }, attrs.name || attrs.title || "Signature"],
@@ -446,7 +464,9 @@ export const DropCap = Extension.create({
       toggleDropCap:
         () =>
         ({ editor, chain }) => {
-          const active = Boolean(editor.getAttributes("paragraph").dropCap || editor.getAttributes("heading").dropCap);
+          const active = Boolean(
+            editor.getAttributes("paragraph").dropCap || editor.getAttributes("heading").dropCap,
+          );
           return chain().updateAttributes("paragraph", { dropCap: !active }).run();
         },
     };

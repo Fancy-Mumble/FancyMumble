@@ -10,11 +10,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/core";
-import {
-  measureBlocks,
-  paginate,
-  paginationSignature,
-} from "./liveDocPagination";
+import { measureBlocks, paginate, paginationSignature } from "./liveDocPagination";
 
 /** Safely read the editor's content DOM.  TipTap's `editor.view` getter
  *  throws while the view is still mounting, so callers that run during a
@@ -28,10 +24,7 @@ function editorDom(editor: Editor): HTMLElement | null {
   }
 }
 
-export function useLiveDocPageCount(
-  editor: Editor | null,
-  pageContentHeight: number,
-): number {
+export function useLiveDocPageCount(editor: Editor | null, pageContentHeight: number): number {
   const [pageCount, setPageCount] = useState(1);
   const signatureRef = useRef("");
 

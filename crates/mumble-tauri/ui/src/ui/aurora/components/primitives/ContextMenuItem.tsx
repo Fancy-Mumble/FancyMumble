@@ -14,9 +14,28 @@ export interface ContextMenuItemProps {
   onSelect?: () => void;
 }
 
-export default function ContextMenuItem({ children, hint, trailing, tone = "default", disabled, onSelect }: ContextMenuItemProps) {
-  return <button type="button" className={styles.item} data-tone={tone} disabled={disabled} role="menuitem" onClick={onSelect}>
-    <span className={styles.label}><span>{children}</span>{hint && <span className={styles.hint}>{hint}</span>}</span>
-    {trailing && <span className={styles.trailing}>{trailing}</span>}
-  </button>;
+export default function ContextMenuItem({
+  children,
+  hint,
+  trailing,
+  tone = "default",
+  disabled,
+  onSelect,
+}: ContextMenuItemProps) {
+  return (
+    <button
+      type="button"
+      className={styles.item}
+      data-tone={tone}
+      disabled={disabled}
+      role="menuitem"
+      onClick={onSelect}
+    >
+      <span className={styles.label}>
+        <span>{children}</span>
+        {hint && <span className={styles.hint}>{hint}</span>}
+      </span>
+      {trailing && <span className={styles.trailing}>{trailing}</span>}
+    </button>
+  );
 }

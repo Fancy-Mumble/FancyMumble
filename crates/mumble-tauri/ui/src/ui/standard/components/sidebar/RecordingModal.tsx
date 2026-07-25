@@ -41,9 +41,7 @@ function formatElapsed(secs: number): string {
   return parts.join(":");
 }
 
-export default function RecordingModal({
-  onClose,
-}: RecordingModalProps) {
+export default function RecordingModal({ onClose }: RecordingModalProps) {
   const [directory, setDirectory] = useState("");
   const [filename, setFilename] = useState("recording_{datetime}_{channel}");
   const [format, setFormat] = useState<RecordingFormat>("wav");
@@ -134,12 +132,8 @@ export default function RecordingModal({
           {recording && (
             <div className={styles.statusBar}>
               <span className={styles.recordingDot} />
-              <span className={styles.statusText}>
-                {t("recordingModal.recordingTo", { path: filePath })}
-              </span>
-              <span className={styles.elapsed}>
-                {formatElapsed(elapsed)}
-              </span>
+              <span className={styles.statusText}>{t("recordingModal.recordingTo", { path: filePath })}</span>
+              <span className={styles.elapsed}>{formatElapsed(elapsed)}</span>
             </div>
           )}
 
@@ -167,11 +161,7 @@ export default function RecordingModal({
                 placeholder={t("recordingModal.directoryPlaceholder")}
                 disabled={recording}
               />
-              <button
-                className={styles.browseBtn}
-                onClick={handleBrowse}
-                disabled={recording}
-              >
+              <button className={styles.browseBtn} onClick={handleBrowse} disabled={recording}>
                 {t("recordingModal.browse")}
               </button>
             </div>
@@ -207,11 +197,7 @@ export default function RecordingModal({
               {t("recordingModal.stopRecording")}
             </button>
           ) : (
-            <button
-              className={styles.recordBtn}
-              onClick={handleStart}
-              disabled={!canStart}
-            >
+            <button className={styles.recordBtn} onClick={handleStart} disabled={!canStart}>
               {t("recordingModal.startRecording")}
             </button>
           )}

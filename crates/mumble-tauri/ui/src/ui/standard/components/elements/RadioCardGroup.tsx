@@ -24,10 +24,7 @@ export function RadioCardGroup<T extends string>({
       {options.map(({ value: optValue, label, description, Icon }) => {
         const active = value === optValue;
         return (
-          <label
-            key={optValue}
-            className={`${styles.card} ${active ? styles.cardActive : ""}`}
-          >
+          <label key={optValue} className={`${styles.card} ${active ? styles.cardActive : ""}`}>
             <input
               type="radio"
               name={name}

@@ -13,9 +13,10 @@ export function flattenChannels(channels: ChannelEntry[]): ChannelEntry[] {
   const ids = new Set(channels.map((channel) => channel.id));
   for (const channel of channels) {
     // Self-parented rows are roots, as are channels whose parent is filtered out.
-    const parent = channel.parent_id === null || channel.parent_id === channel.id || !ids.has(channel.parent_id)
-      ? -1
-      : channel.parent_id;
+    const parent =
+      channel.parent_id === null || channel.parent_id === channel.id || !ids.has(channel.parent_id)
+        ? -1
+        : channel.parent_id;
     childrenOf.set(parent, [...(childrenOf.get(parent) ?? []), channel]);
   }
   for (const siblings of childrenOf.values()) {
@@ -39,7 +40,9 @@ export function flattenChannels(channels: ChannelEntry[]): ChannelEntry[] {
   // and would otherwise vanish from the viewer entirely. Append the stragglers
   // in server order so malformed data still lists every channel.
   if (result.length !== channels.length) {
-    for (const channel of [...channels].sort((left, right) => left.position - right.position || left.name.localeCompare(right.name))) {
+    for (const channel of [...channels].sort(
+      (left, right) => left.position - right.position || left.name.localeCompare(right.name),
+    )) {
       if (seen.has(channel.id)) continue;
       seen.add(channel.id);
       result.push(channel);

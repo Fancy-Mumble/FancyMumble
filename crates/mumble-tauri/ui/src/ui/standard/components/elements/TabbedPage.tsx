@@ -46,18 +46,12 @@ export function TabbedPage<T extends string>({
   children,
 }: Readonly<TabbedPageProps<T>>) {
   const { t } = useTranslation("common");
-  const scrollCls = mainAreaClassName
-    ? `${styles.mainScroll} ${mainAreaClassName}`
-    : styles.mainScroll;
+  const scrollCls = mainAreaClassName ? `${styles.mainScroll} ${mainAreaClassName}` : styles.mainScroll;
 
   return (
     <div className={styles.page}>
       <nav className={styles.sidebar}>
-        <button
-          className={styles.backBtn}
-          onClick={onBack}
-          aria-label={t("tabbedPage.backAriaLabel")}
-        >
+        <button className={styles.backBtn} onClick={onBack} aria-label={t("tabbedPage.backAriaLabel")}>
           {BackIcon}
           <span>{t("tabbedPage.back")}</span>
         </button>
@@ -82,9 +76,7 @@ export function TabbedPage<T extends string>({
       </nav>
 
       <div className={styles.mainArea}>
-        <div className={scrollCls}>
-          {children}
-        </div>
+        <div className={scrollCls}>{children}</div>
         {footer && <div className={styles.mainFooter}>{footer}</div>}
       </div>
     </div>

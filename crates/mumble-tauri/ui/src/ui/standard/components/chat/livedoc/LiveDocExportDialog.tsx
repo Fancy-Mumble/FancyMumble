@@ -20,10 +20,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "@core/store";
-import {
-  encodeFileAttachmentMarker,
-  type FileAttachmentInfo,
-} from "../file/FileAttachmentCard";
+import { encodeFileAttachmentMarker, type FileAttachmentInfo } from "../file/FileAttachmentCard";
 import type { FileShareChoice } from "../file/FileShareDialog";
 import { Modal } from "../../elements/Modal";
 import styles from "../file/FileShareDialog.module.css";
@@ -192,7 +189,13 @@ export default function LiveDocExportDialog({
   }
 
   return (
-    <Modal onClose={onClose} closeOnEsc={false} closeOnOverlayClick={false} zIndex={200} overlayClassName={styles.overlayBlur}>
+    <Modal
+      onClose={onClose}
+      closeOnEsc={false}
+      closeOnOverlayClick={false}
+      zIndex={200}
+      overlayClassName={styles.overlayBlur}
+    >
       <div className={styles.dialog} role="dialog" aria-modal="true" aria-label={t("liveDoc.export.title")}>
         <div className={styles.header}>
           <h2 className={styles.title}>{t("liveDoc.export.title")}</h2>

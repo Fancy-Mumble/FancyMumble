@@ -21,7 +21,14 @@ export interface RichTextEditorProps {
  * Standard UI uses (StarterKit + Placeholder). Suitable for channel
  * descriptions, event notes, and other short rich-text fields.
  */
-export default function RichTextEditor({ value, onChange, placeholder, ariaLabel, label, hint }: RichTextEditorProps) {
+export default function RichTextEditor({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+  label,
+  hint,
+}: RichTextEditorProps) {
   const editor = useEditor({
     extensions: [StarterKit, Placeholder.configure({ placeholder: placeholder ?? "" })],
     content: value,
@@ -39,19 +46,68 @@ export default function RichTextEditor({ value, onChange, placeholder, ariaLabel
     if (normalized !== value) editor.commands.setContent(value || "", { emitUpdate: false });
   }, [value, editor]);
 
-  const cls = (active: boolean | undefined) => (active ? `${styles.toolBtn} ${styles.toolBtnActive}` : styles.toolBtn);
+  const cls = (active: boolean | undefined) =>
+    active ? `${styles.toolBtn} ${styles.toolBtnActive}` : styles.toolBtn;
 
   const body = (
     <div className={styles.wrap}>
       <div className={styles.toolbar} role="toolbar" aria-label="Formatting">
-        <button type="button" className={cls(editor?.isActive("bold"))} onClick={() => editor?.chain().focus().toggleBold().run()} aria-label="Bold" aria-pressed={editor?.isActive("bold")}><BoldIcon size={15} /></button>
-        <button type="button" className={cls(editor?.isActive("italic"))} onClick={() => editor?.chain().focus().toggleItalic().run()} aria-label="Italic" aria-pressed={editor?.isActive("italic")}><ItalicIcon size={15} /></button>
+        <button
+          type="button"
+          className={cls(editor?.isActive("bold"))}
+          onClick={() => editor?.chain().focus().toggleBold().run()}
+          aria-label="Bold"
+          aria-pressed={editor?.isActive("bold")}
+        >
+          <BoldIcon size={15} />
+        </button>
+        <button
+          type="button"
+          className={cls(editor?.isActive("italic"))}
+          onClick={() => editor?.chain().focus().toggleItalic().run()}
+          aria-label="Italic"
+          aria-pressed={editor?.isActive("italic")}
+        >
+          <ItalicIcon size={15} />
+        </button>
         <span className={styles.toolSep} />
-        <button type="button" className={cls(editor?.isActive("bulletList"))} onClick={() => editor?.chain().focus().toggleBulletList().run()} aria-label="Bullet list" aria-pressed={editor?.isActive("bulletList")}><ListIcon size={15} /></button>
-        <button type="button" className={cls(editor?.isActive("orderedList"))} onClick={() => editor?.chain().focus().toggleOrderedList().run()} aria-label="Numbered list" aria-pressed={editor?.isActive("orderedList")}><ListOrderedIcon size={15} /></button>
+        <button
+          type="button"
+          className={cls(editor?.isActive("bulletList"))}
+          onClick={() => editor?.chain().focus().toggleBulletList().run()}
+          aria-label="Bullet list"
+          aria-pressed={editor?.isActive("bulletList")}
+        >
+          <ListIcon size={15} />
+        </button>
+        <button
+          type="button"
+          className={cls(editor?.isActive("orderedList"))}
+          onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+          aria-label="Numbered list"
+          aria-pressed={editor?.isActive("orderedList")}
+        >
+          <ListOrderedIcon size={15} />
+        </button>
         <span className={styles.toolSep} />
-        <button type="button" className={cls(editor?.isActive("blockquote"))} onClick={() => editor?.chain().focus().toggleBlockquote().run()} aria-label="Quote" aria-pressed={editor?.isActive("blockquote")}><QuoteIcon size={15} /></button>
-        <button type="button" className={cls(editor?.isActive("codeBlock"))} onClick={() => editor?.chain().focus().toggleCodeBlock().run()} aria-label="Code block" aria-pressed={editor?.isActive("codeBlock")}><CodeIcon size={15} /></button>
+        <button
+          type="button"
+          className={cls(editor?.isActive("blockquote"))}
+          onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+          aria-label="Quote"
+          aria-pressed={editor?.isActive("blockquote")}
+        >
+          <QuoteIcon size={15} />
+        </button>
+        <button
+          type="button"
+          className={cls(editor?.isActive("codeBlock"))}
+          onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
+          aria-label="Code block"
+          aria-pressed={editor?.isActive("codeBlock")}
+        >
+          <CodeIcon size={15} />
+        </button>
       </div>
       <EditorContent editor={editor} className={styles.content} />
     </div>
@@ -60,7 +116,10 @@ export default function RichTextEditor({ value, onChange, placeholder, ariaLabel
   if (!label) return body;
   return (
     <div className={styles.field}>
-      <span>{label}{hint && <small>{hint}</small>}</span>
+      <span>
+        {label}
+        {hint && <small>{hint}</small>}
+      </span>
       {body}
     </div>
   );

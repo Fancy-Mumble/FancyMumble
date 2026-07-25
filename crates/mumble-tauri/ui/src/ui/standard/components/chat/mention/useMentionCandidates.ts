@@ -42,15 +42,9 @@ export function useMentionCandidates(
     const q = query.toLowerCase();
 
     if (kind === "user") {
-      const allOthers = users.filter(
-        (u) => u.session !== ownSession && u.name.toLowerCase().includes(q),
-      );
-      const inChannel = allOthers.filter(
-        (u) => selectedChannel != null && u.channel_id === selectedChannel,
-      );
-      const elsewhere = allOthers.filter(
-        (u) => selectedChannel == null || u.channel_id !== selectedChannel,
-      );
+      const allOthers = users.filter((u) => u.session !== ownSession && u.name.toLowerCase().includes(q));
+      const inChannel = allOthers.filter((u) => selectedChannel != null && u.channel_id === selectedChannel);
+      const elsewhere = allOthers.filter((u) => selectedChannel == null || u.channel_id !== selectedChannel);
       const userCandidates: MentionCandidate[] = [...inChannel, ...elsewhere]
         .slice(0, MAX_CANDIDATES)
         .map((u) => ({

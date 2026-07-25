@@ -51,18 +51,12 @@ export function extractEndnotes(doc: PmNode): EndnoteEntry[] {
 }
 
 /** Look up an endnote's 1-based number by its id. */
-export function endnoteNumberFor(
-  noteId: string,
-  entries: readonly EndnoteEntry[],
-): number | undefined {
+export function endnoteNumberFor(noteId: string, entries: readonly EndnoteEntry[]): number | undefined {
   return entries.find((e) => e.noteId === noteId)?.number;
 }
 
 /** Find an endnote entry by id. */
-export function resolveEndnote(
-  noteId: string,
-  entries: readonly EndnoteEntry[],
-): EndnoteEntry | undefined {
+export function resolveEndnote(noteId: string, entries: readonly EndnoteEntry[]): EndnoteEntry | undefined {
   return entries.find((e) => e.noteId === noteId);
 }
 
@@ -87,7 +81,5 @@ export function hasEndnotesSection(doc: PmNode): boolean {
 
 /** Compact signature used to skip redundant React state updates. */
 export function endnotesSignature(entries: readonly EndnoteEntry[]): string {
-  return entries
-    .map((e) => `${e.pos}:${e.noteId}:${e.number}:${e.text}`)
-    .join("\u0001");
+  return entries.map((e) => `${e.pos}:${e.noteId}:${e.number}:${e.text}`).join("\u0001");
 }

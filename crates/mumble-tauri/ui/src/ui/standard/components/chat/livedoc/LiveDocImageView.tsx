@@ -249,7 +249,11 @@ export default function LiveDocImageView(props: NodeViewProps) {
       // Resize / rotate / wrap-menu handles have their own
       // pointerdown handlers and run before the wrapper's bubble
       // handler.  Skip drag when the press lands on one of them.
-      if ((e.target as HTMLElement).closest(`.${styles.handle}, .${styles.rotateHandle}, .${styles.wrapToolbar}`)) {
+      if (
+        (e.target as HTMLElement).closest(
+          `.${styles.handle}, .${styles.rotateHandle}, .${styles.wrapToolbar}`,
+        )
+      ) {
         return;
       }
       const wrapper = containerRef.current;
@@ -356,14 +360,7 @@ export default function LiveDocImageView(props: NodeViewProps) {
       onDragStart={draggable ? (e: React.DragEvent) => e.preventDefault() : undefined}
       draggable={draggable ? false : undefined}
     >
-      <img
-        ref={imgRef}
-        src={src}
-        alt={alt}
-        style={imgStyle}
-        className={styles.img}
-        draggable={false}
-      />
+      <img ref={imgRef} src={src} alt={alt} style={imgStyle} className={styles.img} draggable={false} />
 
       {showChrome && (
         <>
@@ -387,42 +384,41 @@ export default function LiveDocImageView(props: NodeViewProps) {
           >
             <RefreshCwIcon width={14} height={14} />
           </span>
-
-
         </>
       )}
 
       {dropState && createPortal(<DropPreview state={dropState} />, document.body)}
 
-      {showChrome && createPortal(
-        <div
-          ref={wrapToolbarRef}
-          className={styles.wrapToolbar}
-          role="toolbar"
-          aria-label={t("liveDoc.image.wrapLabel")}
-        >
-          {IMAGE_WRAP_MODES.map((m) => (
-            <button
-              key={m}
-              type="button"
-              className={`${styles.wrapBtn} ${wrap === m ? styles.wrapBtnActive : ""}`}
-              onClick={(ev) => {
-                ev.preventDefault();
-                ev.stopPropagation();
-                setWrap(m);
-              }}
-              onMouseDown={(ev) => ev.preventDefault()}
-              title={wrapLabel(m, t)}
-              aria-label={wrapLabel(m, t)}
-              aria-pressed={wrap === m}
-            >
-              <WrapIcon mode={m} />
-              <span className={styles.wrapBtnLabel}>{wrapLabel(m, t)}</span>
-            </button>
-          ))}
-        </div>,
-        document.body,
-      )}
+      {showChrome &&
+        createPortal(
+          <div
+            ref={wrapToolbarRef}
+            className={styles.wrapToolbar}
+            role="toolbar"
+            aria-label={t("liveDoc.image.wrapLabel")}
+          >
+            {IMAGE_WRAP_MODES.map((m) => (
+              <button
+                key={m}
+                type="button"
+                className={`${styles.wrapBtn} ${wrap === m ? styles.wrapBtnActive : ""}`}
+                onClick={(ev) => {
+                  ev.preventDefault();
+                  ev.stopPropagation();
+                  setWrap(m);
+                }}
+                onMouseDown={(ev) => ev.preventDefault()}
+                title={wrapLabel(m, t)}
+                aria-label={wrapLabel(m, t)}
+                aria-pressed={wrap === m}
+              >
+                <WrapIcon mode={m} />
+                <span className={styles.wrapBtnLabel}>{wrapLabel(m, t)}</span>
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
     </NodeViewWrapper>
   );
 }
@@ -469,6 +465,3 @@ function DropPreview({ state }: { readonly state: DropDragState }) {
     </>
   );
 }
-
-
-

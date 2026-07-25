@@ -32,7 +32,7 @@ export interface SoundOption {
 }
 
 const SOUND_URLS: Record<string, string> = {
-  "none": "",
+  none: "",
   "dragon-3": sndDragon3,
   "univ-033": sndUniv033,
   "univ-036": sndUniv036,
@@ -66,18 +66,56 @@ const EVENT_KEYS: readonly NotificationEvent[] = [
   "selfMuted",
 ];
 
-function buildEventDefs(t: (key: string) => string): Array<{ key: NotificationEvent; label: string; description: string }> {
+function buildEventDefs(
+  t: (key: string) => string,
+): Array<{ key: NotificationEvent; label: string; description: string }> {
   return [
-    { key: "chatMessage", label: t("notifications.evtChatMessage"), description: t("notifications.evtChatMessageDesc") },
-    { key: "directMessage", label: t("notifications.evtDirectMessage"), description: t("notifications.evtDirectMessageDesc") },
+    {
+      key: "chatMessage",
+      label: t("notifications.evtChatMessage"),
+      description: t("notifications.evtChatMessageDesc"),
+    },
+    {
+      key: "directMessage",
+      label: t("notifications.evtDirectMessage"),
+      description: t("notifications.evtDirectMessageDesc"),
+    },
     { key: "mention", label: t("notifications.evtMention"), description: t("notifications.evtMentionDesc") },
-    { key: "userJoin", label: t("notifications.evtUserJoin"), description: t("notifications.evtUserJoinDesc") },
-    { key: "userLeave", label: t("notifications.evtUserLeave"), description: t("notifications.evtUserLeaveDesc") },
-    { key: "userJoinChannel", label: t("notifications.evtUserJoinChannel"), description: t("notifications.evtUserJoinChannelDesc") },
-    { key: "userLeaveChannel", label: t("notifications.evtUserLeaveChannel"), description: t("notifications.evtUserLeaveChannelDesc") },
-    { key: "streamStart", label: t("notifications.evtStreamStart"), description: t("notifications.evtStreamStartDesc") },
-    { key: "voiceActivity", label: t("notifications.evtVoiceActivity"), description: t("notifications.evtVoiceActivityDesc") },
-    { key: "selfMuted", label: t("notifications.evtSelfMuted"), description: t("notifications.evtSelfMutedDesc") },
+    {
+      key: "userJoin",
+      label: t("notifications.evtUserJoin"),
+      description: t("notifications.evtUserJoinDesc"),
+    },
+    {
+      key: "userLeave",
+      label: t("notifications.evtUserLeave"),
+      description: t("notifications.evtUserLeaveDesc"),
+    },
+    {
+      key: "userJoinChannel",
+      label: t("notifications.evtUserJoinChannel"),
+      description: t("notifications.evtUserJoinChannelDesc"),
+    },
+    {
+      key: "userLeaveChannel",
+      label: t("notifications.evtUserLeaveChannel"),
+      description: t("notifications.evtUserLeaveChannelDesc"),
+    },
+    {
+      key: "streamStart",
+      label: t("notifications.evtStreamStart"),
+      description: t("notifications.evtStreamStartDesc"),
+    },
+    {
+      key: "voiceActivity",
+      label: t("notifications.evtVoiceActivity"),
+      description: t("notifications.evtVoiceActivityDesc"),
+    },
+    {
+      key: "selfMuted",
+      label: t("notifications.evtSelfMuted"),
+      description: t("notifications.evtSelfMutedDesc"),
+    },
   ];
 }
 
@@ -181,8 +219,12 @@ export function NotificationsPanel({
     audio.play().catch(() => {});
   }, []);
 
-  const allEnabled = EVENT_KEYS.every((key) => settings.events[key]?.enabled ?? DEFAULT_NOTIFICATION_SOUNDS.events[key].enabled);
-  const allDisabled = EVENT_KEYS.every((key) => !(settings.events[key]?.enabled ?? DEFAULT_NOTIFICATION_SOUNDS.events[key].enabled));
+  const allEnabled = EVENT_KEYS.every(
+    (key) => settings.events[key]?.enabled ?? DEFAULT_NOTIFICATION_SOUNDS.events[key].enabled,
+  );
+  const allDisabled = EVENT_KEYS.every(
+    (key) => !(settings.events[key]?.enabled ?? DEFAULT_NOTIFICATION_SOUNDS.events[key].enabled),
+  );
 
   return (
     <>
@@ -204,16 +246,19 @@ export function NotificationsPanel({
             <h3 className={styles.sectionTitle}>{t("notifications.native")}</h3>
             <p className={styles.fieldHint}>{t("notifications.nativeHint")}</p>
           </div>
-          <Toggle
-            checked={enableNativeNotifications}
-            onChange={onToggleNativeNotifications}
-          />
+          <Toggle checked={enableNativeNotifications} onChange={onToggleNativeNotifications} />
         </div>
       </section>
 
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>{t("notifications.welcomeMessage", { defaultValue: "Welcome message" })}</h3>
-        <p className={styles.fieldHint}>{t("notifications.welcomeMessageHint", { defaultValue: "Show the server's welcome message in a popup after connecting." })}</p>
+        <h3 className={styles.sectionTitle}>
+          {t("notifications.welcomeMessage", { defaultValue: "Welcome message" })}
+        </h3>
+        <p className={styles.fieldHint}>
+          {t("notifications.welcomeMessageHint", {
+            defaultValue: "Show the server's welcome message in a popup after connecting.",
+          })}
+        </p>
         <select
           className={styles.select}
           value={welcomeMessageDisplay}
@@ -228,20 +273,10 @@ export function NotificationsPanel({
       {settings.masterEnabled && (
         <section className={styles.section}>
           <div className={ns.bulkActions}>
-            <button
-              type="button"
-              className={ns.bulkBtn}
-              onClick={enableAll}
-              disabled={allEnabled}
-            >
+            <button type="button" className={ns.bulkBtn} onClick={enableAll} disabled={allEnabled}>
               {t("notifications.enableAll")}
             </button>
-            <button
-              type="button"
-              className={ns.bulkBtn}
-              onClick={disableAll}
-              disabled={allDisabled}
-            >
+            <button type="button" className={ns.bulkBtn} onClick={disableAll} disabled={allDisabled}>
               {t("notifications.disableAll")}
             </button>
           </div>
@@ -270,9 +305,7 @@ export function NotificationsPanel({
                     <select
                       className={styles.select}
                       value={cfg.sound}
-                      onChange={(e) =>
-                        patchEvent(def.key, { sound: e.target.value })
-                      }
+                      onChange={(e) => patchEvent(def.key, { sound: e.target.value })}
                     >
                       {soundOptions.map((opt) => (
                         <option key={opt.id} value={opt.id}>
@@ -306,9 +339,7 @@ export function NotificationsPanel({
                         })
                       }
                     />
-                    <span className={ns.volumeValue}>
-                      {Math.round(cfg.volume * 100)}%
-                    </span>
+                    <span className={ns.volumeValue}>{Math.round(cfg.volume * 100)}%</span>
                   </div>
                 </div>
               )}

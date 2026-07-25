@@ -10,12 +10,21 @@ interface ChannelPasswordDialogProps {
 
 /** Password prompt for joining a password-protected channel.  A thin wrapper
  *  over the shared {@link PasswordPromptDialog}. */
-export function ChannelPasswordDialog({ channel, onConfirm, onCancel }: Readonly<ChannelPasswordDialogProps>) {
+export function ChannelPasswordDialog({
+  channel,
+  onConfirm,
+  onCancel,
+}: Readonly<ChannelPasswordDialogProps>) {
   const { t } = useTranslation(["sidebar", "common"]);
   return (
     <PasswordPromptDialog
       title={t("channelPassword.title")}
-      body={<><strong>{channel.name}</strong>{t("channelPassword.body")}</>}
+      body={
+        <>
+          <strong>{channel.name}</strong>
+          {t("channelPassword.body")}
+        </>
+      }
       placeholder={t("channelPassword.placeholder")}
       confirmLabel={t("channelPassword.joinBtn")}
       cancelLabel={t("common:actions.cancel")}

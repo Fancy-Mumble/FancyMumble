@@ -8,11 +8,7 @@ interface MessageSelectionBarProps {
   readonly onCancel: () => void;
 }
 
-export default function MessageSelectionBar({
-  count,
-  onDelete,
-  onCancel,
-}: MessageSelectionBarProps) {
+export default function MessageSelectionBar({ count, onDelete, onCancel }: MessageSelectionBarProps) {
   const { t } = useTranslation(["chat", "common"]);
   return (
     <div className={styles.bar}>
@@ -26,11 +22,7 @@ export default function MessageSelectionBar({
         <TrashIcon width={14} height={14} />
         {t("selection.deleteButton", { count })}
       </button>
-      <button
-        type="button"
-        className={`${styles.actionBtn} ${styles.cancelBtn}`}
-        onClick={onCancel}
-      >
+      <button type="button" className={`${styles.actionBtn} ${styles.cancelBtn}`} onClick={onCancel}>
         {t("common:actions.cancel")}
       </button>
     </div>

@@ -6,5 +6,9 @@ export interface SessionStatusIndicatorProps {
 }
 
 export default function SessionStatusIndicator({ pending }: SessionStatusIndicatorProps) {
-  return <div className={`${styles.indicator} ${pending ? styles.indicatorPending : ""}`} aria-hidden="true">{pending ? <span className={styles.spinner} /> : <WarningIcon />}</div>;
+  return (
+    <div className={`${styles.indicator} ${pending ? styles.indicatorPending : ""}`} aria-hidden="true">
+      {pending ? <span className={styles.spinner} /> : <WarningIcon />}
+    </div>
+  );
 }

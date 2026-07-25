@@ -8,15 +8,12 @@
  */
 
 import { useAppStore } from "../../../store";
-import type {
-  WatchPlaybackState,
-  WatchSession,
-  WatchSourceKind,
-  WatchSyncPayload,
-} from "./watchTypes";
+import type { WatchPlaybackState, WatchSession, WatchSourceKind, WatchSyncPayload } from "./watchTypes";
 
 /** Drops payloads we cannot act on and returns true if processing should continue. */
-function isActionable(payload: WatchSyncPayload): payload is Required<Pick<WatchSyncPayload, "sessionId" | "actor">> & WatchSyncPayload {
+function isActionable(
+  payload: WatchSyncPayload,
+): payload is Required<Pick<WatchSyncPayload, "sessionId" | "actor">> & WatchSyncPayload {
   return payload.sessionId != null && payload.actor != null;
 }
 

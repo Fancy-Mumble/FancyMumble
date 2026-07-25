@@ -31,13 +31,15 @@ export async function getSavedServers(): Promise<SavedServer[]> {
   const store = await getStore();
   const servers = await store.get<SavedServer[]>(KEY);
   // Normalize legacy entries that may not have cert_label or favorite.
-  return (servers ?? []).map((s) => ({ ...s, cert_label: s.cert_label ?? null, favorite: s.favorite ?? false }));
+  return (servers ?? []).map((s) => ({
+    ...s,
+    cert_label: s.cert_label ?? null,
+    favorite: s.favorite ?? false,
+  }));
 }
 
 /** Persist a new server entry. Returns the created entry. */
-export async function addServer(
-  server: Omit<SavedServer, "id">,
-): Promise<SavedServer> {
+export async function addServer(server: Omit<SavedServer, "id">): Promise<SavedServer> {
   const store = await getStore();
   const servers = await getSavedServers();
   const entry: SavedServer = { ...server, id: crypto.randomUUID() };
@@ -55,10 +57,7 @@ export async function removeServer(id: string): Promise<void> {
 }
 
 /** Update an existing server entry. */
-export async function updateServer(
-  id: string,
-  patch: Partial<Omit<SavedServer, "id">>,
-): Promise<void> {
+export async function updateServer(id: string, patch: Partial<Omit<SavedServer, "id">>): Promise<void> {
   const store = await getStore();
   const servers = await getSavedServers();
   const idx = servers.findIndex((s) => s.id === id);

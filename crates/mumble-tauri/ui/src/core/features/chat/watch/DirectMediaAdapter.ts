@@ -1,8 +1,4 @@
-import type {
-  LocalPlayerEvent,
-  PlayerAdapter,
-  PlayerAdapterArgs,
-} from "./PlayerAdapter";
+import type { LocalPlayerEvent, PlayerAdapter, PlayerAdapterArgs } from "./PlayerAdapter";
 
 /**
  * Player adapter for a direct media URL backed by an HTML5

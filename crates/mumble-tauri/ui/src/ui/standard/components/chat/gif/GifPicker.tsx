@@ -355,13 +355,19 @@ export default function GifPicker({ onSelect, onClose }: Readonly<GifPickerProps
         <div className={styles.tabs}>
           <button
             className={`${styles.tab} ${tab === "gifs" ? styles.active : ""}`}
-            onClick={() => { setTab("gifs"); setQuery(""); }}
+            onClick={() => {
+              setTab("gifs");
+              setQuery("");
+            }}
           >
             {t("gifPicker.tabGifs")}
           </button>
           <button
             className={`${styles.tab} ${tab === "stickers" ? styles.active : ""}`}
-            onClick={() => { setTab("stickers"); setQuery(""); }}
+            onClick={() => {
+              setTab("stickers");
+              setQuery("");
+            }}
           >
             {t("gifPicker.tabStickers")}
           </button>
@@ -375,28 +381,24 @@ export default function GifPicker({ onSelect, onClose }: Readonly<GifPickerProps
       <div className={styles.searchBar}>
         <PickerSearch
           className={styles.searchInput}
-          placeholder={t("gifPicker.searchPlaceholder", { tab: tab === "gifs" ? t("gifPicker.tabGifs") : t("gifPicker.tabStickers") })}
+          placeholder={t("gifPicker.searchPlaceholder", {
+            tab: tab === "gifs" ? t("gifPicker.tabGifs") : t("gifPicker.tabStickers"),
+          })}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           autoFocus
-          />
+        />
       </div>
 
       {/* Content */}
       <div className={styles.content}>
-        {loading && results.length === 0 && (
-          <div className={styles.loadingMsg}>{t("gifPicker.loading")}</div>
-        )}
+        {loading && results.length === 0 && <div className={styles.loadingMsg}>{t("gifPicker.loading")}</div>}
 
         {/* Category grid */}
         {showCategories && categories.length > 0 && (
           <div className={styles.categories}>
             {categories.slice(0, 12).map((cat) => (
-              <button
-                key={cat.id}
-                className={styles.categoryCard}
-                onClick={() => handleCategoryClick(cat)}
-              >
+              <button key={cat.id} className={styles.categoryCard} onClick={() => handleCategoryClick(cat)}>
                 <span className={styles.categoryLabel}>{cat.name}</span>
               </button>
             ))}
@@ -413,12 +415,7 @@ export default function GifPicker({ onSelect, onClose }: Readonly<GifPickerProps
                 onClick={() => handleGifClick(gif)}
                 title={gif.title}
               >
-                <img
-                  src={gif.preview}
-                  alt={gif.title}
-                  loading="lazy"
-                  className={styles.gifImg}
-                />
+                <img src={gif.preview} alt={gif.title} loading="lazy" className={styles.gifImg} />
               </button>
             ))}
             {/* Infinite scroll sentinel - uses a callback ref so the
@@ -428,13 +425,14 @@ export default function GifPicker({ onSelect, onClose }: Readonly<GifPickerProps
         )}
 
         {/* Spinner shown while loading subsequent pages */}
-        {loadingMore && (
-          <div className={styles.loadingMore}>{t("gifPicker.loading")}</div>
-        )}
+        {loadingMore && <div className={styles.loadingMore}>{t("gifPicker.loading")}</div>}
 
         {!loading && results.length === 0 && query && (
           <div className={styles.emptyMsg}>
-            {t("gifPicker.noResults", { tab: tab === "gifs" ? t("gifPicker.tabGifs") : t("gifPicker.tabStickers"), query })}
+            {t("gifPicker.noResults", {
+              tab: tab === "gifs" ? t("gifPicker.tabGifs") : t("gifPicker.tabStickers"),
+              query,
+            })}
           </div>
         )}
       </div>

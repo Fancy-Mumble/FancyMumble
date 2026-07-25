@@ -13,9 +13,7 @@ let storeData: Record<string, unknown> = {};
 vi.mock("@tauri-apps/plugin-store", () => ({
   load: vi.fn().mockImplementation(() =>
     Promise.resolve({
-      get: vi.fn().mockImplementation((key: string) =>
-        Promise.resolve(storeData[key] ?? null),
-      ),
+      get: vi.fn().mockImplementation((key: string) => Promise.resolve(storeData[key] ?? null)),
       set: vi.fn().mockImplementation((key: string, value: unknown) => {
         storeData[key] = value;
         return Promise.resolve();
@@ -83,10 +81,7 @@ describe("Per-identity profile storage", () => {
 
   it("isolates profiles between different identities", async () => {
     await saveProfileData(SAMPLE_PROFILE, "work");
-    await saveProfileData(
-      { profile: { decoration: "fire" }, bio: "Other", avatarDataUrl: null },
-      "personal",
-    );
+    await saveProfileData({ profile: { decoration: "fire" }, bio: "Other", avatarDataUrl: null }, "personal");
 
     const work = await loadProfileData("work");
     const personal = await loadProfileData("personal");
@@ -132,7 +127,11 @@ describe("Per-identity profile storage", () => {
 
   it("uses and removes an isolated server-specific override", async () => {
     await saveProfileData(SAMPLE_PROFILE, "work");
-    await saveServerProfileData("server-a", { profile: { status: "At work" }, bio: "Scoped", avatarDataUrl: null }, "work");
+    await saveServerProfileData(
+      "server-a",
+      { profile: { status: "At work" }, bio: "Scoped", avatarDataUrl: null },
+      "work",
+    );
 
     const overridden = await loadServerProfileData("server-a", "work");
     const fallback = await loadServerProfileData("server-b", "work");

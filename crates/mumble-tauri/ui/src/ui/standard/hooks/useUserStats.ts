@@ -7,10 +7,7 @@ import type { UserStats } from "@core/types";
  * Request and listen for a user's stats while `active` is true.
  * Returns the latest UserStats or null while loading / inactive.
  */
-export function useUserStats(
-  session: number | null,
-  active: boolean,
-): UserStats | null {
+export function useUserStats(session: number | null, active: boolean): UserStats | null {
   const [stats, setStats] = useState<UserStats | null>(null);
 
   // The listener must be registered before the request goes out: `listen()`

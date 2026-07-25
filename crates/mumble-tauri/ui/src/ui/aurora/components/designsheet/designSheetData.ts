@@ -13,4 +13,3 @@ export const sections = [
 ] as const;
 
 export const avatars = ["MO", "AK", "SR", "JL"];
-

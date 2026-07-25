@@ -9,7 +9,16 @@ const connected: RailGroup = {
   host: "magical.rocks",
   port: 64738,
   favorite: true,
-  identities: [{ id: "a", label: "Magical Rocks", host: "magical.rocks", port: 64738, username: "MyUser", sessionId: "session-1" }],
+  identities: [
+    {
+      id: "a",
+      label: "Magical Rocks",
+      host: "magical.rocks",
+      port: 64738,
+      username: "MyUser",
+      sessionId: "session-1",
+    },
+  ],
 };
 
 const shared: RailGroup = {
@@ -51,7 +60,9 @@ describe("ServerRail", () => {
     expect(screen.getByRole("complementary", { name: "Connected servers" })).toBeTruthy();
     expect(screen.getByText("Magical Rocks")).toBeTruthy();
     expect(screen.getByText("magical.rocks:64738")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Collapse server sidebar" }).getAttribute("aria-expanded")).toBe("true");
+    expect(
+      screen.getByRole("button", { name: "Collapse server sidebar" }).getAttribute("aria-expanded"),
+    ).toBe("true");
   });
 
   it("selects a lone identity directly instead of expanding", () => {

@@ -22,12 +22,7 @@ interface DropRoutingInput {
 }
 
 function pointInRect(point: { x: number; y: number }, rect: Rect): boolean {
-  return (
-    point.x >= rect.left &&
-    point.x <= rect.right &&
-    point.y >= rect.top &&
-    point.y <= rect.bottom
-  );
+  return point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom;
 }
 
 /**
@@ -52,10 +47,7 @@ interface LiveDocDropState {
   insertImages: ((files: File[]) => void) | null;
   /** Whether a drag is currently hovering the live-doc region (drives its overlay). */
   dragOver: boolean;
-  registerTarget: (
-    getRect: () => DOMRect | null,
-    insertImages: (files: File[]) => void,
-  ) => void;
+  registerTarget: (getRect: () => DOMRect | null, insertImages: (files: File[]) => void) => void;
   unregisterTarget: () => void;
   setDragOver: (value: boolean) => void;
 }

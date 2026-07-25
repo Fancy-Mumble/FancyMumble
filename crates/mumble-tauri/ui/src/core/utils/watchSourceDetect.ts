@@ -30,17 +30,11 @@ export interface DetectedVideoSource {
   title: string;
 }
 
-const VIDEO_EXTENSIONS = [
-  "mp4", "webm", "mov", "mkv", "m4v", "ogv", "avi",
-];
+const VIDEO_EXTENSIONS = ["mp4", "webm", "mov", "mkv", "m4v", "ogv", "avi"];
 
-const VIDEO_EXT_RE = new RegExp(
-  `\\.(${VIDEO_EXTENSIONS.join("|")})(?:\\?|#|$)`,
-  "i",
-);
+const VIDEO_EXT_RE = new RegExp(`\\.(${VIDEO_EXTENSIONS.join("|")})(?:\\?|#|$)`, "i");
 
-const YOUTUBE_RE =
-  /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i;
+const YOUTUBE_RE = /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i;
 
 const URL_RE = /https?:\/\/[^\s<>"')\]]+/gi;
 
@@ -55,7 +49,7 @@ function decode(body: string): string {
     .replaceAll("&amp;", "&")
     .replaceAll("&lt;", "<")
     .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", "\"")
+    .replaceAll("&quot;", '"')
     .replaceAll("&#39;", "'");
 }
 
@@ -77,10 +71,7 @@ function tailFromUrl(url: string): string {
  *        direct media links) are considered; YouTube links are
  *        ignored.  Mirrors the `enableExternalEmbeds` preference.
  */
-export function detectVideoSource(
-  body: string,
-  allowExternal: boolean,
-): DetectedVideoSource | null {
+export function detectVideoSource(body: string, allowExternal: boolean): DetectedVideoSource | null {
   if (allowExternal) {
     const yt = YOUTUBE_RE.exec(body);
     if (yt) {

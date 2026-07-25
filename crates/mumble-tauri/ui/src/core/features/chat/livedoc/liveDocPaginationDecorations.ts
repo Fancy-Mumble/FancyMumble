@@ -267,11 +267,9 @@ export const LiveDocPaginationDecorations = Extension.create({
           }),
           apply(tr, prev) {
             const meta = tr.getMeta(paginationKey) as
-              | { metrics?: PageMetrics; decorations?: DecorationSet }
-              | undefined;
+              { metrics?: PageMetrics; decorations?: DecorationSet } | undefined;
             const metrics = meta?.metrics ?? prev.metrics;
-            const decorations =
-              meta?.decorations ?? prev.decorations.map(tr.mapping, tr.doc);
+            const decorations = meta?.decorations ?? prev.decorations.map(tr.mapping, tr.doc);
             return { metrics, decorations };
           },
         },

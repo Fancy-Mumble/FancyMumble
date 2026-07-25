@@ -45,10 +45,7 @@ describe("detectVideoSource", () => {
   });
 
   it("prefers YouTube over direct media when both are present", () => {
-    const r = detectVideoSource(
-      "https://example.com/file.mp4 https://youtu.be/12345678901",
-      true,
-    );
+    const r = detectVideoSource("https://example.com/file.mp4 https://youtu.be/12345678901", true);
     expect(r?.kind).toBe("youtube");
   });
 

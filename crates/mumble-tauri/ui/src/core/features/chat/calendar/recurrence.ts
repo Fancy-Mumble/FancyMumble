@@ -50,11 +50,7 @@ function isWeekday(ms: number): boolean {
  * Expand `event` into occurrences overlapping `[windowStart, windowEnd)`.
  * Non-recurring events yield 0 or 1 occurrence.
  */
-export function expandEvent(
-  event: CalendarEvent,
-  windowStart: number,
-  windowEnd: number,
-): EventOccurrence[] {
+export function expandEvent(event: CalendarEvent, windowStart: number, windowEnd: number): EventOccurrence[] {
   const duration = Math.max(0, event.end - event.start);
   const out: EventOccurrence[] = [];
   const push = (start: number) => {

@@ -18,13 +18,7 @@ import { getPreferences } from "@core/preferencesStorage";
 import { useUserStats } from "../../hooks/useUserStats";
 import { formatDuration } from "@core/utils/format";
 import UserInfoPanel from "./UserInfoPanel";
-import {
-  DECORATIONS,
-  NAMEPLATES,
-  EFFECTS,
-  FONTS,
-  AVATAR_BORDERS,
-} from "@core/features/settings/profileData";
+import { DECORATIONS, NAMEPLATES, EFFECTS, FONTS, AVATAR_BORDERS } from "@core/features/settings/profileData";
 import { resolveThemePalette } from "@core/utils/colorUtils";
 import styles from "./UserProfileView.module.css";
 
@@ -107,16 +101,14 @@ export default function UserProfileView() {
 
   if (!user) return null;
 
-  const handleClose = selectedDmUser === null
-    ? () => selectUser(null)
-    : () => { void selectDmUser(selectedDmUser); };
+  const handleClose =
+    selectedDmUser === null
+      ? () => selectUser(null)
+      : () => {
+          void selectDmUser(selectedDmUser);
+        };
 
-  return (
-    <UserProfilePanel
-      user={user}
-      onClose={handleClose}
-    />
-  );
+  return <UserProfilePanel user={user} onClose={handleClose} />;
 }
 
 function UserProfilePanel({
@@ -143,31 +135,23 @@ function UserProfilePanel({
   const avatarDataUrl = useUserAvatar(user.session, user.texture_size);
   const liveComment = useUserComment(user.session, user.comment_size);
 
-  const parsed = useMemo(
-    () => {
-      const c = user.comment ?? liveComment;
-      return c ? parseComment(c) : null;
-    },
-    [user.comment, liveComment],
-  );
+  const parsed = useMemo(() => {
+    const c = user.comment ?? liveComment;
+    return c ? parseComment(c) : null;
+  }, [user.comment, liveComment]);
 
   const profile: FancyProfile = parsed?.profile ?? {};
   const bio = parsed?.bio ?? "";
 
   const nameStyle = profile.nameStyle ?? {};
-  const decoration = DECORATIONS.find(
-    (d) => d.id === (profile.decoration ?? "none"),
-  );
-  const nameplate = NAMEPLATES.find(
-    (n) => n.id === (profile.nameplate ?? "none"),
-  );
+  const decoration = DECORATIONS.find((d) => d.id === (profile.decoration ?? "none"));
+  const nameplate = NAMEPLATES.find((n) => n.id === (profile.nameplate ?? "none"));
   const effect = EFFECTS.find((e) => e.id === (profile.effect ?? "none"));
-  const fontCss =
-    FONTS.find((f) => f.id === (nameStyle.font ?? "default"))?.css ?? "inherit";
+  const fontCss = FONTS.find((f) => f.id === (nameStyle.font ?? "default"))?.css ?? "inherit";
 
   const bannerBg = profile.banner?.image
     ? `url(${profile.banner.image})`
-    : profile.banner?.color ?? "#1a1a2e";
+    : (profile.banner?.color ?? "#1a1a2e");
 
   const bannerStyle: React.CSSProperties = profile.banner?.image
     ? {
@@ -184,19 +168,13 @@ function UserProfilePanel({
   const avatarBorderStyle = resolveAvatarBorder(profile);
 
   const effectClass =
-    effect && effect.id !== "none" && effect.animation
-      ? styles[effect.animation] ?? ""
-      : "";
+    effect && effect.id !== "none" && effect.animation ? (styles[effect.animation] ?? "") : "";
 
   return (
     <aside className={styles.panel}>
       {/* Close button (hidden in DM mode where the panel is always shown) */}
       {onClose && (
-        <button
-          className={styles.closeBtn}
-          onClick={onClose}
-          aria-label={t("userProfile.closeProfile")}
-        >
+        <button className={styles.closeBtn} onClick={onClose} aria-label={t("userProfile.closeProfile")}>
           <CloseIcon width={18} height={18} />
         </button>
       )}
@@ -205,10 +183,7 @@ function UserProfilePanel({
       <div className={styles.card} style={cardBgStyle}>
         {/* Effect overlay */}
         {effect && effect.id !== "none" && (
-          <div
-            className={`${styles.effectOverlay} ${effectClass}`}
-            style={effect.css}
-          />
+          <div className={`${styles.effectOverlay} ${effectClass}`} style={effect.css} />
         )}
 
         {/* Banner */}
@@ -218,13 +193,11 @@ function UserProfilePanel({
         <div className={styles.avatarArea}>
           <div className={styles.avatarWrapper} style={avatarBorderStyle}>
             {avatarDataUrl ? (
-              <img
-                src={avatarDataUrl}
-                alt={user.name}
-                className={styles.avatarImg}
-              />
+              <img src={avatarDataUrl} alt={user.name} className={styles.avatarImg} />
             ) : (
-              <span className={styles.avatarPlaceholder}><UserFilledIcon width={48} height={48} /></span>
+              <span className={styles.avatarPlaceholder}>
+                <UserFilledIcon width={48} height={48} />
+              </span>
             )}
             {decoration && decoration.id !== "none" && (
               <span className={styles.decoration}>{decoration.preview}</span>
@@ -235,10 +208,7 @@ function UserProfilePanel({
           <div className={styles.nameInline}>
             <div className={styles.nameRow}>
               {nameplate && nameplate.id !== "none" && (
-                <span
-                  className={styles.nameplate}
-                  style={{ background: nameplate.bg }}
-                />
+                <span className={styles.nameplate} style={{ background: nameplate.bg }} />
               )}
               <span
                 className={styles.name}
@@ -256,9 +226,7 @@ function UserProfilePanel({
                     ? `linear-gradient(135deg,${nameStyle.gradient[0]},${nameStyle.gradient[1]})`
                     : "transparent",
                   WebkitBackgroundClip: nameStyle.gradient ? "text" : undefined,
-                  WebkitTextFillColor: nameStyle.gradient
-                    ? "transparent"
-                    : undefined,
+                  WebkitTextFillColor: nameStyle.gradient ? "transparent" : undefined,
                 }}
               >
                 {user.name}
@@ -291,10 +259,7 @@ function UserProfilePanel({
         </div>
 
         {/* Body */}
-        <div
-          className={styles.body}
-          style={themeTextColor ? { color: themeTextColor } : undefined}
-        >
+        <div className={styles.body} style={themeTextColor ? { color: themeTextColor } : undefined}>
           {/* Status */}
           {profile.status && (
             <p

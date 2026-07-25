@@ -1,12 +1,7 @@
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import {
-  BoldIcon,
-  ItalicIcon,
-  ListIcon,
-  ListTreeIcon,
-} from "../../../icons";
+import { BoldIcon, ItalicIcon, ListIcon, ListTreeIcon } from "../../../icons";
 import styles from "./EventDialog.module.css";
 
 /**
@@ -25,10 +20,7 @@ export default function DescriptionEditor({
   readonly placeholder?: string;
 }) {
   const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Placeholder.configure({ placeholder: placeholder ?? "" }),
-    ],
+    extensions: [StarterKit, Placeholder.configure({ placeholder: placeholder ?? "" })],
     content: value,
     onUpdate: ({ editor: ed }) => onChange(ed.getHTML()),
   });

@@ -23,7 +23,12 @@ export function RolePreviewCard({ name, color, icon, sampleUsername }: RolePrevi
     <div className={styles.card} style={style}>
       <span className={styles.title}>{t("roleDisplay.previewTitle")}</span>
       <div className={styles.row}>
-        <RoleChip name={name || t("roleDisplay.previewRoleFallback")} color={color} icon={icon} size="large" />
+        <RoleChip
+          name={name || t("roleDisplay.previewRoleFallback")}
+          color={color}
+          icon={icon}
+          size="large"
+        />
       </div>
       <div className={styles.row}>
         <span className={styles.usernameSample} data-has-color={Boolean(color)}>
@@ -32,7 +37,9 @@ export function RolePreviewCard({ name, color, icon, sampleUsername }: RolePrevi
         </span>
       </div>
       <div className={styles.bubble}>
-        {t("roleDisplay.previewBubblePre")}<span className={styles.mention}>@{name || t("roleDisplay.previewRoleFallback")}</span>{t("roleDisplay.previewBubblePost")}
+        {t("roleDisplay.previewBubblePre")}
+        <span className={styles.mention}>@{name || t("roleDisplay.previewRoleFallback")}</span>
+        {t("roleDisplay.previewBubblePost")}
       </div>
     </div>
   );

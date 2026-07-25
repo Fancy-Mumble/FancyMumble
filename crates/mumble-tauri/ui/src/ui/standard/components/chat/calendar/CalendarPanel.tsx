@@ -1,12 +1,6 @@
 import { lazy, Suspense, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  CalendarIcon,
-  CalendarPlusIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  ClockIcon,
-} from "../../../icons";
+import { CalendarIcon, CalendarPlusIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon } from "../../../icons";
 import { useCalendarStore, type AnchorRect } from "@core/features/chat/calendar/calendarStore";
 import { rangeLabel } from "@core/features/chat/calendar/calendarFormat";
 import { TID } from "@core/testids";

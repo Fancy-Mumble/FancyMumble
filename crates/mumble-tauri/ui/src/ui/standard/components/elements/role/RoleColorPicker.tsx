@@ -29,7 +29,12 @@ function isValidColor(input: string): boolean {
  * Compact color picker used for role customization. Combines a native color
  * input with a hex text field and a row of preset swatches.
  */
-export function RoleColorPicker({ value, onChange, presets = DEFAULT_PRESETS, disabled }: RoleColorPickerProps) {
+export function RoleColorPicker({
+  value,
+  onChange,
+  presets = DEFAULT_PRESETS,
+  disabled,
+}: RoleColorPickerProps) {
   const { t } = useTranslation("settings");
   const inputId = useId();
   const colorInputRef = useRef<HTMLInputElement>(null);

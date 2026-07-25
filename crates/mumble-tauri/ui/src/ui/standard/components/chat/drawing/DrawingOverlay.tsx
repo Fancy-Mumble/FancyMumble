@@ -134,7 +134,9 @@ function subscribeToChannel(channelId: number, fn: ChangeListener): () => void {
     changeListeners.set(channelId, set);
   }
   set.add(fn);
-  return () => { set!.delete(fn); };
+  return () => {
+    set!.delete(fn);
+  };
 }
 
 function applyStrokeEvent(payload: DrawStrokeEvent): void {
@@ -164,7 +166,10 @@ function applyStrokeEvent(payload: DrawStrokeEvent): void {
     const prefix = `${payload.senderSession}:`;
     let removed = 0;
     for (const id of [...strokes.keys()]) {
-      if (id.startsWith(prefix)) { strokes.delete(id); removed++; }
+      if (id.startsWith(prefix)) {
+        strokes.delete(id);
+        removed++;
+      }
     }
     logDraw("rx-clear", { sender: payload.senderSession, removed, channelId: payload.channelId });
     notifyChange(payload.channelId);
@@ -172,9 +177,7 @@ function applyStrokeEvent(payload: DrawStrokeEvent): void {
   }
   const key = `${payload.senderSession}:${payload.strokeId}`;
   const existing = strokes.get(key);
-  const newPoints = existing
-    ? [...existing.points, ...payload.points]
-    : [...payload.points];
+  const newPoints = existing ? [...existing.points, ...payload.points] : [...payload.points];
   strokes.set(key, {
     strokeId: key,
     color: payload.color,
@@ -290,7 +293,10 @@ export function clearStrokesFromSender(senderSession: number): void {
   for (const [channelId, strokes] of channelStrokes) {
     let removed = 0;
     for (const id of [...strokes.keys()]) {
-      if (id.startsWith(prefix)) { strokes.delete(id); removed++; }
+      if (id.startsWith(prefix)) {
+        strokes.delete(id);
+        removed++;
+      }
     }
     if (removed > 0) {
       logDraw("local-clear-sender", { sender: senderSession, channelId, removed });
@@ -325,13 +331,13 @@ export function clearAllStrokesInChannel(channelId: number): void {
 // ---------------------------------------------------------------------------
 
 const PALETTE = [
-  0xFF_FF_00_00, // red
-  0xFF_00_CC_00, // green
-  0xFF_00_88_FF, // blue
-  0xFF_FF_BB_00, // yellow
-  0xFF_FF_00_FF, // magenta
-  0xFF_FF_FF_FF, // white
-  0xFF_00_00_00, // black
+  0xff_ff_00_00, // red
+  0xff_00_cc_00, // green
+  0xff_00_88_ff, // blue
+  0xff_ff_bb_00, // yellow
+  0xff_ff_00_ff, // magenta
+  0xff_ff_ff_ff, // white
+  0xff_00_00_00, // black
 ];
 const DEFAULT_COLOR = PALETTE[0];
 const DEFAULT_WIDTH = 4;
@@ -382,10 +388,7 @@ export function computeContentRect(
   canvasW: number,
   canvasH: number,
 ): ContentRect {
-  if (
-    canvasW <= 0 || canvasH <= 0
-    || videoIntrinsicW <= 0 || videoIntrinsicH <= 0
-  ) {
+  if (canvasW <= 0 || canvasH <= 0 || videoIntrinsicW <= 0 || videoIntrinsicH <= 0) {
     return { x: 0, y: 0, w: Math.max(canvasW, 0), h: Math.max(canvasH, 0) };
   }
   const scale = Math.min(canvasW / videoIntrinsicW, canvasH / videoIntrinsicH);
@@ -407,15 +410,9 @@ function renderStroke(
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.beginPath();
-  ctx.moveTo(
-    contentRect.x + points[0] * contentRect.w,
-    contentRect.y + points[1] * contentRect.h,
-  );
+  ctx.moveTo(contentRect.x + points[0] * contentRect.w, contentRect.y + points[1] * contentRect.h);
   for (let i = 2; i + 1 < points.length; i += 2) {
-    ctx.lineTo(
-      contentRect.x + points[i] * contentRect.w,
-      contentRect.y + points[i + 1] * contentRect.h,
-    );
+    ctx.lineTo(contentRect.x + points[i] * contentRect.w, contentRect.y + points[i + 1] * contentRect.h);
   }
   ctx.stroke();
 }
@@ -475,7 +472,13 @@ interface DrawingOverlayProps {
   readonly videoRef?: React.RefObject<HTMLVideoElement | HTMLCanvasElement | null>;
 }
 
-export default function DrawingOverlay({ channelId, ownSession, hideToolbar, viewOnly, videoRef }: DrawingOverlayProps) {
+export default function DrawingOverlay({
+  channelId,
+  ownSession,
+  hideToolbar,
+  viewOnly,
+  videoRef,
+}: DrawingOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { t } = useTranslation("chat");
   /** Cached content rect in canvas CSS pixels - kept in sync with resize + video metadata. */
@@ -496,9 +499,7 @@ export default function DrawingOverlay({ channelId, ownSession, hideToolbar, vie
    * for the broadcaster (receivers should ignore `clear_all` from
    * non-broadcaster senders).
    */
-  const isOwnBroadcaster = useAppStore((s) =>
-    !!ownSession && s.broadcastingSessions.has(ownSession),
-  );
+  const isOwnBroadcaster = useAppStore((s) => !!ownSession && s.broadcastingSessions.has(ownSession));
 
   // Ephemeral local-stroke bookkeeping.
   const currentStrokeId = useRef<string>("");
@@ -520,8 +521,12 @@ export default function DrawingOverlay({ channelId, ownSession, hideToolbar, vie
   // Keep selected color/width accessible in event callbacks without stale closure.
   const colorRef = useRef(selectedColor);
   const widthRef = useRef(strokeWidth);
-  useEffect(() => { colorRef.current = selectedColor; }, [selectedColor]);
-  useEffect(() => { widthRef.current = strokeWidth; }, [strokeWidth]);
+  useEffect(() => {
+    colorRef.current = selectedColor;
+  }, [selectedColor]);
+  useEffect(() => {
+    widthRef.current = strokeWidth;
+  }, [strokeWidth]);
 
   // Helper: redraw entire canvas from the channel store.
   const redraw = useCallback(() => {
@@ -542,8 +547,8 @@ export default function DrawingOverlay({ channelId, ownSession, hideToolbar, vie
       const media = videoRef?.current;
       // Intrinsic media size: videoWidth/Height for <video>, width/height
       // (the painted frame size) for the native viewer's <canvas>.
-      const mediaW = media instanceof HTMLVideoElement ? media.videoWidth : media?.width ?? 0;
-      const mediaH = media instanceof HTMLVideoElement ? media.videoHeight : media?.height ?? 0;
+      const mediaW = media instanceof HTMLVideoElement ? media.videoWidth : (media?.width ?? 0);
+      const mediaH = media instanceof HTMLVideoElement ? media.videoHeight : (media?.height ?? 0);
       if (mediaW > 0 && mediaH > 0) {
         contentRectRef.current = computeContentRect(mediaW, mediaH, canvasW, canvasH);
       } else {
@@ -871,41 +876,41 @@ export default function DrawingOverlay({ channelId, ownSession, hideToolbar, vie
       {/* Toolbar - colour/width/clear shown only while drawing is active.
           The on/off toggle itself lives in the StreamControls bar below. */}
       {!hideToolbar && drawingActive && (
-      <div className={styles.toolbar}>
-        {PALETTE.map((c) => (
-          <button
-            key={c}
-            type="button"
-            className={`${styles.colorSwatch} ${c === selectedColor ? styles.colorSwatchSelected : ""}`}
-            style={{ background: argbToCssColor(c) }}
-            onClick={() => setSelectedColor(c)}
-            title={t("drawing.selectColor", { color: c.toString(16) })}
-            aria-label={t("drawing.selectColor", { color: c.toString(16) })}
-            aria-pressed={c === selectedColor}
+        <div className={styles.toolbar}>
+          {PALETTE.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className={`${styles.colorSwatch} ${c === selectedColor ? styles.colorSwatchSelected : ""}`}
+              style={{ background: argbToCssColor(c) }}
+              onClick={() => setSelectedColor(c)}
+              title={t("drawing.selectColor", { color: c.toString(16) })}
+              aria-label={t("drawing.selectColor", { color: c.toString(16) })}
+              aria-pressed={c === selectedColor}
+            />
+          ))}
+
+          <input
+            type="range"
+            min={2}
+            max={16}
+            value={strokeWidth}
+            onChange={(e) => setStrokeWidth(Number(e.target.value))}
+            className={styles.widthSlider}
+            aria-label={t("drawing.strokeWidth")}
+            title={t("drawing.widthTooltip", { strokeWidth })}
           />
-        ))}
 
-        <input
-          type="range"
-          min={2}
-          max={16}
-          value={strokeWidth}
-          onChange={(e) => setStrokeWidth(Number(e.target.value))}
-          className={styles.widthSlider}
-          aria-label={t("drawing.strokeWidth")}
-          title={t("drawing.widthTooltip", { strokeWidth })}
-        />
-
-        <button
-          type="button"
-          className={styles.toolBtn}
-          onClick={handleClear}
-          title={isOwnBroadcaster ? t("drawing.clearAll") : t("drawing.clearMine")}
-          aria-label={isOwnBroadcaster ? t("drawing.clearAll") : t("drawing.clearMine")}
-        >
-          <TrashIcon width={16} height={16} />
-        </button>
-      </div>
+          <button
+            type="button"
+            className={styles.toolBtn}
+            onClick={handleClear}
+            title={isOwnBroadcaster ? t("drawing.clearAll") : t("drawing.clearMine")}
+            aria-label={isOwnBroadcaster ? t("drawing.clearAll") : t("drawing.clearMine")}
+          >
+            <TrashIcon width={16} height={16} />
+          </button>
+        </div>
       )}
     </div>
   );

@@ -155,18 +155,15 @@ export default function LiveDocPanel({
     (link: LiveDocDocLink) => {
       const channelId = link.channel ?? session.channelId;
       const mode = link.channel === null ? "private" : "publish";
-      void requestOpenLiveDoc(channelId, link.slug, link.title, { silent: true, mode }).catch(
-        (e) => console.warn("live-doc open from sidebar failed:", e),
+      void requestOpenLiveDoc(channelId, link.slug, link.title, { silent: true, mode }).catch((e) =>
+        console.warn("live-doc open from sidebar failed:", e),
       );
     },
     [requestOpenLiveDoc, session.channelId],
   );
 
   const onExport = useCallback(() => setExportOpen(true), []);
-  const getMarkdownForExport = useCallback(
-    () => editorApi.current?.getMarkdown() ?? "",
-    [],
-  );
+  const getMarkdownForExport = useCallback(() => editorApi.current?.getMarkdown() ?? "", []);
 
   // Expose a "save this document to a local file" callback while the panel is
   // mounted, so the plugin-disabled dialog can offer it before tearing the
@@ -186,8 +183,9 @@ export default function LiveDocPanel({
   const onExportPdf = useCallback(() => {
     const html = editorApi.current?.getHtml() ?? "";
     if (!html) return;
-    void exportLiveDocToPdf(html, liveTitle, pageSetup, decoration)
-      .catch((e) => console.warn("live-doc pdf export failed:", e));
+    void exportLiveDocToPdf(html, liveTitle, pageSetup, decoration).catch((e) =>
+      console.warn("live-doc pdf export failed:", e),
+    );
   }, [liveTitle, pageSetup, decoration]);
 
   const onEditorReady = useCallback(
@@ -222,8 +220,7 @@ export default function LiveDocPanel({
     };
   }, []);
 
-  let statusKey: "liveDoc.connected" | "liveDoc.connecting" | "liveDoc.disconnected" =
-    "liveDoc.disconnected";
+  let statusKey: "liveDoc.connected" | "liveDoc.connecting" | "liveDoc.disconnected" = "liveDoc.disconnected";
   if (handle?.status === "connected") {
     statusKey = "liveDoc.connected";
   } else if (handle?.status === "connecting") {
@@ -265,76 +262,68 @@ export default function LiveDocPanel({
           onRenameActiveDoc={applyActiveRename}
         />
         <div className={styles.main}>
-      {/* Document chrome (title, status, all actions) now lives in the
+          {/* Document chrome (title, status, all actions) now lives in the
           ribbon inside the editor.  While still connecting there is no
           editor yet, so show a slim fallback bar with the title + close. */}
-      {!handle && (
-        <div className={styles.header}>
-          <div className={styles.title}>
-            <FileIcon width={16} height={16} aria-hidden="true" />
-            <span className={styles.titleText}>{liveTitle}</span>
-            <span className={`${styles.status} ${styles.statusBad}`} aria-live="polite">
-              {t(statusKey)}
-            </span>
-          </div>
-          <div className={styles.headerActions}>
-            <button
-              type="button"
-              className={styles.headerBtnClose}
-              onClick={onClose}
-              title={t("liveDoc.closePanel")}
-              aria-label={t("liveDoc.closePanel")}
-            >
-              <CloseIcon width={16} height={16} />
-            </button>
-          </div>
-        </div>
-      )}
-      <div className={styles.body} ref={bodyRef}>
-        {handle ? (
-          <>
-            <LiveDocEditor
-              doc={handle.doc}
-              provider={handle.provider}
-              chrome={chrome}
-              onReady={onEditorReady}
-            />
-            {handle.error && (
-              <div className={styles.errorOverlay} role="alert">
-                <div className={styles.errorOverlayContent}>
-                  <p className={styles.errorOverlayTitle}>{t("liveDoc.connectionLost")}</p>
-                  <p className={styles.errorOverlayMessage}>{handle.error}</p>
-                  <div className={styles.errorOverlayActions}>
-                    <button
-                      type="button"
-                      className={styles.errorActionBtnPrimary}
-                      onClick={onExport}
-                    >
-                      {t("liveDoc.saveLastDocument")}
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.errorActionBtnSecondary}
-                      onClick={onClose}
-                    >
-                      {t("liveDoc.quitDocument")}
-                    </button>
+          {!handle && (
+            <div className={styles.header}>
+              <div className={styles.title}>
+                <FileIcon width={16} height={16} aria-hidden="true" />
+                <span className={styles.titleText}>{liveTitle}</span>
+                <span className={`${styles.status} ${styles.statusBad}`} aria-live="polite">
+                  {t(statusKey)}
+                </span>
+              </div>
+              <div className={styles.headerActions}>
+                <button
+                  type="button"
+                  className={styles.headerBtnClose}
+                  onClick={onClose}
+                  title={t("liveDoc.closePanel")}
+                  aria-label={t("liveDoc.closePanel")}
+                >
+                  <CloseIcon width={16} height={16} />
+                </button>
+              </div>
+            </div>
+          )}
+          <div className={styles.body} ref={bodyRef}>
+            {handle ? (
+              <>
+                <LiveDocEditor
+                  doc={handle.doc}
+                  provider={handle.provider}
+                  chrome={chrome}
+                  onReady={onEditorReady}
+                />
+                {handle.error && (
+                  <div className={styles.errorOverlay} role="alert">
+                    <div className={styles.errorOverlayContent}>
+                      <p className={styles.errorOverlayTitle}>{t("liveDoc.connectionLost")}</p>
+                      <p className={styles.errorOverlayMessage}>{handle.error}</p>
+                      <div className={styles.errorOverlayActions}>
+                        <button type="button" className={styles.errorActionBtnPrimary} onClick={onExport}>
+                          {t("liveDoc.saveLastDocument")}
+                        </button>
+                        <button type="button" className={styles.errorActionBtnSecondary} onClick={onClose}>
+                          {t("liveDoc.quitDocument")}
+                        </button>
+                      </div>
+                    </div>
                   </div>
+                )}
+              </>
+            ) : (
+              <div className={styles.loading}>{t("liveDoc.connecting")}</div>
+            )}
+            {dragOver && (
+              <div className={styles.dropOverlay} aria-hidden="true">
+                <div className={styles.dropOverlayInner}>
+                  <span>{t("liveDoc.dropImageHint")}</span>
                 </div>
               </div>
             )}
-          </>
-        ) : (
-          <div className={styles.loading}>{t("liveDoc.connecting")}</div>
-        )}
-        {dragOver && (
-          <div className={styles.dropOverlay} aria-hidden="true">
-            <div className={styles.dropOverlayInner}>
-              <span>{t("liveDoc.dropImageHint")}</span>
-            </div>
           </div>
-        )}
-      </div>
         </div>
       </div>
 

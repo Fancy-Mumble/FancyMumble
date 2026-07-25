@@ -68,43 +68,46 @@ export default function KebabMenu({ items, ariaLabel, badge }: KebabMenuProps) {
         {badge && <span className={styles.badgeDot} />}
       </button>
 
-      {open && createPortal(
-        <>
-          <button
-            type="button"
-            className={styles.backdrop}
-            onClick={close}
-            aria-label={t("kebabMenu.closeMenu")}
-          />
-          <div
-            className={styles.menu}
-            role="menu"
-            style={menuPos ? { top: menuPos.top, right: menuPos.right } : undefined}
-          >
-            {items.map((item) => (
-              <button
-                key={item.id}
-                className={[
-                  styles.menuItem,
-                  item.active ? styles.menuItemActive : "",
-                  item.danger ? styles.menuItemDanger : "",
-                ].filter(Boolean).join(" ")}
-                role="menuitem"
-                disabled={item.disabled}
-                onClick={() => {
-                  item.onClick();
-                  close();
-                }}
-              >
-                {item.icon && <span className={styles.menuItemIcon}>{item.icon}</span>}
-                {item.label}
-                {item.badge && <span className={styles.itemBadgeDot} />}
-              </button>
-            ))}
-          </div>
-        </>,
-        document.body
-      )}
+      {open &&
+        createPortal(
+          <>
+            <button
+              type="button"
+              className={styles.backdrop}
+              onClick={close}
+              aria-label={t("kebabMenu.closeMenu")}
+            />
+            <div
+              className={styles.menu}
+              role="menu"
+              style={menuPos ? { top: menuPos.top, right: menuPos.right } : undefined}
+            >
+              {items.map((item) => (
+                <button
+                  key={item.id}
+                  className={[
+                    styles.menuItem,
+                    item.active ? styles.menuItemActive : "",
+                    item.danger ? styles.menuItemDanger : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  role="menuitem"
+                  disabled={item.disabled}
+                  onClick={() => {
+                    item.onClick();
+                    close();
+                  }}
+                >
+                  {item.icon && <span className={styles.menuItemIcon}>{item.icon}</span>}
+                  {item.label}
+                  {item.badge && <span className={styles.itemBadgeDot} />}
+                </button>
+              ))}
+            </div>
+          </>,
+          document.body,
+        )}
     </div>
   );
 }

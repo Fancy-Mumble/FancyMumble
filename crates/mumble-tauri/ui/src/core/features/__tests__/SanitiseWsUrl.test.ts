@@ -10,20 +10,12 @@ describe("sanitiseWsUrl", () => {
   });
 
   it("rewrites 0.0.0.0 to the fallback host and preserves port/path/query", () => {
-    const out = sanitiseWsUrl(
-      "ws://0.0.0.0:64740/ws/0/59/untitled-document?token=abc",
-      "mumble.example.com",
-    );
-    expect(out).toBe(
-      "ws://mumble.example.com:64740/ws/0/59/untitled-document?token=abc",
-    );
+    const out = sanitiseWsUrl("ws://0.0.0.0:64740/ws/0/59/untitled-document?token=abc", "mumble.example.com");
+    expect(out).toBe("ws://mumble.example.com:64740/ws/0/59/untitled-document?token=abc");
   });
 
   it("rewrites IPv6 unspecified [::] to the fallback host", () => {
-    const out = sanitiseWsUrl(
-      "ws://[::]:64740/ws/0/59/doc",
-      "mumble.example.com",
-    );
+    const out = sanitiseWsUrl("ws://[::]:64740/ws/0/59/doc", "mumble.example.com");
     expect(out).toBe("ws://mumble.example.com:64740/ws/0/59/doc");
   });
 
@@ -64,10 +56,7 @@ describe("sanitiseWsUrl", () => {
   });
 
   it("supports wss URLs", () => {
-    const out = sanitiseWsUrl(
-      "wss://0.0.0.0:443/ws/0/1/doc",
-      "secure.example.com",
-    );
+    const out = sanitiseWsUrl("wss://0.0.0.0:443/ws/0/1/doc", "secure.example.com");
     expect(out).toBe("wss://secure.example.com/ws/0/1/doc");
   });
 });

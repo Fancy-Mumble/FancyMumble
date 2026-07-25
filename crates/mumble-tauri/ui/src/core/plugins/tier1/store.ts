@@ -21,11 +21,7 @@ import {
   normaliseActionRow,
 } from "./types";
 import { newCorrelationId, parseClientManifest } from "./manifest";
-import {
-  evaluateTrust,
-  type PendingTrustPrompt,
-  type TrustRecord,
-} from "./trust";
+import { evaluateTrust, type PendingTrustPrompt, type TrustRecord } from "./trust";
 import { base64ToBytes } from "../../utils/base64";
 
 /** An active plugin-rendered message card.  Created when a plugin
@@ -184,11 +180,7 @@ export function applyRegistryWithTrust(
   return { pluginManifests, pluginPanels, pluginTrustQueue };
 }
 
-function seedPanels(
-  out: Map<string, PluginPanelState>,
-  pluginName: string,
-  manifest: ClientManifest,
-): void {
+function seedPanels(out: Map<string, PluginPanelState>, pluginName: string, manifest: ClientManifest): void {
   for (const panel of manifest.settings_panels ?? []) {
     out.set(panelKey(pluginName, panel.id), {
       pluginName,
@@ -222,9 +214,7 @@ export function panelKey(pluginName: string, panelId: string): string {
  *  `InteractionResponse::message` constructor, which only needs
  *  `Components`).  Accepting either capability lets component-only
  *  plugins surface display cards without over-declaring `Modals`. */
-export function acceptedCapabilitiesFor(
-  kind: ResponseKind["kind"],
-): readonly Capability[] {
+export function acceptedCapabilitiesFor(kind: ResponseKind["kind"]): readonly Capability[] {
   switch (kind) {
     case "show-modal":
       return [Capability.Modals, Capability.Components];
@@ -243,10 +233,7 @@ export function acceptedCapabilitiesFor(
  *  backing the surface it is trying to drive; a manifest that omits them
  *  all (e.g. the empty `{}` manifest that auto-trusts with no prompt) is
  *  refused. */
-export function manifestPermitsResponse(
-  manifest: ClientManifest,
-  kind: ResponseKind["kind"],
-): boolean {
+export function manifestPermitsResponse(manifest: ClientManifest, kind: ResponseKind["kind"]): boolean {
   const accepted = acceptedCapabilitiesFor(kind);
   if (accepted.length === 0) return true;
   const declared = manifest.capabilities ?? [];
@@ -309,10 +296,7 @@ function applyUpdateMessage(
     return {
       ...c,
       content: response.content ?? c.content,
-      components:
-        response.components === null
-          ? []
-          : (response.components ?? c.components),
+      components: response.components === null ? [] : (response.components ?? c.components),
     };
   });
   return { ...slice, pluginCards: cards };
@@ -342,9 +326,7 @@ export function applyTrustDecision(
 ): PluginTier1Slice {
   const nextTrust = new Map(slice.pluginTrust);
   nextTrust.set(pluginName, record);
-  const nextQueue = slice.pluginTrustQueue.filter(
-    (p) => p.pluginName !== pluginName,
-  );
+  const nextQueue = slice.pluginTrustQueue.filter((p) => p.pluginName !== pluginName);
   const nextManifests = new Map(slice.pluginManifests);
   const nextPanels = new Map(slice.pluginPanels);
   if (record.decision === "allow") {
@@ -368,10 +350,7 @@ export function applyTrustDecision(
 /** Drop a stored trust record so the next registry refresh re-prompts.
  *  Used by the Plugins settings tab "Revoke trust" button.  Pure;
  *  caller updates persistent storage separately. */
-export function applyTrustRevocation(
-  slice: PluginTier1Slice,
-  pluginName: string,
-): PluginTier1Slice {
+export function applyTrustRevocation(slice: PluginTier1Slice, pluginName: string): PluginTier1Slice {
   const nextTrust = new Map(slice.pluginTrust);
   nextTrust.delete(pluginName);
   const nextManifests = new Map(slice.pluginManifests);
@@ -442,15 +421,10 @@ export async function sendInteraction(
 /** Decode an inbound `plugin-message` payload (base64-encoded bytes)
  *  as an `InteractionResponse`.  Returns null when the bytes do not
  *  look like a Tier-1 response envelope. */
-export function decodeInteractionResponse(
-  payloadType: string,
-  payload: string,
-): InteractionResponse | null {
+export function decodeInteractionResponse(payloadType: string, payload: string): InteractionResponse | null {
   if (payloadType !== INTERACTION_RESPONSE_PAYLOAD_TYPE) return null;
   try {
-    const parsed = JSON.parse(
-      new TextDecoder().decode(base64ToBytes(payload)),
-    ) as InteractionResponse;
+    const parsed = JSON.parse(new TextDecoder().decode(base64ToBytes(payload))) as InteractionResponse;
     return normaliseInboundResponse(parsed);
   } catch (e) {
     console.warn("[plugin-tier1] malformed InteractionResponse:", e);
@@ -476,9 +450,7 @@ function normaliseInboundResponse(response: InteractionResponse): InteractionRes
       return {
         ...response,
         components:
-          response.components == null
-            ? response.components
-            : response.components.map(normaliseActionRow),
+          response.components == null ? response.components : response.components.map(normaliseActionRow),
       };
     case "update-panel":
     case "toast":

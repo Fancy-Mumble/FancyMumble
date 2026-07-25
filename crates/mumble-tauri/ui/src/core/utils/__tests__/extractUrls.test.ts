@@ -12,11 +12,9 @@ describe("extractUrlsFromMessage", () => {
     // href contains an ampersand.
     const body =
       '<p><a href="https://www.youtube.com/watch?v=eQLzLc9cgq8&amp;list=RDeQLzLc9cgq8&amp;start_radio=1">' +
-      'https://www.youtube.com/watch?v=eQLzLc9cgq8&amp;list=RDeQLzLc9cgq8&amp;start_radio=1</a></p>';
+      "https://www.youtube.com/watch?v=eQLzLc9cgq8&amp;list=RDeQLzLc9cgq8&amp;start_radio=1</a></p>";
     const urls = extractUrlsFromMessage(body);
-    expect(urls).toContain(
-      "https://www.youtube.com/watch?v=eQLzLc9cgq8&list=RDeQLzLc9cgq8&start_radio=1",
-    );
+    expect(urls).toContain("https://www.youtube.com/watch?v=eQLzLc9cgq8&list=RDeQLzLc9cgq8&start_radio=1");
     expect(urls.some((u) => u.includes("&amp;"))).toBe(false);
   });
 
@@ -26,16 +24,11 @@ describe("extractUrlsFromMessage", () => {
     const urls = extractUrlsFromMessage(
       '<a href="https://a.example/x">https://a.example/x</a> and https://b.example/y',
     );
-    expect(urls.sort()).toEqual([
-      "https://a.example/x",
-      "https://b.example/y",
-    ]);
+    expect(urls.sort()).toEqual(["https://a.example/x", "https://b.example/y"]);
   });
 
   it("decodes numeric and named entities", () => {
-    const urls = extractUrlsFromMessage(
-      "https://x.test/?a=1&#38;b=2 and https://y.test/?p=q&#x26;r=s",
-    );
+    const urls = extractUrlsFromMessage("https://x.test/?a=1&#38;b=2 and https://y.test/?p=q&#x26;r=s");
     expect(urls).toContain("https://x.test/?a=1&b=2");
     expect(urls).toContain("https://y.test/?p=q&r=s");
   });

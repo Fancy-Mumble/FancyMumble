@@ -1,4 +1,15 @@
-export type ThemeId = "dark" | "light" | "apprentice" | "mobel" | "rose" | "inversa" | "hearth" | "macchiato" | "midnight-pretenders" | "ply" | "guardbase";
+export type ThemeId =
+  | "dark"
+  | "light"
+  | "apprentice"
+  | "mobel"
+  | "rose"
+  | "inversa"
+  | "hearth"
+  | "macchiato"
+  | "midnight-pretenders"
+  | "ply"
+  | "guardbase";
 
 export interface ThemeOption {
   readonly id: ThemeId;
@@ -15,7 +26,11 @@ export const THEMES: readonly ThemeOption[] = [
   { id: "inversa", label: "Inversa", swatches: ["#F5F6EF", "#1A2611", "#A2A633", "#93AEBF"] },
   { id: "hearth", label: "Hearth", swatches: ["#20111B", "#382830", "#EAA549", "#426A79"] },
   { id: "macchiato", label: "Macchiato", swatches: ["#1E2030", "#363A4F", "#8AADF4", "#F5BDE6"] },
-  { id: "midnight-pretenders", label: "Midnight Pretenders", swatches: ["#0d0d1a", "#1a1a35", "#F21B7F", "#0C87F2"] },
+  {
+    id: "midnight-pretenders",
+    label: "Midnight Pretenders",
+    swatches: ["#0d0d1a", "#1a1a35", "#F21B7F", "#0C87F2"],
+  },
   { id: "ply", label: "Ply", swatches: ["#F2F2F2", "#0D0D0D", "#93ABBF", "#F20505"] },
   { id: "guardbase", label: "Guardbase", swatches: ["#0E1826", "#012340", "#2E4959", "#687E8C"] },
 ];

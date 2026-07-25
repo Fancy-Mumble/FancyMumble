@@ -83,70 +83,55 @@ export async function registerPersistentChatEvents(unlisteners: UnlistenFn[]): P
     ),
 
     // Key trust level changed for a channel.
-    await listen<{ channel_id: number; trust: KeyTrustState }>(
-      TauriEvent.KeyTrustChanged,
-      (event) => {
-        const { channel_id, trust } = event.payload;
-        useAppStore.setState((prev) => {
-          // Receiving a new key clears the revoked flag for this channel.
-          const next = new Set(prev.pchatKeyRevoked);
-          next.delete(channel_id);
-          return {
-            keyTrust: { ...prev.keyTrust, [channel_id]: trust },
-            pchatKeyRevoked: next,
-          };
-        });
-      },
-    ),
+    await listen<{ channel_id: number; trust: KeyTrustState }>(TauriEvent.KeyTrustChanged, (event) => {
+      const { channel_id, trust } = event.payload;
+      useAppStore.setState((prev) => {
+        // Receiving a new key clears the revoked flag for this channel.
+        const next = new Set(prev.pchatKeyRevoked);
+        next.delete(channel_id);
+        return {
+          keyTrust: { ...prev.keyTrust, [channel_id]: trust },
+          pchatKeyRevoked: next,
+        };
+      });
+    }),
 
     // Custodian list changed (TOFU change detection).
-    await listen<{ channel_id: number; pin: CustodianPinState }>(
-      TauriEvent.CustodianPinChanged,
-      (event) => {
-        const { channel_id, pin } = event.payload;
-        useAppStore.setState((prev) => ({
-          custodianPins: { ...prev.custodianPins, [channel_id]: pin },
-        }));
-      },
-    ),
+    await listen<{ channel_id: number; pin: CustodianPinState }>(TauriEvent.CustodianPinChanged, (event) => {
+      const { channel_id, pin } = event.payload;
+      useAppStore.setState((prev) => ({
+        custodianPins: { ...prev.custodianPins, [channel_id]: pin },
+      }));
+    }),
 
     // Key dispute detected.
-    await listen<{ channel_id: number; dispute: PendingDispute }>(
-      TauriEvent.KeyDisputeDetected,
-      (event) => {
-        const { channel_id, dispute } = event.payload;
-        useAppStore.setState((prev) => ({
-          pendingDisputes: { ...prev.pendingDisputes, [channel_id]: dispute },
-        }));
-      },
-    ),
+    await listen<{ channel_id: number; dispute: PendingDispute }>(TauriEvent.KeyDisputeDetected, (event) => {
+      const { channel_id, dispute } = event.payload;
+      useAppStore.setState((prev) => ({
+        pendingDisputes: { ...prev.pendingDisputes, [channel_id]: dispute },
+      }));
+    }),
 
     // Key dispute resolved (by custodian shortcut or timeout).
-    await listen<{ channel_id: number }>(
-      TauriEvent.KeyDisputeResolved,
-      (event) => {
-        const { channel_id } = event.payload;
-        useAppStore.setState((prev) => {
-          const { [channel_id]: _removed, ...rest } = prev.pendingDisputes;
-          return { pendingDisputes: rest };
-        });
-      },
-    ),
+    await listen<{ channel_id: number }>(TauriEvent.KeyDisputeResolved, (event) => {
+      const { channel_id } = event.payload;
+      useAppStore.setState((prev) => {
+        const { [channel_id]: _removed, ...rest } = prev.pendingDisputes;
+        return { pendingDisputes: rest };
+      });
+    }),
 
     // Pchat history loading state (waiting for key exchange).
-    await listen<{ channel_id: number; loading: boolean }>(
-      TauriEvent.PchatHistoryLoading,
-      (event) => {
-        const { channel_id, loading } = event.payload;
-        const next = new Set(useAppStore.getState().pchatHistoryLoading);
-        if (loading) {
-          next.add(channel_id);
-        } else {
-          next.delete(channel_id);
-        }
-        useAppStore.setState({ pchatHistoryLoading: next });
-      },
-    ),
+    await listen<{ channel_id: number; loading: boolean }>(TauriEvent.PchatHistoryLoading, (event) => {
+      const { channel_id, loading } = event.payload;
+      const next = new Set(useAppStore.getState().pchatHistoryLoading);
+      if (loading) {
+        next.add(channel_id);
+      } else {
+        next.delete(channel_id);
+      }
+      useAppStore.setState({ pchatHistoryLoading: next });
+    }),
 
     // Pchat fetch complete -- update pagination metadata.
     //
@@ -182,25 +167,22 @@ export async function registerPersistentChatEvents(unlisteners: UnlistenFn[]): P
     ),
 
     // A new key-share consent request from the backend.
-    await listen<PendingKeyShareRequest>(
-      TauriEvent.PchatKeyShareRequest,
-      (event) => {
-        const req = event.payload;
-        useAppStore.setState((prev) => {
-          const existing = prev.pendingKeyShares[req.channel_id] ?? [];
-          // Avoid duplicates.
-          if (existing.some((p) => p.peer_cert_hash === req.peer_cert_hash)) {
-            return {};
-          }
-          return {
-            pendingKeyShares: {
-              ...prev.pendingKeyShares,
-              [req.channel_id]: [...existing, req],
-            },
-          };
-        });
-      },
-    ),
+    await listen<PendingKeyShareRequest>(TauriEvent.PchatKeyShareRequest, (event) => {
+      const req = event.payload;
+      useAppStore.setState((prev) => {
+        const existing = prev.pendingKeyShares[req.channel_id] ?? [];
+        // Avoid duplicates.
+        if (existing.some((p) => p.peer_cert_hash === req.peer_cert_hash)) {
+          return {};
+        }
+        return {
+          pendingKeyShares: {
+            ...prev.pendingKeyShares,
+            [req.channel_id]: [...existing, req],
+          },
+        };
+      });
+    }),
 
     // Key-share requests changed (after approve/dismiss).
     await listen<{ channel_id: number; pending: PendingKeyShareRequest[] }>(
@@ -237,126 +219,114 @@ export async function registerPersistentChatEvents(unlisteners: UnlistenFn[]): P
     ),
 
     // Key restored: a new key was received after a previous revocation.
-    await listen<{ channel_id: number }>(
-      TauriEvent.PchatKeyRestored,
-      (event) => {
-        const { channel_id } = event.payload;
-        useAppStore.setState((prev) => {
-          const next = new Set(prev.pchatKeyRevoked);
-          next.delete(channel_id);
-          return { pchatKeyRevoked: next };
-        });
-      },
-    ),
+    await listen<{ channel_id: number }>(TauriEvent.PchatKeyRestored, (event) => {
+      const { channel_id } = event.payload;
+      useAppStore.setState((prev) => {
+        const next = new Set(prev.pchatKeyRevoked);
+        next.delete(channel_id);
+        return { pchatKeyRevoked: next };
+      });
+    }),
 
     // Key-possession challenge failed: our key was wrong/outdated.
-    await listen<{ channel_id: number }>(
-      TauriEvent.PchatKeyRevoked,
-      (event) => {
-        const { channel_id } = event.payload;
-        useAppStore.setState((prev) => {
-          const next = new Set(prev.pchatKeyRevoked);
-          next.add(channel_id);
-          // Clear stale key-trust for this channel.
-          const { [channel_id]: _removedTrust, ...restTrust } = prev.keyTrust;
-          // Clear any messages that were decrypted before the challenge
-          // result arrived (prevents flash of unauthorized content).
-          const clearMessages = prev.selectedChannel === channel_id;
-          // Stop the loading spinner - no fetch response will arrive.
-          const nextLoading = new Set(prev.pchatHistoryLoading);
-          nextLoading.delete(channel_id);
-          const { [channel_id]: prevPersist, ...restPersist } = prev.channelPersistence;
-          return {
-            pchatKeyRevoked: next,
-            keyTrust: restTrust,
-            pchatHistoryLoading: nextLoading,
-            channelPersistence: {
-              ...restPersist,
-              [channel_id]: { ...prevPersist, isFetching: false },
-            },
-            ...(clearMessages ? { messages: [] } : {}),
-          };
-        });
-      },
-    ),
+    await listen<{ channel_id: number }>(TauriEvent.PchatKeyRevoked, (event) => {
+      const { channel_id } = event.payload;
+      useAppStore.setState((prev) => {
+        const next = new Set(prev.pchatKeyRevoked);
+        next.add(channel_id);
+        // Clear stale key-trust for this channel.
+        const { [channel_id]: _removedTrust, ...restTrust } = prev.keyTrust;
+        // Clear any messages that were decrypted before the challenge
+        // result arrived (prevents flash of unauthorized content).
+        const clearMessages = prev.selectedChannel === channel_id;
+        // Stop the loading spinner - no fetch response will arrive.
+        const nextLoading = new Set(prev.pchatHistoryLoading);
+        nextLoading.delete(channel_id);
+        const { [channel_id]: prevPersist, ...restPersist } = prev.channelPersistence;
+        return {
+          pchatKeyRevoked: next,
+          keyTrust: restTrust,
+          pchatHistoryLoading: nextLoading,
+          channelPersistence: {
+            ...restPersist,
+            [channel_id]: { ...prevPersist, isFetching: false },
+          },
+          ...(clearMessages ? { messages: [] } : {}),
+        };
+      });
+    }),
 
     // Reaction add/remove delivered by the server (persistent channels).
-    await listen<ReactionDeliverEvent>(
-      TauriEvent.PchatReactionDeliver,
-      (event) => {
-        const { message_id, emoji, action, sender_hash, sender_name } = event.payload;
-        const resolvedName = useAppStore.getState().users.find((u) => u.hash === sender_hash)?.name ?? sender_name;
-        applyReaction(message_id, emoji, action as "add" | "remove", sender_hash, resolvedName);
-        useAppStore.setState((s) => ({ reactionVersion: s.reactionVersion + 1 }));
-      },
-    ),
+    await listen<ReactionDeliverEvent>(TauriEvent.PchatReactionDeliver, (event) => {
+      const { message_id, emoji, action, sender_hash, sender_name } = event.payload;
+      const resolvedName =
+        useAppStore.getState().users.find((u) => u.hash === sender_hash)?.name ?? sender_name;
+      applyReaction(message_id, emoji, action as "add" | "remove", sender_hash, resolvedName);
+      useAppStore.setState((s) => ({ reactionVersion: s.reactionVersion + 1 }));
+    }),
 
     // Batch reaction fetch response (historical reactions for persistent channels).
-    await listen<ReactionFetchResponseEvent>(
-      TauriEvent.PchatReactionFetchResponse,
-      (event) => {
-        const { users } = useAppStore.getState();
-        for (const r of event.payload.reactions) {
-          const resolvedName = users.find((u) => u.hash === r.sender_hash)?.name ?? r.sender_name;
-          applyReaction(r.message_id, r.emoji, "add", r.sender_hash, resolvedName);
-        }
-        useAppStore.setState((s) => ({ reactionVersion: s.reactionVersion + 1 }));
-      },
-    ),
+    await listen<ReactionFetchResponseEvent>(TauriEvent.PchatReactionFetchResponse, (event) => {
+      const { users } = useAppStore.getState();
+      for (const r of event.payload.reactions) {
+        const resolvedName = users.find((u) => u.hash === r.sender_hash)?.name ?? r.sender_name;
+        applyReaction(r.message_id, r.emoji, "add", r.sender_hash, resolvedName);
+      }
+      useAppStore.setState((s) => ({ reactionVersion: s.reactionVersion + 1 }));
+    }),
 
     // Pin/unpin delivered by the server (persistent channels).
-    await listen<PinDeliverEvent>(
-      TauriEvent.PchatPinDeliver,
-      (event) => {
-        const { channel_id, message_id, pinned, pinner_hash, pinner_name, timestamp } = event.payload;
-        const resolvedName = useAppStore.getState().users.find((u) => u.hash === pinner_hash)?.name ?? pinner_name;
-        useAppStore.setState((s) => {
-          const nextUnseen = new Map(s.unseenPinIds);
-          const channelSet = new Set(nextUnseen.get(channel_id));
-          if (pinned) {
-            channelSet.add(message_id);
-          } else {
-            channelSet.delete(message_id);
-          }
-          if (channelSet.size > 0) nextUnseen.set(channel_id, channelSet);
-          else nextUnseen.delete(channel_id);
+    await listen<PinDeliverEvent>(TauriEvent.PchatPinDeliver, (event) => {
+      const { channel_id, message_id, pinned, pinner_hash, pinner_name, timestamp } = event.payload;
+      const resolvedName =
+        useAppStore.getState().users.find((u) => u.hash === pinner_hash)?.name ?? pinner_name;
+      useAppStore.setState((s) => {
+        const nextUnseen = new Map(s.unseenPinIds);
+        const channelSet = new Set(nextUnseen.get(channel_id));
+        if (pinned) {
+          channelSet.add(message_id);
+        } else {
+          channelSet.delete(message_id);
+        }
+        if (channelSet.size > 0) nextUnseen.set(channel_id, channelSet);
+        else nextUnseen.delete(channel_id);
 
-          return {
-            messages: s.messages.map((m) =>
-              m.message_id === message_id
-                ? { ...m, pinned, pinned_by: pinned ? resolvedName : null, pinned_at: pinned ? timestamp : null }
-                : m,
-            ),
-            unseenPinIds: nextUnseen,
-          };
-        });
-      },
-    ),
+        return {
+          messages: s.messages.map((m) =>
+            m.message_id === message_id
+              ? {
+                  ...m,
+                  pinned,
+                  pinned_by: pinned ? resolvedName : null,
+                  pinned_at: pinned ? timestamp : null,
+                }
+              : m,
+          ),
+          unseenPinIds: nextUnseen,
+        };
+      });
+    }),
 
     // Batch pin fetch response (historical pins for persistent channels).
-    await listen<PinFetchResponseEvent>(
-      TauriEvent.PchatPinFetchResponse,
-      (event) => {
-        const { users } = useAppStore.getState();
-        const pinnedIds = new Map(event.payload.pins.map((p) => {
+    await listen<PinFetchResponseEvent>(TauriEvent.PchatPinFetchResponse, (event) => {
+      const { users } = useAppStore.getState();
+      const pinnedIds = new Map(
+        event.payload.pins.map((p) => {
           const resolvedName = users.find((u) => u.hash === p.pinner_hash)?.name ?? p.pinner_name;
           return [p.message_id, { pinned_by: resolvedName, pinned_at: p.timestamp }] as const;
-        }));
-        useAppStore.setState((s) => ({
-          messages: s.messages.map((m) => {
-            const pin = m.message_id ? pinnedIds.get(m.message_id) : undefined;
-            return pin ? { ...m, pinned: true, pinned_by: pin.pinned_by, pinned_at: pin.pinned_at } : m;
-          }),
-        }));
-      },
-    ),
+        }),
+      );
+      useAppStore.setState((s) => ({
+        messages: s.messages.map((m) => {
+          const pin = m.message_id ? pinnedIds.get(m.message_id) : undefined;
+          return pin ? { ...m, pinned: true, pinned_by: pin.pinned_by, pinned_at: pin.pinned_at } : m;
+        }),
+      }));
+    }),
 
     // Signal bridge load failure: show error banner in the UI.
-    await listen<{ message: string }>(
-      TauriEvent.PchatSignalBridgeError,
-      (event) => {
-        useAppStore.setState({ signalBridgeError: event.payload.message });
-      },
-    ),
+    await listen<{ message: string }>(TauriEvent.PchatSignalBridgeError, (event) => {
+      useAppStore.setState({ signalBridgeError: event.payload.message });
+    }),
   );
 }

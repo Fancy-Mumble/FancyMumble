@@ -23,7 +23,11 @@ import { useWatchSend } from "@core/features/chat/watch/useWatchSend";
 import { useWatchSync } from "@core/features/chat/watch/useWatchSync";
 import { applyWatchSyncEvent } from "@core/features/chat/watch/watchStore";
 import { consumePendingAutoStart } from "@core/features/chat/watch/watchAutoStart";
-import { claimWatchMount, releaseWatchMount, useOwnsWatchMount } from "@core/features/chat/watch/watchMountClaim";
+import {
+  claimWatchMount,
+  releaseWatchMount,
+  useOwnsWatchMount,
+} from "@core/features/chat/watch/watchMountClaim";
 import styles from "./WatchTogetherCard.module.css";
 
 interface Props {
@@ -84,11 +88,7 @@ function WatchTogetherCardImpl({ sessionId, mountKey }: Props) {
     if (!container) return;
     let next: PlayerAdapter | null = null;
     try {
-      next = createPlayerAdapter(
-        sourceKind,
-        { container, sourceUrl },
-        enableExternalEmbeds,
-      );
+      next = createPlayerAdapter(sourceKind, { container, sourceUrl }, enableExternalEmbeds);
       setAdapter(next);
       setAdapterError(null);
     } catch (err) {
@@ -218,13 +218,13 @@ function WatchTogetherCardImpl({ sessionId, mountKey }: Props) {
           <span className={styles.title}>{session.title ?? session.sourceUrl}</span>
           <span className={styles.badges}>
             <span className={styles.participants}>
-              {hostName ? t("watch.card.watchingWithHost", { count: session.participants.size, hostName }) : t("watch.watching", { count: session.participants.size })}
+              {hostName
+                ? t("watch.card.watchingWithHost", { count: session.participants.size, hostName })
+                : t("watch.watching", { count: session.participants.size })}
             </span>
           </span>
         </div>
-        <div className={styles.warning}>
-          {t("watch.card.openElsewhere")}
-        </div>
+        <div className={styles.warning}>{t("watch.card.openElsewhere")}</div>
       </div>
     );
   }
@@ -236,12 +236,16 @@ function WatchTogetherCardImpl({ sessionId, mountKey }: Props) {
           <span className={styles.title}>{session.title ?? session.sourceUrl}</span>
           <span className={styles.badges}>
             <span className={styles.participants}>
-              {hostName ? t("watch.card.watchingWithHost", { count: session.participants.size, hostName }) : t("watch.watching", { count: session.participants.size })}
+              {hostName
+                ? t("watch.card.watchingWithHost", { count: session.participants.size, hostName })
+                : t("watch.watching", { count: session.participants.size })}
             </span>
           </span>
         </div>
         <div className={styles.actions}>
-          <button type="button" onClick={handleRejoin}>{t("watch.card.rejoin")}</button>
+          <button type="button" onClick={handleRejoin}>
+            {t("watch.card.rejoin")}
+          </button>
         </div>
       </div>
     );
@@ -254,7 +258,9 @@ function WatchTogetherCardImpl({ sessionId, mountKey }: Props) {
         <span className={styles.badges}>
           {isHost && <span className={styles.hostBadge}>{t("watch.card.hostBadge")}</span>}
           <span className={styles.participants}>
-            {hostName ? t("watch.card.watchingWithHost", { count: session.participants.size, hostName }) : t("watch.watching", { count: session.participants.size })}
+            {hostName
+              ? t("watch.card.watchingWithHost", { count: session.participants.size, hostName })
+              : t("watch.watching", { count: session.participants.size })}
           </span>
         </span>
       </div>
@@ -264,15 +270,24 @@ function WatchTogetherCardImpl({ sessionId, mountKey }: Props) {
       {adapterError && <div className={styles.error}>{adapterError}</div>}
       {outOfSync && (
         <div className={styles.warning}>
-          {t("watch.card.outOfSync")} <button type="button" onClick={() => void requestState()}>{t("watch.card.resync")}</button>
+          {t("watch.card.outOfSync")}{" "}
+          <button type="button" onClick={() => void requestState()}>
+            {t("watch.card.resync")}
+          </button>
         </div>
       )}
 
       <div className={styles.actions}>
-        <button type="button" onClick={() => void requestState()}>{t("watch.card.requestState")}</button>
-        <button type="button" className={styles.danger} onClick={() => void handleLeave()}>{t("watch.card.leave")}</button>
+        <button type="button" onClick={() => void requestState()}>
+          {t("watch.card.requestState")}
+        </button>
+        <button type="button" className={styles.danger} onClick={() => void handleLeave()}>
+          {t("watch.card.leave")}
+        </button>
         {isHost && (
-          <button type="button" className={styles.danger} onClick={() => void handleEnd()}>{t("watch.card.endForEveryone")}</button>
+          <button type="button" className={styles.danger} onClick={() => void handleEnd()}>
+            {t("watch.card.endForEveryone")}
+          </button>
         )}
       </div>
     </div>

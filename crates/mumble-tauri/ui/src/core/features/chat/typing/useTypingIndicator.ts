@@ -26,11 +26,13 @@ export function useTypingIndicator() {
   }, [selectedChannel]);
 
   useEffect(() => {
-    getPreferences().then((prefs) => {
-      disabledRef.current = prefs.disableTypingIndicators ?? false;
-    }).catch(() => {
-      disabledRef.current = false;
-    });
+    getPreferences()
+      .then((prefs) => {
+        disabledRef.current = prefs.disableTypingIndicators ?? false;
+      })
+      .catch(() => {
+        disabledRef.current = false;
+      });
   }, []);
 
   const notifyTyping = useCallback(() => {

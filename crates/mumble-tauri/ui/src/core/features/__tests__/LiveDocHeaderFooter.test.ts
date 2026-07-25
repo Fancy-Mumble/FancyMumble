@@ -7,10 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
-import {
-  DEFAULT_HEADER_FOOTER,
-  setLiveDocHeaderFooter,
-} from "../chat/livedoc/useLiveDoc";
+import { DEFAULT_HEADER_FOOTER, setLiveDocHeaderFooter } from "../chat/livedoc/useLiveDoc";
 
 function readMeta(doc: Y.Doc) {
   const meta = doc.getMap("meta");

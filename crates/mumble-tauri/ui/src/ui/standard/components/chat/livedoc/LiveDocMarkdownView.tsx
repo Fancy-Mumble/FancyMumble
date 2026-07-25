@@ -36,9 +36,17 @@ import type { WebsocketProvider } from "y-websocket";
 import { ySyncPluginKey, relativePositionToAbsolutePosition } from "@tiptap/y-tiptap";
 import hljs from "highlight.js/lib/common";
 import "highlight.js/styles/github-dark.css";
-import { editorHtmlToMarkdown, markdownToEditorHtml, stripBlockSentinels } from "@core/features/chat/livedoc/liveDocMarkdown";
+import {
+  editorHtmlToMarkdown,
+  markdownToEditorHtml,
+  stripBlockSentinels,
+} from "@core/features/chat/livedoc/liveDocMarkdown";
 import { abbreviateBase64, expandBase64 } from "@core/features/chat/livedoc/liveDocMarkdownImages";
-import { serializeFrontMatter, parseFrontMatter, type LiveDocLayoutMeta } from "@core/features/chat/livedoc/liveDocFrontMatter";
+import {
+  serializeFrontMatter,
+  parseFrontMatter,
+  type LiveDocLayoutMeta,
+} from "@core/features/chat/livedoc/liveDocFrontMatter";
 import {
   useLiveDocHeaderFooter,
   setLiveDocHeaderFooter,
@@ -250,10 +258,7 @@ interface OverlayChip {
 /** Mention markers + collapsed image tokens in the markdown source.  The
  *  textarea keeps the raw text (`<@123>`); the overlay renders these as the
  *  friendly `@USERNAME` chips the rendered view shows. */
-function findChips(
-  text: string,
-  resolveName: (session: number) => string | undefined,
-): OverlayChip[] {
+function findChips(text: string, resolveName: (session: number) => string | undefined): OverlayChip[] {
   const chips: OverlayChip[] = [];
   const re = /⟦[^⟧]*⟧|<@(\d+)>|<@&([^>\s]+)>|@(everyone|here)\b/g;
   let m: RegExpExecArray | null;
@@ -341,7 +346,12 @@ function buildOverlayNodes(
   const drawCaret = showCaret && !hasSel && caret >= 0;
   const caretNode = () => <span key={`caret${key++}`} className={styles.caret} aria-hidden="true" />;
   const remoteCaretNode = (rc: RemoteCaret) => (
-    <span key={`rc${key++}`} className={styles.remoteCaret} style={{ backgroundColor: rc.color }} aria-hidden="true">
+    <span
+      key={`rc${key++}`}
+      className={styles.remoteCaret}
+      style={{ backgroundColor: rc.color }}
+      aria-hidden="true"
+    >
       <span className={styles.remoteCaretFlag} style={{ backgroundColor: rc.color }}>
         {rc.name}
       </span>
@@ -384,7 +394,10 @@ function buildOverlayNodes(
     if (chip) {
       const inSel = hasSel && from < selTo && chip.end > selFrom;
       nodes.push(
-        <span key={`chip${key++}`} className={`${chipClassName(chip.kind)}${inSel ? ` ${styles.selection}` : ""}`}>
+        <span
+          key={`chip${key++}`}
+          className={`${chipClassName(chip.kind)}${inSel ? ` ${styles.selection}` : ""}`}
+        >
           {chip.display}
         </span>,
       );
@@ -573,10 +586,7 @@ export default function LiveDocMarkdownView({
   const [mentionTrigger, setMentionTrigger] = useState<MentionTrigger | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionRect, setMentionRect] = useState<{ left: number; bottom: number } | null>(null);
-  const mentionCandidates = useMentionCandidates(
-    mentionTrigger?.kind ?? null,
-    mentionTrigger?.query ?? "",
-  );
+  const mentionCandidates = useMentionCandidates(mentionTrigger?.kind ?? null, mentionTrigger?.query ?? "");
 
   // Refs so event handlers / cleanup see the latest values without
   // re-binding (which would thrash the editor `update` subscription).
@@ -646,9 +656,7 @@ export default function LiveDocMarkdownView({
       const full = expandBase64(body, mapRef.current);
       applyingRef.current = true;
       try {
-        editor.commands.setContent(
-          markdownToEditorHtml(full, { resolveMention: resolveNameRef.current }),
-        );
+        editor.commands.setContent(markdownToEditorHtml(full, { resolveMention: resolveNameRef.current }));
       } finally {
         applyingRef.current = false;
       }
@@ -902,7 +910,9 @@ export default function LiveDocMarkdownView({
     <div className={styles.root}>
       <div className={styles.bar}>
         <span className={styles.label}>{t("liveDoc.markdown.title", { defaultValue: "Markdown" })}</span>
-        <span className={styles.flavor}>{t("liveDoc.markdown.flavor", { defaultValue: "Pandoc-flavored" })}</span>
+        <span className={styles.flavor}>
+          {t("liveDoc.markdown.flavor", { defaultValue: "Pandoc-flavored" })}
+        </span>
         <span className={styles.status}>
           <span className={`${styles.dot} ${editing ? styles.dotEditing : ""}`} />
           {editing
@@ -968,52 +978,56 @@ export default function LiveDocMarkdownView({
             ref={taRef}
             className={styles.textarea}
             value={text}
-          readOnly={readOnly}
-          spellCheck={false}
-          aria-label={t("liveDoc.markdown.title", { defaultValue: "Markdown" })}
-          onChange={(e) => {
-            onChange(e.target.value);
-            setSel({ start: e.target.selectionStart, end: e.target.selectionEnd });
-            refreshMention(e.target.value, e.target.selectionStart, e.target.selectionEnd);
-          }}
-          onSelect={(e) => {
-            setSel({ start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd });
-            refreshMention(e.currentTarget.value, e.currentTarget.selectionStart, e.currentTarget.selectionEnd);
-          }}
-          onFocus={() => setFocused(true)}
-          onBlur={() => {
-            setFocused(false);
-            closeMention();
-          }}
-          onCompositionStart={() => setComposing(true)}
-          onCompositionEnd={() => setComposing(false)}
-          onKeyDown={(e) => {
-            // Mention popup navigation takes priority over editor keys.
-            if (mentionTrigger && mentionCandidates.length > 0) {
-              const action = handleMentionKey(e, {
-                activeIndex: mentionIndex,
-                count: mentionCandidates.length,
-              });
-              if (action) {
-                e.preventDefault();
-                if (action.kind === "move") setMentionIndex(action.index);
-                else if (action.kind === "pick") {
-                  const c = mentionCandidates[action.index];
-                  if (c) insertMention(c);
-                } else if (action.kind === "close") closeMention();
-                return;
+            readOnly={readOnly}
+            spellCheck={false}
+            aria-label={t("liveDoc.markdown.title", { defaultValue: "Markdown" })}
+            onChange={(e) => {
+              onChange(e.target.value);
+              setSel({ start: e.target.selectionStart, end: e.target.selectionEnd });
+              refreshMention(e.target.value, e.target.selectionStart, e.target.selectionEnd);
+            }}
+            onSelect={(e) => {
+              setSel({ start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd });
+              refreshMention(
+                e.currentTarget.value,
+                e.currentTarget.selectionStart,
+                e.currentTarget.selectionEnd,
+              );
+            }}
+            onFocus={() => setFocused(true)}
+            onBlur={() => {
+              setFocused(false);
+              closeMention();
+            }}
+            onCompositionStart={() => setComposing(true)}
+            onCompositionEnd={() => setComposing(false)}
+            onKeyDown={(e) => {
+              // Mention popup navigation takes priority over editor keys.
+              if (mentionTrigger && mentionCandidates.length > 0) {
+                const action = handleMentionKey(e, {
+                  activeIndex: mentionIndex,
+                  count: mentionCandidates.length,
+                });
+                if (action) {
+                  e.preventDefault();
+                  if (action.kind === "move") setMentionIndex(action.index);
+                  else if (action.kind === "pick") {
+                    const c = mentionCandidates[action.index];
+                    if (c) insertMention(c);
+                  } else if (action.kind === "close") closeMention();
+                  return;
+                }
               }
-            }
-            if (e.key !== "Tab") return;
-            e.preventDefault();
-            const el = e.currentTarget;
-            const { selectionStart, selectionEnd } = el;
-            const next = text.slice(0, selectionStart) + "  " + text.slice(selectionEnd);
-            onChange(next);
-            requestAnimationFrame(() => {
-              el.selectionStart = el.selectionEnd = selectionStart + 2;
-            });
-          }}
+              if (e.key !== "Tab") return;
+              e.preventDefault();
+              const el = e.currentTarget;
+              const { selectionStart, selectionEnd } = el;
+              const next = text.slice(0, selectionStart) + "  " + text.slice(selectionEnd);
+              onChange(next);
+              requestAnimationFrame(() => {
+                el.selectionStart = el.selectionEnd = selectionStart + 2;
+              });
+            }}
           />
         </div>
       </div>

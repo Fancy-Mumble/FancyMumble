@@ -392,13 +392,7 @@ export function ColorTrigger({ inputRef, label, current, onColor, onClear, child
 const TABLE_PICKER_MAX_ROWS = 8;
 const TABLE_PICKER_MAX_COLS = 8;
 
-export function TablePickerButton({
-  editor,
-  large,
-}: {
-  readonly editor: Editor;
-  readonly large?: boolean;
-}) {
+export function TablePickerButton({ editor, large }: { readonly editor: Editor; readonly large?: boolean }) {
   const { t } = useTranslation("chat");
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState<{ rows: number; cols: number } | null>(null);
@@ -418,16 +412,13 @@ export function TablePickerButton({
     return () => document.removeEventListener("mousedown", onDocDown);
   }, [open]);
 
-  const handleToggle = useCallback(
-    () => {
-      if (!open && triggerRef.current) {
-        const rect = triggerRef.current.getBoundingClientRect();
-        setMenuPos({ left: rect.left, top: rect.bottom + 4 });
-      }
-      setOpen((v) => !v);
-    },
-    [open],
-  );
+  const handleToggle = useCallback(() => {
+    if (!open && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setMenuPos({ left: rect.left, top: rect.bottom + 4 });
+    }
+    setOpen((v) => !v);
+  }, [open]);
 
   const insertTable = useCallback(
     (rows: number, cols: number) => {

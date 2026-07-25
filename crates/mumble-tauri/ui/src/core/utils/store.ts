@@ -18,10 +18,7 @@ import { isE2E } from "./e2e";
 /** localStorage key the e2e harness uses to relocate the store directory. */
 export const E2E_DATA_DIR_KEY = "fancy-e2e-data-dir";
 
-export function load(
-  path: string,
-  options?: Parameters<typeof tauriLoad>[1],
-): ReturnType<typeof tauriLoad> {
+export function load(path: string, options?: Parameters<typeof tauriLoad>[1]): ReturnType<typeof tauriLoad> {
   return tauriLoad(resolveStorePath(path), options);
 }
 

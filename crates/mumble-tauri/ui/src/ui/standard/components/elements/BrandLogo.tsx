@@ -27,9 +27,7 @@ export default function BrandLogo({ size = 64, className }: BrandLogoProps) {
     maxHeight: `${size}px`,
     fontSize: `${Math.round(size * 0.5)}px`,
   };
-  const rootClass = className
-    ? `${styles.logo} ${className}`
-    : styles.logo;
+  const rootClass = className ? `${styles.logo} ${className}` : styles.logo;
   return (
     <div className={rootClass} style={style} aria-hidden="true">
       <span className={styles.glyph}>M</span>

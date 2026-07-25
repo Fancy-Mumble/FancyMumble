@@ -32,9 +32,7 @@ const CARD_W = 320;
 export default function EventDetailCard() {
   const { t } = useTranslation("chat");
   const detail = useCalendarStore((s) => s.detail);
-  const event = useCalendarStore((s) =>
-    detail ? s.events.find((e) => e.id === detail.eventId) : undefined,
-  );
+  const event = useCalendarStore((s) => (detail ? s.events.find((e) => e.id === detail.eventId) : undefined));
   const closeDetail = useCalendarStore((s) => s.closeDetail);
   const openEditEvent = useCalendarStore((s) => s.openEditEvent);
   const deleteEvent = useCalendarStore((s) => s.deleteEvent);
@@ -57,9 +55,7 @@ export default function EventDetailCard() {
   const occEnd = occStart + duration;
 
   const organizer = users.find((u) => u.user_id === event.organizerId);
-  const organizerAvatar = organizer
-    ? getCachedUserAvatar(organizer.session, organizer.texture_size)
-    : null;
+  const organizerAvatar = organizer ? getCachedUserAvatar(organizer.session, organizer.texture_size) : null;
 
   // The viewer's registered user_id, used to gate the organiser-only invite link.
   const ownUserId = users.find((u) => u.session === ownSession)?.user_id ?? null;
@@ -93,8 +89,7 @@ export default function EventDetailCard() {
   // Prefer placing the card to the right of the clicked event; flip left if it
   // would overflow, then clamp vertically to the viewport.
   const spaceRight = window.innerWidth - detail.rect.right;
-  const left =
-    spaceRight >= CARD_W + 16 ? detail.rect.right + 8 : Math.max(8, detail.rect.left - CARD_W - 8);
+  const left = spaceRight >= CARD_W + 16 ? detail.rect.right + 8 : Math.max(8, detail.rect.left - CARD_W - 8);
   const top = Math.min(detail.rect.top, window.innerHeight - 280);
 
   return createPortal(
@@ -137,7 +132,15 @@ export default function EventDetailCard() {
 
         <div className={styles.detailRow}>
           <ClockIcon width={14} height={14} />
-          <span>{formatRangeFormatted(occStart, occEnd, event.allDay, formatPrefs.timeFormat, formatPrefs.dateFormat)}</span>
+          <span>
+            {formatRangeFormatted(
+              occStart,
+              occEnd,
+              event.allDay,
+              formatPrefs.timeFormat,
+              formatPrefs.dateFormat,
+            )}
+          </span>
         </div>
 
         {event.repeat.freq !== "none" && (

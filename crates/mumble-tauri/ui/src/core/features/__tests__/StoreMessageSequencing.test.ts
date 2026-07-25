@@ -18,10 +18,11 @@ type Deferred = { cmd: string; args: unknown; resolve: (v: unknown) => void; rej
 const deferred: Deferred[] = [];
 
 function createInvokeMock() {
-  return vi.fn((cmd: string, args?: unknown) =>
-    new Promise((resolve, reject) => {
-      deferred.push({ cmd, args, resolve, reject });
-    }),
+  return vi.fn(
+    (cmd: string, args?: unknown) =>
+      new Promise((resolve, reject) => {
+        deferred.push({ cmd, args, resolve, reject });
+      }),
   );
 }
 

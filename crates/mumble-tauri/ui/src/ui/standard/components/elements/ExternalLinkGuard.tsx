@@ -76,34 +76,23 @@ function ExternalLinkDialog({ url, onConfirm, onCancel }: Readonly<DialogProps>)
   })();
 
   return (
-    <dialog
-      ref={dialogRef}
-      className={styles.dialog}
-      aria-labelledby="ext-link-title"
-    >
+    <dialog ref={dialogRef} className={styles.dialog} aria-labelledby="ext-link-title">
       {/* Icon */}
       <div className={styles.iconRow}>
-        <WarningIcon
-          className={styles.warningIcon}
-          aria-hidden="true"
-        />
+        <WarningIcon className={styles.warningIcon} aria-hidden="true" />
       </div>
 
       <h2 id="ext-link-title" className={styles.title}>
         {t("externalLinkGuard.title")}
       </h2>
 
-      <p className={styles.body}>
-        {t("externalLinkGuard.body")}
-      </p>
+      <p className={styles.body}>{t("externalLinkGuard.body")}</p>
 
       <div className={styles.urlBox} title={url}>
         {displayUrl}
       </div>
 
-      <p className={styles.disclaimer}>
-        {t("externalLinkGuard.disclaimer")}
-      </p>
+      <p className={styles.disclaimer}>{t("externalLinkGuard.disclaimer")}</p>
 
       <div className={styles.actions}>
         <button className={styles.cancelBtn} onClick={onCancel}>
@@ -175,11 +164,7 @@ export function ExternalLinkGuard({ children, className, style }: Readonly<Guard
         {children}
       </div>
       {pendingUrl && (
-        <ExternalLinkDialog
-          url={pendingUrl}
-          onConfirm={handleConfirm}
-          onCancel={handleCancel}
-        />
+        <ExternalLinkDialog url={pendingUrl} onConfirm={handleConfirm} onCancel={handleCancel} />
       )}
     </>
   );

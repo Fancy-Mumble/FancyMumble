@@ -1,4 +1,14 @@
-import { ArrowUpRightIcon, CheckboxIcon, CopyIcon, EditIcon, EmojiPlusIcon, PinIcon, PlayIcon, QuoteIcon, TrashIcon } from "../../../icons";
+import {
+  ArrowUpRightIcon,
+  CheckboxIcon,
+  CopyIcon,
+  EditIcon,
+  EmojiPlusIcon,
+  PinIcon,
+  PlayIcon,
+  QuoteIcon,
+  TrashIcon,
+} from "../../../icons";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatMessage } from "@core/types";
@@ -84,10 +94,11 @@ export default function MobileMessageActionSheet({
   const previewImage = useMemo(() => extractFirstImageSrc(message.body), [message.body]);
   const hasTextPreview = previewText.length > 0;
 
-  const { canStart: canWatchTogether, busy: watchBusy, start: startWatch } = useWatchStart(
-    message.body,
-    message.channel_id,
-  );
+  const {
+    canStart: canWatchTogether,
+    busy: watchBusy,
+    start: startWatch,
+  } = useWatchStart(message.body, message.channel_id);
 
   const act = useCallback(
     (fn: (msg: ChatMessage) => void) => () => {
@@ -119,7 +130,12 @@ export default function MobileMessageActionSheet({
     const readers = getReadersForMessage(channelId, msgId, allMessageIds);
     return readers
       .filter((r) => r.name && (!ownHash || r.cert_hash !== ownHash))
-      .map((r) => ({ certHash: r.cert_hash, name: r.name, isOnline: r.is_online, avatarUrl: avatarByHash?.get(r.cert_hash) }));
+      .map((r) => ({
+        certHash: r.cert_hash,
+        name: r.name,
+        isOnline: r.is_online,
+        avatarUrl: avatarByHash?.get(r.cert_hash),
+      }));
   }, [message, channelId, allMessageIds, avatarByHash, ownHash, readReceiptVersion]);
 
   return (
@@ -128,16 +144,9 @@ export default function MobileMessageActionSheet({
       {(hasTextPreview || previewImage) && (
         <div className={styles.preview}>
           {previewImage && (
-            <img
-              className={styles.previewImage}
-              src={previewImage}
-              alt=""
-              draggable={false}
-            />
+            <img className={styles.previewImage} src={previewImage} alt="" draggable={false} />
           )}
-          {hasTextPreview && (
-            <p className={styles.previewText}>{previewText}</p>
-          )}
+          {hasTextPreview && <p className={styles.previewText}>{previewText}</p>}
         </div>
       )}
 
@@ -190,13 +199,14 @@ export default function MobileMessageActionSheet({
           <div className={styles.readByLabel}>{t("contextMenu.readBy")}</div>
           {readerEntries.length > 0 ? (
             readerEntries.map((entry) => (
-              <div key={entry.certHash} className={`${styles.readByRow} ${entry.isOnline ? "" : styles.offlineReader}`}>
+              <div
+                key={entry.certHash}
+                className={`${styles.readByRow} ${entry.isOnline ? "" : styles.offlineReader}`}
+              >
                 {entry.avatarUrl ? (
                   <img src={entry.avatarUrl} alt="" className={styles.readByAvatar} />
                 ) : (
-                  <div className={styles.readByAvatarFallback}>
-                    {entry.name.charAt(0).toUpperCase()}
-                  </div>
+                  <div className={styles.readByAvatarFallback}>{entry.name.charAt(0).toUpperCase()}</div>
                 )}
                 <span className={styles.reactorNames}>{entry.name}</span>
               </div>
@@ -222,7 +232,10 @@ export default function MobileMessageActionSheet({
             type="button"
             className={styles.actionItem}
             disabled={watchBusy}
-            onClick={() => { void startWatch(); onClose(); }}
+            onClick={() => {
+              void startWatch();
+              onClose();
+            }}
           >
             <span className={styles.actionIcon}>
               <PlayIcon width={16} height={16} />
@@ -248,12 +261,18 @@ export default function MobileMessageActionSheet({
         )}
         {onPin && message.message_id && (
           <button type="button" className={styles.actionItem} onClick={act((m) => onPin(m))}>
-            <span className={styles.actionIcon}><PinIcon width={16} height={16} /></span>
+            <span className={styles.actionIcon}>
+              <PinIcon width={16} height={16} />
+            </span>
             {message.pinned ? t("contextMenu.unpin") : t("contextMenu.pin")}
           </button>
         )}
         {onPopOutImage && popOutImageSrc && (
-          <button type="button" className={styles.actionItem} onClick={act((m) => onPopOutImage(m, popOutImageSrc))}>
+          <button
+            type="button"
+            className={styles.actionItem}
+            onClick={act((m) => onPopOutImage(m, popOutImageSrc))}
+          >
             <span className={styles.actionIcon}>
               <ArrowUpRightIcon width={16} height={16} />
             </span>

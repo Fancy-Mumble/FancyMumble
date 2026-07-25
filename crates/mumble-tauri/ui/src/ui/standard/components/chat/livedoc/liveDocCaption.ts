@@ -28,9 +28,7 @@ declare module "@tiptap/core" {
 }
 
 function normaliseKind(value: unknown): CaptionKind {
-  return (CAPTION_KINDS as readonly string[]).includes(value as string)
-    ? (value as CaptionKind)
-    : "figure";
+  return (CAPTION_KINDS as readonly string[]).includes(value as string) ? (value as CaptionKind) : "figure";
 }
 
 export const Caption = Node.create({
@@ -60,11 +58,7 @@ export const Caption = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return [
-      "figcaption",
-      mergeAttributes(HTMLAttributes, { "data-livedoc-caption": "" }),
-      0,
-    ];
+    return ["figcaption", mergeAttributes(HTMLAttributes, { "data-livedoc-caption": "" }), 0];
   },
 
   addNodeView() {

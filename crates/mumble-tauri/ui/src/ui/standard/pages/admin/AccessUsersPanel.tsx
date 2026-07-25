@@ -54,14 +54,14 @@ export function AccessUsersPanel({
   };
 
   const nothing =
-    !access.allUsers && !access.allRegistered &&
-    access.granted.length === 0 && access.groupMembers.size === 0;
+    !access.allUsers &&
+    !access.allRegistered &&
+    access.granted.length === 0 &&
+    access.groupMembers.size === 0;
 
   return (
     <div className={styles.accessUsers}>
-      {access.allUsers && (
-        <div className={styles.accessNote}>{t("channelAcl.accessAllUsers")}</div>
-      )}
+      {access.allUsers && <div className={styles.accessNote}>{t("channelAcl.accessAllUsers")}</div>}
       {!access.allUsers && access.allRegistered && (
         <div className={styles.accessNote}>{t("channelAcl.accessAllRegistered")}</div>
       )}
@@ -80,15 +80,11 @@ export function AccessUsersPanel({
 
       {[...access.groupMembers.entries()].map(([group, members]) => (
         <div key={group} className={styles.accessGroupBlock}>
-          <div className={styles.aclSectionTitle}>
-            {t("channelAcl.accessViaGroup", { group })}
-          </div>
+          <div className={styles.aclSectionTitle}>{t("channelAcl.accessViaGroup", { group })}</div>
           {members.length === 0 ? (
             <div className={styles.dimText}>&mdash;</div>
           ) : (
-            <ul className={styles.accessUserList}>
-              {members.map((uid) => renderUser(uid, false))}
-            </ul>
+            <ul className={styles.accessUserList}>{members.map((uid) => renderUser(uid, false))}</ul>
           )}
         </div>
       ))}

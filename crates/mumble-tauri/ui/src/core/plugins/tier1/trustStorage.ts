@@ -30,9 +30,7 @@ function keyFor(serverId: string | null): string {
 /** Load every trust record effective for a given server.
  *  Global records ("always allow") provide a baseline; server-specific
  *  records override them, so a per-server deny wins over a global allow. */
-export async function loadServerTrust(
-  serverId: string | null,
-): Promise<Record<string, TrustRecord>> {
+export async function loadServerTrust(serverId: string | null): Promise<Record<string, TrustRecord>> {
   const store = await getStore();
   const all = (await store.get<GlobalTrustMap>(STORE_KEY)) ?? {};
   return { ...(all[GLOBAL_KEY] ?? {}), ...(all[keyFor(serverId)] ?? {}) };
@@ -50,10 +48,7 @@ export interface NamedTrustRecord {
  *  tauri-plugin-store cache and so the explicit save() - needed because
  *  autoSave is debounced and gets lost on app close - happens in one
  *  place. */
-async function writeRecords(
-  bucketKey: string,
-  records: readonly NamedTrustRecord[],
-): Promise<void> {
+async function writeRecords(bucketKey: string, records: readonly NamedTrustRecord[]): Promise<void> {
   if (records.length === 0) return;
   const store = await getStore();
   const all = (await store.get<GlobalTrustMap>(STORE_KEY)) ?? {};
@@ -67,10 +62,7 @@ async function writeRecords(
 }
 
 /** Persist a trust record that applies to every server ("always allow"). */
-export async function saveGlobalTrustRecord(
-  pluginName: string,
-  record: TrustRecord,
-): Promise<void> {
+export async function saveGlobalTrustRecord(pluginName: string, record: TrustRecord): Promise<void> {
   return saveGlobalTrustRecords([{ pluginName, record }]);
 }
 
@@ -94,19 +86,14 @@ export async function saveTrustRecords(
 }
 
 /** Batch equivalent of {@link saveGlobalTrustRecord}. */
-export async function saveGlobalTrustRecords(
-  records: readonly NamedTrustRecord[],
-): Promise<void> {
+export async function saveGlobalTrustRecords(records: readonly NamedTrustRecord[]): Promise<void> {
   return writeRecords(GLOBAL_KEY, records);
 }
 
 /** Drop a trust record so the next registry refresh re-prompts.
  *  Removes from both the server-specific bucket and the global bucket
  *  so that "Allowed - All Servers" records are fully cleared too. */
-export async function revokeTrustRecord(
-  serverId: string | null,
-  pluginName: string,
-): Promise<void> {
+export async function revokeTrustRecord(serverId: string | null, pluginName: string): Promise<void> {
   const store = await getStore();
   const all = (await store.get<GlobalTrustMap>(STORE_KEY)) ?? {};
 

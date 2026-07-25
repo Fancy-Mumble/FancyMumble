@@ -6,9 +6,18 @@ export interface ChannelPresenceAvatarProps {
 }
 
 function initials(name: string): string {
-  return name.split(/\s+/).slice(0, 2).map((part) => part[0] ?? "").join("").toUpperCase();
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0] ?? "")
+    .join("")
+    .toUpperCase();
 }
 
 export default function ChannelPresenceAvatar({ name, talking }: ChannelPresenceAvatarProps) {
-  return <span className={`${styles.presenceAvatar} ${talking ? styles.presenceTalking : ""}`} title={name}>{initials(name)}</span>;
+  return (
+    <span className={`${styles.presenceAvatar} ${talking ? styles.presenceTalking : ""}`} title={name}>
+      {initials(name)}
+    </span>
+  );
 }

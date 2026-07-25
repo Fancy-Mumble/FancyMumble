@@ -22,40 +22,22 @@ export default function ReadReceiptIndicator({
 
   const { t } = useTranslation("chat");
 
-  const ownHash = useMemo(
-    () => users.find((u) => u.session === ownSession)?.hash,
-    [users, ownSession],
-  );
+  const ownHash = useMemo(() => users.find((u) => u.session === ownSession)?.hash, [users, ownSession]);
 
   const activeHashes = useMemo(
-    () =>
-      users
-        .filter((u) => u.channel_id === channelId && u.hash)
-        .map((u) => u.hash!),
+    () => users.filter((u) => u.channel_id === channelId && u.hash).map((u) => u.hash!),
     [users, channelId],
   );
 
   const allRead = useMemo(
-    () =>
-      allActiveUsersRead(
-        channelId,
-        messageId,
-        allMessageIds,
-        activeHashes,
-        ownHash,
-      ),
+    () => allActiveUsersRead(channelId, messageId, allMessageIds, activeHashes, ownHash),
     [channelId, messageId, allMessageIds, activeHashes, ownHash, readReceiptVersion],
   );
 
-  const readerCount = useMemo(
-    () => {
-      const readers = getReadersForMessage(channelId, messageId, allMessageIds);
-      return ownHash
-        ? readers.filter((r) => r.cert_hash !== ownHash).length
-        : readers.length;
-    },
-    [channelId, messageId, allMessageIds, ownHash, readReceiptVersion],
-  );
+  const readerCount = useMemo(() => {
+    const readers = getReadersForMessage(channelId, messageId, allMessageIds);
+    return ownHash ? readers.filter((r) => r.cert_hash !== ownHash).length : readers.length;
+  }, [channelId, messageId, allMessageIds, ownHash, readReceiptVersion]);
 
   if (readerCount === 0) {
     return (
@@ -67,7 +49,10 @@ export default function ReadReceiptIndicator({
 
   if (!allRead) {
     return (
-      <span className={`${styles.indicator} ${styles.read}`} title={t("readReceipt.readByCount", { count: readerCount })}>
+      <span
+        className={`${styles.indicator} ${styles.read}`}
+        title={t("readReceipt.readByCount", { count: readerCount })}
+      >
         <CheckSingleIcon width={16} height={11} aria-label={t("readReceipt.read")} />
       </span>
     );

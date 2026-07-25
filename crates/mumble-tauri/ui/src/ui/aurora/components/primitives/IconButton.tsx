@@ -8,5 +8,16 @@ export interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
 }
 
 export default function IconButton({ icon, label, className = "", ...props }: IconButtonProps) {
-  return <Button variant="bare" wrapLabel={false} className={`${styles.iconButton} ${className}`} aria-label={label} title={props.title ?? label} {...props}>{icon}</Button>;
+  return (
+    <Button
+      variant="bare"
+      wrapLabel={false}
+      className={`${styles.iconButton} ${className}`}
+      aria-label={label}
+      title={props.title ?? label}
+      {...props}
+    >
+      {icon}
+    </Button>
+  );
 }

@@ -3,12 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useAppStore, resolvePluginTrust, resolvePluginTrustBulk } from "@core/store";
 import { Modal } from "../elements/Modal";
 import type { PendingTrustPrompt } from "@core/plugins/tier1/trust";
-import {
-  capabilityLabel,
-  decodePluginInfo,
-  TrustDecision,
-  TrustScope,
-} from "@core/plugins/tier1/trust";
+import { capabilityLabel, decodePluginInfo, TrustDecision, TrustScope } from "@core/plugins/tier1/trust";
 import { ChevronDownIcon, ChevronRightIcon } from "../../icons";
 import { SplitButton } from "../elements/SplitButton";
 import type { SplitButtonOption } from "../elements/SplitButton";
@@ -27,12 +22,9 @@ export default function PluginTrustPrompt() {
 
 function TrustListDialog({ queue }: { readonly queue: readonly PendingTrustPrompt[] }) {
   const { t } = useTranslation("common");
-  const [expanded, setExpanded] = useState<string | null>(
-    queue.length === 1 ? queue[0]!.pluginName : null,
-  );
+  const [expanded, setExpanded] = useState<string | null>(queue.length === 1 ? queue[0]!.pluginName : null);
 
-  const toggle = (name: string) =>
-    setExpanded((prev) => (prev === name ? null : name));
+  const toggle = (name: string) => setExpanded((prev) => (prev === name ? null : name));
 
   // Single atomic persist + setState for every queued plugin.  Looping
   // `resolvePluginTrust` instead races the in-memory tauri-plugin-store
@@ -76,22 +68,13 @@ function TrustListDialog({ queue }: { readonly queue: readonly PendingTrustPromp
 
   return (
     <Modal onClose={() => {}} closeOnEsc={false} closeOnOverlayClick={false} zIndex={250}>
-      <div
-        className={styles.dialog}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="plugin-trust-title"
-      >
+      <div className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="plugin-trust-title">
         <header className={styles.header}>
           <h2 id="plugin-trust-title" className={styles.title}>
-            {single
-              ? t("pluginTrust.singleTitle")
-              : t("pluginTrust.multiTitle", { count: queue.length })}
+            {single ? t("pluginTrust.singleTitle") : t("pluginTrust.multiTitle", { count: queue.length })}
           </h2>
           <p className={styles.subtitle}>
-            {single
-              ? t("pluginTrust.singleSubtitle")
-              : t("pluginTrust.multiSubtitle")}
+            {single ? t("pluginTrust.singleSubtitle") : t("pluginTrust.multiSubtitle")}
           </p>
         </header>
 
@@ -108,11 +91,7 @@ function TrustListDialog({ queue }: { readonly queue: readonly PendingTrustPromp
 
         {!single && (
           <footer className={styles.footer}>
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnDanger}`}
-              onClick={blockAll}
-            >
+            <button type="button" className={`${styles.btn} ${styles.btnDanger}`} onClick={blockAll}>
               {t("pluginTrust.blockAll")}
             </button>
             <SplitButton options={allowAllOptions} variant="primary" />
@@ -165,22 +144,14 @@ function PluginRow({
     },
   ];
 
-  const capCount = declared.length === 0
-    ? t("pluginTrust.capNone")
-    : t("pluginTrust.capCount", { count: declared.length });
+  const capCount =
+    declared.length === 0 ? t("pluginTrust.capNone") : t("pluginTrust.capCount", { count: declared.length });
 
   return (
     <section className={`${styles.row} ${open ? styles.rowOpen : ""}`}>
-      <button
-        type="button"
-        className={styles.rowHeader}
-        onClick={onToggle}
-        aria-expanded={open}
-      >
+      <button type="button" className={styles.rowHeader} onClick={onToggle} aria-expanded={open}>
         <span className={styles.rowChevron} aria-hidden="true">
-          {open
-            ? <ChevronDownIcon width={14} height={14} />
-            : <ChevronRightIcon width={14} height={14} />}
+          {open ? <ChevronDownIcon width={14} height={14} /> : <ChevronRightIcon width={14} height={14} />}
         </span>
         <span className={styles.rowMain}>
           <span className={styles.rowTitle}>
@@ -188,28 +159,20 @@ function PluginRow({
             <span className={styles.rowVersion}>v{pending.version}</span>
             {isReprompt && <span className={styles.rowBadge}>{t("pluginTrust.updatedBadge")}</span>}
           </span>
-          {info.description && (
-            <span className={styles.rowDesc}>{info.description}</span>
-          )}
+          {info.description && <span className={styles.rowDesc}>{info.description}</span>}
         </span>
         <span className={styles.rowMeta}>{capCount}</span>
       </button>
 
       {open && (
         <div className={styles.rowBody}>
-          {isReprompt && (
-            <div className={styles.warning}>
-              {t("pluginTrust.repromptWarning")}
-            </div>
-          )}
+          {isReprompt && <div className={styles.warning}>{t("pluginTrust.repromptWarning")}</div>}
 
           <section>
             <h3 className={styles.sectionTitle}>{t("pluginTrust.capabilitiesHeading")}</h3>
             <ul className={styles.capabilities}>
               {declared.length === 0 ? (
-                <li className={styles.capability}>
-                  {t("pluginTrust.capEmpty")}
-                </li>
+                <li className={styles.capability}>{t("pluginTrust.capEmpty")}</li>
               ) : (
                 declared.map((c) => (
                   <li key={c} className={styles.capability}>
@@ -251,7 +214,9 @@ function PluginRow({
               <span className={styles.advancedValue}>
                 <div className={styles.tagList}>
                   {(declared as readonly string[]).map((c) => (
-                    <span key={c} className={styles.tag}>{c}</span>
+                    <span key={c} className={styles.tag}>
+                      {c}
+                    </span>
                   ))}
                 </div>
               </span>
@@ -262,7 +227,9 @@ function PluginRow({
                   <span className={styles.advancedValue}>
                     <div className={styles.tagList}>
                       {info.capabilityTags.map((t) => (
-                        <span key={t} className={styles.tag}>{t}</span>
+                        <span key={t} className={styles.tag}>
+                          {t}
+                        </span>
                       ))}
                     </div>
                   </span>
@@ -281,20 +248,14 @@ function PluginRow({
               )}
 
               <span className={styles.advancedLabel}>{t("pluginTrust.fieldSchema")}</span>
-              <span className={styles.advancedValue}>
-                v{pending.manifest.schema_version ?? 1}
-              </span>
+              <span className={styles.advancedValue}>v{pending.manifest.schema_version ?? 1}</span>
 
               <Fingerprint infoJson={pending.registryEntry.infoJson} />
             </div>
           </details>
 
           <div className={styles.rowActions}>
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnDanger}`}
-              onClick={deny}
-            >
+            <button type="button" className={`${styles.btn} ${styles.btnDanger}`} onClick={deny}>
               {t("pluginTrust.block")}
             </button>
             <SplitButton options={allowOptions} variant="primary" />
@@ -322,9 +283,7 @@ function Fingerprint({ infoJson }: { readonly infoJson: string | null }) {
   return (
     <>
       <span className={styles.advancedLabel}>{t("pluginTrust.fieldFingerprint")}</span>
-      <span className={`${styles.advancedValue} ${styles.fingerprint}`}>
-        {fingerprint}
-      </span>
+      <span className={`${styles.advancedValue} ${styles.fingerprint}`}>{fingerprint}</span>
     </>
   );
 }

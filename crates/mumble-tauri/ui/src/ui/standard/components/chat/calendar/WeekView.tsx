@@ -11,7 +11,11 @@ import {
   startOfWeek,
 } from "@core/features/chat/calendar/calendarDates";
 import type { EventOccurrence } from "@core/features/chat/calendar/types";
-import { eventVisualStyle, shortTimeFormatted, weekdayShortNames } from "@core/features/chat/calendar/calendarFormat";
+import {
+  eventVisualStyle,
+  shortTimeFormatted,
+  weekdayShortNames,
+} from "@core/features/chat/calendar/calendarFormat";
 import { useCalendarFormatPreferences } from "@core/features/chat/calendar/useCalendarFormatPreferences";
 import { TID } from "@core/testids";
 import styles from "./CalendarPanel.module.css";
@@ -255,9 +259,7 @@ export default function WeekView({ dayCount }: { readonly dayCount: 1 | 5 | 7 })
               return (
                 <div key={day} className={styles.colHead}>
                   <div className={styles.colHeadName}>{wd}</div>
-                  <div
-                    className={`${styles.colHeadNum} ${isToday(day) ? styles.colHeadNumToday : ""}`}
-                  >
+                  <div className={`${styles.colHeadNum} ${isToday(day) ? styles.colHeadNumToday : ""}`}>
                     {new Date(day).getDate()}
                   </div>
                 </div>
@@ -301,80 +303,81 @@ export default function WeekView({ dayCount }: { readonly dayCount: 1 | 5 | 7 })
                   />
                 ))}
                 {dayOccs.map((o) => {
-                    const isThis = preview?.key === o.key;
-                    const moving = isThis && preview!.mode === "move";
-                    const start = isThis ? preview!.start : o.start;
-                    const end = isThis ? preview!.end : o.end;
-                    // Move keeps the original box + a transform (preserves pointer
-                    // capture); resize changes the box directly.
-                    const baseStart = moving ? o.start : start;
-                    const baseEnd = moving ? o.end : end;
-                    const top = ((baseStart - day) / MS_PER_HOUR) * HOUR_PX;
-                    const height = Math.max(18, ((baseEnd - baseStart) / MS_PER_HOUR) * HOUR_PX);
-                    // Side-by-side lanes for overlapping events.
-                    const pos = layout.get(o.key) ?? { lane: 0, lanes: 1 };
-                    const widthPct = 100 / pos.lanes;
-                    const leftPct = pos.lane * widthPct;
+                  const isThis = preview?.key === o.key;
+                  const moving = isThis && preview!.mode === "move";
+                  const start = isThis ? preview!.start : o.start;
+                  const end = isThis ? preview!.end : o.end;
+                  // Move keeps the original box + a transform (preserves pointer
+                  // capture); resize changes the box directly.
+                  const baseStart = moving ? o.start : start;
+                  const baseEnd = moving ? o.end : end;
+                  const top = ((baseStart - day) / MS_PER_HOUR) * HOUR_PX;
+                  const height = Math.max(18, ((baseEnd - baseStart) / MS_PER_HOUR) * HOUR_PX);
+                  // Side-by-side lanes for overlapping events.
+                  const pos = layout.get(o.key) ?? { lane: 0, lanes: 1 };
+                  const widthPct = 100 / pos.lanes;
+                  const leftPct = pos.lane * widthPct;
 
-                    // For very short events, hide content to avoid overflow
-                    // 40px: enough for title + time, 25px: only title, 18px: nothing
-                    const showMeta = height >= 40;
-                    const showTitle = height >= 25;
+                  // For very short events, hide content to avoid overflow
+                  // 40px: enough for title + time, 25px: only title, 18px: nothing
+                  const showMeta = height >= 40;
+                  const showTitle = height >= 25;
 
-                    return (
-                      <div
-                        key={o.key}
-                        className={`${styles.timedEvent} ${isThis ? styles.timedEventDragging : ""}`}
-                        style={{
-                          top,
-                          height,
-                          left: `calc(${leftPct}% + 2px)`,
-                          width: `calc(${widthPct}% - 4px)`,
-                          right: "auto",
-                          transform: moving ? `translate(${preview!.dx}px, ${preview!.dy}px)` : undefined,
-                          ...eventVisualStyle(o.event).style,
-                        }}
-                        title={o.event.title}
-                        data-cal-event=""
-                        data-testid={TID.calendarEvent}
-                        data-event-title={o.event.title}
-                        onPointerDown={(e) => beginDrag(e, o, "move")}
+                  return (
+                    <div
+                      key={o.key}
+                      className={`${styles.timedEvent} ${isThis ? styles.timedEventDragging : ""}`}
+                      style={{
+                        top,
+                        height,
+                        left: `calc(${leftPct}% + 2px)`,
+                        width: `calc(${widthPct}% - 4px)`,
+                        right: "auto",
+                        transform: moving ? `translate(${preview!.dx}px, ${preview!.dy}px)` : undefined,
+                        ...eventVisualStyle(o.event).style,
+                      }}
+                      title={o.event.title}
+                      data-cal-event=""
+                      data-testid={TID.calendarEvent}
+                      data-event-title={o.event.title}
+                      onPointerDown={(e) => beginDrag(e, o, "move")}
+                      onPointerMove={onPointerMove}
+                      onPointerUp={onPointerUp}
+                      onPointerCancel={onPointerCancel}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        openMenu(o.event.id, e.clientX, e.clientY);
+                      }}
+                    >
+                      <span
+                        className={styles.resizeEdgeTop}
+                        onPointerDown={(e) => beginDrag(e, o, "resize-start")}
                         onPointerMove={onPointerMove}
                         onPointerUp={onPointerUp}
                         onPointerCancel={onPointerCancel}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          openMenu(o.event.id, e.clientX, e.clientY);
-                        }}
                       >
-                        <span
-                          className={styles.resizeEdgeTop}
-                          onPointerDown={(e) => beginDrag(e, o, "resize-start")}
-                          onPointerMove={onPointerMove}
-                          onPointerUp={onPointerUp}
-                          onPointerCancel={onPointerCancel}
-                        >
-                          <span className={styles.resizeHandle} aria-hidden="true" />
-                        </span>
-                        {showTitle && <div className={styles.timedTitle}>{o.event.title || "(untitled)"}</div>}
-                        {showMeta && (
-                          <div className={styles.timedMeta}>
-                            {shortTimeFormatted(start, formatPrefs.timeFormat)} – {shortTimeFormatted(end, formatPrefs.timeFormat)}
-                            {o.event.location ? ` · ${o.event.location}` : ""}
-                          </div>
-                        )}
-                        <span
-                          className={styles.resizeEdgeBottom}
-                          onPointerDown={(e) => beginDrag(e, o, "resize-end")}
-                          onPointerMove={onPointerMove}
-                          onPointerUp={onPointerUp}
-                          onPointerCancel={onPointerCancel}
-                        >
-                          <span className={styles.resizeHandle} aria-hidden="true" />
-                        </span>
-                      </div>
-                    );
-                  })}
+                        <span className={styles.resizeHandle} aria-hidden="true" />
+                      </span>
+                      {showTitle && <div className={styles.timedTitle}>{o.event.title || "(untitled)"}</div>}
+                      {showMeta && (
+                        <div className={styles.timedMeta}>
+                          {shortTimeFormatted(start, formatPrefs.timeFormat)} –{" "}
+                          {shortTimeFormatted(end, formatPrefs.timeFormat)}
+                          {o.event.location ? ` · ${o.event.location}` : ""}
+                        </div>
+                      )}
+                      <span
+                        className={styles.resizeEdgeBottom}
+                        onPointerDown={(e) => beginDrag(e, o, "resize-end")}
+                        onPointerMove={onPointerMove}
+                        onPointerUp={onPointerUp}
+                        onPointerCancel={onPointerCancel}
+                      >
+                        <span className={styles.resizeHandle} aria-hidden="true" />
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}

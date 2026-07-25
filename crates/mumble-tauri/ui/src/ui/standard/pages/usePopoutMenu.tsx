@@ -17,7 +17,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import styles from "./PopoutPage.module.css";
 
-interface MenuPos { x: number; y: number; }
+interface MenuPos {
+  x: number;
+  y: number;
+}
 
 /** Extra page-specific entry rendered above "Close" in the menu. */
 export interface PopoutMenuItem {
@@ -41,16 +44,28 @@ export interface PopoutMenuOptions {
 }
 
 /** Hook + JSX renderer for the popout right-click menu. */
-export function usePopoutMenu({ mediaRef, mediaReady, mediaLabel, aspectStorageKey = "popout.aspectLocked", extraItems }: PopoutMenuOptions) {
+export function usePopoutMenu({
+  mediaRef,
+  mediaReady,
+  mediaLabel,
+  aspectStorageKey = "popout.aspectLocked",
+  extraItems,
+}: PopoutMenuOptions) {
   const [menu, setMenu] = useState<MenuPos | null>(null);
   const [aspectLocked, setAspectLocked] = useState<boolean>(() => {
-    try { return localStorage.getItem(aspectStorageKey) === "1"; } catch { return false; }
+    try {
+      return localStorage.getItem(aspectStorageKey) === "1";
+    } catch {
+      return false;
+    }
   });
   const menuRef = useRef<HTMLDivElement>(null);
 
   const closeMenu = useCallback(() => setMenu(null), []);
   const close = useCallback(() => {
-    getCurrentWindow().close().catch((e) => console.error("close failed", e));
+    getCurrentWindow()
+      .close()
+      .catch((e) => console.error("close failed", e));
   }, []);
 
   const onContextMenu = useCallback((e: React.MouseEvent) => {
@@ -74,7 +89,11 @@ export function usePopoutMenu({ mediaRef, mediaReady, mediaLabel, aspectStorageK
     closeMenu();
     setAspectLocked((prev) => {
       const next = !prev;
-      try { localStorage.setItem(aspectStorageKey, next ? "1" : "0"); } catch { /* ignore */ }
+      try {
+        localStorage.setItem(aspectStorageKey, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
       return next;
     });
   }, [closeMenu, aspectStorageKey]);
@@ -95,7 +114,8 @@ export function usePopoutMenu({ mediaRef, mediaReady, mediaLabel, aspectStorageK
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (menu) closeMenu(); else close();
+      if (menu) closeMenu();
+      else close();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -111,11 +131,13 @@ export function usePopoutMenu({ mediaRef, mediaReady, mediaLabel, aspectStorageK
     const h = m instanceof HTMLVideoElement ? m.videoHeight : m.naturalHeight;
     const ratio = aspectLocked ? w / h : null;
     if (ratio !== null && (!Number.isFinite(ratio) || ratio <= 0)) return;
-    invoke<boolean>("set_window_aspect_ratio", { ratio })
-      .catch((e) => console.error("set_window_aspect_ratio failed", e));
+    invoke<boolean>("set_window_aspect_ratio", { ratio }).catch((e) =>
+      console.error("set_window_aspect_ratio failed", e),
+    );
     return () => {
-      invoke<boolean>("set_window_aspect_ratio", { ratio: null })
-        .catch((e) => console.error("set_window_aspect_ratio clear failed", e));
+      invoke<boolean>("set_window_aspect_ratio", { ratio: null }).catch((e) =>
+        console.error("set_window_aspect_ratio clear failed", e),
+      );
     };
   }, [aspectLocked, mediaReady, mediaRef]);
 
@@ -124,7 +146,10 @@ export function usePopoutMenu({ mediaRef, mediaReady, mediaLabel, aspectStorageK
       <div
         className={styles.menuOverlay}
         onClick={closeMenu}
-        onContextMenu={(e) => { e.preventDefault(); closeMenu(); }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          closeMenu();
+        }}
         role="presentation"
       />
       <div ref={menuRef} className={styles.menu} style={{ top: menu.y, left: menu.x }}>
@@ -145,14 +170,25 @@ export function usePopoutMenu({ mediaRef, mediaReady, mediaLabel, aspectStorageK
             key={item.label}
             type="button"
             className={styles.menuItem}
-            onClick={() => { closeMenu(); item.onClick(); }}
+            onClick={() => {
+              closeMenu();
+              item.onClick();
+            }}
             role={item.checked === undefined ? undefined : "menuitemcheckbox"}
             aria-checked={item.checked}
           >
-            {item.checked ? "\u2713 " : ""}{item.label}
+            {item.checked ? "\u2713 " : ""}
+            {item.label}
           </button>
         ))}
-        <button type="button" className={styles.menuItem} onClick={() => { closeMenu(); close(); }}>
+        <button
+          type="button"
+          className={styles.menuItem}
+          onClick={() => {
+            closeMenu();
+            close();
+          }}
+        >
           Close
         </button>
       </div>

@@ -39,11 +39,7 @@ function shouldHandleReject(event: RejectEvent): boolean {
     pendingConnect !== null &&
     activeServerId === null &&
     (eventServerId === null || eventServerId !== activeServerId);
-  return !(
-    eventServerId !== null &&
-    eventServerId !== activeServerId &&
-    !pendingFallbackApplies
-  );
+  return !(eventServerId !== null && eventServerId !== activeServerId && !pendingFallbackApplies);
 }
 
 /** Same logic for the "server-disconnected" listener. */
@@ -54,10 +50,7 @@ function shouldHandleDisconnect(event: DisconnectEvent): boolean {
     pendingConnect !== null &&
     activeServerId === null &&
     (eventServerId === null || eventServerId !== activeServerId);
-  return (
-    (eventServerId !== null && eventServerId === activeServerId) ||
-    pendingFallbackApplies
-  );
+  return (eventServerId !== null && eventServerId === activeServerId) || pendingFallbackApplies;
 }
 
 beforeEach(() => {
@@ -182,4 +175,3 @@ describe("connect-time disconnect surfacing", () => {
     expect(handled).toBe(false);
   });
 });
-

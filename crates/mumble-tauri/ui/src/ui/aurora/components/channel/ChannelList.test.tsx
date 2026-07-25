@@ -6,27 +6,51 @@ import ChannelList from "./ChannelList";
 import { flattenChannels } from "./channelOrder";
 
 const channel = (id: number, name: string, parent_id: number | null, position = 0): ChannelEntry => ({
-  id, name, parent_id, position, description_size: null, user_count: 0, permissions: null, temporary: false, max_users: 0,
+  id,
+  name,
+  parent_id,
+  position,
+  description_size: null,
+  user_count: 0,
+  permissions: null,
+  temporary: false,
+  max_users: 0,
 });
 
 const user = (session: number, name: string, channel_id: number): UserEntry => ({
-  session, name, channel_id, user_id: null, texture_size: null, comment: null,
-  mute: false, deaf: false, suppress: false, self_mute: false, self_deaf: false, priority_speaker: false,
+  session,
+  name,
+  channel_id,
+  user_id: null,
+  texture_size: null,
+  comment: null,
+  mute: false,
+  deaf: false,
+  suppress: false,
+  self_mute: false,
+  self_deaf: false,
+  priority_speaker: false,
 });
 
-const renderList = (channels: ChannelEntry[], users: UserEntry[] = [], props: Partial<React.ComponentProps<typeof ChannelList>> = {}) =>
-  render(<ChannelList
-    channels={channels}
-    users={users}
-    selectedChannel={null}
-    currentChannel={null}
-    listenedChannels={new Set()}
-    unreadCounts={{}}
-    talkingSessions={new Set()}
-    onSelect={vi.fn()}
-    onJoin={vi.fn()}
-    {...props}
-  />);
+const renderList = (
+  channels: ChannelEntry[],
+  users: UserEntry[] = [],
+  props: Partial<React.ComponentProps<typeof ChannelList>> = {},
+) =>
+  render(
+    <ChannelList
+      channels={channels}
+      users={users}
+      selectedChannel={null}
+      currentChannel={null}
+      listenedChannels={new Set()}
+      unreadCounts={{}}
+      talkingSessions={new Set()}
+      onSelect={vi.fn()}
+      onJoin={vi.fn()}
+      {...props}
+    />,
+  );
 
 describe("flattenChannels", () => {
   it("orders parents before their children, each level by position", () => {
@@ -71,7 +95,10 @@ describe("ChannelList", () => {
 
   it("renders a structural channel as a heading, not a joinable row", () => {
     const onSelect = vi.fn();
-    const structural = { ...channel(1, "Voice rooms", null, 0), attributes: 1 << ChannelAttribute.Structural };
+    const structural = {
+      ...channel(1, "Voice rooms", null, 0),
+      attributes: 1 << ChannelAttribute.Structural,
+    };
     renderList([structural, channel(2, "Lounge", 1, 0)], [], { onSelect });
 
     const heading = screen.getByRole("heading", { name: "Voice rooms" });

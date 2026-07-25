@@ -2,7 +2,13 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import type { PersonalizationData, BubbleStyle, FontSize, BgFit, ChannelViewerStyle } from "../../personalizationStorage";
+import type {
+  PersonalizationData,
+  BubbleStyle,
+  FontSize,
+  BgFit,
+  ChannelViewerStyle,
+} from "../../personalizationStorage";
 import {
   MessageCircleIcon,
   AlignLeftIcon,
@@ -22,11 +28,7 @@ import { FileDropZone } from "../../components/elements/FileDropZone";
 import styles from "./SettingsPage.module.css";
 import panelStyles from "./PersonalizationPanel.module.css";
 import { registerSettings } from "@core/features/settings/settingsSearchRegistry";
-import {
-  getSelectedUiDesign,
-  getUiDesignOverride,
-  setSelectedUiDesign,
-} from "@ui/selection";
+import { getSelectedUiDesign, getUiDesignOverride, setSelectedUiDesign } from "@ui/selection";
 
 registerSettings("personalize")
   .add("personalize.uiDesign", ["aurora", "beta", "design beta", "interface", "design", "standard"])
@@ -311,11 +313,7 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
             >
               <span className={panelStyles.swatchGrid}>
                 {theme.swatches.map((color) => (
-                  <span
-                    key={color}
-                    className={panelStyles.swatch}
-                    style={{ backgroundColor: color }}
-                  />
+                  <span key={color} className={panelStyles.swatch} style={{ backgroundColor: color }} />
                 ))}
               </span>
               <span className={styles.optionLabel}>{theme.label}</span>
@@ -494,10 +492,7 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
             <label className={styles.fieldLabel}>{t("personalize.compactMode")}</label>
             <p className={styles.fieldHint}>{t("personalize.compactModeHint")}</p>
           </div>
-          <Toggle
-            checked={data.compactMode}
-            onChange={() => onChange({ compactMode: !data.compactMode })}
-          />
+          <Toggle checked={data.compactMode} onChange={() => onChange({ compactMode: !data.compactMode })} />
         </div>
         <div className={styles.fieldRow}>
           <div>
@@ -569,4 +564,3 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
     </>
   );
 }
-

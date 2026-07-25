@@ -55,10 +55,7 @@ export const EndnotesSection = Node.create({
           });
           if (exists) return false;
           return chain()
-            .insertContentAt(doc.content.size, [
-              { type: this.name },
-              { type: "paragraph" },
-            ])
+            .insertContentAt(doc.content.size, [{ type: this.name }, { type: "paragraph" }])
             .run();
         },
     };

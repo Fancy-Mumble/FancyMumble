@@ -144,11 +144,7 @@ function RenderButton({
       // Unsafe scheme (javascript:, data:, ...) - render an inert button
       // rather than a clickable anchor.
       return (
-        <button
-          type="button"
-          className={`${styles.btn} ${btnClass("link")}`}
-          disabled
-        >
+        <button type="button" className={`${styles.btn} ${btnClass("link")}`} disabled>
           {component.label}
         </button>
       );
@@ -216,9 +212,7 @@ function RenderRadioGroup({
           />
           <span>
             {o.label}
-            {o.description && (
-              <span className={styles.choiceDescription}>{o.description}</span>
-            )}
+            {o.description && <span className={styles.choiceDescription}>{o.description}</span>}
           </span>
         </label>
       ))}
@@ -233,9 +227,7 @@ function RenderCheckboxGroup({
   readonly component: Extract<Component, { type: "checkbox-group" }>;
   readonly ctx: RenderContext;
 }) {
-  const initial = new Set(
-    component.options.filter((o) => o.default).map((o) => o.value),
-  );
+  const initial = new Set(component.options.filter((o) => o.default).map((o) => o.value));
   const [selected, setSelected] = useState<Set<string>>(initial);
   const toggle = (value: string, on: boolean) => {
     const next = new Set(selected);
@@ -263,9 +255,7 @@ function RenderCheckboxGroup({
           />
           <span>
             {o.label}
-            {o.description && (
-              <span className={styles.choiceDescription}>{o.description}</span>
-            )}
+            {o.description && <span className={styles.choiceDescription}>{o.description}</span>}
           </span>
         </label>
       ))}
@@ -288,9 +278,7 @@ function RenderStringSelect({
       disabled={component.disabled}
       defaultValue={multi ? [] : ""}
       onChange={(e) => {
-        const values = multi
-          ? Array.from(e.target.selectedOptions, (o) => o.value)
-          : [e.target.value];
+        const values = multi ? Array.from(e.target.selectedOptions, (o) => o.value) : [e.target.value];
         void sendPluginInteraction(
           ctx.pluginName,
           { kind: "component", custom_id: component.custom_id, values },
@@ -328,9 +316,7 @@ function RenderUserSelect({
       disabled={component.disabled}
       defaultValue={multi ? [] : ""}
       onChange={(e) => {
-        const values = multi
-          ? Array.from(e.target.selectedOptions, (o) => o.value)
-          : [e.target.value];
+        const values = multi ? Array.from(e.target.selectedOptions, (o) => o.value) : [e.target.value];
         void sendPluginInteraction(
           ctx.pluginName,
           { kind: "component", custom_id: component.custom_id, values },
@@ -368,9 +354,7 @@ function RenderRoleSelect({
       disabled={component.disabled}
       defaultValue={multi ? [] : ""}
       onChange={(e) => {
-        const values = multi
-          ? Array.from(e.target.selectedOptions, (o) => o.value)
-          : [e.target.value];
+        const values = multi ? Array.from(e.target.selectedOptions, (o) => o.value) : [e.target.value];
         void sendPluginInteraction(
           ctx.pluginName,
           { kind: "component", custom_id: component.custom_id, values },
@@ -413,9 +397,7 @@ function RenderMentionableSelect({
       disabled={component.disabled}
       defaultValue={multi ? [] : ""}
       onChange={(e) => {
-        const values = multi
-          ? Array.from(e.target.selectedOptions, (o) => o.value)
-          : [e.target.value];
+        const values = multi ? Array.from(e.target.selectedOptions, (o) => o.value) : [e.target.value];
         void sendPluginInteraction(
           ctx.pluginName,
           { kind: "component", custom_id: component.custom_id, values },
@@ -462,9 +444,7 @@ function RenderChannelSelect({
       disabled={component.disabled}
       defaultValue={multi ? [] : ""}
       onChange={(e) => {
-        const values = multi
-          ? Array.from(e.target.selectedOptions, (o) => o.value)
-          : [e.target.value];
+        const values = multi ? Array.from(e.target.selectedOptions, (o) => o.value) : [e.target.value];
         void sendPluginInteraction(
           ctx.pluginName,
           { kind: "component", custom_id: component.custom_id, values },
@@ -490,16 +470,11 @@ function RenderChannelSelect({
 // Display primitives
 // ---------------------------------------------------------------------------
 
-function RenderThumbnail({
-  component,
-}: {
-  readonly component: Extract<Component, { type: "thumbnail" }>;
-}) {
+function RenderThumbnail({ component }: { readonly component: Extract<Component, { type: "thumbnail" }> }) {
   const [revealed, setRevealed] = useState(!component.spoiler);
   const resolved = safeImageUrl(useFancyFileUrl(component.media.url));
-  const cls = component.spoiler && !revealed
-    ? `${styles.thumbnailImg} ${styles.spoiler}`
-    : styles.thumbnailImg;
+  const cls =
+    component.spoiler && !revealed ? `${styles.thumbnailImg} ${styles.spoiler}` : styles.thumbnailImg;
   return (
     <img
       className={cls}
@@ -529,13 +504,16 @@ function RenderMediaGallery({
 function MediaGalleryTile({
   item,
 }: {
-  readonly item: { readonly media: { readonly url: string }; readonly description?: string; readonly spoiler?: boolean };
+  readonly item: {
+    readonly media: { readonly url: string };
+    readonly description?: string;
+    readonly spoiler?: boolean;
+  };
 }) {
   const [revealed, setRevealed] = useState(!item.spoiler);
   const resolved = safeImageUrl(useFancyFileUrl(item.media.url));
-  const cls = item.spoiler && !revealed
-    ? `${styles.mediaGalleryItem} ${styles.spoiler}`
-    : styles.mediaGalleryItem;
+  const cls =
+    item.spoiler && !revealed ? `${styles.mediaGalleryItem} ${styles.spoiler}` : styles.mediaGalleryItem;
   return (
     <div
       className={cls}
@@ -548,16 +526,9 @@ function MediaGalleryTile({
   );
 }
 
-function RenderFile({
-  component,
-}: {
-  readonly component: Extract<Component, { type: "file" }>;
-}) {
+function RenderFile({ component }: { readonly component: Extract<Component, { type: "file" }> }) {
   const href = safeLinkUrl(useFancyFileUrl(component.file.url));
-  const sizeText =
-    component.size != null
-      ? ` · ${humanSize(component.size)}`
-      : "";
+  const sizeText = component.size != null ? ` · ${humanSize(component.size)}` : "";
   const label = component.name ?? component.file.url;
   if (!href) {
     // Unsafe / unresolvable URL - show the metadata without a link.
@@ -569,12 +540,7 @@ function RenderFile({
     );
   }
   return (
-    <a
-      className={styles.fileTile}
-      href={href}
-      target="_blank"
-      rel="noreferrer noopener"
-    >
+    <a className={styles.fileTile} href={href} target="_blank" rel="noreferrer noopener">
       <span>{label}</span>
       <span className={styles.fileMeta}>{sizeText}</span>
     </a>
@@ -592,18 +558,11 @@ function RenderTextDisplay({ content }: { readonly content: string }) {
   // Plugins emit text-display content as markdown (GFM).  Parse it
   // synchronously and route through SafeHtml so DOMPurify strips
   // anything that would let a plugin smuggle script/XSS through.
-  const html = useMemo(
-    () => String(marked.parse(content, { async: false, gfm: true })),
-    [content],
-  );
+  const html = useMemo(() => String(marked.parse(content, { async: false, gfm: true })), [content]);
   return <SafeHtml html={html} className={styles.textDisplay} />;
 }
 
-function RenderSeparator({
-  component,
-}: {
-  readonly component: Extract<Component, { type: "separator" }>;
-}) {
+function RenderSeparator({ component }: { readonly component: Extract<Component, { type: "separator" }> }) {
   const cls = [styles.separator];
   if (component.spacing === "large") cls.push(styles.separatorLarge);
   if (component.divider === false) cls.push(styles.separatorBlank);
@@ -687,9 +646,7 @@ function RenderLabel({
   return (
     <div className={styles.label}>
       <span className={styles.labelTitle}>{component.label}</span>
-      {component.description && (
-        <span className={styles.labelDescription}>{component.description}</span>
-      )}
+      {component.description && <span className={styles.labelDescription}>{component.description}</span>}
       <RenderComponent component={component.component} ctx={ctx} />
     </div>
   );

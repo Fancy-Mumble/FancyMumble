@@ -6,8 +6,12 @@ import styles from "./SettingsPage.module.css";
 import panelStyles from "./ShortcutsPanel.module.css";
 import { registerSettings } from "@core/features/settings/settingsSearchRegistry";
 
-registerSettings("shortcuts")
-  .add("shortcuts.builtinTitle", ["keybinds", "hotkeys", "keyboard", "push to talk"]);
+registerSettings("shortcuts").add("shortcuts.builtinTitle", [
+  "keybinds",
+  "hotkeys",
+  "keyboard",
+  "push to talk",
+]);
 
 interface Props {
   shortcuts: ShortcutBindings;
@@ -15,13 +19,7 @@ interface Props {
   isExpert?: boolean;
 }
 
-function ShortcutGroup({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function ShortcutGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className={styles.section}>
       <h3 className={styles.sectionTitle}>{title}</h3>
@@ -36,10 +34,7 @@ export function ShortcutsPanel({ shortcuts, onChangeShortcut, isExpert }: Props)
   return (
     <>
       <h2 className={styles.panelTitle}>{t("shortcuts.panelTitle")}</h2>
-      <p
-        className={styles.fieldHint}
-        dangerouslySetInnerHTML={{ __html: t("shortcuts.globalHint") }}
-      />
+      <p className={styles.fieldHint} dangerouslySetInnerHTML={{ __html: t("shortcuts.globalHint") }} />
 
       <ShortcutGroup title={t("shortcuts.groupVoiceGlobal")}>
         <ShortcutRecorder
@@ -137,19 +132,63 @@ export function ShortcutsPanel({ shortcuts, onChangeShortcut, isExpert }: Props)
         <p className={styles.fieldHint}>{t("shortcuts.builtinHint")}</p>
         <table className={panelStyles.builtinTable}>
           <tbody>
-            <tr><td>{t("shortcuts.builtinFocusComposer")}</td><td><kbd>Tab</kbd></td></tr>
-            <tr><td>{t("shortcuts.builtinSendMessage")}</td><td><kbd>Enter</kbd></td></tr>
-            <tr><td>{t("shortcuts.builtinNewLine")}</td><td><kbd>Shift+Enter</kbd></td></tr>
-            <tr><td>{t("shortcuts.builtinEditLast")}</td><td><kbd>ArrowUp</kbd> {t("shortcuts.builtinEditLastHint")}</td></tr>
-            <tr><td>{t("shortcuts.builtinBold")}</td><td><kbd>Ctrl+B</kbd></td></tr>
-            <tr><td>{t("shortcuts.builtinItalic")}</td><td><kbd>Ctrl+I</kbd></td></tr>
-            <tr><td>{t("shortcuts.builtinInlineCode")}</td><td><kbd>Ctrl+E</kbd></td></tr>
-            <tr><td>{t("shortcuts.builtinEmojiPicker")}</td><td>Type <kbd>:</kbd> {t("shortcuts.builtinEmojiHint")}</td></tr>
-            <tr><td>{t("shortcuts.builtinMentionPicker")}</td><td>Type <kbd>@</kbd> {t("shortcuts.builtinMentionHint")}</td></tr>
+            <tr>
+              <td>{t("shortcuts.builtinFocusComposer")}</td>
+              <td>
+                <kbd>Tab</kbd>
+              </td>
+            </tr>
+            <tr>
+              <td>{t("shortcuts.builtinSendMessage")}</td>
+              <td>
+                <kbd>Enter</kbd>
+              </td>
+            </tr>
+            <tr>
+              <td>{t("shortcuts.builtinNewLine")}</td>
+              <td>
+                <kbd>Shift+Enter</kbd>
+              </td>
+            </tr>
+            <tr>
+              <td>{t("shortcuts.builtinEditLast")}</td>
+              <td>
+                <kbd>ArrowUp</kbd> {t("shortcuts.builtinEditLastHint")}
+              </td>
+            </tr>
+            <tr>
+              <td>{t("shortcuts.builtinBold")}</td>
+              <td>
+                <kbd>Ctrl+B</kbd>
+              </td>
+            </tr>
+            <tr>
+              <td>{t("shortcuts.builtinItalic")}</td>
+              <td>
+                <kbd>Ctrl+I</kbd>
+              </td>
+            </tr>
+            <tr>
+              <td>{t("shortcuts.builtinInlineCode")}</td>
+              <td>
+                <kbd>Ctrl+E</kbd>
+              </td>
+            </tr>
+            <tr>
+              <td>{t("shortcuts.builtinEmojiPicker")}</td>
+              <td>
+                Type <kbd>:</kbd> {t("shortcuts.builtinEmojiHint")}
+              </td>
+            </tr>
+            <tr>
+              <td>{t("shortcuts.builtinMentionPicker")}</td>
+              <td>
+                Type <kbd>@</kbd> {t("shortcuts.builtinMentionHint")}
+              </td>
+            </tr>
           </tbody>
         </table>
       </section>
     </>
   );
 }
-

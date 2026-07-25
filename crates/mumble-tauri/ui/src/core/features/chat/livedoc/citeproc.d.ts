@@ -26,10 +26,7 @@ declare module "citeproc" {
     updateItems(ids: string[]): void;
     /** Reset internal state and (re)process all citations in order.
      *  Returns `[citationID, noteIndex, htmlString]` triples. */
-    rebuildProcessorState(
-      citations: CiteprocCitation[],
-      format?: string,
-    ): Array<[string, number, string]>;
+    rebuildProcessorState(citations: CiteprocCitation[], format?: string): Array<[string, number, string]>;
     /** `[params, htmlEntries]` or `false` when nothing is cited. */
     makeBibliography(): [unknown, string[]] | false;
   }

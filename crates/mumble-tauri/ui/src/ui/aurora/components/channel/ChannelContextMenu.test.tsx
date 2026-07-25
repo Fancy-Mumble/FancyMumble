@@ -5,18 +5,43 @@ import { ChannelAttribute } from "@core/utils/channelAttributes";
 import ChannelContextMenu from "./ChannelContextMenu";
 
 const channel = (overrides: Partial<ChannelEntry> = {}): ChannelEntry => ({
-  id: 1, name: "Lounge", parent_id: 0, position: 0, description_size: null, user_count: 0,
-  permissions: null, temporary: false, max_users: 0, ...overrides,
+  id: 1,
+  name: "Lounge",
+  parent_id: 0,
+  position: 0,
+  description_size: null,
+  user_count: 0,
+  permissions: null,
+  temporary: false,
+  max_users: 0,
+  ...overrides,
 });
 
 const noop = vi.fn();
-const renderMenu = (entry: ChannelEntry, overrides: Partial<React.ComponentProps<typeof ChannelContextMenu>> = {}) =>
-  render(<ChannelContextMenu
-    channel={entry} x={10} y={10} listening={false} notificationsMuted={false}
-    onOpenText={noop} onJoinVoice={noop} onToggleListen={noop} onToggleNotifications={noop}
-    onCreateSubchannel={noop} onEdit={noop} onEditPermissions={noop} onMove={noop}
-    onMoveAllUsers={noop} onPurgeHistory={noop} {...overrides}
-  />);
+const renderMenu = (
+  entry: ChannelEntry,
+  overrides: Partial<React.ComponentProps<typeof ChannelContextMenu>> = {},
+) =>
+  render(
+    <ChannelContextMenu
+      channel={entry}
+      x={10}
+      y={10}
+      listening={false}
+      notificationsMuted={false}
+      onOpenText={noop}
+      onJoinVoice={noop}
+      onToggleListen={noop}
+      onToggleNotifications={noop}
+      onCreateSubchannel={noop}
+      onEdit={noop}
+      onEditPermissions={noop}
+      onMove={noop}
+      onMoveAllUsers={noop}
+      onPurgeHistory={noop}
+      {...overrides}
+    />,
+  );
 
 describe("ChannelContextMenu", () => {
   it("groups items with separators under a heading", () => {

@@ -10,14 +10,7 @@
 export type CalendarView = "day" | "workweek" | "week" | "month";
 
 /** Recurrence frequency presets (plus `custom` for an interval+unit rule). */
-export type RepeatFreq =
-  | "none"
-  | "weekdays"
-  | "daily"
-  | "weekly"
-  | "monthly"
-  | "yearly"
-  | "custom";
+export type RepeatFreq = "none" | "weekdays" | "daily" | "weekly" | "monthly" | "yearly" | "custom";
 
 /** Custom-recurrence unit. */
 export type RepeatUnit = "day" | "week" | "month" | "year";
@@ -35,13 +28,7 @@ export interface RepeatRule {
 export type RsvpStatus = "invited" | "accepted" | "declined" | "tentative";
 
 /** How the meeting shows on the user's free/busy (Outlook-style "Show as"). */
-export type ShowAs =
-  | "free"
-  | "tentative"
-  | "busy"
-  | "away"
-  | "workingElsewhere"
-  | "oof";
+export type ShowAs = "free" | "tentative" | "busy" | "away" | "workingElsewhere" | "oof";
 
 export const SHOW_AS_OPTIONS: readonly ShowAs[] = [
   "free",
@@ -144,14 +131,4 @@ export const CALENDAR_COLORS: readonly string[] = [
 ];
 
 /** Reminder offsets offered in the dropdown (minutes; `null` = none). */
-export const REMINDER_OPTIONS: readonly ReminderMinutes[] = [
-  null,
-  0,
-  5,
-  10,
-  15,
-  30,
-  60,
-  120,
-  1440,
-];
+export const REMINDER_OPTIONS: readonly ReminderMinutes[] = [null, 0, 5, 10, 15, 30, 60, 120, 1440];

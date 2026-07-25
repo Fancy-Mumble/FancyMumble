@@ -330,7 +330,6 @@ export default function ServerTabsBar() {
     finishDrag(false);
   };
 
-
   const handleSwitch = (id: ServerId) => {
     // If we're on the connect page (new-tab dummy active), navigate
     // back to the chat view; switchServer is a no-op when id matches
@@ -446,7 +445,12 @@ export default function ServerTabsBar() {
 
   return (
     <>
-      <div className={styles.bar} role="tablist" aria-label={t("tabsBar.connectedServersAriaLabel")} data-tauri-drag-region>
+      <div
+        className={styles.bar}
+        role="tablist"
+        aria-label={t("tabsBar.connectedServersAriaLabel")}
+        data-tauri-drag-region
+      >
         {renderFriendsTab()}
         {orderedSessions.map((meta) => {
           const isActive = !newTabActive && meta.id === activeServerId;
@@ -454,11 +458,11 @@ export default function ServerTabsBar() {
           const isDragging = draggingId === meta.id;
           const dropClass =
             dropTarget?.id === meta.id && draggingId && draggingId !== meta.id
-              ? (dropTarget.before ? styles.tabDropBefore : styles.tabDropAfter)
+              ? dropTarget.before
+                ? styles.tabDropBefore
+                : styles.tabDropAfter
               : "";
-          const style: React.CSSProperties = isDragging
-            ? { visibility: "hidden" }
-            : {};
+          const style: React.CSSProperties = isDragging ? { visibility: "hidden" } : {};
           return (
             <div
               key={meta.id}
@@ -498,7 +502,10 @@ export default function ServerTabsBar() {
               <span className={`${styles.statusDot} ${statusClass(meta.status)}`} />
               <span className={styles.label}>{tabLabel(meta)}</span>
               {unreadTotal > 0 && (
-                <span className={styles.unreadBadge} aria-label={t("tabsBar.unreadCount", { count: unreadTotal })}>
+                <span
+                  className={styles.unreadBadge}
+                  aria-label={t("tabsBar.unreadCount", { count: unreadTotal })}
+                >
                   {unreadTotal > 99 ? "99+" : unreadTotal}
                 </span>
               )}
@@ -540,26 +547,27 @@ export default function ServerTabsBar() {
 
       {popover}
 
-      {floatingMeta && createPortal(
-        <div
-          ref={floatingRef}
-          className={`${styles.tab} ${styles.tabFloating}`}
-          style={{
-            position: "fixed",
-            left: 0,
-            top: 0,
-            width: floatingMeta.width,
-            height: floatingMeta.height,
-            transform: `translate(${floatingMeta.initialX}px, ${floatingMeta.initialY}px)`,
-            pointerEvents: "none",
-            zIndex: 9999,
-          }}
-        >
-          <span className={`${styles.statusDot} ${statusClass(floatingMeta.meta.status)}`} />
-          <span className={styles.label}>{tabLabel(floatingMeta.meta)}</span>
-        </div>,
-        document.body,
-      )}
+      {floatingMeta &&
+        createPortal(
+          <div
+            ref={floatingRef}
+            className={`${styles.tab} ${styles.tabFloating}`}
+            style={{
+              position: "fixed",
+              left: 0,
+              top: 0,
+              width: floatingMeta.width,
+              height: floatingMeta.height,
+              transform: `translate(${floatingMeta.initialX}px, ${floatingMeta.initialY}px)`,
+              pointerEvents: "none",
+              zIndex: 9999,
+            }}
+          >
+            <span className={`${styles.statusDot} ${statusClass(floatingMeta.meta.status)}`} />
+            <span className={styles.label}>{tabLabel(floatingMeta.meta)}</span>
+          </div>,
+          document.body,
+        )}
 
       {pendingDisconnect && (
         <ConfirmDialog

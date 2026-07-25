@@ -16,13 +16,7 @@ interface PanelCloseButtonProps {
 
 export default function PanelCloseButton({ onClose, label }: PanelCloseButtonProps) {
   return (
-    <button
-      type="button"
-      className={styles.closeBtn}
-      onClick={onClose}
-      title={label}
-      aria-label={label}
-    >
+    <button type="button" className={styles.closeBtn} onClick={onClose} title={label} aria-label={label}>
       <CloseIcon width={16} height={16} />
     </button>
   );

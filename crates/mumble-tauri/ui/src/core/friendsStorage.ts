@@ -54,7 +54,6 @@ export interface Friend {
   avatarUpdatedAt?: number;
 }
 
-
 /**
  * Stable grouping key for a friend's origin server.
  *
@@ -129,7 +128,11 @@ export interface FriendIdentity {
 function applyIdentity(dst: Friend, src: FriendIdentity): boolean {
   let changed = false;
   const keys: (keyof FriendIdentity)[] = [
-    "userId", "serverHost", "serverPort", "serverUsername", "serverCertLabel",
+    "userId",
+    "serverHost",
+    "serverPort",
+    "serverUsername",
+    "serverCertLabel",
   ];
   for (const k of keys) {
     const v = src[k];
@@ -141,12 +144,14 @@ function applyIdentity(dst: Friend, src: FriendIdentity): boolean {
   return changed;
 }
 
-export async function addFriend(input: {
-  userName: string;
-  userHash?: string;
-  serverId?: string;
-  serverLabel?: string;
-} & FriendIdentity): Promise<Friend> {
+export async function addFriend(
+  input: {
+    userName: string;
+    userHash?: string;
+    serverId?: string;
+    serverLabel?: string;
+  } & FriendIdentity,
+): Promise<Friend> {
   const friends = await getFriends();
   const existing = friends.find((f) => isSameFriend(f, input));
   if (existing) {
@@ -191,10 +196,7 @@ export async function removeFriend(id: string): Promise<void> {
  * `get_user_texture`).  No-op when the friend has been removed or the
  * bytes are identical to what is already cached.
  */
-export async function updateFriendAvatar(
-  id: string,
-  bytes: number[] | Uint8Array,
-): Promise<void> {
+export async function updateFriendAvatar(id: string, bytes: number[] | Uint8Array): Promise<void> {
   const friends = await getFriends();
   const idx = friends.findIndex((f) => f.id === id);
   if (idx === -1) return;

@@ -50,28 +50,36 @@ export function SidebarTabs({ channelsPane, membersPane, onMembersFirstShown }: 
         }
       }
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [onMembersFirstShown]);
 
-  useEffect(() => () => {
-    if (persistTimer.current !== null) window.clearTimeout(persistTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (persistTimer.current !== null) window.clearTimeout(persistTimer.current);
+    },
+    [],
+  );
 
-  const handleClick = useCallback((tab: SidebarTabKey) => {
-    setActiveTab(tab);
-    if (tab === "members" && !membersOpenedRef.current) {
-      membersOpenedRef.current = true;
-      onMembersFirstShown();
-    }
-    // Debounce the disk write so a rapid back-and-forth tab click
-    // doesn't stack synchronous Tauri-IPC + JSON-serialise + disk
-    // writes on top of the React state update.
-    if (persistTimer.current !== null) window.clearTimeout(persistTimer.current);
-    persistTimer.current = window.setTimeout(() => {
-      persistTimer.current = null;
-      updatePreferences({ sidebarActiveTab: tab }).catch(() => {});
-    }, 600);
-  }, [onMembersFirstShown]);
+  const handleClick = useCallback(
+    (tab: SidebarTabKey) => {
+      setActiveTab(tab);
+      if (tab === "members" && !membersOpenedRef.current) {
+        membersOpenedRef.current = true;
+        onMembersFirstShown();
+      }
+      // Debounce the disk write so a rapid back-and-forth tab click
+      // doesn't stack synchronous Tauri-IPC + JSON-serialise + disk
+      // writes on top of the React state update.
+      if (persistTimer.current !== null) window.clearTimeout(persistTimer.current);
+      persistTimer.current = window.setTimeout(() => {
+        persistTimer.current = null;
+        updatePreferences({ sidebarActiveTab: tab }).catch(() => {});
+      }, 600);
+    },
+    [onMembersFirstShown],
+  );
 
   const channelsActive = activeTab === "channels";
   const membersActive = activeTab === "members";
@@ -99,13 +107,9 @@ export function SidebarTabs({ channelsPane, membersPane, onMembersFirstShown }: 
         </button>
       </div>
 
-      <div className={channelsActive ? styles.tabPane : styles.tabPaneHidden}>
-        {channelsPane}
-      </div>
+      <div className={channelsActive ? styles.tabPane : styles.tabPaneHidden}>{channelsPane}</div>
       {membersPane && (
-        <div className={membersActive ? styles.tabPane : styles.tabPaneHidden}>
-          {membersPane}
-        </div>
+        <div className={membersActive ? styles.tabPane : styles.tabPaneHidden}>{membersPane}</div>
       )}
     </>
   );

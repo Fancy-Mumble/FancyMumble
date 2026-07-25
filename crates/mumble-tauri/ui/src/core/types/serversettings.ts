@@ -2,8 +2,7 @@
  *  broadcast event that delivers them. */
 
 /** Input type for a server setting, mapped to a form control by the factory. */
-export type ServerSettingType =
-  | "string" | "text" | "bool" | "int" | "enum" | "country" | "password";
+export type ServerSettingType = "string" | "text" | "bool" | "int" | "enum" | "country" | "password";
 
 /** One editable server setting (schema + current value), advertised by the
  *  server. The `type` drives the client's form-control factory. */

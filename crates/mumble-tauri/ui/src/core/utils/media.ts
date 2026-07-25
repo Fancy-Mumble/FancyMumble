@@ -101,10 +101,7 @@ export function fileToDataUrl(file: File): Promise<string> {
  *      binary-search to maximize dimensions.  Finally sweep quality
  *      upward at the chosen scale to use any remaining budget.
  */
-export async function fitImage(
-  file: File,
-  maxBytes: number,
-): Promise<string> {
+export async function fitImage(file: File, maxBytes: number): Promise<string> {
   if (maxBytes < 5000) maxBytes = 131072; // guard against bogus limits
 
   const dataUrl = await fileToDataUrl(file);
@@ -211,12 +208,7 @@ export async function fitImage(
  * rides along on the tag itself and survives the server's verbatim message
  * relay (the same way the message body's `<!-- FANCY_* -->` markers do).
  */
-export function mediaToHtml(
-  dataUrl: string,
-  kind: MediaKind,
-  fileName: string,
-  spoiler = false,
-): string {
+export function mediaToHtml(dataUrl: string, kind: MediaKind, fileName: string, spoiler = false): string {
   const spoilerAttr = spoiler ? ' data-spoiler="1"' : "";
   switch (kind) {
     case "image":
@@ -243,10 +235,7 @@ export const MAX_GALLERY_IMAGES = 10;
  * Returns `{ dataUrl, kind }` - `kind` will be `"video"` when the
  * original was kept, or `"image"` when a still frame was extracted.
  */
-export async function fitVideo(
-  file: File,
-  maxBytes: number,
-): Promise<{ dataUrl: string; kind: MediaKind }> {
+export async function fitVideo(file: File, maxBytes: number): Promise<{ dataUrl: string; kind: MediaKind }> {
   const dataUrl = await fileToDataUrl(file);
 
   // If the raw video fits, return as-is.
@@ -256,9 +245,7 @@ export async function fitVideo(
 
   // Video is far too large for the Mumble limit - extract a poster
   // frame and compress it as JPEG so the recipient sees something.
-  console.log(
-    `[fitVideo] video too large (${dataUrl.length} > ${maxBytes}), extracting poster frame`,
-  );
+  console.log(`[fitVideo] video too large (${dataUrl.length} > ${maxBytes}), extracting poster frame`);
 
   const frameBlob = await extractVideoFrame(file);
   const frameFile = new File([frameBlob], "frame.jpg", {

@@ -68,10 +68,7 @@ function buildKeyShareBanner(
   );
 }
 
-function buildDisputeBanner(
-  onCompareClick: () => void,
-  t: (key: string) => string,
-): ReactNode {
+function buildDisputeBanner(onCompareClick: () => void, t: (key: string) => string): ReactNode {
   return (
     <InfoBanner
       variant="danger"
@@ -82,9 +79,7 @@ function buildDisputeBanner(
         </button>
       }
     >
-      <p className={infoBannerStyles.description}>
-        {t("overlays.conflictingKeys")}
-      </p>
+      <p className={infoBannerStyles.description}>{t("overlays.conflictingKeys")}</p>
     </InfoBanner>
   );
 }
@@ -94,10 +89,7 @@ function buildDisputeBanner(
  * key verification dialog, and custodian prompt.
  * Extracted from ChatView to reduce component complexity.
  */
-export function usePersistentChat(
-  channelId: number | null,
-  channelName: string,
-): PersistentChatResult {
+export function usePersistentChat(channelId: number | null, channelName: string): PersistentChatResult {
   const channelPersistence = useAppStore((s) => s.channelPersistence);
   const pchatHistoryLoading = useAppStore((s) => s.pchatHistoryLoading);
   const keyTrust = useAppStore((s) => s.keyTrust);
@@ -168,9 +160,7 @@ export function usePersistentChat(
     }
   }, [custodian]);
 
-  const showBanner = channelId !== null && (
-    (persistence && persistence.mode !== "NONE") || isLoading
-  );
+  const showBanner = channelId !== null && ((persistence && persistence.mode !== "NONE") || isLoading);
 
   const keyShareRequests = (channelId !== null && pendingKeyShares[channelId]) || [];
 
@@ -178,12 +168,8 @@ export function usePersistentChat(
     trustLevel: trust?.trustLevel,
     onVerifyClick: trust ? () => setShowVerifyDialog(true) : undefined,
     isPersisted: !!persistence && persistence.mode !== "NONE",
-    banner: showBanner ? (
-      <PersistenceBanner channelId={channelId} />
-    ) : null,
-    disputeBanner: dispute
-      ? buildDisputeBanner(() => setShowVerifyDialog(true), tStr)
-      : null,
+    banner: showBanner ? <PersistenceBanner channelId={channelId} /> : null,
+    disputeBanner: dispute ? buildDisputeBanner(() => setShowVerifyDialog(true), tStr) : null,
     keyShareBanner: keyRevoked
       ? null
       : buildKeyShareBanner(channelId, keyShareRequests, handleShareClick, dismissKeyShare, tStr),
@@ -191,44 +177,41 @@ export function usePersistentChat(
       <InfoBanner
         variant="danger"
         icon={warningIcon}
-        actions={canTakeover ? (
-          <button
-            className={infoBannerStyles.dangerAction}
-            data-testid={TID.pchatResetKey}
-            onClick={() => setConfirmTakeover(true)}
-          >
-            {t("overlays.resetChannelKey")}
-          </button>
-        ) : undefined}
+        actions={
+          canTakeover ? (
+            <button
+              className={infoBannerStyles.dangerAction}
+              data-testid={TID.pchatResetKey}
+              onClick={() => setConfirmTakeover(true)}
+            >
+              {t("overlays.resetChannelKey")}
+            </button>
+          ) : undefined
+        }
       >
         {userMode === "normal" ? (
-          <p className={infoBannerStyles.description}>
-            {t("overlays.revokedNormal")}
-          </p>
+          <p className={infoBannerStyles.description}>{t("overlays.revokedNormal")}</p>
         ) : (
           <>
             <p className={infoBannerStyles.description}>
               <strong>{t("overlays.keyChallengeFailed")}</strong> - {t("overlays.keyRejected")}
             </p>
-            <p className={infoBannerStyles.description}>
-              {t("overlays.keyMaterialPurged")}
-            </p>
+            <p className={infoBannerStyles.description}>{t("overlays.keyMaterialPurged")}</p>
           </>
         )}
       </InfoBanner>
     ) : null,
     keyRevoked,
     sendBlocked: keyRevoked || (persistenceMode === "SIGNAL_V1" && !!signalBridgeError),
-    signalBridgeErrorBanner: (persistenceMode === "SIGNAL_V1" && signalBridgeError) ? (
-      <InfoBanner variant="danger" icon={warningIcon}>
-        <p className={infoBannerStyles.description}>
-          <strong>{t("overlays.encryptionUnavailable")}</strong> - {signalBridgeError}
-        </p>
-        <p className={infoBannerStyles.description}>
-          {t("overlays.encryptionUnavailableDetail")}
-        </p>
-      </InfoBanner>
-    ) : null,
+    signalBridgeErrorBanner:
+      persistenceMode === "SIGNAL_V1" && signalBridgeError ? (
+        <InfoBanner variant="danger" icon={warningIcon}>
+          <p className={infoBannerStyles.description}>
+            <strong>{t("overlays.encryptionUnavailable")}</strong> - {signalBridgeError}
+          </p>
+          <p className={infoBannerStyles.description}>{t("overlays.encryptionUnavailableDetail")}</p>
+        </InfoBanner>
+      ) : null,
     dialogs: (
       <>
         {trust && channelId !== null && (
@@ -236,30 +219,26 @@ export function usePersistentChat(
             channelId={channelId}
             open={showVerifyDialog}
             onClose={() => setShowVerifyDialog(false)}
-          onVerify={() => verifyKeyFingerprint(channelId)}
-          trustLevel={trust.trustLevel}
-          channelName={channelName}
-          mode={persistence?.mode ?? "NONE"}
-          distributorName={trust.distributorName}
-          distributorHash={trust.distributorHash}
-        />
+            onVerify={() => verifyKeyFingerprint(channelId)}
+            trustLevel={trust.trustLevel}
+            channelName={channelName}
+            mode={persistence?.mode ?? "NONE"}
+            distributorName={trust.distributorName}
+            distributorHash={trust.distributorHash}
+          />
         )}
         {custodian && channelId !== null && (
           <CustodianPrompt
             open={showCustodianPrompt}
             onClose={() => setShowCustodianPrompt(false)}
             onConfirm={() =>
-              custodian.pendingUpdate
-                ? acceptCustodianChanges(channelId)
-                : confirmCustodians(channelId)
+              custodian.pendingUpdate ? acceptCustodianChanges(channelId) : confirmCustodians(channelId)
             }
             custodians={custodian.pinned.map((h) => ({ hash: h }))}
             isFirstJoin={!custodian.confirmed && !custodian.pendingUpdate}
-            addedCustodians={
-              custodian.pendingUpdate
-                ?.filter((h) => !custodian.pinned.includes(h))
-                .map((h) => ({ hash: h }))
-            }
+            addedCustodians={custodian.pendingUpdate
+              ?.filter((h) => !custodian.pinned.includes(h))
+              .map((h) => ({ hash: h }))}
             removedCustodians={
               custodian.pendingUpdate
                 ? custodian.pinned

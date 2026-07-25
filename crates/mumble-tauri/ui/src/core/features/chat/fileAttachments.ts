@@ -32,7 +32,23 @@ export type PreviewKind = "image" | "audio" | "video" | "text" | "other";
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"]);
 const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "flac", "m4a", "aac", "opus", "oga"]);
 const VIDEO_EXTS = new Set(["mp4", "webm", "mov", "mkv", "m4v", "ogv"]);
-const TEXT_EXTS = new Set(["txt", "md", "log", "json", "csv", "xml", "html", "css", "js", "ts", "rs", "py", "yml", "yaml", "toml"]);
+const TEXT_EXTS = new Set([
+  "txt",
+  "md",
+  "log",
+  "json",
+  "csv",
+  "xml",
+  "html",
+  "css",
+  "js",
+  "ts",
+  "rs",
+  "py",
+  "yml",
+  "yaml",
+  "toml",
+]);
 
 export function previewKindForFilename(filename: string): PreviewKind {
   const extension = filename.includes(".") ? filename.slice(filename.lastIndexOf(".") + 1).toLowerCase() : "";

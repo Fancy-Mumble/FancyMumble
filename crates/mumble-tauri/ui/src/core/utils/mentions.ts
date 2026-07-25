@@ -48,10 +48,7 @@ export interface MentionTrigger {
  * on whitespace or when the `@` is preceded by a non-whitespace,
  * non-newline character (so email addresses don't trigger).
  */
-export function parseMentionTrigger(
-  draft: string,
-  cursor: number,
-): MentionTrigger | null {
+export function parseMentionTrigger(draft: string, cursor: number): MentionTrigger | null {
   if (cursor < 1) return null;
 
   // Walk backwards from cursor looking for an unbroken token.
@@ -113,10 +110,7 @@ function sanitiseColor(color: string): string | null {
  * input.  The output is safe HTML containing `<span class="mention"...>`
  * elements that the receiver renders directly.
  */
-export function applyMentionsToHtml(
-  escapedHtml: string,
-  resolver: MentionResolver,
-): string {
+export function applyMentionsToHtml(escapedHtml: string, resolver: MentionResolver): string {
   let out = escapedHtml;
 
   // <@SESSION>  ->  &lt;@SESSION&gt;
@@ -138,12 +132,16 @@ export function applyMentionsToHtml(
   });
 
   // @everyone (only at start of text or after whitespace)
-  out = out.replace(/(^|\s)@everyone\b/g, (_m, lead) =>
-    `${lead}<span class="mention mention-everyone" data-mention-everyone="1">@everyone</span>`);
+  out = out.replace(
+    /(^|\s)@everyone\b/g,
+    (_m, lead) => `${lead}<span class="mention mention-everyone" data-mention-everyone="1">@everyone</span>`,
+  );
 
   // @here
-  out = out.replace(/(^|\s)@here\b/g, (_m, lead) =>
-    `${lead}<span class="mention mention-here" data-mention-here="1">@here</span>`);
+  out = out.replace(
+    /(^|\s)@here\b/g,
+    (_m, lead) => `${lead}<span class="mention mention-here" data-mention-here="1">@here</span>`,
+  );
 
   return out;
 }
@@ -199,10 +197,7 @@ export interface SelfMentionContext {
 }
 
 /** Return true if the message body mentions the receiving user. */
-export function containsSelfMention(
-  html: string,
-  ctx: SelfMentionContext,
-): boolean {
+export function containsSelfMention(html: string, ctx: SelfMentionContext): boolean {
   const targets = extractMentionTargets(html);
   if (ctx.ownSession != null && targets.sessions.has(ctx.ownSession)) {
     return true;

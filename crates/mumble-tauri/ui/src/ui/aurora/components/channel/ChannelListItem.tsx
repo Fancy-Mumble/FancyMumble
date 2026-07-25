@@ -19,24 +19,44 @@ export interface ChannelListItemProps {
   onContextMenu?: (event: MouseEvent<HTMLElement>) => void;
 }
 
-export default function ChannelListItem({ channel, users, selected, current, listened, unread, talkingSessions, onSelect, onJoin, onContextMenu }: ChannelListItemProps) {
+export default function ChannelListItem({
+  channel,
+  users,
+  selected,
+  current,
+  listened,
+  unread,
+  talkingSessions,
+  onSelect,
+  onJoin,
+  onContextMenu,
+}: ChannelListItemProps) {
   const locked = !current && channel.permissions !== null && (channel.permissions & PERM_ENTER) === 0;
-  const className = [styles.item, selected ? styles.selected : "", current ? styles.current : "", locked ? styles.locked : ""].filter(Boolean).join(" ");
-  return <Button
-    variant="bare"
-    wrapLabel={false}
-    className={className}
-    aria-current={current ? "true" : undefined}
-    onClick={onSelect}
-    onDoubleClick={onJoin}
-    onContextMenu={onContextMenu}
-  >
-    <HashIcon />
-    <span className={styles.name}>{channel.name}</span>
-    {locked && <LockIcon className={styles.badgeIcon} />}
-    {listened && <HeadphonesIcon className={styles.badgeIcon} />}
-    {unread > 0 && <b className={styles.unread}>{unread > 99 ? "99+" : unread}</b>}
-    {users.length > 0 && <span className={styles.count}>{users.length}</span>}
-    <ChannelPresence users={users} talkingSessions={talkingSessions} />
-  </Button>;
+  const className = [
+    styles.item,
+    selected ? styles.selected : "",
+    current ? styles.current : "",
+    locked ? styles.locked : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    <Button
+      variant="bare"
+      wrapLabel={false}
+      className={className}
+      aria-current={current ? "true" : undefined}
+      onClick={onSelect}
+      onDoubleClick={onJoin}
+      onContextMenu={onContextMenu}
+    >
+      <HashIcon />
+      <span className={styles.name}>{channel.name}</span>
+      {locked && <LockIcon className={styles.badgeIcon} />}
+      {listened && <HeadphonesIcon className={styles.badgeIcon} />}
+      {unread > 0 && <b className={styles.unread}>{unread > 99 ? "99+" : unread}</b>}
+      {users.length > 0 && <span className={styles.count}>{users.length}</span>}
+      <ChannelPresence users={users} talkingSessions={talkingSessions} />
+    </Button>
+  );
 }

@@ -33,7 +33,12 @@ export default function LiveDocPlaceholderChecker({ editor, onClose }: LiveDocPl
       <div className={`${styles.dialog} ${styles.dialogNarrow}`} role="dialog" aria-modal="true">
         <div className={styles.dialogHeader}>
           <span className={styles.dialogTitle}>{tb("checkPlaceholders", "Check Placeholders")}</span>
-          <button type="button" className={styles.dialogClose} onClick={onClose} aria-label={tb("close", "Close")}>
+          <button
+            type="button"
+            className={styles.dialogClose}
+            onClick={onClose}
+            aria-label={tb("close", "Close")}
+          >
             <CloseIcon width={16} height={16} />
           </button>
         </div>

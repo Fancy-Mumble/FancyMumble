@@ -32,12 +32,7 @@ function makeMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
 describe("ConfirmDialog", () => {
   it("renders title and body", () => {
     render(
-      <ConfirmDialog
-        title="Delete messages"
-        body="Are you sure?"
-        onConfirm={vi.fn()}
-        onCancel={vi.fn()}
-      />,
+      <ConfirmDialog title="Delete messages" body="Are you sure?" onConfirm={vi.fn()} onCancel={vi.fn()} />,
     );
     expect(screen.getByText("Delete messages")).toBeTruthy();
     expect(screen.getByText("Are you sure?")).toBeTruthy();
@@ -75,28 +70,14 @@ describe("ConfirmDialog", () => {
 
   it("calls onCancel when cancel button is clicked", () => {
     const onCancel = vi.fn();
-    render(
-      <ConfirmDialog
-        title="Test"
-        body="Test body"
-        onConfirm={vi.fn()}
-        onCancel={onCancel}
-      />,
-    );
+    render(<ConfirmDialog title="Test" body="Test body" onConfirm={vi.fn()} onCancel={onCancel} />);
     fireEvent.click(screen.getByText("Cancel"));
     expect(onCancel).toHaveBeenCalledOnce();
   });
 
   it("calls onCancel on Escape key", () => {
     const onCancel = vi.fn();
-    render(
-      <ConfirmDialog
-        title="Test"
-        body="Test body"
-        onConfirm={vi.fn()}
-        onCancel={onCancel}
-      />,
-    );
+    render(<ConfirmDialog title="Test" body="Test body" onConfirm={vi.fn()} onCancel={onCancel} />);
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onCancel).toHaveBeenCalledOnce();
   });
@@ -106,41 +87,31 @@ describe("ConfirmDialog", () => {
 
 describe("MessageSelectionBar", () => {
   it("displays the selection count", () => {
-    render(
-      <MessageSelectionBar count={5} onDelete={vi.fn()} onCancel={vi.fn()} />,
-    );
+    render(<MessageSelectionBar count={5} onDelete={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByText("5 selected")).toBeTruthy();
   });
 
   it("shows delete button with count", () => {
-    render(
-      <MessageSelectionBar count={3} onDelete={vi.fn()} onCancel={vi.fn()} />,
-    );
+    render(<MessageSelectionBar count={3} onDelete={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByText("Delete (3)")).toBeTruthy();
   });
 
   it("disables delete button when count is 0", () => {
-    render(
-      <MessageSelectionBar count={0} onDelete={vi.fn()} onCancel={vi.fn()} />,
-    );
+    render(<MessageSelectionBar count={0} onDelete={vi.fn()} onCancel={vi.fn()} />);
     const deleteBtn = screen.getByText("Delete (0)").closest("button");
     expect(deleteBtn?.disabled).toBe(true);
   });
 
   it("calls onDelete when delete button is clicked", () => {
     const onDelete = vi.fn();
-    render(
-      <MessageSelectionBar count={2} onDelete={onDelete} onCancel={vi.fn()} />,
-    );
+    render(<MessageSelectionBar count={2} onDelete={onDelete} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByText("Delete (2)"));
     expect(onDelete).toHaveBeenCalledOnce();
   });
 
   it("calls onCancel when cancel button is clicked", () => {
     const onCancel = vi.fn();
-    render(
-      <MessageSelectionBar count={2} onDelete={vi.fn()} onCancel={onCancel} />,
-    );
+    render(<MessageSelectionBar count={2} onDelete={vi.fn()} onCancel={onCancel} />);
     fireEvent.click(screen.getByText("Cancel"));
     expect(onCancel).toHaveBeenCalledOnce();
   });

@@ -10,8 +10,22 @@ export interface SettingsNavProps {
 }
 
 export default function SettingsNav({ section, query, onQueryChange, onSelect }: SettingsNavProps) {
-  return <nav>
-    <SearchField value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Search settings" aria-label="Search settings" />
-    {SETTINGS_SECTIONS.filter((item) => sectionMatchesQuery(item, query)).map((item) => <SettingsNavButton key={item.id} label={item.label} active={item.id === section} onSelect={() => onSelect(item.id)} />)}
-  </nav>;
+  return (
+    <nav>
+      <SearchField
+        value={query}
+        onChange={(event) => onQueryChange(event.target.value)}
+        placeholder="Search settings"
+        aria-label="Search settings"
+      />
+      {SETTINGS_SECTIONS.filter((item) => sectionMatchesQuery(item, query)).map((item) => (
+        <SettingsNavButton
+          key={item.id}
+          label={item.label}
+          active={item.id === section}
+          onSelect={() => onSelect(item.id)}
+        />
+      ))}
+    </nav>
+  );
 }

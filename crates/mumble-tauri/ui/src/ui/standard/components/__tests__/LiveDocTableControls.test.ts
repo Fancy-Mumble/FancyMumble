@@ -29,22 +29,40 @@ function makeEditor(): Editor {
             {
               type: "tableRow",
               content: [
-                { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "H1" }] }] },
-                { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "H2" }] }] },
+                {
+                  type: "tableHeader",
+                  content: [{ type: "paragraph", content: [{ type: "text", text: "H1" }] }],
+                },
+                {
+                  type: "tableHeader",
+                  content: [{ type: "paragraph", content: [{ type: "text", text: "H2" }] }],
+                },
               ],
             },
             {
               type: "tableRow",
               content: [
-                { type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "A1" }] }] },
-                { type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "A2" }] }] },
+                {
+                  type: "tableCell",
+                  content: [{ type: "paragraph", content: [{ type: "text", text: "A1" }] }],
+                },
+                {
+                  type: "tableCell",
+                  content: [{ type: "paragraph", content: [{ type: "text", text: "A2" }] }],
+                },
               ],
             },
             {
               type: "tableRow",
               content: [
-                { type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "B1" }] }] },
-                { type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "B2" }] }] },
+                {
+                  type: "tableCell",
+                  content: [{ type: "paragraph", content: [{ type: "text", text: "B1" }] }],
+                },
+                {
+                  type: "tableCell",
+                  content: [{ type: "paragraph", content: [{ type: "text", text: "B2" }] }],
+                },
               ],
             },
           ],

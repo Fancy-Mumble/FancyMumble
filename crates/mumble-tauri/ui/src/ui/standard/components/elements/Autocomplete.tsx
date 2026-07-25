@@ -48,9 +48,7 @@ export interface MultipleAutocompleteProps<T> extends CommonAutocompleteProps<T>
   readonly onChange: (options: readonly AutocompleteOption<T>[]) => void;
 }
 
-export type AutocompleteProps<T> =
-  | SingleAutocompleteProps<T>
-  | MultipleAutocompleteProps<T>;
+export type AutocompleteProps<T> = SingleAutocompleteProps<T> | MultipleAutocompleteProps<T>;
 
 const MAX_VISIBLE = 200;
 
@@ -101,9 +99,7 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
   // mode it doubles as the display string for the committed value and
   // snaps back to that label on blur - multi-select never does this
   // because the chips already show what's chosen.
-  const [inputValue, setInputValue] = useState(
-    multiple ? "" : props.value?.label ?? "",
-  );
+  const [inputValue, setInputValue] = useState(multiple ? "" : (props.value?.label ?? ""));
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const ignoreBlur = useRef(false);
@@ -152,8 +148,7 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
     // typing) show all options instead of filtering to the single
     // selected item.  Multi-select never collapses to one item like
     // that, so this branch is single-only.
-    const showingSelectedLabel =
-      !multiple && singleValue !== null && q === singleValue.label.toLowerCase();
+    const showingSelectedLabel = !multiple && singleValue !== null && q === singleValue.label.toLowerCase();
     if (!q || showingSelectedLabel) {
       return options.slice(0, MAX_VISIBLE) as AutocompleteOption<T>[];
     }
@@ -284,7 +279,13 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
   const showClearBtn = hasSelection || inputValue !== "";
 
   return (
-    <div className={styles.root} role="combobox" aria-expanded={open} aria-haspopup="listbox" aria-owns={listboxId}>
+    <div
+      className={styles.root}
+      role="combobox"
+      aria-expanded={open}
+      aria-haspopup="listbox"
+      aria-owns={listboxId}
+    >
       <div
         ref={wrapperRef}
         className={`${styles.inputWrapper} ${multiple ? styles.inputWrapperMulti : ""}`}
@@ -298,28 +299,33 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
         }}
       >
         {!multiple && singleValue?.startAdornment && (
-          <span className={styles.startAdornment} aria-hidden="true">{singleValue.startAdornment}</span>
+          <span className={styles.startAdornment} aria-hidden="true">
+            {singleValue.startAdornment}
+          </span>
         )}
 
-        {multiple && multipleValue.map((opt) => (
-          <span key={opt.key} className={styles.chip}>
-            {opt.startAdornment}
-            <span className={styles.chipLabel}>{opt.label}</span>
-            <button
-              type="button"
-              className={styles.chipClose}
-              tabIndex={-1}
-              aria-label={t("autocomplete.removeChipAriaLabel", { name: opt.label })}
-              onMouseDown={() => { ignoreBlur.current = true; }}
-              onClick={(e) => {
-                e.stopPropagation();
-                removeChip(opt);
-              }}
-            >
-              &times;
-            </button>
-          </span>
-        ))}
+        {multiple &&
+          multipleValue.map((opt) => (
+            <span key={opt.key} className={styles.chip}>
+              {opt.startAdornment}
+              <span className={styles.chipLabel}>{opt.label}</span>
+              <button
+                type="button"
+                className={styles.chipClose}
+                tabIndex={-1}
+                aria-label={t("autocomplete.removeChipAriaLabel", { name: opt.label })}
+                onMouseDown={() => {
+                  ignoreBlur.current = true;
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeChip(opt);
+                }}
+              >
+                &times;
+              </button>
+            </span>
+          ))}
 
         <input
           ref={inputEl}
@@ -328,11 +334,15 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
             styles.input,
             !multiple && singleValue?.startAdornment ? styles.inputWithAdornment : "",
             multiple ? styles.inputMulti : "",
-          ].filter(Boolean).join(" ")}
+          ]
+            .filter(Boolean)
+            .join(" ")}
           role="combobox"
           aria-autocomplete="list"
           aria-controls={listboxId}
-          aria-activedescendant={open && filtered[highlightedIndex] ? `${listboxId}-opt-${highlightedIndex}` : undefined}
+          aria-activedescendant={
+            open && filtered[highlightedIndex] ? `${listboxId}-opt-${highlightedIndex}` : undefined
+          }
           aria-label={label}
           placeholder={multiple && multipleValue.length > 0 ? "" : displayPlaceholder}
           value={inputValue}
@@ -350,7 +360,9 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
             className={styles.clearBtn}
             tabIndex={-1}
             aria-label={t("autocomplete.clearSelectionAriaLabel")}
-            onMouseDown={() => { ignoreBlur.current = true; }}
+            onMouseDown={() => {
+              ignoreBlur.current = true;
+            }}
             onClick={handleClear}
           >
             &times;
@@ -358,56 +370,66 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
         )}
       </div>
 
-      {open && popperRect && createPortal(
-        <ul
-          id={listboxId}
-          ref={listboxRef}
-          className={`${styles.listbox} ${styles.listboxPortaled}`}
-          role="listbox"
-          aria-label={label ?? displayPlaceholder}
-          aria-multiselectable={multiple || undefined}
-          // Match the anchor's viewport position.
-          style={{
-            top: popperRect.top,
-            left: popperRect.left,
-            width: popperRect.width,
-          }}
-          onMouseDown={() => { ignoreBlur.current = true; }}
-        >
-          {filtered.length === 0 ? (
-            <li className={styles.noOptions} role="option" aria-selected={false}>{displayNoOptions}</li>
-          ) : (
-            filtered.map((opt, i) => {
-              const isSelected = selectedKeys.has(opt.key);
-              return (
-                <li
-                  key={opt.key}
-                  id={`${listboxId}-opt-${i}`}
-                  role="option"
-                  aria-selected={isSelected}
-                  className={[
-                    styles.option,
-                    i === highlightedIndex ? styles.highlighted : "",
-                    isSelected ? styles.selected : "",
-                  ].filter(Boolean).join(" ")}
-                  onMouseEnter={() => setHighlightedIndex(i)}
-                  onMouseDown={() => { ignoreBlur.current = true; }}
-                  onClick={() => selectOption(opt)}
-                >
-                  {multiple && (
-                    <span className={styles.checkbox} aria-hidden="true">
-                      {isSelected ? "✓" : ""}
-                    </span>
-                  )}
-                  {opt.startAdornment}
-                  {opt.label}
-                </li>
-              );
-            })
-          )}
-        </ul>,
-        document.body,
-      )}
+      {open &&
+        popperRect &&
+        createPortal(
+          <ul
+            id={listboxId}
+            ref={listboxRef}
+            className={`${styles.listbox} ${styles.listboxPortaled}`}
+            role="listbox"
+            aria-label={label ?? displayPlaceholder}
+            aria-multiselectable={multiple || undefined}
+            // Match the anchor's viewport position.
+            style={{
+              top: popperRect.top,
+              left: popperRect.left,
+              width: popperRect.width,
+            }}
+            onMouseDown={() => {
+              ignoreBlur.current = true;
+            }}
+          >
+            {filtered.length === 0 ? (
+              <li className={styles.noOptions} role="option" aria-selected={false}>
+                {displayNoOptions}
+              </li>
+            ) : (
+              filtered.map((opt, i) => {
+                const isSelected = selectedKeys.has(opt.key);
+                return (
+                  <li
+                    key={opt.key}
+                    id={`${listboxId}-opt-${i}`}
+                    role="option"
+                    aria-selected={isSelected}
+                    className={[
+                      styles.option,
+                      i === highlightedIndex ? styles.highlighted : "",
+                      isSelected ? styles.selected : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    onMouseEnter={() => setHighlightedIndex(i)}
+                    onMouseDown={() => {
+                      ignoreBlur.current = true;
+                    }}
+                    onClick={() => selectOption(opt)}
+                  >
+                    {multiple && (
+                      <span className={styles.checkbox} aria-hidden="true">
+                        {isSelected ? "✓" : ""}
+                      </span>
+                    )}
+                    {opt.startAdornment}
+                    {opt.label}
+                  </li>
+                );
+              })
+            )}
+          </ul>,
+          document.body,
+        )}
     </div>
   );
 }

@@ -3,7 +3,12 @@ import { Routes, Route, useNavigate, Navigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { initEventListeners, useAppStore } from "@core/store";
-import { getPreferences, getSavedAudioSettings, isFirstRun, getNotificationSounds } from "@core/preferencesStorage";
+import {
+  getPreferences,
+  getSavedAudioSettings,
+  isFirstRun,
+  getNotificationSounds,
+} from "@core/preferencesStorage";
 import { setKlipyApiKey } from "@core/features/chat/gif/klipyConfig";
 import { loadShortcuts, applyAllGlobalShortcuts } from "@core/features/settings/shortcutHelpers";
 import {
@@ -65,18 +70,24 @@ function isPopoutWindow(): boolean {
   if (new URLSearchParams(globalThis.location.search).has("popout")) return true;
   // Fallback: detect via the Tauri window label using the IPC global.
   // We run this synchronously by reading the document title fallback.
-  const tauriInternals = (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__;
+  const tauriInternals = (
+    globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }
+  ).__TAURI_INTERNALS__;
   const label = tauriInternals?.metadata?.currentWindow?.label;
-  return !!label
-    && label.startsWith("popout-")
-    && !label.startsWith("popout-stream-")
-    && !label.startsWith("popout-dm-");
+  return (
+    !!label &&
+    label.startsWith("popout-") &&
+    !label.startsWith("popout-stream-") &&
+    !label.startsWith("popout-dm-")
+  );
 }
 
 /** True when this webview is a stream-share popout (`popout-stream-<id>`). */
 function isStreamPopoutWindow(): boolean {
   if (new URLSearchParams(globalThis.location.search).has("stream-popout")) return true;
-  const tauriInternals = (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__;
+  const tauriInternals = (
+    globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }
+  ).__TAURI_INTERNALS__;
   const label = tauriInternals?.metadata?.currentWindow?.label;
   return !!label && label.startsWith("popout-stream-");
 }
@@ -84,7 +95,9 @@ function isStreamPopoutWindow(): boolean {
 /** True when this webview is a DM popout (`popout-dm-<id>`). */
 function isDmPopoutWindow(): boolean {
   if (new URLSearchParams(globalThis.location.search).has("popout-dm")) return true;
-  const tauriInternals = (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__;
+  const tauriInternals = (
+    globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }
+  ).__TAURI_INTERNALS__;
   const label = tauriInternals?.metadata?.currentWindow?.label;
   return !!label && label.startsWith("popout-dm-");
 }
@@ -92,7 +105,9 @@ function isDmPopoutWindow(): boolean {
 /** True when this webview is the translation helper popout (`popout-translation`). */
 function isTranslationPopoutWindow(): boolean {
   if (new URLSearchParams(globalThis.location.search).has("popout-translation")) return true;
-  const tauriInternals = (globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__;
+  const tauriInternals = (
+    globalThis as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }
+  ).__TAURI_INTERNALS__;
   const label = tauriInternals?.metadata?.currentWindow?.label;
   return label === "popout-translation";
 }
@@ -104,14 +119,24 @@ function isTranslationPopoutWindow(): boolean {
  */
 function isDrawOverlayWindow(): boolean {
   if (new URLSearchParams(globalThis.location.search).has("draw-overlay")) return true;
-  const tauriInternals = (globalThis as unknown as {
-    __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } };
-  }).__TAURI_INTERNALS__;
+  const tauriInternals = (
+    globalThis as unknown as {
+      __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } };
+    }
+  ).__TAURI_INTERNALS__;
   const label = tauriInternals?.metadata?.currentWindow?.label;
   return label === "draw-overlay";
 }
 
-const enum WindowKind { Main, Popout, StreamPopout, DmPopout, TranslationPopout, Updater, DrawOverlay }
+const enum WindowKind {
+  Main,
+  Popout,
+  StreamPopout,
+  DmPopout,
+  TranslationPopout,
+  Updater,
+  DrawOverlay,
+}
 
 function getWindowKind(): WindowKind {
   if (isUpdaterWindow()) return WindowKind.Updater;
@@ -125,13 +150,20 @@ function getWindowKind(): WindowKind {
 
 function renderWindowContent() {
   switch (getWindowKind()) {
-    case WindowKind.Updater:           return <UpdaterWindow />;
-    case WindowKind.DrawOverlay:       return <DrawOverlayPage />;
-    case WindowKind.StreamPopout:      return <StreamPopoutPage />;
-    case WindowKind.DmPopout:          return <DmPopoutPage />;
-    case WindowKind.TranslationPopout: return <TranslationPopoutPage />;
-    case WindowKind.Popout:            return <PopoutPage />;
-    default:                           return <MainApp />;
+    case WindowKind.Updater:
+      return <UpdaterWindow />;
+    case WindowKind.DrawOverlay:
+      return <DrawOverlayPage />;
+    case WindowKind.StreamPopout:
+      return <StreamPopoutPage />;
+    case WindowKind.DmPopout:
+      return <DmPopoutPage />;
+    case WindowKind.TranslationPopout:
+      return <TranslationPopoutPage />;
+    case WindowKind.Popout:
+      return <PopoutPage />;
+    default:
+      return <MainApp />;
   }
 }
 
@@ -144,8 +176,7 @@ export default function App() {
 function MainApp() {
   const navigate = useNavigate();
   const [firstRun, setFirstRun] = useState<boolean | null>(null);
-  const [notifSounds, setNotifSounds] =
-    useState<NotificationSoundSettings>(DEFAULT_NOTIFICATION_SOUNDS);
+  const [notifSounds, setNotifSounds] = useState<NotificationSoundSettings>(DEFAULT_NOTIFICATION_SOUNDS);
 
   // Track visual viewport height on mobile so the layout shrinks
   // when the on-screen keyboard is active.
@@ -183,23 +214,21 @@ function MainApp() {
       // Native notifications: streamer mode forces them off so they
       // cannot leak personal data into a screen recording; otherwise
       // honour the user's saved preference.
-      const notificationsEnabled = prefs.streamerMode
-        ? false
-        : (prefs.enableNotifications ?? true);
-      invoke("set_notifications_enabled", { enabled: notificationsEnabled })
-        .catch(() => undefined);
+      const notificationsEnabled = prefs.streamerMode ? false : (prefs.enableNotifications ?? true);
+      invoke("set_notifications_enabled", { enabled: notificationsEnabled }).catch(() => undefined);
       // Dual-path audio: backend stores the inverted "disabled" flag.
-      invoke("set_disable_dual_path", { disabled: !(prefs.enableDualPath ?? false) })
-        .catch(() => undefined);
+      invoke("set_disable_dual_path", { disabled: !(prefs.enableDualPath ?? false) }).catch(() => undefined);
       // Log level (also accepts "debug" via the legacy debugLogging flag).
       const logLevel = prefs.logLevel ?? (prefs.debugLogging ? "debug" : "info");
       invoke("set_log_level", { filter: logLevel }).catch(() => undefined);
       // Inform the Rust updater whether to auto-install on startup.
-      invoke("updater_set_auto_install", { enabled: prefs.autoUpdateOnStartup ?? false })
-        .catch(() => undefined);
+      invoke("updater_set_auto_install", { enabled: prefs.autoUpdateOnStartup ?? false }).catch(
+        () => undefined,
+      );
       // Inform the Rust updater of the version (if any) the user chose to skip.
-      invoke("updater_set_skipped_version", { version: prefs.skippedUpdateVersion ?? null })
-        .catch(() => undefined);
+      invoke("updater_set_skipped_version", { version: prefs.skippedUpdateVersion ?? null }).catch(
+        () => undefined,
+      );
     });
     getNotificationSounds().then((ns) => {
       if (ns) setNotifSounds(ns);
@@ -314,7 +343,9 @@ function MainApp() {
         else i18n.emit("languageChanged", code);
       },
     );
-    return () => { void unlisten.then((f) => f()); };
+    return () => {
+      void unlisten.then((f) => f());
+    };
   }, []);
 
   // fancy:// deep links emitted by the Rust deep-link plugin.
@@ -348,7 +379,9 @@ function MainApp() {
         console.warn("deep-link: unhandled route", segments);
       }
     });
-    return () => { unlisten.then((f) => f()); };
+    return () => {
+      unlisten.then((f) => f());
+    };
   }, [navigate]);
 
   // Wait until we know the first-run status before rendering routes.

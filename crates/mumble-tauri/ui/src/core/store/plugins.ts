@@ -63,8 +63,7 @@ function stableKeyFromMeta(meta: SessionMeta): string {
  *  entry) gives us a key that stays the same across reconnects. */
 async function stableServerKey(): Promise<string | null> {
   const state = useAppStore.getState();
-  const serverId =
-    state.activeServerId ?? (await invoke<string | null>("get_active_server"));
+  const serverId = state.activeServerId ?? (await invoke<string | null>("get_active_server"));
   if (!serverId) return null;
 
   let meta = state.sessions.find((s) => s.id === serverId);
@@ -88,8 +87,7 @@ async function storedServerKeys(): Promise<{
   legacy: string | null;
 }> {
   const state = useAppStore.getState();
-  const serverId =
-    state.activeServerId ?? (await invoke<string | null>("get_active_server"));
+  const serverId = state.activeServerId ?? (await invoke<string | null>("get_active_server"));
   if (!serverId) return { primary: null, legacy: null };
 
   let meta = state.sessions.find((s) => s.id === serverId);
@@ -101,9 +99,7 @@ async function storedServerKeys(): Promise<{
       // ignored - falls through to using just the raw id
     }
   }
-  return meta
-    ? { primary: stableKeyFromMeta(meta), legacy: serverId }
-    : { primary: serverId, legacy: null };
+  return meta ? { primary: stableKeyFromMeta(meta), legacy: serverId } : { primary: serverId, legacy: null };
 }
 
 /** Raw `plugin-registry` event payload (server -> client after ServerSync). */
@@ -187,19 +183,15 @@ export function sendPluginInteraction(
  *  server id directly from the backend to avoid a race where the
  *  Zustand store's `activeServerId` is still null when this fires
  *  right after `server-connected` (before `refreshSessions` settles). */
-export async function reconcilePluginRegistry(
-  entries: readonly PluginRegistryEntry[],
-): Promise<void> {
+export async function reconcilePluginRegistry(entries: readonly PluginRegistryEntry[]): Promise<void> {
   const state = useAppStore.getState();
   const { primary, legacy } = await storedServerKeys();
-  const serverId =
-    state.activeServerId ?? (await invoke<string | null>("get_active_server"));
+  const serverId = state.activeServerId ?? (await invoke<string | null>("get_active_server"));
   // Read both the stable (host:port:user) bucket and the legacy
   // (ServerId UUID) bucket so trust granted before this change still
   // applies. Stable wins on conflict; the next save migrates the
   // record into the stable bucket.
-  const legacyRecords =
-    legacy && legacy !== primary ? await loadServerTrust(legacy) : {};
+  const legacyRecords = legacy && legacy !== primary ? await loadServerTrust(legacy) : {};
   const primaryRecords = primary ? await loadServerTrust(primary) : {};
   const storedTrust = new Map<string, import("../plugins/tier1/trust").TrustRecord>(
     Object.entries({ ...legacyRecords, ...primaryRecords }),
@@ -211,8 +203,11 @@ export async function reconcilePluginRegistry(
     const sessionRecord = state.pluginTrust.get(name);
     if (sessionRecord) effectiveTrust.set(name, sessionRecord);
   }
-  const { pluginManifests, pluginPanels, pluginTrustQueue } =
-    applyRegistryWithTrust(serverId, entries, effectiveTrust);
+  const { pluginManifests, pluginPanels, pluginTrustQueue } = applyRegistryWithTrust(
+    serverId,
+    entries,
+    effectiveTrust,
+  );
   useAppStore.setState((s) => {
     // Preserve any panel rows the plugin patched in via UpdatePanel
     // between manifest broadcasts.  The freshly-seeded rows are only
@@ -240,9 +235,7 @@ export async function resolvePluginTrust(
   scope: TrustScope = TrustScope.Server,
 ): Promise<void> {
   const state = useAppStore.getState();
-  const pending = state.pluginTrustQueue.find(
-    (p) => p.pluginName === pluginName,
-  );
+  const pending = state.pluginTrustQueue.find((p) => p.pluginName === pluginName);
   if (!pending) return;
   const record = recordFromDecision(decision, pending.version, pending.manifest, scope);
   if (decision === TrustDecision.Allow && scope === TrustScope.Global) {
@@ -251,12 +244,7 @@ export async function resolvePluginTrust(
     await saveTrustRecord(await stableServerKey(), pluginName, record);
   }
   useAppStore.setState((s) => {
-    const next = applyTrustDecision(
-      sliceFromState(s),
-      pluginName,
-      record,
-      pending.manifest,
-    );
+    const next = applyTrustDecision(sliceFromState(s), pluginName, record, pending.manifest);
     const nextSessionTrust =
       decision === TrustDecision.Allow && scope === TrustScope.Once
         ? new Set([...s.pluginSessionTrust, pluginName])
@@ -323,8 +311,7 @@ export async function revokePluginTrust(pluginName: string): Promise<void> {
   // registry entry so even a manifest we never accepted can be denied.
   const entry = state.pluginRegistry.find((e) => e.pluginName === pluginName);
   const manifest =
-    state.pluginManifests.get(pluginName) ??
-    (entry ? parseClientManifest(entry.infoJson) : null);
+    state.pluginManifests.get(pluginName) ?? (entry ? parseClientManifest(entry.infoJson) : null);
   if (!manifest || !entry) {
     // Without a manifest we cannot persist a structured deny record;
     // fall back to clearing whatever is on disk so at least the
@@ -337,12 +324,7 @@ export async function revokePluginTrust(pluginName: string): Promise<void> {
     });
     return;
   }
-  const record = recordFromDecision(
-    TrustDecision.Deny,
-    entry.version,
-    manifest,
-    TrustScope.Server,
-  );
+  const record = recordFromDecision(TrustDecision.Deny, entry.version, manifest, TrustScope.Server);
   // Drop any "always allow" / per-server allow record first so the
   // new per-server deny is the effective decision (per-server records
   // overlay the global ones in `loadServerTrust`).
@@ -350,12 +332,7 @@ export async function revokePluginTrust(pluginName: string): Promise<void> {
   await revokeTrustRecord(key, pluginName);
   await saveTrustRecord(key, pluginName, record);
   useAppStore.setState((s) => {
-    const next = applyTrustDecision(
-      sliceFromState(s),
-      pluginName,
-      record,
-      manifest,
-    );
+    const next = applyTrustDecision(sliceFromState(s), pluginName, record, manifest);
     // Also drop any in-session "Allow once" grant so the deny is not
     // overlaid by an older session record on the next reconcile.
     const nextSessionTrust = new Set(s.pluginSessionTrust);
@@ -380,19 +357,20 @@ export async function resetPluginTrust(pluginName: string): Promise<void> {
     // reconcile.  Skip when we cannot reconstruct a manifest (e.g.
     // legacy registry entry without `info_json`) - in that case the
     // disk record is simply cleared.
-    const nextQueue = manifest && entry
-      ? [
-          ...next.pluginTrustQueue,
-          {
-            serverId: s.activeServerId,
-            pluginName,
-            version: entry.version,
-            manifest,
-            registryEntry: entry,
-            previous: s.pluginTrust.get(pluginName) ?? null,
-          },
-        ]
-      : next.pluginTrustQueue;
+    const nextQueue =
+      manifest && entry
+        ? [
+            ...next.pluginTrustQueue,
+            {
+              serverId: s.activeServerId,
+              pluginName,
+              version: entry.version,
+              manifest,
+              registryEntry: entry,
+              previous: s.pluginTrust.get(pluginName) ?? null,
+            },
+          ]
+        : next.pluginTrustQueue;
     const nextSessionTrust = new Set(s.pluginSessionTrust);
     nextSessionTrust.delete(pluginName);
     return {
@@ -406,10 +384,7 @@ export async function resetPluginTrust(pluginName: string): Promise<void> {
  *  without requiring it to be in the trust-prompt queue.  Looks up the
  *  plugin from the registry, parses its manifest, and persists the
  *  decision according to the given scope. */
-export async function allowPlugin(
-  pluginName: string,
-  scope: TrustScope = TrustScope.Server,
-): Promise<void> {
+export async function allowPlugin(pluginName: string, scope: TrustScope = TrustScope.Server): Promise<void> {
   const state = useAppStore.getState();
   const entry = state.pluginRegistry.find((e) => e.pluginName === pluginName);
   if (!entry) return;
@@ -424,9 +399,7 @@ export async function allowPlugin(
   useAppStore.setState((s) => {
     const next = applyTrustDecision(sliceFromState(s), pluginName, record, manifest);
     const nextSessionTrust =
-      scope === TrustScope.Once
-        ? new Set([...s.pluginSessionTrust, pluginName])
-        : s.pluginSessionTrust;
+      scope === TrustScope.Once ? new Set([...s.pluginSessionTrust, pluginName]) : s.pluginSessionTrust;
     return { ...slicePatch(next), pluginSessionTrust: nextSessionTrust };
   });
 }

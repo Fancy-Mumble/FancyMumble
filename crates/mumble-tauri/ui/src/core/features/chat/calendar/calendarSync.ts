@@ -42,9 +42,7 @@ export function showDesktopNotification(title: string, body: string): void {
   // assert it (the native IPC below is not interceptable from the webview, whose
   // `__TAURI_INTERNALS__.invoke` is locked non-writable).
   try {
-    globalThis.dispatchEvent(
-      new CustomEvent("fancy:desktop-notification", { detail: { title, body } }),
-    );
+    globalThis.dispatchEvent(new CustomEvent("fancy:desktop-notification", { detail: { title, body } }));
   } catch {
     /* no DOM event target (non-browser context) */
   }

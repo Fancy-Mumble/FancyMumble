@@ -13,9 +13,17 @@ import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "r
 import type { Editor } from "@tiptap/react";
 import { sendPluginInteraction, useAppStore } from "@core/store";
 import { parseMentionTrigger, type MentionTrigger } from "@core/utils/mentions";
-import { collectSlashCommands, filterSlashCommands, type SlashCommandEntry } from "@core/plugins/tier1/manifest";
+import {
+  collectSlashCommands,
+  filterSlashCommands,
+  type SlashCommandEntry,
+} from "@core/plugins/tier1/manifest";
 import { extractSlashQuery, parseSlashLine } from "@core/plugins/tier1/slashParser";
-import { candidateInsertText, handleMentionKey, type MentionCandidate } from "@standard/components/chat/mention/MentionAutocomplete";
+import {
+  candidateInsertText,
+  handleMentionKey,
+  type MentionCandidate,
+} from "@standard/components/chat/mention/MentionAutocomplete";
 import { useMentionCandidates } from "@standard/components/chat/mention/useMentionCandidates";
 
 /** The caret's text block plus where it starts in the document, which is all
@@ -79,29 +87,43 @@ export function useComposerAutocomplete(editor: Editor | null): ComposerAutocomp
   );
 
   // Keep the highlighted row inside the (re-filtered) list.
-  useEffect(() => { if (mentionIndex >= mentionCandidates.length) setMentionIndex(0); }, [mentionCandidates.length, mentionIndex]);
-  useEffect(() => { if (slashIndex >= slashEntries.length) setSlashIndex(0); }, [slashEntries.length, slashIndex]);
+  useEffect(() => {
+    if (mentionIndex >= mentionCandidates.length) setMentionIndex(0);
+  }, [mentionCandidates.length, mentionIndex]);
+  useEffect(() => {
+    if (slashIndex >= slashEntries.length) setSlashIndex(0);
+  }, [slashEntries.length, slashIndex]);
 
-  const pickMention = useCallback((candidate: MentionCandidate) => {
-    if (!editor || !trigger || !line) return;
-    // `@&role` triggers carry one extra character before the query.
-    const queryLength = trigger.query.length + (trigger.kind === "role" ? 2 : 1);
-    const from = line.blockStart + trigger.anchor;
-    editor.chain().focus()
-      .deleteRange({ from, to: Math.max(from, line.blockStart + trigger.anchor + queryLength) })
-      .insertContent(`${candidateInsertText(candidate)} `)
-      .run();
-    setTrigger(null);
-  }, [editor, trigger, line]);
+  const pickMention = useCallback(
+    (candidate: MentionCandidate) => {
+      if (!editor || !trigger || !line) return;
+      // `@&role` triggers carry one extra character before the query.
+      const queryLength = trigger.query.length + (trigger.kind === "role" ? 2 : 1);
+      const from = line.blockStart + trigger.anchor;
+      editor
+        .chain()
+        .focus()
+        .deleteRange({ from, to: Math.max(from, line.blockStart + trigger.anchor + queryLength) })
+        .insertContent(`${candidateInsertText(candidate)} `)
+        .run();
+      setTrigger(null);
+    },
+    [editor, trigger, line],
+  );
 
-  const pickSlash = useCallback((entry: SlashCommandEntry) => {
-    if (!editor || !line) return;
-    editor.chain().focus()
-      .deleteRange({ from: line.blockStart, to: line.caret })
-      .insertContent(`/${entry.command.name} `)
-      .run();
-    setSlashIndex(0);
-  }, [editor, line]);
+  const pickSlash = useCallback(
+    (entry: SlashCommandEntry) => {
+      if (!editor || !line) return;
+      editor
+        .chain()
+        .focus()
+        .deleteRange({ from: line.blockStart, to: line.caret })
+        .insertContent(`/${entry.command.name} `)
+        .run();
+      setSlashIndex(0);
+    },
+    [editor, line],
+  );
 
   const submitSlashCommand = useCallback(() => {
     if (!editor) return false;
@@ -111,8 +133,9 @@ export function useComposerAutocomplete(editor: Editor | null): ComposerAutocomp
       console.warn("[aurora-composer] slash command rejected:", parsed.errors.join("; "));
       return false;
     }
-    void sendPluginInteraction(parsed.pluginName, parsed.kind, selectedChannel)
-      .catch((reason) => console.warn("[aurora-composer] sendPluginInteraction failed:", reason));
+    void sendPluginInteraction(parsed.pluginName, parsed.kind, selectedChannel).catch((reason) =>
+      console.warn("[aurora-composer] sendPluginInteraction failed:", reason),
+    );
     editor.commands.clearContent();
     return true;
   }, [editor, allSlashCommands, selectedChannel]);
@@ -120,28 +143,40 @@ export function useComposerAutocomplete(editor: Editor | null): ComposerAutocomp
   const slashOpen = slashQuery !== null && slashEntries.length > 0;
   const mentionOpen = !slashOpen && !!trigger && mentionCandidates.length > 0;
 
-  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLElement>) => {
-    // The shared key mappers only read `event.key`; they are typed against the
-    // Standard client's textarea, which Aurora's contenteditable stands in for.
-    const shared = event as unknown as KeyboardEvent<HTMLTextAreaElement>;
-    if (slashOpen) {
-      const action = handleMentionKey(shared, { activeIndex: slashIndex, count: slashEntries.length });
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLElement>) => {
+      // The shared key mappers only read `event.key`; they are typed against the
+      // Standard client's textarea, which Aurora's contenteditable stands in for.
+      const shared = event as unknown as KeyboardEvent<HTMLTextAreaElement>;
+      if (slashOpen) {
+        const action = handleMentionKey(shared, { activeIndex: slashIndex, count: slashEntries.length });
+        if (!action) return false;
+        event.preventDefault();
+        if (action.kind === "move") setSlashIndex(action.index);
+        else if (action.kind === "pick") pickSlash(slashEntries[action.index]);
+        else setLine(null);
+        return true;
+      }
+      if (!mentionOpen) return false;
+      const action = handleMentionKey(shared, { activeIndex: mentionIndex, count: mentionCandidates.length });
       if (!action) return false;
       event.preventDefault();
-      if (action.kind === "move") setSlashIndex(action.index);
-      else if (action.kind === "pick") pickSlash(slashEntries[action.index]);
-      else setLine(null);
+      if (action.kind === "move") setMentionIndex(action.index);
+      else if (action.kind === "pick") pickMention(mentionCandidates[action.index]);
+      else setTrigger(null);
       return true;
-    }
-    if (!mentionOpen) return false;
-    const action = handleMentionKey(shared, { activeIndex: mentionIndex, count: mentionCandidates.length });
-    if (!action) return false;
-    event.preventDefault();
-    if (action.kind === "move") setMentionIndex(action.index);
-    else if (action.kind === "pick") pickMention(mentionCandidates[action.index]);
-    else setTrigger(null);
-    return true;
-  }, [slashOpen, slashIndex, slashEntries, pickSlash, mentionOpen, mentionIndex, mentionCandidates, pickMention]);
+    },
+    [
+      slashOpen,
+      slashIndex,
+      slashEntries,
+      pickSlash,
+      mentionOpen,
+      mentionIndex,
+      mentionCandidates,
+      pickMention,
+    ],
+  );
 
   return {
     mentionCandidates: mentionOpen ? mentionCandidates : [],

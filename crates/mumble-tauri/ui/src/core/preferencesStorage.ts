@@ -74,9 +74,7 @@ export async function getPreferences(): Promise<UserPreferences> {
 }
 
 /** Persist the full preferences object. */
-export async function setPreferences(
-  prefs: UserPreferences,
-): Promise<void> {
+export async function setPreferences(prefs: UserPreferences): Promise<void> {
   const store = await getStore();
   await store.set(KEY, prefs);
   cachedPrefs = Promise.resolve(prefs);
@@ -100,9 +98,7 @@ let prefWriteChain: Promise<unknown> = Promise.resolve();
  *
  * Patches are applied strictly in call order and never interleave, so
  * concurrent updates cannot clobber each other. */
-export async function updatePreferences(
-  patch: Partial<UserPreferences>,
-): Promise<UserPreferences> {
+export async function updatePreferences(patch: Partial<UserPreferences>): Promise<UserPreferences> {
   const apply = async (): Promise<UserPreferences> => {
     const current = await getPreferences();
     const updated = { ...current, ...patch };
@@ -134,10 +130,7 @@ export async function getDefaultUsername(): Promise<string> {
 }
 
 /** Finalise first-run setup by storing mode, default username, and marking complete. */
-export async function completeSetup(
-  mode: UserMode,
-  defaultUsername: string,
-): Promise<void> {
+export async function completeSetup(mode: UserMode, defaultUsername: string): Promise<void> {
   await updatePreferences({
     userMode: mode,
     defaultUsername,
@@ -154,9 +147,7 @@ export async function getSavedAudioSettings(): Promise<AudioSettings | null> {
 }
 
 /** Persist audio settings to disk. */
-export async function saveAudioSettings(
-  settings: AudioSettings,
-): Promise<void> {
+export async function saveAudioSettings(settings: AudioSettings): Promise<void> {
   const store = await getStore();
   await store.set(AUDIO_KEY, settings);
 }
@@ -191,9 +182,7 @@ const SILENCED_CHANNELS_KEY = "silencedChannels";
 type SilencedMap = Record<string, number[]>;
 
 /** Return the channel IDs silenced for a given server. */
-export async function getSilencedChannels(
-  serverKey: string,
-): Promise<number[]> {
+export async function getSilencedChannels(serverKey: string): Promise<number[]> {
   const store = await getStore();
   const map = (await store.get<SilencedMap>(SILENCED_CHANNELS_KEY)) ?? {};
   return map[serverKey] ?? [];
@@ -234,10 +223,7 @@ export async function getUserVolumes(): Promise<VolumeMap> {
 }
 
 /** Persist a single user's volume override (or remove if 100). */
-export async function saveUserVolume(
-  hash: string,
-  volume: number,
-): Promise<void> {
+export async function saveUserVolume(hash: string, volume: number): Promise<void> {
   const store = await getStore();
   const map = (await store.get<VolumeMap>(USER_VOLUMES_KEY)) ?? {};
   if (volume === 100) {
@@ -261,12 +247,9 @@ const MUTED_PUSH_CHANNELS_KEY = "mutedPushChannels";
 type MutedPushMap = Record<string, number[]>;
 
 /** Return channel IDs with push notifications disabled for a server. */
-export async function getMutedPushChannels(
-  serverKey: string,
-): Promise<number[]> {
+export async function getMutedPushChannels(serverKey: string): Promise<number[]> {
   const store = await getStore();
-  const map =
-    (await store.get<MutedPushMap>(MUTED_PUSH_CHANNELS_KEY)) ?? {};
+  const map = (await store.get<MutedPushMap>(MUTED_PUSH_CHANNELS_KEY)) ?? {};
   return map[serverKey] ?? [];
 }
 
@@ -277,8 +260,7 @@ export async function setMutedPushChannel(
   muted: boolean,
 ): Promise<number[]> {
   const store = await getStore();
-  const map =
-    (await store.get<MutedPushMap>(MUTED_PUSH_CHANNELS_KEY)) ?? {};
+  const map = (await store.get<MutedPushMap>(MUTED_PUSH_CHANNELS_KEY)) ?? {};
   const current = map[serverKey] ?? [];
   let updated: number[];
   if (muted && !current.includes(channelId)) {
@@ -328,14 +310,10 @@ export async function getNotificationSounds(): Promise<NotificationSoundSettings
 }
 
 /** Persist notification sound settings. */
-export async function saveNotificationSounds(
-  settings: NotificationSoundSettings,
-): Promise<void> {
+export async function saveNotificationSounds(settings: NotificationSoundSettings): Promise<void> {
   const store = await getStore();
   await store.set(NOTIFICATION_SOUNDS_KEY, settings);
-  window.dispatchEvent(
-    new CustomEvent("notification-sounds-changed", { detail: settings }),
-  );
+  window.dispatchEvent(new CustomEvent("notification-sounds-changed", { detail: settings }));
 }
 
 // -- Registered (offline) members cache (per-server) ---------------
@@ -356,12 +334,9 @@ interface RegisteredUsersCacheEntry {
 type RegisteredUsersCacheMap = Record<string, RegisteredUsersCacheEntry>;
 
 /** Return the cached registered users for a server, or null if none. */
-export async function getCachedRegisteredUsers(
-  serverKey: string,
-): Promise<RegisteredUsersCacheEntry | null> {
+export async function getCachedRegisteredUsers(serverKey: string): Promise<RegisteredUsersCacheEntry | null> {
   const store = await getStore();
-  const map =
-    (await store.get<RegisteredUsersCacheMap>(REGISTERED_USERS_KEY)) ?? {};
+  const map = (await store.get<RegisteredUsersCacheMap>(REGISTERED_USERS_KEY)) ?? {};
   return map[serverKey] ?? null;
 }
 
@@ -379,8 +354,7 @@ export async function saveCachedRegisteredUsers(
   users: readonly RegisteredUser[],
 ): Promise<void> {
   const store = await getStore();
-  const map =
-    (await store.get<RegisteredUsersCacheMap>(REGISTERED_USERS_KEY)) ?? {};
+  const map = (await store.get<RegisteredUsersCacheMap>(REGISTERED_USERS_KEY)) ?? {};
   const lean: RegisteredUser[] = users.map((u) => ({
     user_id: u.user_id,
     name: u.name,

@@ -128,10 +128,7 @@ export function extractReferenceTargets(doc: PmNode): RefTarget[] {
 }
 
 /** Find a target by id; first match wins (handles duplicate slugs). */
-export function resolveTarget(
-  id: string,
-  targets: readonly RefTarget[],
-): RefTarget | undefined {
+export function resolveTarget(id: string, targets: readonly RefTarget[]): RefTarget | undefined {
   return targets.find((t) => t.id === id);
 }
 
@@ -142,7 +139,5 @@ export function isNumberedTarget(target: RefTarget): boolean {
 
 /** Compact signature used to skip redundant React state updates. */
 export function referenceTargetsSignature(targets: readonly RefTarget[]): string {
-  return targets
-    .map((t) => `${t.pos}:${t.id}:${t.number ?? ""}:${t.label}`)
-    .join("\u0001");
+  return targets.map((t) => `${t.pos}:${t.id}:${t.number ?? ""}:${t.label}`).join("\u0001");
 }

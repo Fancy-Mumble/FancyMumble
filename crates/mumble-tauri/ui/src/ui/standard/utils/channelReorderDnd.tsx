@@ -61,12 +61,7 @@ function findDropTarget(
     if (t.channelId === dragId) continue;
     if (t.parentId !== dragParent) continue;
     const rect = t.el.getBoundingClientRect();
-    if (
-      clientX >= rect.left &&
-      clientX <= rect.right &&
-      clientY >= rect.top &&
-      clientY <= rect.bottom
-    ) {
+    if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
       const pos = clientY < rect.top + rect.height / 2 ? "before" : "after";
       return { target: t, pos };
     }
@@ -81,10 +76,7 @@ function findDropTarget(
  * Returns `ref` (attach to the outermost wrapper element) and `dropPos`
  * (`"before"` / `"after"` / `null`) to render the insertion indicator.
  */
-export function useChannelReorderTarget(
-  channelId: number,
-  parentId: number | null,
-) {
+export function useChannelReorderTarget(channelId: number, parentId: number | null) {
   const [dropPos, setDropPos] = useState<"before" | "after" | null>(null);
   const unregRef = useRef<(() => void) | null>(null);
 
@@ -398,19 +390,14 @@ function FloatingChannelClone({
         borderRadius: 8,
         background: "rgba(30, 33, 40, 0.90)",
         border: "1px solid rgba(255, 255, 255, 0.18)",
-        boxShadow:
-          "0 8px 24px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.06) inset",
+        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.06) inset",
         backdropFilter: "blur(10px) saturate(160%)",
         WebkitBackdropFilter: "blur(10px) saturate(160%)",
         color: "#f5f6f8",
         font: "inherit",
       }}
     >
-      <GripVerticalIcon
-        width={14}
-        height={14}
-        style={{ flexShrink: 0, opacity: 0.6 }}
-      />
+      <GripVerticalIcon width={14} height={14} style={{ flexShrink: 0, opacity: 0.6 }} />
       <span
         style={{
           overflow: "hidden",

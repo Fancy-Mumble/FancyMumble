@@ -16,7 +16,15 @@ const groups: RailGroup[] = [
     port: 64738,
     favorite: true,
     identities: [
-      { id: "a", label: "Fancy studio", host: "voice.example.com", port: 64738, username: "morgan", favorite: true, sessionId: "s1" },
+      {
+        id: "a",
+        label: "Fancy studio",
+        host: "voice.example.com",
+        port: 64738,
+        username: "morgan",
+        favorite: true,
+        sessionId: "s1",
+      },
       { id: "b", label: "Fancy studio", host: "voice.example.com", port: 64738, username: "morgan.alt" },
     ],
   },
@@ -26,9 +34,7 @@ const groups: RailGroup[] = [
     host: "chat.example.org",
     port: 64738,
     favorite: false,
-    identities: [
-      { id: "c", label: "Design guild", host: "chat.example.org", port: 64738, username: "alex" },
-    ],
+    identities: [{ id: "c", label: "Design guild", host: "chat.example.org", port: 64738, username: "alex" }],
   },
 ];
 
@@ -39,11 +45,27 @@ export default function ServerRailSpecimen() {
     <div className={styles.stage}>
       <div className={styles.pane}>
         <small>COLLAPSED</small>
-        <ServerRail groups={groups} expanded={false} activeSessionId="s1" label="Servers" onToggle={noop} onSelect={noop} onAdd={noop} />
+        <ServerRail
+          groups={groups}
+          expanded={false}
+          activeSessionId="s1"
+          label="Servers"
+          onToggle={noop}
+          onSelect={noop}
+          onAdd={noop}
+        />
       </div>
       <div className={styles.pane}>
         <small>EXPANDED</small>
-        <ServerRail groups={groups} expanded activeSessionId="s1" label="Servers" onToggle={noop} onSelect={noop} onAdd={noop} />
+        <ServerRail
+          groups={groups}
+          expanded
+          activeSessionId="s1"
+          label="Servers"
+          onToggle={noop}
+          onSelect={noop}
+          onAdd={noop}
+        />
       </div>
     </div>
   );

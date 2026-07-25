@@ -9,8 +9,13 @@ export interface PreferenceToggleRowProps {
 }
 
 export default function PreferenceToggleRow({ title, detail, checked, onToggle }: PreferenceToggleRowProps) {
-  return <Button variant="bare" wrapLabel={false} className={styles.settingRow} onClick={onToggle}>
-    <span><strong>{title}</strong><small>{detail}</small></span>
-    <ToggleSwitch on={checked} />
-  </Button>;
+  return (
+    <Button variant="bare" wrapLabel={false} className={styles.settingRow} onClick={onToggle}>
+      <span>
+        <strong>{title}</strong>
+        <small>{detail}</small>
+      </span>
+      <ToggleSwitch on={checked} />
+    </Button>
+  );
 }

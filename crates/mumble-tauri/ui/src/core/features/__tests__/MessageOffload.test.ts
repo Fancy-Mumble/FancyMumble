@@ -113,9 +113,7 @@ describe("isOffloaded", () => {
 
 describe("offloadPlaceholder", () => {
   it("produces the correct format with size", () => {
-    expect(offloadPlaceholder("abc-123", 9876)).toBe(
-      "<!-- OFFLOADED:abc-123:9876 -->",
-    );
+    expect(offloadPlaceholder("abc-123", 9876)).toBe("<!-- OFFLOADED:abc-123:9876 -->");
   });
 
   it("round-trips through extractOffloadInfo", () => {
@@ -135,9 +133,7 @@ describe("extractOffloadInfo", () => {
 
   it("handles UUID-style keys with colons in value", () => {
     // The key includes hyphens; the last colon separates the size.
-    const info = extractOffloadInfo(
-      "<!-- OFFLOADED:a1b2c3d4-e5f6-7890-abcd-ef1234567890:42000 -->",
-    );
+    const info = extractOffloadInfo("<!-- OFFLOADED:a1b2c3d4-e5f6-7890-abcd-ef1234567890:42000 -->");
     expect(info?.key).toBe("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
     expect(info?.contentLength).toBe(42000);
   });

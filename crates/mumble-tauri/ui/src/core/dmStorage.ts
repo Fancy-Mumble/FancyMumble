@@ -31,13 +31,10 @@ const IV_LENGTH = 12;
 let cachedKey: Promise<CryptoKey> | null = null;
 
 async function importRawKey(raw: Uint8Array): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    "raw",
-    raw as BufferSource,
-    { name: "AES-GCM" },
-    false,
-    ["encrypt", "decrypt"],
-  );
+  return crypto.subtle.importKey("raw", raw as BufferSource, { name: "AES-GCM" }, false, [
+    "encrypt",
+    "decrypt",
+  ]);
 }
 
 async function getEncryptionKey(): Promise<CryptoKey> {
@@ -48,11 +45,10 @@ async function getEncryptionKey(): Promise<CryptoKey> {
     if (typeof existing === "string" && existing.length > 0) {
       return importRawKey(base64ToBytes(existing));
     }
-    const generated = await crypto.subtle.generateKey(
-      { name: "AES-GCM", length: 256 },
-      true,
-      ["encrypt", "decrypt"],
-    );
+    const generated = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, [
+      "encrypt",
+      "decrypt",
+    ]);
     const raw = new Uint8Array(await crypto.subtle.exportKey("raw", generated));
     await store.set(KEY_STORE_KEY, bytesToBase64(raw));
     return importRawKey(raw);
@@ -93,10 +89,7 @@ async function decryptJson<T>(payload: string): Promise<T> {
 }
 
 /** Stable per-friend key for use as the storage entry name. */
-export function friendKeyFor(
-  user: { hash?: string | null; name: string },
-  serverId?: string | null,
-): string {
+export function friendKeyFor(user: { hash?: string | null; name: string }, serverId?: string | null): string {
   if (user.hash) return `hash:${user.hash}`;
   return `anon:${serverId ?? ""}:${user.name}`;
 }
@@ -123,15 +116,13 @@ export async function loadDmHistory(friendKey: string): Promise<ChatMessage[]> {
   }
 }
 
-export async function saveDmHistory(
-  friendKey: string,
-  messages: ChatMessage[],
-): Promise<void> {
+export async function saveDmHistory(friendKey: string, messages: ChatMessage[]): Promise<void> {
   try {
     const store = await load(STORE_FILE, { autoSave: true, defaults: {} });
-    const trimmed = messages.length > MAX_MESSAGES_PER_FRIEND
-      ? messages.slice(messages.length - MAX_MESSAGES_PER_FRIEND)
-      : messages;
+    const trimmed =
+      messages.length > MAX_MESSAGES_PER_FRIEND
+        ? messages.slice(messages.length - MAX_MESSAGES_PER_FRIEND)
+        : messages;
     const payload = await encryptJson(trimmed);
     await store.set(`${HISTORY_KEY_PREFIX}${friendKey}`, payload);
   } catch (e) {
@@ -159,10 +150,7 @@ export async function clearAllDmHistory(): Promise<void> {
  * `message_id` when available, otherwise by `(sender_session, timestamp,
  * body)` triples.
  */
-export function mergeMessages(
-  persisted: ChatMessage[],
-  remote: ChatMessage[],
-): ChatMessage[] {
+export function mergeMessages(persisted: ChatMessage[], remote: ChatMessage[]): ChatMessage[] {
   const seen = new Set<string>();
   const keyOf = (m: ChatMessage) =>
     m.message_id ?? `${m.sender_session ?? "?"}|${m.timestamp ?? "?"}|${m.body}`;

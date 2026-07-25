@@ -25,14 +25,31 @@ vi.mock("@core/serverStorage", () => ({
 // plugin, which has no backend in jsdom; stub just the loaders so the panel
 // renders (everything else in these modules stays real).
 vi.mock("@core/preferencesStorage", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@core/preferencesStorage")>(),
-  getPreferences: vi.fn().mockResolvedValue({ userMode: "normal", hasCompletedSetup: true, defaultUsername: "", timeFormat: "auto", convertToLocalTime: true }),
+  ...(await importOriginal<typeof import("@core/preferencesStorage")>()),
+  getPreferences: vi
+    .fn()
+    .mockResolvedValue({
+      userMode: "normal",
+      hasCompletedSetup: true,
+      defaultUsername: "",
+      timeFormat: "auto",
+      convertToLocalTime: true,
+    }),
   updatePreferences: vi.fn().mockImplementation((patch: unknown) => Promise.resolve(patch)),
 }));
 
 vi.mock("@ui/standard/personalizationStorage", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@ui/standard/personalizationStorage")>(),
-  loadPersonalization: vi.fn().mockResolvedValue({ theme: "dark", fontFamily: "inter", fontSize: "medium", fontSizeCustomPx: 16, compactMode: false, alwaysShowMessageActions: false }),
+  ...(await importOriginal<typeof import("@ui/standard/personalizationStorage")>()),
+  loadPersonalization: vi
+    .fn()
+    .mockResolvedValue({
+      theme: "dark",
+      fontFamily: "inter",
+      fontSize: "medium",
+      fontSizeCustomPx: 16,
+      compactMode: false,
+      alwaysShowMessageActions: false,
+    }),
   savePersonalization: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -45,7 +62,12 @@ describe("AuroraApp", () => {
     useAppStore.setState({ status: "disconnected", sessions: [], activeServerId: null });
   });
 
-  const renderApp = () => render(<MemoryRouter><AuroraApp /></MemoryRouter>);
+  const renderApp = () =>
+    render(
+      <MemoryRouter>
+        <AuroraApp />
+      </MemoryRouter>,
+    );
 
   /** Render as if the app was launched with the `?design-sheet` flag, which is
    *  the only way into the design inventory now that the chrome has no button
@@ -93,7 +115,17 @@ describe("AuroraApp", () => {
   });
 
   it("shows saved servers in a collapsible detailed launcher", async () => {
-    getSavedServersMock.mockResolvedValueOnce([{ id: "studio", label: "Fancy studio", host: "voice.example.com", port: 64738, username: "Morgan", cert_label: null, favorite: true }]);
+    getSavedServersMock.mockResolvedValueOnce([
+      {
+        id: "studio",
+        label: "Fancy studio",
+        host: "voice.example.com",
+        port: 64738,
+        username: "Morgan",
+        cert_label: null,
+        favorite: true,
+      },
+    ]);
     renderApp();
     expect(await screen.findByText("Your conversations")).toBeTruthy();
     expect(screen.getByText("voice.example.com:64738")).toBeTruthy();
@@ -106,7 +138,17 @@ describe("AuroraApp", () => {
     useAppStore.setState({
       status: "connected",
       activeServerId: "studio",
-      sessions: [{ id: "studio", label: "Fancy studio", host: "voice.example.com", port: 64738, username: "Morgan", certLabel: null, status: "connected" }],
+      sessions: [
+        {
+          id: "studio",
+          label: "Fancy studio",
+          host: "voice.example.com",
+          port: 64738,
+          username: "Morgan",
+          certLabel: null,
+          status: "connected",
+        },
+      ],
     });
     renderApp();
     const expand = screen.getByRole("button", { name: "Expand server sidebar" });
@@ -117,7 +159,17 @@ describe("AuroraApp", () => {
     useAppStore.setState({
       status: "disconnected",
       activeServerId: "studio",
-      sessions: [{ id: "studio", label: "Fancy studio", host: "voice.example.com", port: 64738, username: "Morgan", certLabel: null, status: "disconnected" }],
+      sessions: [
+        {
+          id: "studio",
+          label: "Fancy studio",
+          host: "voice.example.com",
+          port: 64738,
+          username: "Morgan",
+          certLabel: null,
+          status: "disconnected",
+        },
+      ],
       sessionErrors: { studio: "Wrong server password" },
       error: "Wrong server password",
       passwordRequired: false,
@@ -136,7 +188,17 @@ describe("AuroraApp", () => {
     useAppStore.setState({
       status: "disconnected",
       activeServerId: "studio",
-      sessions: [{ id: "studio", label: "Zewi@magical.rocks:64738", host: "magical.rocks", port: 64738, username: "Zewi", certLabel: null, status: "disconnected" }],
+      sessions: [
+        {
+          id: "studio",
+          label: "Zewi@magical.rocks:64738",
+          host: "magical.rocks",
+          port: 64738,
+          username: "Zewi",
+          certLabel: null,
+          status: "disconnected",
+        },
+      ],
       sessionErrors: { studio: "Connection to server was lost." },
       error: "Connection to server was lost.",
       passwordRequired: false,
@@ -154,7 +216,17 @@ describe("AuroraApp", () => {
     useAppStore.setState({
       status: "disconnected",
       activeServerId: "studio",
-      sessions: [{ id: "studio", label: "Fancy studio", host: "voice.example.com", port: 64738, username: "Morgan", certLabel: null, status: "disconnected" }],
+      sessions: [
+        {
+          id: "studio",
+          label: "Fancy studio",
+          host: "voice.example.com",
+          port: 64738,
+          username: "Morgan",
+          certLabel: null,
+          status: "disconnected",
+        },
+      ],
       sessionErrors: { studio: "Wrong server password" },
       error: "Wrong server password",
       passwordRequired: true,

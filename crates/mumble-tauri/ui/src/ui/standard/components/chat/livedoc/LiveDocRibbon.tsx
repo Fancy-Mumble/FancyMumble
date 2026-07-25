@@ -50,10 +50,7 @@ import { RibbonGroupRow } from "./liveDocRibbonGroups";
 import styles from "./LiveDocRibbon.module.css";
 
 /** i18n keys for the connection-status pill. */
-export type LiveDocStatusKey =
-  | "liveDoc.connected"
-  | "liveDoc.connecting"
-  | "liveDoc.disconnected";
+export type LiveDocStatusKey = "liveDoc.connected" | "liveDoc.connecting" | "liveDoc.disconnected";
 
 /** Document + window actions surfaced by the ribbon, supplied by the panel. */
 export interface LiveDocChrome {
@@ -77,15 +74,7 @@ export interface LiveDocChrome {
   readonly onClose: () => void;
 }
 
-type RibbonTab =
-  | "home"
-  | "insert"
-  | "draw"
-  | "design"
-  | "layout"
-  | "references"
-  | "review"
-  | "view";
+type RibbonTab = "home" | "insert" | "draw" | "design" | "layout" | "references" | "review" | "view";
 
 const TABS: ReadonlyArray<{ readonly id: RibbonTab; readonly key: string; readonly fallback: string }> = [
   { id: "home", key: "liveDoc.ribbon.tabs.home", fallback: "Home" },
@@ -154,9 +143,7 @@ export default function LiveDocRibbon(props: LiveDocRibbonProps) {
         )}
         {activeTab === "draw" && <DrawTab onOpenDraw={props.onOpenDraw} />}
         {activeTab === "design" && <DesignTab doc={doc} />}
-        {activeTab === "layout" && (
-          <LayoutTab doc={doc} onInsertSectionBreak={props.onInsertSectionBreak} />
-        )}
+        {activeTab === "layout" && <LayoutTab doc={doc} onInsertSectionBreak={props.onInsertSectionBreak} />}
         {activeTab === "references" && <ReferencesTab editor={editor} doc={doc} />}
         {activeTab === "review" && <ReviewTab editor={editor} pageCount={pageCount} />}
         {activeTab === "view" && (
@@ -225,10 +212,7 @@ function TitleBar({ chrome, editor }: { readonly chrome: LiveDocChrome; readonly
         </span>
         {chrome.peers.length > 0 && <LiveDocAvatarStack peers={chrome.peers} />}
         {chrome.sharedWith && chrome.sharedWith.length > 0 && (
-          <span
-            className={styles.sharedWith}
-            title={chrome.sharedWith.map((m) => m.display_name).join(", ")}
-          >
+          <span className={styles.sharedWith} title={chrome.sharedWith.map((m) => m.display_name).join(", ")}>
             <UsersGroupIcon width={13} height={13} aria-hidden="true" />
             {chrome.sharedWith.length}
           </span>
@@ -245,7 +229,11 @@ function TitleBar({ chrome, editor }: { readonly chrome: LiveDocChrome; readonly
             aria-label={chrome.compactChat ? t("liveDoc.compactChatOff") : t("liveDoc.compactChatOn")}
             aria-pressed={chrome.compactChat}
           >
-            {chrome.compactChat ? <MaximizeIcon width={14} height={14} /> : <MinimizeIcon width={14} height={14} />}
+            {chrome.compactChat ? (
+              <MaximizeIcon width={14} height={14} />
+            ) : (
+              <MinimizeIcon width={14} height={14} />
+            )}
           </button>
         )}
         <button
@@ -318,35 +306,70 @@ function FileMenu({ chrome }: { readonly chrome: LiveDocChrome }) {
             style={{ position: "fixed", left: menuPos.left, top: menuPos.top, zIndex: 9999 }}
             role="menu"
           >
-            <button type="button" role="menuitem" className={styles.fileMenuItem} onClick={run(chrome.onRename)}>
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.fileMenuItem}
+              onClick={run(chrome.onRename)}
+            >
               <EditIcon width={16} height={16} aria-hidden="true" />
               {t("liveDoc.renameDoc")}
             </button>
             {chrome.isOwner && (
-              <button type="button" role="menuitem" className={styles.fileMenuItem} onClick={run(chrome.onSaveNow)}>
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.fileMenuItem}
+                onClick={run(chrome.onSaveNow)}
+              >
                 <SaveIcon width={16} height={16} aria-hidden="true" />
                 {t("liveDoc.saveNow")}
               </button>
             )}
             <div className={styles.fileMenuSep} />
-            <button type="button" role="menuitem" className={styles.fileMenuItem} onClick={run(chrome.onExport)}>
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.fileMenuItem}
+              onClick={run(chrome.onExport)}
+            >
               <FileDownIcon width={16} height={16} aria-hidden="true" />
               {t("liveDoc.exportMarkdown")}
             </button>
-            <button type="button" role="menuitem" className={styles.fileMenuItem} onClick={run(chrome.onExportPdf)}>
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.fileMenuItem}
+              onClick={run(chrome.onExportPdf)}
+            >
               <PrinterIcon width={16} height={16} aria-hidden="true" />
               {t("liveDoc.exportPdf")}
             </button>
             <div className={styles.fileMenuSep} />
-            <button type="button" role="menuitem" className={styles.fileMenuItem} onClick={run(chrome.onSaveToDocs)}>
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.fileMenuItem}
+              onClick={run(chrome.onSaveToDocs)}
+            >
               <StarIcon width={16} height={16} aria-hidden="true" />
               {t("liveDoc.sidebar.saveToDocs")}
             </button>
-            <button type="button" role="menuitem" className={styles.fileMenuItem} onClick={run(chrome.onPublish)}>
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.fileMenuItem}
+              onClick={run(chrome.onPublish)}
+            >
               <GlobeIcon width={16} height={16} aria-hidden="true" />
               {t("liveDoc.publishToChannel")}
             </button>
-            <button type="button" role="menuitem" className={styles.fileMenuItem} onClick={run(chrome.onHistory)}>
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.fileMenuItem}
+              onClick={run(chrome.onHistory)}
+            >
               <HistoryIcon width={16} height={16} aria-hidden="true" />
               {t("liveDoc.history")}
             </button>

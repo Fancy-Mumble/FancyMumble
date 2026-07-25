@@ -67,7 +67,12 @@ export function editorHtmlToMarkdown(html: string, options: MarkdownSerializeOpt
   activeMarkBlocks = options.markBlocks ?? false;
   try {
     const out = serializeTopLevel(root);
-    return out.replaceAll(/\n{3,}/g, "\n\n").replace(/^\n+/, "").replace(/\s+$/, "") + "\n";
+    return (
+      out
+        .replaceAll(/\n{3,}/g, "\n\n")
+        .replace(/^\n+/, "")
+        .replace(/\s+$/, "") + "\n"
+    );
   } finally {
     activeDetectLanguage = undefined;
     activeMarkBlocks = false;
@@ -253,7 +258,12 @@ function serializeTaskList(el: Element): string {
     const head = (inlineParts.join("").trim() || "").replaceAll("\n", " ");
     lines.push(marker + head);
     for (const nested of nestedBlocks) {
-      lines.push(nested.split("\n").map((l) => `  ${l}`).join("\n"));
+      lines.push(
+        nested
+          .split("\n")
+          .map((l) => `  ${l}`)
+          .join("\n"),
+      );
     }
   }
   return lines.join("\n");
@@ -290,7 +300,12 @@ function serializeList(el: Element, ordered: boolean): string {
     const head = (inlineParts.join("").trim() || "").replaceAll("\n", " ");
     lines.push(marker + head);
     for (const nested of nestedBlocks) {
-      lines.push(nested.split("\n").map((l) => `  ${l}`).join("\n"));
+      lines.push(
+        nested
+          .split("\n")
+          .map((l) => `  ${l}`)
+          .join("\n"),
+      );
     }
   }
   return lines.join("\n");
@@ -301,8 +316,23 @@ function serializeList(el: Element, ordered: boolean): string {
 /** Inline tags whose content a GFM pipe-table cell can hold. Anything else
  *  (lists, nested tables, blockquotes...) forces a raw-HTML fallback. */
 const INLINE_CELL_TAGS = new Set([
-  "strong", "b", "em", "i", "u", "s", "del", "strike", "sub", "sup",
-  "code", "br", "a", "img", "span", "mark", "font",
+  "strong",
+  "b",
+  "em",
+  "i",
+  "u",
+  "s",
+  "del",
+  "strike",
+  "sub",
+  "sup",
+  "code",
+  "br",
+  "a",
+  "img",
+  "span",
+  "mark",
+  "font",
 ]);
 
 interface SerializedCell {
@@ -579,9 +609,23 @@ export function markdownToEditorHtml(markdown: string, options: MarkdownParseOpt
 }
 
 const RAW_BLOCK_TAGS = new Set([
-  "h1", "h2", "h3", "h4", "h5", "h6",
-  "p", "div", "table", "figure", "figcaption", "blockquote",
-  "ul", "ol", "pre", "hr", "img",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "p",
+  "div",
+  "table",
+  "figure",
+  "figcaption",
+  "blockquote",
+  "ul",
+  "ol",
+  "pre",
+  "hr",
+  "img",
 ]);
 
 function parseBlocks(lines: string[]): string {
@@ -868,9 +912,9 @@ function parseTableBlock(lines: string[], start: number): { html: string; consum
     return `<${tag}><p${style}>${parseInline(text)}</p></${tag}>`;
   };
   const row = (cells: string[], isHeader: boolean): string =>
-    `<tr>${Array.from({ length: colCount }, (_, c) =>
-      cell(cells[c] ?? "", aligns[c] ?? null, isHeader),
-    ).join("")}</tr>`;
+    `<tr>${Array.from({ length: colCount }, (_, c) => cell(cells[c] ?? "", aligns[c] ?? null, isHeader)).join(
+      "",
+    )}</tr>`;
   const headerRow = row(header, true);
   const bodyRows = body.map((r) => row(r, false)).join("");
   return { html: `<table><tbody>${headerRow}${bodyRows}</tbody></table>`, consumed: i - start };
@@ -898,25 +942,21 @@ function parseInline(text: string): string {
   let s = text.replaceAll(/<@(\d+)>/g, (_m, sid: string) => {
     const name = activeResolveMention?.(Number(sid)) ?? `user-${sid}`;
     const safe = name.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-    return push(
-      `<span class="mention mention-user" data-mention-session="${sid}">@${safe}</span>`,
-    );
+    return push(`<span class="mention mention-user" data-mention-session="${sid}">@${safe}</span>`);
   });
   s = s.replaceAll(/<@&([^>\s]+)>/g, (_m, name: string) => {
     const safe = name.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
-    return push(
-      `<span class="mention mention-role" data-mention-role="${safe}">@${safe}</span>`,
-    );
+    return push(`<span class="mention mention-role" data-mention-role="${safe}">@${safe}</span>`);
   });
-  s = s.replaceAll(/(^|\s)@everyone\b/g, (_m, lead: string) =>
-    `${lead}${push(
-      `<span class="mention mention-everyone" data-mention-everyone="1">@everyone</span>`,
-    )}`,
+  s = s.replaceAll(
+    /(^|\s)@everyone\b/g,
+    (_m, lead: string) =>
+      `${lead}${push(`<span class="mention mention-everyone" data-mention-everyone="1">@everyone</span>`)}`,
   );
-  s = s.replaceAll(/(^|\s)@here\b/g, (_m, lead: string) =>
-    `${lead}${push(
-      `<span class="mention mention-here" data-mention-here="1">@here</span>`,
-    )}`,
+  s = s.replaceAll(
+    /(^|\s)@here\b/g,
+    (_m, lead: string) =>
+      `${lead}${push(`<span class="mention mention-here" data-mention-here="1">@here</span>`)}`,
   );
 
   // Stash tags that look like real HTML. We accept self-closing,
@@ -937,12 +977,15 @@ function parseInline(text: string): string {
 
   // Markdown image must run before link so `![…](…)` doesn't get
   // partially eaten by the link regex.
-  s = s.replaceAll(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (_m, alt: string, url: string, title?: string) => {
-    const a = ` alt="${alt.replaceAll('"', "&quot;")}"`;
-    const u = ` src="${url.replaceAll('"', "&quot;")}"`;
-    const ti = title ? ` title="${title.replaceAll('"', "&quot;")}"` : "";
-    return `<img${u}${a}${ti}>`;
-  });
+  s = s.replaceAll(
+    /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g,
+    (_m, alt: string, url: string, title?: string) => {
+      const a = ` alt="${alt.replaceAll('"', "&quot;")}"`;
+      const u = ` src="${url.replaceAll('"', "&quot;")}"`;
+      const ti = title ? ` title="${title.replaceAll('"', "&quot;")}"` : "";
+      return `<img${u}${a}${ti}>`;
+    },
+  );
 
   // Links: [text](url)
   s = s.replaceAll(/\[([^\]\n]+)]\(([^)\s]+)\)/g, (_m, t: string, u: string) => {
@@ -964,4 +1007,3 @@ function parseInline(text: string): string {
   s = s.replaceAll(/\u0000H(\d+)\u0000/g, (_m, idx: string) => stash[Number(idx)] ?? "");
   return s;
 }
-

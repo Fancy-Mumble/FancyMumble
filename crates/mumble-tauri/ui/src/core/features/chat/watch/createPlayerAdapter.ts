@@ -17,9 +17,7 @@ export function createPlayerAdapter(
 ): PlayerAdapter {
   if (kind === "youtube") {
     if (!allowExternal) {
-      throw new Error(
-        "YouTube playback is disabled (enable external embeds in settings)",
-      );
+      throw new Error("YouTube playback is disabled (enable external embeds in settings)");
     }
     return new YouTubeAdapter(args);
   }

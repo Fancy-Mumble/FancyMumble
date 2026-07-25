@@ -10,10 +10,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import {
-  editorHtmlToMarkdown,
-  markdownToEditorHtml,
-} from "../chat/livedoc/liveDocMarkdown";
+import { editorHtmlToMarkdown, markdownToEditorHtml } from "../chat/livedoc/liveDocMarkdown";
 
 function roundtrip(html: string): string {
   return markdownToEditorHtml(editorHtmlToMarkdown(html));
@@ -21,8 +18,7 @@ function roundtrip(html: string): string {
 
 describe("editorHtmlToMarkdown", () => {
   it("emits ATX headings for all six levels", () => {
-    const html =
-      "<h1>One</h1><h2>Two</h2><h3>Three</h3><h4>Four</h4><h5>Five</h5><h6>Six</h6>";
+    const html = "<h1>One</h1><h2>Two</h2><h3>Three</h3><h4>Four</h4><h5>Five</h5><h6>Six</h6>";
     const md = editorHtmlToMarkdown(html);
     expect(md).toContain("# One");
     expect(md).toContain("## Two");
@@ -53,8 +49,7 @@ describe("editorHtmlToMarkdown", () => {
   });
 
   it("round-trips a manual page break", () => {
-    const html =
-      '<p>before</p><div data-page-break="" class="livedoc-page-break"></div><p>after</p>';
+    const html = '<p>before</p><div data-page-break="" class="livedoc-page-break"></div><p>after</p>';
     const md = editorHtmlToMarkdown(html);
     expect(md).toContain("data-page-break");
     const back = markdownToEditorHtml(md);
@@ -66,8 +61,7 @@ describe("editorHtmlToMarkdown", () => {
   });
 
   it("round-trips a manual section break", () => {
-    const html =
-      '<p>one</p><div data-section-break="" class="livedoc-section-break"></div><p>two</p>';
+    const html = '<p>one</p><div data-section-break="" class="livedoc-section-break"></div><p>two</p>';
     const md = editorHtmlToMarkdown(html);
     expect(md).toContain("data-section-break");
     const back = markdownToEditorHtml(md);
@@ -145,8 +139,7 @@ describe("editorHtmlToMarkdown", () => {
   });
 
   it("serialises inline marks", () => {
-    const html =
-      "<p><strong>bold</strong> <em>italic</em> <u>under</u> <s>strike</s> <code>tt</code></p>";
+    const html = "<p><strong>bold</strong> <em>italic</em> <u>under</u> <s>strike</s> <code>tt</code></p>";
     const md = editorHtmlToMarkdown(html);
     expect(md).toContain("**bold**");
     expect(md).toContain("*italic*");
@@ -306,15 +299,15 @@ describe("LiveDoc round-trip", () => {
 
   it("serialises mention chips into wire markers", () => {
     const html = [
-      '<p>',
+      "<p>",
       '<span class="mention mention-user" data-mention-session="42">@alice</span>',
-      ' please review ',
+      " please review ",
       '<span class="mention mention-role" data-mention-role="ops">@ops</span>',
-      ' tag ',
+      " tag ",
       '<span class="mention mention-everyone" data-mention-everyone="1">@everyone</span>',
-      ' and ',
+      " and ",
       '<span class="mention mention-here" data-mention-here="1">@here</span>',
-      '</p>',
+      "</p>",
     ].join("");
     const md = editorHtmlToMarkdown(html);
     expect(md).toContain("<@42>");
@@ -406,7 +399,8 @@ describe("LiveDoc round-trip", () => {
   });
 
   it("keeps tables with merged cells as raw HTML", () => {
-    const html = '<table><tbody><tr><th colspan="2"><p>Wide</p></th></tr><tr><td><p>a</p></td><td><p>b</p></td></tr></tbody></table>';
+    const html =
+      '<table><tbody><tr><th colspan="2"><p>Wide</p></th></tr><tr><td><p>a</p></td><td><p>b</p></td></tr></tbody></table>';
     const md = editorHtmlToMarkdown(html);
     expect(md).toContain("<table");
   });
@@ -437,7 +431,7 @@ describe("LiveDoc round-trip", () => {
     const out = roundtrip(html);
     expect(out).toContain("<table>");
     expect(out).toContain("Name");
-    expect(out).toContain('text-align: right');
+    expect(out).toContain("text-align: right");
     expect(out).toContain("a | b");
     expect(out).toContain(">9</p>");
   });

@@ -20,22 +20,16 @@ export default function MobileProfileSheet() {
   const selectUser = useAppStore((s) => s.selectUser);
   const { t } = useTranslation("sidebar");
 
-  const user = useMemo(
-    () => users.find((u) => u.session === selectedUser) ?? null,
-    [users, selectedUser],
-  );
+  const user = useMemo(() => users.find((u) => u.session === selectedUser) ?? null, [users, selectedUser]);
 
   const isOpen = selectedUser !== null && user !== null;
   const stats = useUserStats(selectedUser, isOpen);
 
   const liveComment = useUserComment(user?.session, user?.comment_size);
-  const parsed = useMemo(
-    () => {
-      const c = user?.comment ?? liveComment;
-      return c ? parseComment(c) : null;
-    },
-    [user?.comment, liveComment],
-  );
+  const parsed = useMemo(() => {
+    const c = user?.comment ?? liveComment;
+    return c ? parseComment(c) : null;
+  }, [user?.comment, liveComment]);
 
   const avatar = useUserAvatar(user?.session, user?.texture_size);
 

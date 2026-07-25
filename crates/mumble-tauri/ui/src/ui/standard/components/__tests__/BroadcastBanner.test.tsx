@@ -9,19 +9,12 @@ import { BroadcastBanner } from "../chat/stream/ScreenShareViewer";
 
 describe("BroadcastBanner", () => {
   it("renders nothing when no broadcasters", () => {
-    const { container } = render(
-      <BroadcastBanner broadcasters={[]} onWatch={vi.fn()} />,
-    );
+    const { container } = render(<BroadcastBanner broadcasters={[]} onWatch={vi.fn()} />);
     expect(container.innerHTML).toBe("");
   });
 
   it("shows broadcaster name", () => {
-    render(
-      <BroadcastBanner
-        broadcasters={[{ session: 42, name: "Alice" }]}
-        onWatch={vi.fn()}
-      />,
-    );
+    render(<BroadcastBanner broadcasters={[{ session: 42, name: "Alice" }]} onWatch={vi.fn()} />);
     expect(screen.getByText("Alice")).toBeTruthy();
     expect(screen.getByText(/sharing their screen/)).toBeTruthy();
   });
@@ -42,12 +35,7 @@ describe("BroadcastBanner", () => {
 
   it("calls onWatch with the correct session when Watch is clicked", () => {
     const onWatch = vi.fn();
-    render(
-      <BroadcastBanner
-        broadcasters={[{ session: 42, name: "Alice" }]}
-        onWatch={onWatch}
-      />,
-    );
+    render(<BroadcastBanner broadcasters={[{ session: 42, name: "Alice" }]} onWatch={onWatch} />);
     fireEvent.click(screen.getByText("Watch"));
     expect(onWatch).toHaveBeenCalledWith(42);
   });
@@ -95,12 +83,7 @@ describe("BroadcastBanner", () => {
   });
 
   it("does not show P2P label when sfuAvailable is omitted (default)", () => {
-    render(
-      <BroadcastBanner
-        broadcasters={[{ session: 1, name: "Alice" }]}
-        onWatch={vi.fn()}
-      />,
-    );
+    render(<BroadcastBanner broadcasters={[{ session: 1, name: "Alice" }]} onWatch={vi.fn()} />);
     expect(screen.queryByText("P2P")).toBeNull();
   });
 });

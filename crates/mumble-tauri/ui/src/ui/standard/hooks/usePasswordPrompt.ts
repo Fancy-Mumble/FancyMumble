@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "@core/store";
-import {
-  getSavedServers,
-  setServerPassword,
-  updateServer,
-} from "@core/serverStorage";
+import { getSavedServers, setServerPassword, updateServer } from "@core/serverStorage";
 import type { SavedServer } from "@core/types";
 
 /** Password dialog submit/change-username handlers, shared by ConnectPage and ChatPage. */
@@ -14,7 +10,6 @@ export interface PasswordPromptHandlers {
   readonly handleChangeUsername: (newUsername: string) => Promise<void>;
   readonly showSaveOption: boolean;
 }
-
 
 export function usePasswordPrompt(
   connectingServerId?: string | null,
@@ -32,7 +27,9 @@ export function usePasswordPrompt(
     void getSavedServers().then((list) => {
       if (!cancelled) setSavedServers(list);
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const matchingServerId = pendingConnect
@@ -61,9 +58,7 @@ export function usePasswordPrompt(
       const targetId = connectingServerId ?? matchingServerId;
       if (targetId) {
         await updateServer(targetId, { username: newUsername });
-        const updated = savedServers.map((s) =>
-          s.id === targetId ? { ...s, username: newUsername } : s,
-        );
+        const updated = savedServers.map((s) => (s.id === targetId ? { ...s, username: newUsername } : s));
         setSavedServers(updated);
         onSavedServersChanged?.(updated);
       }
@@ -73,15 +68,15 @@ export function usePasswordPrompt(
       if (failedSessionId) {
         try {
           await invoke("disconnect_server", { serverId: failedSessionId });
-        } catch (_) { /* already torn down */ }
-        await useAppStore.getState().refreshSessions().catch(() => {});
+        } catch (_) {
+          /* already torn down */
+        }
+        await useAppStore
+          .getState()
+          .refreshSessions()
+          .catch(() => {});
       }
-      await connect(
-        pendingConnect.host,
-        pendingConnect.port,
-        newUsername,
-        pendingConnect.certLabel ?? null,
-      );
+      await connect(pendingConnect.host, pendingConnect.port, newUsername, pendingConnect.certLabel ?? null);
     },
     [
       pendingConnect,

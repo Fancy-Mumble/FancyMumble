@@ -26,11 +26,7 @@ interface BannerEditorModalProps {
   onCancel: () => void;
 }
 
-export function BannerEditorModal({
-  banner,
-  onConfirm,
-  onCancel,
-}: Readonly<BannerEditorModalProps>) {
+export function BannerEditorModal({ banner, onConfirm, onCancel }: Readonly<BannerEditorModalProps>) {
   const initialTab = detectInitialTab(banner);
   const [tab, setTab] = useState<BannerTab>(initialTab);
   const [color, setColor] = useState(banner?.color || "#1a1a2e");
@@ -108,10 +104,7 @@ export function BannerEditorModal({
 
   return (
     <div className={settingsStyles.editorOverlay} onClick={tryClose}>
-      <div
-        className={styles.modal}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <h3 className={styles.title}>{t("bannerEditor.title")}</h3>
 
         {/* Preview */}
@@ -169,35 +162,21 @@ export function BannerEditorModal({
               accept="image/png,image/jpeg,image/webp,image/gif"
               onFile={handleFileSelect}
               label={t("bannerEditor.dropLabel")}
-              preview={
-                localImage ? (
-                  <img src={localImage} alt={t("bannerEditor.imgAlt")} />
-                ) : undefined
-              }
+              preview={localImage ? <img src={localImage} alt={t("bannerEditor.imgAlt")} /> : undefined}
               onRemove={localImage ? handleRemoveImage : undefined}
             />
           )}
 
-          {tab === "gif" && (
-            <KlipyGifBrowser onSelect={handleGifSelect} />
-          )}
+          {tab === "gif" && <KlipyGifBrowser onSelect={handleGifSelect} />}
         </div>
 
         {/* Actions */}
         <div className={styles.actions}>
-          <button
-            type="button"
-            className={settingsStyles.ghostBtn}
-            onClick={onCancel}
-          >
+          <button type="button" className={settingsStyles.ghostBtn} onClick={onCancel}>
             {t("bannerEditor.discardBtn")}
           </button>
           <div className={styles.applyWrapper}>
-            {showUnsavedHint && (
-              <div className={styles.unsavedBubble}>
-                {t("bannerEditor.unsavedHint")}
-              </div>
-            )}
+            {showUnsavedHint && <div className={styles.unsavedBubble}>{t("bannerEditor.unsavedHint")}</div>}
             <button
               type="button"
               className={`${settingsStyles.applyBtn} ${showUnsavedHint ? styles.applyFlash : ""}`}

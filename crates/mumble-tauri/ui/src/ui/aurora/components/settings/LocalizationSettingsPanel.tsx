@@ -29,9 +29,32 @@ export interface LocalizationSettingsPanelProps {
 }
 
 export default function LocalizationSettingsPanel({ prefs, onPatch }: LocalizationSettingsPanelProps) {
-  return <div className={styles.form}>
-    <SelectField label="Time format" value={prefs.timeFormat} options={TIME_FORMATS} onChange={(event) => void onPatch({ timeFormat: event.target.value as UserPreferences["timeFormat"] })} />
-    <SelectField label="Date format" value={prefs.dateFormat ?? "auto"} options={DATE_FORMATS} onChange={(event) => void onPatch({ dateFormat: event.target.value as NonNullable<UserPreferences["dateFormat"]> })} />
-    <SelectField label="Number format" value={prefs.numberFormat ?? "auto"} options={NUMBER_FORMATS} onChange={(event) => void onPatch({ numberFormat: event.target.value as NonNullable<UserPreferences["numberFormat"]> })} />
-  </div>;
+  return (
+    <div className={styles.form}>
+      <SelectField
+        label="Time format"
+        value={prefs.timeFormat}
+        options={TIME_FORMATS}
+        onChange={(event) =>
+          void onPatch({ timeFormat: event.target.value as UserPreferences["timeFormat"] })
+        }
+      />
+      <SelectField
+        label="Date format"
+        value={prefs.dateFormat ?? "auto"}
+        options={DATE_FORMATS}
+        onChange={(event) =>
+          void onPatch({ dateFormat: event.target.value as NonNullable<UserPreferences["dateFormat"]> })
+        }
+      />
+      <SelectField
+        label="Number format"
+        value={prefs.numberFormat ?? "auto"}
+        options={NUMBER_FORMATS}
+        onChange={(event) =>
+          void onPatch({ numberFormat: event.target.value as NonNullable<UserPreferences["numberFormat"]> })
+        }
+      />
+    </div>
+  );
 }

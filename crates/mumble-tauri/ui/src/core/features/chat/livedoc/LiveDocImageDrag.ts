@@ -49,9 +49,7 @@ function resolvePageContent(editor: NodeViewProps["editor"]): PageContent | null
   // side-zone indicator does not bleed into the toolbar or beyond the viewport.
   const scrollRect = pageEl.parentElement?.getBoundingClientRect();
   const clampTop = scrollRect ? Math.max(pageRect.top, scrollRect.top) : pageRect.top;
-  const clampBottom = scrollRect
-    ? Math.min(pageRect.bottom, scrollRect.bottom)
-    : pageRect.bottom;
+  const clampBottom = scrollRect ? Math.min(pageRect.bottom, scrollRect.bottom) : pageRect.bottom;
   return {
     contentLeft: pageRect.left + padLeft,
     contentRight: pageRect.right - padRight,

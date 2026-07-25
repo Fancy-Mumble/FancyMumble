@@ -20,11 +20,7 @@ import {
 const SRV_A = "srv-a";
 const SRV_B = "srv-b";
 
-function session(
-  channelId: number,
-  slug = "notes",
-  appServerId: string | null = SRV_A,
-): LiveDocSessionInfo {
+function session(channelId: number, slug = "notes", appServerId: string | null = SRV_A): LiveDocSessionInfo {
   return {
     serverId: 1,
     appServerId,
@@ -39,10 +35,7 @@ function session(
   };
 }
 
-function announce(
-  channelId: number,
-  appServerId: string | null = SRV_A,
-): LiveDocAnnounceInfo {
+function announce(channelId: number, appServerId: string | null = SRV_A): LiveDocAnnounceInfo {
   return {
     openerName: "Alice",
     title: "Plan",

@@ -35,15 +35,17 @@ export default function ContextMenu({ x, y, heading, label, children }: ContextM
     });
   }, [x, y]);
 
-  return <div
-    ref={ref}
-    className={styles.menu}
-    style={{ left: position.left, top: position.top }}
-    role="menu"
-    aria-label={label}
-    onClick={(event) => event.stopPropagation()}
-  >
-    {heading && <div className={styles.heading}>{heading}</div>}
-    {children}
-  </div>;
+  return (
+    <div
+      ref={ref}
+      className={styles.menu}
+      style={{ left: position.left, top: position.top }}
+      role="menu"
+      aria-label={label}
+      onClick={(event) => event.stopPropagation()}
+    >
+      {heading && <div className={styles.heading}>{heading}</div>}
+      {children}
+    </div>
+  );
 }

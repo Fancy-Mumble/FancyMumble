@@ -69,14 +69,11 @@ export function useMessageSelection({
   }, []);
 
   /** Handle right-click on a message bubble. */
-  const handleMessageContextMenu = useCallback(
-    (e: React.MouseEvent, msg: ChatMessage) => {
-      if (!msg.message_id) return;
-      e.preventDefault();
-      setMsgContextMenu({ x: e.clientX, y: e.clientY, message: msg });
-    },
-    [],
-  );
+  const handleMessageContextMenu = useCallback((e: React.MouseEvent, msg: ChatMessage) => {
+    if (!msg.message_id) return;
+    e.preventDefault();
+    setMsgContextMenu({ x: e.clientX, y: e.clientY, message: msg });
+  }, []);
 
   /** Handle single-message delete from context menu. */
   const handleSingleDelete = useCallback((msg: ChatMessage) => {
@@ -140,13 +137,16 @@ export function useMessageSelection({
   // --- Message action bar handlers ---------------------------------
 
   /** Called when the cite/quote button is clicked. */
-  const handleCite = useCallback((msg: ChatMessage) => {
-    if (!msg.message_id) return;
-    setPendingQuotes((prev) => {
-      if (prev.some((q) => q.message_id === msg.message_id)) return prev;
-      return [...prev, msg];
-    });
-  }, [setPendingQuotes]);
+  const handleCite = useCallback(
+    (msg: ChatMessage) => {
+      if (!msg.message_id) return;
+      setPendingQuotes((prev) => {
+        if (prev.some((q) => q.message_id === msg.message_id)) return prev;
+        return [...prev, msg];
+      });
+    },
+    [setPendingQuotes],
+  );
 
   /** Copy message text to clipboard from kebab menu. */
   const handleCopyText = useCallback((msg: ChatMessage) => {
@@ -162,35 +162,39 @@ export function useMessageSelection({
   }, []);
 
   /** Scroll to a quoted message and flash-highlight it. */
-  const handleScrollToMessage = useCallback((messageId: string) => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-    // The target may be outside the tail-anchored render window; grow
-    // the window and retry over the next frames until the row mounts.
-    ensureMessageRendered?.(messageId);
-    let attempts = 0;
-    const tryScroll = () => {
-      const el = container.querySelector<HTMLElement>(
-        `[data-msg-id="${CSS.escape(messageId)}"]`,
-      );
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add(styles.quoteHighlight);
-        setTimeout(() => el.classList.remove(styles.quoteHighlight), 1500);
-        return;
-      }
-      if (attempts < 5) {
-        attempts += 1;
-        requestAnimationFrame(tryScroll);
-      }
-    };
-    tryScroll();
-  }, [messagesContainerRef, ensureMessageRendered]);
+  const handleScrollToMessage = useCallback(
+    (messageId: string) => {
+      const container = messagesContainerRef.current;
+      if (!container) return;
+      // The target may be outside the tail-anchored render window; grow
+      // the window and retry over the next frames until the row mounts.
+      ensureMessageRendered?.(messageId);
+      let attempts = 0;
+      const tryScroll = () => {
+        const el = container.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(messageId)}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add(styles.quoteHighlight);
+          setTimeout(() => el.classList.remove(styles.quoteHighlight), 1500);
+          return;
+        }
+        if (attempts < 5) {
+          attempts += 1;
+          requestAnimationFrame(tryScroll);
+        }
+      };
+      tryScroll();
+    },
+    [messagesContainerRef, ensureMessageRendered],
+  );
 
   /** Remove a pending quote by message ID. */
-  const removePendingQuote = useCallback((msgId: string) => {
-    setPendingQuotes((prev) => prev.filter((p) => p.message_id !== msgId));
-  }, [setPendingQuotes]);
+  const removePendingQuote = useCallback(
+    (msgId: string) => {
+      setPendingQuotes((prev) => prev.filter((p) => p.message_id !== msgId));
+    },
+    [setPendingQuotes],
+  );
 
   /** Auto-exit selection mode when all messages are deselected. */
   useEffect(() => {
@@ -215,7 +219,7 @@ export function useMessageSelection({
     if (!container || !canDelete) return;
 
     const findMsgId = (node: Node | null): string | null => {
-      let el: HTMLElement | null = node instanceof HTMLElement ? node : node?.parentElement ?? null;
+      let el: HTMLElement | null = node instanceof HTMLElement ? node : (node?.parentElement ?? null);
       while (el && el !== container) {
         if (el.dataset.msgId) return el.dataset.msgId;
         el = el.parentElement;

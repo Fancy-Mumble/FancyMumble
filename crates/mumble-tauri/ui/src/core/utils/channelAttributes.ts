@@ -20,7 +20,10 @@ export const ChannelAttribute = {
 export type ChannelAttributeValue = (typeof ChannelAttribute)[keyof typeof ChannelAttribute];
 
 /** Whether the server advertised `attribute` for `channel`. */
-export function hasChannelAttribute(channel: Pick<ChannelEntry, "attributes">, attribute: ChannelAttributeValue): boolean {
+export function hasChannelAttribute(
+  channel: Pick<ChannelEntry, "attributes">,
+  attribute: ChannelAttributeValue,
+): boolean {
   // Bit 31 and above would overflow the signed 32-bit result of `<<`, so the
   // shift is done in BigInt space. Attribute values stay far below that today,
   // but silently misreading a future one would be a nasty bug to track down.

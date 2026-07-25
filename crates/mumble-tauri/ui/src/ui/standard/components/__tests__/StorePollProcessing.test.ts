@@ -35,10 +35,7 @@ function makePoll(overrides: Partial<PollPayload> = {}): PollPayload {
 }
 
 /** Simulate what the store's plugin-data listener does for polls. */
-function simulateIncomingPoll(
-  poll: PollPayload,
-  senderSession: number | null = poll.creator,
-) {
+function simulateIncomingPoll(poll: PollPayload, senderSession: number | null = poll.creator) {
   // This replicates the exact logic in initEventListeners -> "plugin-data" handler
   const bytes = new TextEncoder().encode(JSON.stringify(poll));
   const json = new TextDecoder().decode(bytes);
@@ -54,10 +51,7 @@ function simulateIncomingPoll(
 }
 
 /** Simulate what the store's plugin-data listener does for votes. */
-function simulateIncomingVote(
-  vote: PollVotePayload,
-  senderSession: number | null = vote.voter,
-) {
+function simulateIncomingVote(vote: PollVotePayload, senderSession: number | null = vote.voter) {
   const bytes = new TextEncoder().encode(JSON.stringify(vote));
   const json = new TextDecoder().decode(bytes);
   const payload = JSON.parse(json) as PollVotePayload;
@@ -154,7 +148,19 @@ describe("simulated plugin-data event processing", () => {
     // Pre-populate users in the store.
     useAppStore.setState({
       users: [
-        { session: 92, name: "Alice", channel_id: 0, texture_size: null, comment: null, mute: false, deaf: false, suppress: false, self_mute: false, self_deaf: false, priority_speaker: false },
+        {
+          session: 92,
+          name: "Alice",
+          channel_id: 0,
+          texture_size: null,
+          comment: null,
+          mute: false,
+          deaf: false,
+          suppress: false,
+          self_mute: false,
+          self_deaf: false,
+          priority_speaker: false,
+        },
       ],
     });
 

@@ -130,9 +130,9 @@ export default function NewRolePage() {
   };
 
   const tabs: TabDef<Step>[] = [
-    { id: "display",     label: t("roleEditor.tabDisplay"),     icon: <PaletteIcon    width={16} height={16} /> },
-    { id: "permissions", label: t("roleEditor.tabPermissions"), icon: <LockIcon       width={16} height={16} /> },
-    { id: "members",     label: t("roleEditor.tabMembers"),     icon: <UsersGroupIcon width={16} height={16} /> },
+    { id: "display", label: t("roleEditor.tabDisplay"), icon: <PaletteIcon width={16} height={16} /> },
+    { id: "permissions", label: t("roleEditor.tabPermissions"), icon: <LockIcon width={16} height={16} /> },
+    { id: "members", label: t("roleEditor.tabMembers"), icon: <UsersGroupIcon width={16} height={16} /> },
   ];
 
   let body: React.ReactNode;
@@ -218,9 +218,7 @@ export default function NewRolePage() {
       onBack={goBack}
       footer={footer}
     >
-      <div className={styles.content}>
-        {body}
-      </div>
+      <div className={styles.content}>{body}</div>
     </TabbedPage>
   );
 }

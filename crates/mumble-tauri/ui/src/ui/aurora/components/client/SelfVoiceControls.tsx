@@ -17,18 +17,24 @@ export default function SelfVoiceControls() {
   const deafened = useAppStore(selectSelfDeafened);
   const voiceState = useAppStore((state) => state.voiceState);
 
-  return <>
-    <IconButton
-      icon={micLive ? <MicIcon /> : <MicOffIcon />}
-      label={micLive ? "Mute" : voiceState === "inactive" ? "Enable voice" : "Unmute"}
-      className={micLive ? undefined : styles.controlActive}
-      onClick={() => void (voiceState === "inactive" ? useAppStore.getState().enableVoice() : useAppStore.getState().toggleMute())}
-    />
-    <IconButton
-      icon={deafened ? <HeadphonesOffIcon /> : <HeadphonesIcon />}
-      label={deafened ? "Undeafen" : "Deafen"}
-      className={deafened ? styles.controlActive : undefined}
-      onClick={() => void useAppStore.getState().toggleDeafen()}
-    />
-  </>;
+  return (
+    <>
+      <IconButton
+        icon={micLive ? <MicIcon /> : <MicOffIcon />}
+        label={micLive ? "Mute" : voiceState === "inactive" ? "Enable voice" : "Unmute"}
+        className={micLive ? undefined : styles.controlActive}
+        onClick={() =>
+          void (voiceState === "inactive"
+            ? useAppStore.getState().enableVoice()
+            : useAppStore.getState().toggleMute())
+        }
+      />
+      <IconButton
+        icon={deafened ? <HeadphonesOffIcon /> : <HeadphonesIcon />}
+        label={deafened ? "Undeafen" : "Deafen"}
+        className={deafened ? styles.controlActive : undefined}
+        onClick={() => void useAppStore.getState().toggleDeafen()}
+      />
+    </>
+  );
 }

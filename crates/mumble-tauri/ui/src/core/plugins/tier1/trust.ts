@@ -82,10 +82,7 @@ export function evaluateTrust(
 
 /** Returns true when `next` contains a capability not present in
  *  `previous`.  A *narrowed* set never re-prompts. */
-function capabilitiesExpanded(
-  previous: readonly Capability[],
-  next: readonly Capability[],
-): boolean {
+function capabilitiesExpanded(previous: readonly Capability[], next: readonly Capability[]): boolean {
   const prev = new Set(previous);
   return next.some((c) => !prev.has(c));
 }
@@ -100,9 +97,7 @@ export function recordFromDecision(
   return {
     decision,
     version,
-    capabilities: (manifest.capabilities ?? []).filter((c) =>
-      GATED_CAPABILITIES.has(c),
-    ),
+    capabilities: (manifest.capabilities ?? []).filter((c) => GATED_CAPABILITIES.has(c)),
     decidedAt: Date.now(),
     scope,
   };
@@ -145,7 +140,7 @@ export function decodePluginInfo(infoJson: string | null): PluginInfoDigest {
     author: typeof o.author === "string" ? o.author : null,
     homepage: typeof o.homepage === "string" ? o.homepage : null,
     capabilityTags: Array.isArray(o.capabilities)
-      ? (o.capabilities.filter((c): c is string => typeof c === "string"))
+      ? o.capabilities.filter((c): c is string => typeof c === "string")
       : [],
   };
 }

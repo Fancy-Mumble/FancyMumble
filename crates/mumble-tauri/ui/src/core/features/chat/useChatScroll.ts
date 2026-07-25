@@ -1,10 +1,7 @@
 import { useRef, useEffect, useLayoutEffect, useCallback, useState, useMemo } from "react";
 import { useAppStore } from "../../store";
 import type { ChatMessage } from "../../types";
-import {
-  offloadManager,
-  type MessageScope,
-} from "../../messageOffload";
+import { offloadManager, type MessageScope } from "../../messageOffload";
 import {
   BASE_WINDOW,
   GROW_THRESHOLD_PX,

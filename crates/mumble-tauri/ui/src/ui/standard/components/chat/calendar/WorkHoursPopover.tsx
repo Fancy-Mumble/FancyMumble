@@ -44,7 +44,10 @@ export default function WorkHoursPopover({
       <div className={styles.workPopover} style={{ left, top, width: POPOVER_W }}>
         <div className={styles.workRow}>
           <span className={styles.fieldLabelInline}>{t("calendar.workHours.enable")}</span>
-          <Toggle checked={workHours.enabled} onChange={() => setWorkHours({ enabled: !workHours.enabled })} />
+          <Toggle
+            checked={workHours.enabled}
+            onChange={() => setWorkHours({ enabled: !workHours.enabled })}
+          />
         </div>
         <div className={styles.workRow}>
           <span className={styles.fieldLabelInline}>{t("calendar.workHours.from")}</span>

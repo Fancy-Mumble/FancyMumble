@@ -47,13 +47,7 @@ interface VuMeterProps {
   talking?: boolean;
 }
 
-export function VuMeter({
-  rms,
-  peak,
-  threshold,
-  markers,
-  talking,
-}: Readonly<VuMeterProps>) {
+export function VuMeter({ rms, peak, threshold, markers, talking }: Readonly<VuMeterProps>) {
   const fillRef = useRef<HTMLDivElement>(null);
   const peakRef = useRef<HTMLDivElement>(null);
   const heldPeakPct = useRef(0);
@@ -98,7 +92,10 @@ export function VuMeter({
     let minDist = Infinity;
     draggableMarkers.forEach((m, i) => {
       const dist = Math.abs(linearToVuPercent(m.value) - xPct);
-      if (dist < minDist) { minDist = dist; closest = i; }
+      if (dist < minDist) {
+        minDist = dist;
+        closest = i;
+      }
     });
     return closest;
   }

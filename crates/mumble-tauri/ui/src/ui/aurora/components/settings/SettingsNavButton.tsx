@@ -8,5 +8,9 @@ export interface SettingsNavButtonProps {
 }
 
 export default function SettingsNavButton({ label, active, onSelect }: SettingsNavButtonProps) {
-  return <Button variant="bare" className={active ? styles.settingsActive : undefined} onClick={onSelect}>{label}</Button>;
+  return (
+    <Button variant="bare" className={active ? styles.settingsActive : undefined} onClick={onSelect}>
+      {label}
+    </Button>
+  );
 }

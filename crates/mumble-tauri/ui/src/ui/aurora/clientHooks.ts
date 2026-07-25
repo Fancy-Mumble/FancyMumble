@@ -13,10 +13,18 @@ import { listen } from "@tauri-apps/api/event";
 import { initEventListeners, useAppStore } from "@core/store";
 import { getPreferences } from "@core/preferencesStorage";
 import { setKlipyApiKey } from "@core/features/chat/gif/klipyConfig";
-import { DEFAULT_SHORTCUTS, loadShortcuts, type ShortcutBindings } from "@core/features/settings/shortcutHelpers";
+import {
+  DEFAULT_SHORTCUTS,
+  loadShortcuts,
+  type ShortcutBindings,
+} from "@core/features/settings/shortcutHelpers";
 import { getSavedServers } from "@core/serverStorage";
 import { loadPersonalization } from "@ui/standard/personalizationStorage";
-import { getUserRelations, USER_RELATIONS_CHANGED_EVENT, type UserRelation } from "@core/userRelationsStorage";
+import {
+  getUserRelations,
+  USER_RELATIONS_CHANGED_EVENT,
+  type UserRelation,
+} from "@core/userRelationsStorage";
 import type { MumbleServerConfig, RegisteredUser, SavedServer } from "@core/types";
 import { applyAuroraAppearance } from "./components";
 
@@ -25,12 +33,20 @@ export function useUserRelations(): Record<string, UserRelation> {
   const [relations, setRelations] = useState<Record<string, UserRelation>>({});
   useEffect(() => {
     let active = true;
-    const load = () => void getUserRelations()
-      .then((value) => { if (active) setRelations(value); })
-      .catch(() => { if (active) setRelations({}); });
+    const load = () =>
+      void getUserRelations()
+        .then((value) => {
+          if (active) setRelations(value);
+        })
+        .catch(() => {
+          if (active) setRelations({});
+        });
     load();
     globalThis.addEventListener(USER_RELATIONS_CHANGED_EVENT, load);
-    return () => { active = false; globalThis.removeEventListener(USER_RELATIONS_CHANGED_EVENT, load); };
+    return () => {
+      active = false;
+      globalThis.removeEventListener(USER_RELATIONS_CHANGED_EVENT, load);
+    };
   }, []);
   return relations;
 }
@@ -45,11 +61,16 @@ export function useClientPreferences(): { hideEmptyChannels: boolean } {
       setHideEmptyChannels(preferences.hideEmptyChannels ?? false);
       setKlipyApiKey(preferences.klipyApiKey);
     };
-    void getPreferences().then(apply).catch(() => undefined);
+    void getPreferences()
+      .then(apply)
+      .catch(() => undefined);
     const onChanged = (event: Event) =>
       apply((event as CustomEvent<{ hideEmptyChannels?: boolean; klipyApiKey?: string }>).detail);
     globalThis.addEventListener("preferences-changed", onChanged);
-    return () => { active = false; globalThis.removeEventListener("preferences-changed", onChanged); };
+    return () => {
+      active = false;
+      globalThis.removeEventListener("preferences-changed", onChanged);
+    };
   }, []);
   return { hideEmptyChannels };
 }
@@ -57,7 +78,10 @@ export function useClientPreferences(): { hideEmptyChannels: boolean } {
 export function useShortcutBindings(): ShortcutBindings {
   const [shortcuts, setShortcuts] = useState<ShortcutBindings>(DEFAULT_SHORTCUTS);
   useEffect(() => {
-    const reload = () => void loadShortcuts().then(setShortcuts).catch(() => undefined);
+    const reload = () =>
+      void loadShortcuts()
+        .then(setShortcuts)
+        .catch(() => undefined);
     reload();
     globalThis.addEventListener("shortcuts-changed", reload);
     return () => globalThis.removeEventListener("shortcuts-changed", reload);
@@ -69,7 +93,9 @@ export function useShortcutBindings(): ShortcutBindings {
 export function useSavedServers(): { savedServers: SavedServer[] | null; reload: () => void } {
   const [savedServers, setSavedServers] = useState<SavedServer[] | null>(null);
   const reload = useCallback(() => {
-    void getSavedServers().then(setSavedServers).catch(() => setSavedServers([]));
+    void getSavedServers()
+      .then(setSavedServers)
+      .catch(() => setSavedServers([]));
   }, []);
   useEffect(reload, [reload]);
   return { savedServers, reload };
@@ -83,13 +109,19 @@ export function useRegisteredUsers(activeServerId: string | null, status: string
     if (status === "disconnected") return;
     let disposed = false;
     let unlisten: (() => void) | undefined;
-    void listen<RegisteredUser[]>("user-list", (event) => { if (!disposed) setRegisteredUsers(event.payload); })
+    void listen<RegisteredUser[]>("user-list", (event) => {
+      if (!disposed) setRegisteredUsers(event.payload);
+    })
       .then((off) => {
-        if (disposed) off(); else unlisten = off;
+        if (disposed) off();
+        else unlisten = off;
         return invoke("request_user_list");
       })
       .catch(() => undefined);
-    return () => { disposed = true; unlisten?.(); };
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   }, [activeServerId, status]);
   return registeredUsers;
 }
@@ -105,12 +137,19 @@ export function useClientEventBridge(navigate: Parameters<typeof initEventListen
         else unlisteners = listeners;
       })
       .catch((reason) => console.error("Aurora event bootstrap failed:", reason));
-    return () => { cancelled = true; unlisteners.forEach((unlisten) => unlisten()); };
+    return () => {
+      cancelled = true;
+      unlisteners.forEach((unlisten) => unlisten());
+    };
   }, [navigate]);
 }
 
 export function useAuroraAppearance(): void {
-  useEffect(() => { void loadPersonalization().then(applyAuroraAppearance).catch(() => undefined); }, []);
+  useEffect(() => {
+    void loadPersonalization()
+      .then(applyAuroraAppearance)
+      .catch(() => undefined);
+  }, []);
 }
 
 /**
@@ -123,7 +162,10 @@ export function useServerConfigSync(activeServerId: string | null, status: strin
     if (status === "disconnected") return;
     void invoke<MumbleServerConfig>("get_server_config")
       .then((serverConfig) => {
-        console.info("aurora: server limits", { image: serverConfig.max_image_message_length, message: serverConfig.max_message_length });
+        console.info("aurora: server limits", {
+          image: serverConfig.max_image_message_length,
+          message: serverConfig.max_message_length,
+        });
         useAppStore.setState({ serverConfig });
       })
       .catch((reason) => console.error("get_server_config failed:", reason));
@@ -153,19 +195,22 @@ export function useDismissOnInteraction(open: boolean, dismiss: () => void): voi
  */
 export function useMessageImageClicks(onOpen: (src: string) => void): (node: HTMLElement | null) => void {
   const cleanup = useRef<(() => void) | null>(null);
-  return useCallback((node: HTMLElement | null) => {
-    cleanup.current?.();
-    cleanup.current = null;
-    if (!node) return;
-    const onClick = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target || target.tagName !== "IMG") return;
-      // The lightbox indexes media by the raw attribute (see extractMedia), not
-      // the resolved absolute URL, so look it up with the same value.
-      const src = target.getAttribute("src");
-      if (src) onOpen(src);
-    };
-    node.addEventListener("click", onClick);
-    cleanup.current = () => node.removeEventListener("click", onClick);
-  }, [onOpen]);
+  return useCallback(
+    (node: HTMLElement | null) => {
+      cleanup.current?.();
+      cleanup.current = null;
+      if (!node) return;
+      const onClick = (event: MouseEvent) => {
+        const target = event.target as HTMLElement | null;
+        if (!target || target.tagName !== "IMG") return;
+        // The lightbox indexes media by the raw attribute (see extractMedia), not
+        // the resolved absolute URL, so look it up with the same value.
+        const src = target.getAttribute("src");
+        if (src) onOpen(src);
+      };
+      node.addEventListener("click", onClick);
+      cleanup.current = () => node.removeEventListener("click", onClick);
+    },
+    [onOpen],
+  );
 }

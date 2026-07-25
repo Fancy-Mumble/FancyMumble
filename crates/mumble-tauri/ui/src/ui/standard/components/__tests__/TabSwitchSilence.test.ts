@@ -69,8 +69,7 @@ class FakeAudio {
 
 beforeEach(() => {
   audioCalls.length = 0;
-  (globalThis as unknown as { Audio: typeof Audio }).Audio =
-    FakeAudio as unknown as typeof Audio;
+  (globalThis as unknown as { Audio: typeof Audio }).Audio = FakeAudio as unknown as typeof Audio;
 });
 
 afterEach(() => {
@@ -126,11 +125,7 @@ describe("useNotificationSounds - tab switching regression", () => {
         activeServerId: "server-a",
         ownSession: 5,
         currentChannel: 7,
-        users: [
-          makeUser(5, 7, "me"),
-          makeUser(11, 7, "alice"),
-          makeUser(12, 8, "bob"),
-        ],
+        users: [makeUser(5, 7, "me"), makeUser(11, 7, "alice"), makeUser(12, 8, "bob")],
       });
     });
 
@@ -140,11 +135,7 @@ describe("useNotificationSounds - tab switching regression", () => {
     // snapshots silently.  Trigger a no-op update to flush.
     act(() => {
       useAppStore.setState({
-        users: [
-          makeUser(5, 7, "me"),
-          makeUser(11, 7, "alice"),
-          makeUser(12, 8, "bob"),
-        ],
+        users: [makeUser(5, 7, "me"), makeUser(11, 7, "alice"), makeUser(12, 8, "bob")],
       });
     });
 
@@ -161,11 +152,7 @@ describe("useNotificationSounds - tab switching regression", () => {
     // this point, while the store's `ownSession` field is still 5.
     act(() => {
       useAppStore.setState({
-        users: [
-          makeUser(99, 3, "me-on-b"),
-          makeUser(20, 3, "carol"),
-          makeUser(21, 4, "dave"),
-        ],
+        users: [makeUser(99, 3, "me-on-b"), makeUser(20, 3, "carol"), makeUser(21, 4, "dave")],
       });
     });
 
@@ -225,11 +212,7 @@ describe("useNotificationSounds - tab switching regression", () => {
     // (mirrors the existing activeServerId-reset behaviour).
     act(() => {
       useAppStore.setState({
-        users: [
-          makeUser(99, 3, "me-on-b"),
-          makeUser(20, 3, "carol"),
-          makeUser(30, 3, "eve"),
-        ],
+        users: [makeUser(99, 3, "me-on-b"), makeUser(20, 3, "carol"), makeUser(30, 3, "eve")],
       });
     });
 

@@ -11,12 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import BrandLogo from "../components/elements/BrandLogo";
-import {
-  isAutoInstall,
-  updaterApi,
-  type ProgressEvent,
-  type UpdateInfo,
-} from "./api";
+import { isAutoInstall, updaterApi, type ProgressEvent, type UpdateInfo } from "./api";
 import styles from "./UpdaterWindow.module.css";
 
 enum Phase {
@@ -109,9 +104,7 @@ export default function UpdaterWindow() {
   }, [autoInstall, info, phase, onInstall]);
 
   const onLater = useCallback(() => {
-    const skipPromise = skipVersion && info
-      ? updaterApi.setSkippedVersion(info.version)
-      : Promise.resolve();
+    const skipPromise = skipVersion && info ? updaterApi.setSkippedVersion(info.version) : Promise.resolve();
     void skipPromise.finally(() => {
       updaterApi.dismiss().catch(() => updaterApi.closeWindow());
     });
@@ -125,11 +118,16 @@ export default function UpdaterWindow() {
   const busy = phase === Phase.Downloading || phase === Phase.Installing;
   const heading = useMemo((): string => {
     switch (phase) {
-      case Phase.Downloading: return t("updater.heading.downloading");
-      case Phase.Installing:  return t("updater.heading.installing");
-      case Phase.Done:        return t("updater.heading.restarting");
-      case Phase.Error:       return t("updater.heading.failed");
-      default:                return t("updater.heading.available");
+      case Phase.Downloading:
+        return t("updater.heading.downloading");
+      case Phase.Installing:
+        return t("updater.heading.installing");
+      case Phase.Done:
+        return t("updater.heading.restarting");
+      case Phase.Error:
+        return t("updater.heading.failed");
+      default:
+        return t("updater.heading.available");
     }
   }, [phase, t]);
   const subtitle = useMemo((): string => {
@@ -156,12 +154,7 @@ export default function UpdaterWindow() {
         title={busy ? t("updater.busyTitle") : t("updater.closeAriaLabel")}
       >
         <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-          <path
-            d="M2 2 L12 12 M12 2 L2 12"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          />
+          <path d="M2 2 L12 12 M12 2 L2 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
       </button>
       <div className={styles.body}>
@@ -187,21 +180,20 @@ export default function UpdaterWindow() {
           <div className={styles.progressWrap}>
             <div className={styles.progressBar}>
               <div
-                className={`${styles.progressFill} ${
-                  percent == null ? styles.indeterminate : ""
-                }`}
+                className={`${styles.progressFill} ${percent == null ? styles.indeterminate : ""}`}
                 style={progressFillStyle}
               />
             </div>
             <div className={styles.progressLabel}>
               <span>{progressText}</span>
               {phase === Phase.Downloading && total != null && (
-                <span>{formatBytes(downloaded)} / {formatBytes(total)}</span>
+                <span>
+                  {formatBytes(downloaded)} / {formatBytes(total)}
+                </span>
               )}
             </div>
           </div>
         )}
-
       </div>
 
       {!autoInstall && (

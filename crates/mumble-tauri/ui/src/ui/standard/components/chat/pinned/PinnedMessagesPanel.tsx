@@ -44,19 +44,14 @@ export default function PinnedMessagesPanel({
   onUnpin,
 }: PinnedMessagesPanelProps) {
   const { t } = useTranslation("chat");
-  const pinnedMessages = useMemo(
-    () => messages.filter((m) => m.pinned),
-    [messages],
-  );
+  const pinnedMessages = useMemo(() => messages.filter((m) => m.pinned), [messages]);
 
   return (
     <div className={styles.panel}>
       <div className={styles.header}>
         <span className={styles.title}>
           <PinIcon width={14} height={14} /> {t("pinned.title")}
-          {pinnedMessages.length > 0 && (
-            <span className={styles.count}>{pinnedMessages.length}</span>
-          )}
+          {pinnedMessages.length > 0 && <span className={styles.count}>{pinnedMessages.length}</span>}
         </span>
         {/* Close (×) is rendered by the shared PanelCloseButton via ChatView's
             ResizableSplitPanel, so every panel's close looks and sits the same. */}
@@ -86,16 +81,14 @@ export default function PinnedMessagesPanel({
                   <span className={styles.senderName}>{msg.sender_name}</span>
                   {isUnseen && <span className={styles.unseenDot} />}
                   {msg.pinned_by && (
-                    <span className={styles.pinnedBy}>
-                      {t("pinned.pinnedBy", { name: msg.pinned_by })}
-                    </span>
+                    <span className={styles.pinnedBy}>{t("pinned.pinnedBy", { name: msg.pinned_by })}</span>
                   )}
                 </div>
                 <div className={styles.previewRow}>
-                  {imageSrc && (
-                    <img src={imageSrc} alt="" className={styles.thumbnail} />
-                  )}
-                  <div className={styles.preview}>{preview || (imageSrc ? t("pinned.imageLabel") : t("pinned.mediaLabel"))}</div>
+                  {imageSrc && <img src={imageSrc} alt="" className={styles.thumbnail} />}
+                  <div className={styles.preview}>
+                    {preview || (imageSrc ? t("pinned.imageLabel") : t("pinned.mediaLabel"))}
+                  </div>
                 </div>
                 {onUnpin && (
                   <button

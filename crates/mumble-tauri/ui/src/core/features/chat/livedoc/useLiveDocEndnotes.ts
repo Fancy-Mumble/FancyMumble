@@ -11,11 +11,7 @@
 
 import { useEffect, useState } from "react";
 import type { Editor } from "@tiptap/react";
-import {
-  extractEndnotes,
-  endnotesSignature,
-  type EndnoteEntry,
-} from "./liveDocEndnotes";
+import { extractEndnotes, endnotesSignature, type EndnoteEntry } from "./liveDocEndnotes";
 
 export interface UseLiveDocEndnotes {
   readonly entries: EndnoteEntry[];

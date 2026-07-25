@@ -310,29 +310,55 @@ function FolderNode({
         onKeyDown={(e) => e.key === "Enter" && setOpen((v) => !v)}
       >
         <span className={styles.caret}>
-          {open ? (
-            <ChevronDownIcon width={14} height={14} />
-          ) : (
-            <ChevronRightIcon width={14} height={14} />
-          )}
+          {open ? <ChevronDownIcon width={14} height={14} /> : <ChevronRightIcon width={14} height={14} />}
         </span>
         {!isSection && <FolderIcon width={14} height={14} aria-hidden="true" />}
-        <span className={`${styles.rowLabel} ${isSection ? styles.sectionName : ""}`}>
-          {node.name}
-        </span>
+        <span className={`${styles.rowLabel} ${isSection ? styles.sectionName : ""}`}>{node.name}</span>
         <span className={styles.rowActions}>
           {onCreateDocInFolder && (
-            <button type="button" className={styles.miniBtn} onClick={(e) => { e.stopPropagation(); onCreateDocInFolder(node.id); }} title={t("liveDoc.sidebar.newDocumentHere")}>
+            <button
+              type="button"
+              className={styles.miniBtn}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCreateDocInFolder(node.id);
+              }}
+              title={t("liveDoc.sidebar.newDocumentHere")}
+            >
               <FileTextIcon width={13} height={13} />
             </button>
           )}
-          <button type="button" className={styles.miniBtn} onClick={(e) => { e.stopPropagation(); onAddFolder(); }} title={t("liveDoc.sidebar.newFolder")}>
+          <button
+            type="button"
+            className={styles.miniBtn}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddFolder();
+            }}
+            title={t("liveDoc.sidebar.newFolder")}
+          >
             <PlusIcon width={13} height={13} />
           </button>
-          <button type="button" className={styles.miniBtn} onClick={(e) => { e.stopPropagation(); onRename(); }} title={t("liveDoc.sidebar.rename")}>
+          <button
+            type="button"
+            className={styles.miniBtn}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRename();
+            }}
+            title={t("liveDoc.sidebar.rename")}
+          >
             <EditIcon width={13} height={13} />
           </button>
-          <button type="button" className={styles.miniBtn} onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }} title={t("liveDoc.sidebar.delete")}>
+          <button
+            type="button"
+            className={styles.miniBtn}
+            onClick={(e) => {
+              e.stopPropagation();
+              setConfirmDelete(true);
+            }}
+            title={t("liveDoc.sidebar.delete")}
+          >
             <TrashIcon width={13} height={13} />
           </button>
         </span>
@@ -344,7 +370,10 @@ function FolderNode({
           body={t("liveDoc.sidebar.deleteConfirm", { name: node.name })}
           confirmLabel={t("liveDoc.sidebar.delete")}
           danger
-          onConfirm={() => { removeNode(node.id); setConfirmDelete(false); }}
+          onConfirm={() => {
+            removeNode(node.id);
+            setConfirmDelete(false);
+          }}
           onCancel={() => setConfirmDelete(false)}
         />
       )}
@@ -449,7 +478,10 @@ function DocRow({ doc, parentId, depth, active, onOpenDoc, onRenameActiveDoc }: 
         <button
           type="button"
           className={styles.miniBtn}
-          onClick={(e) => { e.stopPropagation(); onRename(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRename();
+          }}
           title={t("liveDoc.sidebar.renameDoc")}
         >
           <EditIcon width={13} height={13} />
@@ -457,7 +489,10 @@ function DocRow({ doc, parentId, depth, active, onOpenDoc, onRenameActiveDoc }: 
         <button
           type="button"
           className={styles.miniBtn}
-          onClick={(e) => { e.stopPropagation(); removeDocLink(parentId, doc.slug); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            removeDocLink(parentId, doc.slug);
+          }}
           title={t("liveDoc.sidebar.removeLink")}
         >
           <TrashIcon width={13} height={13} />

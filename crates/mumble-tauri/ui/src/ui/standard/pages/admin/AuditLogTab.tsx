@@ -16,12 +16,7 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { ActivityIcon, ListIcon, ShieldCheckIcon, SlidersIcon } from "../../icons";
-import type {
-  AuditConfigEvent,
-  AuditEventPayload,
-  AuditResponse,
-  ServerSetting,
-} from "@core/types";
+import type { AuditConfigEvent, AuditEventPayload, AuditResponse, ServerSetting } from "@core/types";
 import { TID } from "@core/testids";
 import { SelectInput, TextInput } from "../../components/elements/TextInput";
 import { Toggle } from "../settings/SharedControls";
@@ -228,7 +223,11 @@ function AuditConfigHalf() {
                 <div className={styles.settingLabel}>{s.label || s.key}</div>
                 {s.help && <div className={styles.settingHelp}>{s.help}</div>}
               </div>
-              <AuditSettingField setting={s} value={valueOf(s)} onChange={(v) => setEdits((p) => ({ ...p, [s.key]: v }))} />
+              <AuditSettingField
+                setting={s}
+                value={valueOf(s)}
+                onChange={(v) => setEdits((p) => ({ ...p, [s.key]: v }))}
+              />
             </div>
           ))}
         </section>
@@ -302,7 +301,9 @@ function AuditSettingField({
         >
           {!setting.options.includes(value) && value !== "" && <option value={value}>{value}</option>}
           {setting.options.map((o) => (
-            <option key={o} value={o}>{o}</option>
+            <option key={o} value={o}>
+              {o}
+            </option>
           ))}
         </SelectInput>
       );

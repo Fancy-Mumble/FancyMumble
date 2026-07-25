@@ -147,13 +147,16 @@ export default function ScreenSharePickerDialog({
             // list, but it must survive the confirm so adding a camera keeps
             // the live screen track. Represent it as a synthetic card-less
             // selection (chip only).
-            setSelectedDisplay((prev) => prev ?? {
-              id: seed.id,
-              kind: seed.kind,
-              title: t("screenShare.picker.systemPickedDisplay"),
-              width: 0,
-              height: 0,
-            });
+            setSelectedDisplay(
+              (prev) =>
+                prev ?? {
+                  id: seed.id,
+                  kind: seed.kind,
+                  title: t("screenShare.picker.systemPickedDisplay"),
+                  width: 0,
+                  height: 0,
+                },
+            );
             continue;
           }
           const live = usable.find((s) => s.kind === seed.kind && s.id === seed.id);
@@ -212,9 +215,7 @@ export default function ScreenSharePickerDialog({
 
   const toggleSelect = (src: CaptureSource) => {
     if (src.kind === "device") {
-      setSelectedDevice((prev) =>
-        prev !== null && prev.id === src.id ? null : src,
-      );
+      setSelectedDevice((prev) => (prev !== null && prev.id === src.id ? null : src));
     } else {
       setSelectedDisplay((prev) =>
         prev !== null && prev.kind === src.kind && prev.id === src.id ? null : src,
@@ -239,9 +240,7 @@ export default function ScreenSharePickerDialog({
     if (loadError !== null) return t("screenShare.picker.loadFailed", { detail: loadError });
     if (visibleSources === null) return t("screenShare.picker.loading");
     if (visibleSources.length === 0) {
-      return tab === "devices"
-        ? t("screenShare.picker.emptyDevices")
-        : t("screenShare.picker.empty");
+      return tab === "devices" ? t("screenShare.picker.emptyDevices") : t("screenShare.picker.empty");
     }
     return null;
   };
@@ -250,9 +249,7 @@ export default function ScreenSharePickerDialog({
 
   /** Whether a tab holds a current selection (dot marker on inactive tabs). */
   const tabHasSelection = (p: PickerTab): boolean =>
-    p === "devices"
-      ? selectedDevice !== null
-      : selectedDisplay?.kind === KIND_BY_TAB[p];
+    p === "devices" ? selectedDevice !== null : selectedDisplay?.kind === KIND_BY_TAB[p];
 
   return (
     <Modal onClose={onCancel}>
@@ -267,29 +264,27 @@ export default function ScreenSharePickerDialog({
         </h3>
 
         {!deviceOnly && (
-        <div className={styles.tabs} role="tablist">
-          {(["screens", "windows", "devices"] as const).map((p) => {
-            const Icon = TAB_ICONS[p];
-            return (
-              <button
-                key={p}
-                type="button"
-                role="tab"
-                aria-selected={tab === p}
-                className={`${styles.tab} ${tab === p ? styles.tabActive : ""}`}
-                onClick={() => setTab(p)}
-                data-testid={TID.screenSharePickerTab}
-                data-tab={p}
-              >
-                <Icon width={15} height={15} aria-hidden="true" />
-                {t(TAB_LABEL_KEYS[p])}
-                {tab !== p && tabHasSelection(p) && (
-                  <span className={styles.tabDot} aria-hidden="true" />
-                )}
-              </button>
-            );
-          })}
-        </div>
+          <div className={styles.tabs} role="tablist">
+            {(["screens", "windows", "devices"] as const).map((p) => {
+              const Icon = TAB_ICONS[p];
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === p}
+                  className={`${styles.tab} ${tab === p ? styles.tabActive : ""}`}
+                  onClick={() => setTab(p)}
+                  data-testid={TID.screenSharePickerTab}
+                  data-tab={p}
+                >
+                  <Icon width={15} height={15} aria-hidden="true" />
+                  {t(TAB_LABEL_KEYS[p])}
+                  {tab !== p && tabHasSelection(p) && <span className={styles.tabDot} aria-hidden="true" />}
+                </button>
+              );
+            })}
+          </div>
         )}
 
         <div className={styles.grid}>
@@ -297,16 +292,14 @@ export default function ScreenSharePickerDialog({
             <div className={styles.status}>{status}</div>
           ) : (
             visibleSources?.map((src) => {
-              const isSelected = src.kind === "device"
-                ? selectedDevice?.id === src.id
-                : selectedDisplay?.kind === src.kind && selectedDisplay.id === src.id;
+              const isSelected =
+                src.kind === "device"
+                  ? selectedDevice?.id === src.id
+                  : selectedDisplay?.kind === src.kind && selectedDisplay.id === src.id;
               const thumb = thumbs.get(sourceKey(src.kind, src.id));
               const cardAttrs = { [STREAM_SOURCE_TITLE_ATTR]: src.title };
-              const KindIcon = src.kind === "screen"
-                ? MonitorIcon
-                : src.kind === "window"
-                  ? AppWindowIcon
-                  : WebcamIcon;
+              const KindIcon =
+                src.kind === "screen" ? MonitorIcon : src.kind === "window" ? AppWindowIcon : WebcamIcon;
               return (
                 <button
                   key={sourceKey(src.kind, src.id)}
@@ -321,11 +314,7 @@ export default function ScreenSharePickerDialog({
                   {...cardAttrs}
                 >
                   <span className={styles.thumb} aria-hidden="true">
-                    {thumb ? (
-                      <img src={thumb} alt="" />
-                    ) : (
-                      <KindIcon width={32} height={32} />
-                    )}
+                    {thumb ? <img src={thumb} alt="" /> : <KindIcon width={32} height={32} />}
                   </span>
                   <span className={styles.cardLabel}>
                     <KindIcon width={15} height={15} aria-hidden="true" />
@@ -344,9 +333,7 @@ export default function ScreenSharePickerDialog({
             discover they can share both at once). */}
         {(selectedDisplay !== null || selectedDevice !== null) && (
           <div className={styles.selection}>
-            <span className={styles.selectionLabel}>
-              {t("screenShare.picker.sharingLabel")}
-            </span>
+            <span className={styles.selectionLabel}>{t("screenShare.picker.sharingLabel")}</span>
             {[selectedDisplay, selectedDevice].map((src) => {
               if (src === null) return null;
               const ChipIcon = KIND_ICONS[src.kind];
@@ -375,24 +362,16 @@ export default function ScreenSharePickerDialog({
               );
             })}
             {selectedDevice === null && !deviceOnly && (
-              <span className={styles.selectionHint}>
-                {t("screenShare.picker.addCameraHint")}
-              </span>
+              <span className={styles.selectionHint}>{t("screenShare.picker.addCameraHint")}</span>
             )}
             {selectedDisplay === null && !deviceOnly && (
-              <span className={styles.selectionHint}>
-                {t("screenShare.picker.addDisplayHint")}
-              </span>
+              <span className={styles.selectionHint}>{t("screenShare.picker.addDisplayHint")}</span>
             )}
           </div>
         )}
 
         <div className={styles.actions}>
-          <div
-            className={styles.quality}
-            role="group"
-            aria-label={t("screenShare.picker.qualityLabel")}
-          >
+          <div className={styles.quality} role="group" aria-label={t("screenShare.picker.qualityLabel")}>
             {(["sd", "hd", "source"] as const).map((q) => (
               <button
                 key={q}
@@ -422,9 +401,7 @@ export default function ScreenSharePickerDialog({
             }}
             data-testid={TID.screenShareConfirm}
           >
-            {selections.length === 2
-              ? t("screenShare.picker.shareBoth")
-              : t("screenShare.picker.share")}
+            {selections.length === 2 ? t("screenShare.picker.shareBoth") : t("screenShare.picker.share")}
           </button>
         </div>
       </div>
@@ -546,9 +523,7 @@ function StreamModeButton({
             onClick={() => setSub((s) => (s === "res" ? null : "res"))}
           >
             <span className={styles.modeRowName}>{t("screenShare.mode.resolution")}</span>
-            <span className={styles.modeRowValue}>
-              {t(`screenShare.picker.res_${resKey}`, resKey)}
-            </span>
+            <span className={styles.modeRowValue}>{t(`screenShare.picker.res_${resKey}`, resKey)}</span>
             <ChevronRightIcon width={14} height={14} className={sub === "res" ? styles.chevronOpen : ""} />
           </button>
           {sub === "res" &&
@@ -594,9 +569,7 @@ function StreamModeButton({
                 <span className={styles.check}>
                   {settings.maxFps === f && <CheckIcon width={14} height={14} />}
                 </span>
-                <span className={styles.modeRowName}>
-                  {t("screenShare.mode.fpsValue", { fps: f })}
-                </span>
+                <span className={styles.modeRowName}>{t("screenShare.mode.fpsValue", { fps: f })}</span>
               </button>
             ))}
 

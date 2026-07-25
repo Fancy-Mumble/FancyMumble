@@ -12,7 +12,9 @@ import type { AppState } from ".";
 
 /** Our own user entry, or `undefined` before the server assigns a session. */
 export function selectOwnUser(state: AppState) {
-  return state.ownSession === null ? undefined : state.users.find((user) => user.session === state.ownSession);
+  return state.ownSession === null
+    ? undefined
+    : state.users.find((user) => user.session === state.ownSession);
 }
 
 /** Whether we have deafened ourselves (server-confirmed). */
