@@ -318,11 +318,31 @@ pub struct ChannelState {
     pub invitee_user_ids: ::prost::alloc::vec::Vec<u32>,
     /// Fancy extension: the set of attributes describing this channel from the
     /// receiving user's perspective (see ChannelAttribute). Supersedes `can_enter`
-    /// / `is_enter_restricted` for Fancy clients. Input-only on create:
-    /// CHANNEL_ATTRIBUTE_DETACHED requests a parentless, Fancy-only channel that
-    /// never appears in the channel tree.
+    /// / `is_enter_restricted` for Fancy clients.
+    ///
+    /// As input this is the generic carrier for every *settable* attribute, so new
+    /// channel traits need no new ChannelState field - add the enum value and list
+    /// it here. The server partitions ChannelAttribute into:
+    ///    - server-computed (CAN_ENTER, ENTER_RESTRICTED, HIDDEN, TEMPORARY):
+    ///      ignored as input, always recomputed per recipient;
+    ///    - create-only (DETACHED): honoured on create, ignored on edit;
+    ///    - settable (STRUCTURAL): honoured on create and edit, requires Write.
     #[prost(enumeration = "ChannelAttribute", repeated, packed = "false", tag = "110")]
     pub attributes: ::prost::alloc::vec::Vec<i32>,
+    /// Fancy extension: generic write-mask for `attributes`, so a client can
+    /// assign attributes without a dedicated field per trait.
+    ///
+    /// For every attribute listed here the server assigns the value implied by
+    /// `attributes` - set when also present there, cleared when not. Attributes
+    /// absent from the mask are left untouched, so a partial update (a rename,
+    /// say) never disturbs unrelated traits. A repeated field cannot distinguish
+    /// "empty" from "absent", which is exactly why clearing the last remaining
+    /// attribute needs this mask rather than an empty `attributes`.
+    ///
+    /// Omitting the mask keeps the original create-time behaviour: `attributes`
+    /// is read additively and nothing is cleared.
+    #[prost(enumeration = "ChannelAttribute", repeated, packed = "false", tag = "111")]
+    pub attribute_mask: ::prost::alloc::vec::Vec<i32>,
 }
 /// Used to communicate user leaving or being kicked. May be sent by the client
 /// when it attempts to kick a user. Sent by the server when it informs the
@@ -3127,6 +3147,10 @@ pub enum ChannelAttribute {
     /// Detached: a parentless channel (like the root) that never appears in the
     /// channel tree and is only ever sent to Fancy clients. Used for meeting rooms.
     Detached = 5,
+    /// Structural: the channel exists only to organise the tree. It cannot be
+    /// entered and never holds users; clients render it as a heading for the
+    /// channels nested beneath it. Settable by clients with Write on the channel.
+    Structural = 6,
 }
 impl ChannelAttribute {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3141,6 +3165,7 @@ impl ChannelAttribute {
             Self::Hidden => "CHANNEL_ATTRIBUTE_HIDDEN",
             Self::Temporary => "CHANNEL_ATTRIBUTE_TEMPORARY",
             Self::Detached => "CHANNEL_ATTRIBUTE_DETACHED",
+            Self::Structural => "CHANNEL_ATTRIBUTE_STRUCTURAL",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3152,6 +3177,7 @@ impl ChannelAttribute {
             "CHANNEL_ATTRIBUTE_HIDDEN" => Some(Self::Hidden),
             "CHANNEL_ATTRIBUTE_TEMPORARY" => Some(Self::Temporary),
             "CHANNEL_ATTRIBUTE_DETACHED" => Some(Self::Detached),
+            "CHANNEL_ATTRIBUTE_STRUCTURAL" => Some(Self::Structural),
             _ => None,
         }
     }

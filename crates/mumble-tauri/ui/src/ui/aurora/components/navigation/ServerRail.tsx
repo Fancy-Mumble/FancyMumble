@@ -34,6 +34,8 @@ export interface ServerRailProps {
   onToggle: () => void;
   onSelect: (identity: RailIdentity) => void;
   onAdd: () => void;
+  /** Layout class from the parent that positions the rail in its grid. */
+  className?: string;
 }
 
 /** Initials from a name, ignoring the dots/dashes common in host names. */
@@ -69,7 +71,7 @@ function RailEntry({ mark, title, primary, secondary, tertiary, active, offline,
   </Button>;
 }
 
-export default function ServerRail({ groups, expanded, activeSessionId, connecting = false, label, onToggle, onSelect, onAdd }: ServerRailProps) {
+export default function ServerRail({ groups, expanded, activeSessionId, connecting = false, label, onToggle, onSelect, onAdd , className }: ServerRailProps) {
   const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set<string>());
   const toggleGroup = (key: string) => setOpenGroups((current) => {
     const next = new Set(current);
@@ -119,7 +121,7 @@ export default function ServerRail({ groups, expanded, activeSessionId, connecti
     </div>;
   };
 
-  return <aside className={styles.servers} aria-label={label} data-expanded={expanded}>
+  return <aside className={`${styles.servers} ${className ?? ""}`} aria-label={label} data-expanded={expanded}>
     <div className={styles.railHeader}><span>{activeSessionId ? "CONNECTED" : "YOUR SERVERS"}</span><IconButton icon={expanded ? <ChevronLeftIcon /> : <ChevronRightIcon />} label={expanded ? "Collapse server sidebar" : "Expand server sidebar"} aria-expanded={expanded} onClick={onToggle} /></div>
     <div className={styles.serverLibrary}>{groups.map(renderGroup)}</div>
     <Button variant="ghost" className={styles.addServer} onClick={onAdd} leadingIcon={<PlusIcon />}>Add server</Button>

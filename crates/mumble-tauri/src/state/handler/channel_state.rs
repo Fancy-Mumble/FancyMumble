@@ -33,6 +33,7 @@ impl HandleMessage for mumble_tcp::ChannelState {
                     is_enter_restricted: false,
                     hidden: false,
                     detached: false,
+                    attributes: 0,
                     expiry_mode: 0,
                     expiry_duration_secs: 0,
                     expires_at: 0,
@@ -144,13 +145,29 @@ fn apply_channel_state_fields(ch: &mut ChannelEntry, proto: &mumble_tcp::Channel
     if let Some(v) = proto.hidden {
         ch.hidden = v;
     }
-    // Detached marker comes from the `attributes` set. Only update when the server
-    // included attributes (a partial ChannelState update may omit them), so we
-    // never clear a known-detached flag on e.g. an expiry-only update.
-    if !proto.attributes.is_empty() {
-        ch.detached = proto
-            .attributes
-            .contains(&(mumble_tcp::ChannelAttribute::Detached as i32));
+    // Attributes arrive as a whole set. Only update when the server included one
+    // (a partial ChannelState update may omit it), so known traits are never
+    // cleared on e.g. an expiry-only update. The mask is carried through
+    // generically, so a new attribute needs no change here - only `detached` is
+    // mirrored onto its own field, for the consumers that predate the mask.
+    let to_mask = |values: &[i32]| {
+        values.iter().fold(0u64, |mask, &attribute| {
+            if (0..64).contains(&attribute) { mask | (1u64 << attribute) } else { mask }
+        })
+    };
+    // `attribute_mask` makes the message authoritative for the attributes it
+    // names - the only way to say "this trait is now off" when the resulting set
+    // is empty. Without a mask a non-empty set replaces the whole thing, and an
+    // empty one leaves traits untouched so partial updates never clear them.
+    let asserted = to_mask(&proto.attribute_mask);
+    let present = to_mask(&proto.attributes);
+    if asserted != 0 || present != 0 {
+        ch.attributes = if asserted != 0 {
+            (ch.attributes & !asserted) | (present & asserted)
+        } else {
+            present
+        };
+        ch.detached = ch.attributes & (1u64 << mumble_tcp::ChannelAttribute::Detached as u64) != 0;
     }
     if let Some(v) = proto.expiry_mode {
         ch.expiry_mode = v;

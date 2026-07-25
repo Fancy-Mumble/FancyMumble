@@ -573,6 +573,9 @@ export interface AppState extends PersistentChatSlice, DmSlice, VoiceSlice, Noti
     expiryDurationSecs?: number;
     /** Registered user_ids to invite (private meeting room). Create-only. */
     invitees?: number[];
+    /** `ChannelAttribute` discriminants to set on the new channel. Generic on
+     *  purpose - any settable attribute travels here, no field per trait. */
+    attributes?: number[];
   }) => Promise<void>;
   updateChannel: (channelId: number, opts: {
     parentId?: number;
@@ -588,6 +591,11 @@ export interface AppState extends PersistentChatSlice, DmSlice, VoiceSlice, Noti
     hidden?: boolean;
     expiryMode?: number;
     expiryDurationSecs?: number;
+    /** `ChannelAttribute` discriminants to assign, paired with `attributeMask`. */
+    attributes?: number[];
+    /** Which attributes this update asserts: each is set when listed in
+     *  `attributes` and cleared otherwise. Omit to leave all of them alone. */
+    attributeMask?: number[];
   }) => Promise<void>;
   deleteChannel: (channelId: number) => Promise<void>;
   moveChannelUsers: (fromChannelId: number, toChannelId: number) => Promise<void>;
@@ -1257,6 +1265,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
         expiryMode: opts.expiryMode ?? null,
         expiryDurationSecs: opts.expiryDurationSecs ?? null,
         invitees: opts.invitees ?? null,
+        attributes: opts.attributes ?? null,
       });
     } catch (e) {
       console.error("create_channel error:", e);
@@ -1281,6 +1290,8 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
         hidden: opts.hidden ?? null,
         expiryMode: opts.expiryMode ?? null,
         expiryDurationSecs: opts.expiryDurationSecs ?? null,
+        attributes: opts.attributes ?? null,
+        attributeMask: opts.attributeMask ?? null,
       });
     } catch (e) {
       console.error("update_channel error:", e);

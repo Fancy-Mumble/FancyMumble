@@ -48,7 +48,12 @@ export function useAclGroups(): readonly AclGroup[] {
       if (!cached) {
         invoke("request_acl", { channelId: rootId }).catch(() => {});
       }
-    })();
+    })().catch(() => {
+      // No Tauri IPC (tests, a plain browser preview): roles simply stay
+      // empty. Without this the rejected `listen()` surfaced as an unhandled
+      // rejection in every consumer, now including the Aurora composer's
+      // mention autocomplete.
+    });
     return () => {
       cancelled = true;
       unlisten?.();

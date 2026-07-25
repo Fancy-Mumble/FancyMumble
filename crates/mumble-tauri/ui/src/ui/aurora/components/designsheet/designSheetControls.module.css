@@ -1,0 +1,189 @@
+/* Design sheet: dsControls. Split from AuroraApp.module.css. */
+
+.iconButton {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: #bac0cb;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  border-color: rgb(255 255 255 / 8%);
+  background: rgb(255 255 255 / 3.5%);
+  box-shadow: none;
+  backdrop-filter: blur(20px) saturate(105%);
+}
+
+.floatingButton {
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
+  width: 42px;
+  height: 42px;
+  color: var(--ink);
+  border: 0;
+  border-radius: 14px;
+  background: #72b6df;
+  box-shadow: none;
+}
+
+.iconButton:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: rgb(255 255 255 / 7%);
+}
+
+.primaryButton {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: #10120d;
+  border-color: var(--signal);
+  background: #72b6df;
+  box-shadow: none;
+}
+
+.secondaryButton {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  border-color: rgb(255 255 255 / 8%);
+  background: rgb(255 255 255 / 3.5%);
+  box-shadow: none;
+  backdrop-filter: blur(20px) saturate(105%);
+}
+
+.ghostButton {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  border-color: transparent;
+}
+
+.dangerButton {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: #ff9288;
+  border-color: rgb(255 120 106 / 22%);
+  background: rgb(255 120 106 / 8%);
+}
+
+.primaryButton:hover {
+  filter: brightness(1.07);
+  box-shadow: 0 0 0 3px rgb(105 183 232 / 10%);
+}
+
+.secondaryButton:hover {
+  background: rgb(255 255 255 / 9%);
+}
+
+.ghostButton:hover {
+  background: rgb(255 255 255 / 9%);
+}
+
+.primaryButton:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+.secondaryButton:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+.splitButton {
+  display: inline-flex;
+  margin-right: 16px;
+}
+
+.splitButton button {
+  height: 38px;
+  padding: 0 13px;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 0;
+  background: var(--signal);
+}
+
+.splitButton button:first-child {
+  border-radius: 10px 0 0 10px;
+}
+
+.splitButton button:last-child {
+  padding: 0 10px;
+  border-left: 1px solid rgb(0 0 0 / 18%);
+  border-radius: 0 10px 10px 0;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  border-color: rgb(255 255 255 / 8%);
+  background: rgb(255 255 255 / 3.5%);
+  box-shadow: none;
+  backdrop-filter: blur(20px) saturate(105%);
+}
+
+.segmented button {
+  height: 30px;
+  padding: 0 11px;
+  color: var(--muted);
+  font-size: 9px;
+  cursor: pointer;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+}
+
+.segmented .segmentActive {
+  color: var(--text);
+  background: #272b35;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
+}

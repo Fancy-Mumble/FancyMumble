@@ -22,6 +22,7 @@ export {
   FileText as FileTextIcon,
   Hash as HashIcon,
   Headphones as HeadphonesIcon,
+  HeadphoneOff as HeadphonesOffIcon,
   Image as ImageIcon,
   Info as InfoIcon,
   Link2 as Link2Icon,

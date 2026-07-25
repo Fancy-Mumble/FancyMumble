@@ -9,7 +9,7 @@ import { CheckIcon, CopyIcon, EditIcon, PinIcon, QuoteIcon, TrashIcon } from "@u
 import WatchStartButton from "@ui/standard/components/chat/watch/WatchStartButton";
 import WatchTogetherCard from "@ui/standard/components/chat/watch/WatchTogetherCard";
 import styles from "../../AuroraClientApp.module.css";
-import extensionStyles from "../../AuroraClientExtensions.module.css";
+import extensionStyles from "./MessageItem.module.css";
 import LinkPreviews from "./LinkPreviews";
 import { Button, IconButton } from "../primitives";
 import { PollCard } from "./PollSurfaces";

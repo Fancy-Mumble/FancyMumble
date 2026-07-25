@@ -9,3 +9,6 @@ export { FileAttachmentCard, FileAttachmentMarker } from "./FileAttachmentCard";
 export { GifPicker } from "./GifPicker";
 export { default as LinkPreviews } from "./LinkPreviews";
 export type { LinkPreviewsProps } from "./LinkPreviews";
+export * from "./composer";
+export { RichComposer } from "./RichComposer";
+export { default as MemberSidebar } from "./MemberSidebar";
