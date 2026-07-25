@@ -1,3 +1,4 @@
+import LayoutSpecimen from "./LayoutSpecimen";
 import Avatar from "./Avatar";
 import foundation from "./FoundationSection.module.css";
 import Section from "./Section";
@@ -82,6 +83,9 @@ export default function FoundationSection() {
           </div>
         </Specimen>
       </div>
+      <Specimen title="Layout" meta="Box / Container / spacing scale" wide>
+        <LayoutSpecimen />
+      </Specimen>
     </Section>
   );
 }
