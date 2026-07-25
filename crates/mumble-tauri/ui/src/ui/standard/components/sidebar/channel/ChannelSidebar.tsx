@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@core/store";
+import { selectSelfDeafened } from "@core/store/voiceSelectors";
 import { listen } from "@tauri-apps/api/event";
 import type { ChannelEntry, UserEntry, SidebarSections } from "@core/types";
 import { getPreferences, updatePreferences } from "@core/preferencesStorage";
@@ -49,6 +50,8 @@ interface SelfVoiceControlsProps {
   readonly inCall: boolean;
   readonly toggleMute: () => void;
   readonly toggleDeafen: () => void;
+  /** Server-confirmed self-deafen flag (not derivable from `voiceState`). */
+  readonly deafened: boolean;
   readonly enableVoice: () => void;
   readonly disableVoice: () => void;
   readonly onCollapse?: () => void;
@@ -58,10 +61,9 @@ interface SelfVoiceControlsProps {
   readonly micInUseTitle?: string;
 }
 
-function SelfVoiceControls({ voiceState, inCall, toggleMute, toggleDeafen, enableVoice, disableVoice, onCollapse, micInUse, micInUseTitle }: Readonly<SelfVoiceControlsProps>) {
+function SelfVoiceControls({ voiceState, inCall, toggleMute, toggleDeafen, deafened, enableVoice, disableVoice, onCollapse, micInUse, micInUseTitle }: Readonly<SelfVoiceControlsProps>) {
   const { t } = useTranslation(["sidebar", "common"]);
   const isActive = voiceState === "active";
-  const isInactive = voiceState === "inactive";
   const muteTitle = micInUse
     ? micInUseTitle ?? t("channelSidebar.micInUse")
     : isActive ? t("channelSidebar.mute") : t("channelSidebar.unmute");
@@ -87,12 +89,13 @@ function SelfVoiceControls({ voiceState, inCall, toggleMute, toggleDeafen, enabl
         </button>
       </Tooltip>
       <button
-        className={`${styles.voiceToggle} ${isInactive ? styles.voiceMuted : styles.voiceActive}`}
+        className={`${styles.voiceToggle} ${deafened ? styles.voiceMuted : styles.voiceActive}`}
         data-testid={TID.toggleDeafen}
         onClick={toggleDeafen}
-        title={isInactive ? t("channelSidebar.enableVoice") : t("channelSidebar.disableVoice")}
+        title={deafened ? t("userMenu.undeafen") : t("userMenu.deafen")}
+        aria-pressed={deafened}
       >
-        {isInactive ? (
+        {deafened ? (
           <HeadphonesOffIcon width={18} height={18} />
         ) : (
           <HeadphonesIcon width={18} height={18} />
@@ -166,6 +169,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
     : undefined;
   const toggleMute = useAppStore((s) => s.toggleMute);
   const toggleDeafen = useAppStore((s) => s.toggleDeafen);
+  const selfDeafened = useAppStore(selectSelfDeafened);
   const enableVoice = useAppStore((s) => s.enableVoice);
   const disableVoice = useAppStore((s) => s.disableVoice);
   const inCall = useAppStore((s) => s.inCall);
@@ -738,6 +742,7 @@ export default function ChannelSidebar({ onChannelSelect, onServerInfoToggle, on
                 inCall={inCall}
                 toggleMute={toggleMute}
                 toggleDeafen={toggleDeafen}
+                deafened={selfDeafened}
                 enableVoice={enableVoice}
                 disableVoice={disableVoice}
                 onCollapse={onCollapse}

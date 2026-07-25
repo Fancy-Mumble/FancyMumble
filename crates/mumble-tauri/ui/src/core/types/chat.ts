@@ -35,6 +35,11 @@ export interface ChannelEntry {
    *  tree, only delivered to Fancy clients (e.g. meeting rooms). Surfaced in the
    *  Meetings/Private-rooms viewer instead. */
   detached?: boolean;
+  /** Server-advertised channel attributes as a bitmask over `ChannelAttribute`
+   *  (bit N = attribute N). Read it with `hasChannelAttribute` rather than
+   *  masking by hand - new server-side channel traits become available here
+   *  without any further plumbing. */
+  attributes?: number;
   /** Channel expiry mode: 0 = none, 1 = absolute, 2 = sliding. */
   expiry_mode?: number;
   /** Expiry lifetime / idle window in seconds (0 = none). */

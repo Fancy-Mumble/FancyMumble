@@ -227,14 +227,14 @@ impl QtEventHandler {
     /// that is never drawn.
     fn push_channels(&self) {
         let mut channels: Vec<&Channel> =
-            self.state.channels.values().filter(|c| !c.detached).collect();
+            self.state.channels.values().filter(|c| !c.detached()).collect();
         channels.sort_by(|a, b| a.position.cmp(&b.position).then(a.channel_id.cmp(&b.channel_id)));
 
         let dm_rooms: std::collections::HashSet<u32> = self
             .state
             .channels
             .values()
-            .filter(|c| c.detached && c.name.starts_with(crate::constants::DM_CHANNEL_PREFIX))
+            .filter(|c| c.detached() && c.name.starts_with(crate::constants::DM_CHANNEL_PREFIX))
             .map(|c| c.channel_id)
             .collect();
 

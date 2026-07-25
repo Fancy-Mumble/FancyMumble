@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ChannelEntry, PchatProtocol } from "@core/types";
 import { useChannelDescription } from "@core/lazyBlobs";
 import { useAppStore } from "@core/store";
+import { ChannelAttribute, isStructuralChannel } from "@core/utils/channelAttributes";
 import { TrashIcon } from "@ui/icons";
 import { Button, ModalSurface, RichTextEditor, TextField } from "../primitives";
 import styles from "../../AuroraClientExtensions.module.css";
@@ -9,10 +10,13 @@ import styles from "../../AuroraClientExtensions.module.css";
 export interface ChannelEditorSurfaceProps {
   channel: ChannelEntry | null;
   parentId: number;
+  /** Pre-set the structural toggle when creating (a "create category" entry
+   *  point). Ignored when editing, where the channel's own flag wins. */
+  initialStructural?: boolean;
   onClose: () => void;
 }
 
-export default function ChannelEditorSurface({ channel, parentId, onClose }: ChannelEditorSurfaceProps) {
+export default function ChannelEditorSurface({ channel, parentId, initialStructural = false, onClose }: ChannelEditorSurfaceProps) {
   const channels = useAppStore((state) => state.channels);
   const sourceDescription = useChannelDescription(channel?.id, channel?.description_size);
   const [name, setName] = useState(channel?.name ?? "");
@@ -22,6 +26,7 @@ export default function ChannelEditorSurface({ channel, parentId, onClose }: Cha
   const [maxUsers, setMaxUsers] = useState(channel?.max_users ?? 0);
   const [temporary, setTemporary] = useState(channel?.temporary ?? false);
   const [hidden, setHidden] = useState(channel?.hidden ?? false);
+  const [structural, setStructural] = useState(channel ? isStructuralChannel(channel) : initialStructural);
   const [password, setPassword] = useState("");
   const [pchatProtocol, setPchatProtocol] = useState<PchatProtocol>(channel?.pchat_protocol ?? "none");
   const [history, setHistory] = useState(channel?.pchat_max_history ?? 0);
@@ -38,8 +43,11 @@ export default function ChannelEditorSurface({ channel, parentId, onClose }: Cha
     setBusy(true); setError(null);
     try {
       const values = { description: description || undefined, position, temporary, maxUsers, password: password || undefined, hidden, pchatProtocol, pchatMaxHistory: history, pchatRetentionDays: retention };
-      if (creating) await useAppStore.getState().createChannel(parentId, name.trim(), values);
-      else await useAppStore.getState().updateChannel(channel.id, { name: name.trim(), parentId: selectedParentId, ...values });
+      // Only STRUCTURAL is asserted, so the mask names just that one: every
+      // other attribute stays as the server computed it.
+      const attributes = structural ? [ChannelAttribute.Structural] : [];
+      if (creating) await useAppStore.getState().createChannel(parentId, name.trim(), { ...values, attributes });
+      else await useAppStore.getState().updateChannel(channel.id, { name: name.trim(), parentId: selectedParentId, ...values, attributes, attributeMask: [ChannelAttribute.Structural] });
       onClose();
     } catch (reason) { setError(String(reason)); }
     finally { setBusy(false); }
@@ -67,7 +75,7 @@ export default function ChannelEditorSurface({ channel, parentId, onClose }: Cha
         <TextField label="History limit" hint="0 means unlimited" type="number" min={0} disabled={pchatProtocol === "none"} value={history} onChange={(event) => setHistory(Number(event.target.value))} />
         <TextField label="Retention days" hint="0 means forever" type="number" min={0} disabled={pchatProtocol === "none"} value={retention} onChange={(event) => setRetention(Number(event.target.value))} />
       </div>
-      <div className={styles.channelChecks}><label><input type="checkbox" checked={temporary} onChange={(event) => setTemporary(event.target.checked)} />Temporary channel</label><label><input type="checkbox" checked={hidden} onChange={(event) => setHidden(event.target.checked)} />Hidden channel</label></div>
+      <div className={styles.channelChecks}><label><input type="checkbox" checked={temporary} onChange={(event) => setTemporary(event.target.checked)} />Temporary channel</label><label><input type="checkbox" checked={hidden} onChange={(event) => setHidden(event.target.checked)} />Hidden channel</label><label><input type="checkbox" checked={structural} onChange={(event) => setStructural(event.target.checked)} />Structural only<small>A heading for the channels beneath it. Cannot be joined and holds no users.</small></label></div>
       {error && <div className={styles.formError} role="alert">{error}</div>}
       <footer className={styles.channelEditorActions}>
         {!creating && channel.id !== 0 && (confirmDelete ? <><span>Delete this channel permanently?</span><Button variant="danger" onClick={() => void remove()} disabled={busy}>Confirm delete</Button><Button onClick={() => setConfirmDelete(false)}>Keep channel</Button></> : <Button variant="danger" leadingIcon={<TrashIcon />} onClick={() => setConfirmDelete(true)}>Delete channel</Button>)}

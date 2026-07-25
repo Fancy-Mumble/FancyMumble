@@ -1,0 +1,91 @@
+/* Design sheet: dataProfile. Split from AuroraApp.module.css. */
+
+.profileCard {
+  max-width: 340px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  border-color: rgb(255 255 255 / 9%);
+  background: rgb(21 27 34 / 62%);
+  box-shadow: 0 16px 44px rgb(0 0 0 / 13%);
+  backdrop-filter: blur(32px) saturate(108%);
+}
+
+.profileCover {
+  height: 88px;
+  background: radial-gradient(circle at 72% 30%, rgb(105 183 232 / 11%), transparent 22%), #27313c;
+}
+
+.profileBody {
+  position: relative;
+  padding: 0 16px 16px;
+}
+
+.profileBodyAvatar.profileBodyAvatar {
+  width: 58px;
+  height: 58px;
+  margin-top: -28px;
+  font-size: 13px;
+  border-width: 4px;
+  border-color: #15181e;
+  border-radius: 18px;
+}
+
+.profileBody > button:nth-child(2) {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  color: var(--muted);
+  border: 0;
+  background: transparent;
+}
+
+.profileBody h3 {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  margin: 10px 0 2px;
+  font-size: var(--type-title);
+}
+
+.profileBody h3 svg {
+  width: 14px;
+  color: #79bdff;
+}
+
+.profileBody > small {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.profileBody > p {
+  color: #a7adb8;
+  line-height: 1.55;
+  font-size: 12px;
+}
+
+.profileBody > div {
+  display: flex;
+  gap: 22px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.profileBody > div span {
+  display: flex;
+  flex-direction: column;
+}
+
+.profileBody > div strong {
+  font-size: 11px;
+}
+
+.profileBody > div small {
+  color: var(--muted);
+  font-size: 7px;
+}
+
+.profileBodyPrimaryButton.profileBodyPrimaryButton {
+  width: 100%;
+  margin-top: 4px;
+}

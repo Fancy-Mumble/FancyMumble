@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isDesktopPlatform } from "@core/utils/platform";
 import { CloseIcon, MinimizeIcon, PlusIcon, SquareIcon } from "@ui/icons";
 import { Button, IconButton } from "../primitives";
-import styles from "../../AuroraApp.module.css";
+import styles from "./WindowTitleBar.module.css";
 
 export type ChromePlatform = "windows" | "macos" | "linux";
 

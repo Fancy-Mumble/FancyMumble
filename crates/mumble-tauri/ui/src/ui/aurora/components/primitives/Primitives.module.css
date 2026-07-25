@@ -19,28 +19,39 @@
     cursor: default
 }
 
-.primary {
+/* Variants are selected by the `data-variant` attribute the Button primitive
+ * writes, so a red button differs from a blue one by that attribute alone.
+ * Each is wrapped in `:where()` so it contributes zero specificity beyond
+ * `.button` - callers that pass their own class keep overriding these exactly
+ * as they did when the variants were plain classes. */
+.button:where([data-variant="primary"]) {
     background: #65b8ed;
     color: #102535
 }
 
-.secondary {
+.button:where([data-variant="secondary"]) {
     border-color: rgba(255, 255, 255, .075);
     background: rgba(255, 255, 255, .05)
 }
 
-.danger {
-    background: rgba(239, 100, 100, .09);
-    color: #f29494
+.button:where([data-variant="danger"]) {
+    background: rgba(224, 78, 78, .13);
+    border-color: rgba(224, 78, 78, .28);
+    color: #f08d8d
 }
 
-.ghost {
+.button:where([data-variant="danger"]):hover:not(:disabled) {
+    background: rgba(224, 78, 78, .2);
+    color: #f7a5a5
+}
+
+.button:where([data-variant="ghost"]) {
     border-color: rgba(255, 255, 255, .075);
     background: transparent;
     color: #9ba7b5
 }
 
-.bare {
+.button:where([data-variant="bare"]) {
     min-height: 0;
     padding: 0;
     border: 0;
@@ -127,4 +138,71 @@
     color: #f29494;
     font-size: 9px;
     font-style: normal
+}
+
+.select {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #aeb7c3;
+    font-size: 10px;
+    font-weight: 700
+}
+
+.select>span {
+    display: flex;
+    align-items: baseline;
+    gap: 5px
+}
+
+.select small {
+    color: #687483;
+    font-weight: 400
+}
+
+.select select {
+    width: 100%;
+    height: 42px;
+    padding: 0 34px 0 12px;
+    border: 1px solid rgba(255, 255, 255, .09);
+    border-radius: 10px;
+    outline: 0;
+    background: rgba(6, 9, 13, .4);
+    color: #edf1f7;
+    font: inherit
+}
+
+.select select:focus {
+    border-color: rgba(101, 184, 237, .5);
+    box-shadow: 0 0 0 3px rgba(101, 184, 237, .08)
+}
+
+.switch,
+.switchOn {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 21px;
+    padding: 3px;
+    border-radius: 12px;
+    background: #303944;
+    transition: .18s
+}
+
+.switch b,
+.switchOn b {
+    display: block;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: #8d98a6;
+    transition: .18s
+}
+
+.switchOn {
+    background: rgba(101, 184, 237, .35)
+}
+
+.switchOn b {
+    transform: translateX(15px);
+    background: #7bc4f1
 }

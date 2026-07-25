@@ -1,0 +1,110 @@
+/* Design sheet: foundation. Split from AuroraApp.module.css. */
+
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.swatch {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.swatch i {
+  height: 78px;
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  border-color: rgb(255 255 255 / 8%);
+  box-shadow: none;
+}
+
+.swatch strong {
+  font-size: 10px;
+}
+
+.swatch span {
+  margin-top: 3px;
+  color: var(--muted);
+  font: 8px ui-monospace, monospace;
+}
+
+.ink {
+  background: #0b0e13;
+}
+
+.canvas {
+  background: #12171e;
+}
+
+.cloud {
+  background: #f3f5f7;
+}
+
+.signal {
+  background: #69b7e8;
+}
+
+.iris {
+  background: #718096;
+}
+
+.coral {
+  background: #e4776d;
+}
+
+.typeScale {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr auto;
+  gap: 36px;
+  align-items: end;
+}
+
+.typeScale span {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font: 8px ui-monospace, monospace;
+  text-transform: uppercase;
+}
+
+.typeScale strong {
+  font-weight: 560;
+  line-height: .95;
+  letter-spacing: -.05em;
+  font-size: clamp(27px, 3.4vw, 43px);
+}
+
+.typeScale p {
+  margin: 0;
+  color: #a1a7b3;
+  line-height: 1.6;
+  font-size: var(--type-body);
+}
+
+.typeScale code {
+  color: var(--signal);
+  font-size: 9px;
+}
+
+@media (max-width: 1000px) {
+  .typeScale {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .typeScale code {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .swatches {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .typeScale {
+    grid-template-columns: 1fr;
+  }
+}

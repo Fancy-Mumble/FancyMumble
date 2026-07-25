@@ -7,6 +7,17 @@ use tracing::debug;
 use super::parse_pchat_protocol_str;
 use super::AppState;
 
+/// Maps raw `ChannelAttribute` discriminants sent by the frontend onto the proto
+/// enum, dropping any value the current protocol does not define.
+///
+/// Kept generic on purpose: a new settable channel trait becomes usable from the
+/// UI without touching this command surface.
+fn parse_channel_attributes(raw: &[i32]) -> Vec<mumble_protocol::proto::mumble_tcp::ChannelAttribute> {
+    raw.iter()
+        .filter_map(|&value| mumble_protocol::proto::mumble_tcp::ChannelAttribute::try_from(value).ok())
+        .collect()
+}
+
 impl AppState {
     pub async fn select_channel(&self, channel_id: u32) -> Result<(), String> {
         let handle = {
@@ -157,6 +168,8 @@ impl AppState {
         hidden: Option<bool>,
         expiry_mode: Option<u32>,
         expiry_duration_secs: Option<u32>,
+        attributes: Vec<i32>,
+        attribute_mask: Vec<i32>,
     ) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
@@ -192,6 +205,8 @@ impl AppState {
                     expiry_mode,
                     expiry_duration_secs,
                     invitee_user_ids: Vec::new(),
+                    attributes: parse_channel_attributes(&attributes),
+                    attribute_mask: parse_channel_attributes(&attribute_mask),
                 })
                 .await
                 .map_err(|e| e.to_string())
@@ -235,6 +250,7 @@ impl AppState {
         expiry_mode: Option<u32>,
         expiry_duration_secs: Option<u32>,
         invitees: Vec<u32>,
+        attributes: Vec<i32>,
     ) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
@@ -259,6 +275,10 @@ impl AppState {
                     expiry_mode,
                     expiry_duration_secs,
                     invitee_user_ids: invitees,
+                    // Create honours the listed attributes directly; no mask is
+                    // needed because a new channel has nothing to clear.
+                    attributes: parse_channel_attributes(&attributes),
+                    attribute_mask: Vec::new(),
                 })
                 .await
                 .map_err(|e| e.to_string()),

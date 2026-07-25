@@ -12,3 +12,4 @@ export * from "./user";
 export * from "./settings";
 export * from "./admin";
 export * from "./auxiliary";
+export type { Surface } from "./surfaces";

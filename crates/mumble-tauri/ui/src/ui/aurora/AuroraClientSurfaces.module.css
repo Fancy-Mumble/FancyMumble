@@ -31,3 +31,30 @@
         border-left: 0;
     }
 }
+
+/* Full-screen settings surface (Aurora) */
+.settingsBackdrop {
+    padding: 0;
+}
+
+.settingsSurface {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+}
+
+.settingsSurface>.surfaceBody {
+    height: calc(100% - 70px);
+    max-height: none;
+}
+
+.settingsSurface .settingsGrid {
+    min-height: 100%;
+}
+
+.settingsSurface .settingsGrid nav {
+    max-height: calc(100vh - 118px);
+}

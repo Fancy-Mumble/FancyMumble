@@ -1,5 +1,14 @@
 export { default as ChannelEditorSurface } from "./ChannelEditorSurface";
 export type { ChannelEditorSurfaceProps } from "./ChannelEditorSurface";
-export { default as ChannelTree } from "./ChannelTree";
-export type { ChannelTreeProps } from "./ChannelTree";
+export { default as ChannelList } from "./ChannelList";
+export type { ChannelListProps } from "./ChannelList";
+export { flattenChannels } from "./channelOrder";
 export { default as ChannelJoinPrompt } from "./ChannelJoinPrompt";
+export { default as SidebarContextMenu } from "./SidebarContextMenu";
+export type { SidebarContextMenuProps } from "./SidebarContextMenu";
+export { default as ChannelContextMenu } from "./ChannelContextMenu";
+export type { ChannelContextMenuProps } from "./ChannelContextMenu";
+export { default as ChannelSidebar } from "./ChannelSidebar";
+export type { ChannelSidebarProps } from "./ChannelSidebar";
+export { default as MoveUsersDialog } from "./MoveUsersDialog";
+export { default as PurgeChannelDialog } from "./PurgeChannelDialog";

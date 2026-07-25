@@ -1,0 +1,27 @@
+/* Stage for the real client ServerRail inside the design sheet. */
+
+.stage {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* The rail is a grid child in the client; give it a height to lay out against. */
+  height: 320px;
+}
+
+.pane > small {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #8c96a3;
+}
+
+/* Rosters need more room than the rail so every member state stays visible. */
+.tallPane {
+  height: 420px;
+}

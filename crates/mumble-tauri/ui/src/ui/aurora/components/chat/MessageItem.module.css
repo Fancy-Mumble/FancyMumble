@@ -1,0 +1,223 @@
+/* Extracted from AuroraClientExtensions.module.css - owns only this component's styles. */
+
+.messageSelected {
+  background: rgba(100, 178, 224, .075) !important;
+  box-shadow: inset 3px 0 #69b5df;
+}
+
+.messageSelect {
+  flex: 0 0 19px;
+  width: 19px;
+  height: 19px;
+  margin: 8px 0 0 2px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 6px;
+  background: #151b22;
+  color: #dfe9ef;
+  cursor: pointer;
+}
+
+.messageSelect[aria-pressed="true"] {
+  border-color: #66b4de;
+  background: #2879a8;
+}
+
+.messageSelect svg {
+  width: 12px;
+}
+
+.messageContextMenu {
+  position: fixed;
+  z-index: 900;
+  width: 174px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 11px;
+  background: rgba(18, 23, 30, .96);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, .45);
+  backdrop-filter: blur(20px);
+}
+
+.messageContextMenu button {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+@media(max-width:620px) {
+  .messageContextMenu {
+    right: 8px !important;
+    bottom: 8px !important;
+    left: 8px !important;
+    top: auto !important;
+    width: auto;
+    padding: 8px;
+    border-radius: 15px;
+  }
+
+  .messageContextMenu button {
+    min-height: 42px;
+  }
+}
+
+.messageBody {
+  margin: 5px 0 0;
+  color: #aeb7c2;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.messageBody p {
+  margin: 0 0 6px;
+}
+
+.messageBody p:last-child {
+  margin-bottom: 0;
+}
+
+.messageBody a {
+  color: #78bfe9;
+}
+
+.messageBody pre {
+  max-width: 100%;
+  padding: 9px;
+  overflow: auto;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .24);
+}
+
+.messageBody code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.messageBody blockquote {
+  margin: 6px 0;
+  padding-left: 10px;
+  border-left: 2px solid rgba(101, 184, 237, .5);
+  color: #919eac;
+}
+
+.messageBody img {
+  display: block;
+  max-width: min(520px, 100%);
+  max-height: 420px;
+  margin-top: 7px;
+  border-radius: 9px;
+  object-fit: contain;
+  cursor: zoom-in;
+}
+
+.messageContent {
+  position: relative;
+  min-width: 0;
+}
+
+.messageContent>header small {
+  margin-left: 6px;
+  color: #697584;
+  font-size: 8px;
+}
+
+.messageActions {
+  position: absolute;
+  right: 0;
+  top: -12px;
+  padding: 3px;
+  display: none;
+  gap: 1px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 8px;
+  background: #1a2029;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .24);
+}
+
+.messageContent:hover .messageActions, .messageActions:focus-within {
+  display: flex;
+}
+
+.messageActions button {
+  min-width: 26px;
+  height: 25px;
+  padding: 0 5px;
+  font-size: 10px;
+}
+
+.messageActions svg {
+  width: 12px;
+}
+
+.reactionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.reactionRow button {
+  height: 25px;
+  padding: 0 7px;
+  border: 1px solid rgba(101, 184, 237, .15);
+  background: rgba(101, 184, 237, .05);
+  font-size: 10px;
+}
+
+.readers {
+  display: block;
+  margin-top: 5px;
+  color: #6f7c8a;
+  font-size: 8px;
+}
+
+.messageEdit {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.messageEdit textarea {
+  grid-column: 1/-1;
+  min-height: 70px;
+  padding: 9px;
+  border: 1px solid rgba(101, 184, 237, .35);
+  border-radius: 8px;
+  outline: 0;
+  background: rgba(5, 8, 12, .5);
+  color: #dce3ea;
+  font: inherit;
+  resize: vertical;
+}
+
+.messageEdit button {
+  grid-row: 2;
+}
+
+.messageEdit button:first-of-type {
+  grid-column: 2;
+}
+
+.deleteMessageConfirm {
+  margin-top: 7px;
+  padding: 7px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 8px;
+  background: rgba(239, 100, 100, .06);
+}
+
+.deleteMessageConfirm span {
+  margin-right: auto;
+  color: #e9a0a0;
+  font-size: 9px;
+}
+
+.deleteMessageConfirm button {
+  height: 27px;
+  font-size: 9px;
+}
