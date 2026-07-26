@@ -46,7 +46,7 @@ vi.mock("@tauri-apps/plugin-store", () => ({
 }));
 
 import { useAppStore } from "@core/store";
-import { useNotificationSounds } from "../../hooks/useNotificationSounds";
+import { useNotificationSounds } from "@core/features/notifications/useNotificationSounds";
 import { DEFAULT_NOTIFICATION_SOUNDS } from "../../pages/settings/NotificationsPanel";
 
 // ----- Audio capture --------------------------------------------------

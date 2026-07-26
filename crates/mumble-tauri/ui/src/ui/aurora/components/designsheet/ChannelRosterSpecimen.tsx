@@ -10,7 +10,18 @@ import styles from "./ChannelRosterSpecimen.module.css";
  * regression surface for the roster's speaking / muted / deafened states.
  */
 const person = (session: number, name: string, extra: Partial<UserEntry> = {}) =>
-  ({ session, name, channel_id: 1, user_id: session, mute: false, deaf: false, suppress: false, self_mute: false, self_deaf: false, ...extra }) as UserEntry;
+  ({
+    session,
+    name,
+    channel_id: 1,
+    user_id: session,
+    mute: false,
+    deaf: false,
+    suppress: false,
+    self_mute: false,
+    self_deaf: false,
+    ...extra,
+  }) as UserEntry;
 
 const busy = [
   person(1, "carmol92"),

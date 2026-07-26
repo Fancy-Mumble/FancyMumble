@@ -8,7 +8,7 @@ import {
   registerLocalVote,
   type PollPayload,
 } from "@core/features/chat/poll/model";
-import { Button, ModalSurface, TextField } from "../primitives";
+import { Button, Checkbox, ModalSurface, TextField } from "../primitives";
 import styles from "../../AuroraClientExtensions.module.css";
 
 export function PollCreatorSurface({ channelId, onClose }: { channelId: number; onClose: () => void }) {
@@ -95,10 +95,12 @@ export function PollCreatorSurface({ channelId, onClose }: { channelId: number; 
         >
           Add option
         </Button>
-        <label className={styles.rememberSecret}>
-          <input type="checkbox" checked={multiple} onChange={(event) => setMultiple(event.target.checked)} />
-          Allow multiple choices
-        </label>
+        <Checkbox
+          className={styles.rememberSecret}
+          label="Allow multiple choices"
+          checked={multiple}
+          onChange={(event) => setMultiple(event.target.checked)}
+        />
         <footer>
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" type="submit" disabled={!valid}>

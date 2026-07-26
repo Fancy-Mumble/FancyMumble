@@ -1,7 +1,9 @@
 import extensionStyles from "../../AuroraClientExtensions.module.css";
 import styles from "../../AuroraClientSurfaces.module.css";
 import { Button, IconButton, UserActions } from "../../components";
+import { useMemo } from "react";
 import { useUserAvatar, useUserComment } from "@core/lazyBlobs";
+import { parseComment } from "@core/profileFormat";
 import { useAppStore } from "@core/store";
 import type { UserEntry } from "@core/types";
 import { PERMISSIONS } from "@core/utils/permissions";
@@ -11,9 +13,15 @@ import { plainText } from "../htmlText";
 
 export function UserCard({ user, onClose }: { user: UserEntry; onClose: () => void }) {
   const avatar = useUserAvatar(user.session, user.texture_size);
-  const comment = useUserComment(user.session, user.comment_size);
+  const liveComment = useUserComment(user.session, user.comment_size);
   const channel = useAppStore((state) => state.channels.find((item) => item.id === user.channel_id));
   const muted = user.mute || user.self_mute || user.suppress;
+  // See UserHoverCard: the profile JSON lives in an HTML comment, so the raw
+  // string has to be split before the bio is readable.
+  const { profile, bio } = useMemo(() => {
+    const comment = user.comment || liveComment;
+    return comment ? parseComment(comment) : { profile: null, bio: "" };
+  }, [user.comment, liveComment]);
   const effectivePermissions =
     channel?.permissions == null
       ? "Not reported"
@@ -39,11 +47,14 @@ export function UserCard({ user, onClose }: { user: UserEntry; onClose: () => vo
           <span className={styles.profileAvatar}>{user.name.slice(0, 2).toUpperCase()}</span>
         )}
         <i className={styles.online} />
-        <h2>{user.name}</h2>
+        <h2 style={profile?.nameStyle?.color ? { color: profile.nameStyle.color } : undefined}>
+          {user.name}
+        </h2>
         <small>
+          {profile?.status ? `${profile.status} · ` : ""}
           {muted ? "Muted" : "Online"} · #{channel?.name ?? "Unknown"}
         </small>
-        <p>{plainText(user.comment ?? comment) || "This user has not added a profile description yet."}</p>
+        <p>{plainText(bio) || "This user has not added a profile description yet."}</p>
         <div className={styles.profileFacts}>
           <Fact label="Account" value={user.user_id == null ? "Guest" : `Registered #${user.user_id}`} />
           <Fact label="Voice" value={muted ? "Muted" : "Available"} />

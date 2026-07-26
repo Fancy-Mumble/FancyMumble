@@ -18,7 +18,7 @@ import {
   type JumpToUserDetail,
 } from "@core/features/settings/userShortcuts";
 import { useVisualViewport } from "./hooks/useVisualViewport";
-import { useNotificationSounds } from "./hooks/useNotificationSounds";
+import { useNotificationSounds } from "@core/features/notifications/useNotificationSounds";
 import { useCalendarReminders } from "@core/features/chat/calendar/useCalendarReminders";
 import { requestJoinMeeting } from "@core/features/chat/calendar/meetings";
 import { useSpoilerReveal } from "./hooks/useSpoilerReveal";

@@ -1,3 +1,4 @@
+import { Checkbox } from "../primitives";
 import Avatar from "./Avatar";
 import calendar from "./CalendarSpecimen.module.css";
 import editor from "./EditorSpecimen.module.css";
@@ -53,7 +54,7 @@ export default function DataSection() {
               <thead>
                 <tr>
                   <th>
-                    <input type="checkbox" />
+                    <Checkbox aria-label="Select row" />
                   </th>
                   <th>Member</th>
                   <th>Role</th>
@@ -70,7 +71,7 @@ export default function DataSection() {
                 ].map((row) => (
                   <tr key={row[1]}>
                     <td>
-                      <input type="checkbox" />
+                      <Checkbox aria-label="Select row" />
                     </td>
                     <td>
                       <Avatar label={row[0]} className={memberTable.tableWrapAvatar} />

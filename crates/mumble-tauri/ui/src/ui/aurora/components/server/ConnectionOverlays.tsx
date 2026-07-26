@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getSavedServers, setServerPassword } from "@core/serverStorage";
 import { useAppStore } from "@core/store";
-import { Button, ModalSurface, TextField } from "../primitives";
+import { Button, Checkbox, ModalSurface, TextField } from "../primitives";
 import styles from "../../AuroraClientExtensions.module.css";
 
 function ConnectionChallenge() {
@@ -71,14 +71,12 @@ function ConnectionChallenge() {
           autoFocus
         />
         {!isTotp && (
-          <label className={styles.rememberSecret}>
-            <input
-              type="checkbox"
-              checked={remember}
-              onChange={(event) => setRemember(event.target.checked)}
-            />
-            Remember for this saved server
-          </label>
+          <Checkbox
+            className={styles.rememberSecret}
+            checked={remember}
+            onChange={(event) => setRemember(event.target.checked)}
+            label="Remember for this saved server"
+          />
         )}
         <footer>
           <Button onClick={() => useAppStore.getState().dismissPasswordPrompt()}>Cancel</Button>

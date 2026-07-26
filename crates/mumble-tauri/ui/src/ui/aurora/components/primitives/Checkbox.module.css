@@ -1,0 +1,56 @@
+/* The native control is a 40px platform widget that ignores font-size, so it is
+   hidden and a box of our own is drawn beside it. The input stays in the DOM
+   and in the tab order - it is still what gets focused, checked and announced. */
+
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #aeb4bf;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.checkbox input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.box {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  /* --signal/--ink are the design sheet's tokens; elsewhere these fall back to
+     Aurora's accent, so one component serves both surfaces. */
+  color: var(--ink, #0b0e13);
+  border: 1px solid #525966;
+  border-radius: 5px;
+}
+
+.checkbox input:checked + .box {
+  border-color: var(--signal, #65b8ed);
+  background: var(--signal, #65b8ed);
+}
+
+.checkbox input:focus-visible + .box {
+  outline: 2px solid var(--signal, #65b8ed);
+  outline-offset: 2px;
+}
+
+/* The tick is always in the box so its size never shifts the layout. */
+.tick {
+  opacity: 0;
+}
+
+.checkbox input:checked + .box .tick {
+  opacity: 1;
+}
+
+.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

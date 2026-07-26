@@ -33,7 +33,13 @@ export interface ContainerProps {
 
 /** Centres content at a readable width with uniform gutters. */
 export default function Container({
-  maxWidth = "md", gutter, fill, as: Component = "div", className, style, children,
+  maxWidth = "md",
+  gutter,
+  fill,
+  as: Component = "div",
+  className,
+  style,
+  children,
 }: ContainerProps) {
   const vars = {
     "--container-max": CONTAINER_WIDTHS[maxWidth],
@@ -41,5 +47,9 @@ export default function Container({
   } as CSSProperties;
 
   const classes = [styles.container, fill && styles.fill, className].filter(Boolean).join(" ");
-  return <Component className={classes} style={{ ...vars, ...style }}>{children}</Component>;
+  return (
+    <Component className={classes} style={{ ...vars, ...style }}>
+      {children}
+    </Component>
+  );
 }

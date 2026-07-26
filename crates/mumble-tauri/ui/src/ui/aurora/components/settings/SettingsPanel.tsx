@@ -58,6 +58,7 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           onToggle={(key) => void toggle(key)}
           onPatch={patchPreference}
           onLocalChange={updateLocalPrefs}
+          onNavigate={selectSection}
         />
       </div>
     </ModalSurface>

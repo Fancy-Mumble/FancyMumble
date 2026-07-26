@@ -1,6 +1,6 @@
 import { useAppStore } from "@core/store";
 import type { UserEntry } from "@core/types";
-import { MicIcon, MicOffIcon } from "@ui/icons";
+import { HeadphonesOffIcon, MicIcon, MicOffIcon } from "@ui/icons";
 import styles from "../../AuroraClientApp.module.css";
 import { Button } from "../primitives";
 
@@ -21,6 +21,11 @@ export type MemberRowProps = {
 };
 
 export default function MemberRow({ user, own, talking, onHover }: MemberRowProps) {
+  // Server flag and self flag read the same from the outside, so both fold into
+  // one indicator - the distinction belongs in the profile card. Deafening
+  // implies muting on the wire, so deafened supersedes muted and shows the one
+  // icon that says the most.
+  const deafened = user.deaf || user.self_deaf;
   const muted = user.self_mute || user.mute || user.suppress;
   const offline = user.session < 0;
   return (
@@ -43,10 +48,18 @@ export default function MemberRow({ user, own, talking, onHover }: MemberRowProp
           {own ? " (you)" : ""}
         </strong>
         <small>
-          {offline ? "Offline · registered" : talking ? "Speaking" : muted ? "Muted" : "Listening"}
+          {offline
+            ? "Offline · registered"
+            : deafened
+              ? "Muted and deafened"
+              : muted
+                ? "Muted"
+                : talking
+                  ? "Speaking"
+                  : "Listening"}
         </small>
       </span>
-      {!offline && (muted ? <MicOffIcon /> : <MicIcon />)}
+      {!offline && (deafened ? <HeadphonesOffIcon /> : muted ? <MicOffIcon /> : <MicIcon />)}
     </Button>
   );
 }

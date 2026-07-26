@@ -64,9 +64,23 @@ const JUSTIFY = {
  * to look for a component's appearance.
  */
 export default function Box({
-  p, px, py, m, mx, my, gap,
-  display, direction, align, justify, wrap, grow,
-  as: Component = "div", className, style, children,
+  p,
+  px,
+  py,
+  m,
+  mx,
+  my,
+  gap,
+  display,
+  direction,
+  align,
+  justify,
+  wrap,
+  grow,
+  as: Component = "div",
+  className,
+  style,
+  children,
 }: BoxProps) {
   const vars = {
     "--box-p": space(p),
@@ -87,7 +101,13 @@ export default function Box({
     wrap && styles.wrap,
     grow && styles.grow,
     className,
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  return <Component className={classes} style={{ ...vars, ...style }}>{children}</Component>;
+  return (
+    <Component className={classes} style={{ ...vars, ...style }}>
+      {children}
+    </Component>
+  );
 }

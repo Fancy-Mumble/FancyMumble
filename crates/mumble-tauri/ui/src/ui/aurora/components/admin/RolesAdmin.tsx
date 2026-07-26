@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { AclData, AclGroup, RegisteredUser } from "@core/types";
-import { Button, SearchField, TextField } from "../primitives";
+import { Button, Checkbox, SearchField, TextField } from "../primitives";
 import styles from "./RolesAdmin.module.css";
 
 const blankRole = (name: string): AclGroup => ({
@@ -159,24 +159,18 @@ export default function RolesAdmin({
                 </label>
               </section>
               <section className={styles.checks}>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={role.inherit}
-                    disabled={role.inherited}
-                    onChange={(event) => patch({ inherit: event.target.checked })}
-                  />
-                  Inherit members from the parent
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={role.inheritable}
-                    disabled={role.inherited}
-                    onChange={(event) => patch({ inheritable: event.target.checked })}
-                  />
-                  Allow child channels to inherit this role
-                </label>
+                <Checkbox
+                  label="Inherit members from the parent"
+                  checked={role.inherit}
+                  disabled={role.inherited}
+                  onChange={(event) => patch({ inherit: event.target.checked })}
+                />
+                <Checkbox
+                  label="Allow child channels to inherit this role"
+                  checked={role.inheritable}
+                  disabled={role.inherited}
+                  onChange={(event) => patch({ inheritable: event.target.checked })}
+                />
               </section>
               <MemberSection
                 title="Direct members"

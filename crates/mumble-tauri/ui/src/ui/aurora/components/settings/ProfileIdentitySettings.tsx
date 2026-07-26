@@ -16,7 +16,7 @@ import {
   saveServerProfileData,
   type ProfileData,
 } from "@core/features/settings/profileData";
-import { Button, RichTextEditor, TextField } from "../primitives";
+import { Button, Checkbox, RichTextEditor, TextField } from "../primitives";
 import styles from "./ProfileIdentitySettings.module.css";
 
 function readImage(file: File | undefined): Promise<string | null> {
@@ -191,21 +191,18 @@ export default function ProfileIdentitySettings() {
           {identity === connectedIdentity && <b>Connected</b>}
         </div>
         {activeServerId && (
-          <label className={styles.colors}>
-            <input
-              type="checkbox"
-              checked={serverOverride}
-              onChange={(event) => {
-                const enabled = event.target.checked;
-                setServerOverride(enabled);
-                if (!enabled)
-                  void deleteServerProfileData(activeServerId, identity)
-                    .then(() => loadProfileData(identity))
-                    .then(setData);
-              }}
-            />
-            Use a separate profile on {activeServerLabel ?? "this server"}
-          </label>
+          <Checkbox
+            checked={serverOverride}
+            label={`Use a separate profile on ${activeServerLabel ?? "this server"}`}
+            onChange={(event) => {
+              const enabled = event.target.checked;
+              setServerOverride(enabled);
+              if (!enabled)
+                void deleteServerProfileData(activeServerId, identity)
+                  .then(() => loadProfileData(identity))
+                  .then(setData);
+            }}
+          />
         )}
         <ImagePicker
           label="Avatar"
@@ -299,14 +296,11 @@ export default function ProfileIdentitySettings() {
             value={profile.banner?.color ?? "#273545"}
             onChange={(event) => patchProfile({ banner: { ...profile.banner, color: event.target.value } })}
           />
-          <label>
-            <input
-              type="checkbox"
-              checked={profile.cardGlass ?? false}
-              onChange={(event) => patchProfile({ cardGlass: event.target.checked })}
-            />
-            Glass profile card
-          </label>
+          <Checkbox
+            checked={profile.cardGlass ?? false}
+            label="Glass profile card"
+            onChange={(event) => patchProfile({ cardGlass: event.target.checked })}
+          />
         </div>
         {status && <p className={styles.status}>{status}</p>}
         <Button variant="primary" disabled={busy} onClick={() => void persist()}>

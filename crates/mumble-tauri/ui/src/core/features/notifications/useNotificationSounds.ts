@@ -1,12 +1,8 @@
 import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { NotificationSoundSettings, NotificationEvent, VoiceState, UserEntry } from "@core/types";
-import { SOUND_OPTIONS } from "../pages/settings/NotificationsPanel";
+import { findSoundUrl } from "./sounds";
 import { useAppStore } from "@core/store";
-
-function findSoundUrl(id: string): string {
-  return SOUND_OPTIONS.find((s) => s.id === id)?.url ?? "";
-}
 
 function playSound(url: string, volume: number) {
   if (!url) return;

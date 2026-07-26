@@ -1,11 +1,11 @@
 import { useState } from "react";
+import { Checkbox } from "../primitives";
 import forms from "./FormsSection.module.css";
 import Section from "./Section";
 import Specimen from "./Specimen";
 import fields from "./designSheetFields.module.css";
 import layout from "./designSheetLayout.module.css";
 import {
-  CheckIcon as Check,
   ChevronDownIcon as ChevronDown,
   CloseIcon as X,
   LockIcon as LockKeyhole,
@@ -74,13 +74,7 @@ export default function FormsSection() {
                 </span>
               </label>
             ))}
-            <label className={forms.checkRow}>
-              <input type="checkbox" defaultChecked />
-              <span>
-                <Check size={12} />
-              </span>
-              Auto-connect on launch
-            </label>
+            <Checkbox className={forms.checkRow} defaultChecked label="Auto-connect on launch" />
           </div>
         </Specimen>
         <Specimen title="Switches & slider" meta="Preferences">

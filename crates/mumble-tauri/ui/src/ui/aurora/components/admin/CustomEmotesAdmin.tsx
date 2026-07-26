@@ -44,15 +44,13 @@ export default function CustomEmotesAdmin() {
     setBusy(true);
     setStatus(null);
     try {
-      await useAppStore
-        .getState()
-        .addCustomEmote({
-          shortcode: shortcode.trim(),
-          aliasEmoji: aliasEmoji.trim(),
-          description: description.trim() || undefined,
-          filePath,
-          mimeType,
-        });
+      await useAppStore.getState().addCustomEmote({
+        shortcode: shortcode.trim(),
+        aliasEmoji: aliasEmoji.trim(),
+        description: description.trim() || undefined,
+        filePath,
+        mimeType,
+      });
       setShortcode("");
       setAliasEmoji("");
       setDescription("");
