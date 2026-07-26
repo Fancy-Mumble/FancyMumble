@@ -44,23 +44,23 @@ export default function ChannelListItem({
     .join(" ");
   return (
     <>
-    <Button
-      variant="bare"
-      wrapLabel={false}
-      className={className}
-      aria-current={current ? "true" : undefined}
-      onClick={onSelect}
-      onDoubleClick={onJoin}
-      onContextMenu={onContextMenu}
-    >
-      <HashIcon />
-      <span className={styles.name}>{channel.name}</span>
-      {locked && <LockIcon className={styles.badgeIcon} />}
-      {listened && <HeadphonesIcon className={styles.badgeIcon} />}
-      {unread > 0 && <b className={styles.unread}>{unread > 99 ? "99+" : unread}</b>}
-      {users.length > 0 && <span className={styles.count}>{users.length}</span>}
-    </Button>
-    <ChannelPresence users={users} talkingSessions={talkingSessions} ownSession={ownSession} />
+      <Button
+        variant="bare"
+        wrapLabel={false}
+        className={className}
+        aria-current={current ? "true" : undefined}
+        onClick={onSelect}
+        onDoubleClick={onJoin}
+        onContextMenu={onContextMenu}
+      >
+        <HashIcon />
+        <span className={styles.name}>{channel.name}</span>
+        {locked && <LockIcon className={styles.badgeIcon} />}
+        {listened && <HeadphonesIcon className={styles.badgeIcon} />}
+        {unread > 0 && <b className={styles.unread}>{unread > 99 ? "99+" : unread}</b>}
+        {users.length > 0 && <span className={styles.count}>{users.length}</span>}
+      </Button>
+      <ChannelPresence users={users} talkingSessions={talkingSessions} ownSession={ownSession} />
     </>
   );
 }

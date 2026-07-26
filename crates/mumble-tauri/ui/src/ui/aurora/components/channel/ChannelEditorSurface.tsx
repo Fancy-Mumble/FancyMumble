@@ -4,7 +4,7 @@ import { useChannelDescription } from "@core/lazyBlobs";
 import { useAppStore } from "@core/store";
 import { ChannelAttribute, isStructuralChannel } from "@core/utils/channelAttributes";
 import { TrashIcon } from "@ui/icons";
-import { Button, ModalSurface, RichTextEditor, TextField } from "../primitives";
+import { Button, Checkbox, ModalSurface, RichTextEditor, TextField } from "../primitives";
 import styles from "../../AuroraClientExtensions.module.css";
 
 export interface ChannelEditorSurfaceProps {
@@ -67,15 +67,13 @@ export default function ChannelEditorSurface({
       if (creating)
         await useAppStore.getState().createChannel(parentId, name.trim(), { ...values, attributes });
       else
-        await useAppStore
-          .getState()
-          .updateChannel(channel.id, {
-            name: name.trim(),
-            parentId: selectedParentId,
-            ...values,
-            attributes,
-            attributeMask: [ChannelAttribute.Structural],
-          });
+        await useAppStore.getState().updateChannel(channel.id, {
+          name: name.trim(),
+          parentId: selectedParentId,
+          ...values,
+          attributes,
+          attributeMask: [ChannelAttribute.Structural],
+        });
       onClose();
     } catch (reason) {
       setError(String(reason));
@@ -196,27 +194,26 @@ export default function ChannelEditorSurface({
           />
         </div>
         <div className={styles.channelChecks}>
-          <label>
-            <input
-              type="checkbox"
-              checked={temporary}
-              onChange={(event) => setTemporary(event.target.checked)}
-            />
-            Temporary channel
-          </label>
-          <label>
-            <input type="checkbox" checked={hidden} onChange={(event) => setHidden(event.target.checked)} />
-            Hidden channel
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={structural}
-              onChange={(event) => setStructural(event.target.checked)}
-            />
-            Structural only
-            <small>A heading for the channels beneath it. Cannot be joined and holds no users.</small>
-          </label>
+          <Checkbox
+            label="Temporary channel"
+            checked={temporary}
+            onChange={(event) => setTemporary(event.target.checked)}
+          />
+          <Checkbox
+            label="Hidden channel"
+            checked={hidden}
+            onChange={(event) => setHidden(event.target.checked)}
+          />
+          <Checkbox
+            checked={structural}
+            onChange={(event) => setStructural(event.target.checked)}
+            label={
+              <span>
+                Structural only
+                <small>A heading for the channels beneath it. Cannot be joined and holds no users.</small>
+              </span>
+            }
+          />
         </div>
         {error && (
           <div className={styles.formError} role="alert">

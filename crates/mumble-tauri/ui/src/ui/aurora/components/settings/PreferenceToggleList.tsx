@@ -1,20 +1,30 @@
 import type { UserPreferences } from "@core/types";
-import PreferenceToggleRow from "./PreferenceToggleRow";
+import { SettingsGroup, SettingsToggleRow } from "./layout";
 import { settingRows, type PreferenceToggleHandler } from "./settingsModel";
 
 export interface PreferenceToggleListProps {
   keys: Array<keyof UserPreferences>;
   prefs: UserPreferences;
   onToggle: PreferenceToggleHandler;
+  /** Heading for the band these toggles sit in. */
+  title?: string;
+  description?: string;
 }
 
-export default function PreferenceToggleList({ keys, prefs, onToggle }: PreferenceToggleListProps) {
+/** The boolean preferences named by `keys`, in the order `settingRows` declares. */
+export default function PreferenceToggleList({
+  keys,
+  prefs,
+  onToggle,
+  title,
+  description,
+}: PreferenceToggleListProps) {
   return (
-    <>
+    <SettingsGroup title={title} description={description}>
       {settingRows
         .filter((row) => keys.includes(row.key))
         .map((row) => (
-          <PreferenceToggleRow
+          <SettingsToggleRow
             key={row.key}
             title={row.title}
             detail={row.detail}
@@ -22,6 +32,6 @@ export default function PreferenceToggleList({ keys, prefs, onToggle }: Preferen
             onToggle={() => onToggle(row.key)}
           />
         ))}
-    </>
+    </SettingsGroup>
   );
 }

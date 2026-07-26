@@ -1,0 +1,57 @@
+/* Notification settings: the per-event sound rows and their expanded controls. */
+
+.eventRow {
+  padding: 12px 2px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid rgb(255 255 255 / 6%);
+}
+
+.eventRow > span:first-child {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.eventRow strong {
+  font-size: 12px;
+}
+
+.eventRow small {
+  color: #7e8a99;
+  font-size: 10px;
+}
+
+/* The sound picker and volume, revealed when an event is switched on. */
+.eventConfig {
+  padding: 0 2px 12px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid rgb(255 255 255 / 6%);
+}
+
+.soundSelect {
+  width: min(220px, 45%);
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 8px;
+  background: #151b23;
+  color: #dce3ea;
+  font-size: 10px;
+}
+
+.volume {
+  min-width: 0;
+  flex: 1;
+}
+
+.bulkActions {
+  padding: 12px 0;
+  display: flex;
+  gap: 8px;
+}

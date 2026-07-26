@@ -2,10 +2,11 @@ import type { UserPreferences } from "@core/types";
 import AppearanceSettings from "./AppearanceSettings";
 import AdvancedSettingsPanel from "./AdvancedSettingsPanel";
 import GeneralSettingsPanel from "./GeneralSettingsPanel";
-import LocalizationSettingsPanel from "./LocalizationSettingsPanel";
-import NotificationsSettingsPanel from "./NotificationsSettingsPanel";
-import PluginTrustSettings from "./PluginTrustSettings";
-import PrivacySettingsPanel from "./PrivacySettingsPanel";
+import IdentitiesPanel from "./identities/IdentitiesPanel";
+import LocalizationSettingsPanel from "./localization/LocalizationSettingsPanel";
+import NotificationsSettingsPanel from "./notifications/NotificationsSettingsPanel";
+import PluginTrustSettings from "./plugins/PluginTrustSettings";
+import PrivacySettingsPanel from "./privacy/PrivacySettingsPanel";
 import ProfileIdentitySettings from "./ProfileIdentitySettings";
 import ShortcutSettings from "./ShortcutSettings";
 import VoiceSettingsPanel from "./VoiceSettingsPanel";
@@ -22,6 +23,7 @@ export interface SettingsSectionViewProps {
   onToggle: PreferenceToggleHandler;
   onPatch: PreferencePatchHandler;
   onLocalChange: LocalPreferenceHandler;
+  onNavigate: (section: SettingsSectionId) => void;
 }
 
 export default function SettingsSectionView({
@@ -30,6 +32,7 @@ export default function SettingsSectionView({
   onToggle,
   onPatch,
   onLocalChange,
+  onNavigate,
 }: SettingsSectionViewProps) {
   switch (section) {
     case "general":
@@ -43,14 +46,16 @@ export default function SettingsSectionView({
       );
     case "profile":
       return <ProfileIdentitySettings />;
+    case "identities":
+      return <IdentitiesPanel onEditProfile={() => onNavigate("profile")} />;
     case "voice":
       return <VoiceSettingsPanel />;
     case "shortcuts":
       return <ShortcutSettings />;
     case "notifications":
-      return <NotificationsSettingsPanel prefs={prefs} onToggle={onToggle} />;
+      return <NotificationsSettingsPanel prefs={prefs} onToggle={onToggle} onPatch={onPatch} />;
     case "localization":
-      return <LocalizationSettingsPanel prefs={prefs} onPatch={onPatch} />;
+      return <LocalizationSettingsPanel prefs={prefs} onPatch={onPatch} onToggle={onToggle} />;
     case "privacy":
       return <PrivacySettingsPanel prefs={prefs} onToggle={onToggle} />;
     case "plugins":

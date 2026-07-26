@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "@core/store";
 import type { AclData, AclEntry, BanEntry, RegisteredUser } from "@core/types";
 import { PERMISSIONS } from "@core/utils/permissions";
-import { Button, ModalSurface, TextField } from "../primitives";
+import { Button, Checkbox, ModalSurface, TextField } from "../primitives";
 import ServerSettingsEditor from "./ServerSettingsEditor";
 import { PluginMarketplace, ServerPluginManager } from "./PluginAdmin";
 import CustomEmotesAdmin from "./CustomEmotesAdmin";
@@ -338,14 +338,12 @@ export default function ServerAdminPanel({
               </header>
               {acl ? (
                 <>
-                  <label className={styles.inherit}>
-                    <input
-                      type="checkbox"
-                      checked={acl.inherit_acls}
-                      onChange={(event) => setAcl({ ...acl, inherit_acls: event.target.checked })}
-                    />
-                    Inherit parent ACLs
-                  </label>
+                  <Checkbox
+                    className={styles.inherit}
+                    label="Inherit parent ACLs"
+                    checked={acl.inherit_acls}
+                    onChange={(event) => setAcl({ ...acl, inherit_acls: event.target.checked })}
+                  />
                   <div className={styles.groups}>
                     Groups:{" "}
                     {acl.groups.map((group) => (
@@ -366,24 +364,18 @@ export default function ServerAdminPanel({
                               patchRule(index, { group: event.target.value || null, user_id: null })
                             }
                           />
-                          <label>
-                            <input
-                              type="checkbox"
-                              checked={rule.apply_here}
-                              disabled={rule.inherited}
-                              onChange={(event) => patchRule(index, { apply_here: event.target.checked })}
-                            />
-                            This channel
-                          </label>
-                          <label>
-                            <input
-                              type="checkbox"
-                              checked={rule.apply_subs}
-                              disabled={rule.inherited}
-                              onChange={(event) => patchRule(index, { apply_subs: event.target.checked })}
-                            />
-                            Subchannels
-                          </label>
+                          <Checkbox
+                            label="This channel"
+                            checked={rule.apply_here}
+                            disabled={rule.inherited}
+                            onChange={(event) => patchRule(index, { apply_here: event.target.checked })}
+                          />
+                          <Checkbox
+                            label="Subchannels"
+                            checked={rule.apply_subs}
+                            disabled={rule.inherited}
+                            onChange={(event) => patchRule(index, { apply_subs: event.target.checked })}
+                          />
                           {!rule.inherited && (
                             <Button
                               variant="danger"

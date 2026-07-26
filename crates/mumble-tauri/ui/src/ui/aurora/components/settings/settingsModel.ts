@@ -3,6 +3,7 @@ import type { UserPreferences } from "@core/types";
 export type SettingsSectionId =
   | "general"
   | "profile"
+  | "identities"
   | "voice"
   | "shortcuts"
   | "notifications"
@@ -96,12 +97,22 @@ export const settingRows: PreferenceRow[] = [
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "general", label: "General" },
   { id: "profile", label: "Profile" },
+  { id: "identities", label: "Identities", keywords: "certificate key export import persona account" },
   { id: "voice", label: "Voice & audio", keywords: "audio microphone" },
   { id: "shortcuts", label: "Shortcuts" },
-  { id: "notifications", label: "Notifications" },
-  { id: "localization", label: "Localization" },
-  { id: "privacy", label: "Privacy" },
-  { id: "plugins", label: "Plugins" },
+  { id: "notifications", label: "Notifications", keywords: "sound alert volume welcome message chime" },
+  {
+    id: "localization",
+    label: "Localization",
+    keywords: "language translation time date number format 12h 24h separator timezone",
+  },
+  {
+    id: "privacy",
+    label: "Privacy",
+    keywords:
+      "encryption e2ee read receipts typing maps geolocation openstreetmap previews embeds youtube streamer hide ip",
+  },
+  { id: "plugins", label: "Plugins", keywords: "extensions trust capabilities permissions allow block" },
   { id: "appearance", label: "Appearance" },
   { id: "advanced", label: "Advanced" },
 ];
@@ -110,6 +121,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
 export const sectionPreferenceKeys: Record<SettingsSectionId, Array<keyof UserPreferences>> = {
   general: ["autoReconnect", "hideEmptyChannels", "showDisconnectWarning", "autoUpdateOnStartup"],
   profile: [],
+  identities: [],
   voice: [],
   shortcuts: [],
   notifications: ["enableNotifications"],

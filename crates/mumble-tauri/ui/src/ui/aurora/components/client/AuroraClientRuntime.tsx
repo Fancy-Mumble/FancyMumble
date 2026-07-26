@@ -17,10 +17,10 @@ import {
 import { setKlipyApiKey } from "@core/features/chat/gif/klipyConfig";
 import type { AudioSettings, NotificationSoundSettings } from "@core/types";
 import { useVisualViewport } from "@ui/standard/hooks/useVisualViewport";
-import { useNotificationSounds } from "@ui/standard/hooks/useNotificationSounds";
+import { useNotificationSounds } from "@core/features/notifications/useNotificationSounds";
 import { useSpoilerReveal } from "@ui/standard/hooks/useSpoilerReveal";
 import { useCodeHighlight } from "@ui/standard/hooks/useCodeHighlight";
-import { DEFAULT_NOTIFICATION_SOUNDS } from "@ui/standard/pages/settings/NotificationsPanel";
+import { DEFAULT_NOTIFICATION_SOUNDS } from "@core/features/notifications/sounds";
 
 const PluginInteractionLayer = lazy(() => import("@ui/standard/components/plugin/PluginInteractionLayer"));
 const TranslationPickerOverlay = lazy(
