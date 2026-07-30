@@ -14,6 +14,31 @@ pub struct Version {
     /// (message_id, timestamp, plugin data, etc.).
     #[prost(uint64, optional, tag = "6")]
     pub fancy_version: ::core::option::Option<u64>,
+    /// Which Fancy *wire* numbering this peer speaks.
+    ///
+    /// Separate from `fancy_version` on purpose. That field is a product
+    /// version: it answers "which features exist", and a peer can infer from it
+    /// that some message was implemented. It cannot express "I renumbered the
+    /// wire", so a client that trusts it will happily send a type the peer can
+    /// route nowhere — which is exactly what happened when Starling kept the
+    /// upstream types and moved every Fancy message to a new range.
+    ///
+    ///    absent / 0  epoch 0: the historical interleaved 100-999 layout, which
+    ///                is every Fancy build shipped to date.
+    ///    1           epoch 1: upstream 0-99 stays flat and frozen; every Fancy
+    ///                service is reached through one outer type >= 1000 carrying
+    ///                a service-owned envelope.
+    ///
+    /// A peer speaks exactly one epoch. When the other side does not know it,
+    /// the Fancy extensions are off and the connection degrades to plain Mumble
+    /// — plus anything relayable through PluginDataTransmission, which works
+    /// through any Mumble server and is therefore epoch-independent.
+    /// 100, not the next free number: Fancy fields start at 100 so upstream can
+    /// keep growing into 1-99 (see the same note in Starling's copy). And it
+    /// must be *this* number in every copy of this file — it is read before any
+    /// epoch is known, so the two sides cannot negotiate where to find it.
+    #[prost(uint32, optional, tag = "100")]
+    pub fancy_protocol: ::core::option::Option<u32>,
     /// Client release name.
     #[prost(string, optional, tag = "2")]
     pub release: ::core::option::Option<::prost::alloc::string::String>,
@@ -439,7 +464,7 @@ pub struct UserState {
         enumeration = "user_state::ClientFeature",
         repeated,
         packed = "false",
-        tag = "24"
+        tag = "100"
     )]
     pub client_features: ::prost::alloc::vec::Vec<i32>,
 }
@@ -550,19 +575,19 @@ pub struct TextMessage {
     #[prost(string, required, tag = "5")]
     pub message: ::prost::alloc::string::String,
     /// unique identifier for this message
-    #[prost(string, optional, tag = "6")]
+    #[prost(string, optional, tag = "100")]
     pub message_id: ::core::option::Option<::prost::alloc::string::String>,
     /// message timestamp
-    #[prost(uint64, optional, tag = "7")]
+    #[prost(uint64, optional, tag = "101")]
     pub timestamp: ::core::option::Option<u64>,
     /// When set, this message is an edit replacing the message with this ID.
-    #[prost(string, optional, tag = "8")]
+    #[prost(string, optional, tag = "102")]
     pub edit_id: ::core::option::Option<::prost::alloc::string::String>,
     /// When set, pin or unpin the message with this ID in the channel.
-    #[prost(string, optional, tag = "9")]
+    #[prost(string, optional, tag = "103")]
     pub pin_target: ::core::option::Option<::prost::alloc::string::String>,
     /// When true combined with pin_target, unpin instead of pin.
-    #[prost(bool, optional, tag = "10")]
+    #[prost(bool, optional, tag = "104")]
     pub unpin: ::core::option::Option<bool>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -721,16 +746,16 @@ pub mod acl {
         #[prost(uint32, repeated, packed = "false", tag = "7")]
         pub inherited_members: ::prost::alloc::vec::Vec<u32>,
         /// FancyMumble: optional CSS color string for role chip (e.g. "#5865F2").
-        #[prost(string, optional, tag = "8")]
+        #[prost(string, optional, tag = "100")]
         pub color: ::core::option::Option<::prost::alloc::string::String>,
         /// FancyMumble: optional raw icon image bytes (PNG/JPEG) for the role.
-        #[prost(bytes = "vec", optional, tag = "9")]
+        #[prost(bytes = "vec", optional, tag = "101")]
         pub icon: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
         /// FancyMumble: optional named visual style preset id.
-        #[prost(string, optional, tag = "10")]
+        #[prost(string, optional, tag = "102")]
         pub style_preset: ::core::option::Option<::prost::alloc::string::String>,
         /// FancyMumble: arbitrary key-value metadata for client-side extensions.
-        #[prost(message, repeated, tag = "11")]
+        #[prost(message, repeated, tag = "103")]
         pub metadata: ::prost::alloc::vec::Vec<chan_group::KeyValue>,
     }
     /// Nested message and enum types in `ChanGroup`.
@@ -933,15 +958,15 @@ pub mod user_list {
         #[prost(uint32, optional, tag = "4")]
         pub last_channel: ::core::option::Option<u32>,
         /// Registered user avatar (PNG/JPEG bytes).
-        #[prost(bytes = "vec", optional, tag = "5")]
+        #[prost(bytes = "vec", optional, tag = "100")]
         pub texture: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
         /// SHA-1 hash of the comment when len >= 128; empty otherwise.
         /// If set without comment, the client must request the full text
         /// via RequestBlob.user_id_comment.
-        #[prost(bytes = "vec", optional, tag = "6")]
+        #[prost(bytes = "vec", optional, tag = "101")]
         pub comment_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
         /// Full comment text when len < 128, or in blob responses.
-        #[prost(string, optional, tag = "7")]
+        #[prost(string, optional, tag = "102")]
         pub comment: ::core::option::Option<::prost::alloc::string::String>,
     }
 }
@@ -1126,7 +1151,7 @@ pub struct RequestBlob {
     #[prost(uint32, repeated, packed = "false", tag = "3")]
     pub channel_description: ::prost::alloc::vec::Vec<u32>,
     /// registered user_ids whose comment should be fetched (offline support).
-    #[prost(uint32, repeated, packed = "false", tag = "4")]
+    #[prost(uint32, repeated, packed = "false", tag = "100")]
     pub user_id_comment: ::prost::alloc::vec::Vec<u32>,
 }
 /// Sent by the server when it informs the clients on server configuration
@@ -1156,7 +1181,7 @@ pub struct ServerConfig {
     pub recording_allowed: ::core::option::Option<bool>,
     /// True when the server has a WebRTC SFU module loaded and can
     /// relay screen-share streams server-side.
-    #[prost(bool, optional, tag = "8")]
+    #[prost(bool, optional, tag = "100")]
     pub webrtc_sfu_available: ::core::option::Option<bool>,
     /// Optional public base URL of the Fancy Mumble REST API (file
     /// server, custom emotes, capabilities, ...). Set this when the
@@ -1165,7 +1190,7 @@ pub struct ServerConfig {
     /// or Kubernetes ingress. Clients should prefer this URL over any
     /// per-plugin `base_url` when contacting the REST API. Empty /
     /// unset means "no override; use whatever the plugin advertises".
-    #[prost(string, optional, tag = "9")]
+    #[prost(string, optional, tag = "101")]
     pub fancy_rest_api_url: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Sent by the server to inform the clients of suggested client configuration

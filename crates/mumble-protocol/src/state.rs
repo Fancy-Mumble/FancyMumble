@@ -220,6 +220,14 @@ pub struct ConnectionInfo {
     /// `None` means the server is a standard Mumble server without
     /// Fancy Mumble extensions.
     pub server_fancy_version: Option<u64>,
+    /// The Fancy *wire epoch* the server announced (`Version.fancy_protocol`).
+    ///
+    /// `None` means the server predates the field, which is epoch 0 — the only
+    /// numbering that existed when it was built. Read this before
+    /// `server_fancy_version`: the version says which features exist, the epoch
+    /// says whether this client and the server agree on what the message
+    /// numbers mean, and the second question governs the first.
+    pub server_fancy_protocol: Option<u32>,
     /// The Mumble protocol version announced by the server, in v2
     /// encoding (`major << 48 | minor << 32 | patch << 16`).
     /// `None` until the handshake `Version` message is received.
@@ -383,6 +391,13 @@ impl ServerState {
     /// extensions (`message_id`, `timestamp`, etc.).
     pub fn apply_version(&mut self, version: &crate::proto::mumble_tcp::Version) {
         self.connection.server_fancy_version = version.fancy_version;
+        // Sticky, for the same reason `fancy_version` is upstream of here: a
+        // server may send a second `Version` that omits the field, and letting
+        // that erase the epoch would silently re-enable natives the first
+        // message told us not to send.
+        self.connection.server_fancy_protocol = version
+            .fancy_protocol
+            .or(self.connection.server_fancy_protocol);
         // Servers < 1.5 only send the legacy v1 encoding; widen it to v2
         // so a single field can be compared everywhere.
         self.connection.server_version_v2 = version.version_v2.or_else(|| {

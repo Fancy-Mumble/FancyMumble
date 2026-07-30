@@ -452,7 +452,18 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!initialLoadDone.current || !isConnected) return;
-    if (connectedCertLabel !== activeIdentity) return;
+    // Guard against pushing one identity's profile to a connection made as
+    // another — but only when the connection actually has an identity to
+    // conflict with.
+    //
+    // A connection made without choosing a certificate stores
+    // `connectedCertLabel = null`, while this panel falls back to `certs[0]`
+    // for something to display. Comparing the two then failed for every such
+    // connection on a machine with any certificate at all, and the failure was
+    // silent: the avatar and bio changed on screen, the debounce ran, and
+    // `set_user_texture` was never called. The profile simply never reached
+    // the server, with nothing in the UI or the log to say so.
+    if (connectedCertLabel !== null && connectedCertLabel !== activeIdentity) return;
     const timer = setTimeout(async () => {
       setProfileError(null);
       try {
