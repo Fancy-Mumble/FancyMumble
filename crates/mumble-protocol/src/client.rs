@@ -170,6 +170,11 @@ pub async fn run<H: EventHandler>(
         // Announce Fancy Mumble extension support, version derived from Cargo.toml.
         // The server responds with its own fancy_version if it supports them.
         fancy_version: Some(crate::FANCY_VERSION),
+        // And which wire numbering that version is expressed in, so the server
+        // can make the same judgement about us that we make about it. Announced
+        // even though it is the default: a server distinguishing "epoch 0" from
+        // "too old to have an opinion" needs to see the field.
+        fancy_protocol: Some(fancy_codec::FANCY_PROTOCOL_EPOCH),
     });
     tcp.send(&version_msg).await?;
     info!("Version {ver} sent");
@@ -542,6 +547,7 @@ impl<H: EventHandler> EventLoopCtx<'_, H> {
                     if matches!(ctrl, ControlMessage::Version(_)) {
                         *self.codec = fancy_codec::select_codec(
                             self.state.connection.server_fancy_version,
+                            self.state.connection.server_fancy_protocol,
                         );
                     }
 

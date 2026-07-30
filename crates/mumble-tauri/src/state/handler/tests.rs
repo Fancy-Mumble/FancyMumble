@@ -160,6 +160,7 @@ fn version_updates_state() {
         version_v1: Some(0x0001_0500),
         version_v2: Some(42),
         fancy_version: Some(mumble_protocol::state::fancy_version_encode(0, 1, 0)),
+        fancy_protocol: None,
     };
     version.handle(&ctx);
 

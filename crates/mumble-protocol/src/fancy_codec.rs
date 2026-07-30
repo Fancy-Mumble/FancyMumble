@@ -25,6 +25,30 @@ use crate::transport::codec;
 pub const FANCY_NATIVE_MIN_VERSION: u64 =
     fancy_utils::version::fancy_version_encode(0, 2, 12);
 
+/// The Fancy wire epoch this client can speak natively.
+///
+/// Epoch 0 is the interleaved 100–999 layout every shipped Fancy build uses,
+/// and it is what [`NativeCodec`] encodes. See `Version.fancy_protocol` in
+/// `Mumble.proto` for what an epoch is and why it is not the product version.
+pub const FANCY_PROTOCOL_EPOCH: u32 = 0;
+
+/// Whether this client speaks the epoch a server announced.
+///
+/// An absent field means epoch 0: every server that predates the field speaks
+/// the only numbering that existed when it was built.
+///
+/// The point of asking is what happens when the answer is *no*. Before this
+/// existed the client decided purely on `fancy_version`, so a server that had
+/// renumbered the wire — announcing features it does implement, at types this
+/// client would send to the wrong place — was indistinguishable from an old
+/// Fancy server. It would then emit natives the peer could route nowhere and
+/// they would vanish silently. A `false` here is the client choosing to be a
+/// plain Mumble client instead, which always works.
+#[must_use]
+pub fn speaks_epoch(server_fancy_protocol: Option<u32>) -> bool {
+    server_fancy_protocol.unwrap_or(FANCY_PROTOCOL_EPOCH) == FANCY_PROTOCOL_EPOCH
+}
+
 /// Prefix for `PluginDataTransmission.data_id` identifying a wrapped
 /// Fancy extension message. Followed by the decimal `TcpMessageType` ID.
 const WRAPPED_DATA_ID_PREFIX: &str = "fancy-native:";
@@ -52,14 +76,33 @@ pub trait FancyCodec: Send + Sync + Debug {
     fn decode(&self, msg: ControlMessage) -> ControlMessage;
 }
 
-/// Select the appropriate codec based on the server's announced Fancy
-/// version.
-pub fn select_codec(server_fancy_version: Option<u64>) -> Box<dyn FancyCodec> {
+/// Select the appropriate codec for a server.
+///
+/// Two questions, in order, and the epoch comes first: a version only means
+/// anything once both sides agree on what the numbers on the wire *are*. A
+/// server speaking an epoch this client does not know is handled as a plain
+/// Mumble server no matter how new its `fancy_version` is — [`LegacyCodec`]
+/// still relays everything relayable through `PluginDataTransmission`, which
+/// is epoch-independent, so the basics keep working and nothing is sent to a
+/// type the peer cannot route.
+pub fn select_codec(
+    server_fancy_version: Option<u64>,
+    server_fancy_protocol: Option<u32>,
+) -> Box<dyn FancyCodec> {
     debug!(
         raw_version = ?server_fancy_version,
         decoded = ?server_fancy_version.map(fancy_utils::version::fancy_version_decode),
+        protocol = ?server_fancy_protocol,
         "select_codec called"
     );
+    if !speaks_epoch(server_fancy_protocol) {
+        debug!(
+            protocol = ?server_fancy_protocol,
+            ours = FANCY_PROTOCOL_EPOCH,
+            "server speaks a Fancy wire epoch we do not; basic features only"
+        );
+        return Box::new(LegacyCodec);
+    }
     match server_fancy_version {
         Some(v) if v >= FANCY_NATIVE_MIN_VERSION => {
             Box::new(NativeCodec { server_version: v })
@@ -339,20 +382,52 @@ mod tests {
 
     #[test]
     fn select_codec_native_for_new_server() {
-        let codec = select_codec(Some(FANCY_NATIVE_MIN_VERSION));
+        let codec = select_codec(Some(FANCY_NATIVE_MIN_VERSION), None);
         assert!(format!("{codec:?}").contains("NativeCodec"));
     }
 
     #[test]
     fn select_codec_legacy_for_old_server() {
         let old_version = fancy_utils::version::fancy_version_encode(0, 2, 11);
-        let codec = select_codec(Some(old_version));
+        let codec = select_codec(Some(old_version), None);
         assert!(format!("{codec:?}").contains("LegacyCodec"));
     }
 
     #[test]
     fn select_codec_legacy_when_no_version() {
-        let codec = select_codec(None);
+        let codec = select_codec(None, None);
+        assert!(format!("{codec:?}").contains("LegacyCodec"));
+    }
+
+    #[test]
+    fn an_absent_epoch_is_the_one_that_existed_when_the_server_was_built() {
+        // Every server predating the field speaks epoch 0, so its silence is an
+        // answer rather than a reason to disable anything.
+        assert!(speaks_epoch(None));
+        assert!(speaks_epoch(Some(FANCY_PROTOCOL_EPOCH)));
+    }
+
+    #[test]
+    fn a_newer_epoch_drops_to_basic_features_however_new_the_server_is() {
+        // The case this field exists for. The server is *newer* than us and
+        // announces a full feature set, but its wire numbering is one we do not
+        // speak — so every native we sent would land on nothing and vanish. A
+        // plain Mumble client is the honest thing to be here.
+        let future = fancy_utils::version::fancy_version_encode(9, 9, 9);
+        let codec = select_codec(Some(future), Some(FANCY_PROTOCOL_EPOCH + 1));
+        assert!(
+            format!("{codec:?}").contains("LegacyCodec"),
+            "an unknown epoch must not be answered with native encoding"
+        );
+        assert!(!speaks_epoch(Some(FANCY_PROTOCOL_EPOCH + 1)));
+    }
+
+    #[test]
+    fn the_epoch_decides_before_the_version_does() {
+        // Ordering matters: a version high enough for natives must not override
+        // an epoch mismatch, because the version says which features exist and
+        // the epoch says whether we agree on what the numbers mean.
+        let codec = select_codec(Some(FANCY_NATIVE_MIN_VERSION), Some(1));
         assert!(format!("{codec:?}").contains("LegacyCodec"));
     }
 

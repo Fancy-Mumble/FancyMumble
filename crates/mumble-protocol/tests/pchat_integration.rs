@@ -145,6 +145,9 @@ async fn connect_and_authenticate_with_password(
         os_version: Some("test".into()),
         // Announce Fancy Mumble extension support, version derived from Cargo.toml.
         fancy_version: Some(mumble_protocol::FANCY_VERSION),
+        // …and which wire numbering that version is expressed in. This fixture
+        // drives the pchat extensions, which only exist on epoch 0.
+        fancy_protocol: Some(mumble_protocol::fancy_codec::FANCY_PROTOCOL_EPOCH),
     });
     transport.send(&version_msg).await.unwrap();
 

@@ -58,3 +58,8 @@ google-services.json
 .env.local
 # dhat heap profiler output (cargo run --features dhat-heap)
 dhat-heap*.json
+
+# pnpm's content-addressable store, wherever it is run from. The UI builds with
+# npm, but `pnpm-debug.log*` above shows pnpm does get invoked here sometimes,
+# and the store it leaves behind is a large untracked tree nobody wants staged.
+.pnpm-store/
