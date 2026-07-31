@@ -8,9 +8,14 @@ import { useTranslation } from "react-i18next";
  * integration. Visual feedback via animated bar fills.
  */
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useSyncExternalStore } from "react";
 import type { PollPayload } from "@core/features/chat/poll/model";
-import { getLocalVote, getVotes } from "@core/features/chat/poll/model";
+import {
+  getLocalVote,
+  getVotes,
+  pollsRevision,
+  subscribeToPolls,
+} from "@core/features/chat/poll/model";
 export {
   getLocalVote,
   getPoll,
@@ -38,6 +43,11 @@ interface PollCardProps {
 export default function PollCard({ poll, ownSession, isOwn, onVote }: Readonly<PollCardProps>) {
   const { t } = useTranslation("chat");
   const [_rev, forceUpdate] = useState(0);
+
+  // The poll store is plain Maps, so a write to it is invisible to React. This
+  // subscribes to it, which is what makes a *remote* vote appear: the local
+  // one always did, because the click handler below calls `forceUpdate` itself.
+  useSyncExternalStore(subscribeToPolls, pollsRevision, pollsRevision);
 
   const votes = getVotes(poll.id);
   // Use both ownSession matching and the local vote map as fallback.
