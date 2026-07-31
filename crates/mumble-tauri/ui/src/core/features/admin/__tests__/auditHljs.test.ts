@@ -12,8 +12,7 @@ import type { HljsToken } from "../../chat/markdown/hljsTokens";
 
 const text = (toks: HljsToken[]) => toks.map((t) => t.text).join("");
 /** Classes present for a given source token (there may be several). */
-const clsOf = (toks: HljsToken[], word: string) =>
-  toks.filter((t) => t.text === word).map((t) => t.cls);
+const clsOf = (toks: HljsToken[], word: string) => toks.filter((t) => t.text === word).map((t) => t.cls);
 
 describe("auditTokens - DSL", () => {
   it("is lossless, even with operators hljs would escape", () => {
@@ -63,8 +62,6 @@ describe("auditTokens - fallbacks", () => {
   });
 
   it("returns plain text for an unknown language", () => {
-    expect(auditTokens(hljs, "whatever", "no-such-lang")).toEqual([
-      { text: "whatever", cls: "" },
-    ]);
+    expect(auditTokens(hljs, "whatever", "no-such-lang")).toEqual([{ text: "whatever", cls: "" }]);
   });
 });

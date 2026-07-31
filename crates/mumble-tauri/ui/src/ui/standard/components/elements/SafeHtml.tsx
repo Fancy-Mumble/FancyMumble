@@ -29,7 +29,11 @@ export function SafeHtml({ html, className, style, fallback }: SafeHtmlProps) {
   const clean = useMemo(() => sanitizeHtml(html), [html]);
 
   if (!clean && fallback) {
-    return <div className={className} style={style}>{fallback}</div>;
+    return (
+      <div className={className} style={style}>
+        {fallback}
+      </div>
+    );
   }
 
   if (!clean) return null;

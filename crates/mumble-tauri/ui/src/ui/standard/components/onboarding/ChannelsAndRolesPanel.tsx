@@ -40,22 +40,14 @@ export default function ChannelsAndRolesPanel() {
     return map;
   }, [channels]);
 
-  const visibleChannels = useMemo(
-    () => [...computeVisibleChannels(config, response)],
-    [config, response],
-  );
-  const roleLabels = useMemo(
-    () => computeRoleLabels(config, response),
-    [config, response],
-  );
+  const visibleChannels = useMemo(() => [...computeVisibleChannels(config, response)], [config, response]);
+  const roleLabels = useMemo(() => computeRoleLabels(config, response), [config, response]);
 
   if (!supported) {
     return (
       <div className={styles.panel}>
         <h3 className={styles.heading}>{t("onboarding.channelsAndRoles.heading")}</h3>
-        <div className={styles.empty}>
-          {t("onboarding.channelsAndRoles.unsupportedServer")}
-        </div>
+        <div className={styles.empty}>{t("onboarding.channelsAndRoles.unsupportedServer")}</div>
       </div>
     );
   }
@@ -64,9 +56,7 @@ export default function ChannelsAndRolesPanel() {
     return (
       <div className={styles.panel}>
         <h3 className={styles.heading}>{t("onboarding.channelsAndRoles.heading")}</h3>
-        <div className={styles.empty}>
-          {t("onboarding.channelsAndRoles.notEnabled")}
-        </div>
+        <div className={styles.empty}>{t("onboarding.channelsAndRoles.notEnabled")}</div>
       </div>
     );
   }
@@ -79,9 +69,7 @@ export default function ChannelsAndRolesPanel() {
   return (
     <div className={styles.panel}>
       <h3 className={styles.heading}>{t("onboarding.channelsAndRoles.heading")}</h3>
-      <p className={styles.subtle}>
-        {t("onboarding.channelsAndRoles.subtitle")}
-      </p>
+      <p className={styles.subtle}>{t("onboarding.channelsAndRoles.subtitle")}</p>
 
       <section className={styles.section}>
         <p className={styles.sectionTitle}>{t("onboarding.channelsAndRoles.visibleChannels")}</p>
@@ -117,10 +105,7 @@ export default function ChannelsAndRolesPanel() {
         <button className={styles.btn} onClick={handleClear}>
           {t("onboarding.channelsAndRoles.resetBtn")}
         </button>
-        <button
-          className={`${styles.btn} ${styles.btnPrimary}`}
-          onClick={() => setModalOpen(true)}
-        >
+        <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => setModalOpen(true)}>
           {t("onboarding.channelsAndRoles.changeAnswersBtn")}
         </button>
       </div>

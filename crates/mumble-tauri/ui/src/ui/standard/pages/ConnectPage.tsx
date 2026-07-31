@@ -36,9 +36,17 @@ interface StepDef {
 export default function ConnectPage() {
   const { t } = useTranslation(["server", "common"]);
   const {
-    connect, disconnect, status, error, passwordRequired, pendingConnect,
-    retryWithPassword, dismissPasswordPrompt, bootstrapStage,
-    totpRequired, retryWithTotp,
+    connect,
+    disconnect,
+    status,
+    error,
+    passwordRequired,
+    pendingConnect,
+    retryWithPassword,
+    dismissPasswordPrompt,
+    bootstrapStage,
+    totpRequired,
+    retryWithTotp,
   } = useAppStore();
   // Keep the loading bar up not just while the TLS handshake runs, but
   // through the post-connect data bootstrap (channels, users, own session,
@@ -93,13 +101,17 @@ export default function ConnectPage() {
       pingCache.set(key, now);
 
       invoke<ServerPingResult>("ping_server", { host: s.host, port: s.port })
-        .then((result) =>
-          setPings((prev) => ({ ...prev, [s.id]: result })),
-        )
+        .then((result) => setPings((prev) => ({ ...prev, [s.id]: result })))
         .catch(() =>
           setPings((prev) => ({
             ...prev,
-            [s.id]: { online: false, latency_ms: null, user_count: null, max_user_count: null, server_version: null },
+            [s.id]: {
+              online: false,
+              latency_ms: null,
+              user_count: null,
+              max_user_count: null,
+              server_version: null,
+            },
           })),
         );
     }
@@ -242,14 +254,9 @@ export default function ConnectPage() {
 
   const handleEditServer = (server: SavedServer) => setEditingServer(server);
 
-  const handleSaveEdit = async (
-    id: string,
-    patch: Partial<Omit<SavedServer, "id">>,
-  ) => {
+  const handleSaveEdit = async (id: string, patch: Partial<Omit<SavedServer, "id">>) => {
     await updateServer(id, patch);
-    setSavedServers((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, ...patch } : s)),
-    );
+    setSavedServers((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
     setEditingServer(null);
   };
 
@@ -258,9 +265,7 @@ export default function ConnectPage() {
     if (!server) return;
     const next = !server.favorite;
     await updateServer(id, { favorite: next });
-    setSavedServers((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, favorite: next } : s)),
-    );
+    setSavedServers((prev) => prev.map((s) => (s.id === id ? { ...s, favorite: next } : s)));
   };
 
   /* -- password dialog helpers --------------------------------- */
@@ -294,19 +299,12 @@ export default function ConnectPage() {
       // quick-connects use it.
       if (targetId) {
         await updateServer(targetId, { username: newUsername });
-        setSavedServers((prev) =>
-          prev.map((s) => (s.id === targetId ? { ...s, username: newUsername } : s)),
-        );
+        setSavedServers((prev) => prev.map((s) => (s.id === targetId ? { ...s, username: newUsername } : s)));
       }
       // Dismiss the password prompt before issuing a fresh connect so the
       // store isn't blocked by a stale passwordRequired flag.
       dismissPasswordPrompt();
-      await connect(
-        pendingConnect.host,
-        pendingConnect.port,
-        newUsername,
-        pendingConnect.certLabel ?? null,
-      );
+      await connect(pendingConnect.host, pendingConnect.port, newUsername, pendingConnect.certLabel ?? null);
     },
     [pendingConnect, connectingServerId, matchingServerId, dismissPasswordPrompt, connect],
   );
@@ -350,9 +348,7 @@ export default function ConnectPage() {
           <BrandLogo size={64} className={styles.logoIcon} />
           <h1 className={styles.title}>Fancy Mumble</h1>
           <p className={styles.subtitle}>
-            {view === "servers" || view === "public"
-              ? t("chooseServer")
-              : currentStep.subtitle}
+            {view === "servers" || view === "public" ? t("chooseServer") : currentStep.subtitle}
           </p>
         </div>
 
@@ -437,7 +433,14 @@ export default function ConnectPage() {
             </div>
 
             <form
-              onSubmit={isLastStep ? (e) => { e.preventDefault(); handleConnectAndSave(); } : handleNext}
+              onSubmit={
+                isLastStep
+                  ? (e) => {
+                      e.preventDefault();
+                      handleConnectAndSave();
+                    }
+                  : handleNext
+              }
               className={styles.form}
             >
               {/* -- Step 0: Server address ---------------- */}

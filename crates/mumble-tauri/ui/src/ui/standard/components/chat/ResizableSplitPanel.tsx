@@ -85,9 +85,7 @@ export default function ResizableSplitPanel({
     <>
       <div
         ref={panelRef}
-        className={[styles.panel, heightPx === null ? styles.fill : "", className]
-          .filter(Boolean)
-          .join(" ")}
+        className={[styles.panel, heightPx === null ? styles.fill : "", className].filter(Boolean).join(" ")}
         style={heightPx !== null ? { flex: `0 0 ${heightPx}px` } : undefined}
       >
         {onClose && <PanelCloseButton onClose={onClose} label={closeLabel} />}

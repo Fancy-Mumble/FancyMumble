@@ -25,10 +25,7 @@ const localVotes = new Map<string, number[]>();
 
 export function registerVote(vote: PollVotePayload): void {
   const previous = votes.get(vote.pollId) ?? [];
-  votes.set(vote.pollId, [
-    ...previous.filter((candidate) => candidate.voter !== vote.voter),
-    vote,
-  ]);
+  votes.set(vote.pollId, [...previous.filter((candidate) => candidate.voter !== vote.voter), vote]);
 }
 
 export function getVotes(pollId: string): PollVotePayload[] {

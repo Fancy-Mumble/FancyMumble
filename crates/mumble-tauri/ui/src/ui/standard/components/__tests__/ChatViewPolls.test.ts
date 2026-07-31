@@ -22,9 +22,7 @@ function computeAllMessages(
   pollMessages: ChatMessage[],
   selectedChannel: number | null,
 ): ChatMessage[] {
-  const channelPolls = pollMessages.filter(
-    (m) => m.channel_id === selectedChannel,
-  );
+  const channelPolls = pollMessages.filter((m) => m.channel_id === selectedChannel);
   return [...messages, ...channelPolls];
 }
 
@@ -46,10 +44,7 @@ function computePollTargets(
 }
 
 /** Replicate the dedup check for setPollMessages. */
-function shouldAddPollMessage(
-  existing: ChatMessage[],
-  pollId: string,
-): boolean {
+function shouldAddPollMessage(existing: ChatMessage[], pollId: string): boolean {
   return !existing.some((m) => m.body.includes(pollId));
 }
 

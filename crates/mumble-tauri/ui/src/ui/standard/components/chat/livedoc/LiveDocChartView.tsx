@@ -10,7 +10,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { useTranslation } from "react-i18next";
 import { Chart, registerables } from "chart.js";
-import { DEFAULT_CHART, type ChartPayload, type LiveDocChartType } from "@core/features/chat/livedoc/liveDocChart";
+import {
+  DEFAULT_CHART,
+  type ChartPayload,
+  type LiveDocChartType,
+} from "@core/features/chat/livedoc/liveDocChart";
 import styles from "./LiveDocChart.module.css";
 
 // Chart.js's overloaded `register`/constructor signatures crash the
@@ -134,13 +138,45 @@ export default function LiveDocChartView({ node, updateAttributes }: NodeViewPro
     datasets: payload.datasets.map((d) => ({ label: d.label, data: [...d.data] })),
   });
 
-  const setLabel = (i: number, value: string) => { const n = clone(); n.labels[i] = value; commit(n); };
-  const setSeriesName = (j: number, value: string) => { const n = clone(); n.datasets[j].label = value; commit(n); };
-  const setValue = (i: number, j: number, value: string) => { const n = clone(); n.datasets[j].data[i] = Number(value) || 0; commit(n); };
-  const addRow = () => { const n = clone(); n.labels.push(`Item ${n.labels.length + 1}`); n.datasets.forEach((d) => d.data.push(0)); commit(n); };
-  const removeRow = (i: number) => { if (payload.labels.length <= 1) return; const n = clone(); n.labels.splice(i, 1); n.datasets.forEach((d) => d.data.splice(i, 1)); commit(n); };
-  const addColumn = () => { const n = clone(); n.datasets.push({ label: `Series ${n.datasets.length + 1}`, data: n.labels.map(() => 0) }); commit(n); };
-  const removeColumn = (j: number) => { if (payload.datasets.length <= 1) return; const n = clone(); n.datasets.splice(j, 1); commit(n); };
+  const setLabel = (i: number, value: string) => {
+    const n = clone();
+    n.labels[i] = value;
+    commit(n);
+  };
+  const setSeriesName = (j: number, value: string) => {
+    const n = clone();
+    n.datasets[j].label = value;
+    commit(n);
+  };
+  const setValue = (i: number, j: number, value: string) => {
+    const n = clone();
+    n.datasets[j].data[i] = Number(value) || 0;
+    commit(n);
+  };
+  const addRow = () => {
+    const n = clone();
+    n.labels.push(`Item ${n.labels.length + 1}`);
+    n.datasets.forEach((d) => d.data.push(0));
+    commit(n);
+  };
+  const removeRow = (i: number) => {
+    if (payload.labels.length <= 1) return;
+    const n = clone();
+    n.labels.splice(i, 1);
+    n.datasets.forEach((d) => d.data.splice(i, 1));
+    commit(n);
+  };
+  const addColumn = () => {
+    const n = clone();
+    n.datasets.push({ label: `Series ${n.datasets.length + 1}`, data: n.labels.map(() => 0) });
+    commit(n);
+  };
+  const removeColumn = (j: number) => {
+    if (payload.datasets.length <= 1) return;
+    const n = clone();
+    n.datasets.splice(j, 1);
+    commit(n);
+  };
 
   return (
     <NodeViewWrapper
@@ -163,8 +199,15 @@ export default function LiveDocChartView({ node, updateAttributes }: NodeViewPro
             </button>
           ))}
         </div>
-        <button type="button" className={styles.editBtn} onClick={() => setEditing((v) => !v)} aria-pressed={editing}>
-          {editing ? t("liveDoc.insert.chartDone", { defaultValue: "Done" }) : t("liveDoc.insert.chartEdit", { defaultValue: "Edit data" })}
+        <button
+          type="button"
+          className={styles.editBtn}
+          onClick={() => setEditing((v) => !v)}
+          aria-pressed={editing}
+        >
+          {editing
+            ? t("liveDoc.insert.chartDone", { defaultValue: "Done" })
+            : t("liveDoc.insert.chartEdit", { defaultValue: "Edit data" })}
         </button>
       </div>
 
@@ -195,12 +238,25 @@ export default function LiveDocChartView({ node, updateAttributes }: NodeViewPro
                   <th key={j} className={styles.seriesHead}>
                     <input value={ds.label} onChange={(e) => setSeriesName(j, e.target.value)} />
                     {payload.datasets.length > 1 && (
-                      <button type="button" className={styles.removeBtn} title={t("liveDoc.insert.chartRemoveSeries", { defaultValue: "Remove series" })} onClick={() => removeColumn(j)}>×</button>
+                      <button
+                        type="button"
+                        className={styles.removeBtn}
+                        title={t("liveDoc.insert.chartRemoveSeries", { defaultValue: "Remove series" })}
+                        onClick={() => removeColumn(j)}
+                      >
+                        ×
+                      </button>
                     )}
                   </th>
                 ))}
                 <th className={styles.addCol}>
-                  <button type="button" onClick={addColumn} title={t("liveDoc.insert.chartAddSeries", { defaultValue: "Add series" })}>+</button>
+                  <button
+                    type="button"
+                    onClick={addColumn}
+                    title={t("liveDoc.insert.chartAddSeries", { defaultValue: "Add series" })}
+                  >
+                    +
+                  </button>
                 </th>
               </tr>
             </thead>
@@ -210,12 +266,23 @@ export default function LiveDocChartView({ node, updateAttributes }: NodeViewPro
                   <th className={styles.rowHead}>
                     <input value={label} onChange={(e) => setLabel(i, e.target.value)} />
                     {payload.labels.length > 1 && (
-                      <button type="button" className={styles.removeBtn} title={t("liveDoc.insert.chartRemoveRow", { defaultValue: "Remove row" })} onClick={() => removeRow(i)}>×</button>
+                      <button
+                        type="button"
+                        className={styles.removeBtn}
+                        title={t("liveDoc.insert.chartRemoveRow", { defaultValue: "Remove row" })}
+                        onClick={() => removeRow(i)}
+                      >
+                        ×
+                      </button>
                     )}
                   </th>
                   {payload.datasets.map((ds, j) => (
                     <td key={j}>
-                      <input type="number" value={ds.data[i] ?? 0} onChange={(e) => setValue(i, j, e.target.value)} />
+                      <input
+                        type="number"
+                        value={ds.data[i] ?? 0}
+                        onChange={(e) => setValue(i, j, e.target.value)}
+                      />
                     </td>
                   ))}
                   <td />
@@ -223,7 +290,9 @@ export default function LiveDocChartView({ node, updateAttributes }: NodeViewPro
               ))}
               <tr>
                 <td className={styles.addRow}>
-                  <button type="button" onClick={addRow}>{t("liveDoc.insert.chartAddRow", { defaultValue: "+ Row" })}</button>
+                  <button type="button" onClick={addRow}>
+                    {t("liveDoc.insert.chartAddRow", { defaultValue: "+ Row" })}
+                  </button>
                 </td>
               </tr>
             </tbody>

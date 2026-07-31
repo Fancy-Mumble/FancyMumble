@@ -38,7 +38,13 @@ export default function ConfirmDialog({
   const resolvedCancel = cancelLabel ?? t("confirmDialog.cancelLabel");
   return (
     <Modal onClose={onCancel} zIndex={9999}>
-      <div className={styles.dialog} role="alertdialog" data-testid={TID.confirmDialog} aria-labelledby="confirm-title" aria-describedby="confirm-body">
+      <div
+        className={styles.dialog}
+        role="alertdialog"
+        data-testid={TID.confirmDialog}
+        aria-labelledby="confirm-title"
+        aria-describedby="confirm-body"
+      >
         <h3 id="confirm-title" className={`${styles.title} ${danger ? styles.titleDanger : ""}`}>
           {title}
         </h3>

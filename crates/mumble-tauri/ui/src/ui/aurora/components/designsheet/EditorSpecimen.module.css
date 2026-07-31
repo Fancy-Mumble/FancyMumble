@@ -1,0 +1,115 @@
+/* Design sheet: dataEditor. Split from AuroraApp.module.css. */
+
+.editor {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  border-color: rgb(255 255 255 / 9%);
+  background: rgb(21 27 34 / 62%);
+  box-shadow: 0 16px 44px rgb(0 0 0 / 13%);
+  backdrop-filter: blur(32px) saturate(108%);
+}
+
+.editorToolbar {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  min-height: 42px;
+  padding: 5px 8px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+}
+
+.editorToolbar select {
+  height: 28px;
+  padding: 0 22px 0 8px;
+  color: #b7bdc7;
+  font-size: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #171a20;
+}
+
+.editorToolbar > i {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--line);
+}
+
+.editorToolbar button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: #a0a7b3;
+  font-size: 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.editorToolbar button:hover {
+  background: rgb(255 255 255 / 6%);
+}
+
+.editorToolbar button svg {
+  width: 13px;
+}
+
+.editorToolbar > span {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-left: auto;
+  color: #69717e;
+  font-size: 7px;
+  white-space: nowrap;
+}
+
+.editorToolbar > span svg {
+  width: 10px;
+  color: var(--signal);
+}
+
+.editorPage {
+  max-width: 610px;
+  min-height: 270px;
+  margin: 18px auto;
+  padding: 38px 50px;
+  color: #252830;
+  border-radius: 3px;
+  background: #edf1f4;
+  box-shadow: 0 12px 34px rgb(0 0 0 / 18%);
+}
+
+.editorPage small {
+  font: 7px ui-monospace, monospace;
+  color: #428eff;
+}
+
+.editorPage h3 {
+  margin: 14px 0;
+  font: 28px/1.05 Georgia, serif;
+  letter-spacing: -.03em;
+}
+
+.editorPage p {
+  font: 11px/1.7 Georgia, serif;
+}
+
+.editorPage blockquote {
+  margin: 20px 0 0;
+  padding-left: 14px;
+  color: #5f6370;
+  font: italic 13px Georgia, serif;
+  border-left: 3px solid #8b7cff;
+  border-color: #4e98ee;
+}
+
+@media (max-width: 720px) {
+  .editorPage {
+    margin: 12px;
+    padding: 28px 24px;
+  }
+}

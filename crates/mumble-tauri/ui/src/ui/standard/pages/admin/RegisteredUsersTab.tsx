@@ -47,7 +47,14 @@ interface UserActionsArgs {
 }
 
 /** Builds the kebab-menu items for a user row. */
-function buildUserActions({ user, isEditing, onRename, onDelete, onManageRoles, t }: UserActionsArgs): KebabMenuItem[] {
+function buildUserActions({
+  user,
+  isEditing,
+  onRename,
+  onDelete,
+  onManageRoles,
+  t,
+}: UserActionsArgs): KebabMenuItem[] {
   return [
     {
       id: "rename",
@@ -283,7 +290,10 @@ export function RegisteredUsersTab() {
             <button
               type="button"
               className={styles.clearBtn}
-              onClick={() => { setSearch(""); searchRef.current?.focus(); }}
+              onClick={() => {
+                setSearch("");
+                searchRef.current?.focus();
+              }}
               aria-label={t("registeredUsers.clearSearch")}
             >
               &times;
@@ -300,13 +310,16 @@ export function RegisteredUsersTab() {
           <thead>
             <tr>
               <th className={styles.sortable} onClick={() => toggleSort("name")}>
-                {t("registeredUsers.colUsername")}{sortArrow("name")}
+                {t("registeredUsers.colUsername")}
+                {sortArrow("name")}
               </th>
               <th className={styles.sortable} onClick={() => toggleSort("last_seen")}>
-                {t("registeredUsers.colLastSeen")}{sortArrow("last_seen")}
+                {t("registeredUsers.colLastSeen")}
+                {sortArrow("last_seen")}
               </th>
               <th className={styles.sortable} onClick={() => toggleSort("last_channel")}>
-                {t("registeredUsers.colLastChannel")}{sortArrow("last_channel")}
+                {t("registeredUsers.colLastChannel")}
+                {sortArrow("last_channel")}
               </th>
               <th>{t("registeredUsers.colRoles")}</th>
               <th>{t("registeredUsers.colActions")}</th>
@@ -337,8 +350,12 @@ export function RegisteredUsersTab() {
                             if (e.key === "Escape") cancelRename();
                           }}
                         />
-                        <button type="button" className={styles.saveBtn} onClick={submitRename}>{t("registeredUsers.save")}</button>
-                        <button type="button" className={styles.removeBtn} onClick={cancelRename}>{t("common:actions.cancel")}</button>
+                        <button type="button" className={styles.saveBtn} onClick={submitRename}>
+                          {t("registeredUsers.save")}
+                        </button>
+                        <button type="button" className={styles.removeBtn} onClick={cancelRename}>
+                          {t("common:actions.cancel")}
+                        </button>
                       </span>
                     ) : connectedById.has(u.user_id) ? (
                       <UserHoverCard user={connectedById.get(u.user_id)!}>{u.name}</UserHoverCard>
@@ -388,7 +405,11 @@ export function RegisteredUsersTab() {
       </div>
 
       <div className={styles.statusBar}>
-        {t("registeredUsers.statusBar", { filtered: filtered.length, total: users.length, count: users.length })}
+        {t("registeredUsers.statusBar", {
+          filtered: filtered.length,
+          total: users.length,
+          count: users.length,
+        })}
       </div>
 
       {roleDialogUser && (
@@ -406,7 +427,9 @@ export function RegisteredUsersTab() {
           body={tFn("registeredUsers.unregisterBody", { name: deletingUser.name })}
           confirmLabel={t("registeredUsers.unregisterConfirm")}
           danger
-          onConfirm={() => { void submitDelete(); }}
+          onConfirm={() => {
+            void submitDelete();
+          }}
           onCancel={cancelDelete}
         />
       )}

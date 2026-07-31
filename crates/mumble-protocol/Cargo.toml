@@ -1,6 +1,6 @@
 [package]
 name = "mumble-protocol"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 # Internal workspace crate - never published to crates.io (this also lets
 # cargo-deny's wildcard gate exempt the path dependencies).
@@ -49,18 +49,23 @@ realfft = "3"
 # runtime and bundled model.
 fancy-denoiser-deepfilter = { path = "../fancy-denoiser-deepfilter", optional = true }
 
-# OCB2-AES128 encryption for Mumble UDP
+# Voice encryption. OCB2-AES128 for every stock Mumble server;
+# XChaCha20-Poly1305 for a Fancy server at 0.4.0 or later.
+#
+# Not optional, and deliberately so: announcing Fancy 0.4.0 is a promise about
+# what this client can decrypt, and a build flag that changed the answer would
+# make two builds of the same version behave differently on the wire.
 aes = "0.8"
+chacha20poly1305 = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"
+zeroize = { version = "1", features = ["zeroize_derive"] }
 
-# Persistent chat - encryption and key management
-chacha20poly1305 = { version = "0.10", optional = true }
+# Persistent chat - key management
 x25519-dalek = { version = "2", features = ["static_secrets"], optional = true }
 ed25519-dalek = { version = "2", features = ["rand_core"], optional = true }
-hkdf = { version = "0.12", optional = true }
-sha2 = { version = "0.10", optional = true }
 hmac = { version = "0.12", optional = true }
 rand = { version = "0.10.0", optional = true }
-zeroize = { version = "1", features = ["zeroize_derive"], optional = true }
 rmp-serde = { version = "1", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_bytes = { version = "0.11", optional = true }
@@ -77,14 +82,10 @@ rnnoise-denoiser = ["nnnoiseless"]
 # Adds ~5 MiB of embedded ONNX model + tract-onnx runtime.
 deepfilternet-denoiser = ["fancy-denoiser-deepfilter"]
 persistent-chat = [
-    "chacha20poly1305",
     "x25519-dalek",
     "ed25519-dalek",
-    "hkdf",
-    "sha2",
     "hmac",
     "rand",
-    "zeroize",
     "rmp-serde",
     "uuid",
     "serde_bytes",

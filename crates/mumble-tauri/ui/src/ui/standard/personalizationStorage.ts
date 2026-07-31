@@ -89,9 +89,7 @@ export async function loadPersonalization(): Promise<PersonalizationData> {
 }
 
 /** Persist personalization data. */
-export async function savePersonalization(
-  data: PersonalizationData,
-): Promise<void> {
+export async function savePersonalization(data: PersonalizationData): Promise<void> {
   const store = await getStore();
   await store.set(KEY, data);
   cachedLoad = Promise.resolve(data);

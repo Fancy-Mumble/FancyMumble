@@ -35,9 +35,7 @@ export function RolesListPanel() {
   return (
     <div className={styles.rolesPanel}>
       <h2 className={styles.panelTitle}>{t("roles.title")}</h2>
-      <p className={styles.dimText}>
-        {t("roles.description")}
-      </p>
+      <p className={styles.dimText}>{t("roles.description")}</p>
 
       <div className={styles.rolesToolbar}>
         <input
@@ -60,9 +58,7 @@ export function RolesListPanel() {
 
       {loading && !acl && <div className={styles.dimText}>{t("roles.loadingRoles")}</div>}
 
-      {acl && visibleRoles.length === 0 && (
-        <div className={styles.dimText}>{t("roles.noMatch")}</div>
-      )}
+      {acl && visibleRoles.length === 0 && <div className={styles.dimText}>{t("roles.noMatch")}</div>}
 
       <ul className={styles.rolesList}>
         {visibleRoles.map(({ group }) => (
@@ -74,15 +70,8 @@ export function RolesListPanel() {
               data-testid={TID.roleListRow}
               data-role-name={group.name}
             >
-              <RoleChip
-                name={group.name}
-                color={group.color}
-                icon={group.icon}
-                size="medium"
-              />
-              <span className={styles.roleMeta}>
-                {t("roles.member", { count: memberCount(group) })}
-              </span>
+              <RoleChip name={group.name} color={group.color} icon={group.icon} size="medium" />
+              <span className={styles.roleMeta}>{t("roles.member", { count: memberCount(group) })}</span>
               {group.style_preset && (
                 <span className={styles.rolePreset}>{t("roles.preset", { name: group.style_preset })}</span>
               )}

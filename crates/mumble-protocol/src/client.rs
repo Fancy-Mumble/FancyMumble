@@ -16,12 +16,13 @@ use crate::error::{Error, Result};
 use crate::event::EventHandler;
 use crate::fancy_codec::{self, FancyCodec};
 use crate::message::{ControlMessage, ServerMessage, UdpMessage};
-use crate::transport::ocb2::Ocb2CryptState;
 use crate::proto::mumble_tcp;
 use crate::state::ServerState;
 use crate::transport::tcp::{TcpConfig, TcpTransport};
 use crate::transport::udp::{CryptState, UdpConfig, UdpTransport};
+use crate::transport::voice_crypt::VoiceCrypt;
 use crate::work_queue::{self, WorkItem, WorkQueueSender};
+use fancy_utils::gate::Gate;
 
 /// The Mumble protocol version advertised to the server.
 ///
@@ -526,6 +527,7 @@ impl<H: EventHandler> EventLoopCtx<'_, H> {
                     if let ControlMessage::CryptSetup(cs) = ctrl {
                         handle_crypt_setup(
                             cs,
+                            self.state.connection.server_fancy_version,
                             self.udp_config,
                             self.force_tcp,
                             self.wq_sender,
@@ -720,7 +722,7 @@ fn handle_control_message<H: EventHandler>(
 /// Lightweight handle for sending encrypted UDP packets.
 struct UdpSender {
     socket: Arc<UdpSocket>,
-    crypt: Ocb2CryptState,
+    crypt: VoiceCrypt,
 }
 
 impl UdpSender {
@@ -806,12 +808,19 @@ struct StoredCrypto {
     key: Vec<u8>,
     client_nonce: Vec<u8>,
     server_nonce: Vec<u8>,
+    /// What the server announced, so re-keying picks the same cipher.
+    ///
+    /// Stored rather than re-read: `force_tcp` can be toggled long after the
+    /// handshake, and re-deriving the cipher from state that has moved on is
+    /// how the two ends end up disagreeing.
+    server_fancy_version: Option<u64>,
 }
 
 /// Handle a `CryptSetup` message: extract keys and start the UDP transport.
 #[allow(clippy::too_many_arguments, reason = "mirrors handle_control_message pattern; grouping would add indirection")]
 async fn handle_crypt_setup<H: EventHandler>(
     cs: &mumble_tcp::CryptSetup,
+    server_fancy_version: Option<u64>,
     udp_config: &UdpConfig,
     force_tcp: bool,
     wq_sender: &WorkQueueSender,
@@ -851,6 +860,7 @@ async fn handle_crypt_setup<H: EventHandler>(
         key: key.clone(),
         client_nonce: client_nonce.clone(),
         server_nonce: server_nonce.clone(),
+        server_fancy_version,
     });
 
     if force_tcp {
@@ -863,6 +873,7 @@ async fn handle_crypt_setup<H: EventHandler>(
         key,
         client_nonce,
         server_nonce,
+        server_fancy_version,
         udp_config,
         wq_sender,
         outbound_tx,
@@ -905,6 +916,7 @@ async fn handle_force_tcp_change<H: EventHandler>(
                 &crypto.key,
                 &crypto.client_nonce,
                 &crypto.server_nonce,
+                crypto.server_fancy_version,
                 udp_config,
                 wq_sender,
                 outbound_tx,
@@ -928,6 +940,7 @@ async fn start_udp<H: EventHandler>(
     key: &[u8],
     client_nonce: &[u8],
     server_nonce: &[u8],
+    server_fancy_version: Option<u64>,
     udp_config: &UdpConfig,
     wq_sender: &WorkQueueSender,
     outbound_tx: &mpsc::Sender<ControlMessage>,
@@ -939,19 +952,26 @@ async fn start_udp<H: EventHandler>(
     protobuf_audio: bool,
 ) {
 
-    // Initialize encrypt CryptState (for outbound audio)
-    let mut encrypt_crypt = Ocb2CryptState::new();
-    if let Err(e) = encrypt_crypt.set_key(key, client_nonce, server_nonce) {
-        warn!("failed to initialize UDP encrypt crypto: {e}");
-        return;
-    }
-
-    // Initialize decrypt CryptState (for inbound audio)
-    let mut decrypt_crypt = Ocb2CryptState::new();
-    if let Err(e) = decrypt_crypt.set_key(key, client_nonce, server_nonce) {
-        warn!("failed to initialize UDP decrypt crypto: {e}");
-        return;
-    }
+    // Which cipher this is was decided when the server announced its version;
+    // this only builds what that decided. Two states, not one shared: the
+    // sender and the reader run on different tasks, and for the modern cipher
+    // the two directions are separately keyed anyway.
+    let gate = Gate::for_peer(server_fancy_version);
+    let encrypt_crypt = match VoiceCrypt::negotiate(&gate, key, client_nonce, server_nonce) {
+        Ok(crypt) => crypt,
+        Err(e) => {
+            warn!("failed to initialize UDP encrypt crypto: {e}");
+            return;
+        }
+    };
+    let decrypt_crypt = match VoiceCrypt::negotiate(&gate, key, client_nonce, server_nonce) {
+        Ok(crypt) => crypt,
+        Err(e) => {
+            warn!("failed to initialize UDP decrypt crypto: {e}");
+            return;
+        }
+    };
+    let cipher_name = encrypt_crypt.name();
 
     // Connect UDP socket
     let transport = match UdpTransport::connect(udp_config, crate::transport::udp::PlaintextCryptState).await {
@@ -1012,7 +1032,7 @@ async fn start_udp<H: EventHandler>(
         }
     }
 
-    info!("UDP transport started with OCB2-AES128 encryption");
+    info!("UDP transport started with {cipher_name} encryption");
     handler.on_audio_transport_changed(true);
 }
 
@@ -1043,7 +1063,7 @@ fn udp_ping_message() -> UdpMessage {
 ///      current encrypt IV, which path #1 then applies.
 async fn udp_reader_loop(
     socket: Arc<UdpSocket>,
-    mut crypt: Ocb2CryptState,
+    mut crypt: VoiceCrypt,
     shared_stats: crate::transport::ocb2::SharedPacketStats,
     wq_sender: WorkQueueSender,
     mut server_nonce_rx: mpsc::Receiver<Vec<u8>>,
@@ -1051,6 +1071,10 @@ async fn udp_reader_loop(
 ) {
     /// Number of consecutive decrypt failures that triggers a resync
     /// request to the server.  Roughly one second of audio at 50 Hz.
+    ///
+    /// Only sent for a cipher a resync can help. `XChaCha20-Poly1305` carries
+    /// two counter bytes and reconstructs the rest, so asking would be a message
+    /// a second at exactly the moment the connection is already struggling.
     const RESYNC_FAILURE_THRESHOLD: u32 = 50;
     /// Minimum delay between two resync requests so we do not flood the
     /// server while the desync is being repaired.
@@ -1067,7 +1091,7 @@ async fn udp_reader_loop(
             maybe_nonce = server_nonce_rx.recv() => {
                 match maybe_nonce {
                     Some(nonce) => {
-                        crypt.set_decrypt_iv(&nonce);
+                        crypt.adopt_resync(&nonce);
                         consecutive_failures = 0;
                         info!("UDP: applied server-supplied decrypt nonce resync");
                         continue;
@@ -1107,7 +1131,8 @@ async fn udp_reader_loop(
             Err(e) => {
                 consecutive_failures = consecutive_failures.saturating_add(1);
                 warn!("UDP decrypt failed, skipping: {e}");
-                if consecutive_failures >= RESYNC_FAILURE_THRESHOLD
+                if crypt.resync_helps()
+                    && consecutive_failures >= RESYNC_FAILURE_THRESHOLD
                     && last_resync_request.elapsed() >= RESYNC_REQUEST_COOLDOWN
                 {
                     // Empty CryptSetup -> server replies with a partial
@@ -1138,7 +1163,7 @@ async fn udp_reader_loop(
 
         // Publish updated counters after each decrypt attempt.
         if let Ok(mut stats) = shared_stats.lock() {
-            stats.clone_from(&crypt.stats);
+            *stats = crypt.stats();
         }
 
         match crate::transport::udp::decode_udp_message(&decrypted) {

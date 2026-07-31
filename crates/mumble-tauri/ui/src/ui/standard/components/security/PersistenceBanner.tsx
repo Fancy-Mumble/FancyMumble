@@ -47,7 +47,9 @@ export default function PersistenceBanner({ channelId }: PersistenceBannerProps)
     getDismissedBanners().then((ids) => {
       if (!cancelled) setDismissed(ids.includes(channelId));
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [channelId]);
 
   const handleDismiss = useCallback(() => {
@@ -127,7 +129,7 @@ export default function PersistenceBanner({ channelId }: PersistenceBannerProps)
       {persistence.hasMore && (
         <div ref={loadMoreRef} className={styles.loadMore}>
           {persistence.isFetching && (
-          <div className={styles.loadingSpinner} aria-label={t("persistence.loadingOlderAriaLabel")} />
+            <div className={styles.loadingSpinner} aria-label={t("persistence.loadingOlderAriaLabel")} />
           )}
         </div>
       )}

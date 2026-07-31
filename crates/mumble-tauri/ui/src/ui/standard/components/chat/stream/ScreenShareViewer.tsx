@@ -1,4 +1,20 @@
-import { ActivityIcon, CloseIcon, EditIcon, ErrorCircleIcon, FullscreenExitIcon, FullscreenIcon, HighlighterIcon, MonitorIcon, PauseIcon, PlayIcon, PopoutIcon, ScreenShareIcon, VolumeIcon, VolumeOffIcon, WebcamIcon } from "../../../icons";
+import {
+  ActivityIcon,
+  CloseIcon,
+  EditIcon,
+  ErrorCircleIcon,
+  FullscreenExitIcon,
+  FullscreenIcon,
+  HighlighterIcon,
+  MonitorIcon,
+  PauseIcon,
+  PlayIcon,
+  PopoutIcon,
+  ScreenShareIcon,
+  VolumeIcon,
+  VolumeOffIcon,
+  WebcamIcon,
+} from "../../../icons";
 /**
  * Screen share viewer components.
  *
@@ -30,7 +46,13 @@ import styles from "./ScreenShareViewer.module.css";
  *  share renders in the main viewport instead (no tile). The media surface
  *  follows the viewer strategy: a MediaStream `<video>` (webview family) or
  *  a `<canvas>` the native Rust viewer paints into. */
-function CameraPipTile({ stream, canvasRef, session, own, onEnd }: {
+function CameraPipTile({
+  stream,
+  canvasRef,
+  session,
+  own,
+  onEnd,
+}: {
   /** Webview family: the camera MediaStream. */
   readonly stream?: MediaStream | null;
   /** Native family: the canvas the viewer paints camera frames into. */
@@ -49,7 +71,9 @@ function CameraPipTile({ stream, canvasRef, session, own, onEnd }: {
     if (!video || !stream) return;
     video.srcObject = stream;
     video.play().catch(() => {});
-    return () => { video.srcObject = null; };
+    return () => {
+      video.srcObject = null;
+    };
   }, [stream]);
 
   return (
@@ -124,7 +148,12 @@ interface StreamControlsProps {
   readonly onToggleStats?: () => void;
 }
 
-function VolumeControl({ muted, volume, onToggleMute, onChange }: {
+function VolumeControl({
+  muted,
+  volume,
+  onToggleMute,
+  onChange,
+}: {
   readonly muted: boolean;
   readonly volume: number;
   readonly onToggleMute: () => void;
@@ -145,9 +174,11 @@ function VolumeControl({ muted, volume, onToggleMute, onChange }: {
         title={muted ? t("screenShare.unmute") : t("screenShare.mute")}
         aria-label={muted ? t("screenShare.unmute") : t("screenShare.mute")}
       >
-        {muted || volume === 0
-          ? <VolumeOffIcon width={16} height={16} />
-          : <VolumeIcon width={16} height={16} />}
+        {muted || volume === 0 ? (
+          <VolumeOffIcon width={16} height={16} />
+        ) : (
+          <VolumeIcon width={16} height={16} />
+        )}
       </button>
       {show && (
         <input
@@ -164,7 +195,19 @@ function VolumeControl({ muted, volume, onToggleMute, onChange }: {
   );
 }
 
-function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, desktopOverlayOn, onToggleDesktopOverlay, missingSourceKind, onAddSource, onPopout, statsOn, onToggleStats }: StreamControlsProps) {
+function StreamControls({
+  videoRef,
+  containerRef,
+  isOwnPreview,
+  drawChannelId,
+  desktopOverlayOn,
+  onToggleDesktopOverlay,
+  missingSourceKind,
+  onAddSource,
+  onPopout,
+  statsOn,
+  onToggleStats,
+}: StreamControlsProps) {
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(100);
@@ -199,20 +242,23 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
     setMuted(video.muted);
   }, [videoRef]);
 
-  const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const video = videoRef.current;
-    if (!(video instanceof HTMLVideoElement)) return;
-    const val = Number(e.target.value);
-    setVolume(val);
-    video.volume = val / 100;
-    if (val === 0) {
-      video.muted = true;
-      setMuted(true);
-    } else if (video.muted) {
-      video.muted = false;
-      setMuted(false);
-    }
-  }, [videoRef]);
+  const handleVolumeChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const video = videoRef.current;
+      if (!(video instanceof HTMLVideoElement)) return;
+      const val = Number(e.target.value);
+      setVolume(val);
+      video.volume = val / 100;
+      if (val === 0) {
+        video.muted = true;
+        setMuted(true);
+      } else if (video.muted) {
+        video.muted = false;
+        setMuted(false);
+      }
+    },
+    [videoRef],
+  );
 
   const toggleFullscreen = useCallback(() => {
     const container = containerRef.current;
@@ -224,8 +270,8 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
     }
   }, [containerRef]);
 
-  const drawingActive = useAppStore((s) =>
-    drawChannelId !== undefined && s.drawingActiveChannels.has(drawChannelId),
+  const drawingActive = useAppStore(
+    (s) => drawChannelId !== undefined && s.drawingActiveChannels.has(drawChannelId),
   );
   const toggleDrawing = useCallback(() => {
     if (drawChannelId === undefined) return;
@@ -249,9 +295,7 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
           title={paused ? t("screenShare.play") : t("screenShare.pause")}
           aria-label={paused ? t("screenShare.play") : t("screenShare.pause")}
         >
-          {paused
-            ? <PlayIcon width={16} height={16} />
-            : <PauseIcon width={16} height={16} />}
+          {paused ? <PlayIcon width={16} height={16} /> : <PauseIcon width={16} height={16} />}
         </button>
       )}
 
@@ -303,16 +347,18 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
           className={styles.controlBtn}
           onClick={onAddSource}
           data-testid={TID.streamAddSource}
-          title={missingSourceKind === "screen"
-            ? t("screenShare.addScreenTrack")
-            : t("screenShare.addCameraTrack")}
-          aria-label={missingSourceKind === "screen"
-            ? t("screenShare.addScreenTrack")
-            : t("screenShare.addCameraTrack")}
+          title={
+            missingSourceKind === "screen" ? t("screenShare.addScreenTrack") : t("screenShare.addCameraTrack")
+          }
+          aria-label={
+            missingSourceKind === "screen" ? t("screenShare.addScreenTrack") : t("screenShare.addCameraTrack")
+          }
         >
-          {missingSourceKind === "screen"
-            ? <MonitorIcon width={16} height={16} />
-            : <WebcamIcon width={16} height={16} />}
+          {missingSourceKind === "screen" ? (
+            <MonitorIcon width={16} height={16} />
+          ) : (
+            <WebcamIcon width={16} height={16} />
+          )}
         </button>
       )}
 
@@ -355,9 +401,11 @@ function StreamControls({ videoRef, containerRef, isOwnPreview, drawChannelId, d
           title={isFullscreen ? t("screenShare.exitFullscreen") : t("screenShare.fullscreen")}
           aria-label={isFullscreen ? t("screenShare.exitFullscreen") : t("screenShare.fullscreen")}
         >
-          {isFullscreen
-            ? <FullscreenExitIcon width={16} height={16} />
-            : <FullscreenIcon width={16} height={16} />}
+          {isFullscreen ? (
+            <FullscreenExitIcon width={16} height={16} />
+          ) : (
+            <FullscreenIcon width={16} height={16} />
+          )}
         </button>
       )}
     </div>
@@ -389,7 +437,14 @@ function usesNativeSurface(): boolean {
   return activeStreamViewerStrategy().id === StreamViewerStrategyId.Native;
 }
 
-function OwnBroadcastPreview({ stream, channelId, ownSession, missingSourceKind, onAddSource, onEndCamera }: OwnPreviewProps) {
+function OwnBroadcastPreview({
+  stream,
+  channelId,
+  ownSession,
+  missingSourceKind,
+  onAddSource,
+  onEndCamera,
+}: OwnPreviewProps) {
   const nativeSurface = usesNativeSurface();
   const videoRef = useRef<HTMLVideoElement>(null);
   const displayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -438,7 +493,9 @@ function OwnBroadcastPreview({ stream, channelId, ownSession, missingSourceKind,
     const video = videoRef.current;
     if (!video) return;
     video.srcObject = stream;
-    return () => { video.srcObject = null; };
+    return () => {
+      video.srcObject = null;
+    };
   }, [stream]);
 
   const openDesktopOverlay = useCallback(async () => {
@@ -561,7 +618,15 @@ function OwnBroadcastPreview({ stream, channelId, ownSession, missingSourceKind,
 // Remote viewer - displays the WebRTC stream from the broadcaster
 // ---------------------------------------------------------------------------
 
-function RemoteViewer({ session, channelId, ownSession }: { readonly session: number; readonly channelId: number; readonly ownSession: number }) {
+function RemoteViewer({
+  session,
+  channelId,
+  ownSession,
+}: {
+  readonly session: number;
+  readonly channelId: number;
+  readonly ownSession: number;
+}) {
   const nativeSurface = usesNativeSurface();
   const videoRef = useRef<HTMLVideoElement>(null);
   const displayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -578,10 +643,7 @@ function RemoteViewer({ session, channelId, ownSession }: { readonly session: nu
   const activeServerId = useAppStore((s) => s.activeServerId);
   const { t } = useTranslation(["chat", "common"]);
   const [statsOn, setStatsOn] = useState(false);
-  const statsSampler = useMemo(
-    () => activeStreamViewerStrategy().createStatsSampler(session),
-    [session],
-  );
+  const statsSampler = useMemo(() => activeStreamViewerStrategy().createStatsSampler(session), [session]);
 
   const handlePopout = useCallback(() => {
     if (!ownSession || !activeServerId) return;
@@ -604,7 +666,9 @@ function RemoteViewer({ session, channelId, ownSession }: { readonly session: nu
     if (remoteStream) {
       video.play().catch(() => {});
     }
-    return () => { video.srcObject = null; };
+    return () => {
+      video.srcObject = null;
+    };
   }, [remoteStream]);
 
   return (
@@ -709,18 +773,18 @@ export default function ScreenShareViewer({
 }: ScreenShareViewerProps) {
   return (
     <div className={styles.broadcastArea}>
-      {isOwnBroadcast
-        ? (
-          <OwnBroadcastPreview
-            stream={localStream}
-            channelId={channelId}
-            ownSession={ownSession}
-            missingSourceKind={missingSourceKind}
-            onAddSource={onAddSource}
-            onEndCamera={onEndCamera}
-          />
-        )
-        : <RemoteViewer session={session ?? 0} channelId={channelId} ownSession={ownSession} />}
+      {isOwnBroadcast ? (
+        <OwnBroadcastPreview
+          stream={localStream}
+          channelId={channelId}
+          ownSession={ownSession}
+          missingSourceKind={missingSourceKind}
+          onAddSource={onAddSource}
+          onEndCamera={onEndCamera}
+        />
+      ) : (
+        <RemoteViewer session={session ?? 0} channelId={channelId} ownSession={ownSession} />
+      )}
     </div>
   );
 }
@@ -730,10 +794,7 @@ export default function ScreenShareViewer({
 // ---------------------------------------------------------------------------
 
 /** "Share Screen" toggle button for the chat header. */
-export function ShareScreenButton({
-  active,
-  onClick,
-}: Readonly<{ active: boolean; onClick: () => void }>) {
+export function ShareScreenButton({ active, onClick }: Readonly<{ active: boolean; onClick: () => void }>) {
   const { t } = useTranslation(["chat", "common"]);
   return (
     <button
@@ -780,7 +841,11 @@ export function BroadcastBanner({ broadcasters, onWatch, sfuAvailable = true }: 
 
   // Reset dismissed state when broadcasters change (new broadcaster should show).
   const broadcasterIds = useMemo(
-    () => broadcasters.map((b) => b.session).sort().join(","),
+    () =>
+      broadcasters
+        .map((b) => b.session)
+        .sort()
+        .join(","),
     [broadcasters],
   );
   useEffect(() => {
@@ -808,7 +873,9 @@ export function BroadcastBanner({ broadcasters, onWatch, sfuAvailable = true }: 
           data-testid={TID.broadcastBanner}
           data-broadcaster-name={b.name}
         >
-          <span className={`${styles.broadcastBannerDot} ${!sfuAvailable ? styles.broadcastBannerDotP2P : ""}`} />
+          <span
+            className={`${styles.broadcastBannerDot} ${!sfuAvailable ? styles.broadcastBannerDotP2P : ""}`}
+          />
           <span className={styles.broadcastBannerText}>
             <span className={styles.broadcastBannerName}>{b.name}</span>{" "}
             {t(BANNER_LABEL_KEYS[getBroadcastContent(b.session)])}

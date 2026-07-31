@@ -186,11 +186,7 @@ function EditForm({ server, onSave, onClose }: Readonly<Props>) {
         {hasStoredPassword && !clearPassword ? (
           <div className={styles.storedPassword}>
             <span className={styles.storedLabel}>{t("edit.storedPassword")}</span>
-            <button
-              type="button"
-              className={styles.clearPasswordBtn}
-              onClick={() => setClearPassword(true)}
-            >
+            <button type="button" className={styles.clearPasswordBtn} onClick={() => setClearPassword(true)}>
               {t("edit.removePassword")}
             </button>
           </div>
@@ -200,7 +196,9 @@ function EditForm({ server, onSave, onClose }: Readonly<Props>) {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder={clearPassword ? t("edit.passwordPlaceholderClear") : t("edit.passwordPlaceholderEmpty")}
+            placeholder={
+              clearPassword ? t("edit.passwordPlaceholderClear") : t("edit.passwordPlaceholderEmpty")
+            }
             autoComplete="new-password"
           />
         )}
@@ -230,7 +228,12 @@ export default function ServerEditSheet({ server, onSave, onClose }: Readonly<Pr
 
   // Desktop: portal overlay dialog (similar pattern to ConfirmDialog)
   return (
-    <div className={styles.overlay} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div
+      className={styles.overlay}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className={styles.dialog}>
         <EditForm server={server} onSave={onSave} onClose={onClose} />
       </div>

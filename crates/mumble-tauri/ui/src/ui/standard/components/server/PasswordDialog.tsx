@@ -71,9 +71,7 @@ export default function PasswordDialog({
 
   if (!open) return null;
 
-  const target = username && serverHost
-    ? `${username} on ${serverHost}`
-    : serverHost ?? "this server";
+  const target = username && serverHost ? `${username} on ${serverHost}` : (serverHost ?? "this server");
 
   return (
     <Modal
@@ -99,7 +97,11 @@ export default function PasswordDialog({
         {editingUsername && onChangeUsername ? (
           <form className={styles.body} onSubmit={handleChangeUsername}>
             <p className={styles.message}>
-              <span dangerouslySetInnerHTML={{ __html: t("password.differentUser.message", { host: serverHost }) }} />
+              <span
+                dangerouslySetInnerHTML={{
+                  __html: t("password.differentUser.message", { host: serverHost }),
+                }}
+              />
             </p>
             <TextField
               className={styles.field}
@@ -115,11 +117,7 @@ export default function PasswordDialog({
               spellCheck={false}
             />
             <div className={styles.actions}>
-              <button
-                className={styles.cancelBtn}
-                type="button"
-                onClick={() => setEditingUsername(false)}
-              >
+              <button className={styles.cancelBtn} type="button" onClick={() => setEditingUsername(false)}>
                 {t("password.differentUser.back")}
               </button>
               <button
@@ -133,13 +131,13 @@ export default function PasswordDialog({
           </form>
         ) : (
           <form className={styles.body} onSubmit={handleSubmit}>
-            {error && (
-              <p className={styles.error}>{error}</p>
-            )}
+            {error && <p className={styles.error}>{error}</p>}
             <p className={styles.message}>
-              {error
-                ? <span dangerouslySetInnerHTML={{ __html: t("password.retryMessage", { target }) }} />
-                : <span dangerouslySetInnerHTML={{ __html: t("password.enterMessage", { target }) }} />}
+              {error ? (
+                <span dangerouslySetInnerHTML={{ __html: t("password.retryMessage", { target }) }} />
+              ) : (
+                <span dangerouslySetInnerHTML={{ __html: t("password.enterMessage", { target }) }} />
+              )}
             </p>
 
             <TextField
@@ -155,11 +153,7 @@ export default function PasswordDialog({
             />
 
             {onChangeUsername && (
-              <button
-                type="button"
-                className={styles.changeUserBtn}
-                onClick={() => setEditingUsername(true)}
-              >
+              <button type="button" className={styles.changeUserBtn} onClick={() => setEditingUsername(true)}>
                 {t("password.changeUsername")}
               </button>
             )}
@@ -176,18 +170,10 @@ export default function PasswordDialog({
                   {t("password.savePassword")}
                 </label>
               )}
-              <button
-                className={styles.cancelBtn}
-                type="button"
-                onClick={onCancel}
-              >
+              <button className={styles.cancelBtn} type="button" onClick={onCancel}>
                 {t("common:actions.cancel")}
               </button>
-              <button
-                className={styles.connectBtn}
-                type="submit"
-                disabled={!password}
-              >
+              <button className={styles.connectBtn} type="submit" disabled={!password}>
                 {t("password.connect")}
               </button>
             </div>

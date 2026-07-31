@@ -1,0 +1,143 @@
+/* Design sheet: dsLayout. Split from AuroraApp.module.css. */
+
+.eyebrow {
+  color: var(--signal);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.wrapRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.section {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: clamp(64px, 8vw, 104px) clamp(24px, 6vw, 80px);
+  border-bottom: 1px solid var(--line);
+  border-color: rgb(255 255 255 / 6%);
+}
+
+.sectionHeader {
+  display: grid;
+  grid-template-columns: 1fr minmax(260px, 470px);
+  gap: 40px;
+  align-items: end;
+  margin-bottom: 36px;
+}
+
+.sectionHeader h2 {
+  margin: 12px 0 0;
+  font-weight: 560;
+  letter-spacing: -.05em;
+  font-size: clamp(36px, 4vw, 50px);
+  line-height: 1.02;
+}
+
+.sectionHeader p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+  max-width: 430px;
+  font-size: var(--type-body);
+}
+
+.specimenGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  gap: 12px;
+  border: 0;
+}
+
+.specimen {
+  min-width: 0;
+  padding: 20px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(166 215 255 / 13%);
+  border-radius: 18px;
+  border-color: rgb(255 255 255 / 8%);
+  background: rgb(25 31 39 / 48%);
+  box-shadow: 0 14px 38px rgb(0 0 0 / 10%);
+  backdrop-filter: blur(30px) saturate(108%);
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.specimenLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 26px;
+  position: relative;
+  z-index: 1;
+}
+
+.specimenLabel strong {
+  letter-spacing: .01em;
+  font-size: var(--type-label);
+}
+
+.specimenLabel span {
+  color: #626a78;
+  font: 8px ui-monospace, monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-size: 9px;
+}
+
+.specimenBody {
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+  font-size: var(--type-body);
+}
+
+.specimen::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background: radial-gradient(circle at 12% 0, rgb(255 255 255 / 5%), transparent 30%);
+  display: none;
+}
+
+@media (max-width: 1000px) {
+  .sectionHeader {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+}
+
+@media (max-width: 720px) {
+  .section {
+    padding: 64px 18px;
+  }
+
+  .sectionHeader p {
+    font-size: 11px;
+  }
+
+  .specimenGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .wide {
+    grid-column: auto;
+  }
+
+  .specimen {
+    padding: 15px;
+  }
+}

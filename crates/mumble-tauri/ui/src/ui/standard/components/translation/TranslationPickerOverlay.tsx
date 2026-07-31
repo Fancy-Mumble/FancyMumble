@@ -18,11 +18,7 @@
 
 import { useEffect } from "react";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
-import {
-  parsePickerMarker,
-  PICKER_MARK_START,
-  setPickerActive,
-} from "@core/i18n";
+import { parsePickerMarker, PICKER_MARK_START, setPickerActive } from "@core/i18n";
 
 const OVERLAY_ID = "translation-picker-overlay";
 const TOAST_ID = "translation-picker-toast";

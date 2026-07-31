@@ -31,7 +31,16 @@ interface UseChatSendOptions {
   stageImage?: (file: File) => void;
 }
 
-export function useChatSend({ pendingQuotes, clearQuotes, draft, clearDraft, editingMessage, onEditComplete, showToast, stageImage }: UseChatSendOptions) {
+export function useChatSend({
+  pendingQuotes,
+  clearQuotes,
+  draft,
+  clearDraft,
+  editingMessage,
+  onEditComplete,
+  showToast,
+  stageImage,
+}: UseChatSendOptions) {
   const sendMessage = useAppStore((s) => s.sendMessage);
   const editMessage = useAppStore((s) => s.editMessage);
   const serverConfig = useAppStore((s) => s.serverConfig);
@@ -119,7 +128,21 @@ export function useChatSend({ pendingQuotes, clearQuotes, draft, clearDraft, edi
       clearQuotes();
       await sendMessage(selectedChannel, html);
     }
-  }, [draft, pendingQuotes, editingMessage, editMessage, onEditComplete, isDmMode, selectedDmUser, sendDm, selectedChannel, sendMessage, clearDraft, clearQuotes, renderBody]);
+  }, [
+    draft,
+    pendingQuotes,
+    editingMessage,
+    editMessage,
+    onEditComplete,
+    isDmMode,
+    selectedDmUser,
+    sendDm,
+    selectedChannel,
+    sendMessage,
+    clearDraft,
+    clearQuotes,
+    renderBody,
+  ]);
 
   const sendMediaFile = useCallback(
     async (file: File) => {
@@ -144,8 +167,7 @@ export function useChatSend({ pendingQuotes, clearQuotes, draft, clearDraft, edi
       // starts.  Without this, mobile users would tap "send" and see
       // nothing happen for several seconds while the JS thread is
       // busy compressing a large camera photo.
-      const preparingLabel =
-        kind === "video" ? "Preparing video\u2026" : "Preparing image\u2026";
+      const preparingLabel = kind === "video" ? "Preparing video\u2026" : "Preparing image\u2026";
       const placeholderBody = `<em>${preparingLabel}</em>`;
       const channelTarget = isDmMode ? null : selectedChannel;
       const dmTarget = isDmMode ? selectedDmUser : null;
@@ -239,16 +261,14 @@ export function useChatSend({ pendingQuotes, clearQuotes, draft, clearDraft, edi
           : serverConfig.max_message_length;
       // Each image is its own message, so it gets the whole limit at full
       // quality; "compressed" targets a third of it to save bandwidth.
-      const perImageBudget =
-        quality === "compressed" ? Math.max(60_000, Math.floor(maxBytes / 3)) : maxBytes;
+      const perImageBudget = quality === "compressed" ? Math.max(60_000, Math.floor(maxBytes / 3)) : maxBytes;
 
       const trimmed = caption.trim();
       const captionHtml = trimmed ? renderBody(trimmed) : "";
 
       const channelTarget = isDmMode ? null : selectedChannel;
       const dmTarget = isDmMode ? selectedDmUser : null;
-      const preparing =
-        files.length > 1 ? `Preparing ${files.length} images…` : "Preparing image…";
+      const preparing = files.length > 1 ? `Preparing ${files.length} images…` : "Preparing image…";
       const placeholderId = addPendingPlaceholder(channelTarget, dmTarget, `<em>${preparing}</em>`);
 
       const single = files.length === 1;

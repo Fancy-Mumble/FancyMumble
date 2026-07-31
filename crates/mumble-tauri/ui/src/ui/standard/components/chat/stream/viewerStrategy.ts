@@ -45,15 +45,11 @@ export const STRATEGY_AUTO = "auto";
 
 /** The persisted selection: a concrete family, or automatic. Narrowing away
  *  {@link STRATEGY_AUTO} leaves a plain {@link StreamViewerStrategyId}. */
-export type StreamViewerStrategyPreference =
-  | StreamViewerStrategyId
-  | typeof STRATEGY_AUTO;
+export type StreamViewerStrategyPreference = StreamViewerStrategyId | typeof STRATEGY_AUTO;
 
 /** The member of {@link StreamViewerStrategyId} a raw (storage/DOM) string
  *  denotes, or null. The single place raw strings become enum values. */
-export function parseStreamViewerStrategyId(
-  value: string | null | undefined,
-): StreamViewerStrategyId | null {
+export function parseStreamViewerStrategyId(value: string | null | undefined): StreamViewerStrategyId | null {
   return Object.values(StreamViewerStrategyId).includes(value as StreamViewerStrategyId)
     ? (value as StreamViewerStrategyId)
     : null;
@@ -138,9 +134,7 @@ export function getStreamViewerStrategyPreference(): StreamViewerStrategyPrefere
 /** Persist the strategy preference (the Settings -> Advanced switch).
  *  Takes effect on the next page load - the active strategy is latched at
  *  first use, so mid-session consumers all stay in one family. */
-export function setStreamViewerStrategyPreference(
-  preference: StreamViewerStrategyPreference,
-): void {
+export function setStreamViewerStrategyPreference(preference: StreamViewerStrategyPreference): void {
   try {
     if (preference === STRATEGY_AUTO) {
       globalThis.localStorage?.removeItem(PREFERENCE_KEY);
@@ -155,9 +149,7 @@ export function setStreamViewerStrategyPreference(
 /** Families a user could select here (registered AND available) - drives
  *  whether the settings switch is offered at all (it needs >= 2). */
 export function selectableStreamViewerStrategyIds(): StreamViewerStrategyId[] {
-  return [...globals.registry.values()]
-    .filter((s) => s.isAvailable())
-    .map((s) => s.id);
+  return [...globals.registry.values()].filter((s) => s.isAvailable()).map((s) => s.id);
 }
 
 /** Auto-selection order: webview (browser WebRTC) first, then native. */

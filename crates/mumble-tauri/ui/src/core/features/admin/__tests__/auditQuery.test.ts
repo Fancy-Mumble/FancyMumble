@@ -36,7 +36,9 @@ describe("isSqlQuery", () => {
 
 describe("parseAuditQuery", () => {
   it("parses the design-doc example shape", () => {
-    const f = parseAuditQuery('category = "ban" and target.name ~ "troll" and ts > now-7d and actor.name = "mod3"');
+    const f = parseAuditQuery(
+      'category = "ban" and target.name ~ "troll" and ts > now-7d and actor.name = "mod3"',
+    );
     expect(f.categories).toEqual(["ban"]);
     expect(f.target).toBe("troll");
     expect(f.since).toBe("7d");
@@ -91,7 +93,7 @@ describe("serializeAuditQuery (two-way binding)", () => {
       since: "7d",
     };
     const text = serializeAuditQuery(filters);
-    expect(text).toContain('category in (ban, kick)');
+    expect(text).toContain("category in (ban, kick)");
     expect(text).toContain('target = "troll guy"');
     const roundTripped = parseAuditQuery(text);
     expect(roundTripped).toEqual(filters);

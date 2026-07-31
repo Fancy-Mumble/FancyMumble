@@ -87,12 +87,8 @@ export function UserRoleManagerDialog({ user, acl, onClose, onSaved }: UserRoleM
       const shouldBeMember = membership.has(g.name);
       const isCurrent = g.add.includes(user.user_id);
       if (shouldBeMember === isCurrent) return g;
-      const add = shouldBeMember
-        ? [...g.add, user.user_id]
-        : g.add.filter((id) => id !== user.user_id);
-      const remove = shouldBeMember
-        ? g.remove.filter((id) => id !== user.user_id)
-        : g.remove;
+      const add = shouldBeMember ? [...g.add, user.user_id] : g.add.filter((id) => id !== user.user_id);
+      const remove = shouldBeMember ? g.remove.filter((id) => id !== user.user_id) : g.remove;
       return { ...g, add, remove };
     });
     try {
@@ -131,7 +127,12 @@ export function UserRoleManagerDialog({ user, acl, onClose, onSaved }: UserRoleM
       <div>
         <div className={styles.dialogHeader}>
           <h3 className={styles.dialogTitle}>{t("roleManagerDialog.title", { name: user.name })}</h3>
-          <button type="button" className={styles.dialogClose} onClick={onClose} aria-label={t("common:actions.close")}>
+          <button
+            type="button"
+            className={styles.dialogClose}
+            onClick={onClose}
+            aria-label={t("common:actions.close")}
+          >
             &times;
           </button>
         </div>
@@ -176,12 +177,7 @@ export function UserRoleManagerDialog({ user, acl, onClose, onSaved }: UserRoleM
           <button type="button" className={styles.refreshBtn} onClick={onClose} disabled={saving}>
             {t("common:actions.cancel")}
           </button>
-          <button
-            type="button"
-            className={styles.saveBtn}
-            onClick={handleSave}
-            disabled={!dirty || saving}
-          >
+          <button type="button" className={styles.saveBtn} onClick={handleSave} disabled={!dirty || saving}>
             {saving ? t("roleManagerDialog.saving") : t("roleManagerDialog.save")}
           </button>
         </div>

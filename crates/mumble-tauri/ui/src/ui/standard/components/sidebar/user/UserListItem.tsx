@@ -1,4 +1,11 @@
-import { HeadphonesOffIcon, MicOffIcon, ScreenShareIcon, ShieldCheckIcon, StarIcon, VolumeIcon } from "../../../icons";
+import {
+  HeadphonesOffIcon,
+  MicOffIcon,
+  ScreenShareIcon,
+  ShieldCheckIcon,
+  StarIcon,
+  VolumeIcon,
+} from "../../../icons";
 import { memo, useState, useMemo, useCallback, useEffect, useRef, createContext, useContext } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -38,9 +45,7 @@ function sanitiseRoleColor(raw: string): string | null {
  * - is not a system group (name not starting with `~`)
  * determines their display color.
  */
-export function buildRoleColorMap(
-  groups: readonly AclGroup[],
-): ReadonlyMap<number, string> {
+export function buildRoleColorMap(groups: readonly AclGroup[]): ReadonlyMap<number, string> {
   const map = new Map<number, string>();
   for (const g of groups) {
     if (g.name.startsWith("~")) continue;
@@ -67,9 +72,7 @@ export type RoleChip = { readonly name: string; readonly color: string | null };
  * Every non-system group (name not starting with `~`) that contains a user
  * contributes a chip for that user.
  */
-export function buildRoleGroupsMap(
-  groups: readonly AclGroup[],
-): ReadonlyMap<number, readonly RoleChip[]> {
+export function buildRoleGroupsMap(groups: readonly AclGroup[]): ReadonlyMap<number, readonly RoleChip[]> {
   const map = new Map<number, RoleChip[]>();
   for (const g of groups) {
     if (g.name.startsWith("~")) continue;
@@ -149,9 +152,7 @@ export function useHoverCardPosition(isBroadcasting: boolean): HoverCardPosition
           Math.min(rawTop, window.innerHeight - effectiveH / 2 - HOVER_CARD_MARGIN),
         );
         const fitsRight = rect.right + HOVER_CARD_GAP + HOVER_CARD_W + HOVER_CARD_MARGIN <= window.innerWidth;
-        const left = fitsRight
-          ? rect.right + HOVER_CARD_GAP
-          : rect.left - HOVER_CARD_GAP - HOVER_CARD_W;
+        const left = fitsRight ? rect.right + HOVER_CARD_GAP : rect.left - HOVER_CARD_GAP - HOVER_CARD_W;
         setCardPos({ top, left });
       }
       setShowCard(true);
@@ -200,10 +201,7 @@ export function UserHoverCardPortal({
   groups,
 }: Readonly<UserHoverCardPortalProps>) {
   return createPortal(
-    <div
-      className={styles.profilePopover}
-      style={{ top: cardPos.top, left: cardPos.left }}
-    >
+    <div className={styles.profilePopover} style={{ top: cardPos.top, left: cardPos.left }}>
       {isBroadcasting && (
         <div className={styles.streamPreview}>
           {thumbnail ? (
@@ -290,7 +288,7 @@ export const UserListItem = memo(function UserListItem({
   const roleGroups = useContext(RoleGroupsContext);
   const userGroups = user.user_id != null ? (roleGroups.get(user.user_id) ?? []) : [];
   const dmUnread = useAppStore((s) => s.dmUnreadCounts[user.session] ?? 0);
-  const volumePct = useAppStore((s) => user.hash ? (s.userVolumes[user.hash] ?? 100) : 100);
+  const volumePct = useAppStore((s) => (user.hash ? (s.userVolumes[user.hash] ?? 100) : 100));
   const isBroadcasting = useAppStore((s) => s.broadcastingSessions.has(user.session));
   const sfuAvailable = useAppStore((s) => s.serverConfig.webrtc_sfu_available);
   const canMoveUser = useAppStore((s) => {
@@ -306,14 +304,11 @@ export const UserListItem = memo(function UserListItem({
   // shown.  Offline entries get their bio via `onRequestComment` (below), so the
   // live fetch is gated on `!offline`.
   const liveComment = useUserComment(user.session, user.comment_size, showCard && !offline);
-  const parsed = useMemo(
-    () => {
-      if (!showCard) return null;
-      const c = user.comment ?? liveComment;
-      return c ? parseComment(c) : null;
-    },
-    [showCard, user.comment, liveComment],
-  );
+  const parsed = useMemo(() => {
+    if (!showCard) return null;
+    const c = user.comment ?? liveComment;
+    return c ? parseComment(c) : null;
+  }, [showCard, user.comment, liveComment]);
 
   const isMuted = user.mute || user.self_mute;
   const isDeafened = user.deaf || user.self_deaf;
@@ -338,107 +333,115 @@ export const UserListItem = memo(function UserListItem({
 
   return (
     <>
-    {dragOverlay}
-    <button
-      ref={itemRef}
-      type="button"
-      className={`${styles.userItem} ${active ? styles.userItemActive : ""} ${isSelf ? styles.selfUser : ""} ${isSelf && isTalking ? styles.selfTalking : ""} ${offline ? styles.userItemOffline : ""}`}
-      data-testid={TID.memberItem}
-      data-user-name={user.name}
-      data-offline={offline ? "true" : undefined}
-      data-talking={isTalking ? "true" : undefined}
-      data-muted={isMuted ? "true" : undefined}
-      data-deaf={isDeafened ? "true" : undefined}
-      data-clickable={isSelf && onClick ? "true" : undefined}
-      onMouseEnter={handleEnter}
-      onMouseLeave={handleLeave}
-      onClick={onClick}
-      onClickCapture={dragHandlers.onClickCapture}
-      onContextMenu={onContextMenu}
-      onPointerDown={dragHandlers.onPointerDown}
-      onPointerMove={dragHandlers.onPointerMove}
-      onPointerUp={dragHandlers.onPointerUp}
-      onPointerCancel={dragHandlers.onPointerCancel}
-      style={dragHandlers.style}
-    >
-      <div className={`${styles.avatarWrap} ${isTalking ? styles.avatarTalking : ""}`}>
-        {url ? (
-          <img src={url} alt={user.name} className={styles.avatarImg} />
-        ) : (
-          <div
-            className={styles.avatar}
-            style={{ background: colorFor(user.name) }}
-          >
-            {user.name.charAt(0).toUpperCase()}
-          </div>
+      {dragOverlay}
+      <button
+        ref={itemRef}
+        type="button"
+        className={`${styles.userItem} ${active ? styles.userItemActive : ""} ${isSelf ? styles.selfUser : ""} ${isSelf && isTalking ? styles.selfTalking : ""} ${offline ? styles.userItemOffline : ""}`}
+        data-testid={TID.memberItem}
+        data-user-name={user.name}
+        data-offline={offline ? "true" : undefined}
+        data-talking={isTalking ? "true" : undefined}
+        data-muted={isMuted ? "true" : undefined}
+        data-deaf={isDeafened ? "true" : undefined}
+        data-clickable={isSelf && onClick ? "true" : undefined}
+        onMouseEnter={handleEnter}
+        onMouseLeave={handleLeave}
+        onClick={onClick}
+        onClickCapture={dragHandlers.onClickCapture}
+        onContextMenu={onContextMenu}
+        onPointerDown={dragHandlers.onPointerDown}
+        onPointerMove={dragHandlers.onPointerMove}
+        onPointerUp={dragHandlers.onPointerUp}
+        onPointerCancel={dragHandlers.onPointerCancel}
+        style={dragHandlers.style}
+      >
+        <div className={`${styles.avatarWrap} ${isTalking ? styles.avatarTalking : ""}`}>
+          {url ? (
+            <img src={url} alt={user.name} className={styles.avatarImg} />
+          ) : (
+            <div className={styles.avatar} style={{ background: colorFor(user.name) }}>
+              {user.name.charAt(0).toUpperCase()}
+            </div>
+          )}
+          {!offline && <span className={styles.onlineDot} />}
+        </div>
+        <span className={styles.userName} style={roleColor ? { color: roleColor } : undefined}>
+          {user.name}
+        </span>
+        {!isSelf && volumePct !== 100 && (
+          <span className={styles.volumeBadge} title={`Volume: ${volumePct}%`}>
+            <VolumeIcon width={12} height={12} />
+            {volumePct}%
+          </span>
         )}
-        {!offline && <span className={styles.onlineDot} />}
-      </div>
-      <span
-        className={styles.userName}
-        style={roleColor ? { color: roleColor } : undefined}
-      >{user.name}</span>
-      {!isSelf && volumePct !== 100 && (
-        <span className={styles.volumeBadge} title={`Volume: ${volumePct}%`}>
-          <VolumeIcon width={12} height={12} />
-          {volumePct}%
-        </span>
-      )}
-      {(isRegistered || (!isSelf && (isMuted || isDeafened || isPriority))) && (
-        <span className={styles.statusIcons}>
-          {isRegistered && (
-            <span className={`${styles.statusIcon} ${styles.registered}`} title={t("userListItem.registeredTitle")}>
-              <RegisteredIcon />
-            </span>
-          )}
-          {!isSelf && isMuted && !isDeafened && (
-            <span className={`${styles.statusIcon} ${styles.muted}`} title={user.mute ? t("userListItem.serverMutedTitle") : t("userListItem.selfMutedTitle")}>
-              <MutedIcon />
-            </span>
-          )}
-          {!isSelf && isDeafened && (
-            <span className={`${styles.statusIcon} ${styles.deafened}`} title={user.deaf ? t("userListItem.serverDeafenedTitle") : t("userListItem.selfDeafenedTitle")}>
-              <DeafenedIcon />
-            </span>
-          )}
-          {!isSelf && isPriority && (
-            <span className={`${styles.statusIcon} ${styles.prioritySpeaker}`} title={t("userListItem.prioritySpeakerTitle")}>
-              <PriorityIcon />
-            </span>
-          )}
-        </span>
-      )}
-      {isBroadcasting && (
-        <span
-          className={`${styles.liveBadge} ${!sfuAvailable ? styles.liveBadgeP2P : ""}`}
-          title={sfuAvailable ? t("userListItem.sharingScreenSfuTitle") : t("userListItem.sharingScreenP2PTitle")}
-        >
-          <ScreenShareIcon width={10} height={10} />
-          {sfuAvailable ? t("userListItem.liveBadge") : t("userListItem.liveBadgeP2P")}
-        </span>
-      )}
-      {dmUnread > 0 && (
-        <span className={styles.unreadBadge}>
-          {dmUnread > 99 ? "99+" : dmUnread}
-        </span>
-      )}
-      {channelName && <span className={styles.channelChip}>{channelName}</span>}
-      {showCard && cardPos && (
-        <UserHoverCardPortal
-          displayName={user.name}
-          cardPos={cardPos}
-          avatar={url}
-          profile={parsed?.profile ?? {}}
-          bio={parsed?.bio ?? ""}
-          onlinesecs={stats?.onlinesecs}
-          idlesecs={stats?.idlesecs}
-          isRegistered={isRegistered}
-          isBroadcasting={isBroadcasting}
-          thumbnail={streamThumbnail}
-          groups={userGroups.length > 0 ? userGroups : undefined}
-        />
-      )}
-    </button>
+        {(isRegistered || (!isSelf && (isMuted || isDeafened || isPriority))) && (
+          <span className={styles.statusIcons}>
+            {isRegistered && (
+              <span
+                className={`${styles.statusIcon} ${styles.registered}`}
+                title={t("userListItem.registeredTitle")}
+              >
+                <RegisteredIcon />
+              </span>
+            )}
+            {!isSelf && isMuted && !isDeafened && (
+              <span
+                className={`${styles.statusIcon} ${styles.muted}`}
+                title={user.mute ? t("userListItem.serverMutedTitle") : t("userListItem.selfMutedTitle")}
+              >
+                <MutedIcon />
+              </span>
+            )}
+            {!isSelf && isDeafened && (
+              <span
+                className={`${styles.statusIcon} ${styles.deafened}`}
+                title={
+                  user.deaf ? t("userListItem.serverDeafenedTitle") : t("userListItem.selfDeafenedTitle")
+                }
+              >
+                <DeafenedIcon />
+              </span>
+            )}
+            {!isSelf && isPriority && (
+              <span
+                className={`${styles.statusIcon} ${styles.prioritySpeaker}`}
+                title={t("userListItem.prioritySpeakerTitle")}
+              >
+                <PriorityIcon />
+              </span>
+            )}
+          </span>
+        )}
+        {isBroadcasting && (
+          <span
+            className={`${styles.liveBadge} ${!sfuAvailable ? styles.liveBadgeP2P : ""}`}
+            title={
+              sfuAvailable ? t("userListItem.sharingScreenSfuTitle") : t("userListItem.sharingScreenP2PTitle")
+            }
+          >
+            <ScreenShareIcon width={10} height={10} />
+            {sfuAvailable ? t("userListItem.liveBadge") : t("userListItem.liveBadgeP2P")}
+          </span>
+        )}
+        {dmUnread > 0 && <span className={styles.unreadBadge}>{dmUnread > 99 ? "99+" : dmUnread}</span>}
+        {channelName && <span className={styles.channelChip}>{channelName}</span>}
+        {showCard && cardPos && (
+          <UserHoverCardPortal
+            displayName={user.name}
+            cardPos={cardPos}
+            avatar={url}
+            profile={parsed?.profile ?? {}}
+            bio={parsed?.bio ?? ""}
+            onlinesecs={stats?.onlinesecs}
+            idlesecs={stats?.idlesecs}
+            isRegistered={isRegistered}
+            isBroadcasting={isBroadcasting}
+            thumbnail={streamThumbnail}
+            groups={userGroups.length > 0 ? userGroups : undefined}
+          />
+        )}
+      </button>
     </>
   );
 });

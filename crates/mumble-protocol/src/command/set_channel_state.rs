@@ -47,6 +47,15 @@ pub struct SetChannelState {
     /// Meeting-room invitees (registered `user_id`s). On create the server grants
     /// each `SeeChannel|Enter|Traverse` and denies them to `@all`. Empty = no-op.
     pub invitee_user_ids: Vec<u32>,
+    /// Channel attributes to assign, paired with [`Self::attribute_mask`].
+    ///
+    /// Generic on purpose: any settable `ChannelAttribute` travels through here,
+    /// so a new channel trait needs no new field on this command. An attribute
+    /// named in the mask is set when listed here and cleared when not.
+    pub attributes: Vec<mumble_tcp::ChannelAttribute>,
+    /// Which attributes this message asserts. Empty leaves every attribute
+    /// untouched, which is what unrelated partial updates (a rename, say) want.
+    pub attribute_mask: Vec<mumble_tcp::ChannelAttribute>,
 }
 
 impl CommandAction for SetChannelState {
@@ -68,6 +77,8 @@ impl CommandAction for SetChannelState {
             expiry_mode: self.expiry_mode,
             expiry_duration_secs: self.expiry_duration_secs,
             invitee_user_ids: self.invitee_user_ids.clone(),
+            attributes: self.attributes.iter().map(|&a| a as i32).collect(),
+            attribute_mask: self.attribute_mask.iter().map(|&a| a as i32).collect(),
             ..Default::default()
         };
         tracing::debug!(

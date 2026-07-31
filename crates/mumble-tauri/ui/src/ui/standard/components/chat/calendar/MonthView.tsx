@@ -10,7 +10,11 @@ import {
   startOfMonth,
 } from "@core/features/chat/calendar/calendarDates";
 import type { CalendarEvent, EventOccurrence } from "@core/features/chat/calendar/types";
-import { eventVisualStyle, shortTimeFormatted, weekdayShortNames } from "@core/features/chat/calendar/calendarFormat";
+import {
+  eventVisualStyle,
+  shortTimeFormatted,
+  weekdayShortNames,
+} from "@core/features/chat/calendar/calendarFormat";
 import { useCalendarFormatPreferences } from "@core/features/chat/calendar/useCalendarFormatPreferences";
 import { TID } from "@core/testids";
 import styles from "./CalendarPanel.module.css";
@@ -90,7 +94,14 @@ export default function MonthView() {
                 {new Date(day).getDate()}
               </span>
               {occ.slice(0, MAX_CHIPS_PER_DAY).map((o) => (
-                <MonthChip key={o.key} event={o.event} start={o.start} timeFormat={formatPrefs.timeFormat} onDetail={openDetail} onMenu={openMenu} />
+                <MonthChip
+                  key={o.key}
+                  event={o.event}
+                  start={o.start}
+                  timeFormat={formatPrefs.timeFormat}
+                  onDetail={openDetail}
+                  onMenu={openMenu}
+                />
               ))}
               {occ.length > MAX_CHIPS_PER_DAY && (
                 <span className={styles.moreLink}>+{occ.length - MAX_CHIPS_PER_DAY}</span>
@@ -107,17 +118,15 @@ interface MonthChipProps {
   readonly event: CalendarEvent;
   readonly start: number;
   readonly timeFormat: ReturnType<typeof useCalendarFormatPreferences>["timeFormat"];
-  readonly onDetail: (id: string, occStart: number, rect: { top: number; left: number; bottom: number; right: number }) => void;
+  readonly onDetail: (
+    id: string,
+    occStart: number,
+    rect: { top: number; left: number; bottom: number; right: number },
+  ) => void;
   readonly onMenu: (id: string, x: number, y: number) => void;
 }
 
-function MonthChip({
-  event,
-  start,
-  timeFormat,
-  onDetail,
-  onMenu,
-}: MonthChipProps) {
+function MonthChip({ event, start, timeFormat, onDetail, onMenu }: MonthChipProps) {
   const downRef = useRef<{ x: number; y: number } | null>(null);
   return (
     <div
@@ -129,10 +138,7 @@ function MonthChip({
       draggable
       onDragStart={(e) => {
         e.stopPropagation();
-        e.dataTransfer.setData(
-          "text/plain",
-          JSON.stringify({ eventId: event.id, occStart: start }),
-        );
+        e.dataTransfer.setData("text/plain", JSON.stringify({ eventId: event.id, occStart: start }));
         e.dataTransfer.effectAllowed = "move";
       }}
       onPointerDown={(e) => {

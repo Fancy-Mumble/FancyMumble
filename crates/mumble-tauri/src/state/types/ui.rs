@@ -62,6 +62,14 @@ pub struct ChannelEntry {
     /// `attributes` set (`CHANNEL_ATTRIBUTE_DETACHED`).
     #[serde(default)]
     pub detached: bool,
+    /// The server-advertised `ChannelState.attributes` set, as a bitmask over
+    /// `ChannelAttribute` discriminants (bit N = attribute N).
+    ///
+    /// Passed through generically so a new channel trait is readable by the UI
+    /// without another field here: check it with `hasChannelAttribute()` on the
+    /// TypeScript side. `detached` predates this and stays for its consumers.
+    #[serde(default)]
+    pub attributes: u64,
     /// Channel expiry mode: 0 = none, 1 = absolute, 2 = sliding.
     #[serde(default)]
     pub expiry_mode: u32,

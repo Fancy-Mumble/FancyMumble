@@ -11,11 +11,7 @@
 
 import { useEffect, useState } from "react";
 import type { Editor } from "@tiptap/react";
-import {
-  extractReferenceTargets,
-  referenceTargetsSignature,
-  type RefTarget,
-} from "./liveDocReferences";
+import { extractReferenceTargets, referenceTargetsSignature, type RefTarget } from "./liveDocReferences";
 
 export interface UseLiveDocReferences {
   readonly targets: RefTarget[];

@@ -1,0 +1,123 @@
+.menu {
+    position: fixed;
+    z-index: 910;
+    width: 196px;
+    max-height: calc(100vh - 16px);
+    padding: 5px;
+    display: flex;
+    flex-direction: column;
+    /* Items are told apart by whitespace, not by outlines. */
+    gap: 2px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 0;
+    border-radius: 8px;
+    background: #16181d;
+    box-shadow: 0 10px 34px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .35);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, .14) transparent;
+}
+
+.heading {
+    padding: 5px 8px 3px;
+    color: #78828f;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .02em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* A hairline, inset so it reads as a divider rather than a box edge. */
+.separator {
+    height: 1px;
+    margin: 5px 8px;
+    background: rgba(255, 255, 255, .07);
+}
+
+/* Items are selected by `data-tone`, so a new variant is one attribute value
+   rather than another class threaded through every call site. */
+.item {
+    width: 100%;
+    min-height: 30px;
+    padding: 5px 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    /* Aurora does not load the standard UI's reset, so a bare <button> would
+       otherwise render with the user-agent's outset border around every item. */
+    appearance: none;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #b9c0c9;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+}
+
+.item:hover:not(:disabled),
+.item:focus-visible:not(:disabled) {
+    background: rgba(255, 255, 255, .06);
+    color: #f2f4f7;
+    outline: 0;
+}
+
+.item:where([data-tone="danger"]) {
+    color: #f0777c;
+}
+
+.item:where([data-tone="danger"]):hover:not(:disabled),
+.item:where([data-tone="danger"]):focus-visible:not(:disabled) {
+    background: rgba(240, 119, 124, .12);
+    color: #ff9498;
+}
+
+.item:disabled {
+    color: #5d6773;
+    cursor: default;
+}
+
+.label {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.label>span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hint {
+    color: #6e7986;
+    font-size: 10px;
+    font-weight: 400;
+}
+
+.trailing {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    color: #6e7986;
+}
+
+.trailing svg {
+    width: 14px;
+}
+
+@media (max-width: 720px) {
+    .menu {
+        right: 8px !important;
+        bottom: 8px !important;
+        left: 8px !important;
+        top: auto !important;
+        width: auto;
+    }
+}

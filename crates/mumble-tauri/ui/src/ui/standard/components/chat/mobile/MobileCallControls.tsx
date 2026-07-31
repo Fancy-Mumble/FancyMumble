@@ -30,11 +30,7 @@ export default function MobileCallControls() {
         onClick={toggleMute}
         title={muteTitle}
       >
-        {isActive ? (
-          <MicIcon width={18} height={18} />
-        ) : (
-          <MicOffIcon width={18} height={18} />
-        )}
+        {isActive ? <MicIcon width={18} height={18} /> : <MicOffIcon width={18} height={18} />}
         <span className={styles.label}>{muteTitle}</span>
       </button>
       <button
@@ -47,7 +43,9 @@ export default function MobileCallControls() {
         ) : (
           <HeadphonesIcon width={18} height={18} />
         )}
-        <span className={styles.label}>{isInactive ? t("callControls.undeafen") : t("callControls.deafen")}</span>
+        <span className={styles.label}>
+          {isInactive ? t("callControls.undeafen") : t("callControls.deafen")}
+        </span>
       </button>
     </div>
   );

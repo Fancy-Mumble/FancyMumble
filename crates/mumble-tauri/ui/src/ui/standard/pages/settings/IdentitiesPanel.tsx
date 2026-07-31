@@ -7,8 +7,7 @@ import styles from "./SettingsPage.module.css";
 import panelStyles from "./IdentitiesPanel.module.css";
 import { registerSettings } from "@core/features/settings/settingsSearchRegistry";
 
-registerSettings("identities")
-  .add("identities.createNew", ["certificate", "key", "identity"]);
+registerSettings("identities").add("identities.createNew", ["certificate", "key", "identity"]);
 
 export function IdentitiesPanel({
   identities,
@@ -122,21 +121,13 @@ export function IdentitiesPanel({
                       {t("identities.editProfile")}
                     </button>
                   )}
-                  <button
-                    type="button"
-                    className={styles.ghostBtn}
-                    onClick={() => handleExport(label)}
-                  >
+                  <button type="button" className={styles.ghostBtn} onClick={() => handleExport(label)}>
                     {t("identities.export")}
                   </button>
 
                   {confirmDelete === label ? (
                     <div className={styles.confirmBtns}>
-                      <button
-                        type="button"
-                        className={styles.dangerBtn}
-                        onClick={() => handleDelete(label)}
-                      >
+                      <button type="button" className={styles.dangerBtn} onClick={() => handleDelete(label)}>
                         {t("identities.confirmDelete")}
                       </button>
                       <button
@@ -188,15 +179,10 @@ export function IdentitiesPanel({
       </section>
 
       <section className={styles.section}>
-        <button
-          type="button"
-          className={styles.ghostBtn}
-          onClick={handleImport}
-        >
+        <button type="button" className={styles.ghostBtn} onClick={handleImport}>
           {t("identities.importBtn")}
         </button>
       </section>
     </>
   );
 }
-

@@ -158,9 +158,7 @@ export const createDmSlice: StateCreator<AppState, [], [], DmSlice> = (set, get)
         const detail = e instanceof Error ? e.message : String(e);
         set((s) => ({
           pendingMessages: s.pendingMessages.map((p) =>
-            p.pendingId === pendingId
-              ? { ...p, state: "failed" as const, errorMessage: detail }
-              : p,
+            p.pendingId === pendingId ? { ...p, state: "failed" as const, errorMessage: detail } : p,
           ),
         }));
       }

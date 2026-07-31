@@ -47,8 +47,11 @@ function formatTimestamp(ms: number | null | undefined): string | null {
   if (!ms || !Number.isFinite(ms)) return null;
   try {
     return new Date(ms).toLocaleString(undefined, {
-      year: "numeric", month: "short", day: "numeric",
-      hour: "2-digit", minute: "2-digit",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   } catch {
     return null;
@@ -61,11 +64,22 @@ function initialFor(name: string | null | undefined): string {
 }
 
 export default function PopoutShell({
-  mediaRef, mediaReady, mediaLabel, aspectStorageKey,
-  error, placeholder, infoBar, extraMenuItems, children,
+  mediaRef,
+  mediaReady,
+  mediaLabel,
+  aspectStorageKey,
+  error,
+  placeholder,
+  infoBar,
+  extraMenuItems,
+  children,
 }: PopoutShellProps) {
   const { onContextMenu, renderMenu, close } = usePopoutMenu({
-    mediaRef, mediaReady, mediaLabel, aspectStorageKey, extraItems: extraMenuItems,
+    mediaRef,
+    mediaReady,
+    mediaLabel,
+    aspectStorageKey,
+    extraItems: extraMenuItems,
   });
 
   // Make the host page transparent so the OS-level transparent window
@@ -106,8 +120,13 @@ export default function PopoutShell({
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     listen<string | null>("server-disconnected", () => close())
-      .then((u) => { unlisten = u; }).catch(() => {});
-    return () => { unlisten?.(); };
+      .then((u) => {
+        unlisten = u;
+      })
+      .catch(() => {});
+    return () => {
+      unlisten?.();
+    };
   }, [close]);
 
   const timestamp = formatTimestamp(infoBar?.timestamp);

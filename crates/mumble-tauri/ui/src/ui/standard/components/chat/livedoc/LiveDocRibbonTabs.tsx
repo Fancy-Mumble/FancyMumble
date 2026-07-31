@@ -62,7 +62,10 @@ import { insertEditorImage } from "@core/features/chat/livedoc/liveDocImageInser
 import { newRefId } from "./liveDocBookmark";
 import LiveDocReferenceControls from "./LiveDocReferenceControls";
 import LiveDocCustomMarginsDialog from "./LiveDocCustomMarginsDialog";
-import { useLiveDocCitationStyle, setLiveDocCitationStyle } from "@core/features/chat/livedoc/useLiveDocSources";
+import {
+  useLiveDocCitationStyle,
+  setLiveDocCitationStyle,
+} from "@core/features/chat/livedoc/useLiveDocSources";
 import { CITATION_STYLES } from "@core/features/chat/livedoc/liveDocCitationStyles";
 import type { CitationItemRef } from "@core/features/chat/livedoc/liveDocCitations";
 import LiveDocSourceManager from "./LiveDocSourceManager";
@@ -115,12 +118,32 @@ export function HomeTab({ editor }: { readonly editor: Editor }) {
       <Group caption={t("liveDoc.ribbon.groups.styles", { defaultValue: "Styles" })}>
         <Rows>
           <Row>
-            <RibbonButton label={t("liveDoc.toolbar.h1")} icon="H1" active={editor.isActive("heading", { level: 1 })} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} />
-            <RibbonButton label={t("liveDoc.toolbar.h2")} icon="H2" active={editor.isActive("heading", { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} />
+            <RibbonButton
+              label={t("liveDoc.toolbar.h1")}
+              icon="H1"
+              active={editor.isActive("heading", { level: 1 })}
+              onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.h2")}
+              icon="H2"
+              active={editor.isActive("heading", { level: 2 })}
+              onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+            />
           </Row>
           <Row>
-            <RibbonButton label={t("liveDoc.toolbar.h3")} icon="H3" active={editor.isActive("heading", { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} />
-            <RibbonButton label={t("liveDoc.toolbar.paragraph")} icon={<PilcrowIcon width={16} height={16} />} active={editor.isActive("paragraph")} onClick={() => editor.chain().focus().setParagraph().run()} />
+            <RibbonButton
+              label={t("liveDoc.toolbar.h3")}
+              icon="H3"
+              active={editor.isActive("heading", { level: 3 })}
+              onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.paragraph")}
+              icon={<PilcrowIcon width={16} height={16} />}
+              active={editor.isActive("paragraph")}
+              onClick={() => editor.chain().focus().setParagraph().run()}
+            />
           </Row>
         </Rows>
       </Group>
@@ -155,13 +178,48 @@ export function HomeTab({ editor }: { readonly editor: Editor }) {
             <FontSizeWidget editor={editor} />
           </Row>
           <Row>
-            <RibbonButton label={t("liveDoc.toolbar.bold")} icon={<strong>B</strong>} active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()} />
-            <RibbonButton label={t("liveDoc.toolbar.italic")} icon={<em>I</em>} active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()} />
-            <RibbonButton label={t("liveDoc.toolbar.underline")} icon={<u>U</u>} active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()} />
-            <RibbonButton label={t("liveDoc.toolbar.strike")} icon={<s>S</s>} active={editor.isActive("strike")} onClick={() => editor.chain().focus().toggleStrike().run()} />
-            <RibbonButton label={t("liveDoc.toolbar.code")} icon={"</>"} active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()} />
-            <RibbonButton label={t("liveDoc.toolbar.subscript")} icon={<SubscriptIcon width={16} height={16} />} active={editor.isActive("subscript")} onClick={() => editor.chain().focus().toggleSubscript().run()} />
-            <RibbonButton label={t("liveDoc.toolbar.superscript")} icon={<SuperscriptIcon width={16} height={16} />} active={editor.isActive("superscript")} onClick={() => editor.chain().focus().toggleSuperscript().run()} />
+            <RibbonButton
+              label={t("liveDoc.toolbar.bold")}
+              icon={<strong>B</strong>}
+              active={editor.isActive("bold")}
+              onClick={() => editor.chain().focus().toggleBold().run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.italic")}
+              icon={<em>I</em>}
+              active={editor.isActive("italic")}
+              onClick={() => editor.chain().focus().toggleItalic().run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.underline")}
+              icon={<u>U</u>}
+              active={editor.isActive("underline")}
+              onClick={() => editor.chain().focus().toggleUnderline().run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.strike")}
+              icon={<s>S</s>}
+              active={editor.isActive("strike")}
+              onClick={() => editor.chain().focus().toggleStrike().run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.code")}
+              icon={"</>"}
+              active={editor.isActive("code")}
+              onClick={() => editor.chain().focus().toggleCode().run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.subscript")}
+              icon={<SubscriptIcon width={16} height={16} />}
+              active={editor.isActive("subscript")}
+              onClick={() => editor.chain().focus().toggleSubscript().run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.superscript")}
+              icon={<SuperscriptIcon width={16} height={16} />}
+              active={editor.isActive("superscript")}
+              onClick={() => editor.chain().focus().toggleSuperscript().run()}
+            />
             <ColorTrigger
               inputRef={textColorRef}
               label={t("liveDoc.toolbar.textColor")}
@@ -187,19 +245,72 @@ export function HomeTab({ editor }: { readonly editor: Editor }) {
       <Group caption={t("liveDoc.ribbon.groups.paragraph", { defaultValue: "Paragraph" })}>
         <Rows>
           <Row>
-            <RibbonButton label={t("liveDoc.toolbar.bulletList")} icon={<ListIcon width={16} height={16} />} active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()} />
-            <RibbonButton label={t("liveDoc.toolbar.orderedList")} icon="1." active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
-            <RibbonButton label={t("liveDoc.toolbar.taskList")} icon={<CheckboxIcon width={16} height={16} />} active={editor.isActive("taskList")} onClick={() => editor.chain().focus().toggleTaskList().run()} />
-            <RibbonButton label={t("liveDoc.toolbar.outdent")} icon={<OutdentIcon width={16} height={16} />} onClick={() => editor.chain().focus().outdentBlock().run()} />
-            <RibbonButton label={t("liveDoc.toolbar.indent")} icon={<IndentIcon width={16} height={16} />} onClick={() => editor.chain().focus().indentBlock().run()} />
+            <RibbonButton
+              label={t("liveDoc.toolbar.bulletList")}
+              icon={<ListIcon width={16} height={16} />}
+              active={editor.isActive("bulletList")}
+              onClick={() => editor.chain().focus().toggleBulletList().run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.orderedList")}
+              icon="1."
+              active={editor.isActive("orderedList")}
+              onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.taskList")}
+              icon={<CheckboxIcon width={16} height={16} />}
+              active={editor.isActive("taskList")}
+              onClick={() => editor.chain().focus().toggleTaskList().run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.outdent")}
+              icon={<OutdentIcon width={16} height={16} />}
+              onClick={() => editor.chain().focus().outdentBlock().run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.indent")}
+              icon={<IndentIcon width={16} height={16} />}
+              onClick={() => editor.chain().focus().indentBlock().run()}
+            />
           </Row>
           <Row>
-            <RibbonButton label={t("liveDoc.toolbar.alignLeft")} icon={<AlignLeftIcon width={16} height={16} />} active={editor.isActive({ textAlign: "left" })} onClick={() => editor.chain().focus().setTextAlign("left").run()} />
-            <RibbonButton label={t("liveDoc.toolbar.alignCenter")} icon={<AlignCenterIcon width={16} height={16} />} active={editor.isActive({ textAlign: "center" })} onClick={() => editor.chain().focus().setTextAlign("center").run()} />
-            <RibbonButton label={t("liveDoc.toolbar.alignRight")} icon={<AlignRightIcon width={16} height={16} />} active={editor.isActive({ textAlign: "right" })} onClick={() => editor.chain().focus().setTextAlign("right").run()} />
-            <RibbonButton label={t("liveDoc.toolbar.alignJustify")} icon={<AlignJustifyIcon width={16} height={16} />} active={editor.isActive({ textAlign: "justify" })} onClick={() => editor.chain().focus().setTextAlign("justify").run()} />
-            <RibbonButton label={t("liveDoc.toolbar.blockquote")} icon={<QuoteIcon width={16} height={16} />} active={editor.isActive("blockquote")} onClick={() => editor.chain().focus().toggleBlockquote().run()} />
-            <RibbonButton label={t("liveDoc.toolbar.codeBlock")} icon={"{ }"} active={editor.isActive("codeBlock")} onClick={() => editor.chain().focus().toggleCodeBlock().run()} />
+            <RibbonButton
+              label={t("liveDoc.toolbar.alignLeft")}
+              icon={<AlignLeftIcon width={16} height={16} />}
+              active={editor.isActive({ textAlign: "left" })}
+              onClick={() => editor.chain().focus().setTextAlign("left").run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.alignCenter")}
+              icon={<AlignCenterIcon width={16} height={16} />}
+              active={editor.isActive({ textAlign: "center" })}
+              onClick={() => editor.chain().focus().setTextAlign("center").run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.alignRight")}
+              icon={<AlignRightIcon width={16} height={16} />}
+              active={editor.isActive({ textAlign: "right" })}
+              onClick={() => editor.chain().focus().setTextAlign("right").run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.alignJustify")}
+              icon={<AlignJustifyIcon width={16} height={16} />}
+              active={editor.isActive({ textAlign: "justify" })}
+              onClick={() => editor.chain().focus().setTextAlign("justify").run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.blockquote")}
+              icon={<QuoteIcon width={16} height={16} />}
+              active={editor.isActive("blockquote")}
+              onClick={() => editor.chain().focus().toggleBlockquote().run()}
+            />
+            <RibbonButton
+              label={t("liveDoc.toolbar.codeBlock")}
+              icon={"{ }"}
+              active={editor.isActive("codeBlock")}
+              onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+            />
           </Row>
         </Rows>
       </Group>
@@ -234,7 +345,11 @@ export function InsertTab({ editor, doc, onInsertCoverPage, onInsertMathBlock }:
   }, [editor, t]);
 
   const insertBookmark = useCallback(() => {
-    editor.chain().focus().insertBookmark({ bookmarkId: newRefId("bm"), label: "" }).run();
+    editor
+      .chain()
+      .focus()
+      .insertBookmark({ bookmarkId: newRefId("bm"), label: "" })
+      .run();
   }, [editor]);
 
   const insertBlankPage = useCallback(() => {
@@ -254,17 +369,44 @@ export function InsertTab({ editor, doc, onInsertCoverPage, onInsertMathBlock }:
 
   return (
     <>
-      <Group caption={t("liveDoc.ribbon.groups.pages", { defaultValue: "Pages" })} icon={<FileTextIcon width={18} height={18} />}>
-        <RibbonButton variant="large" label={t("liveDoc.pageSetup.insertCoverPage")} caption={t("liveDoc.ribbon.coverPage", { defaultValue: "Cover Page" })} icon={<FileTextIcon width={22} height={22} />} onClick={onInsertCoverPage} />
-        <RibbonButton variant="large" label={t("liveDoc.insert.blankPage", { defaultValue: "Blank Page" })} caption={t("liveDoc.insert.blankPage", { defaultValue: "Blank Page" })} icon={<FileIcon width={22} height={22} />} onClick={insertBlankPage} />
-        <RibbonButton variant="large" label={t("liveDoc.toolbar.pageBreak")} caption={t("liveDoc.ribbon.pageBreak", { defaultValue: "Page Break" })} icon={<SeparatorHorizontalIcon width={22} height={22} />} onClick={() => editor.chain().focus().setPageBreak().run()} />
+      <Group
+        caption={t("liveDoc.ribbon.groups.pages", { defaultValue: "Pages" })}
+        icon={<FileTextIcon width={18} height={18} />}
+      >
+        <RibbonButton
+          variant="large"
+          label={t("liveDoc.pageSetup.insertCoverPage")}
+          caption={t("liveDoc.ribbon.coverPage", { defaultValue: "Cover Page" })}
+          icon={<FileTextIcon width={22} height={22} />}
+          onClick={onInsertCoverPage}
+        />
+        <RibbonButton
+          variant="large"
+          label={t("liveDoc.insert.blankPage", { defaultValue: "Blank Page" })}
+          caption={t("liveDoc.insert.blankPage", { defaultValue: "Blank Page" })}
+          icon={<FileIcon width={22} height={22} />}
+          onClick={insertBlankPage}
+        />
+        <RibbonButton
+          variant="large"
+          label={t("liveDoc.toolbar.pageBreak")}
+          caption={t("liveDoc.ribbon.pageBreak", { defaultValue: "Page Break" })}
+          icon={<SeparatorHorizontalIcon width={22} height={22} />}
+          onClick={() => editor.chain().focus().setPageBreak().run()}
+        />
       </Group>
 
-      <Group caption={t("liveDoc.ribbon.groups.tables", { defaultValue: "Tables" })} icon={<Grid2x2Icon width={18} height={18} />}>
+      <Group
+        caption={t("liveDoc.ribbon.groups.tables", { defaultValue: "Tables" })}
+        icon={<Grid2x2Icon width={18} height={18} />}
+      >
         <TablePickerButton editor={editor} large />
       </Group>
 
-      <Group caption={t("liveDoc.ribbon.groups.illustrations", { defaultValue: "Illustrations" })} icon={<ImageIcon width={18} height={18} />}>
+      <Group
+        caption={t("liveDoc.ribbon.groups.illustrations", { defaultValue: "Illustrations" })}
+        icon={<ImageIcon width={18} height={18} />}
+      >
         <input
           ref={imageInputRef}
           type="file"
@@ -273,46 +415,108 @@ export function InsertTab({ editor, doc, onInsertCoverPage, onInsertMathBlock }:
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) {
-              void insertEditorImage(editor, file).catch((err) => console.warn("live-doc image insert failed:", err));
+              void insertEditorImage(editor, file).catch((err) =>
+                console.warn("live-doc image insert failed:", err),
+              );
             }
             e.target.value = "";
           }}
         />
-        <RibbonButton variant="large" label={t("liveDoc.toolbar.image")} caption={t("liveDoc.ribbon.picture", { defaultValue: "Picture" })} icon={<ImageIcon width={22} height={22} />} onClick={() => imageInputRef.current?.click()} />
+        <RibbonButton
+          variant="large"
+          label={t("liveDoc.toolbar.image")}
+          caption={t("liveDoc.ribbon.picture", { defaultValue: "Picture" })}
+          icon={<ImageIcon width={22} height={22} />}
+          onClick={() => imageInputRef.current?.click()}
+        />
         <ShapesButton editor={editor} />
         <IconsButton editor={editor} />
         <Model3DButton editor={editor} />
         <ChartButton editor={editor} />
       </Group>
 
-      <Group caption={t("liveDoc.ribbon.groups.media", { defaultValue: "Media" })} icon={<PlayIcon width={18} height={18} />}>
+      <Group
+        caption={t("liveDoc.ribbon.groups.media", { defaultValue: "Media" })}
+        icon={<PlayIcon width={18} height={18} />}
+      >
         <OnlineVideoButton editor={editor} />
       </Group>
 
-      <Group caption={t("liveDoc.ribbon.groups.links", { defaultValue: "Links" })} icon={<LinkIcon width={18} height={18} />}>
-        <RibbonButton variant="large" label={t("liveDoc.toolbar.link")} caption={t("liveDoc.ribbon.link", { defaultValue: "Link" })} icon={<LinkIcon width={22} height={22} />} active={editor.isActive("link")} onClick={promptForLink} />
-        <RibbonButton variant="large" label={t("liveDoc.references.insertBookmark")} caption={t("liveDoc.ribbon.bookmark", { defaultValue: "Bookmark" })} icon={<PinIcon width={22} height={22} />} onClick={insertBookmark} />
+      <Group
+        caption={t("liveDoc.ribbon.groups.links", { defaultValue: "Links" })}
+        icon={<LinkIcon width={18} height={18} />}
+      >
+        <RibbonButton
+          variant="large"
+          label={t("liveDoc.toolbar.link")}
+          caption={t("liveDoc.ribbon.link", { defaultValue: "Link" })}
+          icon={<LinkIcon width={22} height={22} />}
+          active={editor.isActive("link")}
+          onClick={promptForLink}
+        />
+        <RibbonButton
+          variant="large"
+          label={t("liveDoc.references.insertBookmark")}
+          caption={t("liveDoc.ribbon.bookmark", { defaultValue: "Bookmark" })}
+          icon={<PinIcon width={22} height={22} />}
+          onClick={insertBookmark}
+        />
         <CrossReferenceButton editor={editor} />
       </Group>
 
-      <Group caption={t("liveDoc.ribbon.groups.comments", { defaultValue: "Comments" })} icon={<MessageIcon width={18} height={18} />}>
+      <Group
+        caption={t("liveDoc.ribbon.groups.comments", { defaultValue: "Comments" })}
+        icon={<MessageIcon width={18} height={18} />}
+      >
         <CommentButton editor={editor} />
       </Group>
 
-      <Group caption={t("liveDoc.ribbon.groups.headerFooter", { defaultValue: "Header & Footer" })} icon={<NewspaperIcon width={18} height={18} />}>
+      <Group
+        caption={t("liveDoc.ribbon.groups.headerFooter", { defaultValue: "Header & Footer" })}
+        icon={<NewspaperIcon width={18} height={18} />}
+      >
         <HeaderTemplateButton doc={doc} />
         <FooterTemplateButton doc={doc} />
         <PageNumberTemplateButton doc={doc} />
       </Group>
 
-      <Group caption={t("liveDoc.ribbon.groups.text", { defaultValue: "Text" })} icon={<PilcrowIcon width={18} height={18} />}>
-        <RibbonButton variant="large" label={t("liveDoc.insert.textBox", { defaultValue: "Text Box" })} caption={t("liveDoc.insert.textBox", { defaultValue: "Text Box" })} icon={<SquareIcon width={22} height={22} />} onClick={() => editor.chain().focus().insertTextBox().run()} />
+      <Group
+        caption={t("liveDoc.ribbon.groups.text", { defaultValue: "Text" })}
+        icon={<PilcrowIcon width={18} height={18} />}
+      >
+        <RibbonButton
+          variant="large"
+          label={t("liveDoc.insert.textBox", { defaultValue: "Text Box" })}
+          caption={t("liveDoc.insert.textBox", { defaultValue: "Text Box" })}
+          icon={<SquareIcon width={22} height={22} />}
+          onClick={() => editor.chain().focus().insertTextBox().run()}
+        />
         <QuickPartsButton editor={editor} />
-        <RibbonButton variant="large" label={t("liveDoc.insert.art", { defaultValue: "Art" })} caption={t("liveDoc.insert.art", { defaultValue: "WordArt" })} icon={<PaletteIcon width={22} height={22} />} onClick={insertArt} />
-        <RibbonButton variant="large" label={t("liveDoc.insert.dropCap", { defaultValue: "Drop Cap" })} caption={t("liveDoc.insert.dropCap", { defaultValue: "Drop Cap" })} icon={<strong style={{ fontSize: 20 }}>A</strong>} active={dropCapActive} onClick={() => editor.chain().focus().toggleDropCap().run()} />
+        <RibbonButton
+          variant="large"
+          label={t("liveDoc.insert.art", { defaultValue: "Art" })}
+          caption={t("liveDoc.insert.art", { defaultValue: "WordArt" })}
+          icon={<PaletteIcon width={22} height={22} />}
+          onClick={insertArt}
+        />
+        <RibbonButton
+          variant="large"
+          label={t("liveDoc.insert.dropCap", { defaultValue: "Drop Cap" })}
+          caption={t("liveDoc.insert.dropCap", { defaultValue: "Drop Cap" })}
+          icon={<strong style={{ fontSize: 20 }}>A</strong>}
+          active={dropCapActive}
+          onClick={() => editor.chain().focus().toggleDropCap().run()}
+        />
         <Rows>
           <Row>
-            <RibbonButton variant="small" showLabel label={t("liveDoc.insert.signatureLine", { defaultValue: "Signature Line" })} caption={t("liveDoc.insert.signatureLine", { defaultValue: "Signature Line" })} icon={<EditIcon width={16} height={16} />} onClick={() => editor.chain().focus().insertLiveDocEmbed({ kind: "signatureLine" }).run()} />
+            <RibbonButton
+              variant="small"
+              showLabel
+              label={t("liveDoc.insert.signatureLine", { defaultValue: "Signature Line" })}
+              caption={t("liveDoc.insert.signatureLine", { defaultValue: "Signature Line" })}
+              icon={<EditIcon width={16} height={16} />}
+              onClick={() => editor.chain().focus().insertLiveDocEmbed({ kind: "signatureLine" }).run()}
+            />
           </Row>
           <Row>
             <DateTimeButton editor={editor} compact />
@@ -323,12 +527,24 @@ export function InsertTab({ editor, doc, onInsertCoverPage, onInsertMathBlock }:
         </Rows>
       </Group>
 
-      <Group caption={t("liveDoc.ribbon.groups.esignature", { defaultValue: "eSignature" })} icon={<EditIcon width={18} height={18} />}>
+      <Group
+        caption={t("liveDoc.ribbon.groups.esignature", { defaultValue: "eSignature" })}
+        icon={<EditIcon width={18} height={18} />}
+      >
         <DigitalSignatureButton editor={editor} />
       </Group>
 
-      <Group caption={t("liveDoc.ribbon.groups.symbols", { defaultValue: "Symbols" })} icon={<span style={{ fontSize: 18, lineHeight: 1 }}>&#x2211;</span>}>
-        <RibbonButton variant="large" label={t("liveDoc.toolbar.mathBlock")} caption={t("liveDoc.ribbon.equation", { defaultValue: "Equation" })} icon={<span style={{ fontSize: 22 }}>&#x2211;</span>} onClick={onInsertMathBlock} />
+      <Group
+        caption={t("liveDoc.ribbon.groups.symbols", { defaultValue: "Symbols" })}
+        icon={<span style={{ fontSize: 18, lineHeight: 1 }}>&#x2211;</span>}
+      >
+        <RibbonButton
+          variant="large"
+          label={t("liveDoc.toolbar.mathBlock")}
+          caption={t("liveDoc.ribbon.equation", { defaultValue: "Equation" })}
+          icon={<span style={{ fontSize: 22 }}>&#x2211;</span>}
+          onClick={onInsertMathBlock}
+        />
         <SymbolButton editor={editor} />
       </Group>
     </>
@@ -431,7 +647,10 @@ function MarginsSelect({ doc, setup }: MarginsSelectProps) {
                   key={m}
                   type="button"
                   className={`${editorStyles.dropdownItem} ${!isCustom && setup.margin === m ? editorStyles.dropdownItemActive : ""}`}
-                  onClick={() => { setLiveDocPageSetup(doc, { margin: m }); close(); }}
+                  onClick={() => {
+                    setLiveDocPageSetup(doc, { margin: m });
+                    close();
+                  }}
                 >
                   {t(`liveDoc.pageSetup.marginOptions.${m}`)}
                 </button>
@@ -440,7 +659,10 @@ function MarginsSelect({ doc, setup }: MarginsSelectProps) {
               <button
                 type="button"
                 className={`${editorStyles.dropdownItem} ${isCustom ? editorStyles.dropdownItemActive : ""}`}
-                onClick={() => { close(); setDialogOpen(true); }}
+                onClick={() => {
+                  close();
+                  setDialogOpen(true);
+                }}
               >
                 {t("liveDoc.pageSetup.marginOptions.customMargins")}
               </button>
@@ -496,10 +718,19 @@ export function LayoutTab({ doc, onInsertSectionBreak }: LayoutTabProps) {
           ariaLabel={t("liveDoc.pageSetup.rulerUnit")}
           value={setup.rulerUnit}
           width={70}
-          options={RULER_UNITS.map((u) => ({ value: u, label: t(`liveDoc.pageSetup.rulerUnitOptions.${u}`) }))}
+          options={RULER_UNITS.map((u) => ({
+            value: u,
+            label: t(`liveDoc.pageSetup.rulerUnitOptions.${u}`),
+          }))}
           onPick={(rulerUnit) => setLiveDocPageSetup(doc, { rulerUnit })}
         />
-        <RibbonButton label={t("liveDoc.pageSetup.insertSectionBreak")} showLabel caption={t("liveDoc.ribbon.sectionBreak", { defaultValue: "Breaks" })} icon={<Columns2Icon width={16} height={16} />} onClick={onInsertSectionBreak} />
+        <RibbonButton
+          label={t("liveDoc.pageSetup.insertSectionBreak")}
+          showLabel
+          caption={t("liveDoc.ribbon.sectionBreak", { defaultValue: "Breaks" })}
+          icon={<Columns2Icon width={16} height={16} />}
+          onClick={onInsertSectionBreak}
+        />
       </Group>
 
       <Group caption={t("liveDoc.ribbon.groups.columns", { defaultValue: "Columns" })}>
@@ -565,10 +796,8 @@ export function ReferencesTab({ editor, doc }: { readonly editor: Editor; readon
   const styleId = useLiveDocCitationStyle(doc);
   const [dialog, setDialog] = useState<CitationDialog>(null);
 
-  const insertCitation = (items: CitationItemRef[]) =>
-    editor.chain().focus().insertCitation(items).run();
-  const insertPlaceholder = (tag: string) =>
-    editor.chain().focus().insertCitationPlaceholder(tag).run();
+  const insertCitation = (items: CitationItemRef[]) => editor.chain().focus().insertCitation(items).run();
+  const insertPlaceholder = (tag: string) => editor.chain().focus().insertCitationPlaceholder(tag).run();
 
   return (
     <>
@@ -628,9 +857,7 @@ export function ReferencesTab({ editor, doc }: { readonly editor: Editor; readon
         <LiveDocReferenceControls editor={editor} />
       </Group>
 
-      {dialog === "manager" && doc && (
-        <LiveDocSourceManager doc={doc} onClose={() => setDialog(null)} />
-      )}
+      {dialog === "manager" && doc && <LiveDocSourceManager doc={doc} onClose={() => setDialog(null)} />}
       {dialog === "picker" && doc && (
         <LiveDocCitationPicker
           doc={doc}
@@ -639,9 +866,7 @@ export function ReferencesTab({ editor, doc }: { readonly editor: Editor; readon
           onClose={() => setDialog(null)}
         />
       )}
-      {dialog === "checker" && (
-        <LiveDocPlaceholderChecker editor={editor} onClose={() => setDialog(null)} />
-      )}
+      {dialog === "checker" && <LiveDocPlaceholderChecker editor={editor} onClose={() => setDialog(null)} />}
     </>
   );
 }
@@ -668,7 +893,9 @@ export function ReviewTab({ editor, pageCount }: { readonly editor: Editor; read
         </div>
         <div className={styles.stat}>
           <span className={styles.statValue}>{characters}</span>
-          <span className={styles.statLabel}>{t("liveDoc.ribbon.characters", { defaultValue: "Characters" })}</span>
+          <span className={styles.statLabel}>
+            {t("liveDoc.ribbon.characters", { defaultValue: "Characters" })}
+          </span>
         </div>
       </div>
     </Group>
@@ -723,7 +950,11 @@ export function ViewTab({
       />
       <RibbonButton
         variant="large"
-        label={paginated ? t("liveDoc.paginationOff", { defaultValue: "Disable pagination" }) : t("liveDoc.paginationOn", { defaultValue: "Enable pagination" })}
+        label={
+          paginated
+            ? t("liveDoc.paginationOff", { defaultValue: "Disable pagination" })
+            : t("liveDoc.paginationOn", { defaultValue: "Enable pagination" })
+        }
         caption={t("liveDoc.ribbon.pagination", { defaultValue: "Pagination" })}
         icon={<SeparatorHorizontalIcon width={22} height={22} />}
         active={paginated}

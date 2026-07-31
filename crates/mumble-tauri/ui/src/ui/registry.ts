@@ -11,10 +11,7 @@ export interface UiPackModule {
 /** Each design is a separate lazy entry point. Designs ship side by side, so
  * adding or changing one pack must not require changing the standard
  * application or another pack. */
-export const UI_PACK_LOADERS: Record<
-  UiDesignId,
-  () => Promise<UiPackModule>
-> = {
+export const UI_PACK_LOADERS: Record<UiDesignId, () => Promise<UiPackModule>> = {
   standard: () => import("@standard/index"),
   aurora: () => import("@aurora/index"),
 };
@@ -25,10 +22,7 @@ export function isUiDesignId(value: unknown): value is UiDesignId {
 
 /** URL selection deliberately wins over persistence so development and E2E
  * can launch a deterministic UI without modifying the user's preferences. */
-export function resolveUiDesign(
-  search: string,
-  persisted?: unknown,
-): UiDesignId {
+export function resolveUiDesign(search: string, persisted?: unknown): UiDesignId {
   const requested = new URLSearchParams(search).get(UI_DESIGN_QUERY_PARAMETER);
   if (isUiDesignId(requested)) return requested;
   if (isUiDesignId(persisted)) return persisted;

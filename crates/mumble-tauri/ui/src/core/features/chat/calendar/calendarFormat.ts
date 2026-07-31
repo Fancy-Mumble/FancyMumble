@@ -75,7 +75,13 @@ export function eventColor(event: CalendarEvent): string {
  */
 export function readableTextColor(hex: string): string {
   const c = hex.replace("#", "").trim();
-  const full = c.length === 3 ? c.split("").map((ch) => ch + ch).join("") : c;
+  const full =
+    c.length === 3
+      ? c
+          .split("")
+          .map((ch) => ch + ch)
+          .join("")
+      : c;
   if (full.length < 6) return "#ffffff";
   const channel = (i: number) => {
     const v = Number.parseInt(full.slice(i, i + 2), 16) / 255;
@@ -87,7 +93,13 @@ export function readableTextColor(hex: string): string {
 
 function hexToRgba(hex: string, alpha: number): string {
   const c = hex.replace("#", "").trim();
-  const full = c.length === 3 ? c.split("").map((ch) => ch + ch).join("") : c;
+  const full =
+    c.length === 3
+      ? c
+          .split("")
+          .map((ch) => ch + ch)
+          .join("")
+      : c;
   const r = Number.parseInt(full.slice(0, 2), 16) || 0;
   const g = Number.parseInt(full.slice(2, 4), 16) || 0;
   const b = Number.parseInt(full.slice(4, 6), 16) || 0;
@@ -147,14 +159,10 @@ export function eventVisualStyle(event: CalendarEvent): { hidden: boolean; style
 /** Human-readable date/time range for an occurrence. */
 export function formatRange(start: number, end: number, allDay: boolean): string {
   const day = (ms: number) =>
-    new Intl.DateTimeFormat([], { weekday: "short", day: "numeric", month: "short" }).format(
-      new Date(ms),
-    );
+    new Intl.DateTimeFormat([], { weekday: "short", day: "numeric", month: "short" }).format(new Date(ms));
   if (allDay) {
     const lastDay = end - 1;
-    return startOfDay(start) === startOfDay(lastDay)
-      ? day(start)
-      : `${day(start)} – ${day(lastDay)}`;
+    return startOfDay(start) === startOfDay(lastDay) ? day(start) : `${day(start)} – ${day(lastDay)}`;
   }
   if (startOfDay(start) === startOfDay(end)) {
     return `${day(start)} · ${shortTime(start)} – ${shortTime(end)}`;
@@ -179,9 +187,7 @@ export function formatRangeFormatted(
     );
   if (allDay) {
     const lastDay = end - 1;
-    return startOfDay(start) === startOfDay(lastDay)
-      ? day(start)
-      : `${day(start)} – ${day(lastDay)}`;
+    return startOfDay(start) === startOfDay(lastDay) ? day(start) : `${day(start)} – ${day(lastDay)}`;
   }
   if (startOfDay(start) === startOfDay(end)) {
     return `${day(start)} · ${shortTimeFormatted(start, timeFormat, systemUses24h)} – ${shortTimeFormatted(end, timeFormat, systemUses24h)}`;
@@ -211,5 +217,7 @@ export function rangeLabel(view: CalendarView, anchor: number): string {
   const sameMonth = ds.getMonth() === de.getMonth() && ds.getFullYear() === de.getFullYear();
   const dayFmt = new Intl.DateTimeFormat([], { day: "numeric" });
   const tailFmt = new Intl.DateTimeFormat([], { day: "numeric", month: "short", year: "numeric" });
-  return sameMonth ? `${dayFmt.format(ds)} – ${tailFmt.format(de)}` : `${tailFmt.format(ds)} – ${tailFmt.format(de)}`;
+  return sameMonth
+    ? `${dayFmt.format(ds)} – ${tailFmt.format(de)}`
+    : `${tailFmt.format(ds)} – ${tailFmt.format(de)}`;
 }

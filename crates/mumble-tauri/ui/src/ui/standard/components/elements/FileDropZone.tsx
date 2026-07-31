@@ -82,20 +82,10 @@ export function FileDropZone({
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
-        {preview ?? (
-          <span className={styles.placeholder}>{resolvedLabel}</span>
-        )}
-        {dragging && (
-          <span className={styles.overlay}>{t("fileDropZone.draggingOverlay")}</span>
-        )}
+        {preview ?? <span className={styles.placeholder}>{resolvedLabel}</span>}
+        {dragging && <span className={styles.overlay}>{t("fileDropZone.draggingOverlay")}</span>}
       </button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept={accept}
-        hidden
-        onChange={handleInputChange}
-      />
+      <input ref={inputRef} type="file" accept={accept} hidden onChange={handleInputChange} />
       {onRemove && (
         <button type="button" className={styles.removeBtn} onClick={onRemove}>
           {t("fileDropZone.removeBtn")}

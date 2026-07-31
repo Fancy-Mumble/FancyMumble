@@ -1,0 +1,52 @@
+/* Colour for the layout specimen. Box and Container supply no visuals of
+   their own, so everything visible here comes from this sheet. */
+
+.caption {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #8c96a3;
+}
+
+.step {
+  font-size: 11px;
+  color: #f3f5f7;
+}
+
+.bar {
+  width: 10px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #69b7e8, rgb(105 183 232 / 35%));
+}
+
+.surface {
+  border: 1px solid rgb(235 242 248 / 12%);
+  border-radius: 10px;
+  background: rgb(235 242 248 / 4%);
+}
+
+.wide {
+  min-width: 220px;
+  border: 1px solid rgb(235 242 248 / 12%);
+  border-radius: 10px;
+  background: rgb(235 242 248 / 4%);
+}
+
+.container {
+  padding-block: 10px;
+  border: 1px dashed rgb(105 183 232 / 45%);
+  border-radius: 10px;
+  background: rgb(105 183 232 / 8%);
+}
+
+.label {
+  font-size: 12px;
+  color: #f3f5f7;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #69b7e8;
+}

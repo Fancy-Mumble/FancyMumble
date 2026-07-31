@@ -38,11 +38,17 @@ export interface ServerCustomReaction {
  * Mutable maps for performance; components trigger re-renders via
  * Zustand `setState({})` after mutations (same pattern as polls).
  */
-const reactionMap = new Map<string, Map<string, {
-  hashes: Set<string>;
-  hashNames: Map<string, string>;
-  firstTimestamp: number;
-}>>();
+const reactionMap = new Map<
+  string,
+  Map<
+    string,
+    {
+      hashes: Set<string>;
+      hashNames: Map<string, string>;
+      firstTimestamp: number;
+    }
+  >
+>();
 
 /** Server-provided custom reactions for the current connection. */
 let serverCustomReactions: ServerCustomReaction[] = [];

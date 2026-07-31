@@ -181,18 +181,10 @@ export function AdvancedPanel({
           <div className={styles.confirmBox}>
             <p className={styles.confirmText}>{t("advanced.uiModeConfirmText")}</p>
             <div className={styles.confirmBtns}>
-              <button
-                type="button"
-                className={styles.ghostBtn}
-                onClick={() => void handleSwitchToMinimal()}
-              >
+              <button type="button" className={styles.ghostBtn} onClick={() => void handleSwitchToMinimal()}>
                 {t("advanced.uiModeConfirmBtn")}
               </button>
-              <button
-                type="button"
-                className={styles.ghostBtn}
-                onClick={() => setConfirmingMinimal(false)}
-              >
+              <button type="button" className={styles.ghostBtn} onClick={() => setConfirmingMinimal(false)}>
                 {t("common:actions.cancel")}
               </button>
             </div>
@@ -235,14 +227,9 @@ export function AdvancedPanel({
           <div className={styles.toggleRow}>
             <div className={styles.toggleInfo}>
               <h3 className={styles.sectionTitle}>{t("advanced.developerMode")}</h3>
-              <p className={styles.fieldHint}>
-                {t("advanced.developerModeHint")}
-              </p>
+              <p className={styles.fieldHint}>{t("advanced.developerModeHint")}</p>
             </div>
-            <Toggle
-              checked={userMode === "developer"}
-              onChange={onToggleDeveloperMode}
-            />
+            <Toggle checked={userMode === "developer"} onChange={onToggleDeveloperMode} />
           </div>
         </section>
       )}
@@ -280,11 +267,7 @@ export function AdvancedPanel({
               <h3 className={styles.sectionTitle}>{t("advanced.autoZipLogs")}</h3>
               <p className={styles.fieldHint}>{t("advanced.autoZipLogsHint")}</p>
             </div>
-            <Toggle
-              checked={autoZipLogs}
-              disabled={!logToFile}
-              onChange={onToggleAutoZipLogs}
-            />
+            <Toggle checked={autoZipLogs} disabled={!logToFile} onChange={onToggleAutoZipLogs} />
           </div>
 
           <div className={styles.toggleRow}>
@@ -299,11 +282,7 @@ export function AdvancedPanel({
             {t("advanced.logFilesHint")}
           </p>
           <div className={styles.confirmBtns}>
-            <button
-              type="button"
-              className={styles.ghostBtn}
-              onClick={() => void handleViewLogs()}
-            >
+            <button type="button" className={styles.ghostBtn} onClick={() => void handleViewLogs()}>
               {t("advanced.viewLogsBtn")}
             </button>
             <button
@@ -352,10 +331,7 @@ export function AdvancedPanel({
             <h3 className={styles.sectionTitle}>{t("advanced.autoUpdate")}</h3>
             <p className={styles.fieldHint}>{t("advanced.autoUpdateHint")}</p>
           </div>
-          <Toggle
-            checked={autoUpdateOnStartup}
-            onChange={onToggleAutoUpdate}
-          />
+          <Toggle checked={autoUpdateOnStartup} onChange={onToggleAutoUpdate} />
         </div>
       </section>
 
@@ -372,8 +348,14 @@ export function AdvancedPanel({
       <section className={styles.section}>
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
-            <h3 className={styles.sectionTitle}>{t("advanced.disconnectWarning", { defaultValue: "Disconnect confirmation" })}</h3>
-            <p className={styles.fieldHint}>{t("advanced.disconnectWarningHint", { defaultValue: "Ask for confirmation before disconnecting from a server." })}</p>
+            <h3 className={styles.sectionTitle}>
+              {t("advanced.disconnectWarning", { defaultValue: "Disconnect confirmation" })}
+            </h3>
+            <p className={styles.fieldHint}>
+              {t("advanced.disconnectWarningHint", {
+                defaultValue: "Ask for confirmation before disconnecting from a server.",
+              })}
+            </p>
           </div>
           <Toggle checked={showDisconnectWarning} onChange={onToggleDisconnectWarning} />
         </div>
@@ -384,32 +366,18 @@ export function AdvancedPanel({
         <p className={styles.fieldHint}>{t("advanced.dangerZoneHint")}</p>
         {confirming ? (
           <div className={styles.confirmBox}>
-            <p className={styles.confirmText}>
-              {t("advanced.dangerConfirmText")}
-            </p>
+            <p className={styles.confirmText}>{t("advanced.dangerConfirmText")}</p>
             <div className={styles.confirmBtns}>
-              <button
-                type="button"
-                className={styles.dangerBtn}
-                onClick={onReset}
-              >
+              <button type="button" className={styles.dangerBtn} onClick={onReset}>
                 {t("advanced.dangerConfirmBtn")}
               </button>
-              <button
-                type="button"
-                className={styles.ghostBtn}
-                onClick={() => setConfirming(false)}
-              >
+              <button type="button" className={styles.ghostBtn} onClick={() => setConfirming(false)}>
                 {t("common:actions.cancel")}
               </button>
             </div>
           </div>
         ) : (
-          <button
-            type="button"
-            className={styles.dangerBtn}
-            onClick={() => setConfirming(true)}
-          >
+          <button type="button" className={styles.dangerBtn} onClick={() => setConfirming(true)}>
             {t("advanced.dangerResetBtn")}
           </button>
         )}

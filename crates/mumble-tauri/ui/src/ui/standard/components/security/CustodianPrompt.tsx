@@ -59,9 +59,7 @@ export default function CustodianPrompt({
           {isChange && (
             <div className={styles.warning}>
               <WarningIcon className={styles.warningIcon} aria-hidden="true" />
-              <span>
-                {t("custodian.warningChange")}
-              </span>
+              <span>{t("custodian.warningChange")}</span>
             </div>
           )}
 
@@ -73,7 +71,9 @@ export default function CustodianPrompt({
                   <ShieldIcon className={styles.custodianIcon} aria-hidden="true" />
                   <span className={styles.custodianName}>{c.name ?? t("custodian.unknownCustodian")}</span>
                   <span className={styles.custodianHash}>{c.hash.slice(0, 12)}...</span>
-                  <span className={`${styles.changeBadge} ${styles.badgeAdded}`}>{t("custodian.badgeAdded")}</span>
+                  <span className={`${styles.changeBadge} ${styles.badgeAdded}`}>
+                    {t("custodian.badgeAdded")}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -86,7 +86,9 @@ export default function CustodianPrompt({
                   <ShieldIcon className={styles.custodianIcon} aria-hidden="true" />
                   <span className={styles.custodianName}>{c.name ?? t("custodian.unknownCustodian")}</span>
                   <span className={styles.custodianHash}>{c.hash.slice(0, 12)}...</span>
-                  <span className={`${styles.changeBadge} ${styles.badgeRemoved}`}>{t("custodian.badgeRemoved")}</span>
+                  <span className={`${styles.changeBadge} ${styles.badgeRemoved}`}>
+                    {t("custodian.badgeRemoved")}
+                  </span>
                 </li>
               ))}
             </ul>

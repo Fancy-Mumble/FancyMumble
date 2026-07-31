@@ -40,11 +40,7 @@ export function writeBoolPref(key: string, value: boolean): void {
  * Read a string preference, constrained to `allowed` so a stale or hand-edited
  * value can never select a sub-page that no longer exists.
  */
-export function readEnumPref<T extends string>(
-  key: string,
-  fallback: T,
-  allowed: readonly T[],
-): T {
+export function readEnumPref<T extends string>(key: string, fallback: T, allowed: readonly T[]): T {
   try {
     const raw = localStorage.getItem(PREFIX + key);
     return raw != null && (allowed as readonly string[]).includes(raw) ? (raw as T) : fallback;

@@ -9,13 +9,7 @@
  * session is actually connected to and preserve the port + path + query.
  */
 
-const BIND_ALL_HOSTS = new Set<string>([
-  "0.0.0.0",
-  "::",
-  "[::]",
-  "0:0:0:0:0:0:0:0",
-  "[0:0:0:0:0:0:0:0]",
-]);
+const BIND_ALL_HOSTS = new Set<string>(["0.0.0.0", "::", "[::]", "0:0:0:0:0:0:0:0", "[0:0:0:0:0:0:0:0]"]);
 
 /**
  * Returns `rawWsUrl` unchanged when:
@@ -25,10 +19,7 @@ const BIND_ALL_HOSTS = new Set<string>([
  *
  * Otherwise rewrites the hostname to `fallbackHost` and logs a warning.
  */
-export function sanitiseWsUrl(
-  rawWsUrl: string,
-  fallbackHost: string | null | undefined,
-): string {
+export function sanitiseWsUrl(rawWsUrl: string, fallbackHost: string | null | undefined): string {
   if (!rawWsUrl) return rawWsUrl;
   let parsed: URL;
   try {

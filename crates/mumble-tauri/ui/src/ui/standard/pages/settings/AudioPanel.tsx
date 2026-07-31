@@ -46,7 +46,9 @@ const FRAME_SIZE_OPTIONS = [
   { value: 60, label: "60 ms" },
 ];
 
-function buildDenoiserOptions(t: (key: string) => string): readonly RadioCardOption<NoiseSuppressionAlgorithm>[] {
+function buildDenoiserOptions(
+  t: (key: string) => string,
+): readonly RadioCardOption<NoiseSuppressionAlgorithm>[] {
   return [
     {
       value: "none",
@@ -88,7 +90,8 @@ function StatsRow({ label, stats }: Readonly<{ label: string; stats: PacketStats
     <div className={panelStyles.statsRow}>
       <span className={panelStyles.statsLabel}>{label}</span>
       <span className={panelStyles.statsValues}>
-        {stats.good} good &middot; {stats.late} late &middot; {stats.lost} lost ({lossPercent}%) &middot; {stats.resync} resync
+        {stats.good} good &middot; {stats.late} late &middot; {stats.lost} lost ({lossPercent}%) &middot;{" "}
+        {stats.resync} resync
       </span>
     </div>
   );
@@ -102,16 +105,16 @@ function AudioStatsSection() {
     const unlisten = listen<CryptoStats>("crypto-stats", (event) => {
       setCryptoStats(event.payload);
     });
-    return () => { unlisten.then((f) => f()); };
+    return () => {
+      unlisten.then((f) => f());
+    };
   }, []);
 
   if (!cryptoStats) {
     return (
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>{t("audio.stats.title")}</h3>
-        <p className={styles.fieldHint}>
-          {t("audio.stats.noStats")}
-        </p>
+        <p className={styles.fieldHint}>{t("audio.stats.noStats")}</p>
       </section>
     );
   }
@@ -119,9 +122,7 @@ function AudioStatsSection() {
   return (
     <section className={styles.section}>
       <h3 className={styles.sectionTitle}>{t("audio.stats.title")}</h3>
-      <p className={styles.fieldHint}>
-        {t("audio.stats.udpCounters")}
-      </p>
+      <p className={styles.fieldHint}>{t("audio.stats.udpCounters")}</p>
       <StatsRow label={t("audio.stats.toClient")} stats={cryptoStats.to_client} />
       <StatsRow label={t("audio.stats.fromClient")} stats={cryptoStats.from_client} />
     </section>
@@ -156,7 +157,11 @@ export function AudioPanel({
   // answer before an un-awaited listen() commits (Tauri does not replay
   // events), and a busy state detected at startup - while this panel was
   // unmounted - must still show here.
-  const [captureError, setCaptureError] = useState<{ kind: string; message: string; holders?: string[] } | null>(null);
+  const [captureError, setCaptureError] = useState<{
+    kind: string;
+    message: string;
+    holders?: string[];
+  } | null>(null);
   useEffect(() => {
     let active = true;
     let unlisten: (() => void) | null = null;
@@ -174,7 +179,9 @@ export function AudioPanel({
         .then((s) => {
           if (active) setCaptureError(s ?? null);
         })
-        .catch(() => { /* command unavailable (non-desktop) */ });
+        .catch(() => {
+          /* command unavailable (non-desktop) */
+        });
     })();
     return () => {
       active = false;
@@ -188,17 +195,23 @@ export function AudioPanel({
   // "device in use" condition (e.g. after a restart with exclusive mode
   // on) surfaces here without waiting for the user to enable voice.
   useEffect(() => {
-    invoke("probe_microphone").catch(() => { /* best-effort */ });
+    invoke("probe_microphone").catch(() => {
+      /* best-effort */
+    });
   }, [settings.exclusive_input, settings.selected_device]);
-  const [availableAlgorithms, setAvailableAlgorithms] = useState<
-    NoiseSuppressionAlgorithm[]
-  >(["none", "omlsa_imcra", "spectral_subtraction"]);
+  const [availableAlgorithms, setAvailableAlgorithms] = useState<NoiseSuppressionAlgorithm[]>([
+    "none",
+    "omlsa_imcra",
+    "spectral_subtraction",
+  ]);
   useEffect(() => {
     invoke<NoiseSuppressionAlgorithm[]>("get_available_denoiser_algorithms")
       .then((algos) => {
         if (Array.isArray(algos)) setAvailableAlgorithms(algos);
       })
-      .catch(() => { /* keep the conservative default */ });
+      .catch(() => {
+        /* keep the conservative default */
+      });
   }, []);
 
   const isVoiceGate = !settings.push_to_talk && settings.noise_suppression;
@@ -296,8 +309,7 @@ export function AudioPanel({
               value={settings.selected_output_device ?? ""}
               onChange={(e) =>
                 onChange({
-                  selected_output_device:
-                    e.target.value === "" ? null : e.target.value,
+                  selected_output_device: e.target.value === "" ? null : e.target.value,
                 })
               }
             >
@@ -325,9 +337,7 @@ export function AudioPanel({
       {/* -- Activation Mode + Voice Gate ---------------------------- */}
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>{t("audio.activationMode")}</h3>
-        <p className={styles.fieldHint}>
-          {t("audio.activationModeHint")}
-        </p>
+        <p className={styles.fieldHint}>{t("audio.activationModeHint")}</p>
         <ActivationModeSelector settings={settings} onChange={onChange} />
         {settings.push_to_talk && (
           <p
@@ -346,9 +356,7 @@ export function AudioPanel({
       {/* -- Noise Suppression --------------------------------------- */}
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>{t("audio.noiseSuppression")}</h3>
-        <p className={styles.fieldHint}>
-          {t("audio.noiseSuppressionHint")}
-        </p>
+        <p className={styles.fieldHint}>{t("audio.noiseSuppressionHint")}</p>
         <RadioCardGroup
           name="denoiser_algorithm"
           options={denoiserOptions.filter((o) => availableAlgorithms.includes(o.value))}
@@ -371,9 +379,7 @@ export function AudioPanel({
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
             <span className={styles.fieldLabel}>{t("audio.autoGain")}</span>
-            <p className={styles.fieldHint}>
-              {t("audio.autoGainHint")}
-            </p>
+            <p className={styles.fieldHint}>{t("audio.autoGainHint")}</p>
           </div>
           <Toggle
             checked={settings.auto_gain}
@@ -411,13 +417,9 @@ export function AudioPanel({
         <div className={styles.field}>
           <div className={styles.fieldRow}>
             <span className={styles.fieldLabel}>{t("audio.audioPerPacket")}</span>
-            <span className={styles.sliderValue}>
-              {settings.frame_size_ms} ms
-            </span>
+            <span className={styles.sliderValue}>{settings.frame_size_ms} ms</span>
           </div>
-          <p className={styles.fieldHint}>
-            {t("audio.audioPerPacketHint")}
-          </p>
+          <p className={styles.fieldHint}>{t("audio.audioPerPacketHint")}</p>
           <div className={styles.radioGroup}>
             {FRAME_SIZE_OPTIONS.map((opt) => (
               <label key={opt.value} className={styles.radioLabel}>
@@ -442,9 +444,7 @@ export function AudioPanel({
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
             <span className={styles.fieldLabel}>{t("audio.forceTcpAudio")}</span>
-            <p className={styles.fieldHint}>
-              {t("audio.forceTcpAudioHint")}
-            </p>
+            <p className={styles.fieldHint}>{t("audio.forceTcpAudioHint")}</p>
           </div>
           <Toggle
             checked={settings.force_tcp_audio}
@@ -477,22 +477,15 @@ export function AudioPanel({
           <div className={styles.toggleRow}>
             <div className={styles.toggleInfo}>
               <span className={styles.fieldLabel}>{t("audio.legacyAudioBackend")}</span>
-              <p className={styles.fieldHint}>
-                {t("audio.legacyAudioBackendHint")}
-              </p>
+              <p className={styles.fieldHint}>{t("audio.legacyAudioBackendHint")}</p>
             </div>
-            <Toggle
-              checked={!useRodioBackend}
-              onChange={onToggleAudioBackend}
-            />
+            <Toggle checked={!useRodioBackend} onChange={onToggleAudioBackend} />
           </div>
         </section>
       )}
 
       {/* -- Audio Statistics -------------------------------- */}
       {isExpert && <AudioStatsSection />}
-
-
     </>
   );
 }

@@ -100,9 +100,7 @@ export const LiveDocImage = TiptapImage.extend({
         default: "inline" as ImageWrapMode,
         parseHTML: (element) => {
           const v = (element as HTMLElement).getAttribute("data-wrap");
-          return (IMAGE_WRAP_MODES as readonly string[]).includes(v ?? "")
-            ? (v as ImageWrapMode)
-            : "inline";
+          return (IMAGE_WRAP_MODES as readonly string[]).includes(v ?? "") ? (v as ImageWrapMode) : "inline";
         },
         renderHTML: (attrs) => {
           const w = (attrs as { wrap?: ImageWrapMode }).wrap ?? "inline";

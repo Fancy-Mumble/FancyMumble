@@ -53,10 +53,7 @@ function createMockContainer(clientHeight = 600): MockContainer {
     clientHeight,
     scrollToCalls: [],
     scrollTo(opts: { top: number; behavior: string }) {
-      container.scrollTop = Math.min(
-        opts.top,
-        Math.max(0, container.scrollHeight - container.clientHeight),
-      );
+      container.scrollTop = Math.min(opts.top, Math.max(0, container.scrollHeight - container.clientHeight));
       container.scrollToCalls.push({ top: opts.top, behavior: opts.behavior });
     },
   };
@@ -189,11 +186,7 @@ class ScrollController {
 
   /** Distance from the bottom of the scroll area. */
   get distFromBottom(): number {
-    return (
-      this.container.scrollHeight -
-      this.container.scrollTop -
-      this.container.clientHeight
-    );
+    return this.container.scrollHeight - this.container.scrollTop - this.container.clientHeight;
   }
 }
 

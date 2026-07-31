@@ -43,15 +43,9 @@ export const Indent = Extension.create({
           indent: {
             default: 0,
             parseHTML: (element) => {
-              const pl = parseInt(
-                (element as HTMLElement).style.paddingLeft || "0",
-                10,
-              );
+              const pl = parseInt((element as HTMLElement).style.paddingLeft || "0", 10);
               if (!Number.isFinite(pl) || pl <= 0) return 0;
-              return Math.max(
-                0,
-                Math.min(MAX_INDENT_LEVEL, Math.round(pl / INDENT_STEP_PX)),
-              );
+              return Math.max(0, Math.min(MAX_INDENT_LEVEL, Math.round(pl / INDENT_STEP_PX)));
             },
             renderHTML: (attributes) => {
               const indent = (attributes as { indent?: number }).indent ?? 0;
@@ -65,8 +59,17 @@ export const Indent = Extension.create({
   },
 
   addCommands() {
-    const change = (delta: number) =>
-      ({ state, dispatch, tr }: { state: import("@tiptap/pm/state").EditorState; dispatch: ((tr: import("@tiptap/pm/state").Transaction) => void) | undefined; tr: import("@tiptap/pm/state").Transaction }) => {
+    const change =
+      (delta: number) =>
+      ({
+        state,
+        dispatch,
+        tr,
+      }: {
+        state: import("@tiptap/pm/state").EditorState;
+        dispatch: ((tr: import("@tiptap/pm/state").Transaction) => void) | undefined;
+        tr: import("@tiptap/pm/state").Transaction;
+      }) => {
         let changed = false;
         const { from, to } = state.selection;
         state.doc.nodesBetween(from, to, (node, pos) => {
@@ -107,8 +110,7 @@ export const FontSize = Extension.create({
         attributes: {
           fontSize: {
             default: null,
-            parseHTML: (element) =>
-              (element as HTMLElement).style.fontSize || null,
+            parseHTML: (element) => (element as HTMLElement).style.fontSize || null,
             renderHTML: (attributes) => {
               const size = (attributes as { fontSize?: string | null }).fontSize;
               if (!size) return {};

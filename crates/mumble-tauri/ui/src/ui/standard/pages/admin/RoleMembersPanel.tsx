@@ -22,8 +22,7 @@ export function RoleMembersPanel({ role, onPatch, registeredUsers, disabled }: R
     () => registeredUsers.map((u) => ({ user_id: u.user_id, name: u.name })),
     [registeredUsers],
   );
-  const resolveName = (id: number) =>
-    registeredUsers.find((u) => u.user_id === id)?.name ?? `User #${id}`;
+  const resolveName = (id: number) => registeredUsers.find((u) => u.user_id === id)?.name ?? `User #${id}`;
 
   /** Look up the avatar data URL for a registered user via the live online users list. */
   const getAvatar = (id: number): string | null => {
@@ -52,9 +51,7 @@ export function RoleMembersPanel({ role, onPatch, registeredUsers, disabled }: R
 
       <fieldset className={styles.fieldset}>
         <legend>{t("roleMembers.legendExcluded")}</legend>
-        <p className={styles.dimText}>
-          {t("roleMembers.excludedDesc")}
-        </p>
+        <p className={styles.dimText}>{t("roleMembers.excludedDesc")}</p>
         <MemberPicker
           value={role.remove}
           candidates={candidates}

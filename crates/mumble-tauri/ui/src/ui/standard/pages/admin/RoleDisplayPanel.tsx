@@ -17,16 +17,16 @@ export interface RoleDisplayPanelProps {
 /** Display sub-tab of the role editor: name, color, icon, style preset, metadata. */
 export function RoleDisplayPanel({ role, onPatch, disabled }: RoleDisplayPanelProps) {
   const { t } = useTranslation("settings");
-  const stylePresets = useMemo(() => [
-    { id: "", label: t("roleDisplay.presetDefault") },
-    { id: "neon", label: t("roleDisplay.presetNeon") },
-    { id: "gradient", label: t("roleDisplay.presetGradient") },
-    { id: "minimal", label: t("roleDisplay.presetMinimal") },
-  ], [t]);
-  const metadataEntries = useMemo(
-    () => Object.entries(role.metadata ?? {}),
-    [role.metadata],
+  const stylePresets = useMemo(
+    () => [
+      { id: "", label: t("roleDisplay.presetDefault") },
+      { id: "neon", label: t("roleDisplay.presetNeon") },
+      { id: "gradient", label: t("roleDisplay.presetGradient") },
+      { id: "minimal", label: t("roleDisplay.presetMinimal") },
+    ],
+    [t],
   );
+  const metadataEntries = useMemo(() => Object.entries(role.metadata ?? {}), [role.metadata]);
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
 
@@ -78,11 +78,11 @@ export function RoleDisplayPanel({ role, onPatch, disabled }: RoleDisplayPanelPr
           onChange={(e) => onPatch({ style_preset: e.target.value || null })}
           disabled={disabled || role.inherited}
         >
-            {stylePresets.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
+          {stylePresets.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
         </TextField>
 
         <fieldset className={styles.fieldset}>
@@ -149,11 +149,7 @@ export function RoleDisplayPanel({ role, onPatch, disabled }: RoleDisplayPanelPr
       </div>
 
       <aside className={styles.editorAside}>
-        <RolePreviewCard
-          name={role.name}
-          color={role.color}
-          icon={role.icon}
-        />
+        <RolePreviewCard name={role.name} color={role.color} icon={role.icon} />
       </aside>
     </div>
   );

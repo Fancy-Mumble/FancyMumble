@@ -55,7 +55,11 @@ export default function PromptDialog() {
         <h3 id="prompt-title" className={styles.title}>
           {options.title}
         </h3>
-        {options.label && <label htmlFor="prompt-input" className={styles.label}>{options.label}</label>}
+        {options.label && (
+          <label htmlFor="prompt-input" className={styles.label}>
+            {options.label}
+          </label>
+        )}
         <input
           id="prompt-input"
           ref={inputRef}

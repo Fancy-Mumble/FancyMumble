@@ -25,19 +25,14 @@ function serverProfileKey(identityLabel: string | null | undefined, serverId: st
   return `${profileKey(identityLabel)}:server:${serverId}`;
 }
 
-export async function loadProfileData(
-  identityLabel?: string | null,
-): Promise<ProfileData> {
+export async function loadProfileData(identityLabel?: string | null): Promise<ProfileData> {
   const store = await load(PROFILE_STORE, { autoSave: true, defaults: {} });
   const key = profileKey(identityLabel);
   const data = await store.get<ProfileData>(key);
   return data ? { ...PROFILE_DEFAULTS, ...data } : { ...PROFILE_DEFAULTS };
 }
 
-export async function saveProfileData(
-  data: ProfileData,
-  identityLabel?: string | null,
-): Promise<void> {
+export async function saveProfileData(data: ProfileData, identityLabel?: string | null): Promise<void> {
   const store = await load(PROFILE_STORE, { autoSave: true, defaults: {} });
   await store.set(profileKey(identityLabel), data);
 }
@@ -69,16 +64,12 @@ export async function deleteServerProfileData(
   await store.delete(serverProfileKey(identityLabel, serverId));
 }
 
-export async function deleteProfileData(
-  identityLabel: string,
-): Promise<void> {
+export async function deleteProfileData(identityLabel: string): Promise<void> {
   const store = await load(PROFILE_STORE, { autoSave: true, defaults: {} });
   await store.delete(profileKey(identityLabel));
 }
 
-export async function migrateProfilesToIdentities(
-  identities: string[],
-): Promise<void> {
+export async function migrateProfilesToIdentities(identities: string[]): Promise<void> {
   const store = await load(PROFILE_STORE, { autoSave: true, defaults: {} });
   const migrated = await store.get<boolean>(MIGRATION_KEY);
   if (migrated) return;
@@ -113,7 +104,11 @@ export const NAMEPLATES: { id: string; label: string; bg: string }[] = [
   { id: "gradient_sunset", label: "Sunset", bg: "linear-gradient(135deg,#f97316,#ef4444)" },
   { id: "gold", label: "Gold", bg: "linear-gradient(135deg,#fbbf24,#d97706)" },
   { id: "silver", label: "Silver", bg: "linear-gradient(135deg,#d1d5db,#9ca3af)" },
-  { id: "rainbow", label: "Rainbow", bg: "linear-gradient(135deg,#ef4444,#f97316,#eab308,#22c55e,#3b82f6,#8b5cf6)" },
+  {
+    id: "rainbow",
+    label: "Rainbow",
+    bg: "linear-gradient(135deg,#ef4444,#f97316,#eab308,#22c55e,#3b82f6,#8b5cf6)",
+  },
   { id: "dark", label: "Dark", bg: "linear-gradient(135deg,#1f2937,#111827)" },
 ];
 

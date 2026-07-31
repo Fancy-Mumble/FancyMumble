@@ -13,9 +13,7 @@ let storeData: Record<string, unknown> = {};
 vi.mock("@tauri-apps/plugin-store", () => ({
   load: vi.fn().mockImplementation(() =>
     Promise.resolve({
-      get: vi.fn().mockImplementation((key: string) =>
-        Promise.resolve(storeData[key] ?? null),
-      ),
+      get: vi.fn().mockImplementation((key: string) => Promise.resolve(storeData[key] ?? null)),
       set: vi.fn().mockImplementation((key: string, value: unknown) => {
         storeData[key] = value;
         return Promise.resolve();
@@ -25,10 +23,7 @@ vi.mock("@tauri-apps/plugin-store", () => ({
 }));
 
 // Import after mocks are in place.
-import {
-  getSilencedChannels,
-  setSilencedChannel,
-} from "../../preferencesStorage";
+import { getSilencedChannels, setSilencedChannel } from "../../preferencesStorage";
 
 describe("Silenced channels storage", () => {
   beforeEach(() => {

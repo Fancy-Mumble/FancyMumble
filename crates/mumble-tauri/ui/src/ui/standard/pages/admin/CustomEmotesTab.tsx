@@ -31,10 +31,12 @@ export function CustomEmotesTab() {
       const picked = await open({
         multiple: false,
         directory: false,
-        filters: [{
-          name: "Emote image",
-          extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"],
-        }],
+        filters: [
+          {
+            name: "Emote image",
+            extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"],
+          },
+        ],
       });
       if (typeof picked === "string") {
         setFilePath(picked);
@@ -45,54 +47,60 @@ export function CustomEmotesTab() {
     }
   }, []);
 
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!filePath) {
-      setStatusMsg({ kind: "err", text: t("emotes.errorNeedsFile") });
-      return;
-    }
-    const mime = inferMimeType(filePath);
-    if (!mime || !ALLOWED_MIME.includes(mime)) {
-      setStatusMsg({ kind: "err", text: t("emotes.errorBadType") });
-      return;
-    }
-    if (!shortcode.trim() || !aliasEmoji.trim()) {
-      setStatusMsg({ kind: "err", text: t("emotes.errorRequiredFields") });
-      return;
-    }
-    setSubmitting(true);
-    setStatusMsg(null);
-    try {
-      await addCustomEmote({
-        shortcode: shortcode.trim(),
-        aliasEmoji: aliasEmoji.trim(),
-        description: description.trim() || undefined,
-        filePath,
-        mimeType: mime,
-      });
-      setShortcode("");
-      setAliasEmoji("");
-      setDescription("");
-      setFilePath(null);
-      setStatusMsg({ kind: "ok", text: t("emotes.successAdded") });
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      setStatusMsg({ kind: "err", text: t("emotes.errorAddFailed", { detail }) });
-    } finally {
-      setSubmitting(false);
-    }
-  }, [filePath, shortcode, aliasEmoji, description, addCustomEmote]);
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!filePath) {
+        setStatusMsg({ kind: "err", text: t("emotes.errorNeedsFile") });
+        return;
+      }
+      const mime = inferMimeType(filePath);
+      if (!mime || !ALLOWED_MIME.includes(mime)) {
+        setStatusMsg({ kind: "err", text: t("emotes.errorBadType") });
+        return;
+      }
+      if (!shortcode.trim() || !aliasEmoji.trim()) {
+        setStatusMsg({ kind: "err", text: t("emotes.errorRequiredFields") });
+        return;
+      }
+      setSubmitting(true);
+      setStatusMsg(null);
+      try {
+        await addCustomEmote({
+          shortcode: shortcode.trim(),
+          aliasEmoji: aliasEmoji.trim(),
+          description: description.trim() || undefined,
+          filePath,
+          mimeType: mime,
+        });
+        setShortcode("");
+        setAliasEmoji("");
+        setDescription("");
+        setFilePath(null);
+        setStatusMsg({ kind: "ok", text: t("emotes.successAdded") });
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        setStatusMsg({ kind: "err", text: t("emotes.errorAddFailed", { detail }) });
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [filePath, shortcode, aliasEmoji, description, addCustomEmote],
+  );
 
-  const handleDelete = useCallback(async (sc: string) => {
-    if (!confirm(t("emotes.confirmDelete", { shortcode: sc }))) return;
-    try {
-      await removeCustomEmote(sc);
-      setStatusMsg({ kind: "ok", text: t("emotes.successRemoved", { shortcode: sc }) });
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      setStatusMsg({ kind: "err", text: t("emotes.errorRemoveFailed", { detail }) });
-    }
-  }, [removeCustomEmote, t]);
+  const handleDelete = useCallback(
+    async (sc: string) => {
+      if (!confirm(t("emotes.confirmDelete", { shortcode: sc }))) return;
+      try {
+        await removeCustomEmote(sc);
+        setStatusMsg({ kind: "ok", text: t("emotes.successRemoved", { shortcode: sc }) });
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        setStatusMsg({ kind: "err", text: t("emotes.errorRemoveFailed", { detail }) });
+      }
+    },
+    [removeCustomEmote, t],
+  );
 
   if (!canManage) {
     return (
@@ -145,9 +153,7 @@ export function CustomEmotesTab() {
           </button>
         </div>
         {statusMsg && (
-          <p className={statusMsg.kind === "err" ? styles.errorText : undefined}>
-            {statusMsg.text}
-          </p>
+          <p className={statusMsg.kind === "err" ? styles.errorText : undefined}>{statusMsg.text}</p>
         )}
       </form>
 
@@ -158,11 +164,7 @@ export function CustomEmotesTab() {
         <ul className={styles.emoteList}>
           {emotes.map((e) => (
             <li key={e.shortcode} className={styles.emoteItem}>
-              <img
-                src={e.imageDataUrl}
-                alt={e.shortcode}
-                className={styles.emoteThumb}
-              />
+              <img src={e.imageDataUrl} alt={e.shortcode} className={styles.emoteThumb} />
               <div className={styles.emoteMeta}>
                 <code>:{e.shortcode}:</code>
                 <span>{e.aliasEmoji}</span>
@@ -173,7 +175,7 @@ export function CustomEmotesTab() {
                 onClick={() => handleDelete(e.shortcode)}
                 className={`${styles.removeBtn} ${styles.emoteDelete}`}
               >
-              {t("emotes.deleteButton")}
+                {t("emotes.deleteButton")}
               </button>
             </li>
           ))}

@@ -1,0 +1,52 @@
+/* Risk banners under the privacy toggles. Tone carries the meaning, so each
+   one gets a distinct accent rather than a shared neutral box. */
+
+.banner {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-left: 2px solid;
+  border-radius: 0 8px 8px 0;
+}
+
+.banner span {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.banner p {
+  margin: 4px 0 0;
+  color: #8c96a3;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+/* Live exposure right now. */
+.danger {
+  border-color: #e05f6a;
+  background: rgb(224 95 106 / 8%);
+}
+
+.danger span {
+  color: #f0919a;
+}
+
+/* Exposure that exists but is less severe, or is one toggle away. */
+.caution {
+  border-color: #d9a441;
+  background: rgb(217 164 65 / 8%);
+}
+
+.caution span {
+  color: #e7c07a;
+}
+
+/* Closed - kept on screen as a standing note. */
+.muted {
+  border-color: rgb(255 255 255 / 14%);
+  background: rgb(255 255 255 / 3%);
+}
+
+.muted span {
+  color: #97a2af;
+}

@@ -23,7 +23,12 @@ describe("friendServerKey", () => {
 
   it("falls back to the connection target when there is no label", () => {
     const a = friend({ serverHost: "magical.rocks", serverPort: 64738, serverUsername: "Zewi" });
-    const b = friend({ serverHost: "magical.rocks", serverPort: 64738, serverUsername: "Zewi", serverId: "other" });
+    const b = friend({
+      serverHost: "magical.rocks",
+      serverPort: 64738,
+      serverUsername: "Zewi",
+      serverId: "other",
+    });
     expect(friendServerKey(a)).toBe("addr:magical.rocks:64738:Zewi");
     expect(friendServerKey(a)).toBe(friendServerKey(b));
   });

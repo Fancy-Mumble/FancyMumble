@@ -10,8 +10,32 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   wrapLabel?: boolean;
 }
 
-const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({ variant = "secondary", leadingIcon, trailingIcon, wrapLabel = true, className = "", children, type = "button", ...props }, ref) {
-  return <button ref={ref} type={type} className={`${styles.button} ${styles[variant]} ${className}`} {...props}>{leadingIcon && <span className={styles.buttonIcon}>{leadingIcon}</span>}{wrapLabel ? <span className={styles.buttonLabel}>{children}</span> : children}{trailingIcon && <span className={styles.buttonIcon}>{trailingIcon}</span>}</button>;
+const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  {
+    variant = "secondary",
+    leadingIcon,
+    trailingIcon,
+    wrapLabel = true,
+    className = "",
+    children,
+    type = "button",
+    ...props
+  },
+  ref,
+) {
+  return (
+    <button
+      ref={ref}
+      type={type}
+      className={`${styles.button} ${className}`}
+      data-variant={variant}
+      {...props}
+    >
+      {leadingIcon && <span className={styles.buttonIcon}>{leadingIcon}</span>}
+      {wrapLabel ? <span className={styles.buttonLabel}>{children}</span> : children}
+      {trailingIcon && <span className={styles.buttonIcon}>{trailingIcon}</span>}
+    </button>
+  );
 });
 
 export default Button;

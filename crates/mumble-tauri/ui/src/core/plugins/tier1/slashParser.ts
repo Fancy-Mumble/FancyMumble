@@ -59,10 +59,7 @@ export function findCommandByName(
 /** Parse a draft line as a slash command invocation against the
  *  manifest entries.  Returns null when the line does not match any
  *  declared command. */
-export function parseSlashLine(
-  line: string,
-  entries: readonly SlashCommandEntry[],
-): ParsedSlashLine | null {
+export function parseSlashLine(line: string, entries: readonly SlashCommandEntry[]): ParsedSlashLine | null {
   const tokens = tokenise(line);
   if (!tokens || tokens.length === 0) return null;
   const [head, ...rest] = tokens;
@@ -71,10 +68,7 @@ export function parseSlashLine(
   return parseAgainstCommand(entry, rest);
 }
 
-function parseAgainstCommand(
-  entry: SlashCommandEntry,
-  args: readonly string[],
-): ParsedSlashLine {
+function parseAgainstCommand(entry: SlashCommandEntry, args: readonly string[]): ParsedSlashLine {
   const options: Record<string, OptionValue> = {};
   const errors: string[] = [];
   const declared = entry.command.options ?? [];
@@ -134,10 +128,7 @@ function parseAgainstCommand(
   };
 }
 
-function coerceOption(
-  raw: string,
-  type: import("./types").OptionType,
-): OptionValue | null {
+function coerceOption(raw: string, type: import("./types").OptionType): OptionValue | null {
   switch (type) {
     case "string":
     case "user":

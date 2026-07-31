@@ -11,14 +11,28 @@ import PanelCloseButton from "../PanelCloseButton";
  * - Drag-and-drop reordering of both the drawer strip and grid panes.
  *   Dropping onto the primary pane switches the focused stream.
  */
-import { lazy, Suspense, useState, useEffect, useRef, useCallback, useMemo, memo, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  memo,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useRemoteStream } from "./useScreenShare";
 import { useStreamThumbnail } from "./useStreamPreview";
 import { useAppStore } from "@core/store";
 import styles from "./StreamFocusView.module.css";
 import { useBroadcasterOrder, useDragStream } from "@core/features/chat/stream/useStreamDrag";
-import type { Broadcaster, PointerDragItemProps, PointerDragHandlers } from "@core/features/chat/stream/useStreamDrag";
+import type {
+  Broadcaster,
+  PointerDragItemProps,
+  PointerDragHandlers,
+} from "@core/features/chat/stream/useStreamDrag";
 import { TID } from "@core/testids";
 
 // Lazy like ChatView's usage: ScreenShareViewer is also dynamically imported
@@ -33,30 +47,30 @@ const ScreenShareViewer = lazy(() => import("./ScreenShareViewer"));
 type GridLayout = "solo" | "side-by-side" | "pip" | "2x2" | "main+2" | "main+3";
 
 const LAYOUT_CSS: Record<GridLayout, string> = {
-  "solo":       styles.layoutSolo,
+  solo: styles.layoutSolo,
   "side-by-side": styles.layoutSideBySide,
-  "pip":        styles.layoutPip,
-  "2x2":        styles.layout2x2,
-  "main+2":     styles.layoutMain2,
-  "main+3":     styles.layoutMain3,
+  pip: styles.layoutPip,
+  "2x2": styles.layout2x2,
+  "main+2": styles.layoutMain2,
+  "main+3": styles.layoutMain3,
 };
 
 const LAYOUT_KEYS: Record<GridLayout, string> = {
-  "solo":         "streamFocus.layout.solo",
+  solo: "streamFocus.layout.solo",
   "side-by-side": "streamFocus.layout.sideBySide",
-  "pip":          "streamFocus.layout.pip",
-  "2x2":          "streamFocus.layout.grid2x2",
-  "main+2":       "streamFocus.layout.main2",
-  "main+3":       "streamFocus.layout.main3",
+  pip: "streamFocus.layout.pip",
+  "2x2": "streamFocus.layout.grid2x2",
+  "main+2": "streamFocus.layout.main2",
+  "main+3": "streamFocus.layout.main3",
 };
 
 const LAYOUT_OPTIONS: { id: GridLayout; label: string }[] = [
-  { id: "solo",         label: "Solo" },
+  { id: "solo", label: "Solo" },
   { id: "side-by-side", label: "Side by side" },
-  { id: "pip",          label: "Picture-in-picture" },
-  { id: "2x2",          label: "2x2 Grid" },
-  { id: "main+2",       label: "Main + 2" },
-  { id: "main+3",       label: "Main + 3" },
+  { id: "pip", label: "Picture-in-picture" },
+  { id: "2x2", label: "2x2 Grid" },
+  { id: "main+2", label: "Main + 2" },
+  { id: "main+3", label: "Main + 3" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -127,7 +141,15 @@ interface SecondaryPanelProps extends PointerDragItemProps {
   readonly ownBroadcastStream?: MediaStream | null;
 }
 
-const SecondaryPanel = memo(function SecondaryPanel({ session, name, className, isDragOver, onItemPointerDown, onItemClick, ownBroadcastStream }: SecondaryPanelProps) {
+const SecondaryPanel = memo(function SecondaryPanel({
+  session,
+  name,
+  className,
+  isDragOver,
+  onItemPointerDown,
+  onItemClick,
+  ownBroadcastStream,
+}: SecondaryPanelProps) {
   const remoteStream = useRemoteStream(session);
   const videoRef = useRef<HTMLVideoElement>(null);
   const stream = ownBroadcastStream ?? remoteStream;
@@ -140,7 +162,9 @@ const SecondaryPanel = memo(function SecondaryPanel({ session, name, className, 
     if (stream) {
       video.play().catch(() => {});
     }
-    return () => { video.srcObject = null; };
+    return () => {
+      video.srcObject = null;
+    };
   }, [stream]);
 
   return (
@@ -156,21 +180,13 @@ const SecondaryPanel = memo(function SecondaryPanel({ session, name, className, 
       data-session={session}
       data-broadcaster-name={name}
     >
-      {stream
-        ? (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className={styles.secondaryImg}
-          />
-        )
-        : (
-          <div className={styles.secondaryPlaceholder}>
-            <ScreenShareIcon width={28} height={28} />
-          </div>
-        )}
+      {stream ? (
+        <video ref={videoRef} autoPlay playsInline muted className={styles.secondaryImg} />
+      ) : (
+        <div className={styles.secondaryPlaceholder}>
+          <ScreenShareIcon width={28} height={28} />
+        </div>
+      )}
 
       <div className={styles.secondaryOverlay}>
         <span className={styles.secondaryName}>{name}</span>
@@ -189,7 +205,13 @@ interface DrawerThumbProps extends PointerDragItemProps {
   readonly name: string;
 }
 
-const DrawerThumb = memo(function DrawerThumb({ session, name, isDragOver, onItemPointerDown, onItemClick }: DrawerThumbProps) {
+const DrawerThumb = memo(function DrawerThumb({
+  session,
+  name,
+  isDragOver,
+  onItemPointerDown,
+  onItemClick,
+}: DrawerThumbProps) {
   const thumbnail = useStreamThumbnail(session, true);
   const { t } = useTranslation("chat");
 
@@ -207,13 +229,13 @@ const DrawerThumb = memo(function DrawerThumb({ session, name, isDragOver, onIte
       data-broadcaster-name={name}
     >
       <div className={styles.drawerThumbImg}>
-        {thumbnail
-          ? <img src={thumbnail} alt="" className={styles.drawerThumbImgEl} />
-          : (
-            <div className={styles.drawerThumbPlaceholder}>
-              <ScreenShareIcon width={20} height={20} />
-            </div>
-          )}
+        {thumbnail ? (
+          <img src={thumbnail} alt="" className={styles.drawerThumbImgEl} />
+        ) : (
+          <div className={styles.drawerThumbPlaceholder}>
+            <ScreenShareIcon width={20} height={20} />
+          </div>
+        )}
         <span className={styles.drawerLiveBadge}>{t("streamFocus.liveBadge")}</span>
       </div>
       <span className={styles.drawerThumbName}>{name}</span>
@@ -238,7 +260,18 @@ interface PrimaryPaneProps {
   readonly onEndCamera?: () => void;
 }
 
-function PrimaryPane({ isOwnBroadcast, localStream, session, hasOthers, isPrimaryDragOver, channelId, ownSession, missingSourceKind, onAddSource, onEndCamera }: PrimaryPaneProps) {
+function PrimaryPane({
+  isOwnBroadcast,
+  localStream,
+  session,
+  hasOthers,
+  isPrimaryDragOver,
+  channelId,
+  ownSession,
+  missingSourceKind,
+  onAddSource,
+  onEndCamera,
+}: PrimaryPaneProps) {
   const { t } = useTranslation("chat");
   return (
     <section
@@ -247,7 +280,16 @@ function PrimaryPane({ isOwnBroadcast, localStream, session, hasOthers, isPrimar
       data-drop-zone={hasOthers ? "primary" : undefined}
     >
       <Suspense fallback={null}>
-        <ScreenShareViewer isOwnBroadcast={isOwnBroadcast} localStream={localStream} session={session} channelId={channelId} ownSession={ownSession} missingSourceKind={missingSourceKind} onAddSource={onAddSource} onEndCamera={onEndCamera} />
+        <ScreenShareViewer
+          isOwnBroadcast={isOwnBroadcast}
+          localStream={localStream}
+          session={session}
+          channelId={channelId}
+          ownSession={ownSession}
+          missingSourceKind={missingSourceKind}
+          onAddSource={onAddSource}
+          onEndCamera={onEndCamera}
+        />
       </Suspense>
       {hasOthers && (
         <div
@@ -287,10 +329,13 @@ function LayoutPickerBar({ layout, onSelectLayout, pickerRef }: LayoutPickerBarP
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [open, pickerRef]);
 
-  const handleSelect = useCallback((id: GridLayout) => {
-    onSelectLayout(id);
-    setOpen(false);
-  }, [onSelectLayout]);
+  const handleSelect = useCallback(
+    (id: GridLayout) => {
+      onSelectLayout(id);
+      setOpen(false);
+    },
+    [onSelectLayout],
+  );
 
   return (
     <div className={styles.topBar} ref={pickerRef}>
@@ -396,7 +441,14 @@ interface LayoutSecondaryPanesProps {
   readonly ownSession: number | null;
 }
 
-function LayoutSecondaryPanes({ layout, secondaries, dragOverTarget, dragHandlers, ownBroadcastStream, ownSession }: LayoutSecondaryPanesProps) {
+function LayoutSecondaryPanes({
+  layout,
+  secondaries,
+  dragOverTarget,
+  dragHandlers,
+  ownBroadcastStream,
+  ownSession,
+}: LayoutSecondaryPanesProps) {
   const ownStreamFor = (session: number) =>
     session === ownSession ? (ownBroadcastStream ?? undefined) : undefined;
   if (layout === "side-by-side" && secondaries[0]) {
@@ -514,10 +566,8 @@ export default function StreamFocusView({
   const hasOthers = otherBroadcasters.length > 0;
 
   // Number of secondary panes the current layout actually renders.
-  const secondarySlots = layout === "solo" ? 0
-    : layout === "side-by-side" || layout === "pip" ? 1
-    : layout === "main+2" ? 2
-    : 3; // 2x2, main+3
+  const secondarySlots =
+    layout === "solo" ? 0 : layout === "side-by-side" || layout === "pip" ? 1 : layout === "main+2" ? 2 : 3; // 2x2, main+3
   const secondaries = orderedList.slice(0, secondarySlots);
 
   // Drawer only shows streams not already visible in the layout panes.
@@ -564,13 +614,7 @@ export default function StreamFocusView({
         />
       </div>
 
-      {hasOthers && (
-        <LayoutPickerBar
-          layout={layout}
-          onSelectLayout={selectLayout}
-          pickerRef={pickerRef}
-        />
-      )}
+      {hasOthers && <LayoutPickerBar layout={layout} onSelectLayout={selectLayout} pickerRef={pickerRef} />}
 
       {drawerBroadcasters.length > 0 && (
         <StreamDrawer

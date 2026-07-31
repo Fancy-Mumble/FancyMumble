@@ -27,7 +27,12 @@ interface LiveDocCitationPickerProps {
   readonly onClose: () => void;
 }
 
-export default function LiveDocCitationPicker({ doc, onInsert, onInsertPlaceholder, onClose }: LiveDocCitationPickerProps) {
+export default function LiveDocCitationPicker({
+  doc,
+  onInsert,
+  onInsertPlaceholder,
+  onClose,
+}: LiveDocCitationPickerProps) {
   const { t } = useTranslation("chat");
   const sources = useLiveDocSources(doc);
   const upsertMaster = useLiveDocMasterSourcesStore((s) => s.upsert);
@@ -81,7 +86,12 @@ export default function LiveDocCitationPicker({ doc, onInsert, onInsertPlacehold
       <div className={`${styles.dialog} ${styles.dialogNarrow}`} role="dialog" aria-modal="true">
         <div className={styles.dialogHeader}>
           <span className={styles.dialogTitle}>{tb("insertCitation", "Insert Citation")}</span>
-          <button type="button" className={styles.dialogClose} onClick={onClose} aria-label={tb("close", "Close")}>
+          <button
+            type="button"
+            className={styles.dialogClose}
+            onClick={onClose}
+            aria-label={tb("close", "Close")}
+          >
             <CloseIcon width={16} height={16} />
           </button>
         </div>
@@ -136,17 +146,32 @@ export default function LiveDocCitationPicker({ doc, onInsert, onInsertPlacehold
                   {sourceLabel(item)}
                 </button>
               ))}
-              {filtered.length === 0 && <div className={styles.empty}>{tb("noSources", "No sources yet.")}</div>}
+              {filtered.length === 0 && (
+                <div className={styles.empty}>{tb("noSources", "No sources yet.")}</div>
+              )}
             </div>
             <div className={styles.pickerSep} />
-            <button type="button" className={`${styles.pickerItem} ${styles.pickerAdd}`} onClick={() => setMode("newSource")}>
+            <button
+              type="button"
+              className={`${styles.pickerItem} ${styles.pickerAdd}`}
+              onClick={() => setMode("newSource")}
+            >
               <PlusIcon width={14} height={14} aria-hidden="true" /> {tb("addNewSource", "Add New Source…")}
             </button>
-            <button type="button" className={`${styles.pickerItem} ${styles.pickerAdd}`} onClick={() => setMode("newBibtex")}>
+            <button
+              type="button"
+              className={`${styles.pickerItem} ${styles.pickerAdd}`}
+              onClick={() => setMode("newBibtex")}
+            >
               <PlusIcon width={14} height={14} aria-hidden="true" /> {tb("addFromBibtex", "Add from BibTeX…")}
             </button>
-            <button type="button" className={`${styles.pickerItem} ${styles.pickerAdd}`} onClick={() => setMode("newPlaceholder")}>
-              <PlusIcon width={14} height={14} aria-hidden="true" /> {tb("addNewPlaceholder", "Add New Placeholder…")}
+            <button
+              type="button"
+              className={`${styles.pickerItem} ${styles.pickerAdd}`}
+              onClick={() => setMode("newPlaceholder")}
+            >
+              <PlusIcon width={14} height={14} aria-hidden="true" />{" "}
+              {tb("addNewPlaceholder", "Add New Placeholder…")}
             </button>
           </>
         )}

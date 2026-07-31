@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  linearToVuPercent,
-  vuPercentToLinear,
-  VU_DB_MIN,
-  VU_DB_MAX,
-} from "../../pages/settings/VuMeter";
+import { linearToVuPercent, vuPercentToLinear, VU_DB_MIN, VU_DB_MAX } from "../../pages/settings/VuMeter";
 
 describe("linearToVuPercent (dB scaling)", () => {
   it("returns 0 for non-positive amplitudes", () => {
@@ -62,4 +57,3 @@ describe("vuPercentToLinear (inverse mapping for manual slider control)", () => 
     }
   });
 });
-

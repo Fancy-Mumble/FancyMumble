@@ -141,12 +141,7 @@ export const SelectInput = forwardRef<HTMLSelectElement, SelectInputProps>(funct
       id={c.id}
       aria-describedby={c["aria-describedby"]}
       aria-invalid={c["aria-invalid"]}
-      className={cx(
-        styles.control,
-        SIZE_CLASS[size],
-        c.invalid && styles.invalid,
-        className,
-      )}
+      className={cx(styles.control, SIZE_CLASS[size], c.invalid && styles.invalid, className)}
       {...rest}
     >
       {children}

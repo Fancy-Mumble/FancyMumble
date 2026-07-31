@@ -78,9 +78,7 @@ describe("custom server emotes wire decoding", () => {
   });
 
   it("resetReactions clears server custom reactions on disconnect", () => {
-    setServerCustomReactions([
-      { shortcode: ":a:", display: "data:image/png;base64,X", label: "a" },
-    ]);
+    setServerCustomReactions([{ shortcode: ":a:", display: "data:image/png;base64,X", label: "a" }]);
     expect(getServerCustomReactions()).toHaveLength(1);
     resetReactions();
     expect(getServerCustomReactions()).toHaveLength(0);

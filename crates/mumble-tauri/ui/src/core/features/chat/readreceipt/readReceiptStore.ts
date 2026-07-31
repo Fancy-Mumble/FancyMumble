@@ -83,9 +83,7 @@ export function allActiveUsersRead(
   ownCertHash: string | undefined,
 ): boolean {
   if (activeUserHashes.length === 0) return false;
-  const othersHashes = ownCertHash
-    ? activeUserHashes.filter((h) => h !== ownCertHash)
-    : activeUserHashes;
+  const othersHashes = ownCertHash ? activeUserHashes.filter((h) => h !== ownCertHash) : activeUserHashes;
   if (othersHashes.length === 0) return true;
 
   const targetIdx = allMessageIds.indexOf(messageId);

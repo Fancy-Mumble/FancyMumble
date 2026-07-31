@@ -13,10 +13,7 @@ import styles from "./LinkPreviewCard.module.css";
  * available; callers should render a placeholder instead of leaking
  * the user's IP to the origin server.
  */
-function previewSrc(
-  media: EmbedMedia | undefined,
-  allowExternal: boolean,
-): string | undefined {
+function previewSrc(media: EmbedMedia | undefined, allowExternal: boolean): string | undefined {
   if (!media) return undefined;
   if (media.preview?.data_url) return media.preview.data_url;
   return allowExternal ? media.url : undefined;
@@ -44,9 +41,8 @@ function videoContainerStyle(embed: LinkEmbed): React.CSSProperties {
   const spotify = isSpotifyEmbed(embed);
 
   if (spotify) {
-    const spotifyHeight = typeof height === "number" && height > 0
-      ? Math.min(Math.max(height, 80), 420)
-      : 152;
+    const spotifyHeight =
+      typeof height === "number" && height > 0 ? Math.min(Math.max(height, 80), 420) : 152;
     return { height: `${spotifyHeight}px` };
   }
 
@@ -62,14 +58,15 @@ interface LinkPreviewCardProps {
   readonly allowExternalResources: boolean;
 }
 
-function EmbedCard({ embed, allowExternalResources }: Readonly<{ embed: LinkEmbed; allowExternalResources: boolean }>) {
+function EmbedCard({
+  embed,
+  allowExternalResources,
+}: Readonly<{ embed: LinkEmbed; allowExternalResources: boolean }>) {
   const [videoConsented, setVideoConsented] = useState(false);
 
   const handleConsent = useCallback(() => setVideoConsented(true), []);
 
-  const colorHex = embed.color != null
-    ? `#${embed.color.toString(16).padStart(6, "0")}`
-    : undefined;
+  const colorHex = embed.color != null ? `#${embed.color.toString(16).padStart(6, "0")}` : undefined;
 
   const imageSrc = previewSrc(embed.image, allowExternalResources);
   const thumbSrc = previewSrc(embed.thumbnail, allowExternalResources);
@@ -80,12 +77,10 @@ function EmbedCard({ embed, allowExternalResources }: Readonly<{ embed: LinkEmbe
   return (
     <div
       className={styles.embed}
-      style={colorHex ? { "--embed-color": colorHex } as React.CSSProperties : undefined}
+      style={colorHex ? ({ "--embed-color": colorHex } as React.CSSProperties) : undefined}
     >
       <div className={styles.embedBody}>
-        {embed.site_name && (
-          <span className={styles.siteName}>{embed.site_name}</span>
-        )}
+        {embed.site_name && <span className={styles.siteName}>{embed.site_name}</span>}
         {embed.author?.name && (
           <span className={styles.author}>
             {embed.author.url ? (
@@ -103,25 +98,13 @@ function EmbedCard({ embed, allowExternalResources }: Readonly<{ embed: LinkEmbe
           </span>
         )}
         {embed.title && (
-          <a
-            className={styles.title}
-            href={embed.url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a className={styles.title} href={embed.url} target="_blank" rel="noopener noreferrer">
             {embed.title}
           </a>
         )}
-        {embed.description && (
-          <p className={styles.description}>{embed.description}</p>
-        )}
+        {embed.description && <p className={styles.description}>{embed.description}</p>}
         {hasLargeImage && imageSrc && (
-          <img
-            className={styles.largeImage}
-            src={imageSrc}
-            alt={embed.title ?? ""}
-            loading="lazy"
-          />
+          <img className={styles.largeImage} src={imageSrc} alt={embed.title ?? ""} loading="lazy" />
         )}
         {hasVideo && (
           <VideoEmbed
@@ -132,21 +115,11 @@ function EmbedCard({ embed, allowExternalResources }: Readonly<{ embed: LinkEmbe
           />
         )}
         {!hasVideo && !hasLargeImage && thumbSrc && !showThumbnailOnSide && (
-          <img
-            className={styles.largeImage}
-            src={thumbSrc}
-            alt={embed.title ?? ""}
-            loading="lazy"
-          />
+          <img className={styles.largeImage} src={thumbSrc} alt={embed.title ?? ""} loading="lazy" />
         )}
       </div>
       {showThumbnailOnSide && thumbSrc && (
-        <img
-          className={styles.thumbnail}
-          src={thumbSrc}
-          alt=""
-          loading="lazy"
-        />
+        <img className={styles.thumbnail} src={thumbSrc} alt="" loading="lazy" />
       )}
     </div>
   );
@@ -185,7 +158,10 @@ function VideoEmbed({
   if (!consented) {
     const posterSrc = previewSrc(embed.thumbnail, allowExternalResources);
     return (
-      <div className={`${styles.videoContainer} ${!spotify ? styles.videoContainerDefault : ""}`} style={containerStyle}>
+      <div
+        className={`${styles.videoContainer} ${!spotify ? styles.videoContainerDefault : ""}`}
+        style={containerStyle}
+      >
         {posterSrc && (
           <img
             src={posterSrc}
@@ -193,7 +169,12 @@ function VideoEmbed({
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
         )}
-        <button type="button" className={styles.videoOverlay} onClick={onConsent} aria-label={t("linkPreview.playVideo")}>
+        <button
+          type="button"
+          className={styles.videoOverlay}
+          onClick={onConsent}
+          aria-label={t("linkPreview.playVideo")}
+        >
           <span className={styles.playButton}>
             <span className={styles.playTriangle} />
           </span>
@@ -203,7 +184,10 @@ function VideoEmbed({
   }
 
   return (
-    <div className={`${styles.videoContainer} ${!spotify ? styles.videoContainerDefault : ""}`} style={containerStyle}>
+    <div
+      className={`${styles.videoContainer} ${!spotify ? styles.videoContainerDefault : ""}`}
+      style={containerStyle}
+    >
       <iframe
         className={styles.videoIframe}
         src={embed.video.url}
@@ -224,11 +208,7 @@ export default memo(function LinkPreviewCard({ embeds, allowExternalResources }:
   return (
     <div className={styles.embedContainer}>
       {embeds.map((embed) => (
-        <EmbedCard
-          key={embed.url}
-          embed={embed}
-          allowExternalResources={allowExternalResources}
-        />
+        <EmbedCard key={embed.url} embed={embed} allowExternalResources={allowExternalResources} />
       ))}
     </div>
   );

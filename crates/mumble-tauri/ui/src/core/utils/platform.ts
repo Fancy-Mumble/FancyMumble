@@ -135,8 +135,7 @@ export function detectBackdropFilterSupport(): void {
         // WebKitGTK identifies itself as "AppleWebKit" in the UA but
         // without "Chrome" (Chromium-based browsers include "Chrome").
         const ua = navigator.userAgent;
-        const isWebKitGTK =
-          /Linux/.test(ua) && /AppleWebKit/.test(ua) && !/Chrome/.test(ua);
+        const isWebKitGTK = /Linux/.test(ua) && /AppleWebKit/.test(ua) && !/Chrome/.test(ua);
 
         if (isWebKitGTK) {
           document.documentElement.setAttribute("data-no-backdrop-blur", "");

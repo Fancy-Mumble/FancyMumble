@@ -98,12 +98,7 @@ export default function MobileBottomSheet({
 
   return (
     <div className={styles.overlay}>
-      <button
-        className={styles.backdropBtn}
-        onClick={dismiss}
-        aria-label={ariaLabel}
-        type="button"
-      />
+      <button className={styles.backdropBtn} onClick={dismiss} aria-label={ariaLabel} type="button" />
       <div ref={sheetRef} className={styles.sheet}>
         <div className={styles.handle}>
           <div className={styles.handleBar} />

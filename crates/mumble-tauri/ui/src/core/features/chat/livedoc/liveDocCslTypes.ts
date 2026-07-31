@@ -100,9 +100,7 @@ export function sourceLabel(item: CslItem): string {
 export function parseAuthors(input: string): CslName[] {
   const trimmed = input.trim();
   if (!trimmed) return [];
-  const parts = trimmed.includes(";")
-    ? trimmed.split(";")
-    : trimmed.split(/\s+and\s+/i);
+  const parts = trimmed.includes(";") ? trimmed.split(";") : trimmed.split(/\s+and\s+/i);
   const names: CslName[] = [];
   for (const raw of parts) {
     const p = raw.trim();

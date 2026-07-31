@@ -1,11 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import type {
-  AudioSettings,
-  DenoiserParamSpec,
-  NoiseSuppressionAlgorithm,
-} from "@core/types";
+import type { AudioSettings, DenoiserParamSpec, NoiseSuppressionAlgorithm } from "@core/types";
 import { SliderField } from "./SharedControls";
 import styles from "./SettingsPage.module.css";
 
@@ -51,9 +47,7 @@ export function DenoiserAdvancedControls({
   return (
     <div className={styles.field}>
       <span className={styles.fieldLabel}>{t("denoiserAdvanced.sectionLabel")}</span>
-      <p className={styles.fieldHint}>
-        {t("denoiserAdvanced.hint")}
-      </p>
+      <p className={styles.fieldHint}>{t("denoiserAdvanced.hint")}</p>
       {specs.map((spec) => {
         const value = params[spec.id] ?? spec.default;
         const label = spec.unit ? `${spec.label} (${spec.unit})` : spec.label;

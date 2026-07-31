@@ -22,13 +22,8 @@ export const ACCOUNT_MIN_FANCY_VERSION = fancyVersionEncode(0, 4, 1);
  * false for legacy (non-Fancy) Mumble servers - which would silently drop
  * the messages - and Fancy servers older than 0.4.1.
  */
-export function isAccountSettingsSupported(
-  serverFancyVersion: number | null | undefined,
-): boolean {
-  return (
-    serverFancyVersion != null &&
-    serverFancyVersion >= ACCOUNT_MIN_FANCY_VERSION
-  );
+export function isAccountSettingsSupported(serverFancyVersion: number | null | undefined): boolean {
+  return serverFancyVersion != null && serverFancyVersion >= ACCOUNT_MIN_FANCY_VERSION;
 }
 
 interface TotpEnrollment {
@@ -83,10 +78,7 @@ export const useAccountStore = create<AccountStoreState>((set) => ({
       if (ack.action === ACCOUNT_ACTION_IDS.totp_begin && ack.totp_secret) {
         patch.totpEnroll = { secret: ack.totp_secret, uri: ack.totp_uri ?? "" };
       }
-      if (
-        ack.action === ACCOUNT_ACTION_IDS.totp_verify ||
-        ack.action === ACCOUNT_ACTION_IDS.totp_disable
-      ) {
+      if (ack.action === ACCOUNT_ACTION_IDS.totp_verify || ack.action === ACCOUNT_ACTION_IDS.totp_disable) {
         patch.totpEnroll = null;
       }
     } else {

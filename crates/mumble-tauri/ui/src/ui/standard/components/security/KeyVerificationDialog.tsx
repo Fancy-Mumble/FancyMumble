@@ -34,10 +34,14 @@ function trustStatusClass(level: KeyTrustLevel): string {
 
 function trustStatusText(level: KeyTrustLevel, t: (key: string) => string): string {
   switch (level) {
-    case "ManuallyVerified": return t("keyVerification.trustManuallyVerified");
-    case "Verified": return t("keyVerification.trustVerified");
-    case "Unverified": return t("keyVerification.trustUnverified");
-    case "Disputed": return t("keyVerification.trustDisputed");
+    case "ManuallyVerified":
+      return t("keyVerification.trustManuallyVerified");
+    case "Verified":
+      return t("keyVerification.trustVerified");
+    case "Unverified":
+      return t("keyVerification.trustUnverified");
+    case "Disputed":
+      return t("keyVerification.trustDisputed");
   }
 }
 
@@ -75,11 +79,7 @@ function FingerprintDisplay({
           {(showFull ? fingerprints.words : fingerprints.words.slice(0, SHORT_COUNT)).join(" ")}
         </div>
       )}
-      {tab === "hex" && (
-        <div className={styles.hexFingerprint}>
-          {fingerprints.hex}
-        </div>
-      )}
+      {tab === "hex" && <div className={styles.hexFingerprint}>{fingerprints.hex}</div>}
       {!showFull && tab !== "hex" && (
         <button className={styles.showFullBtn} onClick={onShowFull}>
           {t("keyVerification.showFullFingerprint")}
@@ -146,7 +146,12 @@ export default function KeyVerificationDialog({
 
   return (
     <Modal onClose={onClose} closeOnOverlayClick={false} zIndex={200} overlayClassName={styles.overlayBlur}>
-      <div className={styles.dialog} role="dialog" aria-modal="true" aria-label={t("keyVerification.ariaLabel")}>
+      <div
+        className={styles.dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("keyVerification.ariaLabel")}
+      >
         <div className={styles.header}>
           <h3 className={styles.title}>{t("keyVerification.title")}</h3>
           <button className={styles.closeBtn} onClick={onClose} aria-label={t("common:actions.close")}>
@@ -165,7 +170,9 @@ export default function KeyVerificationDialog({
           </div>
           <div className={styles.infoRow}>
             <span className={styles.infoLabel}>{t("keyVerification.distributorLabel")}</span>
-            <span>{distributorName} ({distributorHash.slice(0, 8)}...)</span>
+            <span>
+              {distributorName} ({distributorHash.slice(0, 8)}...)
+            </span>
           </div>
 
           {/* Fingerprint tabs */}
@@ -173,15 +180,21 @@ export default function KeyVerificationDialog({
             <button
               className={`${styles.tab} ${tab === "emoji" ? styles.tabActive : ""}`}
               onClick={() => setTab("emoji")}
-            >{t("keyVerification.tabEmoji")}</button>
+            >
+              {t("keyVerification.tabEmoji")}
+            </button>
             <button
               className={`${styles.tab} ${tab === "words" ? styles.tabActive : ""}`}
               onClick={() => setTab("words")}
-            >{t("keyVerification.tabWords")}</button>
+            >
+              {t("keyVerification.tabWords")}
+            </button>
             <button
               className={`${styles.tab} ${tab === "hex" ? styles.tabActive : ""}`}
               onClick={() => setTab("hex")}
-            >{t("keyVerification.tabHex")}</button>
+            >
+              {t("keyVerification.tabHex")}
+            </button>
           </div>
 
           <FingerprintDisplay
@@ -191,9 +204,7 @@ export default function KeyVerificationDialog({
             onShowFull={handleShowFull}
           />
 
-          <p className={styles.instructions}>
-            {t("keyVerification.instructions")}
-          </p>
+          <p className={styles.instructions}>{t("keyVerification.instructions")}</p>
 
           {/* Current trust status */}
           <div className={`${styles.trustStatus} ${trustStatusClass(trustLevel)}`}>

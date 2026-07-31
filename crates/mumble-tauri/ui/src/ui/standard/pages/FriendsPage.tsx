@@ -106,7 +106,9 @@ export default function FriendsPage() {
       if (!cancelled) setFriends(list);
     };
     void load();
-    const onChange = () => { void load(); };
+    const onChange = () => {
+      void load();
+    };
     globalThis.addEventListener(FRIENDS_CHANGED_EVENT, onChange);
     return () => {
       cancelled = true;
@@ -135,7 +137,9 @@ export default function FriendsPage() {
       if (!cancelled) setOnlineMap(next);
     };
     void refresh();
-    const handle = globalThis.setInterval(() => { void refresh(); }, ONLINE_REFRESH_MS);
+    const handle = globalThis.setInterval(() => {
+      void refresh();
+    }, ONLINE_REFRESH_MS);
     return () => {
       cancelled = true;
       globalThis.clearInterval(handle);
@@ -181,54 +185,62 @@ export default function FriendsPage() {
       }
     };
     void run();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [friends, onlineMap, users, activeServerId, sessions]);
 
   /** Resolve how to reach `friend`: the connected session for their server (if
    *  any), their live online match, and whether we can open the chat now or must
    *  first connect to their server. */
-  const resolveFriend = useCallback((friend: Friend) => {
-    const online: FriendsMatch | undefined = onlineMap[friend.id];
-    let sessionId: string | undefined = online?.serverId;
-    if (sessionId == null && friend.serverHost != null) {
-      sessionId = sessions.find(
-        (s) =>
-          s.status === "connected" &&
-          s.host === friend.serverHost &&
-          s.port === friend.serverPort &&
-          s.username === friend.serverUsername,
-      )?.id;
-    }
-    // We can open a chat when connected to their server and we either see them
-    // live (classic / upgrade) or know their registered uid - the persisted E2E
-    // channel can be opened even while they're offline.
-    const canOpen = sessionId != null && (online != null || friend.userId != null);
-    // Otherwise, if we know how to reach their server, we can offer to connect.
-    const canConnect = sessionId == null && friend.serverHost != null;
-    return { online, sessionId, canOpen, canConnect };
-  }, [onlineMap, sessions]);
+  const resolveFriend = useCallback(
+    (friend: Friend) => {
+      const online: FriendsMatch | undefined = onlineMap[friend.id];
+      let sessionId: string | undefined = online?.serverId;
+      if (sessionId == null && friend.serverHost != null) {
+        sessionId = sessions.find(
+          (s) =>
+            s.status === "connected" &&
+            s.host === friend.serverHost &&
+            s.port === friend.serverPort &&
+            s.username === friend.serverUsername,
+        )?.id;
+      }
+      // We can open a chat when connected to their server and we either see them
+      // live (classic / upgrade) or know their registered uid - the persisted E2E
+      // channel can be opened even while they're offline.
+      const canOpen = sessionId != null && (online != null || friend.userId != null);
+      // Otherwise, if we know how to reach their server, we can offer to connect.
+      const canConnect = sessionId == null && friend.serverHost != null;
+      return { online, sessionId, canOpen, canConnect };
+    },
+    [onlineMap, sessions],
+  );
 
   /** Open `friend`'s chat when their server is connected. Returns false when we
    *  aren't connected to it (the caller then offers to connect). */
-  const openFriendChat = useCallback(async (friend: Friend): Promise<boolean> => {
-    const { online, sessionId } = resolveFriend(friend);
-    if (sessionId == null) return false;
-    if (activeServerId !== sessionId) await switchServer(sessionId);
-    if (online != null) {
-      // Online: open the DM; a registered pair upgrades to the E2E channel.
-      await selectDmUser(online.userSession);
-      return true;
-    }
-    if (friend.userId != null) {
-      // Offline: the friend chat is a persisted, end-to-end-encrypted (signal)
-      // channel.  The plugin finds-or-creates it and points us at it
-      // (`friends.room`); we can write right away and the server replays the
-      // messages to the friend when they reconnect.
-      requestFriendChannel(friend.userId);
-      return true;
-    }
-    return false;
-  }, [resolveFriend, activeServerId, switchServer, selectDmUser]);
+  const openFriendChat = useCallback(
+    async (friend: Friend): Promise<boolean> => {
+      const { online, sessionId } = resolveFriend(friend);
+      if (sessionId == null) return false;
+      if (activeServerId !== sessionId) await switchServer(sessionId);
+      if (online != null) {
+        // Online: open the DM; a registered pair upgrades to the E2E channel.
+        await selectDmUser(online.userSession);
+        return true;
+      }
+      if (friend.userId != null) {
+        // Offline: the friend chat is a persisted, end-to-end-encrypted (signal)
+        // channel.  The plugin finds-or-creates it and points us at it
+        // (`friends.room`); we can write right away and the server replays the
+        // messages to the friend when they reconnect.
+        requestFriendChannel(friend.userId);
+        return true;
+      }
+      return false;
+    },
+    [resolveFriend, activeServerId, switchServer, selectDmUser],
+  );
 
   const handleClickFriend = useCallback(
     async (friend: Friend) => {
@@ -250,36 +262,42 @@ export default function FriendsPage() {
 
   /** Connect to `friend`'s server (reusing a saved password when we have one),
    *  then auto-open the chat once the session comes up. */
-  const handleConnectToFriendServer = useCallback(async (friend: Friend) => {
-    if (friend.serverHost == null || friend.serverPort == null) return;
-    setPendingConnect(null);
-    setPendingOpenId(friend.id);
-    try {
-      const saved = (await getSavedServers()).find(
-        (s) =>
-          s.host === friend.serverHost &&
-          s.port === friend.serverPort &&
-          s.username === friend.serverUsername,
-      );
-      const pw = saved ? await getServerPassword(saved.id) : null;
-      await connect(
-        friend.serverHost,
-        friend.serverPort,
-        friend.serverUsername ?? "",
-        friend.serverCertLabel ?? null,
-        pw,
-      );
-    } catch (e) {
-      console.error("connect to friend server failed", e);
-      setPendingOpenId(null);
-    }
-  }, [connect]);
+  const handleConnectToFriendServer = useCallback(
+    async (friend: Friend) => {
+      if (friend.serverHost == null || friend.serverPort == null) return;
+      setPendingConnect(null);
+      setPendingOpenId(friend.id);
+      try {
+        const saved = (await getSavedServers()).find(
+          (s) =>
+            s.host === friend.serverHost &&
+            s.port === friend.serverPort &&
+            s.username === friend.serverUsername,
+        );
+        const pw = saved ? await getServerPassword(saved.id) : null;
+        await connect(
+          friend.serverHost,
+          friend.serverPort,
+          friend.serverUsername ?? "",
+          friend.serverCertLabel ?? null,
+          pw,
+        );
+      } catch (e) {
+        console.error("connect to friend server failed", e);
+        setPendingOpenId(null);
+      }
+    },
+    [connect],
+  );
 
   // Once a pending friend's server is connected, open the chat + clear the flag.
   useEffect(() => {
     if (pendingOpenId == null) return;
     const friend = friends.find((f) => f.id === pendingOpenId);
-    if (!friend) { setPendingOpenId(null); return; }
+    if (!friend) {
+      setPendingOpenId(null);
+      return;
+    }
     if (!resolveFriend(friend).canOpen) return; // still connecting
     void openFriendChat(friend).finally(() => setPendingOpenId(null));
   }, [pendingOpenId, friends, sessions, onlineMap, resolveFriend, openFriendChat]);
@@ -291,8 +309,7 @@ export default function FriendsPage() {
     () => users.find((u) => u.session === ownSession)?.user_id ?? null,
     [users, ownSession],
   );
-  const canSelfChat =
-    activeServerId != null && ownUserId != null && pluginInfos.has(FRIENDS_PLUGIN);
+  const canSelfChat = activeServerId != null && ownUserId != null && pluginInfos.has(FRIENDS_PLUGIN);
 
   // Whether a friend chat is open in the embedded ChatView: either a classic DM
   // (selectedDmUser) or - after the upgrade - the friend's `__dm:` channel (the
@@ -324,7 +341,7 @@ export default function FriendsPage() {
   const roleColors = useMemo(() => buildRoleColorMap(aclGroups), [aclGroups]);
   const roleGroups = useMemo(() => buildRoleGroupsMap(aclGroups), [aclGroups]);
 
-  const ownUser = ownSession != null ? users.find((u) => u.session === ownSession) ?? null : null;
+  const ownUser = ownSession != null ? (users.find((u) => u.session === ownSession) ?? null) : null;
   const ownChannelName = useMemo(
     () => (ownUser ? channels.find((c) => c.id === ownUser.channel_id)?.name : undefined),
     [ownUser, channels],
@@ -347,10 +364,7 @@ export default function FriendsPage() {
     return f;
   }, [canSelfChat, activeServerId, ownUser, sessions]);
 
-  const allFriends = useMemo(
-    () => (selfFriend ? [selfFriend, ...friends] : friends),
-    [selfFriend, friends],
-  );
+  const allFriends = useMemo(() => (selfFriend ? [selfFriend, ...friends] : friends), [selfFriend, friends]);
 
   const filteredFriends = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -358,9 +372,7 @@ export default function FriendsPage() {
     // Search matches the friend's name OR the server they're on, so typing a
     // server name narrows to that server's chats.
     return allFriends.filter(
-      (f) =>
-        f.userName.toLowerCase().includes(q) ||
-        (f.serverLabel ?? "").toLowerCase().includes(q),
+      (f) => f.userName.toLowerCase().includes(q) || (f.serverLabel ?? "").toLowerCase().includes(q),
     );
   }, [allFriends, searchQuery]);
 
@@ -410,7 +422,9 @@ export default function FriendsPage() {
                   placeholder={tSidebar("channelSidebar.searchPlaceholder")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Escape") setSearchQuery(""); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setSearchQuery("");
+                  }}
                   trailing={
                     searchQuery ? (
                       <button
@@ -437,9 +451,7 @@ export default function FriendsPage() {
               </button>
             </div>
             <div className={styles.list}>
-              {allFriends.length === 0 && (
-                <div className={styles.empty}>{t("friendsPage.empty")}</div>
-              )}
+              {allFriends.length === 0 && <div className={styles.empty}>{t("friendsPage.empty")}</div>}
               {allFriends.length > 0 && filteredFriends.length === 0 && (
                 <div className={styles.empty}>{t("friendsPage.noMatches")}</div>
               )}
@@ -457,8 +469,9 @@ export default function FriendsPage() {
                     const res = isSelf ? null : resolveFriend(f);
                     const isActive = isSelf
                       ? selfChatActive
-                      : match != null && selectedDmUser === match.userSession
-                        && activeServerId === match.serverId;
+                      : match != null &&
+                        selectedDmUser === match.userSession &&
+                        activeServerId === match.serverId;
                     // Clickable when we can open the chat (online, or offline on a
                     // connected server) or at least offer to connect to the server.
                     const clickable = isSelf || res!.canOpen || res!.canConnect;
@@ -469,8 +482,16 @@ export default function FriendsPage() {
                         online={isSelf || match != null}
                         clickable={clickable}
                         isActive={isActive}
-                        onClick={() => { void handleClickFriend(f); }}
-                        onRemove={isSelf ? undefined : () => { void handleRemove(f); }}
+                        onClick={() => {
+                          void handleClickFriend(f);
+                        }}
+                        onRemove={
+                          isSelf
+                            ? undefined
+                            : () => {
+                                void handleRemove(f);
+                              }
+                        }
                         removeTitle={t("friendsPage.remove")}
                         offlineHint={t("friendsPage.offline")}
                       />
@@ -481,18 +502,18 @@ export default function FriendsPage() {
             </div>
             {ownUser && (
               <div className={sidebarStyles.selfUserSection}>
-                <UserListItem
-                  user={ownUser}
-                  isSelf
-                  channelName={ownChannelName}
-                />
+                <UserListItem user={ownUser} isSelf channelName={ownChannelName} />
                 <div className={`${sidebarStyles.selfVoiceActions} ${sidebarStyles.desktopOnly}`}>
                   <button
                     type="button"
                     className={`${sidebarStyles.voiceToggle} ${voiceState === "active" ? sidebarStyles.voiceActive : sidebarStyles.voiceMuted}`}
                     onClick={toggleMute}
-                    title={voiceState === "active" ? tChat("callControls.mute") : tChat("callControls.unmute")}
-                    aria-label={voiceState === "active" ? tChat("callControls.mute") : tChat("callControls.unmute")}
+                    title={
+                      voiceState === "active" ? tChat("callControls.mute") : tChat("callControls.unmute")
+                    }
+                    aria-label={
+                      voiceState === "active" ? tChat("callControls.mute") : tChat("callControls.unmute")
+                    }
                   >
                     {voiceState === "active" ? (
                       <MicIcon width={18} height={18} />
@@ -504,8 +525,16 @@ export default function FriendsPage() {
                     type="button"
                     className={`${sidebarStyles.voiceToggle} ${voiceState === "inactive" ? sidebarStyles.voiceMuted : sidebarStyles.voiceActive}`}
                     onClick={toggleDeafen}
-                    title={voiceState === "inactive" ? tChat("callControls.undeafen") : tChat("callControls.deafen")}
-                    aria-label={voiceState === "inactive" ? tChat("callControls.undeafen") : tChat("callControls.deafen")}
+                    title={
+                      voiceState === "inactive"
+                        ? tChat("callControls.undeafen")
+                        : tChat("callControls.deafen")
+                    }
+                    aria-label={
+                      voiceState === "inactive"
+                        ? tChat("callControls.undeafen")
+                        : tChat("callControls.deafen")
+                    }
                   >
                     {voiceState === "inactive" ? (
                       <HeadphonesOffIcon width={18} height={18} />
@@ -534,7 +563,9 @@ export default function FriendsPage() {
                     type="button"
                     className={styles.connectButton}
                     data-testid={TID.friendsConnect}
-                    onClick={() => { void handleConnectToFriendServer(pendingConnect); }}
+                    onClick={() => {
+                      void handleConnectToFriendServer(pendingConnect);
+                    }}
                   >
                     {t("friendsPage.connect", { defaultValue: "Connect" })}
                   </button>
@@ -573,7 +604,16 @@ interface FriendRowProps {
   readonly offlineHint: string;
 }
 
-function FriendRow({ friend, online, clickable, isActive, onClick, onRemove, removeTitle, offlineHint }: FriendRowProps) {
+function FriendRow({
+  friend,
+  online,
+  clickable,
+  isActive,
+  onClick,
+  onRemove,
+  removeTitle,
+  offlineHint,
+}: FriendRowProps) {
   const interactive = clickable;
   // Blob object URL (downscaled when oversized) instead of a data: URL
   // so a large saved avatar doesn't bloat the DOM (see utils/imageBlobs).
@@ -630,7 +670,10 @@ function FriendRow({ friend, online, clickable, isActive, onClick, onRemove, rem
         <button
           type="button"
           className={styles.removeBtn}
-          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
           title={removeTitle}
           aria-label={removeTitle}
         >

@@ -1,0 +1,339 @@
+/* Design sheet: overlays. Split from AuroraApp.module.css. */
+
+.overlayStage {
+  display: grid;
+  min-height: 370px;
+  place-items: center;
+  border-radius: 12px;
+  background: rgb(4 7 10 / 52%);
+  backdrop-filter: blur(16px) saturate(105%);
+}
+
+.dialog {
+  position: relative;
+  width: min(90%, 370px);
+  padding: 24px;
+  text-align: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  border-color: rgb(255 255 255 / 9%);
+  background: rgb(21 27 34 / 62%);
+  box-shadow: 0 16px 44px rgb(0 0 0 / 13%);
+  backdrop-filter: blur(32px) saturate(108%);
+}
+
+.dialogClose {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  color: var(--muted);
+  border: 0;
+  background: transparent;
+}
+
+.dialogClose svg {
+  width: 14px;
+}
+
+.dialogIcon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto;
+  color: #ff8e84;
+  border-radius: 13px;
+  background: rgb(255 120 106 / 10%);
+}
+
+.dialogIcon svg {
+  width: 20px;
+}
+
+.dialog h3 {
+  margin: 16px 0 7px;
+  font-size: 16px;
+}
+
+.dialog p {
+  margin: 0 auto;
+  max-width: 280px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.dialog > div {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 21px;
+}
+
+.commandPalette {
+  max-width: 600px;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  border-color: rgb(255 255 255 / 9%);
+  background: rgb(21 27 34 / 62%);
+  box-shadow: 0 16px 44px rgb(0 0 0 / 13%);
+  backdrop-filter: blur(32px) saturate(108%);
+}
+
+.commandPalette > div {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  height: 54px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.commandPalette > div svg {
+  width: 17px;
+  color: var(--muted);
+}
+
+.commandPalette input {
+  flex: 1;
+  color: var(--text);
+  border: 0;
+  outline: none;
+  background: transparent;
+}
+
+.commandPalette kbd {
+  color: #737b88;
+  font: 8px ui-monospace, monospace;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 3px 5px;
+}
+
+.commandPalette > small {
+  display: block;
+  padding: 13px 14px 6px;
+  color: #656d7a;
+  font-size: 7px;
+}
+
+.commandPalette > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: calc(100% - 12px);
+  min-height: 38px;
+  margin: 0 6px;
+  padding: 0 9px;
+  color: #b4bac4;
+  font-size: 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.commandPalette > button:first-of-type {
+  color: var(--text);
+  background: rgb(255 255 255 / 6%);
+}
+
+.commandPalette > button span {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+
+.commandPalette > button svg {
+  width: 14px;
+}
+
+.commandPalette footer {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 7px;
+  padding: 9px 12px;
+  color: #6a7280;
+  font-size: 7px;
+  border-top: 1px solid var(--line);
+}
+
+.commandPalette footer strong {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-left: auto;
+  color: #9299a6;
+}
+
+.commandPalette footer svg {
+  width: 11px;
+}
+
+/* Overlay typography follows one compact, predictable scale. */
+.userPopover {
+  border: 1px solid var(--line-strong);
+  border-radius: 13px;
+  border-color: rgb(255 255 255 / 9%);
+  background: rgb(21 27 34 / 62%);
+  box-shadow: 0 16px 44px rgb(0 0 0 / 13%);
+  backdrop-filter: blur(32px) saturate(108%);
+  max-width: 360px;
+  padding: 16px;
+}
+
+.userPopover > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.userPopover > div:first-child > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.userPopover strong {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.userPopover strong svg {
+  color: #79bdff;
+  width: 14px;
+  height: 14px;
+}
+
+.userPopover small {
+  color: var(--muted);
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.userPopover p {
+  color: #a3a9b4;
+  margin: 12px 0 14px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.userPopover > div:last-child {
+  display: flex;
+  gap: 8px;
+}
+
+.userPopoverPrimaryButton.userPopoverPrimaryButton {
+  flex: 1;
+  min-height: 38px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.mobileSheet {
+  border: 1px solid var(--line-strong);
+  border-radius: 18px 18px 10px 10px;
+  border-color: rgb(255 255 255 / 9%);
+  background: rgb(21 27 34 / 62%);
+  box-shadow: 0 16px 44px rgb(0 0 0 / 13%);
+  backdrop-filter: blur(32px) saturate(108%);
+  max-width: 380px;
+  padding: 8px 14px 14px;
+}
+
+.mobileSheet > i {
+  display: block;
+  width: 30px;
+  height: 3px;
+  margin: 0 auto 12px;
+  border-radius: 3px;
+  background: #4a515d;
+  margin-bottom: 14px;
+}
+
+.mobileSheet header {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  gap: 11px;
+  padding: 4px 8px 14px;
+}
+
+.mobileSheet header span {
+  display: flex;
+  flex-direction: column;
+}
+
+.mobileSheet header strong {
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.mobileSheet header small {
+  color: var(--muted);
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.mobileSheet > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  color: #b8bec8;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  min-height: 42px;
+  padding: 0 10px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.mobileSheet > button span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobileSheet > button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.mobileSheet > button:hover {
+  background: rgb(255 255 255 / 5%);
+}
+
+.mobileSheetMenuDanger.mobileSheetMenuDanger {
+  color: #ff8d83;
+}
+
+.userPopoverIconButton.userPopoverIconButton {
+  min-height: 38px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.userPopoverPrimaryButton.userPopoverPrimaryButton svg {
+  width: 16px;
+  height: 16px;
+}
+
+.userPopoverAvatar.userPopoverAvatar {
+  width: 42px;
+  height: 42px;
+  font-size: 11px;
+}
+
+.mobileSheetAvatar.mobileSheetAvatar {
+  width: 42px;
+  height: 42px;
+  font-size: 11px;
+}

@@ -194,8 +194,9 @@ export function parseStatsReports(reports: Iterable<StatsDict>, timestampMs: num
 function extractSelectedPair(all: StatsDict[], byId: Map<string, StatsDict>, sample: StatsSample): void {
   const transport = all.find((r) => r.type === "transport" && str(r.selectedCandidatePairId));
   const pairId = transport ? str(transport.selectedCandidatePairId) : null;
-  const pair = (pairId ? byId.get(pairId) : undefined)
-    ?? all.find((r) => r.type === "candidate-pair" && r.state === "succeeded" && r.nominated === true);
+  const pair =
+    (pairId ? byId.get(pairId) : undefined) ??
+    all.find((r) => r.type === "candidate-pair" && r.state === "succeeded" && r.nominated === true);
   if (!pair) return;
   const rtt = num(pair.currentRoundTripTime);
   if (rtt !== null) sample.rttMs = rtt * 1000;
@@ -412,7 +413,12 @@ interface StreamStatsPanelProps {
   readonly onClose: () => void;
 }
 
-export default function StreamStatsPanel({ sampler, videoRef, contentByMid, onClose }: StreamStatsPanelProps) {
+export default function StreamStatsPanel({
+  sampler,
+  videoRef,
+  contentByMid,
+  onClose,
+}: StreamStatsPanelProps) {
   const { t } = useTranslation("chat");
   const [data, setData] = useState<PanelData | null>(null);
   const prevSampleRef = useRef<StatsSample | null>(null);
@@ -455,7 +461,9 @@ export default function StreamStatsPanel({ sampler, videoRef, contentByMid, onCl
 
   useEffect(() => {
     let cancelled = false;
-    const run = () => { if (!cancelled) void tick(); };
+    const run = () => {
+      if (!cancelled) void tick();
+    };
     run();
     const id = setInterval(run, 1000);
     return () => {
@@ -559,14 +567,14 @@ export default function StreamStatsPanel({ sampler, videoRef, contentByMid, onCl
       : sample.videos;
     videos.forEach((v, i) => {
       const content = v.mid != null ? contentByMid?.[v.mid] : undefined;
-      const heading = content === "camera"
-        ? t("screenShare.stats.trackCamera")
-        : content === "screen"
-          ? t("screenShare.stats.trackScreen")
-          : t("screenShare.stats.trackVideo", { n: i + 1 });
-      const res = v.frameWidth && v.frameHeight
-        ? `${v.frameWidth}×${v.frameHeight}@${fmt(v.framesPerSecond)}`
-        : "–";
+      const heading =
+        content === "camera"
+          ? t("screenShare.stats.trackCamera")
+          : content === "screen"
+            ? t("screenShare.stats.trackScreen")
+            : t("screenShare.stats.trackVideo", { n: i + 1 });
+      const res =
+        v.frameWidth && v.frameHeight ? `${v.frameWidth}×${v.frameHeight}@${fmt(v.framesPerSecond)}` : "–";
       rows.push(
         { key: `t${i}-h`, label: heading, value: "", heading: true },
         {
@@ -619,9 +627,11 @@ export default function StreamStatsPanel({ sampler, videoRef, contentByMid, onCl
       </div>
       {data ? (
         <div className={styles.grid}>
-          {rows.map((row) => (
+          {rows.map((row) =>
             row.heading ? (
-              <div key={row.key} className={styles.trackHeading}>{row.label}</div>
+              <div key={row.key} className={styles.trackHeading}>
+                {row.label}
+              </div>
             ) : (
               <div key={row.key} className={styles.row} data-testid={row.testid}>
                 <span className={styles.label}>{row.label}</span>
@@ -630,8 +640,8 @@ export default function StreamStatsPanel({ sampler, videoRef, contentByMid, onCl
                   <span className={styles.valueText}>{row.value}</span>
                 </span>
               </div>
-            )
-          ))}
+            ),
+          )}
         </div>
       ) : (
         <div className={styles.waiting}>{t("screenShare.stats.waiting")}</div>

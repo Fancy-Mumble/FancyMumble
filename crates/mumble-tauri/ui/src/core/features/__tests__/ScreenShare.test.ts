@@ -320,13 +320,10 @@ describe("Screen share signaling", () => {
     // onto the receiver tab.  ChatView computes `isOwnBroadcast` from the
     // hook's `isBroadcasting`, which must now be true ONLY on the tab
     // whose `ownSession` matches `broadcastingOwnSession`.
-    function isOwnBroadcastFor(
-      tabOwnSession: number | null,
-      broadcastingOwnSession: number | null,
-    ): boolean {
-      return broadcastingOwnSession !== null
-        && tabOwnSession !== null
-        && broadcastingOwnSession === tabOwnSession;
+    function isOwnBroadcastFor(tabOwnSession: number | null, broadcastingOwnSession: number | null): boolean {
+      return (
+        broadcastingOwnSession !== null && tabOwnSession !== null && broadcastingOwnSession === tabOwnSession
+      );
     }
 
     it("only the broadcaster tab sees isBroadcasting=true", () => {
@@ -363,8 +360,10 @@ describe("Screen share signaling", () => {
       tabOwnSession: number | null,
       broadcastingOwnSession: number | null,
     ): boolean {
-      return broadcastingOwnSession !== null
-        && (tabOwnSession === null || broadcastingOwnSession !== tabOwnSession);
+      return (
+        broadcastingOwnSession !== null &&
+        (tabOwnSession === null || broadcastingOwnSession !== tabOwnSession)
+      );
     }
 
     it("is false when nobody is broadcasting", () => {

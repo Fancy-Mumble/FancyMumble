@@ -68,7 +68,9 @@ export function SettingsSearch({
       {query.trim() && (
         <div className={styles.results}>
           {results.length === 0 ? (
-            <div className={styles.noResults}>{tStr("search.noResults", { defaultValue: "No matching settings" })}</div>
+            <div className={styles.noResults}>
+              {tStr("search.noResults", { defaultValue: "No matching settings" })}
+            </div>
           ) : (
             results.map((r) => (
               <button key={r.id} type="button" className={styles.resultItem} onClick={() => select(r.id)}>

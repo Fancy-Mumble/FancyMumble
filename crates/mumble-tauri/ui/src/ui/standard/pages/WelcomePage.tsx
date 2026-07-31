@@ -199,7 +199,11 @@ export default function WelcomePage({ onComplete }: Readonly<{ onComplete?: () =
                 <PaletteIcon className={styles.stepIcon} width={18} height={18} />
                 <h2 className={styles.stepTitle}>{t("onboarding.appearance.title")}</h2>
               </div>
-              <div className={styles.themeGrid} role="radiogroup" aria-label={t("onboarding.appearance.title")}>
+              <div
+                className={styles.themeGrid}
+                role="radiogroup"
+                aria-label={t("onboarding.appearance.title")}
+              >
                 {THEMES.map((th) => {
                   const active = th.id === theme;
                   return (

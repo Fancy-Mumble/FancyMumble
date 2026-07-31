@@ -40,10 +40,7 @@ function MentionRow({ user, avatarUrl }: MentionRowProps) {
       {avatarUrl ? (
         <img src={avatarUrl} alt="" className={styles.mentionMemberAvatarImg} />
       ) : (
-        <div
-          className={styles.mentionMemberAvatar}
-          style={{ background: colorFor(user.name) }}
-        >
+        <div className={styles.mentionMemberAvatar} style={{ background: colorFor(user.name) }}>
           {user.name.charAt(0).toUpperCase()}
         </div>
       )}
@@ -61,13 +58,10 @@ interface UserMentionCardProps {
 function UserMentionCard({ session, user, avatarUrl }: UserMentionCardProps) {
   const stats = useUserStats(session, true);
   const liveComment = useUserComment(session, user.comment_size);
-  const parsed = useMemo(
-    () => {
-      const c = user.comment ?? liveComment;
-      return c ? parseComment(c) : null;
-    },
-    [user.comment, liveComment],
-  );
+  const parsed = useMemo(() => {
+    const c = user.comment ?? liveComment;
+    return c ? parseComment(c) : null;
+  }, [user.comment, liveComment]);
   return (
     <ProfilePreviewCard
       profile={parsed?.profile ?? {}}
@@ -91,9 +85,7 @@ interface MemberListProps {
 function MemberList({ title, subtitle, members, avatarBySession }: MemberListProps) {
   const { t } = useTranslation("chat");
   const total = members.length;
-  const displayed = total > MAX_DISPLAYED_MEMBERS
-    ? members.slice(0, MAX_DISPLAYED_MEMBERS)
-    : members;
+  const displayed = total > MAX_DISPLAYED_MEMBERS ? members.slice(0, MAX_DISPLAYED_MEMBERS) : members;
   const overflow = total - displayed.length;
 
   return (
@@ -108,11 +100,7 @@ function MemberList({ title, subtitle, members, avatarBySession }: MemberListPro
       ) : (
         <div className={styles.mentionMemberScroll}>
           {displayed.map((u) => (
-            <MentionRow
-              key={u.session}
-              user={u}
-              avatarUrl={avatarBySession.get(u.session)}
-            />
+            <MentionRow key={u.session} user={u} avatarUrl={avatarBySession.get(u.session)} />
           ))}
           {overflow > 0 && (
             <div className={styles.mentionMemberOverflow}>
@@ -290,13 +278,7 @@ export default function MentionPopover() {
     if (!user) {
       body = <div className={styles.mentionMemberEmpty}>{t("mentionPopover.userOffline")}</div>;
     } else {
-      body = (
-        <UserMentionCard
-          session={session}
-          user={user}
-          avatarUrl={avatarBySession.get(session)}
-        />
-      );
+      body = <UserMentionCard session={session} user={user} avatarUrl={avatarBySession.get(session)} />;
     }
   } else if (state.kind === "role") {
     const members = membersForRole(users, state.target, aclGroups);

@@ -90,9 +90,15 @@ export function generateHarmoniousColors(userColors: string[]): string[] {
 
   const companions: string[] = [];
 
-  companions.push(hslToHex({ h: (avgH + 30) % 360, s: clamp(avgS - 10, 15, 90), l: clamp(avgL - 8, 10, 85) }));
-  companions.push(hslToHex({ h: (avgH + 330) % 360, s: clamp(avgS - 5, 15, 90), l: clamp(avgL + 8, 10, 85) }));
-  companions.push(hslToHex({ h: (avgH + 15) % 360, s: clamp(avgS + 10, 15, 90), l: clamp(avgL - 15, 10, 85) }));
+  companions.push(
+    hslToHex({ h: (avgH + 30) % 360, s: clamp(avgS - 10, 15, 90), l: clamp(avgL - 8, 10, 85) }),
+  );
+  companions.push(
+    hslToHex({ h: (avgH + 330) % 360, s: clamp(avgS - 5, 15, 90), l: clamp(avgL + 8, 10, 85) }),
+  );
+  companions.push(
+    hslToHex({ h: (avgH + 15) % 360, s: clamp(avgS + 10, 15, 90), l: clamp(avgL - 15, 10, 85) }),
+  );
 
   return companions;
 }
@@ -214,10 +220,7 @@ export interface ThemePalette {
  * - Colour 5 becomes a general accent (status highlights, etc.).
  * - Text colour is always contrast-aware against the gradient colours.
  */
-export function resolveThemePalette(
-  userColors: string[],
-  glass = false,
-): ThemePalette {
+export function resolveThemePalette(userColors: string[], glass = false): ThemePalette {
   const alpha = glass ? 0.55 : 1;
   const gradientColors = userColors.slice(0, MAX_GRADIENT_STOPS);
   const extras = userColors.slice(MAX_GRADIENT_STOPS);

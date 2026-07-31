@@ -10,10 +10,7 @@ import { useTranslation } from "react-i18next";
 
 import { useState, useCallback, useMemo } from "react";
 import type { PollPayload } from "@core/features/chat/poll/model";
-import {
-  getLocalVote,
-  getVotes,
-} from "@core/features/chat/poll/model";
+import { getLocalVote, getVotes } from "@core/features/chat/poll/model";
 export {
   getLocalVote,
   getPoll,
@@ -25,7 +22,6 @@ export {
 import styles from "./PollCard.module.css";
 
 // --- Vote store (module-level) ------------------------------------
-
 
 // --- Component ----------------------------------------------------
 
@@ -45,10 +41,7 @@ export default function PollCard({ poll, ownSession, isOwn, onVote }: Readonly<P
 
   const votes = getVotes(poll.id);
   // Use both ownSession matching and the local vote map as fallback.
-  const myVote =
-    ownSession != null
-      ? votes.find((v) => v.voter === ownSession)
-      : undefined;
+  const myVote = ownSession != null ? votes.find((v) => v.voter === ownSession) : undefined;
   const localVote = getLocalVote(poll.id);
   const hasVoted = !!myVote || !!localVote;
   const mySelected = myVote?.selected ?? localVote ?? [];
@@ -75,11 +68,7 @@ export default function PollCard({ poll, ownSession, isOwn, onVote }: Readonly<P
       if (hasVoted) return; // Already voted.
 
       if (poll.multiple) {
-        setPendingSelection((prev) =>
-          prev.includes(idx)
-            ? prev.filter((i) => i !== idx)
-            : [...prev, idx],
-        );
+        setPendingSelection((prev) => (prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]));
       } else {
         // Single-choice: vote immediately.
         onVote(poll.id, [idx]);
@@ -110,14 +99,10 @@ export default function PollCard({ poll, ownSession, isOwn, onVote }: Readonly<P
         {poll.options.map((option, i) => {
           const count = voteCounts[i];
           const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
-          const isSelected = hasVoted
-            ? mySelected.includes(i)
-            : pendingSelection.includes(i);
+          const isSelected = hasVoted ? mySelected.includes(i) : pendingSelection.includes(i);
           // Collect voter names for this option (only after voting).
           const voterNames = hasVoted
-            ? votes
-                .filter((v) => v.selected.includes(i) && v.voterName)
-                .map((v) => v.voterName)
+            ? votes.filter((v) => v.selected.includes(i) && v.voterName).map((v) => v.voterName)
             : [];
 
           return (
@@ -127,30 +112,31 @@ export default function PollCard({ poll, ownSession, isOwn, onVote }: Readonly<P
               onClick={() => handleOptionClick(i)}
               disabled={hasVoted}
             >
-              <div
-                className={styles.fill}
-                style={{ width: hasVoted ? `${pct}%` : "0%" }}
-              />
+              <div className={styles.fill} style={{ width: hasVoted ? `${pct}%` : "0%" }} />
               <span className={styles.optionText}>
                 {poll.multiple && !hasVoted && (
                   <span className={styles.checkbox}>
-                    {isSelected ? <CheckboxIcon width={14} height={14} /> : <SquareIcon width={14} height={14} />}
+                    {isSelected ? (
+                      <CheckboxIcon width={14} height={14} />
+                    ) : (
+                      <SquareIcon width={14} height={14} />
+                    )}
                   </span>
                 )}
                 {!poll.multiple && !hasVoted && (
                   <span className={styles.radio}>
-                    {isSelected ? <CircleDotIcon width={14} height={14} /> : <CircleIcon width={14} height={14} />}
+                    {isSelected ? (
+                      <CircleDotIcon width={14} height={14} />
+                    ) : (
+                      <CircleIcon width={14} height={14} />
+                    )}
                   </span>
                 )}
                 {option}
               </span>
-              {hasVoted && (
-                <span className={styles.optionPct}>{pct}%</span>
-              )}
+              {hasVoted && <span className={styles.optionPct}>{pct}%</span>}
               {hasVoted && voterNames.length > 0 && (
-                <span className={styles.voterNames}>
-                  {voterNames.join(", ")}
-                </span>
+                <span className={styles.voterNames}>{voterNames.join(", ")}</span>
               )}
             </button>
           );

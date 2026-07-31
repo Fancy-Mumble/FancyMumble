@@ -64,9 +64,7 @@ interface SelectedEntry {
 
 /** Build a sorted list of every (ns, key) pair that appears in the source language. */
 function buildKeyIndex(): Array<{ ns: I18nNamespace; key: string; source: string }> {
-  const flat = flattenBundle(
-    BUILT_IN_RESOURCES[SOURCE_LANGUAGE] as Partial<LocaleBundle>,
-  );
+  const flat = flattenBundle(BUILT_IN_RESOURCES[SOURCE_LANGUAGE] as Partial<LocaleBundle>);
   return flat.map(({ ns, key, value }) => ({ ns, key, source: value }));
 }
 
@@ -87,7 +85,9 @@ function getBundleFor(code: string, custom: CustomMap): Partial<LocaleBundle> | 
 export default function TranslationPopoutPage() {
   const [custom, setCustom] = useState<CustomMap>({});
   const [editingCode, setEditingCode] = useState<string>(SOURCE_LANGUAGE);
-  const [bundle, setBundle] = useState<Partial<LocaleBundle>>(BUILT_IN_RESOURCES[SOURCE_LANGUAGE] as Partial<LocaleBundle>);
+  const [bundle, setBundle] = useState<Partial<LocaleBundle>>(
+    BUILT_IN_RESOURCES[SOURCE_LANGUAGE] as Partial<LocaleBundle>,
+  );
   const [dirty, setDirty] = useState(false);
   const [filter, setFilter] = useState("");
   const [nsFilter, setNsFilter] = useState<I18nNamespace | "all">("all");
@@ -97,7 +97,11 @@ export default function TranslationPopoutPage() {
   const [showCloseWarning, setShowCloseWarning] = useState(false);
   const [showDeleteWarning, setShowDeleteWarning] = useState(false);
   const [showOverwriteWarning, setShowOverwriteWarning] = useState(false);
-  type PendingExport = { folder: string; files: Array<{ name: string; content: string }>; conflicts: string[] };
+  type PendingExport = {
+    folder: string;
+    files: Array<{ name: string; content: string }>;
+    conflicts: string[];
+  };
   const pendingExportRef = useRef<PendingExport | null>(null);
   const [previewLinked, setPreviewLinked] = useState(false);
   const savedDisplayCodeRef = useRef<string>(SOURCE_LANGUAGE);
@@ -131,8 +135,12 @@ export default function TranslationPopoutPage() {
       setPickerActive(false);
       void emit("translation-picker:stop");
       flashStatus("ok", `Picked ${ns}.${e.payload.key}`);
-    }).then((u) => { unlisten = u; });
-    return () => { unlisten?.(); };
+    }).then((u) => {
+      unlisten = u;
+    });
+    return () => {
+      unlisten?.();
+    };
   }, []);
 
   // Picker-cancelled (ESC) event: just turn off picker state in the popout.
@@ -140,20 +148,28 @@ export default function TranslationPopoutPage() {
     let unlisten: (() => void) | undefined;
     void listen("translation-picker:cancelled", () => {
       setPickerActive(false);
-    }).then((u) => { unlisten = u; });
-    return () => { unlisten?.(); };
+    }).then((u) => {
+      unlisten = u;
+    });
+    return () => {
+      unlisten?.();
+    };
   }, []);
 
   // Switch the editing target whenever the user selects a different language.
-  const switchEditingLanguage = useCallback((code: string) => {
-    setEditingCode(code);
-    setDirty(false);
-    setSelected(null);
-    const next = isBuiltIn(code)
-      ? (BUILT_IN_RESOURCES[code as keyof typeof BUILT_IN_RESOURCES] as Partial<LocaleBundle>)
-      : (custom[code]?.bundle ?? buildPlaceholderBundle(BUILT_IN_RESOURCES[SOURCE_LANGUAGE] as Partial<LocaleBundle>));
-    setBundle(structuredClone(next) as Partial<LocaleBundle>);
-  }, [custom]);
+  const switchEditingLanguage = useCallback(
+    (code: string) => {
+      setEditingCode(code);
+      setDirty(false);
+      setSelected(null);
+      const next = isBuiltIn(code)
+        ? (BUILT_IN_RESOURCES[code as keyof typeof BUILT_IN_RESOURCES] as Partial<LocaleBundle>)
+        : (custom[code]?.bundle ??
+          buildPlaceholderBundle(BUILT_IN_RESOURCES[SOURCE_LANGUAGE] as Partial<LocaleBundle>));
+      setBundle(structuredClone(next) as Partial<LocaleBundle>);
+    },
+    [custom],
+  );
 
   // When the custom map loads later, refresh the bundle if we're on a custom language.
   useEffect(() => {
@@ -186,9 +202,7 @@ export default function TranslationPopoutPage() {
   }
 
   const allLangsForDropdown = useMemo(() => {
-    const codes = Array.from(
-      new Set<string>([...BUILT_IN_LANGUAGES, ...Object.keys(custom)]),
-    );
+    const codes = Array.from(new Set<string>([...BUILT_IN_LANGUAGES, ...Object.keys(custom)]));
     return codes.map((code) => ({ code, entry: lookupLanguage(code) }));
   }, [custom]);
 
@@ -234,7 +248,11 @@ export default function TranslationPopoutPage() {
 
   const grouped = useMemo(() => {
     const out: Record<I18nNamespace, typeof KEY_INDEX> = {
-      common: [], chat: [], server: [], settings: [], sidebar: [],
+      common: [],
+      chat: [],
+      server: [],
+      settings: [],
+      sidebar: [],
     };
     for (const k of filteredKeys) out[k.ns].push(k);
     return out;
@@ -247,22 +265,27 @@ export default function TranslationPopoutPage() {
 
   const selectedSource = useMemo(() => {
     if (!selected) return null;
-    return getNestedValue(
-      BUILT_IN_RESOURCES[SOURCE_LANGUAGE] as Partial<LocaleBundle>,
-      selected.ns,
-      selected.key,
-    ) ?? "";
+    return (
+      getNestedValue(
+        BUILT_IN_RESOURCES[SOURCE_LANGUAGE] as Partial<LocaleBundle>,
+        selected.ns,
+        selected.key,
+      ) ?? ""
+    );
   }, [selected]);
 
   const editingIsBuiltIn = isBuiltIn(editingCode);
 
   // -- Handlers -----------------------------------------------------
 
-  const handleEditValue = useCallback((value: string) => {
-    if (!selected || editingIsBuiltIn) return;
-    setBundle((prev) => setNestedValue(prev, selected.ns, selected.key, value));
-    setDirty(true);
-  }, [selected, editingIsBuiltIn]);
+  const handleEditValue = useCallback(
+    (value: string) => {
+      if (!selected || editingIsBuiltIn) return;
+      setBundle((prev) => setNestedValue(prev, selected.ns, selected.key, value));
+      setDirty(true);
+    },
+    [selected, editingIsBuiltIn],
+  );
 
   const handleTogglePicker = useCallback(async () => {
     if (pickerActive) {
@@ -318,7 +341,7 @@ export default function TranslationPopoutPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = path ? path.split(/[\\/]/).pop() ?? defaultName : defaultName;
+      a.download = path ? (path.split(/[\\/]/).pop() ?? defaultName) : defaultName;
       a.click();
       URL.revokeObjectURL(url);
       flashStatus("ok", path ? `Saved as ${a.download}` : "Download started");
@@ -366,65 +389,68 @@ export default function TranslationPopoutPage() {
     }
   }, []);
 
-  const handleImportFiles = useCallback(async (fileList: FileList) => {
-    if (editingIsBuiltIn) return;
+  const handleImportFiles = useCallback(
+    async (fileList: FileList) => {
+      if (editingIsBuiltIn) return;
 
-    const validKeySet = new Set(KEY_INDEX.map((k) => `${k.ns}\0${k.key}`));
-    let imported = 0;
-    let skipped = 0;
-    let nextBundle = bundle;
+      const validKeySet = new Set(KEY_INDEX.map((k) => `${k.ns}\0${k.key}`));
+      let imported = 0;
+      let skipped = 0;
+      let nextBundle = bundle;
 
-    for (const file of Array.from(fileList)) {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(await file.text());
-      } catch {
-        flashStatus("error", `Invalid JSON: ${file.name}`);
-        return;
-      }
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        flashStatus("error", `Unexpected format in ${file.name}`);
-        return;
-      }
+      for (const file of Array.from(fileList)) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(await file.text());
+        } catch {
+          flashStatus("error", `Invalid JSON: ${file.name}`);
+          return;
+        }
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          flashStatus("error", `Unexpected format in ${file.name}`);
+          return;
+        }
 
-      const detectedNs = I18N_NAMESPACES.find(
-        (ns) => file.name.endsWith(`.${ns}.json`) || file.name === `${ns}.json`,
-      );
+        const detectedNs = I18N_NAMESPACES.find(
+          (ns) => file.name.endsWith(`.${ns}.json`) || file.name === `${ns}.json`,
+        );
 
-      const toFlatten = detectedNs
-        ? ({ [detectedNs]: parsed } as Partial<LocaleBundle>)
-        : (parsed as Partial<LocaleBundle>);
+        const toFlatten = detectedNs
+          ? ({ [detectedNs]: parsed } as Partial<LocaleBundle>)
+          : (parsed as Partial<LocaleBundle>);
 
-      for (const { ns, key, value } of flattenBundle(toFlatten)) {
-        if (validKeySet.has(`${ns}\0${key}`)) {
-          nextBundle = setNestedValue(nextBundle, ns, key, value);
-          imported++;
-        } else {
-          skipped++;
+        for (const { ns, key, value } of flattenBundle(toFlatten)) {
+          if (validKeySet.has(`${ns}\0${key}`)) {
+            nextBundle = setNestedValue(nextBundle, ns, key, value);
+            imported++;
+          } else {
+            skipped++;
+          }
         }
       }
-    }
 
-    if (fileInputRef.current) fileInputRef.current.value = "";
+      if (fileInputRef.current) fileInputRef.current.value = "";
 
-    if (imported > 0) {
-      setBundle(nextBundle);
-      setDirty(true);
-      flashStatus(
-        "ok",
-        skipped > 0
-          ? `Imported ${imported} keys (${skipped} unknown skipped)`
-          : `Imported ${imported} keys`,
-      );
-    } else {
-      flashStatus(
-        "error",
-        skipped > 0
-          ? `No valid keys found (${skipped} unknown keys skipped)`
-          : "No translation keys found in file(s)",
-      );
-    }
-  }, [editingIsBuiltIn, bundle]);
+      if (imported > 0) {
+        setBundle(nextBundle);
+        setDirty(true);
+        flashStatus(
+          "ok",
+          skipped > 0
+            ? `Imported ${imported} keys (${skipped} unknown skipped)`
+            : `Imported ${imported} keys`,
+        );
+      } else {
+        flashStatus(
+          "error",
+          skipped > 0
+            ? `No valid keys found (${skipped} unknown keys skipped)`
+            : "No translation keys found in file(s)",
+        );
+      }
+    },
+    [editingIsBuiltIn, bundle],
+  );
 
   const handleDeleteLanguage = useCallback(async () => {
     if (editingIsBuiltIn) return;
@@ -442,29 +468,32 @@ export default function TranslationPopoutPage() {
     }
   }, [editingIsBuiltIn, editingCode, switchEditingLanguage]);
 
-  const handleAddLanguage = useCallback((entry: LanguageEntry) => {
-    setShowAddLang(false);
-    if (isBuiltIn(entry.code) || custom[entry.code]) {
-      switchEditingLanguage(entry.code);
-      return;
-    }
-    const placeholder = buildPlaceholderBundle(
-      BUILT_IN_RESOURCES[SOURCE_LANGUAGE] as Partial<LocaleBundle>,
-    );
-    const newEntry: CustomTranslation = {
-      code: entry.code,
-      nativeName: entry.nativeName,
-      englishName: entry.englishName,
-      flagCountry: entry.countryCode,
-      bundle: placeholder,
-      updatedAt: Date.now(),
-    };
-    setCustom((prev) => ({ ...prev, [entry.code]: newEntry }));
-    setEditingCode(entry.code);
-    setBundle(structuredClone(placeholder) as Partial<LocaleBundle>);
-    setDirty(true);
-    setSelected(null);
-  }, [custom, switchEditingLanguage]);
+  const handleAddLanguage = useCallback(
+    (entry: LanguageEntry) => {
+      setShowAddLang(false);
+      if (isBuiltIn(entry.code) || custom[entry.code]) {
+        switchEditingLanguage(entry.code);
+        return;
+      }
+      const placeholder = buildPlaceholderBundle(
+        BUILT_IN_RESOURCES[SOURCE_LANGUAGE] as Partial<LocaleBundle>,
+      );
+      const newEntry: CustomTranslation = {
+        code: entry.code,
+        nativeName: entry.nativeName,
+        englishName: entry.englishName,
+        flagCountry: entry.countryCode,
+        bundle: placeholder,
+        updatedAt: Date.now(),
+      };
+      setCustom((prev) => ({ ...prev, [entry.code]: newEntry }));
+      setEditingCode(entry.code);
+      setBundle(structuredClone(placeholder) as Partial<LocaleBundle>);
+      setDirty(true);
+      setSelected(null);
+    },
+    [custom, switchEditingLanguage],
+  );
 
   const doClose = useCallback(async () => {
     if (pickerActive) await emit("translation-picker:stop");
@@ -554,9 +583,10 @@ export default function TranslationPopoutPage() {
               }
               setPreviewLinked((prev) => !prev);
             }}
-            title={previewLinked
-              ? "Split view: choose display and translate language independently"
-              : "Link view: show the UI in the translate language (preview your work)"
+            title={
+              previewLinked
+                ? "Split view: choose display and translate language independently"
+                : "Link view: show the UI in the translate language (preview your work)"
             }
           >
             {previewLinked ? <Link2Icon width={14} height={14} /> : <Columns2Icon width={14} height={14} />}
@@ -592,7 +622,9 @@ export default function TranslationPopoutPage() {
           >
             <option value="all">All namespaces</option>
             {I18N_NAMESPACES.map((ns) => (
-              <option key={ns} value={ns}>{ns}</option>
+              <option key={ns} value={ns}>
+                {ns}
+              </option>
             ))}
           </select>
 
@@ -620,11 +652,7 @@ export default function TranslationPopoutPage() {
           >
             Import
           </button>
-          <SplitButton
-            options={exportOptions}
-            variant="secondary"
-            dropDirection="down"
-          />
+          <SplitButton options={exportOptions} variant="secondary" dropDirection="down" />
           {!editingIsBuiltIn && (
             <button
               type="button"
@@ -665,7 +693,10 @@ export default function TranslationPopoutPage() {
           cancelLabel="Cancel"
           danger
           onConfirm={() => void doExport()}
-          onCancel={() => { pendingExportRef.current = null; setShowOverwriteWarning(false); }}
+          onCancel={() => {
+            pendingExportRef.current = null;
+            setShowOverwriteWarning(false);
+          }}
         />
       )}
 
@@ -688,7 +719,10 @@ export default function TranslationPopoutPage() {
           confirmLabel="Delete"
           cancelLabel="Cancel"
           danger
-          onConfirm={() => { setShowDeleteWarning(false); void handleDeleteLanguage(); }}
+          onConfirm={() => {
+            setShowDeleteWarning(false);
+            void handleDeleteLanguage();
+          }}
           onCancel={() => setShowDeleteWarning(false)}
         />
       )}
@@ -712,10 +746,8 @@ export default function TranslationPopoutPage() {
                 {items.map((k) => {
                   const v = getNestedValue(bundle, ns, k.key);
                   const dispVal = displayBundle ? getNestedValue(displayBundle, ns, k.key) : undefined;
-                  const isActive =
-                    selected?.ns === ns && selected.key === k.key;
-                  const isMissing =
-                    !editingIsBuiltIn && (v === undefined || v === "" || v === "---");
+                  const isActive = selected?.ns === ns && selected.key === k.key;
+                  const isMissing = !editingIsBuiltIn && (v === undefined || v === "" || v === "---");
                   return (
                     <button
                       type="button"
@@ -724,7 +756,9 @@ export default function TranslationPopoutPage() {
                         styles.listItem,
                         isActive ? styles.listItemActive : "",
                         isMissing ? styles.listItemMissing : "",
-                      ].filter(Boolean).join(" ")}
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                       onClick={() => setSelected({ ns, key: k.key })}
                     >
                       <span className={styles.listItemKey}>{k.key}</span>
@@ -742,7 +776,10 @@ export default function TranslationPopoutPage() {
         <div className={styles.editor}>
           {!selected ? (
             <div className={styles.emptyState}>
-              <p>Select a key on the left, or click <strong>Pick from UI</strong> and choose a string in the main window.</p>
+              <p>
+                Select a key on the left, or click <strong>Pick from UI</strong> and choose a string in the
+                main window.
+              </p>
             </div>
           ) : (
             <>
@@ -769,7 +806,8 @@ export default function TranslationPopoutPage() {
 
               <div className={styles.editorArea}>
                 <label htmlFor="translation-input">
-                  Translation ({editingCode}{editingIsBuiltIn ? " - read-only built-in" : ""})
+                  Translation ({editingCode}
+                  {editingIsBuiltIn ? " - read-only built-in" : ""})
                 </label>
                 <textarea
                   id="translation-input"
@@ -788,9 +826,7 @@ export default function TranslationPopoutPage() {
                       multiple
                       value={refLangValues}
                       options={refLangOptions}
-                      onChange={(next) =>
-                        setRefLangs(next.map((o) => o.value))
-                      }
+                      onChange={(next) => setRefLangs(next.map((o) => o.value))}
                       placeholder="Add reference languages…"
                       label="Reference languages"
                     />
@@ -805,20 +841,12 @@ export default function TranslationPopoutPage() {
                 ) : (
                   refLangs.map((code) => {
                     const refBundle = getBundleFor(code, custom);
-                    const v = refBundle
-                      ? getNestedValue(refBundle, selected.ns, selected.key)
-                      : undefined;
+                    const v = refBundle ? getNestedValue(refBundle, selected.ns, selected.key) : undefined;
                     const entry = lookupLanguage(code);
                     return (
                       <div key={code} className={styles.refRow}>
                         <LanguageFlag entry={entry} size={20} />
-                        <span
-                          className={
-                            v
-                              ? styles.refValue
-                              : `${styles.refValue} ${styles.refMissing}`
-                          }
-                        >
+                        <span className={v ? styles.refValue : `${styles.refValue} ${styles.refMissing}`}>
                           {v || "(missing)"}
                         </span>
                       </div>
@@ -833,12 +861,12 @@ export default function TranslationPopoutPage() {
 
       <div className={styles.statusBar}>
         {status && (
-          <span className={status.kind === "ok" ? styles.statusOk : styles.statusError}>
-            {status.text}
-          </span>
+          <span className={status.kind === "ok" ? styles.statusOk : styles.statusError}>{status.text}</span>
         )}
         <span className={styles.spacer} />
-        <span>{filteredKeys.length} of {KEY_INDEX.length} keys</span>
+        <span>
+          {filteredKeys.length} of {KEY_INDEX.length} keys
+        </span>
       </div>
 
       {showAddLang && (
@@ -863,10 +891,11 @@ function AddLanguageModal({ existing, onPick, onClose }: AddLanguageModalProps) 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return ALL_LANGUAGES.slice(0, 200);
-    return ALL_LANGUAGES.filter((l) =>
-      l.englishName.toLowerCase().includes(needle) ||
-      l.nativeName.toLowerCase().includes(needle) ||
-      l.code.toLowerCase().includes(needle),
+    return ALL_LANGUAGES.filter(
+      (l) =>
+        l.englishName.toLowerCase().includes(needle) ||
+        l.nativeName.toLowerCase().includes(needle) ||
+        l.code.toLowerCase().includes(needle),
     );
   }, [q]);
 
@@ -899,15 +928,14 @@ function AddLanguageModal({ existing, onPick, onClose }: AddLanguageModalProps) 
                   <span style={{ opacity: 0.7 }}>{l.nativeName}</span>
                 </span>
                 <span className={styles.langOptionMeta}>
-                  {l.code}{isExisting ? " ✓" : ""}
+                  {l.code}
+                  {isExisting ? " ✓" : ""}
                 </span>
               </button>
             );
           })}
           {filtered.length === 0 && (
-            <div style={{ padding: 16, opacity: 0.6, textAlign: "center" }}>
-              No languages match "{q}"
-            </div>
+            <div style={{ padding: 16, opacity: 0.6, textAlign: "center" }}>No languages match "{q}"</div>
           )}
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>

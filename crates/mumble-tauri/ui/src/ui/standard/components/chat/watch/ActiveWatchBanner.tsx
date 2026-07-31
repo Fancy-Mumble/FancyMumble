@@ -86,7 +86,9 @@ function CollapsedSession({ title, participants, onOpen }: CollapsedProps) {
         </span>
       </div>
       <div className={styles.actions}>
-        <button type="button" onClick={onOpen}>{t("watch.open")}</button>
+        <button type="button" onClick={onOpen}>
+          {t("watch.open")}
+        </button>
       </div>
     </div>
   );
@@ -110,7 +112,9 @@ function ExpandedSession({ sessionId, onClose }: ExpandedProps) {
   return (
     <div>
       <div className={styles.actions} style={{ justifyContent: "flex-end" }}>
-        <button type="button" onClick={onClose}>{t("common:actions.collapse")}</button>
+        <button type="button" onClick={onClose}>
+          {t("common:actions.collapse")}
+        </button>
       </div>
       <WatchTogetherCard sessionId={sessionId} mountKey={`${BANNER_OWNER_PREFIX}${sessionId}`} />
     </div>

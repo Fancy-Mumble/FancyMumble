@@ -14,14 +14,7 @@
  * re-opens with the next context (field → operator → value → `and`).
  */
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { TID } from "@core/testids";
 import {
   suggestAudit,
@@ -69,10 +62,7 @@ export function QueryAutocomplete({
   /** Caret to restore after a splice, applied once post-render. */
   const pendingCaret = useRef<number | null>(null);
 
-  const result = useMemo(
-    () => suggestAudit(value, caret, context),
-    [value, caret, context],
-  );
+  const result = useMemo(() => suggestAudit(value, caret, context), [value, caret, context]);
   const suggestions = result.suggestions;
   const show = open && !disabled && suggestions.length > 0;
 
@@ -174,9 +164,7 @@ export function QueryAutocomplete({
         aria-expanded={show}
         aria-controls={TID.auditQuerySuggestions}
         aria-autocomplete="list"
-        aria-activedescendant={
-          show && active >= 0 ? `${TID.auditQuerySuggestionItem}-${active}` : undefined
-        }
+        aria-activedescendant={show && active >= 0 ? `${TID.auditQuerySuggestionItem}-${active}` : undefined}
         className={styles.queryInput}
         data-testid={TID.auditQueryInput}
         value={value}

@@ -160,8 +160,7 @@ export interface RoleSelect {
 }
 
 export type Mentionable =
-  | { readonly kind: "user"; readonly id: number }
-  | { readonly kind: "role"; readonly name: string };
+  { readonly kind: "user"; readonly id: number } | { readonly kind: "role"; readonly name: string };
 
 export interface MentionableSelect {
   readonly type: "mentionable-select";
@@ -469,9 +468,7 @@ function normaliseComponentDeep(component: Component): Component {
       return {
         ...normalised,
         components: normalised.components.map(normaliseComponentDeep),
-        accessory: normaliseComponentDeep(
-          normalised.accessory,
-        ) as SectionAccessory,
+        accessory: normaliseComponentDeep(normalised.accessory) as SectionAccessory,
       };
     case "label":
       return {

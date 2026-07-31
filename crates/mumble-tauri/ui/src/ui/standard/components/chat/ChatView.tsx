@@ -26,7 +26,13 @@ import ConfirmDialog from "../elements/ConfirmDialog";
 import Toast from "../elements/Toast";
 import type { FileShareChoice } from "./file/FileShareDialog";
 const FileShareDialog = lazy(() => import("./file/FileShareDialog"));
-import { encodeFileAttachmentMarker, decodeFileAttachmentPayload, previewKindForFilename, FANCY_FILE_MARKER_RE, type FileAttachmentInfo } from "./file/FileAttachmentCard";
+import {
+  encodeFileAttachmentMarker,
+  decodeFileAttachmentPayload,
+  previewKindForFilename,
+  FANCY_FILE_MARKER_RE,
+  type FileAttachmentInfo,
+} from "./file/FileAttachmentCard";
 import { usePersistentChat } from "../security/PersistentChatOverlays";
 import { BannerStack } from "../security/InfoBanner";
 import { useUserAvatars } from "@core/lazyBlobs";
@@ -97,7 +103,6 @@ const MultiStreamGrid = lazy(() => import("./stream/MultiStreamGrid"));
  */
 const SCREEN_SHARE_MIN_VERSION = 2 * 2 ** 32 + 12 * 2 ** 16;
 
-
 interface ChatViewProps {
   readonly onChannelInfoToggle?: () => void;
   readonly onChannelSearch?: () => void;
@@ -140,7 +145,13 @@ function findPopOutImageSrc(body: string): string | null {
   return null;
 }
 
-export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollToMessageId, onScrollConsumed, inPopout = false }: ChatViewProps) {
+export default function ChatView({
+  onChannelInfoToggle,
+  onChannelSearch,
+  scrollToMessageId,
+  onScrollConsumed,
+  inPopout = false,
+}: ChatViewProps) {
   const { t } = useTranslation("chat");
   const channels = useAppStore((s) => s.channels);
   const users = useAppStore((s) => s.users);
@@ -176,8 +187,13 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   const [showMySharedFilesPanel, setShowMySharedFilesPanel] = useState(false);
   const [showCalendarPanel, setShowCalendarPanel] = useState(false);
   const {
-    polls, pollMessages, showPollCreator, openPollCreator, closePollCreator,
-    handlePollCreate, handlePollVote,
+    polls,
+    pollMessages,
+    showPollCreator,
+    openPollCreator,
+    closePollCreator,
+    handlePollCreate,
+    handlePollVote,
   } = usePolls();
 
   // Time display preferences (loaded once from persistent storage).
@@ -207,12 +223,18 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       setTimeFormat(prefs.timeFormat);
       setConvertToLocalTime(prefs.convertToLocalTime);
     });
-    loadPersonalization().then(setPersonalization).catch(() => { /* keep defaults */ });
+    loadPersonalization()
+      .then(setPersonalization)
+      .catch(() => {
+        /* keep defaults */
+      });
     invoke<"12h" | "24h" | null>("get_system_clock_format")
       .then((fmt) => {
         if (fmt !== null) setSystemUses24h(fmt === "24h");
       })
-      .catch(() => { /* leave undefined - fall back to Intl */ });
+      .catch(() => {
+        /* leave undefined - fall back to Intl */
+      });
   }, []);
 
   /** Build the `MessageScope` for the current chat mode. */
@@ -236,9 +258,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     }
     return channelDisplayName(channel);
   }, [channel, users, ownSession, t]);
-  const memberCount = users.filter(
-    (u) => u.channel_id === selectedChannel,
-  ).length;
+  const memberCount = users.filter((u) => u.channel_id === selectedChannel).length;
   const isInChannel = currentChannel === selectedChannel;
 
   /** Map session -> UserEntry for quick lookup. */
@@ -306,9 +326,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     if (isDmMode) {
       return dmMessages;
     }
-    const channelPolls = pollMessages.filter(
-      (m) => m.channel_id === selectedChannel,
-    );
+    const channelPolls = pollMessages.filter((m) => m.channel_id === selectedChannel);
     return [...messages, ...channelPolls];
   }, [isDmMode, dmMessages, messages, pollMessages, selectedChannel]);
 
@@ -320,13 +338,11 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     return pendingMessages.filter((p) => p.channelId === selectedChannel);
   }, [pendingMessages, isDmMode, selectedDmUser, selectedChannel]);
 
-  const hasNewPins = selectedChannel !== null
-    && (unseenPinIds.get(selectedChannel)?.size ?? 0) > 0;
+  const hasNewPins = selectedChannel !== null && (unseenPinIds.get(selectedChannel)?.size ?? 0) > 0;
 
   const channelUnseenPinSet = useMemo(
-    () => (selectedChannel !== null
-      ? unseenPinIds.get(selectedChannel) ?? new Set<string>()
-      : new Set<string>()),
+    () =>
+      selectedChannel !== null ? (unseenPinIds.get(selectedChannel) ?? new Set<string>()) : new Set<string>(),
     [unseenPinIds, selectedChannel],
   );
 
@@ -338,10 +354,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
 
   // Auto-send read receipts and query on channel switch.
   const lastMessageId = allMessageIds[allMessageIds.length - 1];
-  useReadReceipts(
-    isDmMode ? null : selectedChannel,
-    lastMessageId,
-  );
+  useReadReceipts(isDmMode ? null : selectedChannel, lastMessageId);
 
   // Send typing indicators with debouncing.
   const { notifyTyping, resetTyping } = useTypingIndicator();
@@ -349,9 +362,16 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   // --- Extracted hooks ---------------------------------------------
 
   const {
-    messagesContainerRef, bottomSentinelRef, messagesInnerRef,
-    newMsgCount, lastReadIdx, restoringKeys, handleScrollToBottom,
-    visibleMessages, windowStart, ensureMessageRendered,
+    messagesContainerRef,
+    bottomSentinelRef,
+    messagesInnerRef,
+    newMsgCount,
+    lastReadIdx,
+    restoringKeys,
+    handleScrollToBottom,
+    visibleMessages,
+    windowStart,
+    ensureMessageRendered,
   } = useChatScroll({ allMessages, selectedChannel, selectedDmUser, currentScope });
 
   const lightboxRef = useRef<LightboxHandle>(null);
@@ -361,11 +381,14 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     setDraft(htmlToMarkdown(msg.body));
   }, []);
 
-  const handlePin = useCallback((msg: ChatMessage) => {
-    if (!msg.message_id) return;
-    const channelId = msg.channel_id ?? selectedChannel ?? 0;
-    pinMessage(channelId, msg.message_id, !!msg.pinned);
-  }, [selectedChannel, pinMessage]);
+  const handlePin = useCallback(
+    (msg: ChatMessage) => {
+      if (!msg.message_id) return;
+      const channelId = msg.channel_id ?? selectedChannel ?? 0;
+      pinMessage(channelId, msg.message_id, !!msg.pinned);
+    },
+    [selectedChannel, pinMessage],
+  );
 
   const activeServerId = useAppStore((s) => s.activeServerId);
   const sessions = useAppStore((s) => s.sessions);
@@ -384,29 +407,32 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     });
   }, [isDmMode, dmPartner, sessions, activeServerId]);
 
-  const handlePopOutImage = useCallback((msg: ChatMessage, src: string) => {
-    const captionRaw = msg.body
-      .replaceAll(/<!--[\s\S]*?-->/g, "")
-      .replaceAll(/<img\b[^>]*>/gi, "")
-      .replaceAll(/<br\s*\/?>/gi, "\n")
-      .replaceAll(/<[^>]*>/g, "")
-      .replaceAll("&lt;", "<")
-      .replaceAll("&gt;", ">")
-      .replaceAll("&amp;", "&")
-      .trim();
-    const caption = captionRaw.length > 0 ? captionRaw.slice(0, 280) : null;
-    const senderAvatar = msg.sender_hash ? avatarByHash.get(msg.sender_hash) ?? null : null;
-    const payload = {
-      src,
-      sender_name: msg.sender_name || null,
-      sender_avatar: senderAvatar,
-      caption,
-      timestamp_ms: msg.timestamp ?? null,
-    };
-    invoke("open_image_popout", { payload }).catch((err) => {
-      console.error("Failed to open image popout:", err);
-    });
-  }, [avatarByHash]);
+  const handlePopOutImage = useCallback(
+    (msg: ChatMessage, src: string) => {
+      const captionRaw = msg.body
+        .replaceAll(/<!--[\s\S]*?-->/g, "")
+        .replaceAll(/<img\b[^>]*>/gi, "")
+        .replaceAll(/<br\s*\/?>/gi, "\n")
+        .replaceAll(/<[^>]*>/g, "")
+        .replaceAll("&lt;", "<")
+        .replaceAll("&gt;", ">")
+        .replaceAll("&amp;", "&")
+        .trim();
+      const caption = captionRaw.length > 0 ? captionRaw.slice(0, 280) : null;
+      const senderAvatar = msg.sender_hash ? (avatarByHash.get(msg.sender_hash) ?? null) : null;
+      const payload = {
+        src,
+        sender_name: msg.sender_name || null,
+        sender_avatar: senderAvatar,
+        caption,
+        timestamp_ms: msg.timestamp ?? null,
+      };
+      invoke("open_image_popout", { payload }).catch((err) => {
+        console.error("Failed to open image popout:", err);
+      });
+    },
+    [avatarByHash],
+  );
 
   const handleOpenPinnedPanel = useCallback(() => {
     setShowPinnedPanel(true);
@@ -444,10 +470,13 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     setDraft("");
   }, []);
 
-  const handleDraftChange = useCallback((value: string) => {
-    setDraft(value);
-    if (value) notifyTyping();
-  }, [notifyTyping]);
+  const handleDraftChange = useCallback(
+    (value: string) => {
+      setDraft(value);
+      if (value) notifyTyping();
+    },
+    [notifyTyping],
+  );
 
   useEffect(() => {
     setEditingMessage(null);
@@ -456,17 +485,36 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   }, [selectedChannel, selectedDmUser]);
 
   const {
-    canDelete, selectionMode, selectedMsgIds,
-    msgContextMenu, deleteConfirm, isDeleting, toast,
-    toggleMsgSelection, enterSelectionMode, exitSelectionMode,
-    handleMessageContextMenu, handleSingleDelete, handleBulkDelete, confirmDelete,
-    handleTouchStart, cancelLongPress,
-    handleCite, handleCopyText,
-    handleScrollToMessage, removePendingQuote,
-    closeContextMenu, clearDeleteConfirm, clearToast, showToast,
+    canDelete,
+    selectionMode,
+    selectedMsgIds,
+    msgContextMenu,
+    deleteConfirm,
+    isDeleting,
+    toast,
+    toggleMsgSelection,
+    enterSelectionMode,
+    exitSelectionMode,
+    handleMessageContextMenu,
+    handleSingleDelete,
+    handleBulkDelete,
+    confirmDelete,
+    handleTouchStart,
+    cancelLongPress,
+    handleCite,
+    handleCopyText,
+    handleScrollToMessage,
+    removePendingQuote,
+    closeContextMenu,
+    clearDeleteConfirm,
+    clearToast,
+    showToast,
   } = useMessageSelection({
-    selectedChannel, selectedDmUser,
-    channel, messagesContainerRef, setPendingQuotes,
+    selectedChannel,
+    selectedDmUser,
+    channel,
+    messagesContainerRef,
+    setPendingQuotes,
     ensureMessageRendered,
   });
 
@@ -480,9 +528,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       // Grow the render window to cover the target; it mounts on the
       // next render, which a retry below picks up.
       ensureMessageRendered(scrollToMessageId);
-      const el = container.querySelector<HTMLElement>(
-        `[data-msg-id="${CSS.escape(scrollToMessageId)}"]`,
-      );
+      const el = container.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(scrollToMessageId)}"]`);
       if (el) {
         handleScrollToMessage(scrollToMessageId);
         onScrollConsumed?.();
@@ -496,7 +542,14 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       }
     };
     requestAnimationFrame(tryScroll);
-  }, [scrollToMessageId, messages, handleScrollToMessage, messagesContainerRef, onScrollConsumed, ensureMessageRendered]);
+  }, [
+    scrollToMessageId,
+    messages,
+    handleScrollToMessage,
+    messagesContainerRef,
+    onScrollConsumed,
+    ensureMessageRendered,
+  ]);
 
   // Forwards staged images (from paste/clipboard) into the drag-drop
   // attachment tray. A ref breaks the init-order cycle: useChatSend is created
@@ -527,7 +580,6 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   const [shareDialog, setShareDialog] = useState<{ filePath: string; filename: string } | null>(null);
   const [uploadPlaceholders, setUploadPlaceholders] = useState<UploadPlaceholder[]>([]);
 
-
   const activeLiveDocs = useAppStore((s) => s.activeLiveDocs);
   const pendingLiveDocAnnounces = useAppStore((s) => s.pendingLiveDocAnnounces);
   const requestOpenLiveDoc = useAppStore((s) => s.requestOpenLiveDoc);
@@ -543,8 +595,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     if (!calendarActive) setShowCalendarPanel(false);
   }, [calendarActive]);
 
-  const liveDocLookupKey =
-    selectedChannel != null ? liveDocKey(activeServerId, selectedChannel) : null;
+  const liveDocLookupKey = selectedChannel != null ? liveDocKey(activeServerId, selectedChannel) : null;
   const activeLiveDoc = liveDocLookupKey != null ? activeLiveDocs.get(liveDocLookupKey) : undefined;
   const pendingLiveDocAnnounce =
     liveDocLookupKey != null ? pendingLiveDocAnnounces.get(liveDocLookupKey) : undefined;
@@ -619,8 +670,8 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       const channelId = link.channel ?? selectedChannel;
       if (channelId === null) return;
       const mode = link.channel === null ? "private" : "publish";
-      void requestOpenLiveDoc(channelId, link.slug, link.title, { silent: true, mode }).catch(
-        (e) => console.warn("live-doc open from library failed:", e),
+      void requestOpenLiveDoc(channelId, link.slug, link.title, { silent: true, mode }).catch((e) =>
+        console.warn("live-doc open from library failed:", e),
       );
     },
     [requestOpenLiveDoc, selectedChannel],
@@ -684,10 +735,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       pendingLiveDocAnnounce.title,
       { silent: true },
     );
-    clearLiveDocAnnounce(
-      pendingLiveDocAnnounce.channelId,
-      pendingLiveDocAnnounce.appServerId,
-    );
+    clearLiveDocAnnounce(pendingLiveDocAnnounce.channelId, pendingLiveDocAnnounce.appServerId);
   }, [pendingLiveDocAnnounce, requestOpenLiveDoc, clearLiveDocAnnounce]);
 
   const handleAttachFile = useCallback(async () => {
@@ -720,85 +768,88 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     }
   }, [fileServerConfig, selectedChannel, isUploading, showToast, t]);
 
-  const performUpload = useCallback(async (
-    filePath: string,
-    filename: string,
-    choice: FileShareChoice,
-  ) => {
-    if (selectedChannel === null) return;
-    const placeholderId = globalThis.crypto?.randomUUID?.() ?? `upload-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    setUploadPlaceholders((prev) => [...prev, { id: placeholderId, filename, state: "uploading" }]);
-    // Scroll to show the placeholder after React re-renders.
-    requestAnimationFrame(() => {
-      const el = messagesContainerRef.current;
-      if (el) el.scrollTop = el.scrollHeight;
-    });
-    setIsUploading(true);
-    let unlisten: (() => void) | undefined;
-    try {
-      const { listen } = await import("@tauri-apps/api/event");
-      unlisten = await listen<{ uploadId: string; bytesSent: number; totalBytes: number }>(
-        "upload-progress",
-        (event) => {
-          if (event.payload.uploadId !== placeholderId) return;
-          // Cap at 99: the stream is fully consumed but the server is still
-          // processing/responding. We never show 100% until the placeholder is
-          // removed on success, so the user can see "still in progress".
-          const pct =
-            event.payload.totalBytes > 0
-              ? Math.min(99, Math.round((event.payload.bytesSent / event.payload.totalBytes) * 100))
-              : 0;
-          setUploadPlaceholders((prev) =>
-            prev.map((p) => (p.id === placeholderId ? { ...p, progress: pct } : p)),
-          );
-        },
-      );
-      const resp = await uploadFile({
-        filePath,
-        channelId: selectedChannel,
-        mode: choice.mode,
-        password: choice.password,
-        ttlSeconds: choice.ttlSeconds,
-        filename,
-        uploadId: placeholderId,
+  const performUpload = useCallback(
+    async (filePath: string, filename: string, choice: FileShareChoice) => {
+      if (selectedChannel === null) return;
+      const placeholderId =
+        globalThis.crypto?.randomUUID?.() ?? `upload-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      setUploadPlaceholders((prev) => [...prev, { id: placeholderId, filename, state: "uploading" }]);
+      // Scroll to show the placeholder after React re-renders.
+      requestAnimationFrame(() => {
+        const el = messagesContainerRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
       });
-      const info: FileAttachmentInfo = {
-        url: resp.download_url,
-        filename,
-        sizeBytes: resp.size_bytes,
-        mode: resp.access_mode,
-        expiresAt: resp.expires_at,
-      };
-      const marker = encodeFileAttachmentMarker(info);
-      const body = choice.message ? `${choice.message}\n${marker}` : marker;
-      if (selectedDmUser !== null) {
-        await sendDmAction(selectedDmUser, body);
-      } else {
-        await sendMessageAction(selectedChannel, body);
+      setIsUploading(true);
+      let unlisten: (() => void) | undefined;
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen<{ uploadId: string; bytesSent: number; totalBytes: number }>(
+          "upload-progress",
+          (event) => {
+            if (event.payload.uploadId !== placeholderId) return;
+            // Cap at 99: the stream is fully consumed but the server is still
+            // processing/responding. We never show 100% until the placeholder is
+            // removed on success, so the user can see "still in progress".
+            const pct =
+              event.payload.totalBytes > 0
+                ? Math.min(99, Math.round((event.payload.bytesSent / event.payload.totalBytes) * 100))
+                : 0;
+            setUploadPlaceholders((prev) =>
+              prev.map((p) => (p.id === placeholderId ? { ...p, progress: pct } : p)),
+            );
+          },
+        );
+        const resp = await uploadFile({
+          filePath,
+          channelId: selectedChannel,
+          mode: choice.mode,
+          password: choice.password,
+          ttlSeconds: choice.ttlSeconds,
+          filename,
+          uploadId: placeholderId,
+        });
+        const info: FileAttachmentInfo = {
+          url: resp.download_url,
+          filename,
+          sizeBytes: resp.size_bytes,
+          mode: resp.access_mode,
+          expiresAt: resp.expires_at,
+        };
+        const marker = encodeFileAttachmentMarker(info);
+        const body = choice.message ? `${choice.message}\n${marker}` : marker;
+        if (selectedDmUser !== null) {
+          await sendDmAction(selectedDmUser, body);
+        } else {
+          await sendMessageAction(selectedChannel, body);
+        }
+        setUploadPlaceholders((prev) => prev.filter((p) => p.id !== placeholderId));
+      } catch (e) {
+        console.error("file upload failed:", e);
+        const detail = e instanceof Error ? e.message : String(e);
+        // A cancelled upload is silently discarded - the placeholder is already
+        // removed by handleCancelUpload, so there is nothing to show.
+        if (detail === "upload cancelled") return;
+        setUploadPlaceholders((prev) =>
+          prev.map((p) =>
+            p.id === placeholderId ? { ...p, state: "error" as const, errorMessage: detail } : p,
+          ),
+        );
+      } finally {
+        unlisten?.();
+        setIsUploading(false);
       }
-      setUploadPlaceholders((prev) => prev.filter((p) => p.id !== placeholderId));
-    } catch (e) {
-      console.error("file upload failed:", e);
-      const detail = e instanceof Error ? e.message : String(e);
-      // A cancelled upload is silently discarded - the placeholder is already
-      // removed by handleCancelUpload, so there is nothing to show.
-      if (detail === "upload cancelled") return;
-      setUploadPlaceholders((prev) =>
-        prev.map((p) =>
-          p.id === placeholderId ? { ...p, state: "error" as const, errorMessage: detail } : p,
-        ),
-      );
-    } finally {
-      unlisten?.();
-      setIsUploading(false);
-    }
-  }, [selectedChannel, selectedDmUser, uploadFile, sendMessageAction, sendDmAction, messagesContainerRef]);
+    },
+    [selectedChannel, selectedDmUser, uploadFile, sendMessageAction, sendDmAction, messagesContainerRef],
+  );
 
-  const handleShareDialogSubmit = useCallback((choice: FileShareChoice) => {
-    const ctx = shareDialog;
-    setShareDialog(null);
-    if (ctx) void performUpload(ctx.filePath, ctx.filename, choice);
-  }, [shareDialog, performUpload]);
+  const handleShareDialogSubmit = useCallback(
+    (choice: FileShareChoice) => {
+      const ctx = shareDialog;
+      setShareDialog(null);
+      if (ctx) void performUpload(ctx.filePath, ctx.filename, choice);
+    },
+    [shareDialog, performUpload],
+  );
 
   const handleShareDialogCancel = useCallback(() => setShareDialog(null), []);
 
@@ -918,7 +969,16 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     }
 
     return captionConsumed;
-  }, [pendingAttachments, setPendingAttachments, sendMediaGallery, draft, galleryQuality, setDraft, showToast, t]);
+  }, [
+    pendingAttachments,
+    setPendingAttachments,
+    sendMediaGallery,
+    draft,
+    galleryQuality,
+    setDraft,
+    showToast,
+    t,
+  ]);
 
   const handleSendAndResetTyping = useCallback(async () => {
     // Images (with the draft as caption) go out as one gallery message; only
@@ -933,16 +993,18 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   }, []);
 
   const handleCancelUpload = useCallback((id: string) => {
-    void import("@tauri-apps/api/core").then(({ invoke }) =>
-      invoke("cancel_upload", { uploadId: id }),
-    );
+    void import("@tauri-apps/api/core").then(({ invoke }) => invoke("cancel_upload", { uploadId: id }));
     setUploadPlaceholders((prev) => prev.filter((p) => p.id !== id));
   }, []);
 
   const {
-    emojiPicker, handleReaction, handleMoreReactions,
-    closeEmojiPicker, handleEmojiSelect,
-    getMessageReactions, toggleReaction,
+    emojiPicker,
+    handleReaction,
+    handleMoreReactions,
+    closeEmojiPicker,
+    handleEmojiSelect,
+    getMessageReactions,
+    toggleReaction,
   } = useReactions();
 
   const screenShare = useScreenShare();
@@ -955,8 +1017,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   // clears and the in-chat viewer (or banner) reappears automatically.
   const poppedOutStreamSessions = useAppStore((s) => s.poppedOutStreamSessions);
   let activeScreenShare: { session: number; isOwn: boolean; stream: MediaStream | null } | null = null;
-  if (screenShare.watchingSession !== null
-      && !poppedOutStreamSessions.has(screenShare.watchingSession)) {
+  if (screenShare.watchingSession !== null && !poppedOutStreamSessions.has(screenShare.watchingSession)) {
     activeScreenShare = { session: screenShare.watchingSession, isOwn: false, stream: null };
   } else if (screenShare.isBroadcasting) {
     activeScreenShare = { session: ownSession!, isOwn: true, stream: screenShare.localStream };
@@ -977,7 +1038,12 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   // remaining display source, or stop entirely if the camera was the only
   // source. The camera PiP only renders alongside a screen, so in practice
   // this drops screen+camera down to screen-only.
-  const { confirmSource: doConfirmSource, stopSharing: doStopSharing, settings: shareSettings, activeSources } = screenShare;
+  const {
+    confirmSource: doConfirmSource,
+    stopSharing: doStopSharing,
+    settings: shareSettings,
+    activeSources,
+  } = screenShare;
   const handleEndCamera = useCallback(() => {
     const remaining = (activeSources ?? []).filter((s) => s.kind !== "device");
     if (remaining.length === 0) {
@@ -1011,18 +1077,20 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   const channelBroadcasters = useMemo(() => {
     if (screenShare.broadcastingSessions.size === 0) return [];
     return users
-      .filter((u) => u.channel_id === selectedChannel
-        && screenShare.broadcastingSessions.has(u.session)
-        && u.session !== ownSession
-        && !poppedOutStreamSessions.has(u.session))
+      .filter(
+        (u) =>
+          u.channel_id === selectedChannel &&
+          screenShare.broadcastingSessions.has(u.session) &&
+          u.session !== ownSession &&
+          !poppedOutStreamSessions.has(u.session),
+      )
       .map((u) => ({ session: u.session, name: u.name }));
   }, [users, selectedChannel, screenShare.broadcastingSessions, ownSession, poppedOutStreamSessions]);
 
   // Show StreamFocusView when watching someone, or broadcasting with others.
   // Using a single instance keeps layout state stable across swap transitions.
-  const showFocusView = activeScreenShare !== null && (
-    !activeScreenShare.isOwn || channelBroadcasters.length > 0
-  );
+  const showFocusView =
+    activeScreenShare !== null && (!activeScreenShare.isOwn || channelBroadcasters.length > 0);
 
   // Secondary panels for the unified focus view.
   const focusViewSecondaries = useMemo(() => {
@@ -1040,21 +1108,27 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     return secondaries;
   }, [activeScreenShare, screenShare.isBroadcasting, ownSession, users, channelBroadcasters]);
 
-  const handleFocusWatch = useCallback((session: number) => {
-    if (session === ownSession) {
-      screenShare.stopWatching();
-    } else {
-      screenShare.watchBroadcast(session);
-    }
-  }, [ownSession, screenShare.stopWatching, screenShare.watchBroadcast]);
+  const handleFocusWatch = useCallback(
+    (session: number) => {
+      if (session === ownSession) {
+        screenShare.stopWatching();
+      } else {
+        screenShare.watchBroadcast(session);
+      }
+    },
+    [ownSession, screenShare.stopWatching, screenShare.watchBroadcast],
+  );
 
   // Compute header values before any early returns (hooks can't be conditional).
   const [headerName, headerMemberCount] = computeHeader(
-    isDmMode, dmPartner,
+    isDmMode,
+    dmPartner,
     // Meeting rooms display their meeting name (server disambiguation suffix
     // stripped); ordinary channels are unchanged.
-    channel ? { name: channelLabel ?? channel.name } : undefined, memberCount,
-    t("header.directMessage"), t("header.unknown"),
+    channel ? { name: channelLabel ?? channel.name } : undefined,
+    memberCount,
+    t("header.directMessage"),
+    t("header.unknown"),
   );
   const showJoinButton = !isDmMode && !isInChannel;
 
@@ -1082,7 +1156,9 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
     return (
       <main className={styles.main}>
         <div className={styles.empty}>
-          <div className={styles.emptyIcon}><MessageCircleIcon width={40} height={40} /></div>
+          <div className={styles.emptyIcon}>
+            <MessageCircleIcon width={40} height={40} />
+          </div>
           <p>{t("page.selectChannel")}</p>
         </div>
       </main>
@@ -1090,17 +1166,22 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
   }
 
   return (
-    <main ref={mainRef} className={[
-      styles.main,
-      // Screen-share now lives in a resizable panel, so the chat just fills the
-      // remaining space (its normal layout) instead of the fixed compact strip;
-      // only the Live Doc compact mode keeps that strip.
-      liveDocCompactChat ? styles.compactChat : "",
-      activeLiveDoc && !liveDocCompactChat ? styles.hiddenChat : "",
-      ((activeLiveDoc && liveDocCompactChat) || showLiveDocLibrary) && liveDocSplitPx !== null ? styles.splitActive : "",
-    ].join(" ")}>
-      {!inPopout && (
-        selectionMode ? (
+    <main
+      ref={mainRef}
+      className={[
+        styles.main,
+        // Screen-share now lives in a resizable panel, so the chat just fills the
+        // remaining space (its normal layout) instead of the fixed compact strip;
+        // only the Live Doc compact mode keeps that strip.
+        liveDocCompactChat ? styles.compactChat : "",
+        activeLiveDoc && !liveDocCompactChat ? styles.hiddenChat : "",
+        ((activeLiveDoc && liveDocCompactChat) || showLiveDocLibrary) && liveDocSplitPx !== null
+          ? styles.splitActive
+          : "",
+      ].join(" ")}
+    >
+      {!inPopout &&
+        (selectionMode ? (
           <MessageSelectionBar
             count={selectedMsgIds.size}
             onDelete={handleBulkDelete}
@@ -1110,56 +1191,64 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
           <ChatHeader
             channelName={headerName}
             memberCount={headerMemberCount}
-          isInChannel={isDmMode || isInChannel}
-          isDm={isDmMode}
-          isPersisted={persistent.isPersisted}
-          isE2E={!isDmMode && (channel?.pchat_protocol === "signal_v1" || channel?.pchat_protocol === "fancy_v1_full_archive")}
-          onJoin={showJoinButton ? () => joinChannel(selectedChannel!) : undefined}
-          onChannelInfoToggle={onChannelInfoToggle}
-          onChannelSearch={onChannelSearch}
-          keyTrustLevel={persistent.trustLevel}
-          onVerifyClick={persistent.onVerifyClick}
-          onPollCreate={openPollCreator}
-          isSilenced={selectedChannel !== null && silencedChannels.has(selectedChannel)}
-          onToggleSilence={selectedChannel !== null ? () => toggleSilenceChannel(selectedChannel) : undefined}
-          isScreenSharing={screenShare.isBroadcasting}
-          onToggleScreenShare={
-            // Always the picker: the header button stays visible while
-            // broadcasting so the user can change/add sources (confirming a
-            // seeded picker edits the live share). Stopping lives on the
-            // stream panel × and the camera-PiP ×.
-            !inPopout && !isMobile && serverFancyVersion != null && serverFancyVersion >= SCREEN_SHARE_MIN_VERSION
-              ? screenShare.startSharing
-              : undefined
-          }
-          isCameraSharing={screenShare.activeSources?.some((s) => s.kind === "device") ?? false}
-          onToggleCameraShare={
-            // Only where the portal replaces the in-app picker (GNOME): the
-            // picker's Devices tab is gone there, so cameras get their own
-            // button (system consent dialog, then a camera-only picker).
-            screenShare.portalPicker
-              && !inPopout && !isMobile && serverFancyVersion != null && serverFancyVersion >= SCREEN_SHARE_MIN_VERSION
-              ? screenShare.startCameraSharing
-              : undefined
-          }
-          screenShareDisabledReason={
-            screenShare.isBroadcastingFromOtherTab
-              ? t("screenShare.alreadySharingOtherServer")
-              : undefined
-          }
-          sfuAvailable={sfuAvailable}
-          broadcastInfo={broadcastInfo}
-          hasNewPins={hasNewPins}
-          onPinnedMessages={handleOpenPinnedPanel}
-          hasNewDownloads={unseenDownloadCount > 0}
-          onDownloads={handleOpenDownloadsPanel}
-          onOpenCalendar={calendarActive ? handleOpenCalendar : undefined}
-          onMySharedFiles={fileServerConfig ? handleOpenMySharedFiles : undefined}
-          onOpenDocLibrary={liveDocActive ? handleOpenDocLibrary : undefined}
-          onPopOutDm={inPopout ? undefined : handlePopOutDm}
-        />
-        )
-      )}
+            isInChannel={isDmMode || isInChannel}
+            isDm={isDmMode}
+            isPersisted={persistent.isPersisted}
+            isE2E={
+              !isDmMode &&
+              (channel?.pchat_protocol === "signal_v1" || channel?.pchat_protocol === "fancy_v1_full_archive")
+            }
+            onJoin={showJoinButton ? () => joinChannel(selectedChannel!) : undefined}
+            onChannelInfoToggle={onChannelInfoToggle}
+            onChannelSearch={onChannelSearch}
+            keyTrustLevel={persistent.trustLevel}
+            onVerifyClick={persistent.onVerifyClick}
+            onPollCreate={openPollCreator}
+            isSilenced={selectedChannel !== null && silencedChannels.has(selectedChannel)}
+            onToggleSilence={
+              selectedChannel !== null ? () => toggleSilenceChannel(selectedChannel) : undefined
+            }
+            isScreenSharing={screenShare.isBroadcasting}
+            onToggleScreenShare={
+              // Always the picker: the header button stays visible while
+              // broadcasting so the user can change/add sources (confirming a
+              // seeded picker edits the live share). Stopping lives on the
+              // stream panel × and the camera-PiP ×.
+              !inPopout &&
+              !isMobile &&
+              serverFancyVersion != null &&
+              serverFancyVersion >= SCREEN_SHARE_MIN_VERSION
+                ? screenShare.startSharing
+                : undefined
+            }
+            isCameraSharing={screenShare.activeSources?.some((s) => s.kind === "device") ?? false}
+            onToggleCameraShare={
+              // Only where the portal replaces the in-app picker (GNOME): the
+              // picker's Devices tab is gone there, so cameras get their own
+              // button (system consent dialog, then a camera-only picker).
+              screenShare.portalPicker &&
+              !inPopout &&
+              !isMobile &&
+              serverFancyVersion != null &&
+              serverFancyVersion >= SCREEN_SHARE_MIN_VERSION
+                ? screenShare.startCameraSharing
+                : undefined
+            }
+            screenShareDisabledReason={
+              screenShare.isBroadcastingFromOtherTab ? t("screenShare.alreadySharingOtherServer") : undefined
+            }
+            sfuAvailable={sfuAvailable}
+            broadcastInfo={broadcastInfo}
+            hasNewPins={hasNewPins}
+            onPinnedMessages={handleOpenPinnedPanel}
+            hasNewDownloads={unseenDownloadCount > 0}
+            onDownloads={handleOpenDownloadsPanel}
+            onOpenCalendar={calendarActive ? handleOpenCalendar : undefined}
+            onMySharedFiles={fileServerConfig ? handleOpenMySharedFiles : undefined}
+            onOpenDocLibrary={liveDocActive ? handleOpenDocLibrary : undefined}
+            onPopOutDm={inPopout ? undefined : handlePopOutDm}
+          />
+        ))}
 
       {showPinnedPanel && (
         <ResizableSplitPanel
@@ -1256,11 +1345,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
 
       {/* Drag handle: shown in compact-doc mode or whenever the library is open. */}
       {((activeLiveDoc && liveDocCompactChat) || (showLiveDocLibrary && !activeLiveDoc)) && (
-        <div
-          className={styles.splitHandle}
-          onMouseDown={handleSplitDragStart}
-          aria-hidden="true"
-        />
+        <div className={styles.splitHandle} onMouseDown={handleSplitDragStart} aria-hidden="true" />
       )}
 
       {/* Discovery banner for someone else's open Live Doc. */}
@@ -1275,12 +1360,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
            view of our own SFU session) may arrive a moment later, and the
            panel is also the only place the share can be stopped from. */}
       {activeScreenShare?.isOwn && !showFocusView && (
-        <ResizableSplitPanel
-          fillByDefault
-          minPx={200}
-          onClose={handleStopScreen}
-          closeLabel={ownStopLabel}
-        >
+        <ResizableSplitPanel fillByDefault minPx={200} onClose={handleStopScreen} closeLabel={ownStopLabel}>
           <Suspense fallback={null}>
             <StreamConfigMenu
               settings={screenShare.settings}
@@ -1318,9 +1398,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
               otherBroadcasters={focusViewSecondaries}
               onWatch={handleFocusWatch}
               onClose={activeScreenShare.isOwn ? handleStopScreen : screenShare.stopWatching}
-              closeLabel={
-                activeScreenShare.isOwn ? ownStopLabel : t("screenShare.stopWatching")
-              }
+              closeLabel={activeScreenShare.isOwn ? ownStopLabel : t("screenShare.stopWatching")}
               configMenu={
                 activeScreenShare.isOwn ? (
                   <Suspense fallback={null}>
@@ -1341,10 +1419,7 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
       {/* Multi-stream grid: shown when 2+ broadcasters and we are not sharing or watching */}
       {!activeScreenShare && channelBroadcasters.length > 1 && (
         <Suspense fallback={null}>
-          <MultiStreamGrid
-            broadcasters={channelBroadcasters}
-            onWatch={screenShare.watchBroadcast}
-          />
+          <MultiStreamGrid broadcasters={channelBroadcasters} onWatch={screenShare.watchBroadcast} />
         </Suspense>
       )}
 
@@ -1370,165 +1445,175 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
            overlay (position:absolute, inset:0) is scoped to the chat's
            own portion and never spills over the live-doc panel above. */}
       <div className={styles.chatColumn}>
-      {/* Messages wrapper: position:relative so the key-share banner
+        {/* Messages wrapper: position:relative so the key-share banner
            can overlay the scroll viewport without scrolling with it */}
-      <div className={styles.messagesWrapper}>
-        {persistent.keyShareBanner && (
-          <div className={styles.fixedKeyShareBanner}>
-            {persistent.keyShareBanner}
+        <div className={styles.messagesWrapper}>
+          {persistent.keyShareBanner && (
+            <div className={styles.fixedKeyShareBanner}>{persistent.keyShareBanner}</div>
+          )}
+
+          {/* Messages */}
+          <div
+            ref={messagesContainerRef}
+            className={[
+              styles.messages,
+              personalization.bubbleStyle === "flat" ? styles.flatStyle : "",
+              personalization.bubbleStyle === "compact" ? styles.compactStyle : "",
+              personalization.compactMode ? styles.compactLayout : "",
+            ].join(" ")}
+            data-has-bg={personalization.chatBgOriginal ? "" : undefined}
+            style={
+              {
+                ...(personalization.chatBgOriginal
+                  ? {
+                      "--chat-bg-image": `url(${personalization.chatBgBlurred ?? personalization.chatBgOriginal})`,
+                      "--chat-bg-opacity": String(personalization.chatBgOpacity),
+                      "--chat-bg-size": personalization.chatBgFit === "tile" ? "auto" : "cover",
+                      "--chat-bg-repeat": personalization.chatBgFit === "tile" ? "repeat" : "no-repeat",
+                    }
+                  : {}),
+                "--chat-font-size":
+                  personalization.fontSize === "small"
+                    ? "12px"
+                    : personalization.fontSize === "large"
+                      ? `${personalization.fontSizeCustomPx}px`
+                      : "14px",
+              } as React.CSSProperties
+            }
+          >
+            <div ref={messagesInnerRef} className={styles.messagesInner}>
+              {/* All banners in a single sticky container */}
+              <BannerStack>
+                {persistent.banner}
+                {persistent.signalBridgeErrorBanner}
+                {persistent.disputeBanner}
+                {persistent.revokedBanner}
+              </BannerStack>
+
+              <ActiveWatchBanner />
+
+              {allMessages.length === 0 ? (
+                <div className={styles.empty}>
+                  <div className={styles.emptyIcon}>
+                    <HandIcon width={40} height={40} />
+                  </div>
+                  <p>{t("emptyState.noMessages")}</p>
+                </div>
+              ) : (
+                <ChatMessageList
+                  allMessages={visibleMessages}
+                  indexOffset={windowStart}
+                  fullMessageIds={allMessageIds}
+                  userBySession={userBySession}
+                  avatarBySession={avatarBySession}
+                  userByHash={userByHash}
+                  avatarByHash={avatarByHash}
+                  convertToLocalTime={convertToLocalTime}
+                  bubbleStyle={personalization.bubbleStyle}
+                  lastReadIdx={lastReadIdx}
+                  selectionMode={selectionMode}
+                  canDelete={canDelete}
+                  selectedMsgIds={selectedMsgIds}
+                  restoringKeys={restoringKeys}
+                  polls={polls}
+                  ownSession={ownSession}
+                  timeFormat={timeFormat}
+                  systemUses24h={systemUses24h}
+                  selectUser={selectUser}
+                  handleMessageContextMenu={handleMessageContextMenu}
+                  toggleMsgSelection={toggleMsgSelection}
+                  handleCite={handleCite}
+                  handleTouchStart={handleTouchStart}
+                  cancelLongPress={cancelLongPress}
+                  handleReaction={handleReaction}
+                  handleMoreReactions={handleMoreReactions}
+                  handleCopyText={handleCopyText}
+                  handleSingleDelete={handleSingleDelete}
+                  handlePollVote={handlePollVote}
+                  handleScrollToMessage={handleScrollToMessage}
+                  handleOpenLightbox={(src) => lightboxRef.current?.open(src)}
+                  getMessageReactions={getMessageReactions}
+                  onToggleReaction={toggleReaction}
+                  onAddReaction={handleMoreReactions}
+                  alwaysShowMessageActions={personalization.alwaysShowMessageActions}
+                />
+              )}
+              {uploadPlaceholders.map((p) => (
+                <UploadProgressItem
+                  key={p.id}
+                  placeholder={p}
+                  onDismiss={handleDismissUpload}
+                  onCancel={handleCancelUpload}
+                />
+              ))}
+              {scopedPending.map((p) => (
+                <PendingMessageItem key={p.pendingId} pending={p} />
+              ))}
+              {/* Bottom sentinel - scroll target for auto-scroll */}
+              <div ref={bottomSentinelRef} aria-hidden="true" style={{ height: 0, overflow: "hidden" }} />
+            </div>
+          </div>
+        </div>
+
+        {/* "New messages" pill - shown when user scrolled up and messages arrive */}
+        {newMsgCount > 0 && (
+          <button className={styles.newMessagesPill} onClick={handleScrollToBottom}>
+            <ChevronDownIcon width={16} height={16} aria-hidden="true" />
+            {t("newMessagesPill.count", { count: newMsgCount })}
+          </button>
+        )}
+
+        {/* Pending quote preview strip */}
+        <QuotePreviewStrip quotes={pendingQuotes} onRemove={removePendingQuote} />
+
+        {/* Drag-drop preview strip (above composer) */}
+        <PendingAttachmentsStrip
+          attachments={pendingAttachments}
+          onRemove={removeAttachment}
+          onToggleSpoiler={toggleSpoiler}
+          onSend={() => void handleSendAndResetTyping()}
+          quality={galleryQuality}
+          onQualityChange={setGalleryQuality}
+          onPreview={(src) => lightboxRef.current?.open(src)}
+          disabled={sending || isUploading}
+        />
+
+        {/* Drag overlay shown while user drags a file over the chat window */}
+        {dragTarget === "chat" && canDropAttachments && (
+          <div className={styles.dragOverlay} aria-hidden="true">
+            <div className={styles.dragOverlayInner}>
+              <span>{t("dragDrop.overlayHint")}</span>
+            </div>
           </div>
         )}
 
-        {/* Messages */}
-        <div
-          ref={messagesContainerRef}
-          className={[
-            styles.messages,
-            personalization.bubbleStyle === "flat" ? styles.flatStyle : "",
-            personalization.bubbleStyle === "compact" ? styles.compactStyle : "",
-            personalization.compactMode ? styles.compactLayout : "",
-          ].join(" ")}
-          data-has-bg={personalization.chatBgOriginal ? "" : undefined}
-          style={{
-            ...(personalization.chatBgOriginal ? {
-              "--chat-bg-image": `url(${personalization.chatBgBlurred ?? personalization.chatBgOriginal})`,
-              "--chat-bg-opacity": String(personalization.chatBgOpacity),
-              "--chat-bg-size": personalization.chatBgFit === "tile" ? "auto" : "cover",
-              "--chat-bg-repeat": personalization.chatBgFit === "tile" ? "repeat" : "no-repeat",
-            } : {}),
-            "--chat-font-size": personalization.fontSize === "small" ? "12px"
-              : personalization.fontSize === "large" ? `${personalization.fontSizeCustomPx}px`
-              : "14px",
-          } as React.CSSProperties}
-        >
-          <div ref={messagesInnerRef} className={styles.messagesInner}>
-          {/* All banners in a single sticky container */}
-          <BannerStack>
-            {persistent.banner}
-            {persistent.signalBridgeErrorBanner}
-            {persistent.disputeBanner}
-            {persistent.revokedBanner}
-          </BannerStack>
+        <div className={styles.composerWrapper}>
+          <TypingIndicator channelId={isDmMode ? null : selectedChannel} />
 
-          <ActiveWatchBanner />
-
-          {allMessages.length === 0 ? (
-            <div className={styles.empty}>
-              <div className={styles.emptyIcon}><HandIcon width={40} height={40} /></div>
-              <p>{t("emptyState.noMessages")}</p>
-            </div>
-          ) : (
-            <ChatMessageList
-              allMessages={visibleMessages}
-              indexOffset={windowStart}
-              fullMessageIds={allMessageIds}
-              userBySession={userBySession}
-              avatarBySession={avatarBySession}
-              userByHash={userByHash}
-              avatarByHash={avatarByHash}
-              convertToLocalTime={convertToLocalTime}
-              bubbleStyle={personalization.bubbleStyle}
-              lastReadIdx={lastReadIdx}
-              selectionMode={selectionMode}
-              canDelete={canDelete}
-              selectedMsgIds={selectedMsgIds}
-              restoringKeys={restoringKeys}
-              polls={polls}
-              ownSession={ownSession}
-              timeFormat={timeFormat}
-              systemUses24h={systemUses24h}
-              selectUser={selectUser}
-              handleMessageContextMenu={handleMessageContextMenu}
-              toggleMsgSelection={toggleMsgSelection}
-              handleCite={handleCite}
-              handleTouchStart={handleTouchStart}
-              cancelLongPress={cancelLongPress}
-              handleReaction={handleReaction}
-              handleMoreReactions={handleMoreReactions}
-              handleCopyText={handleCopyText}
-              handleSingleDelete={handleSingleDelete}
-              handlePollVote={handlePollVote}
-              handleScrollToMessage={handleScrollToMessage}
-              handleOpenLightbox={(src) => lightboxRef.current?.open(src)}
-              getMessageReactions={getMessageReactions}
-              onToggleReaction={toggleReaction}
-              onAddReaction={handleMoreReactions}
-              alwaysShowMessageActions={personalization.alwaysShowMessageActions}
-            />
-          )}
-          {uploadPlaceholders.map((p) => (
-            <UploadProgressItem key={p.id} placeholder={p} onDismiss={handleDismissUpload} onCancel={handleCancelUpload} />
-          ))}
-          {scopedPending.map((p) => (
-            <PendingMessageItem key={p.pendingId} pending={p} />
-          ))}
-          {/* Bottom sentinel - scroll target for auto-scroll */}
-          <div ref={bottomSentinelRef} aria-hidden="true" style={{ height: 0, overflow: "hidden" }} />
+          <ChatComposer
+            draft={draft}
+            onChange={handleDraftChange}
+            onSend={handleSendAndResetTyping}
+            onPaste={handlePaste}
+            onFilesSelected={(files) => {
+              for (const f of files) addFromFile(f);
+            }}
+            onGifSelect={handleGifSelect}
+            onAttachFile={handleAttachFile}
+            onOpenLiveDoc={
+              liveDocActive && selectedChannel !== null && !isDmMode ? handleOpenLiveDoc : undefined
+            }
+            disabled={sending || persistent.sendBlocked}
+            hasPendingQuotes={pendingQuotes.length > 0 || pendingAttachments.length > 0}
+            isEditing={editingMessage !== null}
+            onCancelEdit={cancelEdit}
+          />
         </div>
-        </div>
-      </div>
-
-      {/* "New messages" pill - shown when user scrolled up and messages arrive */}
-      {newMsgCount > 0 && (
-        <button
-          className={styles.newMessagesPill}
-          onClick={handleScrollToBottom}
-        >
-          <ChevronDownIcon width={16} height={16} aria-hidden="true" />
-          {t("newMessagesPill.count", { count: newMsgCount })}
-        </button>
-      )}
-
-      {/* Pending quote preview strip */}
-      <QuotePreviewStrip quotes={pendingQuotes} onRemove={removePendingQuote} />
-
-      {/* Drag-drop preview strip (above composer) */}
-      <PendingAttachmentsStrip
-        attachments={pendingAttachments}
-        onRemove={removeAttachment}
-        onToggleSpoiler={toggleSpoiler}
-        onSend={() => void handleSendAndResetTyping()}
-        quality={galleryQuality}
-        onQualityChange={setGalleryQuality}
-        onPreview={(src) => lightboxRef.current?.open(src)}
-        disabled={sending || isUploading}
-      />
-
-      {/* Drag overlay shown while user drags a file over the chat window */}
-      {dragTarget === "chat" && canDropAttachments && (
-        <div className={styles.dragOverlay} aria-hidden="true">
-          <div className={styles.dragOverlayInner}>
-            <span>{t("dragDrop.overlayHint")}</span>
-          </div>
-        </div>
-      )}
-
-      <div className={styles.composerWrapper}>
-        <TypingIndicator channelId={isDmMode ? null : selectedChannel} />
-
-        <ChatComposer
-          draft={draft}
-          onChange={handleDraftChange}
-          onSend={handleSendAndResetTyping}
-          onPaste={handlePaste}
-          onFilesSelected={(files) => { for (const f of files) addFromFile(f); }}
-          onGifSelect={handleGifSelect}
-          onAttachFile={handleAttachFile}
-          onOpenLiveDoc={liveDocActive && selectedChannel !== null && !isDmMode ? handleOpenLiveDoc : undefined}
-          disabled={sending || persistent.sendBlocked}
-          hasPendingQuotes={pendingQuotes.length > 0 || pendingAttachments.length > 0}
-          isEditing={editingMessage !== null}
-          onCancelEdit={cancelEdit}
-        />
-      </div>
       </div>
 
       {showPollCreator && (
         <Suspense fallback={null}>
-          <PollCreator
-            onSubmit={handlePollCreate}
-            onClose={closePollCreator}
-          />
+          <PollCreator onSubmit={handlePollCreate} onClose={closePollCreator} />
         </Suspense>
       )}
 
@@ -1552,7 +1637,9 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
             onPin={handlePin}
             onPopOutImage={handlePopOutImage}
             popOutImageSrc={findPopOutImageSrc(msgContextMenu.message.body)}
-            reactions={msgContextMenu.message.message_id ? getMessageReactions(msgContextMenu.message.message_id) : []}
+            reactions={
+              msgContextMenu.message.message_id ? getMessageReactions(msgContextMenu.message.message_id) : []
+            }
             avatarByHash={avatarByHash}
             allMessageIds={allMessageIds}
             channelId={selectedChannel ?? undefined}
@@ -1575,7 +1662,9 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
             onPin={handlePin}
             onPopOutImage={handlePopOutImage}
             popOutImageSrc={findPopOutImageSrc(msgContextMenu.message.body)}
-            reactions={msgContextMenu.message.message_id ? getMessageReactions(msgContextMenu.message.message_id) : []}
+            reactions={
+              msgContextMenu.message.message_id ? getMessageReactions(msgContextMenu.message.message_id) : []
+            }
             allMessageIds={allMessageIds}
             channelId={selectedChannel ?? undefined}
             avatarByHash={avatarByHash}
@@ -1636,7 +1725,8 @@ export default function ChatView({ onChannelInfoToggle, onChannelSearch, scrollT
               // portal may restore it silently instead of re-prompting.
               void screenShare.confirmSource(sources, settings, {
                 reuseDisplay: screenShare.pickerDeviceOnly,
-              })}
+              })
+            }
             onCancel={screenShare.cancelPicker}
           />
         </Suspense>

@@ -59,11 +59,14 @@ export function BanListTab() {
     invoke("request_ban_list").catch(() => setLoading(false));
   }, []);
 
-  const handleSelect = useCallback((idx: number) => {
-    setSelectedIdx(idx);
-    setEditing({ ...bans[idx] });
-    setDirty(false);
-  }, [bans]);
+  const handleSelect = useCallback(
+    (idx: number) => {
+      setSelectedIdx(idx);
+      setEditing({ ...bans[idx] });
+      setDirty(false);
+    },
+    [bans],
+  );
 
   const handleAdd = useCallback(() => {
     const newBan = { ...EMPTY_BAN };
@@ -82,13 +85,10 @@ export function BanListTab() {
     setDirty(true);
   }, [bans, selectedIdx]);
 
-  const patchEditing = useCallback(
-    (patch: Partial<BanEntry>) => {
-      setEditing((prev) => (prev ? { ...prev, ...patch } : prev));
-      setDirty(true);
-    },
-    [],
-  );
+  const patchEditing = useCallback((patch: Partial<BanEntry>) => {
+    setEditing((prev) => (prev ? { ...prev, ...patch } : prev));
+    setDirty(true);
+  }, []);
 
   const handleApplyEdit = useCallback(() => {
     if (selectedIdx == null || !editing) return;
@@ -98,9 +98,7 @@ export function BanListTab() {
   const handleSave = useCallback(async () => {
     // Apply any in-progress edit first.
     const finalBans =
-      selectedIdx != null && editing
-        ? bans.map((b, i) => (i === selectedIdx ? { ...editing } : b))
-        : bans;
+      selectedIdx != null && editing ? bans.map((b, i) => (i === selectedIdx ? { ...editing } : b)) : bans;
     try {
       await invoke("update_ban_list", { bans: finalBans });
       setDirty(false);
@@ -141,9 +139,7 @@ export function BanListTab() {
         {/* Ban list */}
         <div className={styles.listPane}>
           {bans.length === 0 ? (
-            <div className={styles.emptyRow}>
-              {loading ? t("banList.loading") : t("banList.noBans")}
-            </div>
+            <div className={styles.emptyRow}>{loading ? t("banList.loading") : t("banList.noBans")}</div>
           ) : (
             bans.map((b, i) => (
               <button

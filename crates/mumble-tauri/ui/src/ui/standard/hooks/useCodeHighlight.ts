@@ -8,9 +8,7 @@ function isInsideEditor(el: Element): boolean {
 }
 
 function highlightAllPending(root: ParentNode): void {
-  const blocks = root.querySelectorAll<HTMLElement>(
-    `pre > code:not([${HIGHLIGHTED}])`,
-  );
+  const blocks = root.querySelectorAll<HTMLElement>(`pre > code:not([${HIGHLIGHTED}])`);
   if (blocks.length === 0) return; // common case: no highlighter load at all
   const hljs = loadedHljs();
   if (!hljs) {

@@ -58,7 +58,9 @@ export function PrivacyPanel({
           <Toggle checked={enableDualPath} onChange={onToggleDualPath} />
         </div>
         <div className={enableDualPath ? styles.warningBannerDanger : styles.warningBannerMuted}>
-          <span>{enableDualPath ? t("privacy.dualPathWarningActive") : t("privacy.dualPathWarningMuted")}</span>
+          <span>
+            {enableDualPath ? t("privacy.dualPathWarningActive") : t("privacy.dualPathWarningMuted")}
+          </span>
           <p>{t("privacy.dualPathWarningActivePara")}</p>
         </div>
       </section>

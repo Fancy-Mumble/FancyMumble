@@ -1,4 +1,12 @@
+/* A bounded panel above the composer rather than a full-width strip: the
+   picker is a transient popover, and stretched across the whole chat its
+   columns grow into huge tiles. */
 .picker {
+    max-width: 520px;
+    margin-left: auto;
+    border: 1px solid rgba(255, 255, 255, .09);
+    border-bottom: 0;
+    border-radius: 13px 13px 0 0;
     padding: 9px;
     border-bottom: 1px solid rgba(255, 255, 255, .07);
     background: rgba(8, 11, 15, .32)
@@ -6,8 +14,7 @@
 
 .picker header {
     display: flex;
-    align-items: end;
-    gap: 7px
+    align-items: center;
 }
 
 .picker header label {
@@ -15,9 +22,7 @@
     margin: 0 !important
 }
 
-.picker header button {
-    height: 39px
-}
+
 
 .picker>p {
     margin: 8px 0 0;
@@ -39,23 +44,43 @@
     text-align: center
 }
 
+/* An auto-filled grid, NOT CSS multi-column: a multicol box with a capped
+   height flows its overflow into further columns sideways, which showed up as
+   a stray horizontal scrollbar and tiles that stopped lining up. A grid keeps
+   the rows aligned and scrolls the way a picker should. */
 .grid {
-    max-height: 260px;
+    max-height: 292px;
     margin-top: 8px;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 5px;
-    overflow: auto
+    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+    gap: 4px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, .16) transparent
 }
 
+/* The tile is a Button primitive, so its resting padding/min-height have to be
+   cleared for the image to be the whole control. */
 .grid button {
-    height: 90px;
-    padding: 0;
-    overflow: hidden
+    width: 100%;
+    height: 84px;
+    min-height: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+    overflow: hidden;
+    border-radius: 8px !important;
+    background: rgba(255, 255, 255, .03) !important
+}
+
+.grid button:hover, .grid button:focus-visible {
+    box-shadow: 0 0 0 2px rgba(101, 184, 237, .55)
 }
 
 .grid img {
     width: 100%;
     height: 100%;
+    display: block;
     object-fit: cover
 }

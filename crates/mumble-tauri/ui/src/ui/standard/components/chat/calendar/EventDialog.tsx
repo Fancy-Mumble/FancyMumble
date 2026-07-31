@@ -7,10 +7,7 @@ import { MemberPicker } from "../../elements/MemberPicker";
 import { Toggle } from "../../../pages/settings/SharedControls";
 import { useAppStore } from "@core/store";
 import { getCachedUserAvatar } from "@core/lazyBlobs";
-import {
-  acquireRegisteredTextures,
-  releaseRegisteredTextures,
-} from "@core/registeredTextureLease";
+import { acquireRegisteredTextures, releaseRegisteredTextures } from "@core/registeredTextureLease";
 import type { RegisteredUser } from "@core/types";
 import {
   CalendarClockIcon,
@@ -46,15 +43,7 @@ import styles from "./EventDialog.module.css";
 
 const DescriptionEditor = lazy(() => import("./DescriptionEditor"));
 
-const REPEAT_FREQS: RepeatFreq[] = [
-  "none",
-  "weekdays",
-  "daily",
-  "weekly",
-  "monthly",
-  "yearly",
-  "custom",
-];
+const REPEAT_FREQS: RepeatFreq[] = ["none", "weekdays", "daily", "weekly", "monthly", "yearly", "custom"];
 
 /** Round `ms` up to the next whole hour (used for sensible new-event defaults). */
 function nextHour(ms: number): number {
@@ -128,9 +117,7 @@ export default function EventDialog() {
   const initialEnd = existing?.end ?? initialStart + MS_PER_HOUR;
 
   const [title, setTitle] = useState(existing?.title ?? "");
-  const [invitees, setInvitees] = useState<number[]>(
-    existing?.participants.map((p) => p.userId) ?? [],
-  );
+  const [invitees, setInvitees] = useState<number[]>(existing?.participants.map((p) => p.userId) ?? []);
   const [allDay, setAllDay] = useState(existing?.allDay ?? false);
   const [startDate, setStartDate] = useState(toDateInput(initialStart));
   const [startTime, setStartTime] = useState(toTimeInput(initialStart));
@@ -143,9 +130,7 @@ export default function EventDialog() {
   const [location, setLocation] = useState(existing?.location ?? "");
   const [description, setDescription] = useState(existing?.description ?? "");
   const [color, setColor] = useState(existing?.color ?? CALENDAR_COLORS[0]);
-  const [reminder, setReminder] = useState<number | null>(
-    existing?.reminderMinutes ?? 15,
-  );
+  const [reminder, setReminder] = useState<number | null>(existing?.reminderMinutes ?? 15);
 
   const reminderLabel = (m: number | null): string => {
     if (m === null) return t("calendar.reminders.none");
@@ -263,17 +248,9 @@ export default function EventDialog() {
               />
             )}
             <span className={styles.arrow}>→</span>
-            <DateInput
-              value={endDate}
-              onChange={setEndDate}
-              dateFormat={formatPrefs.dateFormat}
-            />
+            <DateInput value={endDate} onChange={setEndDate} dateFormat={formatPrefs.dateFormat} />
             {!allDay && (
-              <TimeInput
-                value={endTime}
-                onChange={setEndTime}
-                timeFormat={formatPrefs.timeFormat}
-              />
+              <TimeInput value={endTime} onChange={setEndTime} timeFormat={formatPrefs.timeFormat} />
             )}
           </div>
 
@@ -404,7 +381,12 @@ export default function EventDialog() {
           <button type="button" className={styles.cancelBtn} onClick={closeDialog}>
             {t("calendar.cancel")}
           </button>
-          <button type="button" className={styles.saveBtn} onClick={handleSave} data-testid={TID.calendarSave}>
+          <button
+            type="button"
+            className={styles.saveBtn}
+            onClick={handleSave}
+            data-testid={TID.calendarSave}
+          >
             {t("calendar.save")}
           </button>
         </div>

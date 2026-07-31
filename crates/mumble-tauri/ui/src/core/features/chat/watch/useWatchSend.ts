@@ -20,16 +20,11 @@ export function useWatchSend() {
 
   return {
     send,
-    sendStart: (sessionId: string, args: Extract<WatchSyncEvent, { type: "start" }>) =>
-      send(sessionId, args),
-    sendState: (sessionId: string, args: Extract<WatchSyncEvent, { type: "state" }>) =>
-      send(sessionId, args),
-    sendJoin: (sessionId: string, session: number) =>
-      send(sessionId, { type: "join", session }),
-    sendLeave: (sessionId: string, session: number) =>
-      send(sessionId, { type: "leave", session }),
-    sendStateRequest: (sessionId: string) =>
-      send(sessionId, { type: "stateRequest" }),
+    sendStart: (sessionId: string, args: Extract<WatchSyncEvent, { type: "start" }>) => send(sessionId, args),
+    sendState: (sessionId: string, args: Extract<WatchSyncEvent, { type: "state" }>) => send(sessionId, args),
+    sendJoin: (sessionId: string, session: number) => send(sessionId, { type: "join", session }),
+    sendLeave: (sessionId: string, session: number) => send(sessionId, { type: "leave", session }),
+    sendStateRequest: (sessionId: string) => send(sessionId, { type: "stateRequest" }),
     sendEnd: (sessionId: string) => send(sessionId, { type: "end" }),
     sendHostTransfer: (sessionId: string, newHostSession: number) =>
       send(sessionId, { type: "hostTransfer", newHostSession }),

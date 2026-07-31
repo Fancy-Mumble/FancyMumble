@@ -110,7 +110,9 @@ describe("allActiveUsersRead", () => {
       makeReadState("hash-bob", "Bob", "msg-3"),
     ]);
     const result = allActiveUsersRead(
-      CHANNEL, "msg-2", MSG_IDS,
+      CHANNEL,
+      "msg-2",
+      MSG_IDS,
       ["hash-alice", "hash-bob", "hash-own"],
       "hash-own",
     );
@@ -123,7 +125,9 @@ describe("allActiveUsersRead", () => {
       makeReadState("hash-bob", "Bob", "msg-1"),
     ]);
     const result = allActiveUsersRead(
-      CHANNEL, "msg-2", MSG_IDS,
+      CHANNEL,
+      "msg-2",
+      MSG_IDS,
       ["hash-alice", "hash-bob", "hash-own"],
       "hash-own",
     );
@@ -131,11 +135,7 @@ describe("allActiveUsersRead", () => {
   });
 
   it("returns true when no other active users (only own)", () => {
-    const result = allActiveUsersRead(
-      CHANNEL, "msg-2", MSG_IDS,
-      ["hash-own"],
-      "hash-own",
-    );
+    const result = allActiveUsersRead(CHANNEL, "msg-2", MSG_IDS, ["hash-own"], "hash-own");
     expect(result).toBe(true);
   });
 

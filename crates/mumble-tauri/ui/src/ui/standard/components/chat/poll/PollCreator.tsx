@@ -50,8 +50,7 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
     setOptions((o) => o.map((v, i) => (i === idx ? value : v)));
   }, []);
 
-  const canSubmit =
-    question.trim() && options.filter((o) => o.trim()).length >= 2;
+  const canSubmit = question.trim() && options.filter((o) => o.trim()).length >= 2;
 
   const handleSubmit = useCallback(() => {
     if (!canSubmit) return;
@@ -115,11 +114,7 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
 
           {/* Multiple choice toggle */}
           <label className={styles.checkboxLabel}>
-            <input
-              type="checkbox"
-              checked={multiple}
-              onChange={(e) => setMultiple(e.target.checked)}
-            />
+            <input type="checkbox" checked={multiple} onChange={(e) => setMultiple(e.target.checked)} />
             {t("poll.creator.allowMultiple")}
           </label>
         </div>
@@ -128,11 +123,7 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
           <button className={styles.cancelBtn} onClick={onClose}>
             {t("common:actions.cancel")}
           </button>
-          <button
-            className={styles.submitBtn}
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-          >
+          <button className={styles.submitBtn} onClick={handleSubmit} disabled={!canSubmit}>
             {t("poll.creator.submit")}
           </button>
         </div>

@@ -77,9 +77,7 @@ function GroupCard({
       if (!trimmed) return null;
       const asNum = Number(trimmed);
       if (Number.isFinite(asNum) && asNum >= 0) return asNum;
-      const match = users.find(
-        (u) => u.name.toLowerCase() === trimmed.toLowerCase() && u.user_id != null,
-      );
+      const match = users.find((u) => u.name.toLowerCase() === trimmed.toLowerCase() && u.user_id != null);
       return match?.user_id ?? null;
     },
     [users],
@@ -147,11 +145,21 @@ function GroupCard({
       <div className={styles.aclCardBody}>
         <div className={styles.aclRuleOptions}>
           <label className={styles.checkboxLabel}>
-            <input type="checkbox" checked={group.inherit} disabled={group.inherited} onChange={(e) => onPatch(index, { inherit: e.target.checked })} />
+            <input
+              type="checkbox"
+              checked={group.inherit}
+              disabled={group.inherited}
+              onChange={(e) => onPatch(index, { inherit: e.target.checked })}
+            />
             {t("groups.labelInherit")}
           </label>
           <label className={styles.checkboxLabel}>
-            <input type="checkbox" checked={group.inheritable} disabled={group.inherited} onChange={(e) => onPatch(index, { inheritable: e.target.checked })} />
+            <input
+              type="checkbox"
+              checked={group.inheritable}
+              disabled={group.inherited}
+              onChange={(e) => onPatch(index, { inheritable: e.target.checked })}
+            />
             {t("groups.labelInheritable")}
           </label>
         </div>
@@ -191,7 +199,9 @@ function GroupCard({
                 placeholder={t("groups.userIdPlaceholder")}
                 value={addInput}
                 onChange={(e) => setAddInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleAddMember(); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAddMember();
+                }}
               />
               <button type="button" className={styles.addBtn} onClick={handleAddMember}>
                 {t("groups.addButton")}
@@ -222,7 +232,9 @@ function GroupCard({
                 placeholder={t("groups.userIdPlaceholder")}
                 value={removeInput}
                 onChange={(e) => setRemoveInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleRemoveMember(); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleRemoveMember();
+                }}
               />
               <button type="button" className={styles.addBtn} onClick={handleRemoveMember}>
                 {t("groups.excludeButton")}

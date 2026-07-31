@@ -10,11 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { Editor } from "@tiptap/core";
 import type { JSONContent } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
-import {
-  extractHeadings,
-  minHeadingLevel,
-  slugifyHeading,
-} from "../chat/livedoc/liveDocHeadings";
+import { extractHeadings, minHeadingLevel, slugifyHeading } from "../chat/livedoc/liveDocHeadings";
 
 type DocContent = JSONContent;
 

@@ -91,14 +91,7 @@ export function formatTimestamp(
 
 // -- Avatar colour -------------------------------------------------
 
-const AVATAR_COLORS = [
-  "#2AABEE",
-  "#7c3aed",
-  "#22c55e",
-  "#f59e0b",
-  "#ef4444",
-  "#ec4899",
-];
+const AVATAR_COLORS = ["#2AABEE", "#7c3aed", "#22c55e", "#f59e0b", "#ef4444", "#ec4899"];
 
 /** Deterministic colour for a username (stable hash into a palette). */
 export function colorFor(name: string): string {

@@ -19,9 +19,7 @@ const RESPONSES: ReadonlyArray<{ status: RsvpStatus; key: "accept" | "tentative"
 export default function EventContextMenu() {
   const { t } = useTranslation("chat");
   const menu = useCalendarStore((s) => s.menu);
-  const event = useCalendarStore((s) =>
-    menu ? s.events.find((e) => e.id === menu.eventId) : undefined,
-  );
+  const event = useCalendarStore((s) => (menu ? s.events.find((e) => e.id === menu.eventId) : undefined));
   const closeMenu = useCalendarStore((s) => s.closeMenu);
   const openEditEvent = useCalendarStore((s) => s.openEditEvent);
   const deleteEvent = useCalendarStore((s) => s.deleteEvent);

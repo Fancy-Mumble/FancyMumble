@@ -1,0 +1,347 @@
+/* Design sheet: navigation. Split from AuroraApp.module.css. */
+
+.menuDemo kbd {
+  margin-left: auto;
+  color: #707887;
+  font: 8px ui-monospace, monospace;
+}
+
+.workspaceDemo {
+  display: grid;
+  grid-template-columns: 62px 210px 1fr;
+  min-height: 365px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  border-color: rgb(255 255 255 / 9%);
+  background: rgb(21 27 34 / 62%);
+  box-shadow: 0 16px 44px rgb(0 0 0 / 13%);
+  backdrop-filter: blur(32px) saturate(108%);
+}
+
+.serverRail {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-direction: column;
+  padding: 10px;
+  border-right: 1px solid var(--line);
+  background: rgb(8 12 17 / 32%);
+  backdrop-filter: blur(24px);
+}
+
+.serverRail button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: #8e96a4;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #1b1e25;
+}
+
+.serverRail .serverActive {
+  color: var(--ink);
+  border-color: var(--signal);
+  border-radius: 10px;
+  background: #72b6df;
+  box-shadow: none;
+}
+
+.serverRail button:last-child {
+  margin-top: auto;
+  border-style: dashed;
+}
+
+.serverRail svg {
+  width: 15px;
+}
+
+.channelRail {
+  border-right: 1px solid var(--line);
+  background: rgb(8 12 17 / 32%);
+  backdrop-filter: blur(24px);
+}
+
+.channelRail > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 58px;
+  padding: 0 13px;
+  border-bottom: 1px solid var(--line);
+}
+
+.channelRail header span {
+  display: flex;
+  flex-direction: column;
+}
+
+.channelRail header strong {
+  font-size: var(--type-title);
+}
+
+.channelRail header small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: var(--type-caption);
+}
+
+.channelRail header svg {
+  width: 13px;
+}
+
+.channelGroup {
+  display: grid;
+  padding: 14px 8px 0;
+}
+
+.channelGroup > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px 6px;
+  color: #646c79;
+  letter-spacing: .07em;
+  font-size: var(--type-caption);
+}
+
+.channelGroup > span svg {
+  width: 11px;
+}
+
+.channelGroup > button {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 7px;
+  color: #858d9a;
+  text-align: left;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 12px;
+}
+
+.channelGroup > button svg {
+  width: 13px;
+}
+
+.channelGroup > button b {
+  margin-left: auto;
+  color: var(--ink);
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: var(--signal);
+}
+
+.channelGroup > button small {
+  margin-left: auto;
+}
+
+.channelGroup .channelActive {
+  color: var(--text);
+  box-shadow: inset 2px 0 #69b7e8;
+  background: rgb(255 255 255 / 5%);
+}
+
+.miniPeople {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 10px 4px 24px;
+  color: #777f8c;
+  font-size: var(--type-caption);
+}
+
+.miniPeopleAvatar.miniPeopleAvatar {
+  width: 22px;
+  height: 22px;
+  font-size: 6px;
+  border-radius: 7px;
+}
+
+.miniPeople svg {
+  width: 11px;
+}
+
+.emptyPanel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #555d69;
+}
+
+.emptyPanel > span {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: rgb(255 255 255 / 2%);
+}
+
+.emptyPanel strong {
+  margin-top: 12px;
+  color: #8e96a3;
+  font-size: 10px;
+}
+
+.emptyPanel small {
+  margin-top: 5px;
+  font-size: 8px;
+}
+
+.breadcrumb {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 26px;
+}
+
+/* Pagination is one compact traversal control. */
+.pagination {
+  align-items: center;
+  display: inline-flex;
+  gap: 2px;
+  width: max-content;
+  padding: 4px;
+  border: 1px solid rgb(235 242 248 / 10%);
+  border-radius: 12px;
+  border-color: rgb(255 255 255 / 8%);
+  background: rgb(255 255 255 / 3%);
+  box-shadow: none;
+  backdrop-filter: blur(20px);
+}
+
+.breadcrumb button {
+  color: #7d8592;
+  font-size: 9px;
+  border: 0;
+  background: transparent;
+}
+
+.breadcrumb svg {
+  width: 11px;
+  color: #4d5460;
+}
+
+.breadcrumb strong {
+  font-size: 9px;
+}
+
+.pagination button {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 9px;
+  cursor: pointer;
+  min-width: 30px;
+  height: 30px;
+  color: #929ba7;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.pagination button svg {
+  width: 13px;
+}
+
+.pagination .pageActive {
+  border-color: var(--signal);
+  color: #eaf4fa;
+  border: 0;
+  background: rgb(105 183 232 / 18%);
+  box-shadow: inset 0 0 0 1px rgb(105 183 232 / 34%);
+}
+
+.pagination span {
+  color: #5f6672;
+  display: grid;
+  min-width: 22px;
+  place-items: center;
+}
+
+.menuDemo {
+  display: grid;
+  max-width: 310px;
+  padding: 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  border-color: rgb(255 255 255 / 9%);
+  background: rgb(21 27 34 / 62%);
+  box-shadow: 0 16px 44px rgb(0 0 0 / 13%);
+  backdrop-filter: blur(32px) saturate(108%);
+}
+
+.menuDemo button {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  min-height: 33px;
+  padding: 0 8px;
+  color: #bbc0c9;
+  font-size: 9px;
+  text-align: left;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+}
+
+.menuDemo button:hover {
+  background: rgb(255 255 255 / 6%);
+}
+
+.menuDemo button svg {
+  width: 13px;
+}
+
+.menuDemo > i {
+  height: 1px;
+  margin: 4px;
+  background: var(--line);
+}
+
+.menuDemoMenuDanger.menuDemoMenuDanger {
+  color: #ff8d83;
+}
+
+.pagination button:hover {
+  color: #e6e9ed;
+  background: rgb(255 255 255 / 6%);
+}
+
+.pagination button:first-child {
+  margin-right: 3px;
+  border-right: 1px solid var(--line);
+  border-radius: 8px 3px 3px 8px;
+}
+
+.pagination button:last-child {
+  margin-left: 3px;
+  border-left: 1px solid var(--line);
+  border-radius: 3px 8px 8px 3px;
+}
+
+@media (max-width: 720px) {
+  .workspaceDemo {
+    grid-template-columns: 52px 1fr;
+  }
+
+  .workspaceDemo .emptyPanel {
+    display: none;
+  }
+
+  .channelRail {
+    border-right: 0;
+  }
+}

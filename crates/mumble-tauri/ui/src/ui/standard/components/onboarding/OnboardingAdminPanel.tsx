@@ -2,11 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useAppStore } from "@core/store";
-import type {
-  OnboardingAnswer,
-  OnboardingConfig,
-  OnboardingQuestion,
-} from "@core/types";
+import type { OnboardingAnswer, OnboardingConfig, OnboardingQuestion } from "@core/types";
 import { type AutocompleteOption } from "../elements/Autocomplete";
 import { MultiSelectField } from "../elements/MultiSelectField";
 import { PlusIcon, TrashIcon, HashIcon, SparklesIcon } from "../../icons";
@@ -133,7 +129,9 @@ export default function OnboardingAdminPanel({ setFooter }: Readonly<OnboardingA
   const addAnswer = (qIdx: number) =>
     setDraft((d) => ({
       ...d,
-      questions: d.questions.map((q, i) => (i === qIdx ? { ...q, answers: [...q.answers, emptyAnswer()] } : q)),
+      questions: d.questions.map((q, i) =>
+        i === qIdx ? { ...q, answers: [...q.answers, emptyAnswer()] } : q,
+      ),
     }));
 
   const removeAnswer = (qIdx: number, aIdx: number) =>
@@ -205,7 +203,9 @@ export default function OnboardingAdminPanel({ setFooter }: Readonly<OnboardingA
             {t("onboarding.admin.maxQuestionsHint", { max: MAX_QUESTIONS })}
           </p>
         </div>
-        <span className={styles.tag}>{t("onboarding.admin.revisionTag", { n: draft.revision, m: channels.length })}</span>
+        <span className={styles.tag}>
+          {t("onboarding.admin.revisionTag", { n: draft.revision, m: channels.length })}
+        </span>
       </header>
 
       <div className={styles.card}>
@@ -216,7 +216,11 @@ export default function OnboardingAdminPanel({ setFooter }: Readonly<OnboardingA
         />
         <MultiSelectField
           className={styles.field}
-          label={<><HashIcon width={13} height={13} /> {t("onboarding.admin.defaultChannelIdsLabel")}</>}
+          label={
+            <>
+              <HashIcon width={13} height={13} /> {t("onboarding.admin.defaultChannelIdsLabel")}
+            </>
+          }
           options={channelOptions}
           value={toOptions(draft.default_channel_ids)}
           onChange={(opts) => setDraft({ ...draft, default_channel_ids: opts.map((o) => o.value) })}
@@ -306,7 +310,11 @@ export default function OnboardingAdminPanel({ setFooter }: Readonly<OnboardingA
 
                 <MultiSelectField
                   className={styles.field}
-                  label={<><HashIcon width={13} height={13} /> {t("onboarding.admin.channelIdsLabel")}</>}
+                  label={
+                    <>
+                      <HashIcon width={13} height={13} /> {t("onboarding.admin.channelIdsLabel")}
+                    </>
+                  }
                   options={channelOptions}
                   value={toOptions(a.channel_ids)}
                   onChange={(opts) => updateAnswer(qIdx, aIdx, { channel_ids: opts.map((o) => o.value) })}
@@ -320,7 +328,9 @@ export default function OnboardingAdminPanel({ setFooter }: Readonly<OnboardingA
                     label={t("onboarding.admin.aclGroupNamesLabel")}
                     inputClassName={styles.input}
                     value={a.group_names.join(", ")}
-                    onChange={(e) => updateAnswer(qIdx, aIdx, { group_names: parseStringList(e.target.value) })}
+                    onChange={(e) =>
+                      updateAnswer(qIdx, aIdx, { group_names: parseStringList(e.target.value) })
+                    }
                     placeholder="gamers, newcomer"
                   />
                 </div>
@@ -348,7 +358,6 @@ export default function OnboardingAdminPanel({ setFooter }: Readonly<OnboardingA
           <PlusIcon width={16} height={16} /> {t("onboarding.admin.addQuestionBtn")}
         </button>
       ) : null}
-
     </div>
   );
 }

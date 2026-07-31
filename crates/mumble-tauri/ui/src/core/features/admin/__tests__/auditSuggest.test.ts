@@ -6,11 +6,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import {
-  suggestAudit,
-  SUGGEST_FIELDS,
-  type AuditSuggestContext,
-} from "../auditSuggest";
+import { suggestAudit, SUGGEST_FIELDS, type AuditSuggestContext } from "../auditSuggest";
 
 const ctx: AuditSuggestContext = {
   categories: ["ban", "kick", "acl", "channel"],
@@ -23,8 +19,7 @@ const ctx: AuditSuggestContext = {
 
 /** Suggest at the end of `text` (the common "just typed this" case). */
 const at = (text: string, caret = text.length) => suggestAudit(text, caret, ctx);
-const labels = (text: string, caret = text.length) =>
-  at(text, caret).suggestions.map((s) => s.label);
+const labels = (text: string, caret = text.length) => at(text, caret).suggestions.map((s) => s.label);
 
 describe("field context", () => {
   it("offers every field on an empty query", () => {

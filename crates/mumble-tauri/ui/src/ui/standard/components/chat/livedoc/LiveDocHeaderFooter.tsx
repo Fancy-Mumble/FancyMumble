@@ -45,12 +45,7 @@ function Band({ doc, zone, value, readOnly, style, showInput, pageNumberLabel }:
   const bandStyle = zone === "header" ? value.headerStyle : value.footerStyle;
   const placeholder = t(`liveDoc.headerFooter.${zone}Placeholder`);
   return (
-    <div
-      className={styles.band}
-      style={style}
-      data-livedoc-band={zone}
-      data-band-style={bandStyle}
-    >
+    <div className={styles.band} style={style} data-livedoc-band={zone} data-band-style={bandStyle}>
       {showInput ? (
         <input
           type="text"
@@ -61,7 +56,10 @@ function Band({ doc, zone, value, readOnly, style, showInput, pageNumberLabel }:
           placeholder={placeholder}
           aria-label={t(`liveDoc.headerFooter.${zone}Aria`)}
           onChange={(e) =>
-            setLiveDocHeaderFooter(doc, zone === "header" ? { header: e.target.value } : { footer: e.target.value })
+            setLiveDocHeaderFooter(
+              doc,
+              zone === "header" ? { header: e.target.value } : { footer: e.target.value },
+            )
           }
         />
       ) : (

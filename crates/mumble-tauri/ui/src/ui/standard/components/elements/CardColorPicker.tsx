@@ -14,12 +14,7 @@ interface CardColorPickerProps {
   onGlassChange?: (glass: boolean) => void;
 }
 
-export function CardColorPicker({
-  colors,
-  onChange,
-  glass,
-  onGlassChange,
-}: Readonly<CardColorPickerProps>) {
+export function CardColorPicker({ colors, onChange, glass, onGlassChange }: Readonly<CardColorPickerProps>) {
   const { t } = useTranslation("common");
   const handleAdd = useCallback(() => {
     if (colors.length >= MAX_COLORS) return;
@@ -46,9 +41,7 @@ export function CardColorPicker({
     onChange(randomThemeColors());
   }, [onChange]);
 
-  const palette = colors.length > 0
-    ? resolveThemePalette(colors, glass ?? false)
-    : null;
+  const palette = colors.length > 0 ? resolveThemePalette(colors, glass ?? false) : null;
 
   return (
     <div className={styles.wrapper}>
@@ -73,12 +66,8 @@ export function CardColorPicker({
             {i < 3 && colors.length > 3 && (
               <span className={styles.roleBadge}>{t("cardColorPicker.roleBg")}</span>
             )}
-            {i === 3 && (
-              <span className={styles.roleBadge}>{t("cardColorPicker.roleBorder")}</span>
-            )}
-            {i === 4 && (
-              <span className={styles.roleBadge}>{t("cardColorPicker.roleAccent")}</span>
-            )}
+            {i === 3 && <span className={styles.roleBadge}>{t("cardColorPicker.roleBorder")}</span>}
+            {i === 4 && <span className={styles.roleBadge}>{t("cardColorPicker.roleAccent")}</span>}
             <button
               type="button"
               className={styles.removeBtn}
@@ -104,11 +93,7 @@ export function CardColorPicker({
 
       {onGlassChange && (
         <label className={styles.glassToggle}>
-          <input
-            type="checkbox"
-            checked={glass ?? false}
-            onChange={(e) => onGlassChange(e.target.checked)}
-          />
+          <input type="checkbox" checked={glass ?? false} onChange={(e) => onGlassChange(e.target.checked)} />
           <span>{t("cardColorPicker.glassLabel")}</span>
         </label>
       )}

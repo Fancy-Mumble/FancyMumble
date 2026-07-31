@@ -107,26 +107,20 @@ describe("PollCard voting", () => {
 describe("PollCard own vs other", () => {
   it("renders with isOwn=true", () => {
     const poll = makePoll({ question: "My own poll?" });
-    const { container } = render(
-      <PollCard poll={poll} ownSession={1} isOwn={true} onVote={vi.fn()} />,
-    );
+    const { container } = render(<PollCard poll={poll} ownSession={1} isOwn={true} onVote={vi.fn()} />);
     // Should have the own-style card class
     expect(container.firstChild).toBeTruthy();
   });
 
   it("renders with isOwn=false", () => {
     const poll = makePoll({ question: "Someone else's poll?" });
-    const { container } = render(
-      <PollCard poll={poll} ownSession={2} isOwn={false} onVote={vi.fn()} />,
-    );
+    const { container } = render(<PollCard poll={poll} ownSession={2} isOwn={false} onVote={vi.fn()} />);
     expect(container.firstChild).toBeTruthy();
   });
 
   it("renders with null ownSession (not yet assigned)", () => {
     const poll = makePoll({ question: "No session yet?" });
-    render(
-      <PollCard poll={poll} ownSession={null} isOwn={false} onVote={vi.fn()} />,
-    );
+    render(<PollCard poll={poll} ownSession={null} isOwn={false} onVote={vi.fn()} />);
     expect(screen.getByText("No session yet?")).toBeTruthy();
     // User should still be able to vote even without ownSession
     expect(screen.getByText("0 votes")).toBeTruthy();

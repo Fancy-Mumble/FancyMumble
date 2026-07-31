@@ -17,9 +17,7 @@ export interface TreeNode {
  * additional top-level nodes - an admin still needs to manage their ACLs.
  */
 export function buildChannelTree(channels: ChannelEntry[]): TreeNode[] {
-  const root = channels.find(
-    (c) => !c.detached && (c.parent_id === null || c.parent_id === c.id),
-  );
+  const root = channels.find((c) => !c.detached && (c.parent_id === null || c.parent_id === c.id));
 
   const byParent = new Map<number, ChannelEntry[]>();
   for (const ch of channels) {
@@ -32,8 +30,9 @@ export function buildChannelTree(channels: ChannelEntry[]): TreeNode[] {
   }
 
   const build = (ch: ChannelEntry): TreeNode => {
-    const kids = (byParent.get(ch.id) ?? [])
-      .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
+    const kids = (byParent.get(ch.id) ?? []).sort(
+      (a, b) => a.position - b.position || a.name.localeCompare(b.name),
+    );
     return { channel: ch, children: kids.map(build) };
   };
 
@@ -66,11 +65,7 @@ export function limitTreeDepth(nodes: TreeNode[], maxDepth: number, depth = 0): 
  *  parent's ACL - i.e. it has its own inheritance override or explicit
  *  (non-inherited) rules/groups of its own. */
 export function hasCustomAcl(acl: AclData): boolean {
-  return (
-    !acl.inherit_acls ||
-    acl.acls.some((a) => !a.inherited) ||
-    acl.groups.some((g) => !g.inherited)
-  );
+  return !acl.inherit_acls || acl.acls.some((a) => !a.inherited) || acl.groups.some((g) => !g.inherited);
 }
 
 export interface ChannelAccess {
@@ -110,10 +105,7 @@ export function computeChannelAccess(acls: AclEntry[], groups: AclGroup[]): Chan
   const groupMembers = new Map<string, number[]>();
   for (const name of groupNames) {
     const g = groups.find((gr) => gr.name === name);
-    const members = new Set<number>([
-      ...(g?.inherited_members ?? []),
-      ...(g?.add ?? []),
-    ]);
+    const members = new Set<number>([...(g?.inherited_members ?? []), ...(g?.add ?? [])]);
     for (const r of g?.remove ?? []) members.delete(r);
     groupMembers.set(name, [...members]);
   }

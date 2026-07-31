@@ -100,7 +100,8 @@ function tokenize(input: string): Token[] {
       i += 1;
     } else if (c === '"' || c === "'") {
       const end = input.indexOf(c, i + 1);
-      if (end === -1) throw new AuditQueryError(`Unterminated string starting at "${input.slice(i, i + 12)}"`);
+      if (end === -1)
+        throw new AuditQueryError(`Unterminated string starting at "${input.slice(i, i + 12)}"`);
       tokens.push({ kind: "string", value: input.slice(i + 1, end) });
       i = end + 1;
     } else if (c === "(" || c === ")" || c === ",") {
@@ -142,9 +143,20 @@ function timeHelperToken(v: string): string | undefined {
 }
 
 const KNOWN_FIELDS = new Set([
-  "category", "source", "severity", "actor", "target", "channel", "text", "ts",
+  "category",
+  "source",
+  "severity",
+  "actor",
+  "target",
+  "channel",
+  "text",
+  "ts",
   // Dotted spellings from the design doc examples.
-  "actor.name", "actor.id", "target.name", "target.id", "channel.id",
+  "actor.name",
+  "actor.id",
+  "target.name",
+  "target.id",
+  "channel.id",
 ]);
 
 /**
@@ -175,7 +187,9 @@ export function parseAuditQuery(input: string): AuditFilterState {
     if (t.kind === "word" && /^(and)$/i.test(t.value)) continue;
     if (t.kind === "punct" && t.value === ",") continue;
     if (t.kind === "word" && /^(or|not)$/i.test(t.value)) {
-      throw new AuditQueryError(`"${t.value}" is not supported in simple mode - switch to SQL mode for boolean logic`);
+      throw new AuditQueryError(
+        `"${t.value}" is not supported in simple mode - switch to SQL mode for boolean logic`,
+      );
     }
 
     // field op value | field in (...)
@@ -210,10 +224,7 @@ export function parseAuditQuery(input: string): AuditFilterState {
 }
 
 /** Consume the "( v, v, ... )" tail of an `in` clause. */
-function parseInList(
-  next: () => Token | undefined,
-  valueOf: (t: Token | undefined) => string,
-): string[] {
+function parseInList(next: () => Token | undefined, valueOf: (t: Token | undefined) => string): string[] {
   const open = next();
   if (!open || open.kind !== "punct" || open.value !== "(") {
     throw new AuditQueryError(`Expected "(" after "in"`);
@@ -274,7 +285,9 @@ function applyTerm(filters: AuditFilterState, field: string, op: string, value: 
       break;
     case "ts": {
       if (op !== ">" && op !== ">=") {
-        throw new AuditQueryError(`Only "ts > now-<duration>" is supported in simple mode - use the until picker or SQL mode`);
+        throw new AuditQueryError(
+          `Only "ts > now-<duration>" is supported in simple mode - use the until picker or SQL mode`,
+        );
       }
       const token = timeHelperToken(value);
       if (!token) {

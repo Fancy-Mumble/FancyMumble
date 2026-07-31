@@ -45,15 +45,15 @@ export const SOURCE_LANGUAGE: BuiltInLanguage = "en";
  * The previous (visible-ASCII) scheme leaked the ns + key path into
  * the UI as readable text - this scheme cloaks it entirely.
  */
-export const PICKER_MARK_START = String.fromCodePoint(0x200B);
-export const PICKER_MARK_END = String.fromCodePoint(0x200D);
+export const PICKER_MARK_START = String.fromCodePoint(0x200b);
+export const PICKER_MARK_END = String.fromCodePoint(0x200d);
 
 /** Visible ASCII character used to separate ns from key inside the
  *  encoded header.  Decoded after tag-stripping. */
 const NS_KEY_DELIM = ":";
 
 /** Tag offset used by Unicode "Tag" block to encode ASCII invisibly. */
-const TAG_OFFSET = 0xE0000;
+const TAG_OFFSET = 0xe0000;
 
 function encodeTags(s: string): string {
   let out = "";
@@ -62,7 +62,7 @@ function encodeTags(s: string): string {
     // Tag block covers U+E0020..U+E007F, mirroring printable ASCII.
     // Non-ASCII characters in ns/key are vanishingly rare; we drop
     // them rather than carry garbage into the header.
-    if (c >= 0x20 && c <= 0x7E) {
+    if (c >= 0x20 && c <= 0x7e) {
       out += String.fromCodePoint(TAG_OFFSET + c);
     }
   }
@@ -74,7 +74,7 @@ function decodeTags(s: string): string {
   // for..of iterates code points, which we need for the 5-digit U+E00xx range.
   for (const ch of s) {
     const c = ch.codePointAt(0) ?? 0;
-    if (c >= TAG_OFFSET + 0x20 && c <= TAG_OFFSET + 0x7E) {
+    if (c >= TAG_OFFSET + 0x20 && c <= TAG_OFFSET + 0x7e) {
       out += String.fromCodePoint(c - TAG_OFFSET);
     }
   }
@@ -201,9 +201,7 @@ export function isPickerActive(): boolean {
  * the *first* marker it finds - callers that need every key in a node can
  * use `parseAllPickerMarkers` instead.
  */
-export function parsePickerMarker(
-  text: string,
-): { ns: string; key: string; value: string } | null {
+export function parsePickerMarker(text: string): { ns: string; key: string; value: string } | null {
   const start = text.indexOf(PICKER_MARK_START);
   if (start < 0) return null;
   const headerEnd = text.indexOf(PICKER_MARK_END, start);
@@ -219,18 +217,14 @@ export function parsePickerMarker(
   // marker in the same text node) or at the end of the string.
   const valueStart = headerEnd + PICKER_MARK_END.length;
   const nextMarker = text.indexOf(PICKER_MARK_START, valueStart);
-  const value =
-    nextMarker >= 0 ? text.slice(valueStart, nextMarker) : text.slice(valueStart);
+  const value = nextMarker >= 0 ? text.slice(valueStart, nextMarker) : text.slice(valueStart);
   return { ns, key, value };
 }
 
 /** Strip every picker marker (header only) from a rendered string. */
 export function stripPickerMarkers(text: string): string {
   if (!text) return text;
-  const re = new RegExp(
-    `${PICKER_MARK_START}[^${PICKER_MARK_END}]*${PICKER_MARK_END}`,
-    "g",
-  );
+  const re = new RegExp(`${PICKER_MARK_START}[^${PICKER_MARK_END}]*${PICKER_MARK_END}`, "g");
   return text.replace(re, "");
 }
 

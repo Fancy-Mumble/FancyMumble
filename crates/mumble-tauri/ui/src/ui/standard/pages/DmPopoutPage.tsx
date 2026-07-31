@@ -102,7 +102,9 @@ export default function DmPopoutPage() {
       // no-op navigate because the popout window has no router-driven
       // navigation - it stays on this page for its entire lifetime.
       try {
-        unlistenersBox.current = await initEventListeners(() => { /* popout has no router */ });
+        unlistenersBox.current = await initEventListeners(() => {
+          /* popout has no router */
+        });
       } catch (e) {
         console.warn("DM popout: initEventListeners failed", e);
       }
@@ -148,7 +150,11 @@ export default function DmPopoutPage() {
 
     return () => {
       for (const fn of unlistenersBox.current) {
-        try { fn(); } catch { /* ignore */ }
+        try {
+          fn();
+        } catch {
+          /* ignore */
+        }
       }
       unlistenersBox.current = [];
     };

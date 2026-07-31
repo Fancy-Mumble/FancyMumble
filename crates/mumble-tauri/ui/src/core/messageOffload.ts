@@ -188,11 +188,7 @@ export class MessageOffloadManager {
    * If the message scrolls back into view before the delay elapses,
    * call `cancelOffload` to prevent the write.
    */
-  scheduleOffload(
-    messageId: string,
-    ctx: MessageScope,
-    onOffloaded: () => void,
-  ): void {
+  scheduleOffload(messageId: string, ctx: MessageScope, onOffloaded: () => void): void {
     if (this._offloaded.has(messageId) || this.pendingOffloads.has(messageId)) return;
 
     const timer = setTimeout(async () => {
@@ -223,10 +219,7 @@ export class MessageOffloadManager {
    *
    * Returns the original body, or `null` if retrieval failed.
    */
-  async restore(
-    messageId: string,
-    ctx: MessageScope,
-  ): Promise<string | null> {
+  async restore(messageId: string, ctx: MessageScope): Promise<string | null> {
     if (!this._offloaded.has(messageId)) return null;
     this._loading.add(messageId);
 
@@ -249,10 +242,7 @@ export class MessageOffloadManager {
    * omitted.  This is more efficient than calling `restore` in a loop
    * because it batches all decryption into one Rust-side lock acquire.
    */
-  async restoreMany(
-    messageIds: string[],
-    ctx: MessageScope,
-  ): Promise<Record<string, string>> {
+  async restoreMany(messageIds: string[], ctx: MessageScope): Promise<Record<string, string>> {
     const toRestore = messageIds.filter((id) => this._offloaded.has(id) && !this._loading.has(id));
     if (toRestore.length === 0) return {};
 
@@ -287,6 +277,4 @@ export class MessageOffloadManager {
 // --- Singleton ----------------------------------------------------
 
 /** Global offload manager instance (local encrypted provider). */
-export const offloadManager = new MessageOffloadManager(
-  new LocalEncryptedProvider(),
-);
+export const offloadManager = new MessageOffloadManager(new LocalEncryptedProvider());

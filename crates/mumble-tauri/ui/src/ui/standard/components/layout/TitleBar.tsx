@@ -42,18 +42,10 @@ export default function TitleBar() {
       </div>
 
       <div className={styles.controls}>
-        <button
-          className={styles.controlBtn}
-          onClick={handleMinimize}
-          aria-label={t("actions.minimize")}
-        >
+        <button className={styles.controlBtn} onClick={handleMinimize} aria-label={t("actions.minimize")}>
           <MinimizeIcon width={12} height={12} />
         </button>
-        <button
-          className={styles.controlBtn}
-          onClick={handleMaximize}
-          aria-label={t("actions.maximize")}
-        >
+        <button className={styles.controlBtn} onClick={handleMaximize} aria-label={t("actions.maximize")}>
           <MaximizeIcon width={12} height={12} />
         </button>
         <button

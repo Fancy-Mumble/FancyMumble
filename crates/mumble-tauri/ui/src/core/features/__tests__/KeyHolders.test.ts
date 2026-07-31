@@ -47,10 +47,7 @@ function makeUser(overrides: Partial<UserEntry> = {}): UserEntry {
  * Simulate the `pchat-key-holders-changed` Tauri event by directly
  * updating the store in the same way the event listener does.
  */
-function simulateKeyHoldersChanged(
-  channelId: number,
-  holders: KeyHolderEntry[],
-) {
+function simulateKeyHoldersChanged(channelId: number, holders: KeyHolderEntry[]) {
   useAppStore.setState((prev) => ({
     keyHolders: {
       ...prev.keyHolders,
@@ -98,10 +95,7 @@ describe("keyHolders store state", () => {
 
     const holders = useAppStore.getState().keyHolders[5];
     expect(holders).toHaveLength(2);
-    expect(holders.map((h) => h.cert_hash)).toEqual([
-      "hash_alice",
-      "hash_bob",
-    ]);
+    expect(holders.map((h) => h.cert_hash)).toEqual(["hash_alice", "hash_bob"]);
   });
 
   it("keeps holders for different channels separate", () => {
@@ -155,12 +149,8 @@ describe("keyHolders store state", () => {
   });
 
   it("reset clears all keyHolders", () => {
-    simulateKeyHoldersChanged(0, [
-      makeHolder({ cert_hash: "a", name: "A" }),
-    ]);
-    simulateKeyHoldersChanged(1, [
-      makeHolder({ cert_hash: "b", name: "B" }),
-    ]);
+    simulateKeyHoldersChanged(0, [makeHolder({ cert_hash: "a", name: "A" })]);
+    simulateKeyHoldersChanged(1, [makeHolder({ cert_hash: "b", name: "B" })]);
 
     useAppStore.getState().reset();
     expect(useAppStore.getState().keyHolders).toEqual({});
@@ -212,10 +202,7 @@ describe("keyHolders and users integration", () => {
   it("holder names can be resolved from connected users", () => {
     // Simulate users being present.
     useAppStore.setState({
-      users: [
-        makeUser({ session: 1, name: "Alice" }),
-        makeUser({ session: 2, name: "Bob" }),
-      ],
+      users: [makeUser({ session: 1, name: "Alice" }), makeUser({ session: 2, name: "Bob" })],
     });
 
     // Server sends holders with cert hashes.
