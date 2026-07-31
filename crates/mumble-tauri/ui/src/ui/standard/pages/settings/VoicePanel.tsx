@@ -62,15 +62,11 @@ export function VoicePanel({
             <div className={styles.toggleRow}>
               <div className={styles.toggleInfo}>
                 <h3 className={styles.sectionTitle}>{t("voice.pushToTalk")}</h3>
-                <p className={styles.fieldHint}>
-                  {t("voice.pushToTalkHint")}
-                </p>
+                <p className={styles.fieldHint}>{t("voice.pushToTalkHint")}</p>
               </div>
               <Toggle
                 checked={settings.push_to_talk}
-                onChange={() =>
-                  onChange({ push_to_talk: !settings.push_to_talk })
-                }
+                onChange={() => onChange({ push_to_talk: !settings.push_to_talk })}
               />
             </div>
             {settings.push_to_talk && (
@@ -78,9 +74,7 @@ export function VoicePanel({
                 <ShortcutRecorder
                   label={t("voice.pttKey")}
                   value={settings.push_to_talk_key ?? ""}
-                  onChange={(key) =>
-                    onChange({ push_to_talk_key: key || null })
-                  }
+                  onChange={(key) => onChange({ push_to_talk_key: key || null })}
                 />
               </div>
             )}
@@ -90,4 +84,3 @@ export function VoicePanel({
     </>
   );
 }
-

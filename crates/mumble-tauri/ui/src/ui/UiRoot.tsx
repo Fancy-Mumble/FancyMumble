@@ -1,16 +1,6 @@
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useState,
-} from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import type { UserPreferences, UiDesignId } from "@core/types";
-import {
-  resolveUiDesign,
-  UI_PACK_LOADERS,
-} from "./registry";
+import { resolveUiDesign, UI_PACK_LOADERS } from "./registry";
 import { getSelectedUiDesign, getUiDesignOverride } from "./selection";
 
 export default function UiRoot() {
@@ -45,10 +35,7 @@ export default function UiRoot() {
     document.documentElement.dataset.uiDesign = design;
   }, [design]);
 
-  const SelectedUi = useMemo(
-    () => (design ? lazy(UI_PACK_LOADERS[design]) : null),
-    [design],
-  );
+  const SelectedUi = useMemo(() => (design ? lazy(UI_PACK_LOADERS[design]) : null), [design]);
 
   if (!SelectedUi) return null;
 

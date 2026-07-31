@@ -47,13 +47,7 @@ function MapUpdater({ lat, lng, zoom }: { lat: number; lng: number; zoom: number
   return null;
 }
 
-export default function OsmMap({
-  lat,
-  lng,
-  zoom = 10,
-  popupLabel,
-  className,
-}: Readonly<OsmMapProps>) {
+export default function OsmMap({ lat, lng, zoom = 10, popupLabel, className }: Readonly<OsmMapProps>) {
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

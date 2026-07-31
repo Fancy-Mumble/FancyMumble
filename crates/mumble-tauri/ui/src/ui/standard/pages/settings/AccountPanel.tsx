@@ -14,11 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { useAccountStore } from "@core/features/settings/accountStore";
-import {
-  ACCOUNT_ACTION_IDS,
-  type AccountAck,
-  type AccountSettingsEvent,
-} from "@core/types";
+import { ACCOUNT_ACTION_IDS, type AccountAck, type AccountSettingsEvent } from "@core/types";
 import { TID } from "@core/testids";
 import styles from "./SettingsPage.module.css";
 import { registerSettings } from "@core/features/settings/settingsSearchRegistry";
@@ -137,8 +133,7 @@ export function AccountPanel() {
     );
   }
 
-  const passwordValid =
-    password.length >= MIN_PASSWORD_LENGTH && password === passwordConfirm;
+  const passwordValid = password.length >= MIN_PASSWORD_LENGTH && password === passwordConfirm;
   const busy = pending !== null;
 
   return (
@@ -155,13 +150,9 @@ export function AccountPanel() {
           })}
         </p>
         <p className={styles.fieldHint}>
-          {snapshot.has_password
-            ? t("account.overview.authPassword")
-            : t("account.overview.authCert")}
+          {snapshot.has_password ? t("account.overview.authPassword") : t("account.overview.authCert")}
           {" · "}
-          {snapshot.totp_enabled
-            ? t("account.overview.totpOn")
-            : t("account.overview.totpOff")}
+          {snapshot.totp_enabled ? t("account.overview.totpOn") : t("account.overview.totpOff")}
         </p>
       </section>
 
@@ -169,9 +160,7 @@ export function AccountPanel() {
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>{t("account.password.title")}</h3>
         <p className={styles.fieldHint}>
-          {snapshot.has_password
-            ? t("account.password.hintEnabled")
-            : t("account.password.hintDisabled")}
+          {snapshot.has_password ? t("account.password.hintEnabled") : t("account.password.hintDisabled")}
         </p>
         {!snapshot.has_password && (
           <div className={styles.warningBanner}>
@@ -204,9 +193,7 @@ export function AccountPanel() {
           />
         </div>
         {password.length > 0 && password.length < MIN_PASSWORD_LENGTH && (
-          <p className={styles.fieldHint}>
-            {t("account.password.tooShort", { min: MIN_PASSWORD_LENGTH })}
-          </p>
+          <p className={styles.fieldHint}>{t("account.password.tooShort", { min: MIN_PASSWORD_LENGTH })}</p>
         )}
         {passwordConfirm.length > 0 && password !== passwordConfirm && (
           <p className={styles.fieldHint}>{t("account.password.mismatch")}</p>
@@ -218,9 +205,7 @@ export function AccountPanel() {
           disabled={busy || !passwordValid}
           onClick={() => void send("set_password", password)}
         >
-          {snapshot.has_password
-            ? t("account.password.change")
-            : t("account.password.enable")}
+          {snapshot.has_password ? t("account.password.change") : t("account.password.enable")}
         </button>
         {feedbackFor("set_password")}
 

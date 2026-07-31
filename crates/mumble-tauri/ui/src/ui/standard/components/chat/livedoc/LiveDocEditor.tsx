@@ -7,7 +7,15 @@
  * [`LiveDocRibbon`] so this module stays focused.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Extension } from "@tiptap/core";
@@ -36,7 +44,10 @@ import { editorHtmlToMarkdown, markdownToEditorHtml } from "@core/features/chat/
 import { insertEditorImage, imageFileFromClipboard } from "@core/features/chat/livedoc/liveDocImageInsert";
 import { FontSize, Indent } from "@core/features/chat/livedoc/liveDocExtensions";
 import { PageBreak, SectionBreak } from "@core/features/chat/livedoc/liveDocPageBreak";
-import { LiveDocPaginationDecorations, GAP_BAND_PX } from "@core/features/chat/livedoc/liveDocPaginationDecorations";
+import {
+  LiveDocPaginationDecorations,
+  GAP_BAND_PX,
+} from "@core/features/chat/livedoc/liveDocPaginationDecorations";
 import { TableOfContents } from "./liveDocToc";
 import { Bookmark } from "./liveDocBookmark";
 import { Caption } from "./liveDocCaption";
@@ -45,7 +56,12 @@ import { EndnoteRef } from "./liveDocEndnote";
 import { EndnotesSection } from "./liveDocEndnotesSection";
 import { Citation } from "./liveDocCitation";
 import { Bibliography } from "./liveDocBibliography";
-import { LiveDocBox, LiveDocEmbed, Comment as LiveDocComment, DropCap } from "@core/features/chat/livedoc/liveDocInsert";
+import {
+  LiveDocBox,
+  LiveDocEmbed,
+  Comment as LiveDocComment,
+  DropCap,
+} from "@core/features/chat/livedoc/liveDocInsert";
 import LiveDocEmbedView from "./LiveDocEmbedView";
 import { LiveDocChart } from "@core/features/chat/livedoc/liveDocChart";
 import LiveDocChartView from "./LiveDocChartView";
@@ -75,9 +91,7 @@ import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import MathEditPopover, { type MathEditTarget } from "./MathEditPopover";
 import LiveDocTableControls from "./LiveDocTableControls";
-import LiveDocMentionPopover, {
-  mentionTriggerListeners,
-} from "./LiveDocMentionPopover";
+import LiveDocMentionPopover, { mentionTriggerListeners } from "./LiveDocMentionPopover";
 import { LiveDocMention, type MentionTriggerState } from "@core/features/chat/livedoc/liveDocMention";
 import styles from "./LiveDocEditor.module.css";
 
@@ -414,7 +428,9 @@ export default function LiveDocEditor({
           {
             type: "paragraph",
             attrs: { textAlign: "center" },
-            content: [{ type: "text", text: t("liveDoc.coverSubtitlePlaceholder", { defaultValue: "Subtitle" }) }],
+            content: [
+              { type: "text", text: t("liveDoc.coverSubtitlePlaceholder", { defaultValue: "Subtitle" }) },
+            ],
           },
           { type: "pageBreak" },
         ])
@@ -428,9 +444,7 @@ export default function LiveDocEditor({
   const handleInsertDrawing = useCallback((file: File) => {
     const e = editorRef.current;
     if (e && !e.isDestroyed) {
-      void insertEditorImage(e, file).catch((err) =>
-        console.warn("live-doc drawing insert failed:", err),
-      );
+      void insertEditorImage(e, file).catch((err) => console.warn("live-doc drawing insert failed:", err));
     }
   }, []);
 
@@ -588,9 +602,7 @@ export default function LiveDocEditor({
           const file = imageFileFromClipboard(event.clipboardData);
           const current = editorRef.current;
           if (!file || !current) return false;
-          void insertEditorImage(current, file).catch((e) =>
-            console.warn("live-doc image paste failed:", e),
-          );
+          void insertEditorImage(current, file).catch((e) => console.warn("live-doc image paste failed:", e));
           return true;
         },
       },
@@ -686,9 +698,7 @@ export default function LiveDocEditor({
   // split view, so both stay pixel-identical.
   const richBody = (
     <>
-      {outlineOpen && (
-        <LiveDocOutline editor={editor} onClose={() => setOutlineOpen(false)} />
-      )}
+      {outlineOpen && <LiveDocOutline editor={editor} onClose={() => setOutlineOpen(false)} />}
       <div
         ref={renderedScrollRef}
         className={styles.editorScroll}
@@ -754,14 +764,30 @@ export default function LiveDocEditor({
               )}
               {rulerDragAxis === "x" && (
                 <>
-                  <div className={styles.rulerGuide} style={{ left: `${padX}px`, top: 0, bottom: 0, width: "1px" }} aria-hidden="true" />
-                  <div className={styles.rulerGuide} style={{ right: `${padX}px`, top: 0, bottom: 0, width: "1px" }} aria-hidden="true" />
+                  <div
+                    className={styles.rulerGuide}
+                    style={{ left: `${padX}px`, top: 0, bottom: 0, width: "1px" }}
+                    aria-hidden="true"
+                  />
+                  <div
+                    className={styles.rulerGuide}
+                    style={{ right: `${padX}px`, top: 0, bottom: 0, width: "1px" }}
+                    aria-hidden="true"
+                  />
                 </>
               )}
               {rulerDragAxis === "y" && (
                 <>
-                  <div className={styles.rulerGuide} style={{ top: `${padY}px`, left: 0, right: 0, height: "1px" }} aria-hidden="true" />
-                  <div className={styles.rulerGuide} style={{ bottom: `${padY}px`, left: 0, right: 0, height: "1px" }} aria-hidden="true" />
+                  <div
+                    className={styles.rulerGuide}
+                    style={{ top: `${padY}px`, left: 0, right: 0, height: "1px" }}
+                    aria-hidden="true"
+                  />
+                  <div
+                    className={styles.rulerGuide}
+                    style={{ bottom: `${padY}px`, left: 0, right: 0, height: "1px" }}
+                    aria-hidden="true"
+                  />
                 </>
               )}
               <LiveDocHeaderFooter
@@ -839,9 +865,7 @@ export default function LiveDocEditor({
                 aria-label={t("liveDoc.markdown.resize", { defaultValue: "Resize markdown split" })}
                 onPointerDown={startSplitDrag}
               />
-              <div className={`${styles.splitPane} ${styles.splitPaneGrow}`}>
-                {richBody}
-              </div>
+              <div className={`${styles.splitPane} ${styles.splitPaneGrow}`}>{richBody}</div>
             </div>
           ) : (
             <LiveDocMarkdownView
@@ -857,11 +881,7 @@ export default function LiveDocEditor({
           richBody
         )}
       </div>
-      <LiveDocDrawModal
-        open={drawOpen}
-        onClose={() => setDrawOpen(false)}
-        onInsert={handleInsertDrawing}
-      />
+      <LiveDocDrawModal open={drawOpen} onClose={() => setDrawOpen(false)} onInsert={handleInsertDrawing} />
       {mentionTrigger && (
         <LiveDocMentionPopover
           editor={editor}

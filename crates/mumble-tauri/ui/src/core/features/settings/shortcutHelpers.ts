@@ -1,8 +1,4 @@
-import {
-  register,
-  unregister,
-  isRegistered,
-} from "@tauri-apps/plugin-global-shortcut";
+import { register, unregister, isRegistered } from "@tauri-apps/plugin-global-shortcut";
 import { invoke } from "@tauri-apps/api/core";
 import { load } from "../../utils/store";
 
@@ -83,10 +79,7 @@ export function eventToShortcut(e: React.KeyboardEvent): string | null {
   return parts.join("+");
 }
 
-export async function applyGlobalShortcut(
-  shortcut: string,
-  command: string,
-): Promise<void> {
+export async function applyGlobalShortcut(shortcut: string, command: string): Promise<void> {
   if (!shortcut) return;
   try {
     if (await isRegistered(shortcut)) await unregister(shortcut);

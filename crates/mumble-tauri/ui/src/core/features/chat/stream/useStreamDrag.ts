@@ -48,7 +48,10 @@ export function useBroadcasterOrder(broadcasters: Broadcaster[]) {
   return { orderedList, reorder };
 }
 
-export function useDragStream(onWatch: (session: number) => void, reorder: (from: number, to: number) => void) {
+export function useDragStream(
+  onWatch: (session: number) => void,
+  reorder: (from: number, to: number) => void,
+) {
   const dragSessionRef = useRef<number | null>(null);
   const dragOverTargetRef = useRef<DragTarget>(null);
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
@@ -116,9 +119,7 @@ export function useDragStream(onWatch: (session: number) => void, reorder: (from
       const dropEl = els.find((el) => el.hasAttribute("data-drop-zone"));
       const zone = dropEl?.getAttribute("data-drop-zone") ?? null;
       const newTarget: DragTarget =
-        zone === "primary" ? "primary"
-        : zone !== null ? (isNaN(Number(zone)) ? null : Number(zone))
-        : null;
+        zone === "primary" ? "primary" : zone !== null ? (isNaN(Number(zone)) ? null : Number(zone)) : null;
       if (newTarget !== dragOverTargetRef.current) {
         dragOverTargetRef.current = newTarget;
         setDragOverTargetState(newTarget);

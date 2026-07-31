@@ -57,9 +57,9 @@ export default function RoleEditorPage() {
   const role: AclGroup | null = roleIdx === -1 ? null : (acl?.groups[roleIdx] ?? null);
 
   const subTabs: TabDef<SubTab>[] = [
-    { id: "display",     label: t("roleEditor.tabDisplay"),      icon: <PaletteIcon    width={16} height={16} /> },
-    { id: "permissions", label: t("roleEditor.tabPermissions"),   icon: <LockIcon       width={16} height={16} /> },
-    { id: "members",     label: t("roleEditor.tabMembers"),       icon: <UsersGroupIcon width={16} height={16} /> },
+    { id: "display", label: t("roleEditor.tabDisplay"), icon: <PaletteIcon width={16} height={16} /> },
+    { id: "permissions", label: t("roleEditor.tabPermissions"), icon: <LockIcon width={16} height={16} /> },
+    { id: "members", label: t("roleEditor.tabMembers"), icon: <UsersGroupIcon width={16} height={16} /> },
   ];
 
   const patchRole = (patch: Partial<AclGroup>) => {
@@ -88,50 +88,39 @@ export default function RoleEditorPage() {
   } else if (tab === "display") {
     body = <RoleDisplayPanel role={role} onPatch={patchRole} />;
   } else if (tab === "permissions" && acl) {
-    body = (
-      <RolePermissionsPanel
-        acl={acl}
-        roleName={role.name}
-        onAclChange={setAcl}
-      />
-    );
+    body = <RolePermissionsPanel acl={acl} roleName={role.name} onAclChange={setAcl} />;
   } else {
-    body = (
-      <RoleMembersPanel
-        role={role}
-        onPatch={patchRole}
-        registeredUsers={registeredUsers}
-      />
-    );
+    body = <RoleMembersPanel role={role} onPatch={patchRole} registeredUsers={registeredUsers} />;
   }
 
   const canDelete = role != null && !role.inherited;
-  const footer = canDelete || dirty ? (
-    <>
-      {canDelete && (
-        <button
-          type="button"
-          className={`${tabStyles.actionBtn} ${tabStyles.actionBtnDanger}`}
-          onClick={handleDelete}
-          disabled={saving}
-        >
-          {t("roleEditor.deleteRole")}
-        </button>
-      )}
-      <div className={tabStyles.actionBtnGroup}>
-        {dirty && (
+  const footer =
+    canDelete || dirty ? (
+      <>
+        {canDelete && (
           <button
             type="button"
-            className={`${tabStyles.actionBtn} ${tabStyles.actionBtnPrimary}`}
-            onClick={() => save()}
+            className={`${tabStyles.actionBtn} ${tabStyles.actionBtnDanger}`}
+            onClick={handleDelete}
             disabled={saving}
           >
-            {saving ? t("roleEditor.saving") : t("roleEditor.saveChanges")}
+            {t("roleEditor.deleteRole")}
           </button>
         )}
-      </div>
-    </>
-  ) : undefined;
+        <div className={tabStyles.actionBtnGroup}>
+          {dirty && (
+            <button
+              type="button"
+              className={`${tabStyles.actionBtn} ${tabStyles.actionBtnPrimary}`}
+              onClick={() => save()}
+              disabled={saving}
+            >
+              {saving ? t("roleEditor.saving") : t("roleEditor.saveChanges")}
+            </button>
+          )}
+        </div>
+      </>
+    ) : undefined;
 
   return (
     <TabbedPage
@@ -142,9 +131,7 @@ export default function RoleEditorPage() {
       onBack={() => navigate("/admin?tab=roles")}
       footer={footer}
     >
-      <div className={styles.content}>
-        {body}
-      </div>
+      <div className={styles.content}>{body}</div>
     </TabbedPage>
   );
 }

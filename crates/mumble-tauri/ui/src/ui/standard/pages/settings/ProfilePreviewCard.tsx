@@ -4,13 +4,7 @@ import { useTranslation } from "react-i18next";
 import { SafeHtml } from "../../components/elements/SafeHtml";
 import { formatDuration } from "@core/utils/format";
 import { resolveThemePalette } from "@core/utils/colorUtils";
-import {
-  DECORATIONS,
-  NAMEPLATES,
-  EFFECTS,
-  FONTS,
-  AVATAR_BORDERS,
-} from "@core/features/settings/profileData";
+import { DECORATIONS, NAMEPLATES, EFFECTS, FONTS, AVATAR_BORDERS } from "@core/features/settings/profileData";
 import styles from "./ProfilePreviewCard.module.css";
 
 interface ProfilePreviewCardProps {
@@ -101,12 +95,11 @@ export function ProfilePreviewCard({
   const decoration = DECORATIONS.find((d) => d.id === (profile.decoration ?? "none"));
   const nameplate = NAMEPLATES.find((n) => n.id === (profile.nameplate ?? "none"));
   const effect = EFFECTS.find((e) => e.id === (profile.effect ?? "none"));
-  const fontCss =
-    FONTS.find((f) => f.id === (nameStyle.font ?? "default"))?.css ?? "inherit";
+  const fontCss = FONTS.find((f) => f.id === (nameStyle.font ?? "default"))?.css ?? "inherit";
 
   const bannerBg = profile.banner?.image
     ? `url(${profile.banner.image})`
-    : profile.banner?.color ?? "#1a1a2e";
+    : (profile.banner?.color ?? "#1a1a2e");
 
   const bannerStyle: React.CSSProperties = profile.banner?.image
     ? {
@@ -124,18 +117,13 @@ export function ProfilePreviewCard({
 
   // Determine effect overlay class name
   const effectClass =
-    effect && effect.id !== "none" && effect.animation
-      ? styles[effect.animation] ?? ""
-      : "";
+    effect && effect.id !== "none" && effect.animation ? (styles[effect.animation] ?? "") : "";
 
   return (
     <div className={styles.previewCard} style={cardBgStyle}>
       {/* Effect overlay (animated layer) */}
       {effect && effect.id !== "none" && (
-        <div
-          className={`${styles.previewEffectOverlay} ${effectClass}`}
-          style={effect.css}
-        />
+        <div className={`${styles.previewEffectOverlay} ${effectClass}`} style={effect.css} />
       )}
 
       {/* Banner */}
@@ -145,18 +133,14 @@ export function ProfilePreviewCard({
       <div className={styles.previewAvatarArea}>
         <div className={styles.previewAvatarWrapper} style={avatarBorderStyle}>
           {avatar ? (
-            <img
-              src={avatar}
-              alt={t("profilePreview.avatarAlt")}
-              className={styles.previewAvatarImg}
-            />
+            <img src={avatar} alt={t("profilePreview.avatarAlt")} className={styles.previewAvatarImg} />
           ) : (
-            <span className={styles.previewAvatarPlaceholder}><UserFilledIcon width={48} height={48} /></span>
+            <span className={styles.previewAvatarPlaceholder}>
+              <UserFilledIcon width={48} height={48} />
+            </span>
           )}
           {decoration && decoration.id !== "none" && (
-            <span className={styles.previewDecoration}>
-              {decoration.preview}
-            </span>
+            <span className={styles.previewDecoration}>{decoration.preview}</span>
           )}
         </div>
 
@@ -164,10 +148,7 @@ export function ProfilePreviewCard({
         <div className={styles.previewNameInline}>
           <div className={styles.previewNameRow}>
             {nameplate && nameplate.id !== "none" && (
-              <span
-                className={styles.previewNameplate}
-                style={{ background: nameplate.bg }}
-              />
+              <span className={styles.previewNameplate} style={{ background: nameplate.bg }} />
             )}
             <span
               className={styles.previewName}
@@ -178,16 +159,12 @@ export function ProfilePreviewCard({
                   : nameStyle.color || themeTextColor || "var(--color-text-primary)",
                 fontWeight: nameStyle.bold ? "bold" : 600,
                 fontStyle: nameStyle.italic ? "italic" : "normal",
-                textShadow: nameStyle.glow
-                  ? `0 0 ${nameStyle.glow.size}px ${nameStyle.glow.color}`
-                  : "none",
+                textShadow: nameStyle.glow ? `0 0 ${nameStyle.glow.size}px ${nameStyle.glow.color}` : "none",
                 background: nameStyle.gradient
                   ? `linear-gradient(135deg,${nameStyle.gradient[0]},${nameStyle.gradient[1]})`
                   : "transparent",
                 WebkitBackgroundClip: nameStyle.gradient ? "text" : undefined,
-                WebkitTextFillColor: nameStyle.gradient
-                  ? "transparent"
-                  : undefined,
+                WebkitTextFillColor: nameStyle.gradient ? "transparent" : undefined,
               }}
             >
               {displayName || "Your Name"}
@@ -220,10 +197,7 @@ export function ProfilePreviewCard({
       </div>
 
       {/* Body */}
-      <div
-        className={styles.previewBody}
-        style={themeTextColor ? { color: themeTextColor } : undefined}
-      >
+      <div className={styles.previewBody} style={themeTextColor ? { color: themeTextColor } : undefined}>
         {/* Custom status */}
         {profile.status && (
           <p
@@ -250,11 +224,15 @@ export function ProfilePreviewCard({
               <span
                 key={g.name}
                 className={styles.previewGroupChip}
-                style={g.color ? {
-                  color: g.color,
-                  borderColor: `${g.color}55`,
-                  background: `${g.color}18`,
-                } : undefined}
+                style={
+                  g.color
+                    ? {
+                        color: g.color,
+                        borderColor: `${g.color}55`,
+                        background: `${g.color}18`,
+                      }
+                    : undefined
+                }
               >
                 {g.name}
               </span>

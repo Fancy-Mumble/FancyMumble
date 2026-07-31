@@ -5,7 +5,9 @@ import { useAppStore } from "@core/store";
 import { Modal } from "../../elements/Modal";
 import { MemberPicker } from "../../elements/MemberPicker";
 import { useChannelDescription } from "@core/lazyBlobs";
-const BioEditor = lazy(() => import("../../../pages/settings/BioEditor").then((m) => ({ default: m.BioEditor })));
+const BioEditor = lazy(() =>
+  import("../../../pages/settings/BioEditor").then((m) => ({ default: m.BioEditor })),
+);
 import styles from "./ChannelEditorDialog.module.css";
 import { TextField } from "../../elements/TextField";
 import {
@@ -30,18 +32,12 @@ export function canEditChannel(channel: ChannelEntry | undefined): boolean {
 
 /** Can the user create a sub-channel? (requires MakeChannel or MakeTempChannel) */
 export function canCreateChannel(channel: ChannelEntry | undefined): boolean {
-  return (
-    hasPermission(channel, PERM_MAKE_CHANNEL) ||
-    hasPermission(channel, PERM_MAKE_TEMP_CHANNEL)
-  );
+  return hasPermission(channel, PERM_MAKE_CHANNEL) || hasPermission(channel, PERM_MAKE_TEMP_CHANNEL);
 }
 
 /** Can only create temporary channels (has MakeTempChannel but not MakeChannel). */
 export function canOnlyCreateTemp(channel: ChannelEntry | undefined): boolean {
-  return (
-    !hasPermission(channel, PERM_MAKE_CHANNEL) &&
-    hasPermission(channel, PERM_MAKE_TEMP_CHANNEL)
-  );
+  return !hasPermission(channel, PERM_MAKE_CHANNEL) && hasPermission(channel, PERM_MAKE_TEMP_CHANNEL);
 }
 
 /** Can the user delete this channel? (requires Write permission; root channel 0 cannot be deleted) */
@@ -103,21 +99,13 @@ export default function ChannelEditorDialog({
     }
   }, [channel?.description_size, initialDescription, descriptionInitialised]);
   const [position, setPosition] = useState(channel?.position ?? 0);
-  const [temporary, setTemporary] = useState(
-    tempOnly ? true : (channel?.temporary ?? false),
-  );
+  const [temporary, setTemporary] = useState(tempOnly ? true : (channel?.temporary ?? false));
   const [maxUsers, setMaxUsers] = useState(channel?.max_users ?? 0);
 
   // Persistence settings
-  const [pchatProtocol, setPchatProtocol] = useState<PchatProtocol>(
-    channel?.pchat_protocol ?? "none",
-  );
-  const [pchatMaxHistory, setPchatMaxHistory] = useState(
-    channel?.pchat_max_history ?? 0,
-  );
-  const [pchatRetentionDays, setPchatRetentionDays] = useState(
-    channel?.pchat_retention_days ?? 0,
-  );
+  const [pchatProtocol, setPchatProtocol] = useState<PchatProtocol>(channel?.pchat_protocol ?? "none");
+  const [pchatMaxHistory, setPchatMaxHistory] = useState(channel?.pchat_max_history ?? 0);
+  const [pchatRetentionDays, setPchatRetentionDays] = useState(channel?.pchat_retention_days ?? 0);
 
   // Access password (set = change/add, empty when editing = remove)
   const [password, setPassword] = useState("");
@@ -180,12 +168,11 @@ export default function ChannelEditorDialog({
       } else {
         await updateChannel(channel.id, {
           name: name.trim() !== channel.name ? name.trim() : undefined,
-          description:
-            description !== (initialDescription ?? "") ? description : undefined,
+          description: description !== (initialDescription ?? "") ? description : undefined,
           position: position !== channel.position ? position : undefined,
           temporary: temporary !== channel.temporary ? temporary : undefined,
           maxUsers: maxUsers !== channel.max_users ? maxUsers : undefined,
-          password: password !== "" ? password : (channel.is_enter_restricted ? "" : undefined),
+          password: password !== "" ? password : channel.is_enter_restricted ? "" : undefined,
           hidden: hidden !== (channel.hidden ?? false) ? hidden : undefined,
           expiryMode: expiryMode !== (channel.expiry_mode ?? 0) ? expiryMode : undefined,
           expiryDurationSecs:
@@ -223,8 +210,15 @@ export default function ChannelEditorDialog({
 
   return (
     <Modal onClose={onClose} zIndex={10001} overlayClassName={styles.overlayBlur}>
-      <div className={styles.dialog} role="dialog" aria-modal="true" aria-label={isCreate ? t("channelEditor.ariaCreate") : t("channelEditor.ariaEdit")}>
-        <h3 className={styles.title}>{isCreate ? t("channelEditor.titleCreate") : t("channelEditor.titleEdit")}</h3>
+      <div
+        className={styles.dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-label={isCreate ? t("channelEditor.ariaCreate") : t("channelEditor.ariaEdit")}
+      >
+        <h3 className={styles.title}>
+          {isCreate ? t("channelEditor.titleCreate") : t("channelEditor.titleEdit")}
+        </h3>
 
         {/* Name */}
         <TextField
@@ -263,7 +257,9 @@ export default function ChannelEditorDialog({
             min={0}
           />
           <div className={styles.field}>
-            <label className={styles.label} htmlFor="ch-ed-max">{t("channelEditor.maxUsersLabel")}</label>
+            <label className={styles.label} htmlFor="ch-ed-max">
+              {t("channelEditor.maxUsersLabel")}
+            </label>
             <input
               id="ch-ed-max"
               className={styles.input}
@@ -322,7 +318,9 @@ export default function ChannelEditorDialog({
         {/* Expiry */}
         <div className={styles.row}>
           <div className={styles.field}>
-            <label className={styles.label} htmlFor="ch-ed-expiry-mode">{t("channelEditor.expiryModeLabel")}</label>
+            <label className={styles.label} htmlFor="ch-ed-expiry-mode">
+              {t("channelEditor.expiryModeLabel")}
+            </label>
             <select
               id="ch-ed-expiry-mode"
               className={styles.input}
@@ -336,7 +334,9 @@ export default function ChannelEditorDialog({
           </div>
           {expiryMode !== 0 && (
             <div className={styles.field}>
-              <label className={styles.label} htmlFor="ch-ed-expiry-value">{t("channelEditor.expiryAfterLabel")}</label>
+              <label className={styles.label} htmlFor="ch-ed-expiry-value">
+                {t("channelEditor.expiryAfterLabel")}
+              </label>
               <div className={styles.row}>
                 <input
                   id="ch-ed-expiry-value"
@@ -372,11 +372,11 @@ export default function ChannelEditorDialog({
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder={
-          isCreate
-          ? t("channelEditor.passwordPlaceholderNew")
-          : channel?.is_enter_restricted
-          ? t("channelEditor.passwordPlaceholderChange")
-          : t("channelEditor.passwordPlaceholderNew")
+            isCreate
+              ? t("channelEditor.passwordPlaceholderNew")
+              : channel?.is_enter_restricted
+                ? t("channelEditor.passwordPlaceholderChange")
+                : t("channelEditor.passwordPlaceholderNew")
           }
           autoComplete="new-password"
         />
@@ -386,7 +386,9 @@ export default function ChannelEditorDialog({
           <h4 className={styles.sectionTitle}>{t("channelEditor.persistenceTitle")}</h4>
 
           <div className={styles.field}>
-            <label className={styles.label} htmlFor="ch-ed-pchat">{t("channelEditor.protocolLabel")}</label>
+            <label className={styles.label} htmlFor="ch-ed-pchat">
+              {t("channelEditor.protocolLabel")}
+            </label>
             <select
               id="ch-ed-pchat"
               className={styles.select}

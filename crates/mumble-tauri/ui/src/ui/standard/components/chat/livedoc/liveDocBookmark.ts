@@ -57,10 +57,7 @@ export const Bookmark = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return [
-      "span",
-      mergeAttributes(HTMLAttributes, { "data-livedoc-bookmark": "" }),
-    ];
+    return ["span", mergeAttributes(HTMLAttributes, { "data-livedoc-bookmark": "" })];
   },
 
   addNodeView() {
@@ -72,9 +69,7 @@ export const Bookmark = Node.create({
       insertBookmark:
         (attrs) =>
         ({ chain }) =>
-          chain()
-            .insertContent({ type: this.name, attrs })
-            .run(),
+          chain().insertContent({ type: this.name, attrs }).run(),
     };
   },
 });

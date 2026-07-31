@@ -1,4 +1,11 @@
-import { ChevronRightIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MicOffSmallIcon, ScreenShareIcon } from "../../../icons";
+import {
+  ChevronRightIcon,
+  HeadphonesOffIcon,
+  ListenBadgeIcon,
+  LockIcon,
+  MicOffSmallIcon,
+  ScreenShareIcon,
+} from "../../../icons";
 /**
  * ModernChannelList - a flat, always-visible channel viewer.
  *
@@ -27,10 +34,7 @@ import { PERM_MOVE, PERM_ENTER } from "@core/utils/permissions";
 import { useUserDrag, useChannelDropTarget } from "../../../utils/userMoveDnd";
 import { useAppStore } from "@core/store";
 import { PchatBadge } from "../PchatBadge";
-import {
-  ChannelReorderWrapper,
-  useChannelReorderHandler,
-} from "../channel/channelReorder";
+import { ChannelReorderWrapper, useChannelReorderHandler } from "../channel/channelReorder";
 import { TID } from "@core/testids";
 import styles from "./ModernChannelList.module.css";
 
@@ -93,7 +97,14 @@ interface MemberItemProps {
   readonly onClick?: (session: number) => void;
 }
 
-function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMenu, onClick }: MemberItemProps) {
+function MemberItemImpl({
+  user,
+  isTalking,
+  isBroadcasting,
+  isActive,
+  onContextMenu,
+  onClick,
+}: MemberItemProps) {
   const { t } = useTranslation(["sidebar", "common"]);
   const ownSession = useAppStore((s) => s.ownSession);
   const selectedDmUser = useAppStore((s) => s.selectedDmUser);
@@ -112,14 +123,11 @@ function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMe
   // The result is consumed only inside the portal below, and parsing
   // adds measurable mount cost when many members are visible.
   const liveComment = useUserComment(user.session, user.comment_size, showCard);
-  const parsed = useMemo(
-    () => {
-      if (!showCard) return null;
-      const c = user.comment ?? liveComment;
-      return c ? parseComment(c) : null;
-    },
-    [showCard, user.comment, liveComment],
-  );
+  const parsed = useMemo(() => {
+    if (!showCard) return null;
+    const c = user.comment ?? liveComment;
+    return c ? parseComment(c) : null;
+  }, [showCard, user.comment, liveComment]);
   const stats = useUserStats(user.session, showCard);
   const streamThumbnail = useStreamThumbnail(user.session, showCard && isBroadcasting);
 
@@ -171,16 +179,11 @@ function MemberItemImpl({ user, isTalking, isBroadcasting, isActive, onContextMe
             user.name.charAt(0).toUpperCase()
           )}
         </div>
-        <span
-          className={styles.memberName}
-          style={roleColor ? { color: roleColor } : undefined}
-        >{user.name}</span>
-        {user.self_mute && (
-          <MicOffSmallIcon className={styles.statusIcon} width={12} height={12} />
-        )}
-        {user.self_deaf && (
-          <HeadphonesOffIcon className={styles.statusIcon} width={12} height={12} />
-        )}
+        <span className={styles.memberName} style={roleColor ? { color: roleColor } : undefined}>
+          {user.name}
+        </span>
+        {user.self_mute && <MicOffSmallIcon className={styles.statusIcon} width={12} height={12} />}
+        {user.self_deaf && <HeadphonesOffIcon className={styles.statusIcon} width={12} height={12} />}
         {isBroadcasting && (
           <span className={styles.liveBadge} title={t("channelList.sharingScreen")}>
             <ScreenShareIcon width={10} height={10} />
@@ -242,9 +245,7 @@ function CollapsedAvatars({ users }: Readonly<{ users: UserEntry[] }>) {
       {visible.map((u) => (
         <CollapsedAvatar key={u.session} user={u} />
       ))}
-      {overflow > 0 && (
-        <span className={styles.overflowCount}>+{overflow}</span>
-      )}
+      {overflow > 0 && <span className={styles.overflowCount}>+{overflow}</span>}
     </div>
   );
 }
@@ -304,7 +305,7 @@ function ModernChannelListImpl({
   const flatChannels = useMemo(() => {
     const childrenOf = new Map<number, typeof channels>();
     for (const ch of channels) {
-      const parent = ch.parent_id === ch.id ? -1 : ch.parent_id ?? -1;
+      const parent = ch.parent_id === ch.id ? -1 : (ch.parent_id ?? -1);
       const list = childrenOf.get(parent) ?? [];
       list.push(ch);
       childrenOf.set(parent, list);
@@ -377,109 +378,119 @@ function ModernChannelListImpl({
   }, [selectedChannel, highlightChannelId]);
 
   /** Render a single channel card (shared between sticky and list). */
-  const renderChannel = useCallback((channel: ChannelEntry) => {
-    const chUsers = usersByChannel.get(channel.id) ?? [];
-    const unread = unreadCounts[channel.id] ?? 0;
-    const isListened = listenedChannels.has(channel.id);
-    const isSelected = selectedChannel === channel.id;
-    const isCurrent = currentChannel === channel.id;
-    // Non-expandable lists (e.g. Meetings) stay collapsed: compact, no sublist.
-    const isCollapsed = !expandableRows || collapsed.has(channel.id);
-    const hasUsers = chUsers.length > 0;
-    const isShaking = shakingChannelId === channel.id;
-    const isHighlighted = highlightChannelId === channel.id;
-    const isLocked = !isCurrent && channel.permissions !== null && (channel.permissions & PERM_ENTER) === 0;
+  const renderChannel = useCallback(
+    (channel: ChannelEntry) => {
+      const chUsers = usersByChannel.get(channel.id) ?? [];
+      const unread = unreadCounts[channel.id] ?? 0;
+      const isListened = listenedChannels.has(channel.id);
+      const isSelected = selectedChannel === channel.id;
+      const isCurrent = currentChannel === channel.id;
+      // Non-expandable lists (e.g. Meetings) stay collapsed: compact, no sublist.
+      const isCollapsed = !expandableRows || collapsed.has(channel.id);
+      const hasUsers = chUsers.length > 0;
+      const isShaking = shakingChannelId === channel.id;
+      const isHighlighted = highlightChannelId === channel.id;
+      const isLocked = !isCurrent && channel.permissions !== null && (channel.permissions & PERM_ENTER) === 0;
 
-    return (
-      <ChannelDropWrapper channelId={channel.id}>
-      <div
-        className={`${styles.channelCard} ${isSelected ? styles.selected : ""} ${isCurrent ? styles.current : ""} ${isShaking ? styles.shaking : ""} ${isHighlighted ? styles.highlighted : ""} ${isLocked ? styles.locked : ""}`}
-      >
-        {/* Channel header row */}
-        <div className={styles.headerRow}>
-          {expandableRows && hasUsers && (
-            <button
-              type="button"
-              className={styles.expandBtn}
-              onClick={() => toggleCollapsed(channel.id)}
-              aria-label={isCollapsed ? t("channelList.expand") : t("common:actions.collapse")}
-            >
-              <ChevronRightIcon
-                className={`${styles.chevron} ${isCollapsed ? "" : styles.chevronOpen}`}
-                width={12}
-                height={12}
-              />
-            </button>
-          )}
-
-          <button
-            type="button"
-            className={styles.channelBtn}
-            data-testid={TID.channelItem}
-            data-channel-id={channel.id}
-            data-channel-name={channel.name || t("channelList.root")}
-            onClick={() => onSelectChannel(channel.id)}
-            onDoubleClick={() => onJoinChannel(channel.id)}
-            onContextMenu={(e) => onContextMenu(e, channel.id)}
+      return (
+        <ChannelDropWrapper channelId={channel.id}>
+          <div
+            className={`${styles.channelCard} ${isSelected ? styles.selected : ""} ${isCurrent ? styles.current : ""} ${isShaking ? styles.shaking : ""} ${isHighlighted ? styles.highlighted : ""} ${isLocked ? styles.locked : ""}`}
           >
-            <span className={styles.channelName}>
-              {channel.name || t("channelList.root")}
-              {isLocked && (
-                <span className={styles.lockBadge} title={t("channelList.noPermissionToJoin")}>
-                  <LockIcon width={11} height={11} />
-                </span>
+            {/* Channel header row */}
+            <div className={styles.headerRow}>
+              {expandableRows && hasUsers && (
+                <button
+                  type="button"
+                  className={styles.expandBtn}
+                  onClick={() => toggleCollapsed(channel.id)}
+                  aria-label={isCollapsed ? t("channelList.expand") : t("common:actions.collapse")}
+                >
+                  <ChevronRightIcon
+                    className={`${styles.chevron} ${isCollapsed ? "" : styles.chevronOpen}`}
+                    width={12}
+                    height={12}
+                  />
+                </button>
               )}
-              {isListened && (
-                <span className={styles.listenBadge} title={t("channelList.listening")}>
-                  <ListenBadgeIcon width={12} height={12} />
+
+              <button
+                type="button"
+                className={styles.channelBtn}
+                data-testid={TID.channelItem}
+                data-channel-id={channel.id}
+                data-channel-name={channel.name || t("channelList.root")}
+                onClick={() => onSelectChannel(channel.id)}
+                onDoubleClick={() => onJoinChannel(channel.id)}
+                onContextMenu={(e) => onContextMenu(e, channel.id)}
+              >
+                <span className={styles.channelName}>
+                  {channel.name || t("channelList.root")}
+                  {isLocked && (
+                    <span className={styles.lockBadge} title={t("channelList.noPermissionToJoin")}>
+                      <LockIcon width={11} height={11} />
+                    </span>
+                  )}
+                  {isListened && (
+                    <span className={styles.listenBadge} title={t("channelList.listening")}>
+                      <ListenBadgeIcon width={12} height={12} />
+                    </span>
+                  )}
+                  <PchatBadge protocol={channel.pchat_protocol} />
                 </span>
-              )}
-              <PchatBadge protocol={channel.pchat_protocol} />
-            </span>
-            {hasUsers && (
-              <span className={styles.memberCount}>
-                {chUsers.length}
-              </span>
-            )}
-          </button>
+                {hasUsers && <span className={styles.memberCount}>{chUsers.length}</span>}
+              </button>
 
-          {unread > 0 && (
-            <span className={styles.unreadBadge}>
-              {unread > 99 ? "99+" : unread}
-            </span>
-          )}
+              {unread > 0 && <span className={styles.unreadBadge}>{unread > 99 ? "99+" : unread}</span>}
 
-          {/* Collapsed: show stacked avatar bubbles */}
-          {isCollapsed && hasUsers && (
-            <CollapsedAvatars users={chUsers} />
-          )}
-        </div>
+              {/* Collapsed: show stacked avatar bubbles */}
+              {isCollapsed && hasUsers && <CollapsedAvatars users={chUsers} />}
+            </div>
 
-        {/* Expanded: show member names */}
-        {!isCollapsed && hasUsers && (
-          <div className={styles.memberList} data-no-channel-drag="true">
-            {chUsers.map((u) => (
-              <div key={u.session} className={u.session === highlightUserSession ? styles.highlighted : undefined}>
-                <MemberItem
-                  user={u}
-                  isTalking={talkingSessions.has(u.session)}
-                  isBroadcasting={broadcastingSessions.has(u.session)}
-                  onContextMenu={onUserContextMenu}
-                  onClick={onUserClick}
-                />
+            {/* Expanded: show member names */}
+            {!isCollapsed && hasUsers && (
+              <div className={styles.memberList} data-no-channel-drag="true">
+                {chUsers.map((u) => (
+                  <div
+                    key={u.session}
+                    className={u.session === highlightUserSession ? styles.highlighted : undefined}
+                  >
+                    <MemberItem
+                      user={u}
+                      isTalking={talkingSessions.has(u.session)}
+                      isBroadcasting={broadcastingSessions.has(u.session)}
+                      onContextMenu={onUserContextMenu}
+                      onClick={onUserClick}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
-      </div>
-      </ChannelDropWrapper>
-    );
-  }, [
-    usersByChannel, unreadCounts, listenedChannels, selectedChannel,
-    currentChannel, collapsed, talkingSessions, broadcastingSessions,
-    shakingChannelId, highlightChannelId, highlightUserSession, toggleCollapsed, onSelectChannel, onJoinChannel, onContextMenu, onUserContextMenu, onUserClick,
-    expandableRows,
-  ]);
+        </ChannelDropWrapper>
+      );
+    },
+    [
+      usersByChannel,
+      unreadCounts,
+      listenedChannels,
+      selectedChannel,
+      currentChannel,
+      collapsed,
+      talkingSessions,
+      broadcastingSessions,
+      shakingChannelId,
+      highlightChannelId,
+      highlightUserSession,
+      toggleCollapsed,
+      onSelectChannel,
+      onJoinChannel,
+      onContextMenu,
+      onUserContextMenu,
+      onUserClick,
+      expandableRows,
+    ],
+  );
 
   return (
     <div ref={listRef} className={styles.list}>

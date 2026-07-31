@@ -151,6 +151,25 @@ impl AppState {
             .unwrap_or_default()
     }
 
+    /// Whether we are deafened, read from the server-confirmed `self_deaf` flag
+    /// on our own user.
+    ///
+    /// Deafen is not part of [`VoiceState`] (which only tracks the local capture
+    /// pipeline), so every surface that shows a deafen indicator must read it
+    /// from here rather than inferring it from the voice state.
+    pub fn self_deafened(&self) -> bool {
+        self.inner
+            .snapshot()
+            .lock()
+            .map(|s| {
+                s.conn
+                    .own_session
+                    .and_then(|session| s.users.get(&session))
+                    .is_some_and(|user| user.self_deaf)
+            })
+            .unwrap_or(false)
+    }
+
     /// Emit voice-state-changed event to the frontend.
     pub(super) fn emit_voice_state(&self) {
         if let Some(app) = self.app_handle() {
@@ -648,25 +667,47 @@ mod voice_pipeline {
 
         /// Toggle deafen.
         ///
-        /// | Current   | Result   |
-        /// |-----------|----------|
-        /// | Inactive  | Muted    | (undeaf, stay muted)
-        /// | Active    | Inactive | (deaf + muted)
-        /// | Muted     | Inactive | (deaf + muted)
+        /// Deafen is a *server-side* flag on our own user, not a local capture
+        /// state: peers must see it, and the server stops sending us voice while
+        /// it is set. So this flips `self_deaf` via [`command::SetSelfDeaf`],
+        /// which already encodes Mumble's rule that deafening implies muting
+        /// (and `SetSelfMute{false}` un-deafens).
+        ///
+        /// The previous implementation called `disable_voice`/`enable_voice_muted`
+        /// instead, which merely left voice locally - it never set `self_deaf`,
+        /// so no peer ever saw us as deafened and we kept hearing everyone.
         pub async fn toggle_deafen(&self) -> Result<(), String> {
-            let voice_state = {
+            let (deafened, handle, voice_state) = {
                 let __session = self.inner.snapshot();
                 let state = __session.lock().map_err(|e| e.to_string())?;
-                state.audio.voice_state
+                // Server-confirmed flag on our own user, so a repeated toggle
+                // cannot drift out of step with what peers actually see.
+                let deafened = state
+                    .conn
+                    .own_session
+                    .and_then(|session| state.users.get(&session))
+                    .is_some_and(|user| user.self_deaf);
+                (deafened, state.conn.client_handle.clone(), state.audio.voice_state)
             };
 
-            match voice_state {
-                VoiceState::Active | VoiceState::Muted => {
-                    self.disable_voice().await?;
+            let handle = handle.ok_or_else(|| "Not connected".to_string())?;
+            handle
+                .send(command::SetSelfDeaf { deafened: !deafened })
+                .await
+                .map_err(|e| format!("Failed to toggle deafen: {e}"))?;
+
+            // Deafening carries self_mute=true on the wire, so stop the outbound
+            // pipeline to match - otherwise we would keep encoding and sending
+            // audio the server discards. Mirrors toggle_mute's local handling.
+            if !deafened && voice_state == VoiceState::Active {
+                info!("toggle_deafen: deafening (stopping outbound)");
+                self.stop_outbound();
+                {
+                    let __session = self.inner.snapshot();
+                    let mut state = __session.lock().map_err(|e| e.to_string())?;
+                    state.audio.voice_state = VoiceState::Muted;
                 }
-                VoiceState::Inactive => {
-                    self.enable_voice_muted().await?;
-                }
+                self.emit_voice_state();
             }
             Ok(())
         }

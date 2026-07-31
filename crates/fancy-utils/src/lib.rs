@@ -5,6 +5,7 @@
 
 pub mod audio;
 pub mod fuzzy;
+pub mod gate;
 pub mod hex;
 pub mod html;
 pub mod image_filter;

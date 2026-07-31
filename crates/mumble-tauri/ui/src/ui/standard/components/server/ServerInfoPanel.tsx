@@ -24,7 +24,11 @@ import ActivityLog from "./ActivityLog";
 import { useTranslation } from "react-i18next";
 import styles from "./ServerInfoPanel.module.css";
 
-function Accordion({ title, defaultOpen = false, children }: Readonly<{
+function Accordion({
+  title,
+  defaultOpen = false,
+  children,
+}: Readonly<{
   title: ReactNode;
   defaultOpen?: boolean;
   children: ReactNode;
@@ -75,9 +79,7 @@ function PluginInfoCard({ plugin }: Readonly<{ plugin: PluginInfoRecord }>) {
       {typeof info.homepage === "string" && info.homepage.length > 0 && (
         <DebugRow label={t("infoPanel.plugins.homepage")} value={info.homepage} />
       )}
-      {caps.length > 0 && (
-        <DebugRow label={t("infoPanel.plugins.capabilities")} value={caps.join(", ")} />
-      )}
+      {caps.length > 0 && <DebugRow label={t("infoPanel.plugins.capabilities")} value={caps.join(", ")} />}
       {rows.map((row, i) => (
         <DebugRow key={`${row.label}-${i}`} label={row.label} value={row.value} />
       ))}
@@ -89,9 +91,9 @@ function PluginInfoCard({ plugin }: Readonly<{ plugin: PluginInfoRecord }>) {
 function decodeFancyVersion(v: number): string {
   // Encoding: (major << 48) | (minor << 32) | (patch << 16)
   // JS bitwise ops are 32-bit, so use division for the upper bits.
-  const major = Math.trunc(v / 2 ** 48) & 0xFFFF;
-  const minor = Math.trunc(v / 2 ** 32) & 0xFFFF;
-  const patch = Math.trunc(v / 2 ** 16) & 0xFFFF;
+  const major = Math.trunc(v / 2 ** 48) & 0xffff;
+  const minor = Math.trunc(v / 2 ** 32) & 0xffff;
+  const patch = Math.trunc(v / 2 ** 16) & 0xffff;
   return `${major}.${minor}.${patch}`;
 }
 
@@ -124,10 +126,7 @@ function latencyColor(rtt: number): string {
   return "#ef4444";
 }
 
-function drawGraph(
-  buffer: LatencyPoint[],
-  svgRef: React.RefObject<SVGSVGElement | null>,
-) {
+function drawGraph(buffer: LatencyPoint[], svgRef: React.RefObject<SVGSVGElement | null>) {
   const svg = svgRef.current;
   if (!svg) return;
 
@@ -265,12 +264,11 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
       .catch(() => {});
 
     // Load audio settings for the debug overview.
-    Promise.all([
-      getSavedAudioSettings(),
-      invoke<AudioSettings>("get_audio_settings"),
-    ]).then(([saved, backend]) => {
-      setAudioSettings(saved ?? backend);
-    }).catch(() => {});
+    Promise.all([getSavedAudioSettings(), invoke<AudioSettings>("get_audio_settings")])
+      .then(([saved, backend]) => {
+        setAudioSettings(saved ?? backend);
+      })
+      .catch(() => {});
   }, []);
 
   // Fetch debug stats when developer mode is active, refresh periodically.
@@ -320,11 +318,7 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
   return (
     <aside className={styles.panel}>
       {/* Close button */}
-      <button
-        className={styles.closeBtn}
-        onClick={onClose}
-        aria-label={t("infoPanel.closeAriaLabel")}
-      >
+      <button className={styles.closeBtn} onClick={onClose} aria-label={t("infoPanel.closeAriaLabel")}>
         <CloseIcon width={18} height={18} />
       </button>
 
@@ -343,14 +337,10 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
             <h3 className={styles.sectionTitle}>{t("infoPanel.sectionConnection")}</h3>
             <div className={styles.infoGrid}>
               <span className={styles.infoLabel}>{t("infoPanel.labelHost")}</span>
-              <span className={styles.infoValue}>
-                {streamerMode ? maskSensitive(info.host) : info.host}
-              </span>
+              <span className={styles.infoValue}>{streamerMode ? maskSensitive(info.host) : info.host}</span>
 
               <span className={styles.infoLabel}>{t("infoPanel.labelPort")}</span>
-              <span className={styles.infoValue}>
-                {streamerMode ? maskSensitive(info.port) : info.port}
-              </span>
+              <span className={styles.infoValue}>{streamerMode ? maskSensitive(info.port) : info.port}</span>
 
               <span className={styles.infoLabel}>{t("infoPanel.labelUsers")}</span>
               <span className={styles.infoValue}>
@@ -401,16 +391,12 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
               {info.max_bandwidth == null ? null : (
                 <>
                   <span className={styles.infoLabel}>{t("infoPanel.labelMaxBandwidth")}</span>
-                  <span className={styles.infoValue}>
-                    {formatBandwidth(info.max_bandwidth)}
-                  </span>
+                  <span className={styles.infoValue}>{formatBandwidth(info.max_bandwidth)}</span>
                 </>
               )}
 
               <span className={styles.infoLabel}>{t("infoPanel.labelCodec")}</span>
-              <span className={styles.infoValue}>
-                {info.opus ? "Opus" : "CELT"}
-              </span>
+              <span className={styles.infoValue}>{info.opus ? "Opus" : "CELT"}</span>
             </div>
           </section>
 
@@ -468,22 +454,49 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
 
               <Accordion title={t("infoPanel.accordionAudioTransport")}>
                 <div className={styles.debugGrid}>
-                  <DebugRow label={t("infoPanel.debug.transport")} value={udpActive ? t("infoPanel.transportUdp") : t("infoPanel.transportTcp")} />
-                  <DebugRow label={t("infoPanel.debug.forceTcp")} value={audioSettings?.force_tcp_audio ?? false} />
+                  <DebugRow
+                    label={t("infoPanel.debug.transport")}
+                    value={udpActive ? t("infoPanel.transportUdp") : t("infoPanel.transportTcp")}
+                  />
+                  <DebugRow
+                    label={t("infoPanel.debug.forceTcp")}
+                    value={audioSettings?.force_tcp_audio ?? false}
+                  />
                 </div>
               </Accordion>
 
               {audioSettings && (
                 <Accordion title={t("infoPanel.accordionAudioSettings")}>
                   <div className={styles.debugGrid}>
-                    <DebugRow label={t("infoPanel.debug.inputDevice")} value={audioSettings.selected_device ?? t("infoPanel.systemDefault")} />
-                    <DebugRow label={t("infoPanel.debug.bitrate")} value={`${audioSettings.bitrate_bps / 1000} kb/s`} />
-                    <DebugRow label={t("infoPanel.debug.frameSize")} value={`${audioSettings.frame_size_ms} ms`} />
-                    <DebugRow label={t("infoPanel.debug.vadThreshold")} value={`${(audioSettings.vad_threshold * 100).toFixed(1)}%`} />
+                    <DebugRow
+                      label={t("infoPanel.debug.inputDevice")}
+                      value={audioSettings.selected_device ?? t("infoPanel.systemDefault")}
+                    />
+                    <DebugRow
+                      label={t("infoPanel.debug.bitrate")}
+                      value={`${audioSettings.bitrate_bps / 1000} kb/s`}
+                    />
+                    <DebugRow
+                      label={t("infoPanel.debug.frameSize")}
+                      value={`${audioSettings.frame_size_ms} ms`}
+                    />
+                    <DebugRow
+                      label={t("infoPanel.debug.vadThreshold")}
+                      value={`${(audioSettings.vad_threshold * 100).toFixed(1)}%`}
+                    />
                     <DebugRow label={t("infoPanel.debug.autoGain")} value={audioSettings.auto_gain} />
-                    <DebugRow label={t("infoPanel.debug.maxGain")} value={`${audioSettings.max_gain_db} dB`} />
-                    <DebugRow label={t("infoPanel.debug.activation")} value={resolveActivationLabel(audioSettings, t as (key: string) => string)} />
-                    <DebugRow label={t("infoPanel.debug.gateCloseRatio")} value={`${(audioSettings.noise_gate_close_ratio * 100).toFixed(0)}%`} />
+                    <DebugRow
+                      label={t("infoPanel.debug.maxGain")}
+                      value={`${audioSettings.max_gain_db} dB`}
+                    />
+                    <DebugRow
+                      label={t("infoPanel.debug.activation")}
+                      value={resolveActivationLabel(audioSettings, t as (key: string) => string)}
+                    />
+                    <DebugRow
+                      label={t("infoPanel.debug.gateCloseRatio")}
+                      value={`${(audioSettings.noise_gate_close_ratio * 100).toFixed(0)}%`}
+                    />
                     <DebugRow label={t("infoPanel.debug.holdFrames")} value={audioSettings.hold_frames} />
                     <DebugRow label={t("infoPanel.debug.pushToTalk")} value={audioSettings.push_to_talk} />
                     {audioSettings.push_to_talk_key && (
@@ -498,8 +511,14 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
                   <Accordion title={t("infoPanel.accordionConnectionState")}>
                     <div className={styles.debugGrid}>
                       <DebugRow label={t("infoPanel.debug.voiceState")} value={debugStats.voice_state} />
-                      <DebugRow label={t("infoPanel.debug.connectionEpoch")} value={debugStats.connection_epoch} />
-                      <DebugRow label={t("infoPanel.debug.appUptime")} value={formatDuration(debugStats.uptime_seconds)} />
+                      <DebugRow
+                        label={t("infoPanel.debug.connectionEpoch")}
+                        value={debugStats.connection_epoch}
+                      />
+                      <DebugRow
+                        label={t("infoPanel.debug.appUptime")}
+                        value={formatDuration(debugStats.uptime_seconds)}
+                      />
                       <DebugRow label={t("infoPanel.debug.users")} value={debugStats.user_count} />
                       <DebugRow label={t("infoPanel.debug.channels")} value={debugStats.channel_count} />
                     </div>
@@ -507,9 +526,15 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
 
                   <Accordion title={t("infoPanel.accordionMessages")}>
                     <div className={styles.debugGrid}>
-                      <DebugRow label={t("infoPanel.debug.channelMessages")} value={debugStats.channel_message_count} />
+                      <DebugRow
+                        label={t("infoPanel.debug.channelMessages")}
+                        value={debugStats.channel_message_count}
+                      />
                       <DebugRow label={t("infoPanel.debug.dmMessages")} value={debugStats.dm_message_count} />
-                      <DebugRow label={t("infoPanel.debug.totalMessages")} value={debugStats.total_message_count} />
+                      <DebugRow
+                        label={t("infoPanel.debug.totalMessages")}
+                        value={debugStats.total_message_count}
+                      />
                       <DebugRow label={t("infoPanel.debug.offloaded")} value={debugStats.offloaded_count} />
                     </div>
                   </Accordion>
@@ -523,15 +548,46 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
               {capabilities && (
                 <Accordion title={t("infoPanel.accordionFileServer")}>
                   <div className={styles.debugGrid}>
-                    <DebugRow label={t("infoPanel.debug.plugin")} value={`${capabilities.plugin.name} v${capabilities.plugin.version}`} />
-                    <DebugRow label={t("infoPanel.debug.mumbleVersion")} value={capabilities.mumble_version.display} />
-                    <DebugRow label={t("infoPanel.debug.fancyVersion")} value={capabilities.fancy_version.display} />
-                    <DebugRow label={t("infoPanel.debug.maxFileSize")} value={`${(capabilities.limits.max_file_size_bytes / 1024 / 1024).toFixed(0)} MB`} />
-                    <DebugRow label={t("infoPanel.debug.maxStorage")} value={`${(capabilities.limits.max_total_storage_bytes / 1024 / 1024).toFixed(0)} MB`} />
-                    <DebugRow label={t("infoPanel.debug.fileTtl")} value={capabilities.features.file_ttl ? `${capabilities.limits.ttl_seconds}s` : t("infoPanel.disabled")} />
-                    <DebugRow label={t("infoPanel.debug.deleteOnDownload")} value={capabilities.features.delete_on_download} />
-                    <DebugRow label={t("infoPanel.debug.deleteOnDisconnect")} value={capabilities.features.delete_on_disconnect} />
-                    <DebugRow label={t("infoPanel.debug.customEmotes")} value={capabilities.features.custom_emotes} />
+                    <DebugRow
+                      label={t("infoPanel.debug.plugin")}
+                      value={`${capabilities.plugin.name} v${capabilities.plugin.version}`}
+                    />
+                    <DebugRow
+                      label={t("infoPanel.debug.mumbleVersion")}
+                      value={capabilities.mumble_version.display}
+                    />
+                    <DebugRow
+                      label={t("infoPanel.debug.fancyVersion")}
+                      value={capabilities.fancy_version.display}
+                    />
+                    <DebugRow
+                      label={t("infoPanel.debug.maxFileSize")}
+                      value={`${(capabilities.limits.max_file_size_bytes / 1024 / 1024).toFixed(0)} MB`}
+                    />
+                    <DebugRow
+                      label={t("infoPanel.debug.maxStorage")}
+                      value={`${(capabilities.limits.max_total_storage_bytes / 1024 / 1024).toFixed(0)} MB`}
+                    />
+                    <DebugRow
+                      label={t("infoPanel.debug.fileTtl")}
+                      value={
+                        capabilities.features.file_ttl
+                          ? `${capabilities.limits.ttl_seconds}s`
+                          : t("infoPanel.disabled")
+                      }
+                    />
+                    <DebugRow
+                      label={t("infoPanel.debug.deleteOnDownload")}
+                      value={capabilities.features.delete_on_download}
+                    />
+                    <DebugRow
+                      label={t("infoPanel.debug.deleteOnDisconnect")}
+                      value={capabilities.features.delete_on_disconnect}
+                    />
+                    <DebugRow
+                      label={t("infoPanel.debug.customEmotes")}
+                      value={capabilities.features.custom_emotes}
+                    />
                   </div>
                 </Accordion>
               )}
@@ -541,7 +597,10 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
                   <span className={styles.debugLabel}>
                     {cspViolations.length === 0
                       ? t("infoPanel.cspNoViolations", { defaultValue: "No violations recorded." })
-                      : t("infoPanel.cspViolationCount", { count: cspViolations.length, defaultValue: "{{count}} violation(s)" })}
+                      : t("infoPanel.cspViolationCount", {
+                          count: cspViolations.length,
+                          defaultValue: "{{count}} violation(s)",
+                        })}
                   </span>
                   {cspViolations.length > 0 && (
                     <button
@@ -555,7 +614,15 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
                   )}
                 </div>
                 {cspViolations.map((v) => (
-                  <div key={v.id} className={styles.debugGrid} style={{ marginBottom: "4px", padding: "4px 0", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div
+                    key={v.id}
+                    className={styles.debugGrid}
+                    style={{
+                      marginBottom: "4px",
+                      padding: "4px 0",
+                      borderTop: "1px solid rgba(255,255,255,0.06)",
+                    }}
+                  >
                     <DebugRow label="directive" value={v.directive} />
                     <DebugRow label="blocked" value={v.blockedUri || "(empty)"} />
                     <DebugRow label="source" value={v.source} />

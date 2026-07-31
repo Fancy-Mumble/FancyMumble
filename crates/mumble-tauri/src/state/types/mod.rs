@@ -83,6 +83,7 @@ mod tests {
             is_enter_restricted: false,
             hidden: false,
             detached: false,
+            attributes: 0,
             expiry_mode: 0,
             expiry_duration_secs: 0,
             expires_at: 0,

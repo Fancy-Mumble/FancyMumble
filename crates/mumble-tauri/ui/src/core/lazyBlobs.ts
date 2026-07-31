@@ -59,7 +59,10 @@ export function getCachedUserAvatar(session: number, textureSize: number | null)
 }
 
 /** Synchronously returns a cached description if present (and matches size). */
-export function getCachedChannelDescription(channelId: number, descriptionSize: number | null): string | null {
+export function getCachedChannelDescription(
+  channelId: number,
+  descriptionSize: number | null,
+): string | null {
   if (descriptionSize == null || descriptionSize === 0) return null;
   const cached = descriptionCache.get(channelId);
   return cached && cached.size === descriptionSize ? cached.value : null;
@@ -117,10 +120,11 @@ async function fetchChannelDescription(channelId: number, expectedSize: number):
 }
 
 /** React hook: returns the avatar data-URL for a user, or `null` while loading or unset. */
-export function useUserAvatar(session: number | null | undefined, textureSize: number | null | undefined): string | null {
-  const initial = session != null && textureSize != null
-    ? getCachedUserAvatar(session, textureSize)
-    : null;
+export function useUserAvatar(
+  session: number | null | undefined,
+  textureSize: number | null | undefined,
+): string | null {
+  const initial = session != null && textureSize != null ? getCachedUserAvatar(session, textureSize) : null;
   const [url, setUrl] = useState<string | null>(initial);
 
   useEffect(() => {
@@ -188,9 +192,8 @@ export function useUserComment(
   commentSize: number | null | undefined,
   enabled = true,
 ): string | null {
-  const initial = enabled && session != null && commentSize != null
-    ? getCachedUserComment(session, commentSize)
-    : null;
+  const initial =
+    enabled && session != null && commentSize != null ? getCachedUserComment(session, commentSize) : null;
   const [text, setText] = useState<string | null>(initial);
 
   useEffect(() => {
@@ -221,9 +224,10 @@ export function useChannelDescription(
   channelId: number | null | undefined,
   descriptionSize: number | null | undefined,
 ): string | null {
-  const initial = channelId != null && descriptionSize != null
-    ? getCachedChannelDescription(channelId, descriptionSize)
-    : null;
+  const initial =
+    channelId != null && descriptionSize != null
+      ? getCachedChannelDescription(channelId, descriptionSize)
+      : null;
   const [text, setText] = useState<string | null>(initial);
 
   useEffect(() => {

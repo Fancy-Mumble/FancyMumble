@@ -1,4 +1,11 @@
-import { HashIcon, HeadphonesOffIcon, ListenBadgeIcon, LockIcon, MicOffSmallIcon, ScreenShareIcon } from "../../../icons";
+import {
+  HashIcon,
+  HeadphonesOffIcon,
+  ListenBadgeIcon,
+  LockIcon,
+  MicOffSmallIcon,
+  ScreenShareIcon,
+} from "../../../icons";
 /**
  * ChannelIconList - a "Modern" channel viewer.
  *
@@ -25,10 +32,7 @@ import { useUserDrag, useChannelDropTarget } from "../../../utils/userMoveDnd";
 import { PERM_MOVE, PERM_ENTER } from "@core/utils/permissions";
 import { useAppStore } from "@core/store";
 import { PchatBadge } from "../PchatBadge";
-import {
-  ChannelReorderWrapper,
-  useChannelReorderHandler,
-} from "../channel/channelReorder";
+import { ChannelReorderWrapper, useChannelReorderHandler } from "../channel/channelReorder";
 import styles from "./ChannelIconList.module.css";
 
 /** Extract the src of the first <img> tag in an HTML string. */
@@ -65,10 +69,7 @@ interface ChannelIconProps {
 
 function ChannelIcon({ channel, isCurrent }: ChannelIconProps) {
   const description = useChannelDescription(channel.id, channel.description_size);
-  const imgSrc = useMemo(
-    () => (description ? extractDescriptionImage(description) : null),
-    [description],
-  );
+  const imgSrc = useMemo(() => (description ? extractDescriptionImage(description) : null), [description]);
 
   if (imgSrc) {
     return (
@@ -106,7 +107,14 @@ interface MemberRowProps {
   readonly onClick?: (session: number) => void;
 }
 
-function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMenu, onClick }: MemberRowProps) {
+function MemberRowImpl({
+  user,
+  isTalking,
+  isBroadcasting,
+  isActive,
+  onContextMenu,
+  onClick,
+}: MemberRowProps) {
   const { t } = useTranslation("sidebar");
   const ownSession = useAppStore((s) => s.ownSession);
   const selectedDmUser = useAppStore((s) => s.selectedDmUser);
@@ -123,14 +131,11 @@ function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMen
   const { showCard, cardPos, itemRef, handleEnter, handleLeave } = useHoverCardPosition(isBroadcasting);
   // Defer FancyProfile parsing (and the bio fetch) until the card is shown.
   const liveComment = useUserComment(user.session, user.comment_size, showCard);
-  const parsed = useMemo(
-    () => {
-      if (!showCard) return null;
-      const c = user.comment ?? liveComment;
-      return c ? parseComment(c) : null;
-    },
-    [showCard, user.comment, liveComment],
-  );
+  const parsed = useMemo(() => {
+    if (!showCard) return null;
+    const c = user.comment ?? liveComment;
+    return c ? parseComment(c) : null;
+  }, [showCard, user.comment, liveComment]);
   const stats = useUserStats(user.session, showCard);
   const streamThumbnail = useStreamThumbnail(user.session, showCard && isBroadcasting);
 
@@ -179,16 +184,11 @@ function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMen
             user.name.charAt(0).toUpperCase()
           )}
         </div>
-        <span
-          className={styles.memberName}
-          style={roleColor ? { color: roleColor } : undefined}
-        >{user.name}</span>
-        {user.self_mute && (
-          <MicOffSmallIcon className={styles.statusIcon} width={12} height={12} />
-        )}
-        {user.self_deaf && (
-          <HeadphonesOffIcon className={styles.statusIcon} width={12} height={12} />
-        )}
+        <span className={styles.memberName} style={roleColor ? { color: roleColor } : undefined}>
+          {user.name}
+        </span>
+        {user.self_mute && <MicOffSmallIcon className={styles.statusIcon} width={12} height={12} />}
+        {user.self_deaf && <HeadphonesOffIcon className={styles.statusIcon} width={12} height={12} />}
         {isBroadcasting && (
           <span className={styles.liveBadge} title={t("channelIconList.liveBadgeTitle")}>
             <ScreenShareIcon width={10} height={10} />
@@ -196,7 +196,10 @@ function MemberRowImpl({ user, isTalking, isBroadcasting, isActive, onContextMen
           </span>
         )}
         {dmUnread > 0 && (
-          <span className={styles.dmUnreadBadge} title={`${dmUnread} unread direct message${dmUnread === 1 ? "" : "s"}`}>
+          <span
+            className={styles.dmUnreadBadge}
+            title={`${dmUnread} unread direct message${dmUnread === 1 ? "" : "s"}`}
+          >
             {dmUnread > 99 ? "99+" : dmUnread}
           </span>
         )}
@@ -284,7 +287,7 @@ function ChannelIconListImpl({
   const flatChannels = useMemo(() => {
     const childrenOf = new Map<number, typeof channels>();
     for (const ch of channels) {
-      const parent = ch.parent_id === ch.id ? -1 : ch.parent_id ?? -1;
+      const parent = ch.parent_id === ch.id ? -1 : (ch.parent_id ?? -1);
       const list = childrenOf.get(parent) ?? [];
       list.push(ch);
       childrenOf.set(parent, list);
@@ -349,98 +352,116 @@ function ChannelIconListImpl({
     selectedCardRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [selectedChannel, highlightChannelId]);
 
-  const renderChannel = useCallback((channel: ChannelEntry) => {
-    const chUsers = usersByChannel.get(channel.id) ?? [];
-    const unread = unreadCounts[channel.id] ?? 0;
-    const isListened = listenedChannels.has(channel.id);
-    const isSelected = selectedChannel === channel.id;
-    const isCurrent = currentChannel === channel.id;
-    const isCollapsed = collapsed.has(channel.id);
-    const hasUsers = chUsers.length > 0;
-    const isShaking = shakingChannelId === channel.id;
-    const isHighlighted = highlightChannelId === channel.id;
-    const isLocked = !isCurrent && channel.permissions !== null && (channel.permissions & PERM_ENTER) === 0;
+  const renderChannel = useCallback(
+    (channel: ChannelEntry) => {
+      const chUsers = usersByChannel.get(channel.id) ?? [];
+      const unread = unreadCounts[channel.id] ?? 0;
+      const isListened = listenedChannels.has(channel.id);
+      const isSelected = selectedChannel === channel.id;
+      const isCurrent = currentChannel === channel.id;
+      const isCollapsed = collapsed.has(channel.id);
+      const hasUsers = chUsers.length > 0;
+      const isShaking = shakingChannelId === channel.id;
+      const isHighlighted = highlightChannelId === channel.id;
+      const isLocked = !isCurrent && channel.permissions !== null && (channel.permissions & PERM_ENTER) === 0;
 
-    return (
-      <ChannelDropWrapper channelId={channel.id}>
-      <div
-        className={[
-          styles.channelRow,
-          isSelected ? styles.selected : "",
-          isCurrent ? styles.current : "",
-          isShaking ? styles.shaking : "",
-          isHighlighted ? styles.highlighted : "",
-          isLocked ? styles.locked : "",
-        ].filter(Boolean).join(" ")}
-      >
-        <div className={styles.channelMain}>
-          <ChannelIcon channel={channel} isCurrent={isCurrent} />
-
-          <button
-            type="button"
-            className={styles.channelBtn}
-            onClick={() => onSelectChannel(channel.id)}
-            onDoubleClick={() => onJoinChannel(channel.id)}
-            onContextMenu={(e) => onContextMenu(e, channel.id)}
+      return (
+        <ChannelDropWrapper channelId={channel.id}>
+          <div
+            className={[
+              styles.channelRow,
+              isSelected ? styles.selected : "",
+              isCurrent ? styles.current : "",
+              isShaking ? styles.shaking : "",
+              isHighlighted ? styles.highlighted : "",
+              isLocked ? styles.locked : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
           >
-            <span className={styles.channelName}>
-              {channel.name || t("channelIconList.rootFallback")}
-              {isLocked && (
-                <span className={styles.lockBadge} title={t("channelIconList.lockBadgeTitle")}>
-                  <LockIcon width={11} height={11} />
-                </span>
-              )}
-              {isListened && (
-                <span className={styles.listenBadge} title={t("channelIconList.listenBadgeTitle")}>
-                  <ListenBadgeIcon width={11} height={11} />
-                </span>
-              )}
-              <PchatBadge protocol={channel.pchat_protocol} />
-            </span>
-          </button>
+            <div className={styles.channelMain}>
+              <ChannelIcon channel={channel} isCurrent={isCurrent} />
 
-          <div className={styles.channelMeta}>
-            {unread > 0 && (
-              <span className={styles.unreadBadge}>
-                {unread > 99 ? "99+" : unread}
-              </span>
-            )}
-            {hasUsers && (
               <button
                 type="button"
-                className={styles.memberCountBtn}
-                onClick={() => toggleCollapsed(channel.id)}
-                title={isCollapsed ? "Show members" : "Hide members"}
+                className={styles.channelBtn}
+                onClick={() => onSelectChannel(channel.id)}
+                onDoubleClick={() => onJoinChannel(channel.id)}
+                onContextMenu={(e) => onContextMenu(e, channel.id)}
               >
-                {chUsers.length}
+                <span className={styles.channelName}>
+                  {channel.name || t("channelIconList.rootFallback")}
+                  {isLocked && (
+                    <span className={styles.lockBadge} title={t("channelIconList.lockBadgeTitle")}>
+                      <LockIcon width={11} height={11} />
+                    </span>
+                  )}
+                  {isListened && (
+                    <span className={styles.listenBadge} title={t("channelIconList.listenBadgeTitle")}>
+                      <ListenBadgeIcon width={11} height={11} />
+                    </span>
+                  )}
+                  <PchatBadge protocol={channel.pchat_protocol} />
+                </span>
               </button>
+
+              <div className={styles.channelMeta}>
+                {unread > 0 && <span className={styles.unreadBadge}>{unread > 99 ? "99+" : unread}</span>}
+                {hasUsers && (
+                  <button
+                    type="button"
+                    className={styles.memberCountBtn}
+                    onClick={() => toggleCollapsed(channel.id)}
+                    title={isCollapsed ? "Show members" : "Hide members"}
+                  >
+                    {chUsers.length}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {!isCollapsed && hasUsers && (
+              <div className={styles.memberList} data-no-channel-drag="true">
+                {chUsers.map((u) => (
+                  <div
+                    key={u.session}
+                    className={u.session === highlightUserSession ? styles.highlighted : undefined}
+                  >
+                    <MemberRow
+                      user={u}
+                      isTalking={talkingSessions.has(u.session)}
+                      isBroadcasting={broadcastingSessions.has(u.session)}
+                      onContextMenu={onUserContextMenu}
+                      onClick={onUserClick}
+                    />
+                  </div>
+                ))}
+              </div>
             )}
           </div>
-        </div>
-
-        {!isCollapsed && hasUsers && (
-          <div className={styles.memberList} data-no-channel-drag="true">
-            {chUsers.map((u) => (
-              <div key={u.session} className={u.session === highlightUserSession ? styles.highlighted : undefined}>
-                <MemberRow
-                  user={u}
-                  isTalking={talkingSessions.has(u.session)}
-                  isBroadcasting={broadcastingSessions.has(u.session)}
-                  onContextMenu={onUserContextMenu}
-                  onClick={onUserClick}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      </ChannelDropWrapper>
-    );
-  }, [
-    usersByChannel, unreadCounts, listenedChannels, selectedChannel,
-    currentChannel, collapsed, talkingSessions, broadcastingSessions,
-    shakingChannelId, highlightChannelId, highlightUserSession, toggleCollapsed, onSelectChannel, onJoinChannel, onContextMenu, onUserContextMenu, onUserClick,
-  ]);
+        </ChannelDropWrapper>
+      );
+    },
+    [
+      usersByChannel,
+      unreadCounts,
+      listenedChannels,
+      selectedChannel,
+      currentChannel,
+      collapsed,
+      talkingSessions,
+      broadcastingSessions,
+      shakingChannelId,
+      highlightChannelId,
+      highlightUserSession,
+      toggleCollapsed,
+      onSelectChannel,
+      onJoinChannel,
+      onContextMenu,
+      onUserContextMenu,
+      onUserClick,
+    ],
+  );
 
   return (
     <div ref={listRef} className={styles.list}>
@@ -498,4 +519,3 @@ function ChannelIconListImpl({
 
 const ChannelIconList = memo(ChannelIconListImpl);
 export default ChannelIconList;
-

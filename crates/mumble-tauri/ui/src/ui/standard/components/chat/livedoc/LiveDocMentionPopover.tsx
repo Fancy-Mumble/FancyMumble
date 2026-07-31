@@ -13,10 +13,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Editor } from "@tiptap/react";
-import MentionAutocomplete, {
-  type MentionCandidate,
-  handleMentionKey,
-} from "../mention/MentionAutocomplete";
+import MentionAutocomplete, { type MentionCandidate, handleMentionKey } from "../mention/MentionAutocomplete";
 import { useMentionCandidates } from "../mention/useMentionCandidates";
 import { type MentionAttrs, type MentionTriggerState } from "@core/features/chat/livedoc/liveDocMention";
 
@@ -43,11 +40,7 @@ function candidateToAttrs(c: MentionCandidate): MentionAttrs {
   }
 }
 
-export default function LiveDocMentionPopover({
-  editor,
-  trigger,
-  onClose,
-}: LiveDocMentionPopoverProps) {
+export default function LiveDocMentionPopover({ editor, trigger, onClose }: LiveDocMentionPopoverProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const candidates = useMentionCandidates(trigger.kind, trigger.query);
 
@@ -79,10 +72,10 @@ export default function LiveDocMentionPopover({
     const dom = editor.view.dom;
     const onKey = (e: KeyboardEvent) => {
       if (!dom.contains(e.target as Node)) return;
-      const action = handleMentionKey(
-        e as unknown as React.KeyboardEvent<HTMLTextAreaElement>,
-        { activeIndex, count: candidates.length },
-      );
+      const action = handleMentionKey(e as unknown as React.KeyboardEvent<HTMLTextAreaElement>, {
+        activeIndex,
+        count: candidates.length,
+      });
       if (!action) return;
       e.preventDefault();
       e.stopPropagation();
@@ -135,6 +128,4 @@ export default function LiveDocMentionPopover({
  *  trigger updates into.  `LiveDocEditor` registers its own setter on
  *  mount, the plugin (installed via `LiveDocMention.configure`) calls
  *  every setter on each ProseMirror view update. */
-export const mentionTriggerListeners = new Set<
-  (state: MentionTriggerState | null) => void
->();
+export const mentionTriggerListeners = new Set<(state: MentionTriggerState | null) => void>();

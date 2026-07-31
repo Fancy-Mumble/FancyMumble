@@ -7,14 +7,7 @@
  * - Videos show a poster frame; click opens a lightbox with playback.
  */
 
-import {
-  useState,
-  useRef,
-  useEffect,
-  useCallback,
-  useMemo,
-  type ReactNode,
-} from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import styles from "./MediaPreview.module.css";
@@ -84,11 +77,43 @@ const revealedSpoilers = new Set<string>();
 
 /** Tags allowed in message text after media extraction. */
 const ALLOWED_TAGS = new Set([
-  "b", "i", "u", "s", "em", "strong", "br", "p", "span",
-  "font", "code", "pre", "a", "ul", "ol", "li", "blockquote",
-  "h1", "h2", "h3", "h4", "h5", "h6", "sub", "sup", "small",
-  "del", "ins", "abbr", "mark", "hr", "table", "thead", "tbody",
-  "tr", "td", "th",
+  "b",
+  "i",
+  "u",
+  "s",
+  "em",
+  "strong",
+  "br",
+  "p",
+  "span",
+  "font",
+  "code",
+  "pre",
+  "a",
+  "ul",
+  "ol",
+  "li",
+  "blockquote",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "sub",
+  "sup",
+  "small",
+  "del",
+  "ins",
+  "abbr",
+  "mark",
+  "hr",
+  "table",
+  "thead",
+  "tbody",
+  "tr",
+  "td",
+  "th",
 ]);
 
 /** Attributes allowed per-tag; `"*"` key applies to every tag. */
@@ -112,10 +137,23 @@ const SAFE_URL_RE = /^(?:https?:|mailto:|#)/i;
 
 /** CSS properties allowed in inline `style` attributes. */
 const SAFE_CSS_PROPS = new Set([
-  "color", "background-color", "background", "font-size",
-  "font-weight", "font-style", "font-family", "text-decoration",
-  "text-align", "margin", "padding", "border", "display",
-  "white-space", "word-break", "line-height", "letter-spacing",
+  "color",
+  "background-color",
+  "background",
+  "font-size",
+  "font-weight",
+  "font-style",
+  "font-family",
+  "text-decoration",
+  "text-align",
+  "margin",
+  "padding",
+  "border",
+  "display",
+  "white-space",
+  "word-break",
+  "line-height",
+  "letter-spacing",
 ]);
 
 /**
@@ -146,12 +184,7 @@ function sanitiseStyle(value: string): string {
 }
 
 /** Process one attribute: remove it if disallowed, sanitise href/style otherwise. */
-function handleAttr(
-  child: Element,
-  attr: Attr,
-  globalAllowed: Set<string>,
-  tagAllowed: Set<string>,
-): void {
+function handleAttr(child: Element, attr: Attr, globalAllowed: Set<string>, tagAllowed: Set<string>): void {
   const name = attr.name.toLowerCase();
   if (name.startsWith("on") || (!globalAllowed.has(name) && !tagAllowed.has(name))) {
     child.removeAttribute(attr.name);
@@ -193,24 +226,18 @@ function sanitiseAttrs(child: Element, tag: string): void {
  */
 // KaTeX is ~450 kB; load it (and its stylesheet) only when a message actually
 // contains math, keeping it off the heap on the common no-math path.
-let katexModule: typeof import("katex")["default"] | null = null;
-let katexLoading: Promise<typeof import("katex")["default"]> | null = null;
-function loadKatex(): Promise<typeof import("katex")["default"]> {
+let katexModule: (typeof import("katex"))["default"] | null = null;
+let katexLoading: Promise<(typeof import("katex"))["default"]> | null = null;
+function loadKatex(): Promise<(typeof import("katex"))["default"]> {
   if (katexModule) return Promise.resolve(katexModule);
-  katexLoading ??= Promise.all([
-    import("katex"),
-    import("katex/dist/katex.min.css"),
-  ]).then(([m]) => (katexModule = m.default));
+  katexLoading ??= Promise.all([import("katex"), import("katex/dist/katex.min.css")]).then(
+    ([m]) => (katexModule = m.default),
+  );
   return katexLoading;
 }
 
-function renderMathWith(
-  katex: typeof import("katex")["default"],
-  root: HTMLElement,
-): void {
-  for (const span of root.querySelectorAll<HTMLSpanElement>(
-    "span.math-inline, span.math-display",
-  )) {
+function renderMathWith(katex: (typeof import("katex"))["default"], root: HTMLElement): void {
+  for (const span of root.querySelectorAll<HTMLSpanElement>("span.math-inline, span.math-display")) {
     const latex = span.textContent ?? "";
     const displayMode = span.classList.contains("math-display");
     try {
@@ -241,7 +268,8 @@ function renderMathNodes(root: HTMLElement): void {
 }
 
 /** Parse `<img>` and `<video>` tags out of HTML and classify them. */
-export function extractMedia(html: string): { cleaned: string; media: MediaItem[] } {  const media: MediaItem[] = [];
+export function extractMedia(html: string): { cleaned: string; media: MediaItem[] } {
+  const media: MediaItem[] = [];
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
 
@@ -253,16 +281,18 @@ export function extractMedia(html: string): { cleaned: string; media: MediaItem[
       src.startsWith("data:image/gif") ||
       src.toLowerCase().endsWith(".gif") ||
       (src.toLowerCase().endsWith(".webp") && src.includes("klipy.com"));
-    media.push({ kind: isGif ? "gif" : "image", src, alt: img.alt || "", spoiler: img.getAttribute("data-spoiler") === "1" });
+    media.push({
+      kind: isGif ? "gif" : "image",
+      src,
+      alt: img.alt || "",
+      spoiler: img.getAttribute("data-spoiler") === "1",
+    });
     img.remove();
   });
 
   // Videos
   doc.querySelectorAll("video").forEach((vid) => {
-    const src =
-      vid.getAttribute("src") ??
-      vid.querySelector("source")?.getAttribute("src") ??
-      "";
+    const src = vid.getAttribute("src") ?? vid.querySelector("source")?.getAttribute("src") ?? "";
     if (!src) return;
     media.push({ kind: "video", src, alt: "", spoiler: vid.getAttribute("data-spoiler") === "1" });
     vid.remove();
@@ -304,9 +334,7 @@ function GifThumb({
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [revealed, setRevealed] = useState(() => revealedSpoilers.has(id));
   const [frozen, setFrozen] = useState(() => playedGifs.has(id));
-  const [posterSrc, setPosterSrc] = useState<string | null>(
-    () => frozenFrames.get(id) ?? null,
-  );
+  const [posterSrc, setPosterSrc] = useState<string | null>(() => frozenFrames.get(id) ?? null);
 
   /** Snapshot whatever frame the <img> is currently showing -> data URL,
    *  cache it, then freeze the display. */
@@ -403,7 +431,10 @@ function GifThumb({
       <button
         type="button"
         className={styles.thumbWrap}
-        onClick={() => { revealedSpoilers.add(id); setRevealed(true); }}
+        onClick={() => {
+          revealedSpoilers.add(id);
+          setRevealed(true);
+        }}
         aria-label={t("spoiler.reveal")}
       >
         <img className={`${styles.thumb} ${styles.spoilerBlurred}`} src={posterSrc ?? item.src} alt="" />
@@ -515,7 +546,12 @@ function VideoThumb({
       onClick={handleClick}
       aria-label={blurred ? t("spoiler.reveal") : undefined}
     >
-      <video className={`${styles.thumb} ${blurred ? styles.spoilerBlurred : ""}`} src={item.src} muted preload="metadata" />
+      <video
+        className={`${styles.thumb} ${blurred ? styles.spoilerBlurred : ""}`}
+        src={item.src}
+        muted
+        preload="metadata"
+      />
       {blurred ? <SpoilerBadge /> : <span className={styles.playBadge}>&#x25B6;</span>}
       {timeLabel && <span className={styles.timeChip}>{timeLabel}</span>}
     </button>
@@ -556,25 +592,20 @@ export function MediaLightbox({
       tabIndex={0}
       className={styles.lightboxOverlay}
       aria-label="Close lightbox"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onClose();
+      }}
     >
       <div className={styles.lightboxContent}>
         {item.kind === "video" ? (
-          <video
-            className={styles.lightboxMedia}
-            src={item.src}
-            controls
-            autoPlay
-          >
+          <video className={styles.lightboxMedia} src={item.src} controls autoPlay>
             <track kind="captions" />
           </video>
         ) : (
-          <img
-            className={styles.lightboxMedia}
-            src={item.src}
-            alt={item.alt}
-          />
+          <img className={styles.lightboxMedia} src={item.src} alt={item.alt} />
         )}
         <button type="button" className={styles.lightboxClose} onClick={onClose}>
           ?
@@ -583,10 +614,7 @@ export function MediaLightbox({
           <div className={styles.lightboxCaption}>
             <span className={styles.lightboxSender}>{senderName}</span>
             {messageTimestamp != null && (
-              <time
-                className={styles.lightboxTime}
-                dateTime={new Date(messageTimestamp).toISOString()}
-              >
+              <time className={styles.lightboxTime} dateTime={new Date(messageTimestamp).toISOString()}>
                 {formatTimestamp(messageTimestamp, timeFormat, convertToLocalTime, systemUses24h)}
               </time>
             )}
@@ -599,7 +627,19 @@ export function MediaLightbox({
 
 // --- Main component -----------------------------------------------
 
-export default function MediaPreview({ html, messageId, compact = false, timestamp, timeFormat = "auto", convertToLocalTime = true, systemUses24h, senderName, messageTimestamp, onOpenLightbox, tile = false }: Readonly<Props>): ReactNode {
+export default function MediaPreview({
+  html,
+  messageId,
+  compact = false,
+  timestamp,
+  timeFormat = "auto",
+  convertToLocalTime = true,
+  systemUses24h,
+  senderName,
+  messageTimestamp,
+  onOpenLightbox,
+  tile = false,
+}: Readonly<Props>): ReactNode {
   // Memoised: extractMedia parses + sanitises the HTML, so re-running it on
   // every render (e.g. hover/timestamp state changes) wasted CPU per message.
   const { cleaned, media } = useMemo(() => extractMedia(html), [html]);
@@ -620,9 +660,8 @@ export default function MediaPreview({ html, messageId, compact = false, timesta
   };
   const closeLightbox = () => setLightboxIdx(null);
 
-  const timeLabel = timestamp == null
-    ? null
-    : formatTimestamp(timestamp, timeFormat, convertToLocalTime, systemUses24h);
+  const timeLabel =
+    timestamp == null ? null : formatTimestamp(timestamp, timeFormat, convertToLocalTime, systemUses24h);
 
   return (
     <>
@@ -641,7 +680,9 @@ export default function MediaPreview({ html, messageId, compact = false, timesta
             tile ? styles.tileSingle : "",
             !tile && media.length >= 2 ? styles.gallery : "",
             !tile && media.length === 3 ? styles.galleryCount3 : "",
-          ].filter(Boolean).join(" ")}
+          ]
+            .filter(Boolean)
+            .join(" ")}
         >
           {media.map((item, i) => {
             const key = `${messageId}-${i}`;
@@ -650,14 +691,7 @@ export default function MediaPreview({ html, messageId, compact = false, timesta
             const itemTimeLabel = i === media.length - 1 ? timeLabel : undefined;
             switch (item.kind) {
               case "gif":
-                return (
-                  <GifThumb
-                    key={key}
-                    item={item}
-                    id={key}
-                    timeLabel={itemTimeLabel}
-                  />
-                );
+                return <GifThumb key={key} item={item} id={key} timeLabel={itemTimeLabel} />;
               case "image":
                 return (
                   <ImageThumb
@@ -684,18 +718,21 @@ export default function MediaPreview({ html, messageId, compact = false, timesta
       )}
 
       {/* Lightbox - portalled to body to escape backdrop-filter containing blocks */}
-      {!onOpenLightbox && lightboxIdx !== null && media[lightboxIdx] && createPortal(
-        <MediaLightbox
-          item={media[lightboxIdx]}
-          onClose={closeLightbox}
-          senderName={senderName}
-          messageTimestamp={messageTimestamp}
-          timeFormat={timeFormat}
-          convertToLocalTime={convertToLocalTime}
-          systemUses24h={systemUses24h}
-        />,
-        document.body,
-      )}
+      {!onOpenLightbox &&
+        lightboxIdx !== null &&
+        media[lightboxIdx] &&
+        createPortal(
+          <MediaLightbox
+            item={media[lightboxIdx]}
+            onClose={closeLightbox}
+            senderName={senderName}
+            messageTimestamp={messageTimestamp}
+            timeFormat={timeFormat}
+            convertToLocalTime={convertToLocalTime}
+            systemUses24h={systemUses24h}
+          />,
+          document.body,
+        )}
     </>
   );
 }

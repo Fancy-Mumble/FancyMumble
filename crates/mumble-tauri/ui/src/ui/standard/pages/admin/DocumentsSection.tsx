@@ -16,18 +16,28 @@ import styles from "./FileServerTab.module.css";
 
 /** Owner cell: the creator's name with an online dot when that user (matched
  *  by cert hash) is currently connected. */
-function DocOwnerCell({ doc, connectedByHash }: { doc: DocumentSummary; connectedByHash: Map<string, UserEntry> }) {
+function DocOwnerCell({
+  doc,
+  connectedByHash,
+}: {
+  doc: DocumentSummary;
+  connectedByHash: Map<string, UserEntry>;
+}) {
   const { t } = useTranslation("settings");
   const entry = doc.owner_cert_hash ? connectedByHash.get(doc.owner_cert_hash) : undefined;
   const name = entry?.name ?? doc.owner_name;
   if (!name) {
-    return <span className={styles.ownerUnknown}>{t("fileServer.unknownOwner", { defaultValue: "Unknown" })}</span>;
+    return (
+      <span className={styles.ownerUnknown}>{t("fileServer.unknownOwner", { defaultValue: "Unknown" })}</span>
+    );
   }
   const online = entry != null;
   return (
     <span className={styles.ownerCell}>
       <span className={`${styles.ownerDot} ${online ? styles.online : styles.offline}`} aria-hidden="true" />
-      <span className={styles.ownerName} title={doc.owner_cert_hash ?? undefined}>{name}</span>
+      <span className={styles.ownerName} title={doc.owner_cert_hash ?? undefined}>
+        {name}
+      </span>
     </span>
   );
 }
@@ -47,8 +57,17 @@ interface DocumentsSectionProps {
 }
 
 export function DocumentsSection({
-  docs, connectedByHash, loading, error, searchActive,
-  isSelected, onToggle, allSelected, onToggleAll, onDelete, deletingName,
+  docs,
+  connectedByHash,
+  loading,
+  error,
+  searchActive,
+  isSelected,
+  onToggle,
+  allSelected,
+  onToggleAll,
+  onDelete,
+  deletingName,
 }: DocumentsSectionProps) {
   const { t } = useTranslation("settings");
 
@@ -56,13 +75,15 @@ export function DocumentsSection({
     <section className={styles.docsSection}>
       <div className={styles.header}>
         <h3 className={styles.title}>
-          <FileTextIcon width={18} height={18} /> {t("fileServer.docs.title", { defaultValue: "Live documents" })}
+          <FileTextIcon width={18} height={18} />{" "}
+          {t("fileServer.docs.title", { defaultValue: "Live documents" })}
         </h3>
       </div>
 
       <p className={styles.docsCaption}>
         {t("fileServer.docs.noExpiry", {
-          defaultValue: "Documents are kept until removed - unlike uploaded files, they have no automatic expiry.",
+          defaultValue:
+            "Documents are kept until removed - unlike uploaded files, they have no automatic expiry.",
         })}
       </p>
 
@@ -91,10 +112,14 @@ export function DocumentsSection({
                 </th>
                 <th>{t("fileServer.docs.col.name", { defaultValue: "Document" })}</th>
                 <th>{t("fileServer.col.owner", { defaultValue: "Owner" })}</th>
-                <th className={styles.num}>{t("fileServer.docs.col.revisions", { defaultValue: "Revisions" })}</th>
+                <th className={styles.num}>
+                  {t("fileServer.docs.col.revisions", { defaultValue: "Revisions" })}
+                </th>
                 <th className={styles.num}>{t("fileServer.docs.col.size", { defaultValue: "Size" })}</th>
                 <th>{t("fileServer.docs.col.updated", { defaultValue: "Updated" })}</th>
-                <th className={styles.thActions}>{t("fileServer.col.actions", { defaultValue: "Actions" })}</th>
+                <th className={styles.thActions}>
+                  {t("fileServer.col.actions", { defaultValue: "Actions" })}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -109,9 +134,13 @@ export function DocumentsSection({
                     />
                   </td>
                   <td className={styles.nameCell}>
-                    <span className={styles.fileName} title={d.name}>{d.name}</span>
+                    <span className={styles.fileName} title={d.name}>
+                      {d.name}
+                    </span>
                   </td>
-                  <td><DocOwnerCell doc={d} connectedByHash={connectedByHash} /></td>
+                  <td>
+                    <DocOwnerCell doc={d} connectedByHash={connectedByHash} />
+                  </td>
                   <td className={styles.num}>{d.revision_count}</td>
                   <td className={styles.num}>{formatBytes(d.size_bytes)}</td>
                   <td className={styles.dateCell}>{new Date(d.updated_at).toLocaleString()}</td>

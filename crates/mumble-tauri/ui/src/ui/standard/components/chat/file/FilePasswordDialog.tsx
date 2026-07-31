@@ -18,7 +18,11 @@ export function FilePasswordDialog({ filename, onConfirm, onCancel }: FilePasswo
   return (
     <PasswordPromptDialog
       title={t("fileAttachment.passwordDialogTitle", { defaultValue: "Password required" })}
-      body={<>{t("fileAttachment.passwordPrompt")} <strong>{filename}</strong></>}
+      body={
+        <>
+          {t("fileAttachment.passwordPrompt")} <strong>{filename}</strong>
+        </>
+      }
       placeholder={t("fileAttachment.passwordPlaceholder", { defaultValue: "Password" })}
       confirmLabel={t("fileAttachment.unlockBtn", { defaultValue: "Unlock" })}
       cancelLabel={t("common:actions.cancel")}

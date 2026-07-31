@@ -24,11 +24,7 @@ interface AvatarEditorModalProps {
   onCancel: () => void;
 }
 
-export function AvatarEditorModal({
-  avatar,
-  onConfirm,
-  onCancel,
-}: Readonly<AvatarEditorModalProps>) {
+export function AvatarEditorModal({ avatar, onConfirm, onCancel }: Readonly<AvatarEditorModalProps>) {
   const initialTab = detectInitialTab(avatar);
   const [tab, setTab] = useState<AvatarTab>(initialTab);
 
@@ -105,10 +101,7 @@ export function AvatarEditorModal({
 
   return (
     <div className={settingsStyles.editorOverlay} onClick={tryClose}>
-      <div
-        className={styles.modal}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <h3 className={styles.title}>{t("avatarEditor.title")}</h3>
 
         {/* Preview */}
@@ -146,35 +139,21 @@ export function AvatarEditorModal({
               onFile={handleFileSelect}
               label={t("avatarEditor.dropLabel")}
               shape="circle"
-              preview={
-                localImage ? (
-                  <img src={localImage} alt={t("avatarEditor.imgAlt")} />
-                ) : undefined
-              }
+              preview={localImage ? <img src={localImage} alt={t("avatarEditor.imgAlt")} /> : undefined}
               onRemove={localImage ? handleRemoveImage : undefined}
             />
           )}
 
-          {tab === "gif" && (
-            <KlipyGifBrowser onSelect={handleGifSelect} />
-          )}
+          {tab === "gif" && <KlipyGifBrowser onSelect={handleGifSelect} />}
         </div>
 
         {/* Actions */}
         <div className={styles.actions}>
-          <button
-            type="button"
-            className={settingsStyles.ghostBtn}
-            onClick={onCancel}
-          >
+          <button type="button" className={settingsStyles.ghostBtn} onClick={onCancel}>
             {t("avatarEditor.discardBtn")}
           </button>
           <div className={styles.applyWrapper}>
-            {showUnsavedHint && (
-              <div className={styles.unsavedBubble}>
-                {t("avatarEditor.unsavedHint")}
-              </div>
-            )}
+            {showUnsavedHint && <div className={styles.unsavedBubble}>{t("avatarEditor.unsavedHint")}</div>}
             <button
               type="button"
               className={`${settingsStyles.applyBtn} ${showUnsavedHint ? styles.applyFlash : ""}`}

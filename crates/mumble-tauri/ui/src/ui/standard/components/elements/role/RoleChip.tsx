@@ -28,12 +28,7 @@ function bytesToDataUrl(bytes: number[]): string {
 export function RoleChip({ name, color, icon, size = "medium", className, title, onClick }: RoleChipProps) {
   const iconSrc = useMemo(() => (icon && icon.length > 0 ? bytesToDataUrl(icon) : null), [icon]);
   const sizeCls = size === "small" ? styles.small : size === "large" ? styles.large : "";
-  const classes = [
-    styles.chip,
-    color ? styles.colored : "",
-    sizeCls,
-    className ?? "",
-  ]
+  const classes = [styles.chip, color ? styles.colored : "", sizeCls, className ?? ""]
     .filter(Boolean)
     .join(" ");
 

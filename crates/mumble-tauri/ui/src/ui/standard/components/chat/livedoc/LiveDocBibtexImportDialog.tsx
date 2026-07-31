@@ -38,7 +38,12 @@ export default function LiveDocBibtexImportDialog({ onImport, onClose }: LiveDoc
       <div className={`${styles.dialog} ${styles.dialogNarrow}`} role="dialog" aria-modal="true">
         <div className={styles.dialogHeader}>
           <span className={styles.dialogTitle}>{tb("newFromBibtex", "New Source from BibTeX")}</span>
-          <button type="button" className={styles.dialogClose} onClick={onClose} aria-label={tb("close", "Close")}>
+          <button
+            type="button"
+            className={styles.dialogClose}
+            onClick={onClose}
+            aria-label={tb("close", "Close")}
+          >
             <CloseIcon width={16} height={16} />
           </button>
         </div>
@@ -80,9 +85,7 @@ export default function LiveDocBibtexImportDialog({ onImport, onClose }: LiveDoc
               onClose();
             }}
           >
-            {parsed.length > 1
-              ? `${tb("import", "Import")} (${parsed.length})`
-              : tb("import", "Import")}
+            {parsed.length > 1 ? `${tb("import", "Import")} (${parsed.length})` : tb("import", "Import")}
           </button>
         </div>
       </div>

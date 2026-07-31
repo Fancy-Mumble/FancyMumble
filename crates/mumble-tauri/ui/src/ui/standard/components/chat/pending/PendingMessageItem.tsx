@@ -27,9 +27,7 @@ export default function PendingMessageItem({ pending }: PendingMessageItemProps)
 
   return (
     <div className={styles.wrapper}>
-      <div
-        className={`${styles.bubble} ${isFailed ? styles.bubbleFailed : styles.bubbleSending}`}
-      >
+      <div className={`${styles.bubble} ${isFailed ? styles.bubbleFailed : styles.bubbleSending}`}>
         <SafeHtml html={pending.body} className={styles.body} />
 
         {!isFailed && (
@@ -45,9 +43,7 @@ export default function PendingMessageItem({ pending }: PendingMessageItemProps)
         )}
 
         <div className={styles.statusRow}>
-          <span
-            className={`${styles.statusLabel} ${isFailed ? styles.statusLabelError : ""}`}
-          >
+          <span className={`${styles.statusLabel} ${isFailed ? styles.statusLabelError : ""}`}>
             {isFailed ? t("pendingMessage.failed") : t("pendingMessage.sending")}
           </span>
           <span className={styles.actions}>
@@ -74,9 +70,7 @@ export default function PendingMessageItem({ pending }: PendingMessageItemProps)
           </span>
         </div>
 
-        {isFailed && pending.errorMessage && (
-          <span className={styles.errorText}>{pending.errorMessage}</span>
-        )}
+        {isFailed && pending.errorMessage && <span className={styles.errorText}>{pending.errorMessage}</span>}
       </div>
     </div>
   );

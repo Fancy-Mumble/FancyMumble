@@ -8,7 +8,7 @@
  * (`useCodeHighlight`) so both reuse a single chunk + module instance and the
  * theme stylesheet is injected exactly once.
  */
-export type HljsApi = typeof import("highlight.js/lib/common")["default"];
+export type HljsApi = (typeof import("highlight.js/lib/common"))["default"];
 
 let hljsModule: HljsApi | null = null;
 let hljsLoading: Promise<HljsApi> | null = null;

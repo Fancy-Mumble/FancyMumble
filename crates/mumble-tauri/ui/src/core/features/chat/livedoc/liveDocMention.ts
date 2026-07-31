@@ -85,10 +85,7 @@ function detectTrigger(
  *  `onChange` emissions: the plugin's `view.update` fires on every editor
  *  update, and emitting a fresh object each time drives a
  *  re-render -> view-update -> emit feedback loop that freezes the app. */
-function sameTrigger(
-  a: MentionTriggerState | null,
-  b: MentionTriggerState | null,
-): boolean {
+function sameTrigger(a: MentionTriggerState | null, b: MentionTriggerState | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
   return a.from === b.from && a.to === b.to && a.query === b.query && a.kind === b.kind;
@@ -187,11 +184,7 @@ export const LiveDocMention = Node.create<MentionPluginOptions>({
         cls += " mention-here";
         break;
     }
-    return [
-      "span",
-      mergeAttributes(HTMLAttributes, { class: cls, ...dataAttrs }),
-      `@${attrs.label}`,
-    ];
+    return ["span", mergeAttributes(HTMLAttributes, { class: cls, ...dataAttrs }), `@${attrs.label}`];
   },
 
   addCommands() {

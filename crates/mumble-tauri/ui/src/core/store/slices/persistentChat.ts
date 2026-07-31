@@ -58,12 +58,15 @@ export interface PersistentChatSlice {
   approveKeyShare: (channelId: number, peerCertHash: string) => Promise<void>;
   dismissKeyShare: (channelId: number, peerCertHash: string) => Promise<void>;
   queryKeyHolders: (channelId: number) => Promise<void>;
-  deletePchatMessages: (channelId: number, opts: {
-    messageIds?: string[];
-    timeFrom?: number;
-    timeTo?: number;
-    senderHash?: string;
-  }) => Promise<void>;
+  deletePchatMessages: (
+    channelId: number,
+    opts: {
+      messageIds?: string[];
+      timeFrom?: number;
+      timeTo?: number;
+      senderHash?: string;
+    },
+  ) => Promise<void>;
 }
 
 /** State-only portion of {@link PersistentChatSlice}. */
@@ -97,10 +100,7 @@ export const persistentChatInitialState: PersistentChatState = {
   signalBridgeError: null,
 };
 
-export const createPersistentChatSlice: StateCreator<AppState, [], [], PersistentChatSlice> = (
-  set,
-  get,
-) => ({
+export const createPersistentChatSlice: StateCreator<AppState, [], [], PersistentChatSlice> = (set, get) => ({
   ...persistentChatInitialState,
 
   fetchHistory: async (channelId, beforeId) => {
@@ -274,9 +274,7 @@ export const createPersistentChatSlice: StateCreator<AppState, [], [], Persisten
       if (opts.messageIds && opts.messageIds.length > 0) {
         const removed = new Set(opts.messageIds);
         set((prev) => ({
-          messages: prev.messages.filter(
-            (m) => !m.message_id || !removed.has(m.message_id),
-          ),
+          messages: prev.messages.filter((m) => !m.message_id || !removed.has(m.message_id)),
         }));
       } else {
         // For time-range or sender-hash deletions we cannot determine

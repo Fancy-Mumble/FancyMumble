@@ -11,11 +11,7 @@ import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { fancyVersionEncode } from "../../utils/version";
 
-import type {
-  OnboardingConfig,
-  OnboardingResponse,
-  OnboardingSelection,
-} from "../../types";
+import type { OnboardingConfig, OnboardingResponse, OnboardingSelection } from "../../types";
 
 /** Local-storage key for "user dismissed the onboarding modal this session". */
 const DISMISSED_PREFIX = "onboarding-dismissed:";
@@ -28,13 +24,8 @@ export const ONBOARDING_MIN_FANCY_VERSION = fancyVersionEncode(0, 3, 1);
  * enough to support the onboarding workflow.  Returns false for legacy
  * (non-Fancy) servers and Fancy servers older than 0.3.1.
  */
-export function isOnboardingSupported(
-  serverFancyVersion: number | null | undefined,
-): boolean {
-  return (
-    serverFancyVersion != null &&
-    serverFancyVersion >= ONBOARDING_MIN_FANCY_VERSION
-  );
+export function isOnboardingSupported(serverFancyVersion: number | null | undefined): boolean {
+  return serverFancyVersion != null && serverFancyVersion >= ONBOARDING_MIN_FANCY_VERSION;
 }
 
 interface OnboardingStoreState {
@@ -56,16 +47,10 @@ interface OnboardingStoreState {
 
   /** Pulls config + response from the backend and decides whether to auto-open the modal.
    *  Skips entirely on servers below `ONBOARDING_MIN_FANCY_VERSION`. */
-  hydrate: (
-    serverId: string | null,
-    serverFancyVersion: number | null | undefined,
-  ) => Promise<void>;
+  hydrate: (serverId: string | null, serverFancyVersion: number | null | undefined) => Promise<void>;
 
   /** Submit the user's selections (also stores them locally). */
-  submit: (
-    selections: OnboardingSelection[],
-    revision: number,
-  ) => Promise<void>;
+  submit: (selections: OnboardingSelection[], revision: number) => Promise<void>;
 
   /** Admin path: persist a new config with the server. */
   saveConfig: (config: OnboardingConfig) => Promise<void>;
@@ -107,9 +92,7 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
 
       if (config?.enabled) {
         const needsAnswer = !response || response.config_revision < config.revision;
-        const dismissed = serverId
-          ? sessionStorage.getItem(DISMISSED_PREFIX + serverId) === "1"
-          : false;
+        const dismissed = serverId ? sessionStorage.getItem(DISMISSED_PREFIX + serverId) === "1" : false;
         if (needsAnswer && !dismissed) {
           set({ modalOpen: true });
         }

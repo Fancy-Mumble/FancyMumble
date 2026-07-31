@@ -17,10 +17,7 @@ import { useUserAvatar } from "@core/lazyBlobs";
 import { PchatBadge } from "../PchatBadge";
 import { useChannelDropTarget } from "../../../utils/userMoveDnd";
 import { PERM_ENTER } from "@core/utils/permissions";
-import {
-  ChannelReorderWrapper,
-  useChannelReorderHandler,
-} from "../channel/channelReorder";
+import { ChannelReorderWrapper, useChannelReorderHandler } from "../channel/channelReorder";
 import styles from "./ClassicChannelList.module.css";
 
 const MAX_STACKED = 3;
@@ -68,10 +65,7 @@ function TooltipUser({ user }: Readonly<{ user: UserEntry }>) {
       {url ? (
         <img src={url} alt={user.name} className={styles.tooltipAvatarImg} />
       ) : (
-        <div
-          className={styles.tooltipAvatar}
-          style={{ background: colorFor(user.name) }}
-        >
+        <div className={styles.tooltipAvatar} style={{ background: colorFor(user.name) }}>
           {user.name.charAt(0).toUpperCase()}
         </div>
       )}
@@ -97,11 +91,7 @@ function StackedAvatars({ users }: Readonly<{ users: UserEntry[] }>) {
       {visible.map((u, i) => (
         <StackedAvatar key={u.session} user={u} zIndex={MAX_STACKED - i} />
       ))}
-      {overflow > 0 && (
-        <div className={`${styles.stackedAvatar} ${styles.overflowBadge}`}>
-          +{overflow}
-        </div>
-      )}
+      {overflow > 0 && <div className={`${styles.stackedAvatar} ${styles.overflowBadge}`}>+{overflow}</div>}
       {showTooltip && (
         <div className={styles.avatarTooltip}>
           {users.map((u) => (
@@ -121,10 +111,7 @@ function ChannelDropWrapper({
 }: Readonly<{ channelId: number; children: React.ReactNode }>) {
   const { ref, active } = useChannelDropTarget(channelId);
   return (
-    <div
-      ref={ref}
-      className={`${styles.dropZone} ${active ? styles.dropZoneActive : ""}`}
-    >
+    <div ref={ref} className={`${styles.dropZone} ${active ? styles.dropZoneActive : ""}`}>
       {children}
     </div>
   );
@@ -171,7 +158,7 @@ function ClassicChannelListImpl({
   );
 
   const currentChannelEntry = useMemo(
-    () => (currentChannel == null ? null : channels.find((c) => c.id === currentChannel) ?? null),
+    () => (currentChannel == null ? null : (channels.find((c) => c.id === currentChannel) ?? null)),
     [channels, currentChannel],
   );
 
@@ -227,39 +214,96 @@ function ClassicChannelListImpl({
           onReorder={handleChannelReorder}
           showHandle={false}
         >
+          <ChannelDropWrapper channelId={channel.id}>
+            <div className={styles.folderGroup}>
+              <div
+                className={[
+                  styles.folderHeader,
+                  isSelected ? styles.active : "",
+                  isCurrent ? styles.currentChannel : "",
+                  isShaking ? styles.shaking : "",
+                  isHighlighted ? styles.highlighted : "",
+                  isLocked ? styles.locked : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                style={{ paddingLeft: `${4 + indentPx}px` }}
+                role="toolbar"
+                onContextMenu={(e) => onContextMenu(e, channel.id)}
+              >
+                <button
+                  className={styles.expandBtn}
+                  onClick={() => toggleExpand(channel.id)}
+                  aria-label={isOpen ? t("common:actions.collapse") : t("channelList.expand")}
+                >
+                  <ChevronRightIcon
+                    className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ""}`}
+                    width={14}
+                    height={14}
+                  />
+                </button>
+                <button
+                  className={styles.folderSelect}
+                  onClick={() => onSelectChannel(channel.id)}
+                  onDoubleClick={() => onJoinChannel(channel.id)}
+                >
+                  <span className={styles.channelName}>
+                    {channel.name || t("channelList.unnamed")}
+                    {isLocked && (
+                      <span className={styles.lockIndicator} title={t("channelList.noPermissionToJoin")}>
+                        <LockIcon width={11} height={11} />
+                      </span>
+                    )}
+                    {isListened && (
+                      <span className={styles.listenIndicator} title={t("channelList.listening")}>
+                        <ListenBadgeIcon width={12} height={12} />
+                      </span>
+                    )}
+                    <PchatBadge protocol={channel.pchat_protocol} />
+                  </span>
+                  <span className={styles.channelMeta}>{t("channelList.member", { count: totalUsers })}</span>
+                </button>
+                {unread > 0 && <span className={styles.unreadBadge}>{unread > 99 ? "99+" : unread}</span>}
+                <StackedAvatars users={allUsers} />
+              </div>
+              {isOpen && (
+                <div className={styles.folderChildren}>
+                  {directChildren.map((ch) => renderChannel(ch, depth + 1))}
+                </div>
+              )}
+            </div>
+          </ChannelDropWrapper>
+        </ChannelReorderWrapper>
+      );
+    }
+
+    return (
+      <ChannelReorderWrapper
+        key={channel.id}
+        channel={channel}
+        onReorder={handleChannelReorder}
+        showHandle={false}
+      >
         <ChannelDropWrapper channelId={channel.id}>
-        <div className={styles.folderGroup}>
-          <div
+          <button
             className={[
-              styles.folderHeader,
+              styles.channelItem,
               isSelected ? styles.active : "",
               isCurrent ? styles.currentChannel : "",
               isShaking ? styles.shaking : "",
               isHighlighted ? styles.highlighted : "",
               isLocked ? styles.locked : "",
-            ].filter(Boolean).join(" ")}
-            style={{ paddingLeft: `${4 + indentPx}px` }}
-            role="toolbar"
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            style={{ paddingLeft: `${12 + indentPx}px` }}
+            onClick={() => onSelectChannel(channel.id)}
+            onDoubleClick={() => onJoinChannel(channel.id)}
             onContextMenu={(e) => onContextMenu(e, channel.id)}
           >
-            <button
-              className={styles.expandBtn}
-              onClick={() => toggleExpand(channel.id)}
-              aria-label={isOpen ? t("common:actions.collapse") : t("channelList.expand")}
-            >
-              <ChevronRightIcon
-                className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ""}`}
-                width={14}
-                height={14}
-              />
-            </button>
-            <button
-              className={styles.folderSelect}
-              onClick={() => onSelectChannel(channel.id)}
-              onDoubleClick={() => onJoinChannel(channel.id)}
-            >
+            <div className={styles.channelInfo}>
               <span className={styles.channelName}>
-                {channel.name || t("channelList.unnamed")}
+                {channel.name || t("channelList.root")}
                 {isLocked && (
                   <span className={styles.lockIndicator} title={t("channelList.noPermissionToJoin")}>
                     <LockIcon width={11} height={11} />
@@ -272,70 +316,11 @@ function ClassicChannelListImpl({
                 )}
                 <PchatBadge protocol={channel.pchat_protocol} />
               </span>
-              <span className={styles.channelMeta}>
-                {t("channelList.member", { count: totalUsers })}
-              </span>
-            </button>
-            {unread > 0 && (
-              <span className={styles.unreadBadge}>{unread > 99 ? "99+" : unread}</span>
-            )}
-            <StackedAvatars users={allUsers} />
-          </div>
-          {isOpen && (
-            <div className={styles.folderChildren}>
-              {directChildren.map((ch) => renderChannel(ch, depth + 1))}
             </div>
-          )}
-        </div>
+            {unread > 0 && <span className={styles.unreadBadge}>{unread > 99 ? "99+" : unread}</span>}
+            <StackedAvatars users={chUsers} />
+          </button>
         </ChannelDropWrapper>
-        </ChannelReorderWrapper>
-      );
-    }
-
-    return (
-      <ChannelReorderWrapper
-        key={channel.id}
-        channel={channel}
-        onReorder={handleChannelReorder}
-        showHandle={false}
-      >
-      <ChannelDropWrapper channelId={channel.id}>
-      <button
-        className={[
-          styles.channelItem,
-          isSelected ? styles.active : "",
-          isCurrent ? styles.currentChannel : "",
-          isShaking ? styles.shaking : "",
-          isHighlighted ? styles.highlighted : "",
-          isLocked ? styles.locked : "",
-        ].filter(Boolean).join(" ")}
-        style={{ paddingLeft: `${12 + indentPx}px` }}
-        onClick={() => onSelectChannel(channel.id)}
-        onDoubleClick={() => onJoinChannel(channel.id)}
-        onContextMenu={(e) => onContextMenu(e, channel.id)}
-      >
-        <div className={styles.channelInfo}>
-          <span className={styles.channelName}>
-            {channel.name || t("channelList.root")}
-            {isLocked && (
-              <span className={styles.lockIndicator} title={t("channelList.noPermissionToJoin")}>
-                <LockIcon width={11} height={11} />
-              </span>
-            )}
-            {isListened && (
-              <span className={styles.listenIndicator} title={t("channelList.listening")}>
-                <ListenBadgeIcon width={12} height={12} />
-              </span>
-            )}
-            <PchatBadge protocol={channel.pchat_protocol} />
-          </span>
-        </div>
-        {unread > 0 && (
-          <span className={styles.unreadBadge}>{unread > 99 ? "99+" : unread}</span>
-        )}
-        <StackedAvatars users={chUsers} />
-      </button>
-      </ChannelDropWrapper>
       </ChannelReorderWrapper>
     );
   }
@@ -345,37 +330,38 @@ function ClassicChannelListImpl({
       {currentChannelEntry && (
         <div className={styles.stickyCurrentChannel}>
           <ChannelDropWrapper channelId={currentChannelEntry.id}>
-          <button
-            className={[styles.channelItem, styles.currentChannel].join(" ")}
-            onClick={() => onSelectChannel(currentChannelEntry.id)}
-            onDoubleClick={() => onJoinChannel(currentChannelEntry.id)}
-            onContextMenu={(e) => onContextMenu(e, currentChannelEntry.id)}
-          >
-            <div className={styles.channelInfo}>
-              <span className={styles.channelName}>{currentChannelEntry.name || t("channelList.root")}</span>
-            </div>
-            <StackedAvatars users={usersByChannel.get(currentChannelEntry.id) ?? []} />
-          </button>
+            <button
+              className={[styles.channelItem, styles.currentChannel].join(" ")}
+              onClick={() => onSelectChannel(currentChannelEntry.id)}
+              onDoubleClick={() => onJoinChannel(currentChannelEntry.id)}
+              onContextMenu={(e) => onContextMenu(e, currentChannelEntry.id)}
+            >
+              <div className={styles.channelInfo}>
+                <span className={styles.channelName}>
+                  {currentChannelEntry.name || t("channelList.root")}
+                </span>
+              </div>
+              <StackedAvatars users={usersByChannel.get(currentChannelEntry.id) ?? []} />
+            </button>
           </ChannelDropWrapper>
         </div>
       )}
 
       {root && root.id !== currentChannel && (
         <ChannelDropWrapper channelId={root.id}>
-        <button
-          className={[
-            styles.channelItem,
-            selectedChannel === root.id ? styles.active : "",
-          ].filter(Boolean).join(" ")}
-          onClick={() => onSelectChannel(root.id)}
-          onDoubleClick={() => onJoinChannel(root.id)}
-          onContextMenu={(e) => onContextMenu(e, root.id)}
-        >
-          <div className={styles.channelInfo}>
-            <span className={styles.channelName}>{root.name || t("channelList.root")}</span>
-          </div>
-          <StackedAvatars users={usersByChannel.get(root.id) ?? []} />
-        </button>
+          <button
+            className={[styles.channelItem, selectedChannel === root.id ? styles.active : ""]
+              .filter(Boolean)
+              .join(" ")}
+            onClick={() => onSelectChannel(root.id)}
+            onDoubleClick={() => onJoinChannel(root.id)}
+            onContextMenu={(e) => onContextMenu(e, root.id)}
+          >
+            <div className={styles.channelInfo}>
+              <span className={styles.channelName}>{root.name || t("channelList.root")}</span>
+            </div>
+            <StackedAvatars users={usersByChannel.get(root.id) ?? []} />
+          </button>
         </ChannelDropWrapper>
       )}
 
@@ -386,4 +372,3 @@ function ClassicChannelListImpl({
 
 const ClassicChannelList = memo(ClassicChannelListImpl);
 export default ClassicChannelList;
-

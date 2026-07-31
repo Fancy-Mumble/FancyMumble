@@ -114,13 +114,11 @@ export default function StreamConfigMenu({
             <SlidersIcon width={15} height={15} />
             <span>{t("screenShare.config.quality")}</span>
             <span className={styles.itemValue}>
-              {activePreset ? t(`screenShare.picker.quality_${activePreset}`) : t("screenShare.config.custom")}
+              {activePreset
+                ? t(`screenShare.picker.quality_${activePreset}`)
+                : t("screenShare.config.custom")}
             </span>
-            <ChevronRightIcon
-              width={14}
-              height={14}
-              className={qualityOpen ? styles.chevronOpen : ""}
-            />
+            <ChevronRightIcon width={14} height={14} className={qualityOpen ? styles.chevronOpen : ""} />
           </button>
           {qualityOpen &&
             (["hd", "sd", "source"] as const).map((q) => (

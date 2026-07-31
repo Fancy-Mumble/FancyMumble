@@ -36,7 +36,7 @@ export const createDownloadsSlice: StateCreator<AppState, [], [], DownloadsSlice
   ...downloadsInitialState,
 
   addDownload: (entry) => {
-    const id = (globalThis.crypto?.randomUUID?.() ?? `dl-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    const id = globalThis.crypto?.randomUUID?.() ?? `dl-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const full: DownloadEntry = { ...entry, id, downloadedAt: Date.now() };
     set((s) => ({
       downloads: [full, ...s.downloads].slice(0, 200),

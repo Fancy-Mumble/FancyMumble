@@ -44,10 +44,7 @@ export function ImageEditor({
 
   // Crop-region dimensions inside the viewport.
   const cropW = cropShape === "circle" ? Math.min(VP_W, VP_H) * 0.7 : VP_W * 0.9;
-  const cropH =
-    cropShape === "circle"
-      ? cropW
-      : cropW * (targetHeight / targetWidth);
+  const cropH = cropShape === "circle" ? cropW : cropW * (targetHeight / targetWidth);
   const cropLeft = (VP_W - cropW) / 2;
   const cropTop = (VP_H - cropH) / 2;
 
@@ -168,30 +165,13 @@ export function ImageEditor({
               <mask id="crop-mask">
                 <rect width={VP_W} height={VP_H} fill="white" />
                 {cropShape === "circle" ? (
-                  <circle
-                    cx={VP_W / 2}
-                    cy={VP_H / 2}
-                    r={cropW / 2}
-                    fill="black"
-                  />
+                  <circle cx={VP_W / 2} cy={VP_H / 2} r={cropW / 2} fill="black" />
                 ) : (
-                  <rect
-                    x={cropLeft}
-                    y={cropTop}
-                    width={cropW}
-                    height={cropH}
-                    rx={6}
-                    fill="black"
-                  />
+                  <rect x={cropLeft} y={cropTop} width={cropW} height={cropH} rx={6} fill="black" />
                 )}
               </mask>
             </defs>
-            <rect
-              width={VP_W}
-              height={VP_H}
-              fill="rgba(0,0,0,0.55)"
-              mask="url(#crop-mask)"
-            />
+            <rect width={VP_W} height={VP_H} fill="rgba(0,0,0,0.55)" mask="url(#crop-mask)" />
             {/* Crop border */}
             {cropShape === "circle" ? (
               <circle
@@ -233,11 +213,7 @@ export function ImageEditor({
 
         {/* Actions */}
         <div className={panelStyles.editorActions}>
-          <button
-            type="button"
-            className={styles.ghostBtn}
-            onClick={onCancel}
-          >
+          <button type="button" className={styles.ghostBtn} onClick={onCancel}>
             {t("common:actions.cancel")}
           </button>
           <button
@@ -253,4 +229,3 @@ export function ImageEditor({
     </div>
   );
 }
-

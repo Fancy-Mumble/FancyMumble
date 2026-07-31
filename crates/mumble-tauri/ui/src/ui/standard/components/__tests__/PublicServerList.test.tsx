@@ -65,9 +65,24 @@ beforeEach(() => {
   vi.clearAllMocks();
   clearPingCache();
   // Default: fetch returns sample servers, ping returns per-server user counts
-  const pingData: Record<string, { online: boolean; latency_ms: number; user_count: number; max_user_count: number; server_version: string | null }> = {
+  const pingData: Record<
+    string,
+    {
+      online: boolean;
+      latency_ms: number;
+      user_count: number;
+      max_user_count: number;
+      server_version: string | null;
+    }
+  > = {
     "1.1.1.1": { online: true, latency_ms: 42, user_count: 5, max_user_count: 50, server_version: "1.4.287" },
-    "2.2.2.2": { online: true, latency_ms: 80, user_count: 12, max_user_count: 100, server_version: "1.5.634" },
+    "2.2.2.2": {
+      online: true,
+      latency_ms: 80,
+      user_count: 12,
+      max_user_count: 100,
+      server_version: "1.5.634",
+    },
     "3.3.3.3": { online: true, latency_ms: 20, user_count: 3, max_user_count: 30, server_version: "1.3.0" },
   };
   invokeMock.mockImplementation((cmd: string, args?: unknown) => {
@@ -75,7 +90,15 @@ beforeEach(() => {
     if (cmd === "ping_server") {
       const { host } = (args ?? {}) as { host?: string };
       const data = host ? pingData[host] : undefined;
-      return Promise.resolve(data ?? { online: true, latency_ms: 42, user_count: null, max_user_count: null, server_version: null });
+      return Promise.resolve(
+        data ?? {
+          online: true,
+          latency_ms: 42,
+          user_count: null,
+          max_user_count: null,
+          server_version: null,
+        },
+      );
     }
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   });
@@ -167,7 +190,8 @@ describe("Error handling", () => {
 
   it("displays error on network failure", async () => {
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === "fetch_public_servers") return Promise.reject("Failed to fetch public server list: connection refused");
+      if (cmd === "fetch_public_servers")
+        return Promise.reject("Failed to fetch public server list: connection refused");
       return Promise.resolve(null);
     });
     renderList();

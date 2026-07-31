@@ -19,19 +19,13 @@ interface LiveDocInviteCardProps {
   readonly senderName: string;
 }
 
-export default function LiveDocInviteCard({
-  channelId,
-  slug,
-  title,
-  senderName,
-}: LiveDocInviteCardProps) {
+export default function LiveDocInviteCard({ channelId, slug, title, senderName }: LiveDocInviteCardProps) {
   const { t } = useTranslation("chat");
   const activeServerId = useAppStore((s) => s.activeServerId);
   const activeLiveDocs = useAppStore((s) => s.activeLiveDocs);
   const requestOpenLiveDoc = useAppStore((s) => s.requestOpenLiveDoc);
 
-  const alreadyJoined =
-    activeLiveDocs.get(liveDocKey(activeServerId, channelId))?.slug === slug;
+  const alreadyJoined = activeLiveDocs.get(liveDocKey(activeServerId, channelId))?.slug === slug;
 
   const handleJoin = useCallback(() => {
     if (alreadyJoined) return;
@@ -44,20 +38,11 @@ export default function LiveDocInviteCard({
     <div className={styles.card} role="group">
       <FileIcon className={styles.icon} width={24} height={24} aria-hidden="true" />
       <div className={styles.body}>
-        <span className={styles.opener}>
-          {t("liveDoc.inviteCard.opened", { name: senderName })}
-        </span>
+        <span className={styles.opener}>{t("liveDoc.inviteCard.opened", { name: senderName })}</span>
         <span className={styles.title}>{title}</span>
       </div>
-      <button
-        type="button"
-        className={styles.joinBtn}
-        onClick={handleJoin}
-        disabled={alreadyJoined}
-      >
-        {alreadyJoined
-          ? t("liveDoc.inviteCard.joined")
-          : t("liveDoc.inviteCard.join")}
+      <button type="button" className={styles.joinBtn} onClick={handleJoin} disabled={alreadyJoined}>
+        {alreadyJoined ? t("liveDoc.inviteCard.joined") : t("liveDoc.inviteCard.join")}
       </button>
     </div>
   );

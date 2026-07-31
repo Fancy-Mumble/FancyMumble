@@ -14,7 +14,12 @@ import { AclRulesPanel } from "./AclRulesPanel";
 import { GroupsPanel } from "./GroupsPanel";
 import { AccessUsersPanel } from "./AccessUsersPanel";
 import { ChannelFiltersPanel } from "./ChannelFiltersPanel";
-import { buildChannelTree, hasCustomAcl, limitTreeDepth, type TreeNode } from "@core/features/admin/channelAclModel";
+import {
+  buildChannelTree,
+  hasCustomAcl,
+  limitTreeDepth,
+  type TreeNode,
+} from "@core/features/admin/channelAclModel";
 import styles from "./AdminPanel.module.css";
 
 const NO_LISTENED_CHANNELS: ReadonlySet<number> = new Set();
@@ -68,9 +73,12 @@ export function ChannelAclTab() {
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
   const [registeredNames, setRegisteredNames] = useState<Map<number, string>>(new Map());
   // Right-click context menu for a tree node (`confirming` = delete confirmation).
-  const [menu, setMenu] = useState<
-    { x: number; y: number; channel: ChannelEntry; confirming?: boolean } | null
-  >(null);
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    channel: ChannelEntry;
+    confirming?: boolean;
+  } | null>(null);
 
   const visibleChannels = useMemo(() => {
     let base = channels;
@@ -85,15 +93,21 @@ export function ChannelAclTab() {
       });
     }
     return base;
-  }, [channels, users, hideDmChannels, privateOnly, customAclOnly, customAclCache, hideEmptyChannels, selectedChannel]);
+  }, [
+    channels,
+    users,
+    hideDmChannels,
+    privateOnly,
+    customAclOnly,
+    customAclCache,
+    hideEmptyChannels,
+    selectedChannel,
+  ]);
   const tree = useMemo(() => {
     const built = buildChannelTree(visibleChannels);
     return topLevelOnly ? limitTreeDepth(built, 1) : built;
   }, [visibleChannels, topLevelOnly]);
-  const matchedIds = useMemo(
-    () => (search ? filterTree(tree, search) : null),
-    [tree, search],
-  );
+  const matchedIds = useMemo(() => (search ? filterTree(tree, search) : null), [tree, search]);
 
   // "Custom ACL only": no batch endpoint exists, so sweep `request_acl` for
   // every channel not yet requested once the filter is turned on. The
@@ -111,8 +125,7 @@ export function ChannelAclTab() {
       }
     }
   }, [customAclOnly, channels]);
-  const customAclLoading =
-    customAclOnly && channels.some((c) => !customAclCache.has(c.id));
+  const customAclLoading = customAclOnly && channels.some((c) => !customAclCache.has(c.id));
 
   // Auto-expand root on first render.
   useEffect(() => {
@@ -254,11 +267,14 @@ export function ChannelAclTab() {
     handleChannelSelect(targetId);
 
     // Strip the consumed param so it does not re-fire on rerenders.
-    setSearchParams((sp) => {
-      const next = new URLSearchParams(sp);
-      next.delete("channel");
-      return next;
-    }, { replace: true });
+    setSearchParams(
+      (sp) => {
+        const next = new URLSearchParams(sp);
+        next.delete("channel");
+        return next;
+      },
+      { replace: true },
+    );
   }, [channelParam, channels, handleChannelSelect, setSearchParams, aclListenerReady]);
 
   const toggleExpand = useCallback((id: number) => {
@@ -418,11 +434,7 @@ export function ChannelAclTab() {
               onChange={(e) => setSearch(e.target.value)}
             />
             {search && (
-              <button
-                type="button"
-                className={styles.clearBtn}
-                onClick={() => setSearch("")}
-              >
+              <button type="button" className={styles.clearBtn} onClick={() => setSearch("")}>
                 &times;
               </button>
             )}
@@ -463,11 +475,7 @@ export function ChannelAclTab() {
               </div>
 
               <label className={styles.checkboxLabel}>
-                <input
-                  type="checkbox"
-                  checked={aclData.inherit_acls}
-                  onChange={handleToggleInherit}
-                />
+                <input type="checkbox" checked={aclData.inherit_acls} onChange={handleToggleInherit} />
                 {t("channelAcl.inheritAcls")}
               </label>
 
@@ -554,7 +562,10 @@ export function ChannelAclTab() {
             className={styles.ctxBackdrop}
             aria-label={t("channelAcl.closeMenu", { defaultValue: "Close menu" })}
             onClick={() => setMenu(null)}
-            onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu(null);
+            }}
           />
           <div className={styles.ctxMenu} style={{ top: menu.y, left: menu.x }} role="menu">
             {menu.confirming ? (
@@ -567,15 +578,13 @@ export function ChannelAclTab() {
                     type="button"
                     className={styles.ctxDangerBtn}
                     data-testid={TID.aclDeleteConfirm}
-                    onClick={() => { void handleDeleteChannel(menu.channel); }}
+                    onClick={() => {
+                      void handleDeleteChannel(menu.channel);
+                    }}
                   >
                     {t("channelAcl.deleteChannel")}
                   </button>
-                  <button
-                    type="button"
-                    className={styles.ctxCancelBtn}
-                    onClick={() => setMenu(null)}
-                  >
+                  <button type="button" className={styles.ctxCancelBtn} onClick={() => setMenu(null)}>
                     {t("channelAcl.cancelDelete", { defaultValue: "Cancel" })}
                   </button>
                 </div>
@@ -647,24 +656,31 @@ function ChannelTreeNode({
             className={styles.aclTreeChevron}
             role="button"
             tabIndex={-1}
-            onClick={(e) => { e.stopPropagation(); onToggle(id); }}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onToggle(id); } }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle(id);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.stopPropagation();
+                onToggle(id);
+              }
+            }}
           >
             <ChevronRightIcon
               width={12}
               height={12}
-              style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s" }}
+              style={{
+                transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
+                transition: "transform 0.15s",
+              }}
             />
           </span>
         )}
         {!hasChildren && <span className={styles.aclTreeChevronSpacer} />}
         {isPrivate && <LockIcon className={styles.aclTreePrivateIcon} width={11} height={11} />}
         <span className={styles.aclTreeLabel}>{node.channel.name}</span>
-        {isPrivate && (
-          <span className={styles.aclTreePrivateBadge}>
-            {t("channelAcl.privateBadge")}
-          </span>
-        )}
+        {isPrivate && <span className={styles.aclTreePrivateBadge}>{t("channelAcl.privateBadge")}</span>}
       </button>
       {isExpanded &&
         node.children.map((child) => (

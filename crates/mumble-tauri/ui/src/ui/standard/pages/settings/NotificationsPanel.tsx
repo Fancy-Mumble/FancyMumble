@@ -12,72 +12,76 @@ import { registerSettings } from "@core/features/settings/settingsSearchRegistry
 import styles from "./SettingsPage.module.css";
 import ns from "./NotificationsPanel.module.css";
 
-import sndDragon3 from "../../assets/audio/dragon-studio-new-notification-3-398649.mp3";
-import sndUniv033 from "../../assets/audio/universfield-new-notification-033-480571.mp3";
-import sndUniv036 from "../../assets/audio/universfield-new-notification-036-485897.mp3";
-import sndUniv040 from "../../assets/audio/universfield-new-notification-040-493469.mp3";
-import sndUniv051 from "../../assets/audio/universfield-new-notification-051-494246.mp3";
-import sndUniv057 from "../../assets/audio/universfield-new-notification-057-494255.mp3";
-import sndUniv09 from "../../assets/audio/universfield-new-notification-09-352705.mp3";
+import {
+  DEFAULT_NOTIFICATION_SOUNDS,
+  NOTIFICATION_EVENT_KEYS,
+  SOUND_OPTIONS,
+  findSoundUrl,
+  type SoundOption,
+} from "@core/features/notifications/sounds";
+
+// The catalogue moved to core so every pack can read it; re-exported here
+// because App.tsx, the sound hook, and the tests all import it from this path.
+export { DEFAULT_NOTIFICATION_SOUNDS, SOUND_OPTIONS };
+export type { SoundOption };
 
 registerSettings("notifications")
   .add("notifications.sounds", ["sound", "audio alert"])
   .add("notifications.native", ["os notifications", "desktop"])
   .add("notifications.welcomeMessage", ["welcome", "motd", "popup"]);
 
-export interface SoundOption {
-  id: string;
-  label: string;
-  url: string;
-}
+const EVENT_KEYS = NOTIFICATION_EVENT_KEYS;
 
-const SOUND_URLS: Record<string, string> = {
-  "none": "",
-  "dragon-3": sndDragon3,
-  "univ-033": sndUniv033,
-  "univ-036": sndUniv036,
-  "univ-040": sndUniv040,
-  "univ-051": sndUniv051,
-  "univ-057": sndUniv057,
-  "univ-09": sndUniv09,
-};
-
-export const SOUND_OPTIONS: SoundOption[] = [
-  { id: "none", label: "None", url: "" },
-  { id: "dragon-3", label: "Chime", url: sndDragon3 },
-  { id: "univ-033", label: "Bubble", url: sndUniv033 },
-  { id: "univ-036", label: "Pop", url: sndUniv036 },
-  { id: "univ-040", label: "Ding", url: sndUniv040 },
-  { id: "univ-051", label: "Ping", url: sndUniv051 },
-  { id: "univ-057", label: "Drop", url: sndUniv057 },
-  { id: "univ-09", label: "Bell", url: sndUniv09 },
-];
-
-const EVENT_KEYS: readonly NotificationEvent[] = [
-  "chatMessage",
-  "directMessage",
-  "mention",
-  "userJoin",
-  "userLeave",
-  "userJoinChannel",
-  "userLeaveChannel",
-  "streamStart",
-  "voiceActivity",
-  "selfMuted",
-];
-
-function buildEventDefs(t: (key: string) => string): Array<{ key: NotificationEvent; label: string; description: string }> {
+function buildEventDefs(
+  t: (key: string) => string,
+): Array<{ key: NotificationEvent; label: string; description: string }> {
   return [
-    { key: "chatMessage", label: t("notifications.evtChatMessage"), description: t("notifications.evtChatMessageDesc") },
-    { key: "directMessage", label: t("notifications.evtDirectMessage"), description: t("notifications.evtDirectMessageDesc") },
+    {
+      key: "chatMessage",
+      label: t("notifications.evtChatMessage"),
+      description: t("notifications.evtChatMessageDesc"),
+    },
+    {
+      key: "directMessage",
+      label: t("notifications.evtDirectMessage"),
+      description: t("notifications.evtDirectMessageDesc"),
+    },
     { key: "mention", label: t("notifications.evtMention"), description: t("notifications.evtMentionDesc") },
-    { key: "userJoin", label: t("notifications.evtUserJoin"), description: t("notifications.evtUserJoinDesc") },
-    { key: "userLeave", label: t("notifications.evtUserLeave"), description: t("notifications.evtUserLeaveDesc") },
-    { key: "userJoinChannel", label: t("notifications.evtUserJoinChannel"), description: t("notifications.evtUserJoinChannelDesc") },
-    { key: "userLeaveChannel", label: t("notifications.evtUserLeaveChannel"), description: t("notifications.evtUserLeaveChannelDesc") },
-    { key: "streamStart", label: t("notifications.evtStreamStart"), description: t("notifications.evtStreamStartDesc") },
-    { key: "voiceActivity", label: t("notifications.evtVoiceActivity"), description: t("notifications.evtVoiceActivityDesc") },
-    { key: "selfMuted", label: t("notifications.evtSelfMuted"), description: t("notifications.evtSelfMutedDesc") },
+    {
+      key: "userJoin",
+      label: t("notifications.evtUserJoin"),
+      description: t("notifications.evtUserJoinDesc"),
+    },
+    {
+      key: "userLeave",
+      label: t("notifications.evtUserLeave"),
+      description: t("notifications.evtUserLeaveDesc"),
+    },
+    {
+      key: "userJoinChannel",
+      label: t("notifications.evtUserJoinChannel"),
+      description: t("notifications.evtUserJoinChannelDesc"),
+    },
+    {
+      key: "userLeaveChannel",
+      label: t("notifications.evtUserLeaveChannel"),
+      description: t("notifications.evtUserLeaveChannelDesc"),
+    },
+    {
+      key: "streamStart",
+      label: t("notifications.evtStreamStart"),
+      description: t("notifications.evtStreamStartDesc"),
+    },
+    {
+      key: "voiceActivity",
+      label: t("notifications.evtVoiceActivity"),
+      description: t("notifications.evtVoiceActivityDesc"),
+    },
+    {
+      key: "selfMuted",
+      label: t("notifications.evtSelfMuted"),
+      description: t("notifications.evtSelfMutedDesc"),
+    },
   ];
 }
 
@@ -92,26 +96,6 @@ function buildSoundOptions(t: (key: string) => string): Array<{ id: string; labe
     { id: "univ-057", label: t("notifications.soundDrop") },
     { id: "univ-09", label: t("notifications.soundBell") },
   ];
-}
-
-export const DEFAULT_NOTIFICATION_SOUNDS: NotificationSoundSettings = {
-  masterEnabled: false,
-  events: {
-    chatMessage: { enabled: true, sound: "dragon-3", volume: 0.5 },
-    directMessage: { enabled: true, sound: "univ-033", volume: 0.7 },
-    mention: { enabled: true, sound: "univ-09", volume: 0.7 },
-    userJoin: { enabled: true, sound: "univ-036", volume: 0.4 },
-    userLeave: { enabled: true, sound: "univ-040", volume: 0.4 },
-    userJoinChannel: { enabled: true, sound: "univ-036", volume: 0.5 },
-    userLeaveChannel: { enabled: true, sound: "univ-040", volume: 0.5 },
-    streamStart: { enabled: true, sound: "univ-051", volume: 0.5 },
-    voiceActivity: { enabled: false, sound: "none", volume: 0.3 },
-    selfMuted: { enabled: true, sound: "univ-057", volume: 0.4 },
-  },
-};
-
-function findSoundUrl(id: string): string {
-  return SOUND_URLS[id] ?? "";
 }
 
 export function NotificationsPanel({
@@ -181,8 +165,12 @@ export function NotificationsPanel({
     audio.play().catch(() => {});
   }, []);
 
-  const allEnabled = EVENT_KEYS.every((key) => settings.events[key]?.enabled ?? DEFAULT_NOTIFICATION_SOUNDS.events[key].enabled);
-  const allDisabled = EVENT_KEYS.every((key) => !(settings.events[key]?.enabled ?? DEFAULT_NOTIFICATION_SOUNDS.events[key].enabled));
+  const allEnabled = EVENT_KEYS.every(
+    (key) => settings.events[key]?.enabled ?? DEFAULT_NOTIFICATION_SOUNDS.events[key].enabled,
+  );
+  const allDisabled = EVENT_KEYS.every(
+    (key) => !(settings.events[key]?.enabled ?? DEFAULT_NOTIFICATION_SOUNDS.events[key].enabled),
+  );
 
   return (
     <>
@@ -204,16 +192,19 @@ export function NotificationsPanel({
             <h3 className={styles.sectionTitle}>{t("notifications.native")}</h3>
             <p className={styles.fieldHint}>{t("notifications.nativeHint")}</p>
           </div>
-          <Toggle
-            checked={enableNativeNotifications}
-            onChange={onToggleNativeNotifications}
-          />
+          <Toggle checked={enableNativeNotifications} onChange={onToggleNativeNotifications} />
         </div>
       </section>
 
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>{t("notifications.welcomeMessage", { defaultValue: "Welcome message" })}</h3>
-        <p className={styles.fieldHint}>{t("notifications.welcomeMessageHint", { defaultValue: "Show the server's welcome message in a popup after connecting." })}</p>
+        <h3 className={styles.sectionTitle}>
+          {t("notifications.welcomeMessage", { defaultValue: "Welcome message" })}
+        </h3>
+        <p className={styles.fieldHint}>
+          {t("notifications.welcomeMessageHint", {
+            defaultValue: "Show the server's welcome message in a popup after connecting.",
+          })}
+        </p>
         <select
           className={styles.select}
           value={welcomeMessageDisplay}
@@ -228,20 +219,10 @@ export function NotificationsPanel({
       {settings.masterEnabled && (
         <section className={styles.section}>
           <div className={ns.bulkActions}>
-            <button
-              type="button"
-              className={ns.bulkBtn}
-              onClick={enableAll}
-              disabled={allEnabled}
-            >
+            <button type="button" className={ns.bulkBtn} onClick={enableAll} disabled={allEnabled}>
               {t("notifications.enableAll")}
             </button>
-            <button
-              type="button"
-              className={ns.bulkBtn}
-              onClick={disableAll}
-              disabled={allDisabled}
-            >
+            <button type="button" className={ns.bulkBtn} onClick={disableAll} disabled={allDisabled}>
               {t("notifications.disableAll")}
             </button>
           </div>
@@ -270,9 +251,7 @@ export function NotificationsPanel({
                     <select
                       className={styles.select}
                       value={cfg.sound}
-                      onChange={(e) =>
-                        patchEvent(def.key, { sound: e.target.value })
-                      }
+                      onChange={(e) => patchEvent(def.key, { sound: e.target.value })}
                     >
                       {soundOptions.map((opt) => (
                         <option key={opt.id} value={opt.id}>
@@ -306,9 +285,7 @@ export function NotificationsPanel({
                         })
                       }
                     />
-                    <span className={ns.volumeValue}>
-                      {Math.round(cfg.volume * 100)}%
-                    </span>
+                    <span className={ns.volumeValue}>{Math.round(cfg.volume * 100)}%</span>
                   </div>
                 </div>
               )}

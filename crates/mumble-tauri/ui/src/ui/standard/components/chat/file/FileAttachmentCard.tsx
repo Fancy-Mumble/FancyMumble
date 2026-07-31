@@ -4,17 +4,19 @@ import { useTranslation } from "react-i18next";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useAppStore } from "@core/store";
-import {
-  previewKindForFilename,
-  type FileAttachmentInfo,
-} from "@core/features/chat/fileAttachments";
+import { previewKindForFilename, type FileAttachmentInfo } from "@core/features/chat/fileAttachments";
 import { formatBytes } from "@core/utils/format";
 import { MediaLightbox } from "../media/MediaPreview";
 import { FilePasswordDialog } from "./FilePasswordDialog";
 import styles from "./FileAttachmentCard.module.css";
 
 export type { FileAttachmentInfo, PreviewKind } from "@core/features/chat/fileAttachments";
-export { decodeFileAttachmentPayload, encodeFileAttachmentMarker, FANCY_FILE_MARKER_RE, previewKindForFilename } from "@core/features/chat/fileAttachments";
+export {
+  decodeFileAttachmentPayload,
+  encodeFileAttachmentMarker,
+  FANCY_FILE_MARKER_RE,
+  previewKindForFilename,
+} from "@core/features/chat/fileAttachments";
 
 interface FileAttachmentCardProps {
   readonly info: FileAttachmentInfo;
@@ -36,8 +38,7 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
   // dialog and a stored resolver hands the entered value back to `onSave`.
   const [pwPromptOpen, setPwPromptOpen] = useState(false);
   const pwResolverRef = useRef<((value: string | null) => void) | null>(null);
-  const initiallyExpired =
-    info.expiresAt != null && info.expiresAt > 0 && info.expiresAt * 1000 < Date.now();
+  const initiallyExpired = info.expiresAt != null && info.expiresAt > 0 && info.expiresAt * 1000 < Date.now();
   const [expired, setExpired] = useState<boolean>(initiallyExpired);
 
   const kind = previewKindForFilename(info.filename);
@@ -47,7 +48,9 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
   // Pre-download: public files only - URL is a signed but open link.
   const previewSrc = savedPath
     ? convertFileSrc(savedPath)
-    : (info.mode === "public" && previewable ? info.url : null);
+    : info.mode === "public" && previewable
+      ? info.url
+      : null;
 
   const handleOpenInBrowser = useCallback(() => {
     openUrl(info.url).catch(() => {
@@ -224,17 +227,23 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
       <div className={`${styles.card} ${styles.expiredCard}`}>
         <div className={styles.cardRow}>
           <div className={`${styles.icon} ${styles.expiredIcon}`} aria-hidden="true">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <circle cx="12" cy="12" r="9" />
               <polyline points="12 7 12 12 15 14" />
             </svg>
           </div>
           <div className={styles.body}>
             <div className={styles.filename}>{info.filename}</div>
-            <div className={styles.expiredMessage}>
-              {t("fileAttachment.expired")}
-            </div>
+            <div className={styles.expiredMessage}>{t("fileAttachment.expired")}</div>
             <div className={styles.meta}>
               {formatBytes(info.sizeBytes)}
               {info.mode !== "public" && <span className={styles.badge}>{info.mode}</span>}
@@ -255,8 +264,16 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
       {preview}
       <div className={styles.cardRow}>
         <div className={styles.icon} aria-hidden="true">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="28"
+            height="28"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
             <polyline points="14 2 14 8 20 8" />
           </svg>
@@ -294,13 +311,16 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
           </button>
         )}
       </div>
-      {lightboxOpen && previewSrc && kind === "image" && createPortal(
-        <MediaLightbox
-          item={{ kind: "image", src: previewSrc, alt: info.filename, spoiler: false }}
-          onClose={closeLightbox}
-        />,
-        document.body,
-      )}
+      {lightboxOpen &&
+        previewSrc &&
+        kind === "image" &&
+        createPortal(
+          <MediaLightbox
+            item={{ kind: "image", src: previewSrc, alt: info.filename, spoiler: false }}
+            onClose={closeLightbox}
+          />,
+          document.body,
+        )}
       {pwPromptOpen && (
         <FilePasswordDialog
           filename={info.filename}

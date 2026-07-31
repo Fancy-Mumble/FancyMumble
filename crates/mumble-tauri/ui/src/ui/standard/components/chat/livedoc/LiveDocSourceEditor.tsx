@@ -80,7 +80,12 @@ export default function LiveDocSourceEditor({ initial, onSave, onCancel }: LiveD
               ? t("liveDoc.citations.editSource", { defaultValue: "Edit source" })
               : t("liveDoc.citations.newSource", { defaultValue: "New source" })}
           </span>
-          <button type="button" className={styles.dialogClose} onClick={onCancel} aria-label={t("liveDoc.citations.cancel", { defaultValue: "Cancel" })}>
+          <button
+            type="button"
+            className={styles.dialogClose}
+            onClick={onCancel}
+            aria-label={t("liveDoc.citations.cancel", { defaultValue: "Cancel" })}
+          >
             <CloseIcon width={16} height={16} />
           </button>
         </div>
@@ -104,24 +109,42 @@ export default function LiveDocSourceEditor({ initial, onSave, onCancel }: LiveD
 
           <label className={styles.field}>
             <span className={styles.fieldLabel}>{tt("author", "Author(s) - Family, Given; …")}</span>
-            <input className={styles.input} value={authors} onChange={(e) => setAuthors(e.target.value)} placeholder="Smith, John; Doe, Jane" />
+            <input
+              className={styles.input}
+              value={authors}
+              onChange={(e) => setAuthors(e.target.value)}
+              placeholder="Smith, John; Doe, Jane"
+            />
           </label>
 
           <div className={styles.grid2}>
             <label className={styles.field}>
               <span className={styles.fieldLabel}>{tt("year", "Year")}</span>
-              <input className={styles.input} value={year} onChange={(e) => setYear(e.target.value)} inputMode="numeric" />
+              <input
+                className={styles.input}
+                value={year}
+                onChange={(e) => setYear(e.target.value)}
+                inputMode="numeric"
+              />
             </label>
             <label className={styles.field}>
               <span className={styles.fieldLabel}>{tt("container", "Journal / Book / Site")}</span>
-              <input className={styles.input} value={container} onChange={(e) => setContainer(e.target.value)} />
+              <input
+                className={styles.input}
+                value={container}
+                onChange={(e) => setContainer(e.target.value)}
+              />
             </label>
           </div>
 
           <div className={styles.grid2}>
             <label className={styles.field}>
               <span className={styles.fieldLabel}>{tt("publisher", "Publisher")}</span>
-              <input className={styles.input} value={publisher} onChange={(e) => setPublisher(e.target.value)} />
+              <input
+                className={styles.input}
+                value={publisher}
+                onChange={(e) => setPublisher(e.target.value)}
+              />
             </label>
             <label className={styles.field}>
               <span className={styles.fieldLabel}>{tt("place", "Place")}</span>
@@ -143,7 +166,12 @@ export default function LiveDocSourceEditor({ initial, onSave, onCancel }: LiveD
           <div className={styles.grid2}>
             <label className={styles.field}>
               <span className={styles.fieldLabel}>{tt("page", "Pages")}</span>
-              <input className={styles.input} value={page} onChange={(e) => setPage(e.target.value)} placeholder="12-34" />
+              <input
+                className={styles.input}
+                value={page}
+                onChange={(e) => setPage(e.target.value)}
+                placeholder="12-34"
+              />
             </label>
             <label className={styles.field}>
               <span className={styles.fieldLabel}>{tt("edition", "Edition")}</span>
@@ -167,7 +195,12 @@ export default function LiveDocSourceEditor({ initial, onSave, onCancel }: LiveD
           <button type="button" className={styles.btn} onClick={onCancel}>
             {t("liveDoc.citations.cancel", { defaultValue: "Cancel" })}
           </button>
-          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={save} disabled={!title.trim() && !authors.trim()}>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={save}
+            disabled={!title.trim() && !authors.trim()}
+          >
             {t("liveDoc.citations.save", { defaultValue: "Save" })}
           </button>
         </div>

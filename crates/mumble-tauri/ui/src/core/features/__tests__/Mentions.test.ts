@@ -109,25 +109,17 @@ describe("containsSelfMention", () => {
   const html = '<span data-mention-session="42">@me</span>';
 
   it("matches by own session id", () => {
-    expect(
-      containsSelfMention(html, { ownSession: 42, isInMessageChannel: false }),
-    ).toBe(true);
+    expect(containsSelfMention(html, { ownSession: 42, isInMessageChannel: false })).toBe(true);
   });
 
   it("does not match other sessions", () => {
-    expect(
-      containsSelfMention(html, { ownSession: 7, isInMessageChannel: false }),
-    ).toBe(false);
+    expect(containsSelfMention(html, { ownSession: 7, isInMessageChannel: false })).toBe(false);
   });
 
   it("matches @everyone only when in the message's channel", () => {
     const ev = '<span data-mention-everyone="1">@everyone</span>';
-    expect(
-      containsSelfMention(ev, { ownSession: 1, isInMessageChannel: true }),
-    ).toBe(true);
-    expect(
-      containsSelfMention(ev, { ownSession: 1, isInMessageChannel: false }),
-    ).toBe(false);
+    expect(containsSelfMention(ev, { ownSession: 1, isInMessageChannel: true })).toBe(true);
+    expect(containsSelfMention(ev, { ownSession: 1, isInMessageChannel: false })).toBe(false);
   });
 
   it("matches a role when receiver belongs to it", () => {

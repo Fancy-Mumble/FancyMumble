@@ -5,12 +5,14 @@ import type { DragRegion } from "@core/features/chat/livedoc/liveDocDropStore";
 
 /** Shape of the Tauri native drag-drop event payload we consume. */
 type DragDropPayload =
-  | { readonly type: "enter" | "over" | "drop"; readonly position?: { readonly x: number; readonly y: number }; readonly paths?: string[] }
+  | {
+      readonly type: "enter" | "over" | "drop";
+      readonly position?: { readonly x: number; readonly y: number };
+      readonly paths?: string[];
+    }
   | { readonly type: "leave" };
 
-const IMAGE_EXTS = new Set([
-  "png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "svg", "ico",
-]);
+const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "svg", "ico"]);
 
 function fileNameFromPath(path: string): string {
   return path.replaceAll("\\", "/").split("/").pop() ?? path;
@@ -89,9 +91,7 @@ export function useDragDropAttachments({
   }, []);
 
   const toggleSpoiler = useCallback((id: string) => {
-    setAttachments((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, spoiler: !a.spoiler } : a)),
-    );
+    setAttachments((prev) => prev.map((a) => (a.id === id ? { ...a, spoiler: !a.spoiler } : a)));
   }, []);
 
   const clearAttachments = useCallback(() => setAttachments([]), []);
@@ -148,5 +148,13 @@ export function useDragDropAttachments({
     };
   }, [enabled, resolveTarget, onLiveDocFiles]);
 
-  return { attachments, setAttachments, dragTarget, addFromFile, removeAttachment, toggleSpoiler, clearAttachments };
+  return {
+    attachments,
+    setAttachments,
+    dragTarget,
+    addFromFile,
+    removeAttachment,
+    toggleSpoiler,
+    clearAttachments,
+  };
 }

@@ -26,17 +26,10 @@ export function clearPingCache() {
 function countryFlag(code: string): string {
   if (code.length !== 2) return "";
   const offset = 0x1f1e6 - 65; // 'A' = 65
-  return String.fromCodePoint(
-    (code.codePointAt(0) ?? 65) + offset,
-    (code.codePointAt(1) ?? 65) + offset,
-  );
+  return String.fromCodePoint((code.codePointAt(0) ?? 65) + offset, (code.codePointAt(1) ?? 65) + offset);
 }
 
-export default function PublicServerList({
-  onConnect,
-  onBack,
-  disabled,
-}: Readonly<Props>) {
+export default function PublicServerList({ onConnect, onBack, disabled }: Readonly<Props>) {
   const { t } = useTranslation("server");
   const [consented, setConsented] = useState(false);
   const [servers, setServers] = useState<PublicServer[]>([]);
@@ -81,7 +74,13 @@ export default function PublicServerList({
         .catch(() =>
           setPings((prev) => ({
             ...prev,
-            [key]: { online: false, latency_ms: null, user_count: null, max_user_count: null, server_version: null },
+            [key]: {
+              online: false,
+              latency_ms: null,
+              user_count: null,
+              max_user_count: null,
+              server_version: null,
+            },
           })),
         );
     }
@@ -104,11 +103,7 @@ export default function PublicServerList({
 
   const sortIndicator = (key: SortKey) => {
     if (sortKey !== key) return null;
-    return (
-      <span className={styles.sortIndicator}>
-        {sortDir === "asc" ? "\u25B2" : "\u25BC"}
-      </span>
-    );
+    return <span className={styles.sortIndicator}>{sortDir === "asc" ? "\u25B2" : "\u25BC"}</span>;
   };
 
   // Filter + sort
@@ -159,28 +154,18 @@ export default function PublicServerList({
       <div className={styles.container}>
         <div className={styles.header}>
           <span className={styles.heading}>{t("public.title")}</span>
-          <button
-            className={styles.backLink}
-            onClick={onBack}
-            type="button"
-          >
+          <button className={styles.backLink} onClick={onBack} type="button">
             {t("public.savedServers")}
           </button>
         </div>
 
         <div className={styles.consent}>
-          <p className={styles.consentText}>
-            {t("public.consentText")}
-          </p>
+          <p className={styles.consentText}>{t("public.consentText")}</p>
           <div className={styles.consentWarning}>
             <span className={styles.consentWarningIcon}>&#x26A0;&#xFE0F;</span>
             <span>{t("public.consentWarning")}</span>
           </div>
-          <button
-            className={styles.consentButton}
-            onClick={() => setConsented(true)}
-            type="button"
-          >
+          <button className={styles.consentButton} onClick={() => setConsented(true)} type="button">
             {t("public.consentButton")}
           </button>
         </div>
@@ -193,11 +178,7 @@ export default function PublicServerList({
     <div className={styles.container}>
       <div className={styles.header}>
         <span className={styles.heading}>{t("public.title")}</span>
-        <button
-          className={styles.backLink}
-          onClick={onBack}
-          type="button"
-        >
+        <button className={styles.backLink} onClick={onBack} type="button">
           {t("public.savedServers")}
         </button>
       </div>
@@ -217,16 +198,11 @@ export default function PublicServerList({
       {/* Loading / error / table */}
       {loading && (
         <div className={styles.statusRow}>
-          <span className={styles.spinner} />{" "}
-          {t("public.loading")}
+          <span className={styles.spinner} /> {t("public.loading")}
         </div>
       )}
 
-      {error && (
-        <div className={styles.statusRow}>
-          {t("public.loadingError", { error })}
-        </div>
-      )}
+      {error && <div className={styles.statusRow}>{t("public.loadingError", { error })}</div>}
 
       {!loading && !error && servers.length > 0 && (
         <div className={styles.tableWrap}>
@@ -234,19 +210,24 @@ export default function PublicServerList({
             <thead>
               <tr>
                 <th onClick={() => handleSort("country")}>
-                  {t("public.colCountry")}{sortIndicator("country")}
+                  {t("public.colCountry")}
+                  {sortIndicator("country")}
                 </th>
                 <th onClick={() => handleSort("name")}>
-                  {t("public.colServer")}{sortIndicator("name")}
+                  {t("public.colServer")}
+                  {sortIndicator("name")}
                 </th>
                 <th onClick={() => handleSort("users")}>
-                  {t("public.colUsers")}{sortIndicator("users")}
+                  {t("public.colUsers")}
+                  {sortIndicator("users")}
                 </th>
                 <th onClick={() => handleSort("ping")}>
-                  {t("public.colPing")}{sortIndicator("ping")}
+                  {t("public.colPing")}
+                  {sortIndicator("ping")}
                 </th>
                 <th onClick={() => handleSort("version")}>
-                  {t("public.colVersion")}{sortIndicator("version")}
+                  {t("public.colVersion")}
+                  {sortIndicator("version")}
                 </th>
               </tr>
             </thead>
@@ -255,15 +236,10 @@ export default function PublicServerList({
                 const key = `${s.ip}:${s.port}`;
                 const ping = pings[key];
                 return (
-                  <tr
-                    key={key}
-                    onClick={() => !disabled && onConnect(s.ip, s.port)}
-                  >
+                  <tr key={key} onClick={() => !disabled && onConnect(s.ip, s.port)}>
                     <td>
                       <span className={styles.countryCell}>
-                        <span className={styles.flag}>
-                          {countryFlag(s.country_code)}
-                        </span>
+                        <span className={styles.flag}>{countryFlag(s.country_code)}</span>
                         {s.country}
                       </span>
                     </td>
@@ -293,9 +269,7 @@ export default function PublicServerList({
       )}
 
       {!loading && !error && servers.length === 0 && (
-        <div className={styles.statusRow}>
-          {t("public.noResults")}
-        </div>
+        <div className={styles.statusRow}>{t("public.noResults")}</div>
       )}
     </div>
   );
@@ -313,11 +287,7 @@ function PingCell({ ping }: Readonly<{ ping?: ServerPingResult }>) {
   if (ms >= 70) cls = styles.pingPoor;
   else if (ms >= 30) cls = styles.pingOkay;
 
-  return (
-    <span className={`${styles.pingValue} ${cls}`}>
-      {ms} ms
-    </span>
-  );
+  return <span className={`${styles.pingValue} ${cls}`}>{ms} ms</span>;
 }
 
 function UsersCell({ ping }: Readonly<{ ping?: ServerPingResult }>) {
@@ -330,7 +300,8 @@ function UsersCell({ ping }: Readonly<{ ping?: ServerPingResult }>) {
   const max = ping.max_user_count;
   return (
     <span>
-      {ping.user_count}{max != null && max > 0 ? `/${max}` : ""}
+      {ping.user_count}
+      {max != null && max > 0 ? `/${max}` : ""}
     </span>
   );
 }

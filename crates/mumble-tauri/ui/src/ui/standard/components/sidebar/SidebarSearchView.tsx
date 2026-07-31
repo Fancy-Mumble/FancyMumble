@@ -39,19 +39,25 @@ export function SidebarSearchView({
 }: SidebarSearchViewProps) {
   const { t } = useTranslation("sidebar");
 
-  const filters: { key: SearchFilter; label: string }[] = useMemo(() => [
-    { key: "all", label: t("search.filterAll") },
-    { key: "messages", label: t("search.filterMessages") },
-    { key: "photos", label: t("search.filterPhotos") },
-    { key: "users", label: t("search.filterUsers") },
-    { key: "links", label: t("search.filterLinks") },
-  ], [t]);
+  const filters: { key: SearchFilter; label: string }[] = useMemo(
+    () => [
+      { key: "all", label: t("search.filterAll") },
+      { key: "messages", label: t("search.filterMessages") },
+      { key: "photos", label: t("search.filterPhotos") },
+      { key: "users", label: t("search.filterUsers") },
+      { key: "links", label: t("search.filterLinks") },
+    ],
+    [t],
+  );
 
-  const categoryLabels = useMemo<Record<SearchCategory, string>>(() => ({
-    channel: t("search.categoryChannels"),
-    user: t("search.categoryUsers"),
-    message: t("search.categoryMessages"),
-  }), [t]);
+  const categoryLabels = useMemo<Record<SearchCategory, string>>(
+    () => ({
+      channel: t("search.categoryChannels"),
+      user: t("search.categoryUsers"),
+      message: t("search.categoryMessages"),
+    }),
+    [t],
+  );
 
   const [filter, setFilter] = useState<SearchFilter>("all");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -159,11 +165,7 @@ export function SidebarSearchView({
     if (!el) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (
-          entries[0]?.isIntersecting &&
-          photosHasMoreRef.current &&
-          !photosLoadingRef.current
-        ) {
+        if (entries[0]?.isIntersecting && photosHasMoreRef.current && !photosLoadingRef.current) {
           loadPhotos(photosOffsetRef.current, true, photosGenRef.current);
         }
       },
@@ -190,9 +192,7 @@ export function SidebarSearchView({
       list.push(r);
       map.set(r.category, list);
     }
-    return CATEGORY_ORDER
-      .filter((c) => map.has(c))
-      .map((c) => ({ category: c, items: map.get(c) ?? [] }));
+    return CATEGORY_ORDER.filter((c) => map.has(c)).map((c) => ({ category: c, items: map.get(c) ?? [] }));
   }, [results]);
 
   const selectResult = useCallback(
@@ -248,9 +248,7 @@ export function SidebarSearchView({
               <div className={styles.empty}>
                 <ImageIcon className={styles.emptyIcon} width={32} height={32} />
                 <span className={styles.emptyText}>{t("search.noPhotosHeading")}</span>
-                <span className={styles.emptyHint}>
-                  {t("search.noPhotosHint")}
-                </span>
+                <span className={styles.emptyHint}>{t("search.noPhotosHint")}</span>
               </div>
             )}
             {photos.length > 0 && (
@@ -268,9 +266,7 @@ export function SidebarSearchView({
                 ))}
               </div>
             )}
-            {photosLoading && (
-              <div className={styles.photoLoading}>{t("search.loading")}</div>
-            )}
+            {photosLoading && <div className={styles.photoLoading}>{t("search.loading")}</div>}
             <div ref={sentinelRef} className={styles.sentinel} />
           </>
         ) : (
@@ -279,26 +275,20 @@ export function SidebarSearchView({
               <div className={styles.empty}>
                 <SearchIcon className={styles.emptyIcon} width={32} height={32} />
                 <span className={styles.emptyText}>{t("search.typeToSearch")}</span>
-                <span className={styles.emptyHint}>
-                  {t("search.typeToSearchHint")}
-                </span>
+                <span className={styles.emptyHint}>{t("search.typeToSearchHint")}</span>
               </div>
             )}
 
             {query.trim() && results.length === 0 && (
               <div className={styles.empty}>
                 <span className={styles.emptyText}>{t("search.noResults")}</span>
-                <span className={styles.emptyHint}>
-                  {t("search.noResultsHint")}
-                </span>
+                <span className={styles.emptyHint}>{t("search.noResultsHint")}</span>
               </div>
             )}
 
             {grouped.map((group) => (
               <div key={group.category}>
-                <div className={styles.categoryLabel}>
-                  {categoryLabels[group.category]}
-                </div>
+                <div className={styles.categoryLabel}>{categoryLabels[group.category]}</div>
                 {group.items.map((r, idx) => (
                   <button
                     key={`${r.category}-${r.id ?? r.string_id}-${idx}`}
@@ -309,9 +299,7 @@ export function SidebarSearchView({
                     <ResultIcon category={r.category} />
                     <div className={styles.resultText}>
                       <span className={styles.resultTitle}>{r.title}</span>
-                      {r.subtitle && (
-                        <span className={styles.resultSubtitle}>{r.subtitle}</span>
-                      )}
+                      {r.subtitle && <span className={styles.resultSubtitle}>{r.subtitle}</span>}
                     </div>
                   </button>
                 ))}

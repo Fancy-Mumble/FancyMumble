@@ -1,0 +1,284 @@
+/* Design sheet: voice. Split from AuroraApp.module.css. */
+
+.livePill {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  border: 1px solid rgb(200 255 98 / 18%);
+  border-radius: 999px;
+  padding: 5px 7px;
+  color: #ff9389;
+  border-color: rgb(255 120 106 / 20%);
+  background: rgb(255 120 106 / 7%);
+}
+
+.meter > span {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  color: #b9bec7;
+  font-size: 9px;
+}
+
+.meter b {
+  margin-left: auto;
+  color: var(--text);
+}
+
+.voiceRoom {
+  padding: 18px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  border-color: rgb(255 255 255 / 9%);
+  box-shadow: 0 16px 44px rgb(0 0 0 / 13%);
+  backdrop-filter: blur(32px) saturate(108%);
+  background: rgb(21 27 34 / 62%);
+}
+
+.voiceTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.voiceTop h3 {
+  margin: 12px 0 4px;
+  font-size: var(--type-title);
+}
+
+.voiceTop p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.voiceTimer {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: #9fa5b1;
+  font: 9px ui-monospace, monospace;
+}
+
+.voiceTimer i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff786a;
+  animation: pulse 1.2s infinite;
+}
+
+.participants {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 24px 0;
+}
+
+.participants > div {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  padding: 18px 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  border-color: rgb(255 255 255 / 8%);
+  background: rgb(255 255 255 / 3%);
+  box-shadow: none;
+  backdrop-filter: blur(20px) saturate(105%);
+}
+
+.participantsAvatar.participantsAvatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+}
+
+.participants strong {
+  margin-top: 9px;
+  font-size: var(--type-label);
+}
+
+.participants small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: var(--type-caption);
+}
+
+.participants > div > svg {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 12px;
+  color: #717987;
+}
+
+.participants .speaking {
+  border-color: rgb(105 183 232 / 30%);
+  box-shadow: inset 0 0 0 1px rgb(105 183 232 / 7%);
+}
+
+.participantsSpeakingAvatar.participantsSpeakingAvatar {
+  box-shadow: 0 0 0 3px var(--signal);
+}
+
+.participants .speaking small {
+  color: var(--signal);
+}
+
+.callControls {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  justify-content: center;
+}
+
+.callControls button {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  height: 35px;
+  padding: 0 10px;
+  color: #aeb5c0;
+  font-size: 8px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  border-color: rgb(255 255 255 / 8%);
+  background: rgb(255 255 255 / 3%);
+}
+
+.callControls svg {
+  width: 14px;
+}
+
+.callControls .hangup {
+  margin-left: 7px;
+  color: #fff;
+  border-color: #ff786a;
+  background: #d9564a;
+}
+
+.meter > div {
+  display: flex;
+  gap: 3px;
+  height: 48px;
+  align-items: end;
+  margin: 13px 0 9px;
+}
+
+.meter > div i {
+  flex: 1;
+  height: 25%;
+  border-radius: 3px;
+  background: #292d35;
+}
+
+.meter > div i:nth-child(3n) {
+  height: 45%;
+}
+
+.meter > div i:nth-child(4n) {
+  height: 70%;
+}
+
+.meter > div .meterOn {
+  background: #68c8ff;
+}
+
+.meter > div .meterOn:nth-last-child(-n + 8) {
+  background: #ffd06b;
+}
+
+.meter small {
+  color: #6d7481;
+  font-size: 8px;
+}
+
+.player {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  border-color: rgb(255 255 255 / 9%);
+  background: rgb(21 27 34 / 62%);
+  box-shadow: 0 16px 44px rgb(0 0 0 / 13%);
+  backdrop-filter: blur(32px) saturate(108%);
+}
+
+.playerVisual {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 148px;
+  background: radial-gradient(circle at 70% 20%, #367fe8, transparent 38%), linear-gradient(145deg, #224467, #0e2138);
+}
+
+.playerVisual > span {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  color: var(--ink);
+  border-radius: 50%;
+  background: rgb(244 246 248 / 88%);
+}
+
+.playerVisual small {
+  position: absolute;
+  top: 9px;
+  left: 9px;
+  padding: 5px 7px;
+  color: var(--signal);
+  font-size: 7px;
+  border-radius: 6px;
+  background: rgb(10 11 15 / 75%);
+}
+
+.playerControls {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding: 9px;
+}
+
+.playerControls button {
+  color: #b4bac4;
+  border: 0;
+  background: transparent;
+}
+
+.playerControls button svg {
+  width: 14px;
+}
+
+.playerControls div {
+  flex: 1;
+  height: 3px;
+  border-radius: 3px;
+  background: #343944;
+}
+
+.playerControls div i {
+  display: block;
+  width: 38%;
+  height: 100%;
+  background: var(--signal);
+}
+
+.playerControls time {
+  color: #757d8a;
+  font: 7px ui-monospace, monospace;
+}
+
+@media (max-width: 720px) {
+  .participants {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

@@ -6,10 +6,7 @@ import type { AclGroup, ChannelEntry, RegisteredUser, UserCommentPayload, UserEn
 import { useAclGroups } from "../../hooks/useAclGroups";
 import { useAppStore } from "@core/store";
 import { acquireRegisteredTextures, releaseRegisteredTextures } from "@core/registeredTextureLease";
-import {
-  getCachedRegisteredUsers,
-  saveCachedRegisteredUsers,
-} from "@core/preferencesStorage";
+import { getCachedRegisteredUsers, saveCachedRegisteredUsers } from "@core/preferencesStorage";
 import { UserListItem } from "./user/UserListItem";
 import { TID } from "@core/testids";
 import styles from "./channel/ChannelSidebar.module.css";
@@ -338,9 +335,7 @@ function MembersTabImpl({
   const pendingConnect = useAppStore((s) => s.pendingConnect);
   const serverKey = pendingConnect ? `${pendingConnect.host}:${pendingConnect.port}` : null;
   const initialCache = serverKey ? registeredMemCache.get(serverKey) : undefined;
-  const [registered, setRegistered] = useState<readonly RegisteredUser[]>(
-    () => initialCache?.users ?? [],
-  );
+  const [registered, setRegistered] = useState<readonly RegisteredUser[]>(() => initialCache?.users ?? []);
   const [fetchedComments, setFetchedComments] = useState<ReadonlyMap<number, string>>(new Map());
   const [loading, setLoading] = useState<boolean>(() => !initialCache);
   /** Tracks user_ids for which a blob request has already been sent
@@ -501,11 +496,11 @@ function MembersTabImpl({
       const fresh = synthesiseOfflineEntry(reg, fetchedComments);
       const existing = cache.get(reg.user_id);
       if (
-        existing
-        && existing.name === fresh.name
-        && existing.channel_id === fresh.channel_id
-        && existing.comment === fresh.comment
-        && existing.texture_size === fresh.texture_size
+        existing &&
+        existing.name === fresh.name &&
+        existing.channel_id === fresh.channel_id &&
+        existing.comment === fresh.comment &&
+        existing.texture_size === fresh.texture_size
       ) {
         next.push(existing);
         continue;
@@ -520,14 +515,19 @@ function MembersTabImpl({
   }, [registered, fetchedComments]);
 
   const groups = useMemo(
-    () => buildMemberGroups(users, offlineEntries, ownSession, aclGroups, t("membersTab.groupMembers"), t("membersTab.groupGuests")),
+    () =>
+      buildMemberGroups(
+        users,
+        offlineEntries,
+        ownSession,
+        aclGroups,
+        t("membersTab.groupMembers"),
+        t("membersTab.groupGuests"),
+      ),
     [users, offlineEntries, ownSession, aclGroups, t],
   );
 
-  const totalMembers = useMemo(
-    () => groups.reduce((sum, g) => sum + g.rows.length, 0),
-    [groups],
-  );
+  const totalMembers = useMemo(() => groups.reduce((sum, g) => sum + g.rows.length, 0), [groups]);
 
   if (loading && totalMembers === 0) {
     return (
@@ -555,10 +555,7 @@ function MembersTabImpl({
     <div className={styles.membersTab} data-testid={TID.memberList}>
       {groups.map((group) => (
         <section key={group.key} className={styles.memberGroup}>
-          <div
-            className={styles.membersGroupTitle}
-            style={group.color ? { color: group.color } : undefined}
-          >
+          <div className={styles.membersGroupTitle} style={group.color ? { color: group.color } : undefined}>
             {group.label} - {group.rows.length}
           </div>
           <div className={styles.memberGroupBody}>
@@ -613,4 +610,3 @@ function MembersTabImpl({
  * props are unchanged by reference.
  */
 export const MembersTab = memo(MembersTabImpl);
-

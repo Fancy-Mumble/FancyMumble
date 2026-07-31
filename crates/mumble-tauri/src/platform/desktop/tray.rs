@@ -160,7 +160,9 @@ fn sync_tray_checks(app: &AppHandle) {
     let state = app.state::<AppState>();
     let vs = state.voice_state();
     let muted = matches!(vs, crate::state::VoiceState::Muted);
-    let deafened = matches!(vs, crate::state::VoiceState::Inactive);
+    // Deafen is a server-side flag, not a voice state: reading it from
+    // `VoiceState::Inactive` ticked "Deafen" whenever voice was merely off.
+    let deafened = state.self_deafened();
 
     if let Some(item) = MUTE_ITEM.get() {
         let _ = item.set_checked(muted);

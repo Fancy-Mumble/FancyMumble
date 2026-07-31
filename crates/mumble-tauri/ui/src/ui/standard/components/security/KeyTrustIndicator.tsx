@@ -11,28 +11,40 @@ interface KeyTrustIndicatorProps {
 
 function trustLabelKey(level: KeyTrustLevel): string {
   switch (level) {
-    case "ManuallyVerified": return "keyTrust.labelVerified";
-    case "Verified": return "keyTrust.labelVerified";
-    case "Unverified": return "keyTrust.labelUnverified";
-    case "Disputed": return "keyTrust.labelDisputed";
+    case "ManuallyVerified":
+      return "keyTrust.labelVerified";
+    case "Verified":
+      return "keyTrust.labelVerified";
+    case "Unverified":
+      return "keyTrust.labelUnverified";
+    case "Disputed":
+      return "keyTrust.labelDisputed";
   }
 }
 
 function trustDescKey(level: KeyTrustLevel): string {
   switch (level) {
-    case "ManuallyVerified": return "keyTrust.descManuallyVerified";
-    case "Verified": return "keyTrust.descVerified";
-    case "Unverified": return "keyTrust.descUnverified";
-    case "Disputed": return "keyTrust.descDisputed";
+    case "ManuallyVerified":
+      return "keyTrust.descManuallyVerified";
+    case "Verified":
+      return "keyTrust.descVerified";
+    case "Unverified":
+      return "keyTrust.descUnverified";
+    case "Disputed":
+      return "keyTrust.descDisputed";
   }
 }
 
 function trustColorClass(level: KeyTrustLevel): string {
   switch (level) {
-    case "ManuallyVerified": return styles.manuallyVerified;
-    case "Verified": return styles.verified;
-    case "Unverified": return styles.unverified;
-    case "Disputed": return styles.disputed;
+    case "ManuallyVerified":
+      return styles.manuallyVerified;
+    case "Verified":
+      return styles.verified;
+    case "Unverified":
+      return styles.unverified;
+    case "Disputed":
+      return styles.disputed;
   }
 }
 
@@ -50,10 +62,14 @@ function WarningIcon() {
 
 function TrustIcon({ level }: Readonly<{ level: KeyTrustLevel }>) {
   switch (level) {
-    case "ManuallyVerified": return <ShieldCheckIcon />;
-    case "Verified": return <LockIcon />;
-    case "Unverified": return <LockIcon />;
-    case "Disputed": return <WarningIcon />;
+    case "ManuallyVerified":
+      return <ShieldCheckIcon />;
+    case "Verified":
+      return <LockIcon />;
+    case "Unverified":
+      return <LockIcon />;
+    case "Disputed":
+      return <WarningIcon />;
   }
 }
 
@@ -83,7 +99,8 @@ export default function KeyTrustIndicator({ trustLevel, onVerifyClick }: KeyTrus
         className={`${styles.indicator} ${colorClass}`}
         onClick={() => setShowTooltip((v) => !v)}
         aria-label={t("keyTrust.buttonAriaLabel", { label: tStr(trustLabelKey(trustLevel)) })}
-        title={t("keyTrust.buttonAriaLabel", { label: tStr(trustLabelKey(trustLevel)) })}>
+        title={t("keyTrust.buttonAriaLabel", { label: tStr(trustLabelKey(trustLevel)) })}
+      >
         <TrustIcon level={trustLevel} />
         <span className={styles.label}>{tStr(trustLabelKey(trustLevel))}</span>
       </button>
@@ -94,10 +111,18 @@ export default function KeyTrustIndicator({ trustLevel, onVerifyClick }: KeyTrus
           <p>{tStr(trustDescKey(trustLevel))}</p>
           {(trustLevel === "Unverified" || trustLevel === "Disputed") && onVerifyClick && (
             <p>
-              <button className={styles.tooltipAction} onClick={() => { setShowTooltip(false); onVerifyClick(); }}>
-                {trustLevel === "Disputed" ? t("keyTrust.compareFingerprints") : t("keyTrust.verifyCustodian")}
-              </button>
-              {" "}{t("keyTrust.turnGreenSuffix")}
+              <button
+                className={styles.tooltipAction}
+                onClick={() => {
+                  setShowTooltip(false);
+                  onVerifyClick();
+                }}
+              >
+                {trustLevel === "Disputed"
+                  ? t("keyTrust.compareFingerprints")
+                  : t("keyTrust.verifyCustodian")}
+              </button>{" "}
+              {t("keyTrust.turnGreenSuffix")}
             </p>
           )}
         </div>

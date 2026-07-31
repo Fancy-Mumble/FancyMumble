@@ -29,20 +29,12 @@ export default function QuotePreviewStrip({ quotes, onRemove }: QuotePreviewStri
         const preview = plain.length > 80 ? plain.slice(0, 80) + "\u2026" : plain;
         return (
           <div key={q.message_id} className={styles.quotePreviewItem}>
-            <div
-              className={styles.quotePreviewBar}
-              style={{ backgroundColor: colorFor(q.sender_name) }}
-            />
+            <div className={styles.quotePreviewBar} style={{ backgroundColor: colorFor(q.sender_name) }} />
             <div className={styles.quotePreviewContent}>
-              <span
-                className={styles.quotePreviewSender}
-                style={{ color: colorFor(q.sender_name) }}
-              >
+              <span className={styles.quotePreviewSender} style={{ color: colorFor(q.sender_name) }}>
                 {q.sender_name}
               </span>
-              <span className={styles.quotePreviewText}>
-                {preview || t("quotePreview.mediaFallback")}
-              </span>
+              <span className={styles.quotePreviewText}>{preview || t("quotePreview.mediaFallback")}</span>
             </div>
             <button
               type="button"

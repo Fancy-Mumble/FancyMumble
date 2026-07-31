@@ -16,30 +16,23 @@ export function NameStyleSection({
   onPatch: (patch: Partial<NameStyle>) => void;
   displayName: string;
 }>) {
-  const fontCss =
-    FONTS.find((f) => f.id === (nameStyle.font ?? "default"))?.css ?? "inherit";
+  const fontCss = FONTS.find((f) => f.id === (nameStyle.font ?? "default"))?.css ?? "inherit";
   const { t } = useTranslation("settings");
 
   return (
     <section className={styles.section}>
       <h3 className={styles.sectionTitle}>{t("nameStyle.heading")}</h3>
-      <p className={styles.fieldHint}>
-        {t("nameStyle.hint")}
-      </p>
+      <p className={styles.fieldHint}>{t("nameStyle.hint")}</p>
 
       {/* Live preview */}
       <div
         className={panelStyles.namePreview}
         style={{
           fontFamily: fontCss,
-          color: nameStyle.gradient
-            ? "transparent"
-            : nameStyle.color || "var(--color-text-primary)",
+          color: nameStyle.gradient ? "transparent" : nameStyle.color || "var(--color-text-primary)",
           fontWeight: nameStyle.bold ? "bold" : "normal",
           fontStyle: nameStyle.italic ? "italic" : "normal",
-          textShadow: nameStyle.glow
-            ? `0 0 ${nameStyle.glow.size}px ${nameStyle.glow.color}`
-            : "none",
+          textShadow: nameStyle.glow ? `0 0 ${nameStyle.glow.size}px ${nameStyle.glow.color}` : "none",
           background: nameStyle.gradient
             ? `linear-gradient(135deg,${nameStyle.gradient[0]},${nameStyle.gradient[1]})`
             : "transparent",
@@ -95,9 +88,7 @@ export function NameStyleSection({
             checked={!!nameStyle.gradient}
             onChange={() =>
               onPatch({
-                gradient: nameStyle.gradient
-                  ? undefined
-                  : ["#667eea", "#764ba2"],
+                gradient: nameStyle.gradient ? undefined : ["#667eea", "#764ba2"],
               })
             }
           />
@@ -139,9 +130,7 @@ export function NameStyleSection({
             checked={!!nameStyle.glow}
             onChange={() =>
               onPatch({
-                glow: nameStyle.glow
-                  ? undefined
-                  : { color: "#667eea", size: 6 },
+                glow: nameStyle.glow ? undefined : { color: "#667eea", size: 6 },
               })
             }
           />
@@ -179,22 +168,15 @@ export function NameStyleSection({
       <div className={styles.field}>
         <div className={styles.toggleRow}>
           <label className={styles.fieldLabel}>{t("nameStyle.boldLabel")}</label>
-          <Toggle
-            checked={!!nameStyle.bold}
-            onChange={() => onPatch({ bold: !nameStyle.bold })}
-          />
+          <Toggle checked={!!nameStyle.bold} onChange={() => onPatch({ bold: !nameStyle.bold })} />
         </div>
       </div>
       <div className={styles.field}>
         <div className={styles.toggleRow}>
           <label className={styles.fieldLabel}>{t("nameStyle.italicLabel")}</label>
-          <Toggle
-            checked={!!nameStyle.italic}
-            onChange={() => onPatch({ italic: !nameStyle.italic })}
-          />
+          <Toggle checked={!!nameStyle.italic} onChange={() => onPatch({ italic: !nameStyle.italic })} />
         </div>
       </div>
     </section>
   );
 }
-

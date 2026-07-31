@@ -50,11 +50,16 @@ export interface ChannelFiltersPanelProps {
  * middle detail pane swaps between "select a channel" and the ACL editor).
  */
 export function ChannelFiltersPanel({
-  hideDmChannels, onHideDmChannelsChange,
-  hideEmptyChannels, onHideEmptyChannelsChange,
-  privateOnly, onPrivateOnlyChange,
-  topLevelOnly, onTopLevelOnlyChange,
-  customAclOnly, onCustomAclOnlyChange,
+  hideDmChannels,
+  onHideDmChannelsChange,
+  hideEmptyChannels,
+  onHideEmptyChannelsChange,
+  privateOnly,
+  onPrivateOnlyChange,
+  topLevelOnly,
+  onTopLevelOnlyChange,
+  customAclOnly,
+  onCustomAclOnlyChange,
   customAclLoading,
 }: Readonly<ChannelFiltersPanelProps>) {
   const { t } = useTranslation("settings");

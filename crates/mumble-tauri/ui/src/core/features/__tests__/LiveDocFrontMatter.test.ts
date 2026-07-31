@@ -5,11 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import { serializeFrontMatter, parseFrontMatter } from "../chat/livedoc/liveDocFrontMatter";
-import {
-  DEFAULT_DECORATION,
-  DEFAULT_HEADER_FOOTER,
-  DEFAULT_PAGE_SETUP,
-} from "../chat/livedoc/useLiveDoc";
+import { DEFAULT_DECORATION, DEFAULT_HEADER_FOOTER, DEFAULT_PAGE_SETUP } from "../chat/livedoc/useLiveDoc";
 
 describe("serializeFrontMatter", () => {
   it("emits nothing when every zone is disabled", () => {
@@ -59,9 +55,7 @@ describe("parseFrontMatter", () => {
   });
 
   it("strips the block and turns present keys into enabled zones", () => {
-    const { patch, body } = parseFrontMatter(
-      '---\nheader: "Top"\npage-numbers: roman\n---\n\n# Title\n',
-    );
+    const { patch, body } = parseFrontMatter('---\nheader: "Top"\npage-numbers: roman\n---\n\n# Title\n');
     expect(body).toBe("# Title\n");
     expect(patch).toEqual({
       headerEnabled: true,
@@ -128,7 +122,7 @@ describe("front matter layout block", () => {
 
   it("parses geometry + decoration into separate patches and disables furniture", () => {
     const { patch, pageSetup, decoration, body } = parseFrontMatter(
-      "---\npage-size: letter\norientation: landscape\nmargin: wide\ncolumns: 3\nborder: medium\nwatermark: \"DRAFT\"\n---\n\n# Title\n",
+      '---\npage-size: letter\norientation: landscape\nmargin: wide\ncolumns: 3\nborder: medium\nwatermark: "DRAFT"\n---\n\n# Title\n',
     );
     expect(body).toBe("# Title\n");
     expect(pageSetup).toEqual({

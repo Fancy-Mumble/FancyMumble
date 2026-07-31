@@ -21,11 +21,7 @@ export function InfoBanner({ icon, actions, onDismiss, children, variant = "defa
       <div className={styles.content}>{children}</div>
       {actions && <div className={styles.actions}>{actions}</div>}
       {onDismiss && (
-        <button
-          className={styles.closeButton}
-          onClick={onDismiss}
-          aria-label="Dismiss banner"
-        >
+        <button className={styles.closeButton} onClick={onDismiss} aria-label="Dismiss banner">
           <CloseIcon width={14} height={14} />
         </button>
       )}

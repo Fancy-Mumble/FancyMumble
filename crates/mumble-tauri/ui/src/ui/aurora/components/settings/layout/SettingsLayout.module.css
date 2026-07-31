@@ -1,0 +1,303 @@
+/* Shared layout for every settings panel.
+
+   The old panels were one undivided list of 13px rows, which read as a dump
+   rather than a screen. This restores the grouping rhythm: related settings sit
+   under a heading, groups are separated by a rule, and the label/hint type
+   scale is large enough to scan. */
+
+.group {
+  margin-bottom: 22px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid rgb(255 255 255 / 7%);
+}
+
+.group:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.groupTitle {
+  display: block;
+  color: #eef3f8;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.groupDescription {
+  display: block;
+  margin-top: 4px;
+  color: #818d9b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Only when the group is titled - an untitled group is pure spacing. */
+.groupTitle + .rows,
+.groupDescription + .rows {
+  margin-top: 12px;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  padding: 9px 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.row + .row {
+  border-top: 1px solid rgb(255 255 255 / 5%);
+}
+
+.info {
+  min-width: 0;
+  flex: 1;
+}
+
+.rowTitle {
+  display: block;
+  color: #dfe5ec;
+  font-size: 13px;
+}
+
+.rowDetail {
+  display: block;
+  margin-top: 3px;
+  color: #818d9b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.control {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Selects and sliders need a predictable column so a stack of them lines up;
+   toggles and buttons size themselves. */
+.controlWide {
+  width: min(280px, 42%);
+}
+
+.controlWide > * {
+  min-width: 0;
+  flex: 1;
+}
+
+.select {
+  width: 100%;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 8px;
+  background: #151b23;
+  color: #dce3ea;
+  font-size: 12px;
+}
+
+.select:focus {
+  border-color: rgb(101 184 237 / 50%);
+  outline: 0;
+}
+
+/* A setting whose control needs the full width - sliders, card pickers, radio
+   groups. The label and its live value share the top line so the number stays
+   next to the name it belongs to, rather than at the far end of the row. */
+.field {
+  padding: 11px 0;
+}
+
+.fieldHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fieldLabel {
+  color: #dfe5ec;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fieldValue {
+  flex: none;
+  color: #65b8ed;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fieldHint {
+  display: block;
+  margin-top: 2px;
+  color: #818d9b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.fieldControl {
+  margin-top: 10px;
+}
+
+/* Choices worth explaining get a card each, not a dropdown entry. */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.card {
+  height: 100%;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 2%);
+  text-align: left;
+  cursor: pointer;
+}
+
+.card:hover {
+  border-color: rgb(255 255 255 / 18%);
+}
+
+/* Doubled so selection survives the hover rule above. */
+.cardSelected.cardSelected {
+  border-color: #65b8ed;
+  background: rgb(101 184 237 / 8%);
+}
+
+.cardIcon {
+  color: #7e8a99;
+}
+
+.cardSelected .cardIcon {
+  color: #65b8ed;
+}
+
+.cardTitle {
+  color: #eef3f8;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cardText {
+  color: #8c96a3;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* Side-by-side fields, collapsing to one column when there is no room. */
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 4px 20px;
+}
+
+.radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+
+.radio {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #dce3ea;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.radio input {
+  accent-color: #65b8ed;
+}
+
+/* Standing notice inside a group - "calibration needed", "not connected". */
+.callout {
+  margin: 4px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid;
+  border-radius: 10px;
+}
+
+.calloutTitle {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.calloutBody {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.calloutInfo {
+  border-color: rgb(255 255 255 / 10%);
+  background: rgb(255 255 255 / 3%);
+}
+
+.calloutInfo .calloutTitle {
+  color: #cdd6e0;
+}
+
+.calloutInfo .calloutBody {
+  color: #8c96a3;
+}
+
+.calloutWarn {
+  border-color: rgb(217 164 65 / 35%);
+  background: rgb(217 164 65 / 8%);
+}
+
+.calloutWarn .calloutTitle {
+  color: #e7c07a;
+}
+
+.calloutWarn .calloutBody {
+  color: #c3a875;
+}
+
+.calloutDanger {
+  border-color: rgb(224 95 106 / 35%);
+  background: rgb(224 95 106 / 8%);
+}
+
+.calloutDanger .calloutTitle {
+  color: #f0919a;
+}
+
+.calloutDanger .calloutBody {
+  color: #c98a90;
+}
+
+/* Meter for the microphone test and playback progress. */
+.meter {
+  width: 100%;
+  height: 5px;
+  margin-top: 8px;
+  display: block;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgb(255 255 255 / 8%);
+}
+
+.meterFill {
+  height: 100%;
+  display: block;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #65b8ed, #7fd3a3);
+  transition: width 0.08s linear;
+}

@@ -59,9 +59,7 @@ export const CrossReference = Node.create({
       insertCrossReference:
         (targetId) =>
         ({ chain }) =>
-          chain()
-            .insertContent({ type: this.name, attrs: { targetId } })
-            .run(),
+          chain().insertContent({ type: this.name, attrs: { targetId } }).run(),
     };
   },
 });

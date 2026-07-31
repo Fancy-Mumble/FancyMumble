@@ -12,11 +12,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { StateCreator } from "zustand";
 import type { AppState } from "..";
 import { updateBadgeCount } from "..";
-import {
-  setSilencedChannel,
-  setMutedPushChannel,
-  saveUserVolume,
-} from "../../preferencesStorage";
+import { setSilencedChannel, setMutedPushChannel, saveUserVolume } from "../../preferencesStorage";
 
 export interface NotificationsSlice {
   /** Channel IDs silenced for the current server (notifications suppressed). */
@@ -49,10 +45,7 @@ export const notificationsInitialState: NotificationsState = {
   userVolumes: {},
 };
 
-export const createNotificationsSlice: StateCreator<AppState, [], [], NotificationsSlice> = (
-  set,
-  get,
-) => ({
+export const createNotificationsSlice: StateCreator<AppState, [], [], NotificationsSlice> = (set, get) => ({
   ...notificationsInitialState,
 
   toggleSilenceChannel: async (channelId) => {
@@ -100,8 +93,6 @@ export const createNotificationsSlice: StateCreator<AppState, [], [], Notificati
       next[hash] = volume;
     }
     set({ userVolumes: next });
-    saveUserVolume(hash, volume).catch((err) =>
-      console.error("saveUserVolume failed:", err),
-    );
+    saveUserVolume(hash, volume).catch((err) => console.error("saveUserVolume failed:", err));
   },
 });

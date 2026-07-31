@@ -11,7 +11,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAppStore } from "@core/store";
 import { useWatchStart } from "@core/features/chat/watch/useWatchStart";
-import { _resetPendingAutoStartForTests, consumePendingAutoStart } from "@core/features/chat/watch/watchAutoStart";
+import {
+  _resetPendingAutoStartForTests,
+  consumePendingAutoStart,
+} from "@core/features/chat/watch/watchAutoStart";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn().mockResolvedValue(undefined),

@@ -48,19 +48,18 @@ export default function LanguageFlag({ entry, size = 18, title }: Props) {
   };
 
   if (!entry) {
-    return <span style={wrapperStyle} aria-hidden="true">🌐</span>;
+    return (
+      <span style={wrapperStyle} aria-hidden="true">
+        🌐
+      </span>
+    );
   }
 
   const Svg = entry.countryCode ? FLAG_REGISTRY[entry.countryCode] : undefined;
   const displayTitle = title ?? entry.englishName;
 
   if (Svg) {
-    return (
-      <Svg
-        style={{ ...wrapperStyle, objectFit: "cover" }}
-        title={displayTitle}
-      />
-    );
+    return <Svg style={{ ...wrapperStyle, objectFit: "cover" }} title={displayTitle} />;
   }
 
   return (

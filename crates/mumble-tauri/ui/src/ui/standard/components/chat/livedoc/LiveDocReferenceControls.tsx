@@ -10,7 +10,11 @@ import { useTranslation } from "react-i18next";
 import type { Editor } from "@tiptap/react";
 import { HashIcon, Link2Icon, PinIcon, SuperscriptIcon } from "../../../icons";
 import { newRefId } from "./liveDocBookmark";
-import { CAPTION_KINDS, type CaptionKind, type RefTarget } from "@core/features/chat/livedoc/liveDocReferences";
+import {
+  CAPTION_KINDS,
+  type CaptionKind,
+  type RefTarget,
+} from "@core/features/chat/livedoc/liveDocReferences";
 import { hasEndnotesSection } from "@core/features/chat/livedoc/liveDocEndnotes";
 import { useLiveDocReferences } from "@core/features/chat/livedoc/useLiveDocReferences";
 import LiveDocReferencePicker from "./LiveDocReferencePicker";

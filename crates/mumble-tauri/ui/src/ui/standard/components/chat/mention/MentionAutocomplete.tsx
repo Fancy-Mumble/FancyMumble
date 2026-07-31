@@ -45,19 +45,27 @@ export interface MentionAutocompleteProps {
  */
 function candidateLabel(c: MentionCandidate): string {
   switch (c.kind) {
-    case "user": return c.name;
-    case "role": return `@${c.name}`;
-    case "everyone": return "@everyone";
-    case "here": return "@here";
+    case "user":
+      return c.name;
+    case "role":
+      return `@${c.name}`;
+    case "everyone":
+      return "@everyone";
+    case "here":
+      return "@here";
   }
 }
 
 function candidateHintKey(c: MentionCandidate): string {
   switch (c.kind) {
-    case "user": return "mention.hintUser";
-    case "role": return "mention.hintRole";
-    case "everyone": return "mention.hintEveryone";
-    case "here": return "mention.hintHere";
+    case "user":
+      return "mention.hintUser";
+    case "role":
+      return "mention.hintRole";
+    case "everyone":
+      return "mention.hintEveryone";
+    case "here":
+      return "mention.hintHere";
   }
 }
 
@@ -140,15 +148,16 @@ function CandidateIcon({ candidate }: { readonly candidate: MentionCandidate }) 
       return <img src={candidate.avatarUrl} alt="" className={styles.avatar} />;
     }
     return (
-      <div
-        className={styles.avatarFallback}
-        style={{ background: colorFor(candidate.name) }}
-      >
+      <div className={styles.avatarFallback} style={{ background: colorFor(candidate.name) }}>
         {candidate.name.charAt(0).toUpperCase()}
       </div>
     );
   }
-  return <div className={styles.iconBadge} aria-hidden>@</div>;
+  return (
+    <div className={styles.iconBadge} aria-hidden>
+      @
+    </div>
+  );
 }
 
 /**
@@ -177,11 +186,7 @@ export function candidateInsertText(c: MentionCandidate): string {
 export function handleMentionKey(
   e: KeyboardEvent<HTMLTextAreaElement>,
   state: { activeIndex: number; count: number },
-):
-  | { kind: "move"; index: number }
-  | { kind: "pick"; index: number }
-  | { kind: "close" }
-  | null {
+): { kind: "move"; index: number } | { kind: "pick"; index: number } | { kind: "close" } | null {
   if (state.count === 0) return null;
   switch (e.key) {
     case "ArrowDown":

@@ -10,7 +10,7 @@ import styles from "./MessageActionBar.module.css";
 
 export const QUICK_REACTIONS = [
   { emoji: "\uD83D\uDC4D", key: "like" },
-  { emoji: "\u2764\uFE0F",  key: "heart" },
+  { emoji: "\u2764\uFE0F", key: "heart" },
   { emoji: "\uD83D\uDE02", key: "laugh" },
   { emoji: "\uD83D\uDE2E", key: "surprise" },
 ] as const;
@@ -57,10 +57,11 @@ export default function MessageActionBar({
   canDelete = false,
 }: MessageActionBarProps) {
   const { t } = useTranslation("common");
-  const { canStart: canWatchTogether, busy: watchBusy, start: startWatch } = useWatchStart(
-    message.body,
-    message.channel_id,
-  );
+  const {
+    canStart: canWatchTogether,
+    busy: watchBusy,
+    start: startWatch,
+  } = useWatchStart(message.body, message.channel_id);
   const [kebabOpen, setKebabOpen] = useState(false);
   const kebabBtnRef = useRef<HTMLButtonElement>(null);
   const [kebabPos, setKebabPos] = useState<{ top: number; right: number } | null>(null);
@@ -97,7 +98,9 @@ export default function MessageActionBar({
       id: "watch-together",
       label: watchBusy ? t("messageActionBar.watchTogetherStarting") : t("messageActionBar.watchTogether"),
       icon: <PlayIcon width={14} height={14} />,
-      onClick: () => { void startWatch(); },
+      onClick: () => {
+        void startWatch();
+      },
     });
   }
   if (canDelete && onDelete) {
@@ -111,10 +114,7 @@ export default function MessageActionBar({
   }
 
   return (
-    <div
-      className={`${styles.actionBar} ${isOwn ? "" : styles.actionBarOwn}`}
-      data-action-bar=""
-    >
+    <div className={`${styles.actionBar} ${isOwn ? "" : styles.actionBarOwn}`} data-action-bar="">
       {/* Quick-reaction emoji buttons */}
       {QUICK_REACTIONS.map((r) => {
         const label = t(`quickReactions.${r.key}`, { ns: "chat" });
@@ -183,33 +183,36 @@ export default function MessageActionBar({
             <KebabMenuIcon width={16} height={16} />
           </button>
 
-          {kebabOpen && createPortal(
-            <>
-              <div className={styles.kebabBackdrop} onClick={closeKebab} />
-              <div
-                className={styles.kebabDropdown}
-                role="menu"
-                style={kebabPos ? { top: kebabPos.top, right: kebabPos.right, position: "fixed" } : undefined}
-              >
-                {kebabItems.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={styles.kebabItem}
-                    role="menuitem"
-                    onClick={() => {
-                      item.onClick();
-                      closeKebab();
-                    }}
-                  >
-                    <span className={styles.kebabItemIcon}>{item.icon}</span>
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </>,
-            document.body,
-          )}
+          {kebabOpen &&
+            createPortal(
+              <>
+                <div className={styles.kebabBackdrop} onClick={closeKebab} />
+                <div
+                  className={styles.kebabDropdown}
+                  role="menu"
+                  style={
+                    kebabPos ? { top: kebabPos.top, right: kebabPos.right, position: "fixed" } : undefined
+                  }
+                >
+                  {kebabItems.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={styles.kebabItem}
+                      role="menuitem"
+                      onClick={() => {
+                        item.onClick();
+                        closeKebab();
+                      }}
+                    >
+                      <span className={styles.kebabItemIcon}>{item.icon}</span>
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </>,
+              document.body,
+            )}
         </div>
       )}
     </div>

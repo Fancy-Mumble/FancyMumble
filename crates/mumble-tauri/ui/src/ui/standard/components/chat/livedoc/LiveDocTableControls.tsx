@@ -12,13 +12,7 @@ import type { Editor } from "@tiptap/react";
 import { Selection, type EditorState } from "@tiptap/pm/state";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import { addColumn, addRow, TableMap } from "@tiptap/pm/tables";
-import {
-  ArrowDownIcon,
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  ArrowUpIcon,
-  PlusIcon,
-} from "../../../icons";
+import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, PlusIcon } from "../../../icons";
 import styles from "./LiveDocEditor.module.css";
 
 export interface TablePresence {
@@ -89,9 +83,13 @@ export function performTableEdit(editor: Editor, action: TableEditAction): void 
   // table off the rect; the left/top/right/bottom fields are required
   // by the TableRect type but unused for these calls.
   const rect = {
-    map, tableStart, table,
-    left: colIndex, right: colIndex + 1,
-    top: rowIndex, bottom: rowIndex + 1,
+    map,
+    tableStart,
+    table,
+    left: colIndex,
+    right: colIndex + 1,
+    top: rowIndex,
+    bottom: rowIndex + 1,
   };
 
   let tr = state.tr;
@@ -118,10 +116,7 @@ export function performTableEdit(editor: Editor, action: TableEditAction): void 
   const newTable = tr.doc.nodeAt(tablePos);
   if (newTable && newTable.type.name === "table") {
     const newMap = TableMap.get(newTable);
-    if (
-      targetRow >= 0 && targetRow < newMap.height &&
-      targetCol >= 0 && targetCol < newMap.width
-    ) {
+    if (targetRow >= 0 && targetRow < newMap.height && targetCol >= 0 && targetCol < newMap.width) {
       const cellAbsPos = tableStart + newMap.positionAt(targetRow, targetCol, newTable);
       if (cellAbsPos + 1 <= tr.doc.content.size) {
         tr.setSelection(Selection.near(tr.doc.resolve(cellAbsPos + 1), 1)).scrollIntoView();

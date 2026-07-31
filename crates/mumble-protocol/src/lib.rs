@@ -75,3 +75,32 @@ mod _dev_deps {
     use rcgen as _;
     use uuid as _;
 }
+
+#[cfg(test)]
+mod fancy_version_tests {
+    use fancy_utils::gate::{Capability, Gate};
+
+    #[test]
+    fn this_build_qualifies_for_every_capability_it_implements() {
+        // `FANCY_VERSION` derives from `CARGO_PKG_VERSION`, so a version bump is
+        // what opts this build into a capability. If the crate version ever drops
+        // below a threshold in `fancy_utils::gate`, this build would silently stop
+        // being offered that capability by a server; fail here instead.
+        let ours = Gate::for_peer(Some(super::FANCY_VERSION));
+        assert_eq!(
+            ours.granted().len(),
+            Capability::all().len(),
+            "this build announces {:?} and does not qualify for everything it implements",
+            ours.version()
+        );
+    }
+
+    #[test]
+    fn the_announced_version_is_the_crate_version() {
+        assert_eq!(
+            Gate::for_peer(Some(super::FANCY_VERSION)).version(),
+            Some((0, 4, 0)),
+            "the breaking voice-crypto change lands on 0.4.0"
+        );
+    }
+}

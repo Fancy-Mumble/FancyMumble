@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  reconnectDelayMs,
-  RECONNECT_BACKOFF_CAP_MS,
-} from "../reconnectBackoff";
+import { reconnectDelayMs, RECONNECT_BACKOFF_CAP_MS } from "../reconnectBackoff";
 
 describe("reconnectDelayMs", () => {
   it("follows a Fibonacci-seconds sequence for the first attempts", () => {

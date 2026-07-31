@@ -58,11 +58,7 @@ export default function PluginsPanel() {
   );
 
   if (rows.length === 0) {
-    return (
-      <div className={styles.empty}>
-        {t("plugins.empty")}
-      </div>
-    );
+    return <div className={styles.empty}>{t("plugins.empty")}</div>;
   }
 
   return (
@@ -74,7 +70,9 @@ export default function PluginsPanel() {
   );
 }
 
-function scopeKey(scope: TrustScope | undefined): "plugins.scopeGlobal" | "plugins.scopeSession" | "plugins.scopeServer" {
+function scopeKey(
+  scope: TrustScope | undefined,
+): "plugins.scopeGlobal" | "plugins.scopeSession" | "plugins.scopeServer" {
   if (scope === TrustScope.Global) return "plugins.scopeGlobal";
   if (scope === TrustScope.Once) return "plugins.scopeSession";
   return "plugins.scopeServer";
@@ -133,9 +131,7 @@ function PluginCard({ row }: { readonly row: PluginRow }) {
             <span className={styles.pluginVersion}>v{row.entry.version}</span>
             {isOfficialPlugin(row.entry.pluginName) && <OfficialBadge />}
           </div>
-          {info.description && (
-            <p className={styles.pluginDescription}>{info.description}</p>
-          )}
+          {info.description && <p className={styles.pluginDescription}>{info.description}</p>}
         </div>
         {isAllowed && (
           <span className={`${styles.trustState} ${styles.trustAllowed}`}>
@@ -144,9 +140,7 @@ function PluginCard({ row }: { readonly row: PluginRow }) {
           </span>
         )}
         {isDenied && (
-          <span className={`${styles.trustState} ${styles.trustDenied}`}>
-            {t("plugins.blocked")}
-          </span>
+          <span className={`${styles.trustState} ${styles.trustDenied}`}>{t("plugins.blocked")}</span>
         )}
       </header>
 

@@ -1,4 +1,21 @@
-import { ArrowRightIcon, BellIcon, BellOffIcon, CalendarIcon, DatabaseIcon, FileTextIcon, FolderIcon, PinIcon, PollIcon, PopoutIcon, ScreenShareIcon, SearchIcon, ShieldCheckIcon, ShieldIcon, UsersGroupIcon, WebcamIcon } from "../../icons";
+import {
+  ArrowRightIcon,
+  BellIcon,
+  BellOffIcon,
+  CalendarIcon,
+  DatabaseIcon,
+  FileTextIcon,
+  FolderIcon,
+  PinIcon,
+  PollIcon,
+  PopoutIcon,
+  ScreenShareIcon,
+  SearchIcon,
+  ShieldCheckIcon,
+  ShieldIcon,
+  UsersGroupIcon,
+  WebcamIcon,
+} from "../../icons";
 import { useTranslation } from "react-i18next";
 import { isMobile } from "@core/utils/platform";
 import type { KeyTrustLevel } from "@core/types";
@@ -86,7 +103,20 @@ function buildKebabItems({
   onChannelSearch,
   onChannelInfoToggle,
   t,
-}: Pick<ChatHeaderProps, "onPollCreate" | "isSilenced" | "onToggleSilence" | "hasNewPins" | "onPinnedMessages" | "hasNewDownloads" | "onDownloads" | "onMySharedFiles" | "onOpenDocLibrary" | "onChannelSearch" | "onChannelInfoToggle"> & { t: (key: string) => string }): KebabMenuItem[] {
+}: Pick<
+  ChatHeaderProps,
+  | "onPollCreate"
+  | "isSilenced"
+  | "onToggleSilence"
+  | "hasNewPins"
+  | "onPinnedMessages"
+  | "hasNewDownloads"
+  | "onDownloads"
+  | "onMySharedFiles"
+  | "onOpenDocLibrary"
+  | "onChannelSearch"
+  | "onChannelInfoToggle"
+> & { t: (key: string) => string }): KebabMenuItem[] {
   const items: KebabMenuItem[] = [];
   if (onChannelSearch) {
     items.push({
@@ -150,9 +180,7 @@ function buildKebabItems({
     items.push({
       id: "toggle-silence",
       label: isSilenced ? t("header.unmuteChannel") : t("header.muteChannel"),
-      icon: isSilenced
-        ? <BellIcon width={16} height={16} />
-        : <BellOffIcon width={16} height={16} />,
+      icon: isSilenced ? <BellIcon width={16} height={16} /> : <BellOffIcon width={16} height={16} />,
       active: isSilenced,
       onClick: onToggleSilence,
     });
@@ -208,9 +236,7 @@ export default function ChatHeader({
             <div
               className={styles.broadcasterAvatar}
               style={{
-                background: broadcastInfo.avatarUrl
-                  ? "transparent"
-                  : colorFor(broadcastInfo.broadcasterName),
+                background: broadcastInfo.avatarUrl ? "transparent" : colorFor(broadcastInfo.broadcasterName),
               }}
             >
               {broadcastInfo.avatarUrl ? (
@@ -280,7 +306,7 @@ export default function ChatHeader({
               )
             )}
           </h2>
-          {!isMobile && (<span className={styles.memberCount}>{subtitle}</span>)}
+          {!isMobile && <span className={styles.memberCount}>{subtitle}</span>}
         </div>
       )}
 
@@ -293,10 +319,7 @@ export default function ChatHeader({
           </span>
         )}
         {keyTrustLevel && !privateBadge && (
-          <KeyTrustIndicator
-            trustLevel={keyTrustLevel}
-            onVerifyClick={onVerifyClick}
-          />
+          <KeyTrustIndicator trustLevel={keyTrustLevel} onVerifyClick={onVerifyClick} />
         )}
         {privateBadge && onPopOutDm && (
           <button
@@ -347,13 +370,12 @@ export default function ChatHeader({
             data-testid={TID.screenShareToggle}
             aria-label={isScreenSharing ? t("header.changeSharing") : t("header.shareScreen")}
             title={
-              screenShareDisabledReason ?? (
-                isScreenSharing
-                  ? t("header.changeSharing")
-                  : sfuAvailable
-                    ? t("header.shareScreenRelayed")
-                    : t("header.shareScreenP2P")
-              )
+              screenShareDisabledReason ??
+              (isScreenSharing
+                ? t("header.changeSharing")
+                : sfuAvailable
+                  ? t("header.shareScreenRelayed")
+                  : t("header.shareScreenP2P"))
             }
           >
             <ScreenShareIcon width={18} height={18} />
@@ -367,9 +389,8 @@ export default function ChatHeader({
             data-testid={TID.cameraShareToggle}
             aria-label={isCameraSharing ? t("header.changeCamera") : t("header.shareCamera")}
             title={
-              screenShareDisabledReason ?? (
-                isCameraSharing ? t("header.changeCamera") : t("header.shareCamera")
-              )
+              screenShareDisabledReason ??
+              (isCameraSharing ? t("header.changeCamera") : t("header.shareCamera"))
             }
           >
             <WebcamIcon width={18} height={18} />
@@ -380,7 +401,20 @@ export default function ChatHeader({
             / StreamFocusView. */}
         {!privateBadge && (
           <KebabMenu
-            items={buildKebabItems({ onPollCreate, isSilenced, onToggleSilence, hasNewPins, onPinnedMessages, hasNewDownloads, onDownloads, onMySharedFiles, onOpenDocLibrary, onChannelSearch: isMobile ? onChannelSearch : undefined, onChannelInfoToggle: isMobile ? onChannelInfoToggle : undefined, t: tStr })}
+            items={buildKebabItems({
+              onPollCreate,
+              isSilenced,
+              onToggleSilence,
+              hasNewPins,
+              onPinnedMessages,
+              hasNewDownloads,
+              onDownloads,
+              onMySharedFiles,
+              onOpenDocLibrary,
+              onChannelSearch: isMobile ? onChannelSearch : undefined,
+              onChannelInfoToggle: isMobile ? onChannelInfoToggle : undefined,
+              t: tStr,
+            })}
             ariaLabel={t("header.channelOptions")}
             badge={hasNewPins || hasNewDownloads}
           />

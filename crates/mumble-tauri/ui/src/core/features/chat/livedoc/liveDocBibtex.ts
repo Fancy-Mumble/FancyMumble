@@ -115,7 +115,10 @@ export function parseBibtex(input: string): CslItem[] {
     if (at < 0) break;
     const braceOpen = text.indexOf("{", at);
     if (braceOpen < 0) break;
-    const type = text.slice(at + 1, braceOpen).trim().toLowerCase();
+    const type = text
+      .slice(at + 1, braceOpen)
+      .trim()
+      .toLowerCase();
     if (type === "comment" || type === "preamble" || type === "string") {
       i = braceOpen + 1;
       continue;

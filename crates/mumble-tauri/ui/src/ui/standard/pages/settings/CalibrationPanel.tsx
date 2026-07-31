@@ -80,12 +80,7 @@ function CalibrationModeSelector({
   t,
 }: Readonly<{ mode: CalibrationMode; onChange: (mode: CalibrationMode) => void; t: TFn }>) {
   return (
-    <RadioCardGroup
-      name="calibration_mode"
-      options={buildModeOptions(t)}
-      value={mode}
-      onChange={onChange}
-    />
+    <RadioCardGroup name="calibration_mode" options={buildModeOptions(t)} value={mode} onChange={onChange} />
   );
 }
 
@@ -151,7 +146,10 @@ function AutoCalibrationView({
             {t("calibration.close")} <strong>{(settings.noise_gate_close_ratio * 100).toFixed(0)}%</strong>
           </span>
           <span>
-            {t("calibration.hold")} <strong>{settings.hold_frames} {t("calibration.frames")}</strong>
+            {t("calibration.hold")}{" "}
+            <strong>
+              {settings.hold_frames} {t("calibration.frames")}
+            </strong>
           </span>
           <span>
             {t("calibration.maxGain")} <strong>{settings.max_gain_db.toFixed(1)} dB</strong>
@@ -167,10 +165,7 @@ function AutoCalibrationView({
       </div>
       {testing && (
         <div className={panelStyles.speechProgressBar}>
-          <div
-            className={panelStyles.speechProgressFill}
-            style={{ width: `${speechProgress * 100}%` }}
-          />
+          <div className={panelStyles.speechProgressFill} style={{ width: `${speechProgress * 100}%` }} />
           <span className={panelStyles.speechProgressStatus}>
             {speechProgress >= 1
               ? t("calibration.nailedIt")
@@ -260,10 +255,10 @@ function ManualCalibrationView({
     <div className={panelStyles.calibrationView}>
       <p className={styles.fieldHint}>
         {t("calibration.manualHintPre")}
-        <span className={panelStyles.legendOpen}>{t("calibration.manualHintOpenWord")}</span>
-        {" "}{t("calibration.manualHintMid")}
-        <span className={panelStyles.legendClose}>{t("calibration.manualHintCloseWord")}</span>
-        {" "}{t("calibration.manualHintPost")}
+        <span className={panelStyles.legendOpen}>{t("calibration.manualHintOpenWord")}</span>{" "}
+        {t("calibration.manualHintMid")}
+        <span className={panelStyles.legendClose}>{t("calibration.manualHintCloseWord")}</span>{" "}
+        {t("calibration.manualHintPost")}
       </p>
       <VuMeter rms={rms} peak={peak} markers={markers} talking={talking} />
       <div className={panelStyles.micTestRow}>
@@ -389,9 +384,7 @@ export function CalibrationPanel({
   settingsRef.current = settings;
   // `undefined` until the persisted signature is read from the
   // preferences store; `null` once read with no prior calibration.
-  const [calibratedSig, setCalibratedSig] = useState<string | null | undefined>(
-    undefined,
-  );
+  const [calibratedSig, setCalibratedSig] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     let active = true;
     getPreferences()
@@ -439,25 +432,17 @@ export function CalibrationPanel({
     speechMsRef.current = 0;
     lastAmplitudeEventTime.current = null;
     if (!testing) return;
-    const unlisten = listen<{ rms: number; peak: number }>(
-      "mic-amplitude",
-      (event) => {
-        const now = performance.now();
-        const prev = lastAmplitudeEventTime.current;
-        lastAmplitudeEventTime.current = now;
-        if (prev !== null && event.payload.rms > speechThresholdRef.current) {
-          speechMsRef.current = Math.min(
-            speechMsRef.current + (now - prev),
-            SPEECH_TARGET_MS,
-          );
-        }
-        amplitudeRef.current = event.payload;
-        cancelAnimationFrame(rafHandle.current);
-        rafHandle.current = requestAnimationFrame(() =>
-          setAmpTick((t) => t + 1),
-        );
-      },
-    );
+    const unlisten = listen<{ rms: number; peak: number }>("mic-amplitude", (event) => {
+      const now = performance.now();
+      const prev = lastAmplitudeEventTime.current;
+      lastAmplitudeEventTime.current = now;
+      if (prev !== null && event.payload.rms > speechThresholdRef.current) {
+        speechMsRef.current = Math.min(speechMsRef.current + (now - prev), SPEECH_TARGET_MS);
+      }
+      amplitudeRef.current = event.payload;
+      cancelAnimationFrame(rafHandle.current);
+      rafHandle.current = requestAnimationFrame(() => setAmpTick((t) => t + 1));
+    });
     return () => {
       cancelAnimationFrame(rafHandle.current);
       unlisten.then((f) => f());
@@ -523,9 +508,7 @@ export function CalibrationPanel({
     <div className={panelStyles.calibrationContainer}>
       <CalibrationModeSelector
         mode={mode}
-        onChange={(next) =>
-          onChange({ auto_input_sensitivity: next === "auto" })
-        }
+        onChange={(next) => onChange({ auto_input_sensitivity: next === "auto" })}
         t={tFn}
       />
       {mode === "auto" ? (
@@ -554,4 +537,3 @@ export function CalibrationPanel({
     </div>
   );
 }
-

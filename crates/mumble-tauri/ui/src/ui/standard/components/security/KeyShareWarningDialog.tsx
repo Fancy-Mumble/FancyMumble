@@ -13,7 +13,11 @@ interface KeyShareWarningDialogProps {
   readonly onCancel: () => void;
 }
 
-function describeAccess(mode: PersistenceMode, totalStored: number, t: (key: string, opts?: Record<string, unknown>) => string): string {
+function describeAccess(
+  mode: PersistenceMode,
+  totalStored: number,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
   if (mode === "FANCY_V1_FULL_ARCHIVE") {
     const count = totalStored > 0 ? t("keyShare.archiveCount", { count: totalStored }) : "";
     return t("keyShare.archiveAccess", { count });
@@ -34,7 +38,13 @@ export default function KeyShareWarningDialog({
   if (!open) return null;
 
   return (
-    <Modal onClose={onCancel} closeOnEsc={false} closeOnOverlayClick={false} zIndex={200} overlayClassName={styles.overlayBlur}>
+    <Modal
+      onClose={onCancel}
+      closeOnEsc={false}
+      closeOnOverlayClick={false}
+      zIndex={200}
+      overlayClassName={styles.overlayBlur}
+    >
       <div className={styles.dialog} role="dialog" aria-modal="true" aria-label={t("keyShare.ariaLabel")}>
         <div className={styles.header}>
           <h2 className={styles.title}>{t("keyShare.title")}</h2>
@@ -59,18 +69,10 @@ export default function KeyShareWarningDialog({
           </p>
 
           <div className={styles.actions}>
-            <button
-              className={styles.cancelBtn}
-              type="button"
-              onClick={onCancel}
-            >
+            <button className={styles.cancelBtn} type="button" onClick={onCancel}>
               {t("common:actions.cancel")}
             </button>
-            <button
-              className={styles.confirmBtn}
-              type="button"
-              onClick={onConfirm}
-            >
+            <button className={styles.confirmBtn} type="button" onClick={onConfirm}>
               {t("keyShare.share")}
             </button>
           </div>

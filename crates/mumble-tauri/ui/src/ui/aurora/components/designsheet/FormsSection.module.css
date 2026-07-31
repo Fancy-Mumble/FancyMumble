@@ -1,0 +1,214 @@
+/* Design sheet: forms. Split from AuroraApp.module.css. */
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 22px;
+}
+
+/* The input shell owns focus and validation; nested inputs stay visually transparent. */
+.tagInput {
+  width: 100%;
+  min-height: 42px;
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  outline: none;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 5px;
+  border-color: rgb(255 255 255 / 10%);
+  background: rgb(7 10 14 / 38%);
+  box-shadow: none;
+  backdrop-filter: blur(22px) saturate(105%);
+}
+
+.tagInput:focus-within {
+  border-color: rgb(185 202 214 / 48%);
+  box-shadow: 0 0 0 3px rgb(255 255 255 / 4%);
+}
+
+.optionStack {
+  display: grid;
+  gap: 10px;
+}
+
+.radioRow {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  color: #aeb4bf;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.checkRow {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  color: #aeb4bf;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.radioRow input {
+  position: absolute;
+  opacity: 0;
+}
+
+.checkRow input {
+  position: absolute;
+  opacity: 0;
+}
+
+.radioRow > span {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+
+.radioRow i {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #515866;
+  border-radius: 50%;
+}
+
+.radioRow input:checked + span i {
+  border: 5px solid var(--signal);
+}
+
+.checkRow > span {
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  color: var(--ink);
+  border: 1px solid #525966;
+  border-radius: 5px;
+}
+
+.checkRow input:checked + span {
+  border-color: var(--signal);
+  background: var(--signal);
+}
+
+.settingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settingRow > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.settingRow strong {
+  font-size: 11px;
+}
+
+.settingRow small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.switch {
+  position: relative;
+  width: 39px;
+  height: 22px;
+  padding: 0;
+  cursor: pointer;
+  border: 0;
+  border-radius: 999px;
+  background: #353a45;
+}
+
+.switchOn {
+  position: relative;
+  width: 39px;
+  height: 22px;
+  padding: 0;
+  cursor: pointer;
+  border: 0;
+  border-radius: 999px;
+  background: var(--signal);
+}
+
+.switch i {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #c3c8d0;
+  transition: .18s;
+}
+
+.switchOn i {
+  position: absolute;
+  top: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  transition: .18s;
+  left: 20px;
+  background: #13150f;
+}
+
+.range {
+  display: block;
+  margin-top: 24px;
+}
+
+.range span {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  color: #aeb4bf;
+  font-size: 9px;
+}
+
+.range b {
+  margin-left: auto;
+  color: var(--signal);
+}
+
+.range input {
+  width: 100%;
+  margin-top: 12px;
+  accent-color: var(--signal);
+}
+
+.tagInput span {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  height: 29px;
+  padding: 0 8px;
+  font-size: 9px;
+  border-radius: 6px;
+  color: #bac4cd;
+  background: rgb(255 255 255 / 6%);
+}
+
+.tagInput input {
+  min-width: 70px;
+  height: 29px;
+  padding: 0 5px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (max-width: 720px) {
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+}

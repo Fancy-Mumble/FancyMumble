@@ -45,12 +45,7 @@ interface BioEditorProps {
   readonly placeholder?: string;
 }
 
-export function BioEditor({
-  value,
-  onChange,
-  maxLength = 2000,
-  placeholder,
-}: BioEditorProps) {
+export function BioEditor({ value, onChange, maxLength = 2000, placeholder }: BioEditorProps) {
   const { t } = useTranslation("settings");
   const resolvedPlaceholder = placeholder ?? t("bioEditor.placeholder");
   const [showColourPicker, setShowColourPicker] = useState(false);
@@ -99,9 +94,9 @@ export function BioEditor({
               const raw = e.target?.result as string | undefined;
               if (!raw) return;
               const dataUrl = await resizeImage(raw, 400, 400, 80_000);
-              view.dispatch(view.state.tr.replaceSelectionWith(
-                view.state.schema.nodes.image.create({ src: dataUrl }),
-              ));
+              view.dispatch(
+                view.state.tr.replaceSelectionWith(view.state.schema.nodes.image.create({ src: dataUrl })),
+              );
             };
             reader.readAsDataURL(file);
             return true;
@@ -332,8 +327,7 @@ export function BioEditor({
               className={styles.bioColourIcon}
               style={{
                 borderBottomColor:
-                  (editor.getAttributes("textStyle")?.color as string) ??
-                  "var(--color-text-primary)",
+                  (editor.getAttributes("textStyle")?.color as string) ?? "var(--color-text-primary)",
               }}
             >
               A
@@ -354,11 +348,7 @@ export function BioEditor({
                   />
                 ))}
               </div>
-              <button
-                type="button"
-                className={styles.bioColourReset}
-                onClick={clearColour}
-              >
+              <button type="button" className={styles.bioColourReset} onClick={clearColour}>
                 {t("bioEditor.resetColour")}
               </button>
             </div>

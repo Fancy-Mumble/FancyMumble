@@ -16,12 +16,7 @@ interface SuperSearchProps {
   readonly onSelectUser: (session: number) => void;
 }
 
-export function SuperSearch({
-  open,
-  onClose,
-  onSelectChannel,
-  onSelectUser,
-}: SuperSearchProps) {
+export function SuperSearch({ open, onClose, onSelectChannel, onSelectUser }: SuperSearchProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -31,11 +26,14 @@ export function SuperSearch({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { t } = useTranslation("sidebar");
 
-  const categoryLabels = useMemo<Record<SearchCategory, string>>(() => ({
-    channel: t("superSearch.categoryChannels"),
-    user: t("superSearch.categoryUsers"),
-    message: t("superSearch.categoryMessages"),
-  }), [t]);
+  const categoryLabels = useMemo<Record<SearchCategory, string>>(
+    () => ({
+      channel: t("superSearch.categoryChannels"),
+      user: t("superSearch.categoryUsers"),
+      message: t("superSearch.categoryMessages"),
+    }),
+    [t],
+  );
 
   // Focus input when opened.
   useEffect(() => {
@@ -82,16 +80,11 @@ export function SuperSearch({
       list.push(r);
       map.set(r.category, list);
     }
-    return CATEGORY_ORDER
-      .filter((c) => map.has(c))
-      .map((c) => ({ category: c, items: map.get(c) ?? [] }));
+    return CATEGORY_ORDER.filter((c) => map.has(c)).map((c) => ({ category: c, items: map.get(c) ?? [] }));
   }, [results]);
 
   // Flat list for keyboard nav.
-  const flatItems = useMemo(
-    () => grouped.flatMap((g) => g.items),
-    [grouped],
-  );
+  const flatItems = useMemo(() => grouped.flatMap((g) => g.items), [grouped]);
 
   // Scroll active item into view.
   useEffect(() => {
@@ -175,9 +168,7 @@ export function SuperSearch({
 
           {grouped.map((group) => (
             <div key={group.category}>
-              <div className={styles.categoryLabel}>
-                {categoryLabels[group.category]}
-              </div>
+              <div className={styles.categoryLabel}>{categoryLabels[group.category]}</div>
               {group.items.map((r) => {
                 const idx = flatIdx++;
                 return (
@@ -192,9 +183,7 @@ export function SuperSearch({
                     <ResultIcon category={r.category} />
                     <div className={styles.resultText}>
                       <span className={styles.resultTitle}>{r.title}</span>
-                      {r.subtitle && (
-                        <span className={styles.resultSubtitle}>{r.subtitle}</span>
-                      )}
+                      {r.subtitle && <span className={styles.resultSubtitle}>{r.subtitle}</span>}
                     </div>
                   </button>
                 );
@@ -205,9 +194,15 @@ export function SuperSearch({
 
         {/* Footer hints */}
         <div className={styles.footer}>
-          <span><span className={styles.footerKey}>â†‘â†“</span> {t("superSearch.hintNavigate")}</span>
-          <span><span className={styles.footerKey}>â†µ</span> {t("superSearch.hintSelect")}</span>
-          <span><span className={styles.footerKey}>esc</span> {t("superSearch.hintClose")}</span>
+          <span>
+            <span className={styles.footerKey}>â†‘â†“</span> {t("superSearch.hintNavigate")}
+          </span>
+          <span>
+            <span className={styles.footerKey}>â†µ</span> {t("superSearch.hintSelect")}
+          </span>
+          <span>
+            <span className={styles.footerKey}>esc</span> {t("superSearch.hintClose")}
+          </span>
         </div>
       </div>
     </div>,

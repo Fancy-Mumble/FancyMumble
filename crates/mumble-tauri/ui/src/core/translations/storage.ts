@@ -9,12 +9,7 @@
  */
 
 import { load } from "../utils/store";
-import {
-  I18N_NAMESPACES,
-  registerLanguage,
-  type I18nNamespace,
-  type LocaleBundle,
-} from "../i18n";
+import { I18N_NAMESPACES, registerLanguage, type I18nNamespace, type LocaleBundle } from "../i18n";
 
 const STORE_FILE = "translations.json";
 const KEY = "customLanguages";
@@ -54,9 +49,7 @@ export async function loadCustomTranslations(): Promise<CustomTranslationsMap> {
 }
 
 /** Persist a single custom-translation bundle. */
-export async function saveCustomTranslation(
-  entry: CustomTranslation,
-): Promise<void> {
+export async function saveCustomTranslation(entry: CustomTranslation): Promise<void> {
   const store = await getStore();
   const current = (await store.get<CustomTranslationsMap>(KEY)) ?? {};
   current[entry.code] = { ...entry, updatedAt: Date.now() };
@@ -86,9 +79,7 @@ export async function bootstrapCustomTranslations(): Promise<void> {
 }
 
 /** Empty placeholder bundle (every key set to "---") cloned from a source. */
-export function buildPlaceholderBundle(
-  source: Partial<LocaleBundle>,
-): Partial<LocaleBundle> {
+export function buildPlaceholderBundle(source: Partial<LocaleBundle>): Partial<LocaleBundle> {
   const out: Partial<LocaleBundle> = {};
   for (const ns of I18N_NAMESPACES) {
     out[ns] = clonePlaceholders(source[ns] ?? {});
@@ -117,9 +108,7 @@ export interface FlattenedEntry {
   readonly value: string;
 }
 
-export function flattenBundle(
-  bundle: Partial<LocaleBundle>,
-): FlattenedEntry[] {
+export function flattenBundle(bundle: Partial<LocaleBundle>): FlattenedEntry[] {
   const out: FlattenedEntry[] = [];
   for (const ns of I18N_NAMESPACES) {
     const nsObj = bundle[ns];

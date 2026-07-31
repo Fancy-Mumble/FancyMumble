@@ -58,17 +58,20 @@ export function useChannelAcl(channelId: number | null) {
   // waiting for a re-render: `save` is a callback memoized on `acl`, so a
   // same-handler `setAcl(next); save()` would otherwise still close over the
   // *previous* render's `acl` and silently persist stale data.
-  const save = useCallback(async (next?: AclData) => {
-    const payload = next ?? acl;
-    if (!payload) return;
-    setSaving(true);
-    try {
-      await invoke("update_acl", { acl: payload });
-      setDirty(false);
-    } finally {
-      setSaving(false);
-    }
-  }, [acl]);
+  const save = useCallback(
+    async (next?: AclData) => {
+      const payload = next ?? acl;
+      if (!payload) return;
+      setSaving(true);
+      try {
+        await invoke("update_acl", { acl: payload });
+        setDirty(false);
+      } finally {
+        setSaving(false);
+      }
+    },
+    [acl],
+  );
 
   const refresh = useCallback(() => {
     if (channelId === null) return;

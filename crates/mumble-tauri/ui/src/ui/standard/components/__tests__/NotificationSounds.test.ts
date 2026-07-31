@@ -1,13 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type {
-  NotificationSoundSettings,
-  NotificationEvent,
-  NotificationEventConfig,
-} from "@core/types";
-import {
-  SOUND_OPTIONS,
-  DEFAULT_NOTIFICATION_SOUNDS,
-} from "../../pages/settings/NotificationsPanel";
+import type { NotificationSoundSettings, NotificationEvent, NotificationEventConfig } from "@core/types";
+import { SOUND_OPTIONS, DEFAULT_NOTIFICATION_SOUNDS } from "../../pages/settings/NotificationsPanel";
 
 describe("NotificationSoundSettings types and defaults", () => {
   it("DEFAULT_NOTIFICATION_SOUNDS has all required events", () => {
@@ -24,8 +17,7 @@ describe("NotificationSoundSettings types and defaults", () => {
     ];
     for (const key of events) {
       expect(DEFAULT_NOTIFICATION_SOUNDS.events[key]).toBeDefined();
-      const cfg: NotificationEventConfig =
-        DEFAULT_NOTIFICATION_SOUNDS.events[key];
+      const cfg: NotificationEventConfig = DEFAULT_NOTIFICATION_SOUNDS.events[key];
       expect(typeof cfg.enabled).toBe("boolean");
       expect(typeof cfg.sound).toBe("string");
       expect(typeof cfg.volume).toBe("number");
@@ -39,9 +31,7 @@ describe("NotificationSoundSettings types and defaults", () => {
   });
 
   it("voiceActivity defaults to disabled", () => {
-    expect(DEFAULT_NOTIFICATION_SOUNDS.events.voiceActivity.enabled).toBe(
-      false,
-    );
+    expect(DEFAULT_NOTIFICATION_SOUNDS.events.voiceActivity.enabled).toBe(false);
   });
 
   it("SOUND_OPTIONS includes a none entry and at least 3 sound options", () => {

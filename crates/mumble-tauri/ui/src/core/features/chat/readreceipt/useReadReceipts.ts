@@ -13,10 +13,7 @@ import { getPreferences } from "../../../preferencesStorage";
  *   current watermark so the sender sees the checkmark.
  * - Respects the `disableReadReceipts` user preference.
  */
-export function useReadReceipts(
-  channelId: number | null,
-  lastMessageId: string | undefined,
-) {
+export function useReadReceipts(channelId: number | null, lastMessageId: string | undefined) {
   const channelRef = useRef<number | null>(null);
   const lastSentRef = useRef<string | undefined>(undefined);
   const disabledRef = useRef(false);
@@ -43,9 +40,7 @@ export function useReadReceipts(
     channelRef.current = channelId;
     lastSentRef.current = undefined;
 
-    invoke("query_read_receipts", { channelId }).catch((e) =>
-      console.error("query_read_receipts error:", e),
-    );
+    invoke("query_read_receipts", { channelId }).catch((e) => console.error("query_read_receipts error:", e));
   }, [channelId]);
 
   // Send read receipt when the latest message changes or when

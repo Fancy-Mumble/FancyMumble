@@ -34,7 +34,9 @@ export function useCaptureError(): CaptureError | null {
       .then((s) => {
         if (active) setError(s ?? null);
       })
-      .catch(() => { /* command unavailable (non-desktop) */ });
+      .catch(() => {
+        /* command unavailable (non-desktop) */
+      });
     const unlisten = listen<CaptureError | null>("capture-error", (event) => {
       setError(event.payload ?? null);
     });

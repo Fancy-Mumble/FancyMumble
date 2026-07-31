@@ -194,17 +194,52 @@ pub struct Channel {
     /// Whether the server reports the current user can enter
     /// this channel (`ChannelState.can_enter`).
     pub can_enter: bool,
-    /// Whether the channel is detached: parentless (like the root), never
-    /// shown in the channel tree, and only delivered to Fancy clients
-    /// (scheduled meeting rooms, `__dm:` friend chats). Derived from the
-    /// `ChannelState.attributes` set (`ChannelAttribute::Detached`).
-    pub detached: bool,
+    /// Server-advertised channel attributes, stored as a bitmask over
+    /// `ChannelAttribute` discriminants (bit N = attribute N).
+    ///
+    /// Kept generic on purpose: a new channel trait needs only its proto enum
+    /// value plus a reader here, with no change to this struct or to the
+    /// message-application code below. Query it with [`Channel::has_attribute`]
+    /// rather than adding a parallel `bool` field per trait.
+    pub attributes: u64,
     /// Persistent-chat protocol.  `None` if not announced by the server.
     pub pchat_protocol: Option<PchatProtocol>,
     /// Maximum stored messages (0 = unlimited).  `None` if not set.
     pub pchat_max_history: Option<u32>,
     /// Auto-delete after N days (0 = forever).  `None` if not set.
     pub pchat_retention_days: Option<u32>,
+}
+
+/// Converts a `ChannelAttribute` discriminant into its bit in [`Channel::attributes`].
+///
+/// Discriminants above 63 cannot be represented and are dropped; the enum is
+/// nowhere near that bound, and widening the mask is a local change here.
+fn attribute_bit(attribute: i32) -> u64 {
+    if (0..64).contains(&attribute) { 1u64 << attribute } else { 0 }
+}
+
+impl Channel {
+    /// Whether the server advertised `attribute` for this channel.
+    #[must_use]
+    pub fn has_attribute(&self, attribute: crate::proto::mumble_tcp::ChannelAttribute) -> bool {
+        self.attributes & attribute_bit(attribute as i32) != 0
+    }
+
+    /// Whether the channel is detached: parentless (like the root), never shown
+    /// in the channel tree, and only delivered to Fancy clients (scheduled
+    /// meeting rooms, `__dm:` friend chats).
+    #[must_use]
+    pub fn detached(&self) -> bool {
+        self.has_attribute(crate::proto::mumble_tcp::ChannelAttribute::Detached)
+    }
+
+    /// Whether the channel exists only to organise the tree: it cannot be
+    /// entered and never holds users, so clients render it as a heading for the
+    /// channels nested beneath it.
+    #[must_use]
+    pub fn structural(&self) -> bool {
+        self.has_attribute(crate::proto::mumble_tcp::ChannelAttribute::Structural)
+    }
 }
 
 /// Connection-level metadata received during handshake.
@@ -332,7 +367,7 @@ impl ServerState {
             permissions: None,
             is_enter_restricted: false,
             can_enter: true,
-            detached: false,
+            attributes: 0,
             pchat_protocol: None,
             pchat_max_history: None,
             pchat_retention_days: None,
@@ -350,13 +385,21 @@ impl ServerState {
             let _ = state.can_enter.inspect(|&v| channel.can_enter = v);
         }
         let _ = state.max_users.inspect(|&v| channel.max_users = v);
-        // Detached marker comes from the `attributes` set. Only update when
-        // the server included attributes (a partial update may omit them), so
-        // a known-detached flag is never cleared by e.g. an expiry-only update.
-        if !state.attributes.is_empty() {
-            channel.detached = state
-                .attributes
-                .contains(&(crate::proto::mumble_tcp::ChannelAttribute::Detached as i32));
+        // Attributes are handled generically, so a new one needs no change here.
+        //
+        // `attribute_mask` marks the message authoritative for the attributes it
+        // names: each is set when also listed in `attributes` and cleared
+        // otherwise. That is the only way to express "this trait is now off" for
+        // a channel whose remaining set is empty. Without a mask a non-empty set
+        // still replaces the whole thing (the full channel listing), while an
+        // empty one leaves traits alone so partial updates - a rename, say -
+        // never clear them.
+        let asserted = state.attribute_mask.iter().fold(0u64, |mask, &attribute| mask | attribute_bit(attribute));
+        let present = state.attributes.iter().fold(0u64, |mask, &attribute| mask | attribute_bit(attribute));
+        if asserted != 0 {
+            channel.attributes = (channel.attributes & !asserted) | (present & asserted);
+        } else if present != 0 {
+            channel.attributes = present;
         }
         let _ = state.pchat_protocol.inspect(|&v| channel.pchat_protocol = Some(PchatProtocol::from_proto(v)));
         let _ = state.pchat_max_history.inspect(|&v| channel.pchat_max_history = Some(v));
@@ -443,6 +486,92 @@ impl ServerState {
 mod tests {
     use super::*;
     use crate::proto::mumble_tcp;
+
+    /// Builds a `ChannelState` for channel 7 carrying `attributes`.
+    fn channel_state_with_attributes(attributes: Vec<i32>) -> mumble_tcp::ChannelState {
+        mumble_tcp::ChannelState { channel_id: Some(7), attributes, ..Default::default() }
+    }
+
+    #[test]
+    fn channel_attributes_are_stored_as_a_generic_mask() {
+        let mut state = ServerState::new();
+        state.apply_channel_state(&channel_state_with_attributes(vec![
+            mumble_tcp::ChannelAttribute::Detached as i32,
+            mumble_tcp::ChannelAttribute::Structural as i32,
+        ]));
+
+        let channel = &state.channels[&7];
+        assert!(channel.detached());
+        assert!(channel.structural());
+        assert!(channel.has_attribute(mumble_tcp::ChannelAttribute::Structural));
+        assert!(!channel.has_attribute(mumble_tcp::ChannelAttribute::Hidden));
+        // An attribute the client has no named accessor for is still readable,
+        // which is the point of carrying the set generically.
+        assert_eq!(
+            channel.attributes,
+            (1 << mumble_tcp::ChannelAttribute::Detached as u64) | (1 << mumble_tcp::ChannelAttribute::Structural as u64)
+        );
+    }
+
+    #[test]
+    fn a_later_attribute_set_replaces_the_previous_one() {
+        let mut state = ServerState::new();
+        state.apply_channel_state(&channel_state_with_attributes(vec![mumble_tcp::ChannelAttribute::Structural as i32]));
+        assert!(state.channels[&7].structural());
+
+        state.apply_channel_state(&channel_state_with_attributes(vec![mumble_tcp::ChannelAttribute::Hidden as i32]));
+        assert!(!state.channels[&7].structural(), "a new set is authoritative");
+    }
+
+    #[test]
+    fn a_mask_clears_an_attribute_even_when_the_resulting_set_is_empty() {
+        let mut state = ServerState::new();
+        state.apply_channel_state(&channel_state_with_attributes(vec![mumble_tcp::ChannelAttribute::Structural as i32]));
+        assert!(state.channels[&7].structural());
+
+        // Turning the trait off leaves nothing to list, so only the mask can say
+        // so. Without it the empty set would read as "omitted" and stick.
+        state.apply_channel_state(&mumble_tcp::ChannelState {
+            channel_id: Some(7),
+            attributes: vec![],
+            attribute_mask: vec![mumble_tcp::ChannelAttribute::Structural as i32],
+            ..Default::default()
+        });
+        assert!(!state.channels[&7].structural());
+    }
+
+    #[test]
+    fn a_mask_leaves_attributes_it_does_not_name_alone() {
+        let mut state = ServerState::new();
+        state.apply_channel_state(&channel_state_with_attributes(vec![
+            mumble_tcp::ChannelAttribute::Detached as i32,
+            mumble_tcp::ChannelAttribute::Structural as i32,
+        ]));
+
+        state.apply_channel_state(&mumble_tcp::ChannelState {
+            channel_id: Some(7),
+            attributes: vec![],
+            attribute_mask: vec![mumble_tcp::ChannelAttribute::Structural as i32],
+            ..Default::default()
+        });
+        assert!(!state.channels[&7].structural(), "the masked attribute is cleared");
+        assert!(state.channels[&7].detached(), "an unmasked attribute survives");
+    }
+
+    #[test]
+    fn an_update_without_attributes_leaves_traits_untouched() {
+        let mut state = ServerState::new();
+        state.apply_channel_state(&channel_state_with_attributes(vec![mumble_tcp::ChannelAttribute::Structural as i32]));
+
+        // A partial update (rename only) must not clear known traits.
+        state.apply_channel_state(&mumble_tcp::ChannelState {
+            channel_id: Some(7),
+            name: Some("Renamed".into()),
+            ..Default::default()
+        });
+        assert!(state.channels[&7].structural());
+        assert_eq!(state.channels[&7].name, "Renamed");
+    }
 
     #[test]
     fn new_state_is_empty() {

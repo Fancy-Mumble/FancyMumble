@@ -7,7 +7,9 @@ import { useAppStore } from "@core/store";
 import type { ChannelEntry } from "@core/types";
 import { getPreferences } from "@core/preferencesStorage";
 import { canDeleteMessages, hasPermission } from "./ChannelEditorDialog";
-const BioEditor = lazy(() => import("../../../pages/settings/BioEditor").then((m) => ({ default: m.BioEditor })));
+const BioEditor = lazy(() =>
+  import("../../../pages/settings/BioEditor").then((m) => ({ default: m.BioEditor })),
+);
 import { SafeHtml } from "../../elements/SafeHtml";
 import { UserListItem, colorFor } from "../user/UserListItem";
 import { UserContextMenu } from "../user/UserContextMenu";
@@ -25,9 +27,7 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
   const selectedChannel = useAppStore((s) => s.selectedChannel);
   const channels = useAppStore((s) => s.channels);
 
-  const channel: ChannelEntry | undefined = channels.find(
-    (c) => c.id === selectedChannel,
-  );
+  const channel: ChannelEntry | undefined = channels.find((c) => c.id === selectedChannel);
   const channelDescription = useChannelDescription(channel?.id, channel?.description_size);
 
   const [editing, setEditing] = useState(false);
@@ -50,19 +50,13 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
     }
   }, [selectedChannel, queryKeyHolders]);
 
-  const currentHolders = selectedChannel != null ? keyHolders[selectedChannel] ?? [] : [];
+  const currentHolders = selectedChannel != null ? (keyHolders[selectedChannel] ?? []) : [];
 
   // Build a set of cert hashes that are key holders for fast lookups.
-  const holderHashes = useMemo(
-    () => new Set(currentHolders.map((h) => h.cert_hash)),
-    [currentHolders],
-  );
+  const holderHashes = useMemo(() => new Set(currentHolders.map((h) => h.cert_hash)), [currentHolders]);
 
   // Derive online status from the live users list.
-  const onlineUserHashes = useMemo(
-    () => new Set(users.map((u) => u.hash).filter(Boolean)),
-    [users],
-  );
+  const onlineUserHashes = useMemo(() => new Set(users.map((u) => u.hash).filter(Boolean)), [users]);
 
   // Offline key holders: holders not currently connected to the server.
   const offlineHolders = useMemo(
@@ -75,8 +69,7 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
     [users, selectedChannel],
   );
 
-  const isPersisted =
-    selectedChannel != null && getPersistenceMode(selectedChannel) !== "NONE";
+  const isPersisted = selectedChannel != null && getPersistenceMode(selectedChannel) !== "NONE";
 
   const [devMode, setDevMode] = useState(false);
 
@@ -86,9 +79,7 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
       .catch(() => {});
   }, []);
 
-  const [userCtxMenu, setUserCtxMenu] = useState<UserContextMenuState | null>(
-    null,
-  );
+  const [userCtxMenu, setUserCtxMenu] = useState<UserContextMenuState | null>(null);
 
   const openUserCtxMenu = useCallback(
     (e: React.MouseEvent, session: number) => {
@@ -100,8 +91,7 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
     [users],
   );
 
-  const canWrite =
-    channel?.permissions != null && (channel.permissions & PERM_WRITE) !== 0;
+  const canWrite = channel?.permissions != null && (channel.permissions & PERM_WRITE) !== 0;
 
   const canKeyOwner = hasPermission(channel, PERM_KEY_OWNER) && isPersisted;
 
@@ -132,8 +122,7 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
     setSaving(true);
     try {
       const nameChanged = editName !== channel.name ? editName : undefined;
-      const descChanged =
-        editDescription !== (channelDescription ?? "") ? editDescription : undefined;
+      const descChanged = editDescription !== (channelDescription ?? "") ? editDescription : undefined;
       if (nameChanged !== undefined || descChanged !== undefined) {
         await invoke("update_channel", {
           channelId: channel.id,
@@ -209,7 +198,9 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
             </label>
             <label className={styles.editLabel}>
               {t("channelInfoPanel.editLabelDescription")}
-              <Suspense fallback={<div className={styles.editInput}>{t("channelInfoPanel.loadingEditor")}</div>}>
+              <Suspense
+                fallback={<div className={styles.editInput}>{t("channelInfoPanel.loadingEditor")}</div>}
+              >
                 <BioEditor
                   value={editDescription}
                   onChange={setEditDescription}
@@ -218,18 +209,10 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
               </Suspense>
             </label>
             <div className={styles.editActions}>
-              <button
-                className={styles.cancelBtn}
-                onClick={cancelEditing}
-                disabled={saving}
-              >
+              <button className={styles.cancelBtn} onClick={cancelEditing} disabled={saving}>
                 {t("common:actions.cancel")}
               </button>
-              <button
-                className={styles.saveBtn}
-                onClick={saveChanges}
-                disabled={saving}
-              >
+              <button className={styles.saveBtn} onClick={saveChanges} disabled={saving}>
                 {saving ? t("channelInfoPanel.saving") : t("channelInfoPanel.saveBtn")}
               </button>
             </div>
@@ -263,7 +246,9 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
         {/* Online: users currently in the channel */}
         {channelUsers.length > 0 && (
           <>
-            <span className={styles.subsectionLabel}>{t("channelInfoPanel.onlineLabel", { count: channelUsers.length })}</span>
+            <span className={styles.subsectionLabel}>
+              {t("channelInfoPanel.onlineLabel", { count: channelUsers.length })}
+            </span>
             <div className={styles.membersList}>
               {channelUsers.map((u) => (
                 <div key={u.session} className={styles.memberRow}>
@@ -274,10 +259,20 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
                     onContextMenu={(e) => openUserCtxMenu(e, u.session)}
                   />
                   {u.hash && holderHashes.has(u.hash) && (
-                    <KeyIcon className={styles.memberKeyIcon} width={12} height={12} aria-label={t("channelInfoPanel.keyIconAriaLabel")} />
+                    <KeyIcon
+                      className={styles.memberKeyIcon}
+                      width={12}
+                      height={12}
+                      aria-label={t("channelInfoPanel.keyIconAriaLabel")}
+                    />
                   )}
                   {isPersisted && (!u.hash || !holderHashes.has(u.hash)) && (
-                    <WarningFilledIcon className={styles.memberWarningIcon} width={12} height={12} aria-label={t("channelInfoPanel.legacyClientAriaLabel")}>
+                    <WarningFilledIcon
+                      className={styles.memberWarningIcon}
+                      width={12}
+                      height={12}
+                      aria-label={t("channelInfoPanel.legacyClientAriaLabel")}
+                    >
                       <title>{t("channelInfoPanel.legacyClientAriaLabel")}</title>
                     </WarningFilledIcon>
                   )}
@@ -290,20 +285,24 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
         {/* Offline: key holders not currently connected */}
         {offlineHolders.length > 0 && (
           <>
-            <span className={styles.subsectionLabel}>{t("channelInfoPanel.offlineLabel", { count: offlineHolders.length })}</span>
+            <span className={styles.subsectionLabel}>
+              {t("channelInfoPanel.offlineLabel", { count: offlineHolders.length })}
+            </span>
             <div className={styles.holdersList}>
               {offlineHolders.map((holder) => (
                 <div key={holder.cert_hash} className={`${styles.holderItem} ${styles.holderOffline}`}>
                   <div className={styles.holderAvatarWrap}>
-                    <div
-                      className={styles.holderAvatar}
-                      style={{ background: colorFor(holder.name) }}
-                    >
+                    <div className={styles.holderAvatar} style={{ background: colorFor(holder.name) }}>
                       {holder.name.charAt(0).toUpperCase()}
                     </div>
                   </div>
                   <span className={styles.holderName}>{holder.name}</span>
-                  <KeyIcon className={styles.memberKeyIcon} width={12} height={12} aria-label={t("channelInfoPanel.keyIconAriaLabel")} />
+                  <KeyIcon
+                    className={styles.memberKeyIcon}
+                    width={12}
+                    height={12}
+                    aria-label={t("channelInfoPanel.keyIconAriaLabel")}
+                  />
                 </div>
               ))}
             </div>
@@ -318,10 +317,7 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
         {canKeyOwner && (
           <div className={styles.keyTakeoverSection}>
             {confirmTakeover == null ? (
-              <button
-                className={styles.dangerBtn}
-                onClick={() => setConfirmTakeover("full_wipe")}
-              >
+              <button className={styles.dangerBtn} onClick={() => setConfirmTakeover("full_wipe")}>
                 <KeyIcon width={14} height={14} />
                 {t("channelInfoPanel.resetKeyOwnership")}
               </button>
@@ -337,7 +333,9 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
                       onChange={() => setConfirmTakeover("full_wipe")}
                     />
                     <span>{t("channelInfoPanel.takeoverFullWipe")}</span>
-                    <span className={styles.keyTakeoverHint}>{t("channelInfoPanel.takeoverFullWipeHint")}</span>
+                    <span className={styles.keyTakeoverHint}>
+                      {t("channelInfoPanel.takeoverFullWipeHint")}
+                    </span>
                   </label>
                   <label className={styles.keyTakeoverOption}>
                     <input
@@ -347,7 +345,9 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
                       onChange={() => setConfirmTakeover("key_only")}
                     />
                     <span>{t("channelInfoPanel.takeoverKeyOnly")}</span>
-                    <span className={styles.keyTakeoverHint}>{t("channelInfoPanel.takeoverKeyOnlyHint")}</span>
+                    <span className={styles.keyTakeoverHint}>
+                      {t("channelInfoPanel.takeoverKeyOnlyHint")}
+                    </span>
                   </label>
                 </div>
                 <div className={styles.editActions}>
@@ -364,12 +364,7 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
         )}
       </div>
 
-      {userCtxMenu && (
-        <UserContextMenu
-          menu={userCtxMenu}
-          onClose={() => setUserCtxMenu(null)}
-        />
-      )}
+      {userCtxMenu && <UserContextMenu menu={userCtxMenu} onClose={() => setUserCtxMenu(null)} />}
 
       {/* Developer permissions debug section */}
       {devMode && (
@@ -379,7 +374,7 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
             <button
               className={styles.editBtn}
               onClick={() => {
-              useAppStore.getState().refreshState();
+                useAppStore.getState().refreshState();
               }}
               title={t("channelInfoPanel.refreshTitle")}
               aria-label={t("channelInfoPanel.refreshAriaLabel")}
@@ -403,10 +398,23 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
               {String(canDeleteMessages(channel))}
             </span>
             <span className={styles.infoLabel}>{t("channelInfoPanel.labelAllChannels")}</span>
-            <span className={styles.infoValue} style={{ fontFamily: "monospace", fontSize: "11px", whiteSpace: "pre-wrap", maxHeight: "150px", overflowY: "auto", display: "block" }}>
-              {channels.map((c) =>
-                `#${c.id} ${c.name}: ${c.permissions != null ? `0x${c.permissions.toString(16).toUpperCase()}` : "null"}`
-              ).join("\n")}
+            <span
+              className={styles.infoValue}
+              style={{
+                fontFamily: "monospace",
+                fontSize: "11px",
+                whiteSpace: "pre-wrap",
+                maxHeight: "150px",
+                overflowY: "auto",
+                display: "block",
+              }}
+            >
+              {channels
+                .map(
+                  (c) =>
+                    `#${c.id} ${c.name}: ${c.permissions != null ? `0x${c.permissions.toString(16).toUpperCase()}` : "null"}`,
+                )
+                .join("\n")}
             </span>
           </div>
           {channel.permissions != null && (

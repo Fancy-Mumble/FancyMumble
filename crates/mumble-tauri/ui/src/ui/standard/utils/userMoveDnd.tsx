@@ -41,12 +41,7 @@ function registerDropTarget(reg: DropRegistration): () => void {
 function hitTest(clientX: number, clientY: number): DropRegistration | null {
   for (const reg of registry) {
     const rect = reg.el.getBoundingClientRect();
-    if (
-      clientX >= rect.left &&
-      clientX <= rect.right &&
-      clientY >= rect.top &&
-      clientY <= rect.bottom
-    ) {
+    if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
       return reg;
     }
   }
@@ -248,12 +243,11 @@ export function useUserDrag(
       // does not check PERM_MOVE on the source/target channels.  Other
       // users go through move_user_to_channel which requires PERM_MOVE.
       const ownSession = useAppStore.getState().ownSession;
-      const cmd = ownSession === session
-        ? invoke("join_channel", { channelId: target.channelId })
-        : invoke("move_user_to_channel", { session, channelId: target.channelId });
-      cmd.catch((err: unknown) =>
-        console.error("channel move failed:", err),
-      );
+      const cmd =
+        ownSession === session
+          ? invoke("join_channel", { channelId: target.channelId })
+          : invoke("move_user_to_channel", { session, channelId: target.channelId });
+      cmd.catch((err: unknown) => console.error("channel move failed:", err));
     },
     [session],
   );
@@ -381,8 +375,7 @@ function FloatingUserClone({
         borderRadius: 10,
         background: "rgba(30, 33, 40, 0.85)",
         border: "1px solid rgba(255, 255, 255, 0.18)",
-        boxShadow:
-          "0 8px 24px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.06) inset",
+        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.06) inset",
         backdropFilter: "blur(10px) saturate(160%)",
         WebkitBackdropFilter: "blur(10px) saturate(160%)",
         color: "#f5f6f8",

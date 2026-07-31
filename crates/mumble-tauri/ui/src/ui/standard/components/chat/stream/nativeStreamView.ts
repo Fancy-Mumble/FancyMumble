@@ -43,11 +43,7 @@ import { invoke, Channel } from "@tauri-apps/api/core";
 import { useAppStore } from "@core/store";
 import { getTrackContentMap } from "./trackContent";
 import type { StatsSample, VideoTrackStats } from "./StreamStatsPanel";
-import {
-  registerStreamViewerStrategy,
-  StreamViewerStrategyId,
-  type StatsSampler,
-} from "./viewerStrategy";
+import { registerStreamViewerStrategy, StreamViewerStrategyId, type StatsSampler } from "./viewerStrategy";
 
 // Singleton state (running viewers keyed per session, live IPC channels,
 // the strategy registration): a hot-swap must reload the page like

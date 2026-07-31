@@ -232,11 +232,11 @@ const PAGE_PX: Record<LiveDocPageSize, { readonly w: number; readonly h: number 
   legal: { w: 816, h: 1344 }, // 8.5 x 14 in
 };
 const MARGIN_PX: Record<LiveDocPageMargin, { readonly x: number; readonly y: number }> = {
-  normal:   { x: 96,  y: 96  }, // 1" all sides
-  narrow:   { x: 48,  y: 48  }, // 0.5" all sides
-  moderate: { x: 72,  y: 96  }, // 0.75" left/right, 1" top/bottom
-  wide:     { x: 192, y: 96  }, // 2" left/right, 1" top/bottom
-  mirrored: { x: 120, y: 96  }, // 1.25" inner/outer, 1" top/bottom
+  normal: { x: 96, y: 96 }, // 1" all sides
+  narrow: { x: 48, y: 48 }, // 0.5" all sides
+  moderate: { x: 72, y: 96 }, // 0.75" left/right, 1" top/bottom
+  wide: { x: 192, y: 96 }, // 2" left/right, 1" top/bottom
+  mirrored: { x: 120, y: 96 }, // 1.25" inner/outer, 1" top/bottom
 };
 /** Named CSS paged-media sizes (used by the print/PDF `@page` rule). */
 const PAGE_CSS_SIZE: Record<LiveDocPageSize, string> = { a4: "A4", letter: "letter", legal: "legal" };
@@ -430,22 +430,27 @@ const HEADER_FOOTER_MAX = 200;
 
 /** Named header/footer theme (Word-style design gallery). */
 export type LiveDocBandStyle =
-  | "blank"
-  | "threeColumns"
-  | "austin"
-  | "banded"
-  | "facet"
-  | "filigree"
-  | "grid"
-  | "integral";
+  "blank" | "threeColumns" | "austin" | "banded" | "facet" | "filigree" | "grid" | "integral";
 /** Numbering-style template for the footer page number. */
 export type LiveDocPageNumberStyle = "page-of" | "page" | "plain" | "dash" | "slash" | "roman";
 
 export const BAND_STYLES: ReadonlyArray<LiveDocBandStyle> = [
-  "blank", "threeColumns", "austin", "banded", "facet", "filigree", "grid", "integral",
+  "blank",
+  "threeColumns",
+  "austin",
+  "banded",
+  "facet",
+  "filigree",
+  "grid",
+  "integral",
 ];
 export const PAGE_NUMBER_STYLES: ReadonlyArray<LiveDocPageNumberStyle> = [
-  "page-of", "page", "plain", "dash", "slash", "roman",
+  "page-of",
+  "page",
+  "plain",
+  "dash",
+  "slash",
+  "roman",
 ];
 
 /** Document-level header/footer bands.  Header, footer and the page-number
@@ -505,8 +510,19 @@ function readHeaderFooter(doc: Y.Doc | null): LiveDocHeaderFooter {
 }
 
 const ROMAN: ReadonlyArray<readonly [number, string]> = [
-  [1000, "m"], [900, "cm"], [500, "d"], [400, "cd"], [100, "c"], [90, "xc"],
-  [50, "l"], [40, "xl"], [10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"],
+  [1000, "m"],
+  [900, "cm"],
+  [500, "d"],
+  [400, "cd"],
+  [100, "c"],
+  [90, "xc"],
+  [50, "l"],
+  [40, "xl"],
+  [10, "x"],
+  [9, "ix"],
+  [5, "v"],
+  [4, "iv"],
+  [1, "i"],
 ];
 
 function toRoman(n: number): string {

@@ -12,11 +12,7 @@
  */
 
 import { load } from "../../utils/store";
-import {
-  register,
-  unregister,
-  isRegistered,
-} from "@tauri-apps/plugin-global-shortcut";
+import { register, unregister, isRegistered } from "@tauri-apps/plugin-global-shortcut";
 
 export interface UserShortcut {
   /** Stable id (UUID) so the UI can edit/remove specific entries. */

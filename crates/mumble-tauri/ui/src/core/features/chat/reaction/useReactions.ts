@@ -9,11 +9,7 @@ import { useState, useCallback, useRef } from "react";
 import { useAppStore } from "../../../store";
 import type { ChatMessage } from "../../../types";
 import { isMobile } from "../../../utils/platform";
-import {
-  hasReacted,
-  getReactions,
-  type ReactionSummary,
-} from "./reactionStore";
+import { hasReacted, getReactions, type ReactionSummary } from "./reactionStore";
 
 interface EmojiPickerState {
   /** Message being reacted to. */

@@ -36,8 +36,14 @@ function makeEditorWithCaretInHeader(): Editor {
             {
               type: "tableRow",
               content: [
-                { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "H" }] }] },
-                { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "H" }] }] },
+                {
+                  type: "tableHeader",
+                  content: [{ type: "paragraph", content: [{ type: "text", text: "H" }] }],
+                },
+                {
+                  type: "tableHeader",
+                  content: [{ type: "paragraph", content: [{ type: "text", text: "H" }] }],
+                },
               ],
             },
             {
@@ -75,9 +81,7 @@ describe("LiveDocTableControls click propagation", () => {
     const editor = makeEditorWithCaretInHeader();
     const wrapperOnClick = vi.fn();
     try {
-      const { getByLabelText } = render(
-        <Harness editor={editor} onWrapperClick={wrapperOnClick} />,
-      );
+      const { getByLabelText } = render(<Harness editor={editor} onWrapperClick={wrapperOnClick} />);
       const btn = getByLabelText("liveDoc.toolbar.addColRight");
       fireEvent.click(btn);
       expect(wrapperOnClick).not.toHaveBeenCalled();

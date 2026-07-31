@@ -3,11 +3,7 @@
 // the wire format produced by the Rust mumble-plugin-api crate.
 
 import { describe, it, expect } from "vitest";
-import {
-  parseClientManifest,
-  collectSlashCommands,
-  filterSlashCommands,
-} from "../../plugins/tier1/manifest";
+import { parseClientManifest, collectSlashCommands, filterSlashCommands } from "../../plugins/tier1/manifest";
 import {
   acceptedCapabilitiesFor,
   applyInteractionResponse,
@@ -20,11 +16,7 @@ import {
   manifestsFromRegistry,
   panelKey,
 } from "../../plugins/tier1/store";
-import {
-  parseSlashLine,
-  tokenise,
-  extractSlashQuery,
-} from "../../plugins/tier1/slashParser";
+import { parseSlashLine, tokenise, extractSlashQuery } from "../../plugins/tier1/slashParser";
 import {
   Capability,
   INTERACTION_RESPONSE_PAYLOAD_TYPE,
@@ -112,11 +104,7 @@ describe("slash line parser", () => {
   });
 
   it("handles quoted strings", () => {
-    expect(tokenise('/greet "Alice Cooper" true')).toEqual([
-      "greet",
-      "Alice Cooper",
-      "true",
-    ]);
+    expect(tokenise('/greet "Alice Cooper" true')).toEqual(["greet", "Alice Cooper", "true"]);
   });
 
   it("extractSlashQuery only fires while typing the command name", () => {
@@ -126,9 +114,7 @@ describe("slash line parser", () => {
   });
 
   it("parseSlashLine coerces option types", () => {
-    const map = manifestsFromRegistry([
-      { pluginName: "fancy-greeter", infoJson: greetManifestInfoJson },
-    ]);
+    const map = manifestsFromRegistry([{ pluginName: "fancy-greeter", infoJson: greetManifestInfoJson }]);
     const entries = collectSlashCommands(map);
     const parsed = parseSlashLine("/greet Alice true", entries);
     expect(parsed).not.toBeNull();
@@ -137,18 +123,14 @@ describe("slash line parser", () => {
   });
 
   it("parseSlashLine reports missing required options", () => {
-    const map = manifestsFromRegistry([
-      { pluginName: "fancy-greeter", infoJson: greetManifestInfoJson },
-    ]);
+    const map = manifestsFromRegistry([{ pluginName: "fancy-greeter", infoJson: greetManifestInfoJson }]);
     const entries = collectSlashCommands(map);
     const parsed = parseSlashLine("/greet", entries);
     expect(parsed?.errors).toContain("missing required option <name>");
   });
 
   it("parseSlashLine accepts name=value named args", () => {
-    const map = manifestsFromRegistry([
-      { pluginName: "fancy-greeter", infoJson: greetManifestInfoJson },
-    ]);
+    const map = manifestsFromRegistry([{ pluginName: "fancy-greeter", infoJson: greetManifestInfoJson }]);
     const entries = collectSlashCommands(map);
     const parsed = parseSlashLine("/greet name=Alice loud=true", entries);
     expect(parsed?.errors).toHaveLength(0);
@@ -156,9 +138,7 @@ describe("slash line parser", () => {
   });
 
   it("parseSlashLine mixes named + positional in any order", () => {
-    const map = manifestsFromRegistry([
-      { pluginName: "fancy-greeter", infoJson: greetManifestInfoJson },
-    ]);
+    const map = manifestsFromRegistry([{ pluginName: "fancy-greeter", infoJson: greetManifestInfoJson }]);
     const entries = collectSlashCommands(map);
     const parsed = parseSlashLine("/greet loud=true Alice", entries);
     expect(parsed?.errors).toHaveLength(0);
@@ -166,18 +146,14 @@ describe("slash line parser", () => {
   });
 
   it("parseSlashLine rejects unknown named option", () => {
-    const map = manifestsFromRegistry([
-      { pluginName: "fancy-greeter", infoJson: greetManifestInfoJson },
-    ]);
+    const map = manifestsFromRegistry([{ pluginName: "fancy-greeter", infoJson: greetManifestInfoJson }]);
     const entries = collectSlashCommands(map);
     const parsed = parseSlashLine("/greet name=Alice nonsense=42", entries);
     expect(parsed?.errors).toContain('unknown option "nonsense"');
   });
 
   it("parseSlashLine quoted value with named key", () => {
-    const map = manifestsFromRegistry([
-      { pluginName: "fancy-greeter", infoJson: greetManifestInfoJson },
-    ]);
+    const map = manifestsFromRegistry([{ pluginName: "fancy-greeter", infoJson: greetManifestInfoJson }]);
     const entries = collectSlashCommands(map);
     const parsed = parseSlashLine('/greet name="Alice Cooper"', entries);
     expect(parsed?.errors).toHaveLength(0);
@@ -221,12 +197,7 @@ describe("decodeInteractionResponse + applyInteractionResponse", () => {
         components: [{ components: [{ type: "button", custom_id: "x", label: "X" }] }],
       }),
     );
-    const next = applyInteractionResponse(
-      emptyPluginTier1Slice,
-      "fancy-greeter",
-      r!,
-      42,
-    );
+    const next = applyInteractionResponse(emptyPluginTier1Slice, "fancy-greeter", r!, 42);
     expect(next.pluginModal?.customId).toBe("m1");
     expect(next.pluginModal?.content).toBe("Hi");
     expect(next.pluginModal?.channelId).toBe(42);
@@ -288,11 +259,16 @@ describe("decodeInteractionResponse + applyInteractionResponse", () => {
         },
       ],
     };
-    const next = applyInteractionResponse(initial, "fancy-greeter", {
-      kind: "update-message",
-      message_id: "m1",
-      content: "New",
-    }, null);
+    const next = applyInteractionResponse(
+      initial,
+      "fancy-greeter",
+      {
+        kind: "update-message",
+        message_id: "m1",
+        content: "New",
+      },
+      null,
+    );
     expect(next.pluginCards[0].content).toBe("New");
   });
 });
@@ -304,10 +280,7 @@ describe("manifestPermitsResponse capability gate", () => {
   });
 
   it("accepts either Modals or Components for a show-modal card", () => {
-    expect(acceptedCapabilitiesFor("show-modal")).toEqual([
-      Capability.Modals,
-      Capability.Components,
-    ]);
+    expect(acceptedCapabilitiesFor("show-modal")).toEqual([Capability.Modals, Capability.Components]);
   });
 
   it("permits a show-modal card from a Components-only plugin", () => {
@@ -315,10 +288,7 @@ describe("manifestPermitsResponse capability gate", () => {
     // (e.g. fancy-info-card, fancy-gallery-showcase) emit a show-modal
     // response while only declaring Components.  These must not be
     // silently dropped by the trust/capability gate.
-    const manifest = manifestWith([
-      Capability.SlashCommands,
-      Capability.Components,
-    ]);
+    const manifest = manifestWith([Capability.SlashCommands, Capability.Components]);
     expect(manifestPermitsResponse(manifest, "show-modal")).toBe(true);
   });
 
@@ -333,12 +303,8 @@ describe("manifestPermitsResponse capability gate", () => {
   });
 
   it("still gates chat-message on Components", () => {
-    expect(
-      manifestPermitsResponse(manifestWith([Capability.Components]), "chat-message"),
-    ).toBe(true);
-    expect(
-      manifestPermitsResponse(manifestWith([Capability.Modals]), "chat-message"),
-    ).toBe(false);
+    expect(manifestPermitsResponse(manifestWith([Capability.Components]), "chat-message")).toBe(true);
+    expect(manifestPermitsResponse(manifestWith([Capability.Modals]), "chat-message")).toBe(false);
   });
 });
 
@@ -346,9 +312,7 @@ describe("trust gate", () => {
   const manifest = parseClientManifest(greetManifestInfoJson)!;
 
   it("evaluateTrust returns no-prompt when manifest declares no capabilities", () => {
-    const bare = parseClientManifest(
-      JSON.stringify({ client_manifest: { schema_version: 1 } }),
-    )!;
+    const bare = parseClientManifest(JSON.stringify({ client_manifest: { schema_version: 1 } }))!;
     expect(evaluateTrust(bare, null, "0.1.0").kind).toBe("no-prompt");
   });
 
@@ -409,9 +373,7 @@ describe("trust gate", () => {
   });
 
   it("applyRegistryWithTrust surfaces allowed plugins directly", () => {
-    const trust = new Map([
-      ["fancy-greeter", recordFromDecision(TrustDecision.Allow, "0.1.0", manifest)],
-    ]);
+    const trust = new Map([["fancy-greeter", recordFromDecision(TrustDecision.Allow, "0.1.0", manifest)]]);
     const { pluginManifests, pluginTrustQueue } = applyRegistryWithTrust(
       "server-a",
       [{ pluginName: "fancy-greeter", version: "0.1.0", infoJson: greetManifestInfoJson }],
@@ -465,9 +427,7 @@ describe("settings panels", () => {
 
   it("applyRegistryWithTrust seeds panels for trusted plugins", () => {
     const manifest = parseClientManifest(panelManifestInfoJson)!;
-    const trust = new Map([
-      ["fancy-greeter", recordFromDecision(TrustDecision.Allow, "0.1.0", manifest)],
-    ]);
+    const trust = new Map([["fancy-greeter", recordFromDecision(TrustDecision.Allow, "0.1.0", manifest)]]);
     const { pluginPanels } = applyRegistryWithTrust(
       "server-a",
       [{ pluginName: "fancy-greeter", version: "0.1.0", infoJson: panelManifestInfoJson }],
@@ -480,30 +440,38 @@ describe("settings panels", () => {
 
   it("update-panel response mutates panel rows", () => {
     const manifest = parseClientManifest(panelManifestInfoJson)!;
-    const trust = new Map([
-      ["fancy-greeter", recordFromDecision(TrustDecision.Allow, "0.1.0", manifest)],
-    ]);
+    const trust = new Map([["fancy-greeter", recordFromDecision(TrustDecision.Allow, "0.1.0", manifest)]]);
     const { pluginPanels } = applyRegistryWithTrust(
       "server-a",
       [{ pluginName: "fancy-greeter", version: "0.1.0", infoJson: panelManifestInfoJson }],
       trust,
     );
     const initial = { ...emptyPluginTier1Slice, pluginPanels };
-    const next = applyInteractionResponse(initial, "fancy-greeter", {
-      kind: "update-panel",
-      panel_id: "status",
-      rows: [{ label: "Active sessions", value: "3" }],
-    }, null);
+    const next = applyInteractionResponse(
+      initial,
+      "fancy-greeter",
+      {
+        kind: "update-panel",
+        panel_id: "status",
+        rows: [{ label: "Active sessions", value: "3" }],
+      },
+      null,
+    );
     const key = panelKey("fancy-greeter", "status");
     expect(next.pluginPanels.get(key)?.rows[0].value).toBe("3");
   });
 
   it("update-panel for unknown panel id is a no-op", () => {
-    const next = applyInteractionResponse(emptyPluginTier1Slice, "fancy-greeter", {
-      kind: "update-panel",
-      panel_id: "nope",
-      rows: [],
-    }, null);
+    const next = applyInteractionResponse(
+      emptyPluginTier1Slice,
+      "fancy-greeter",
+      {
+        kind: "update-panel",
+        panel_id: "nope",
+        rows: [],
+      },
+      null,
+    );
     expect(next.pluginPanels.size).toBe(0);
   });
 });

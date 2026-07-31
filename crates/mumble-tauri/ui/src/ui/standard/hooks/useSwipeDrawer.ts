@@ -58,8 +58,7 @@ export function useSwipeDrawer(
     let dragging = false;
 
     /** Resolve the drawer width in px (needed to convert dx to %). */
-    const getDrawerWidth = (): number =>
-      drawerRef?.current?.offsetWidth ?? 300;
+    const getDrawerWidth = (): number => drawerRef?.current?.offsetWidth ?? 300;
 
     /** Apply a raw translateX (px) to the drawer, bypassing CSS transition. */
     const setDrawerTranslate = (px: number) => {

@@ -51,7 +51,6 @@ const PRINT_STYLES = `
   .livedoc-print-border { position: fixed; inset: 0; border-style: solid; border-color: #333; pointer-events: none; }
 `;
 
-
 export function exportLiveDocToPdf(
   html: string,
   title: string,

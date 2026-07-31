@@ -37,9 +37,7 @@ describe("ReactionBar rendering", () => {
   });
 
   it("renders nothing when reactions are empty", () => {
-    const { container } = render(
-      <ReactionBar reactions={[]} onToggle={onToggle} onAdd={onAdd} />,
-    );
+    const { container } = render(<ReactionBar reactions={[]} onToggle={onToggle} onAdd={onAdd} />);
     expect(container.innerHTML).toBe("");
   });
 
@@ -56,7 +54,11 @@ describe("ReactionBar rendering", () => {
 
   it("shows the reaction count", () => {
     const reactions = [
-      makeSummary("\u{1F44D}", [["hash-alice", "Alice"], ["hash-bob", "Bob"], ["hash-charlie", "Charlie"]]),
+      makeSummary("\u{1F44D}", [
+        ["hash-alice", "Alice"],
+        ["hash-bob", "Bob"],
+        ["hash-charlie", "Charlie"],
+      ]),
     ];
     render(<ReactionBar reactions={reactions} onToggle={onToggle} onAdd={onAdd} />);
 
@@ -100,8 +102,23 @@ describe("ReactionBar rendering", () => {
 
   it("preserves insertion order (sorted by firstTimestamp from store)", () => {
     const reactions = [
-      makeSummary("\u{1F44D}", [["h1", "A"], ["h2", "B"], ["h3", "C"]], 100),
-      makeSummary("\u{2764}\u{FE0F}", [["h1", "A"], ["h2", "B"]], 200),
+      makeSummary(
+        "\u{1F44D}",
+        [
+          ["h1", "A"],
+          ["h2", "B"],
+          ["h3", "C"],
+        ],
+        100,
+      ),
+      makeSummary(
+        "\u{2764}\u{FE0F}",
+        [
+          ["h1", "A"],
+          ["h2", "B"],
+        ],
+        200,
+      ),
       makeSummary("\u{1F525}", [["h1", "A"]], 300),
     ];
     render(<ReactionBar reactions={reactions} onToggle={onToggle} onAdd={onAdd} />);
@@ -120,14 +137,7 @@ describe("ReactionBar rendering", () => {
       reactorHashNames: new Map([["abc123", "Me"]]),
       firstTimestamp: 0,
     };
-    render(
-      <ReactionBar
-        reactions={[summary]}
-        ownHash="abc123"
-        onToggle={onToggle}
-        onAdd={onAdd}
-      />,
-    );
+    render(<ReactionBar reactions={[summary]} ownHash="abc123" onToggle={onToggle} onAdd={onAdd} />);
     const btn = screen.getByLabelText("\u{1F44D} 1");
     expect(btn.className).toContain("Active");
   });
@@ -136,17 +146,20 @@ describe("ReactionBar rendering", () => {
     const summary: ReactionSummary = {
       emoji: "\u{1F44D}",
       reactorHashes: new Set(["hash1", "hash2", "hash3"]),
-      reactorHashNames: new Map([["hash1", "Alice"], ["hash2", "Bob"], ["hash3", "Charlie"]]),
+      reactorHashNames: new Map([
+        ["hash1", "Alice"],
+        ["hash2", "Bob"],
+        ["hash3", "Charlie"],
+      ]),
       firstTimestamp: 0,
     };
-    render(
-      <ReactionBar reactions={[summary]} onToggle={onToggle} onAdd={onAdd} />,
-    );
+    render(<ReactionBar reactions={[summary]} onToggle={onToggle} onAdd={onAdd} />);
     expect(screen.getByText("3")).toBeTruthy();
   });
 
   it("renders an img element (not text) for data URL custom emotes", () => {
-    const dataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const dataUrl =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
     const reactions = [makeSummary(dataUrl, [["hash-alice", "Alice"]])];
     const { container } = render(<ReactionBar reactions={reactions} onToggle={onToggle} onAdd={onAdd} />);
 

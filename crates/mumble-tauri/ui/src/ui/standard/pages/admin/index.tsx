@@ -3,8 +3,16 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
 import {
-  UsersGroupIcon, ShieldIcon, BlockIcon, LockIcon, EmojiPlusIcon,
-  PuzzleIcon, StoreIcon, DatabaseIcon, SlidersIcon, HistoryIcon,
+  UsersGroupIcon,
+  ShieldIcon,
+  BlockIcon,
+  LockIcon,
+  EmojiPlusIcon,
+  PuzzleIcon,
+  StoreIcon,
+  DatabaseIcon,
+  SlidersIcon,
+  HistoryIcon,
 } from "../../icons";
 import { useAppStore } from "@core/store";
 import { RegisteredUsersTab } from "./RegisteredUsersTab";
@@ -38,8 +46,16 @@ export function isAuditLogSupported(v: number | null | undefined): boolean {
 }
 
 type Tab =
-  | "users" | "roles" | "bans" | "acl" | "emotes" | "onboarding"
-  | "serverPlugins" | "marketplace" | "fileServer" | "serverSettings"
+  | "users"
+  | "roles"
+  | "bans"
+  | "acl"
+  | "emotes"
+  | "onboarding"
+  | "serverPlugins"
+  | "marketplace"
+  | "fileServer"
+  | "serverSettings"
   | "auditLog";
 
 export default function AdminPanel() {
@@ -49,10 +65,17 @@ export default function AdminPanel() {
   const initialTab = (() => {
     const t = searchParams.get("tab");
     if (
-      t === "users" || t === "roles" || t === "bans" || t === "acl" ||
-      t === "emotes" || t === "onboarding" ||
-      t === "serverPlugins" || t === "marketplace" || t === "fileServer" ||
-      t === "serverSettings" || t === "auditLog"
+      t === "users" ||
+      t === "roles" ||
+      t === "bans" ||
+      t === "acl" ||
+      t === "emotes" ||
+      t === "onboarding" ||
+      t === "serverPlugins" ||
+      t === "marketplace" ||
+      t === "fileServer" ||
+      t === "serverSettings" ||
+      t === "auditLog"
     ) {
       return t;
     }
@@ -90,29 +113,71 @@ export default function AdminPanel() {
   }, [tab, canManageFileServer, canAdminPlugins, canViewAudit]);
   const tabs: TabDef<Tab>[] = [
     { id: "users", label: t("adminTabs.users"), icon: <UsersGroupIcon width={16} height={16} /> },
-    { id: "roles", label: t("adminTabs.roles"), icon: <ShieldIcon     width={16} height={16} /> },
-    { id: "bans",  label: t("adminTabs.bans"),  icon: <BlockIcon      width={16} height={16} /> },
-    { id: "acl",   label: t("adminTabs.acl"),   icon: <LockIcon       width={16} height={16} /> },
+    { id: "roles", label: t("adminTabs.roles"), icon: <ShieldIcon width={16} height={16} /> },
+    { id: "bans", label: t("adminTabs.bans"), icon: <BlockIcon width={16} height={16} /> },
+    { id: "acl", label: t("adminTabs.acl"), icon: <LockIcon width={16} height={16} /> },
     ...(canManageEmotes
-      ? [{ id: "emotes" as const, label: t("adminTabs.emotes"), icon: <EmojiPlusIcon width={16} height={16} /> }]
+      ? [
+          {
+            id: "emotes" as const,
+            label: t("adminTabs.emotes"),
+            icon: <EmojiPlusIcon width={16} height={16} />,
+          },
+        ]
       : []),
     ...(onboardingSupported
-      ? [{ id: "onboarding" as const, label: t("adminTabs.onboarding"), icon: <UsersGroupIcon width={16} height={16} /> }]
+      ? [
+          {
+            id: "onboarding" as const,
+            label: t("adminTabs.onboarding"),
+            icon: <UsersGroupIcon width={16} height={16} />,
+          },
+        ]
       : []),
     ...(canAdminPlugins
-      ? [{ id: "serverPlugins" as const, label: t("adminTabs.serverPlugins"), icon: <PuzzleIcon width={16} height={16} /> }]
+      ? [
+          {
+            id: "serverPlugins" as const,
+            label: t("adminTabs.serverPlugins"),
+            icon: <PuzzleIcon width={16} height={16} />,
+          },
+        ]
       : []),
     ...(canAdminPlugins
-      ? [{ id: "marketplace" as const, label: t("adminTabs.marketplace"), icon: <StoreIcon width={16} height={16} /> }]
+      ? [
+          {
+            id: "marketplace" as const,
+            label: t("adminTabs.marketplace"),
+            icon: <StoreIcon width={16} height={16} />,
+          },
+        ]
       : []),
     ...(canManageFileServer
-      ? [{ id: "fileServer" as const, label: t("adminTabs.fileServer", { defaultValue: "File server" }), icon: <DatabaseIcon width={16} height={16} /> }]
+      ? [
+          {
+            id: "fileServer" as const,
+            label: t("adminTabs.fileServer", { defaultValue: "File server" }),
+            icon: <DatabaseIcon width={16} height={16} />,
+          },
+        ]
       : []),
     ...(canAdminPlugins
-      ? [{ id: "serverSettings" as const, label: t("adminTabs.serverSettings", { defaultValue: "Server settings" }), icon: <SlidersIcon width={16} height={16} /> }]
+      ? [
+          {
+            id: "serverSettings" as const,
+            label: t("adminTabs.serverSettings", { defaultValue: "Server settings" }),
+            icon: <SlidersIcon width={16} height={16} />,
+          },
+        ]
       : []),
     ...(canViewAudit
-      ? [{ id: "auditLog" as const, label: t("adminTabs.auditLog", { defaultValue: "Audit log" }), icon: <HistoryIcon width={16} height={16} /> }]
+      ? [
+          {
+            id: "auditLog" as const,
+            label: t("adminTabs.auditLog", { defaultValue: "Audit log" }),
+            icon: <HistoryIcon width={16} height={16} />,
+          },
+        ]
       : []),
   ];
 
@@ -127,9 +192,7 @@ export default function AdminPanel() {
     >
       <div
         className={`${styles.content}${
-          tab === "fileServer" || tab === "acl" || tab === "auditLog"
-            ? ` ${styles.contentWide}`
-            : ""
+          tab === "fileServer" || tab === "acl" || tab === "auditLog" ? ` ${styles.contentWide}` : ""
         }`}
       >
         {tab === "users" && <RegisteredUsersTab />}

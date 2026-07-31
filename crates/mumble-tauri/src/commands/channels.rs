@@ -158,6 +158,8 @@ pub(crate) async fn update_channel(
     hidden: Option<bool>,
     expiry_mode: Option<u32>,
     expiry_duration_secs: Option<u32>,
+    attributes: Option<Vec<i32>>,
+    attribute_mask: Option<Vec<i32>>,
 ) -> Result<(), String> {
     state
         .update_channel(
@@ -175,6 +177,8 @@ pub(crate) async fn update_channel(
             hidden,
             expiry_mode,
             expiry_duration_secs,
+            attributes.unwrap_or_default(),
+            attribute_mask.unwrap_or_default(),
         )
         .await
 }
@@ -210,6 +214,7 @@ pub(crate) async fn create_channel(
     expiry_mode: Option<u32>,
     expiry_duration_secs: Option<u32>,
     invitees: Option<Vec<u32>>,
+    attributes: Option<Vec<i32>>,
 ) -> Result<(), String> {
     state
         .create_channel(
@@ -227,6 +232,7 @@ pub(crate) async fn create_channel(
             expiry_mode,
             expiry_duration_secs,
             invitees.unwrap_or_default(),
+            attributes.unwrap_or_default(),
         )
         .await
 }

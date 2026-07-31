@@ -18,12 +18,7 @@
  * look, extend the variants here so every field moves together.
  */
 
-import {
-  forwardRef,
-  useId,
-  type ComponentPropsWithoutRef,
-  type ReactNode,
-} from "react";
+import { forwardRef, useId, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import styles from "./TextInput.module.css";
 
 /** Visual treatment. `outlined` is our default; `filled` drops the border. */

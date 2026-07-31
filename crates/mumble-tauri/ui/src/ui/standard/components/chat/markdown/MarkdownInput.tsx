@@ -115,14 +115,8 @@ function parseMarkdown(raw: string): Segment[] {
         const lang = raw.slice(i + 3, lineEnd);
         const closeIdx = raw.indexOf("\n```", lineEnd);
         // Accept both closed blocks and unclosed blocks (still being typed).
-        const body =
-          closeIdx !== -1
-            ? raw.slice(lineEnd + 1, closeIdx)
-            : raw.slice(lineEnd + 1);
-        const fullText =
-          closeIdx !== -1
-            ? raw.slice(i, closeIdx + 4)
-            : raw.slice(i);
+        const body = closeIdx !== -1 ? raw.slice(lineEnd + 1, closeIdx) : raw.slice(lineEnd + 1);
+        const fullText = closeIdx !== -1 ? raw.slice(i, closeIdx + 4) : raw.slice(i);
         pushCurrent();
         segments.push({ text: fullText, fenceCode: { lang, body } });
         i = closeIdx !== -1 ? closeIdx + 4 : raw.length;
@@ -204,11 +198,7 @@ function parseMarkdown(raw: string): Segment[] {
 }
 
 /** Push text into segments, splitting out URLs as `link` segments. */
-function pushWithUrls(
-  segments: Segment[],
-  text: string,
-  flags?: Partial<Segment>,
-): void {
+function pushWithUrls(segments: Segment[], text: string, flags?: Partial<Segment>): void {
   URL_RE.lastIndex = 0;
   let lastIdx = 0;
   let match: RegExpExecArray | null;
@@ -345,9 +335,7 @@ function renderFormattedOverlay(
       .filter((p) => p > segStart && p < segEnd)
       .map((p) => p - segStart);
 
-    const breaks = [...new Set([0, ...localSplits, seg.text.length])].sort(
-      (a, b) => a - b,
-    );
+    const breaks = [...new Set([0, ...localSplits, seg.text.length])].sort((a, b) => a - b);
 
     for (let bi = 0; bi < breaks.length - 1; bi++) {
       const from = breaks[bi];
@@ -363,8 +351,7 @@ function renderFormattedOverlay(
       }
 
       if (text) {
-        const inSelection =
-          hasSelection && globalFrom >= selFrom && globalTo <= selTo;
+        const inSelection = hasSelection && globalFrom >= selFrom && globalTo <= selTo;
         const hlCls = seg.hljsClass ?? "";
         const base = [cls, hlCls].filter(Boolean).join(" ");
         const combined = inSelection ? `${base} ${styles.selection}`.trim() : base;
@@ -399,15 +386,12 @@ export function markdownToHtml(raw: string): string {
   // any further markdown processing (in particular the trailing newline -> <br>
   // pass would otherwise corrupt them and break syntax highlighting).
   const fenceStash: string[] = [];
-  html = html.replace(
-    /```([a-zA-Z0-9_+-]*)\n([\s\S]*?)```/g,
-    (_match, lang: string, body: string) => {
-      const cls = lang ? ` class="language-${lang}"` : "";
-      const trimmed = body.replace(/\n$/, "");
-      fenceStash.push(`<pre><code${cls}>${trimmed}</code></pre>`);
-      return `\u0000FENCE${fenceStash.length - 1}\u0000`;
-    },
-  );
+  html = html.replace(/```([a-zA-Z0-9_+-]*)\n([\s\S]*?)```/g, (_match, lang: string, body: string) => {
+    const cls = lang ? ` class="language-${lang}"` : "";
+    const trimmed = body.replace(/\n$/, "");
+    fenceStash.push(`<pre><code${cls}>${trimmed}</code></pre>`);
+    return `\u0000FENCE${fenceStash.length - 1}\u0000`;
+  });
 
   // Stash inline code so $...$ inside backticks is not treated as math.
   const inlineCodeStash: string[] = [];
@@ -425,14 +409,10 @@ export function markdownToHtml(raw: string): string {
   });
 
   // Inline math $...$
-  html = html.replace(/\$([^$\n]+)\$/g, (_m, latex: string) =>
-    `<span class="math-inline">${latex}</span>`,
-  );
+  html = html.replace(/\$([^$\n]+)\$/g, (_m, latex: string) => `<span class="math-inline">${latex}</span>`);
 
   // Restore inline code placeholders now that math has been processed.
-  html = html.replace(/\u0000ICODE(\d+)\u0000/g, (_m, idx: string) =>
-    inlineCodeStash[Number(idx)] ?? "",
-  );
+  html = html.replace(/\u0000ICODE(\d+)\u0000/g, (_m, idx: string) => inlineCodeStash[Number(idx)] ?? "");
 
   // **bold**
   html = html.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
@@ -447,22 +427,17 @@ export function markdownToHtml(raw: string): string {
   // URLs -> clickable links (must run after entity escaping). Trailing
   // punctuation is stripped before the link is built so commas/parens
   // inside a URL are preserved while sentence punctuation isn't swallowed.
-  html = html.replace(
-    /(?:https?|ftp):\/\/[^\s<>"'`]+/g,
-    (raw) => {
-      const url = trimTrailingPunctuation(raw);
-      const trail = raw.slice(url.length);
-      const safe = url.replace(/"/g, "&quot;");
-      return `<a href="${safe}" target="_blank" rel="noopener noreferrer">${safe}</a>${trail}`;
-    },
-  );
+  html = html.replace(/(?:https?|ftp):\/\/[^\s<>"'`]+/g, (raw) => {
+    const url = trimTrailingPunctuation(raw);
+    const trail = raw.slice(url.length);
+    const safe = url.replace(/"/g, "&quot;");
+    return `<a href="${safe}" target="_blank" rel="noopener noreferrer">${safe}</a>${trail}`;
+  });
   // Newlines -> <br> (must come last so inline formatting is applied first)
   html = html.replaceAll("\n", "<br>");
 
   // Restore fenced code blocks after the <br> pass so their newlines survive.
-  html = html.replace(/\u0000FENCE(\d+)\u0000/g, (_m, idx: string) =>
-    fenceStash[Number(idx)] ?? "",
-  );
+  html = html.replace(/\u0000FENCE(\d+)\u0000/g, (_m, idx: string) => fenceStash[Number(idx)] ?? "");
   // Restore display math blocks (newlines already stripped, wrap in a span
   // so MediaPreview can find and render them with KaTeX).
   html = html.replace(/\u0000MATH_BLOCK(\d+)\u0000/g, (_m, idx: string) => {
@@ -478,30 +453,20 @@ export function htmlToMarkdown(html: string): string {
   text = text.replaceAll(/<br\s*\/?>/gi, "\n");
   text = text.replaceAll(
     /<pre><code(?:\s+class="language-([a-zA-Z0-9_+-]+)")?>([\s\S]*?)<\/code><\/pre>/gi,
-    (_match, lang: string | undefined, body: string) =>
-      `\`\`\`${lang ?? ""}\n${body}\n\`\`\``,
+    (_match, lang: string | undefined, body: string) => `\`\`\`${lang ?? ""}\n${body}\n\`\`\``,
   );
   text = text.replaceAll(/<a[^>]*>([^<]*)<\/a>/gi, "$1");
   text = text.replaceAll(/<code>([^<]*)<\/code>/gi, "`$1`");
   // Math spans (must come before the generic <span> strip)
-  text = text.replaceAll(
-    /<span\s+class="math-display"[^>]*>([\s\S]*?)<\/span>/gi,
-    "$$$$1$$",
-  );
-  text = text.replaceAll(
-    /<span\s+class="math-inline"[^>]*>([^<]*)<\/span>/gi,
-    "$$1$",
-  );
+  text = text.replaceAll(/<span\s+class="math-display"[^>]*>([\s\S]*?)<\/span>/gi, "$$$$1$$");
+  text = text.replaceAll(/<span\s+class="math-inline"[^>]*>([^<]*)<\/span>/gi, "$$1$");
   text = text.replaceAll(/<b>([^<]*)<\/b>/gi, "**$1**");
   text = text.replaceAll(/<strong>([^<]*)<\/strong>/gi, "**$1**");
   text = text.replaceAll(/<i>([^<]*)<\/i>/gi, "*$1*");
   text = text.replaceAll(/<em>([^<]*)<\/em>/gi, "*$1*");
   text = text.replaceAll(/<u>([^<]*)<\/u>/gi, "__$1__");
   text = text.replaceAll(/<s>([^<]*)<\/s>/gi, "~~$1~~");
-  text = text.replaceAll(
-    /<span\s+class="spoiler"[^>]*>([^<]*)<\/span>/gi,
-    "||$1||",
-  );
+  text = text.replaceAll(/<span\s+class="spoiler"[^>]*>([^<]*)<\/span>/gi, "||$1||");
   text = text.replaceAll(/<!--[\s\S]*?-->/g, "");
   text = text.replaceAll(/<[^>]*>/g, "");
   text = text.replaceAll("&lt;", "<");
@@ -649,8 +614,7 @@ export default function MarkdownInput({
       const start = el.selectionStart;
       const end = el.selectionEnd;
       const selected = value.slice(start, end);
-      const newVal =
-        value.slice(0, start) + before + selected + after + value.slice(end);
+      const newVal = value.slice(0, start) + before + selected + after + value.slice(end);
       onChange(newVal);
       // Restore cursor position after React re-render.
       requestAnimationFrame(() => {
@@ -720,18 +684,8 @@ export default function MarkdownInput({
     <div className={`${styles.wrapper} ${focused ? styles.focused : ""}`}>
       {/* Overlay: shows decorated text + custom caret + selection */}
       <div ref={overlayRef} className={styles.overlay} aria-hidden>
-        {value
-          ? renderFormattedOverlay(
-              segments,
-              selStart,
-              selEnd,
-              showCursor,
-              mentionResolver,
-            )
-          : null}
-        {showPlaceholder && (
-          <span className={styles.placeholder}>{placeholder}</span>
-        )}
+        {value ? renderFormattedOverlay(segments, selStart, selEnd, showCursor, mentionResolver) : null}
+        {showPlaceholder && <span className={styles.placeholder}>{placeholder}</span>}
       </div>
       {/* Actual editable textarea (fully invisible - input only) */}
       <textarea

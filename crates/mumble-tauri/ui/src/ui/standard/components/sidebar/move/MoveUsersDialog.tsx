@@ -14,7 +14,12 @@ interface MoveUsersDialogProps {
   onCancel: () => void;
 }
 
-export function MoveUsersDialog({ sourceChannel, channels, onConfirm, onCancel }: Readonly<MoveUsersDialogProps>) {
+export function MoveUsersDialog({
+  sourceChannel,
+  channels,
+  onConfirm,
+  onCancel,
+}: Readonly<MoveUsersDialogProps>) {
   const { t } = useTranslation(["sidebar", "common"]);
   const eligibleChannels = useMemo(
     () => channels.filter((c) => c.id !== sourceChannel.id),
@@ -26,9 +31,7 @@ export function MoveUsersDialog({ sourceChannel, channels, onConfirm, onCancel }
     [eligibleChannels],
   );
 
-  const [selected, setSelected] = useState<AutocompleteOption<number> | null>(
-    options[0] ?? null,
-  );
+  const [selected, setSelected] = useState<AutocompleteOption<number> | null>(options[0] ?? null);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -51,11 +54,15 @@ export function MoveUsersDialog({ sourceChannel, channels, onConfirm, onCancel }
           inputRef={inputRef}
         />
         <div className={styles.actions}>
-          <button className={styles.cancelBtn} onClick={onCancel}>{t("common:actions.cancel")}</button>
+          <button className={styles.cancelBtn} onClick={onCancel}>
+            {t("common:actions.cancel")}
+          </button>
           <button
             className={styles.confirmBtn}
             disabled={selected === null}
-            onClick={() => { if (selected) onConfirm(selected.value); }}
+            onClick={() => {
+              if (selected) onConfirm(selected.value);
+            }}
           >
             {t("moveUsersDialog.confirmBtn")}
           </button>
@@ -64,4 +71,3 @@ export function MoveUsersDialog({ sourceChannel, channels, onConfirm, onCancel }
     </Modal>
   );
 }
-

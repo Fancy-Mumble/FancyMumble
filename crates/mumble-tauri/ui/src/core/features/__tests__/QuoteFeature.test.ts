@@ -48,9 +48,7 @@ function buildMessageBody(
   pendingQuoteIds: string[],
   markdownToHtml: (s: string) => string,
 ): string {
-  const quoteMarkers = pendingQuoteIds
-    .map((id) => `<!-- FANCY_QUOTE:${id} -->`)
-    .join("");
+  const quoteMarkers = pendingQuoteIds.map((id) => `<!-- FANCY_QUOTE:${id} -->`).join("");
   const htmlBody = draftText.trim() ? markdownToHtml(draftText.trim()) : "";
   return quoteMarkers + htmlBody;
 }
@@ -74,8 +72,7 @@ describe("quote marker extraction", () => {
   });
 
   it("extracts multiple quote IDs", () => {
-    const body =
-      "<!-- FANCY_QUOTE:id-1 --><!-- FANCY_QUOTE:id-2 -->Some text";
+    const body = "<!-- FANCY_QUOTE:id-1 --><!-- FANCY_QUOTE:id-2 -->Some text";
     expect(extractQuoteIds(body)).toEqual(["id-1", "id-2"]);
   });
 
@@ -91,8 +88,7 @@ describe("quote marker extraction", () => {
   });
 
   it("does not confuse poll markers with quote markers", () => {
-    const body =
-      "<!-- FANCY_POLL:poll-1 --><!-- FANCY_QUOTE:quote-1 -->";
+    const body = "<!-- FANCY_POLL:poll-1 --><!-- FANCY_QUOTE:quote-1 -->";
     expect(extractQuoteIds(body)).toEqual(["quote-1"]);
   });
 });
@@ -106,8 +102,7 @@ describe("quote marker stripping", () => {
   });
 
   it("strips multiple quote markers", () => {
-    const body =
-      "<!-- FANCY_QUOTE:id-1 --><!-- FANCY_QUOTE:id-2 -->Some <b>text</b>";
+    const body = "<!-- FANCY_QUOTE:id-1 --><!-- FANCY_QUOTE:id-2 -->Some <b>text</b>";
     expect(stripQuoteMarkers(body)).toBe("Some <b>text</b>");
   });
 
@@ -117,8 +112,7 @@ describe("quote marker stripping", () => {
   });
 
   it("preserves poll markers when stripping quotes", () => {
-    const body =
-      "<!-- FANCY_QUOTE:q-1 --><!-- FANCY_POLL:p-1 -->";
+    const body = "<!-- FANCY_QUOTE:q-1 --><!-- FANCY_POLL:p-1 -->";
     expect(stripQuoteMarkers(body)).toBe("<!-- FANCY_POLL:p-1 -->");
   });
 });
@@ -131,9 +125,7 @@ describe("previewText", () => {
   });
 
   it("strips HTML comment markers", () => {
-    expect(
-      previewText("<!-- FANCY_QUOTE:x -->Some text"),
-    ).toBe("Some text");
+    expect(previewText("<!-- FANCY_QUOTE:x -->Some text")).toBe("Some text");
   });
 
   it("truncates long text with ellipsis", () => {
@@ -176,9 +168,7 @@ describe("buildMessageBody", () => {
 
   it("prepends multiple quote markers", () => {
     const body = buildMessageBody("Hello", ["q-1", "q-2"], identity);
-    expect(body).toBe(
-      "<!-- FANCY_QUOTE:q-1 --><!-- FANCY_QUOTE:q-2 -->Hello",
-    );
+    expect(body).toBe("<!-- FANCY_QUOTE:q-1 --><!-- FANCY_QUOTE:q-2 -->Hello");
   });
 
   it("returns only quote markers when draft is empty", () => {

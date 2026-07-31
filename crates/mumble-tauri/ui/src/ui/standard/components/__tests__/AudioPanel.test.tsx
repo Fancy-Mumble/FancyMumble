@@ -13,14 +13,16 @@ import type { AudioSettings } from "@core/types";
 // -- Tauri mocks (must be declared before importing components) ----
 
 const invokeMock = vi.fn<(cmd: string, args?: unknown) => Promise<unknown>>();
-const listenMock = vi.fn<(event: string, handler: (event: { payload: unknown }) => void) => Promise<() => void>>();
+const listenMock =
+  vi.fn<(event: string, handler: (event: { payload: unknown }) => void) => Promise<() => void>>();
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(args[0] as string, args[1]),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: (...args: unknown[]) => listenMock(args[0] as string, args[1] as (event: { payload: unknown }) => void),
+  listen: (...args: unknown[]) =>
+    listenMock(args[0] as string, args[1] as (event: { payload: unknown }) => void),
 }));
 
 vi.mock("@tauri-apps/plugin-global-shortcut", () => ({
@@ -105,23 +107,17 @@ describe("Activation Mode selector", () => {
 
   it("selects Voice Activation when noise_suppression=true and push_to_talk=false", () => {
     renderPanel({ noise_suppression: true, push_to_talk: false });
-    expect(
-      (screen.getByLabelText("Voice Activation") as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByLabelText("Voice Activation") as HTMLInputElement).checked).toBe(true);
   });
 
   it("selects Continuous when noise_suppression=false and push_to_talk=false", () => {
     renderPanel({ noise_suppression: false, push_to_talk: false });
-    expect(
-      (screen.getByLabelText("Continuous") as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByLabelText("Continuous") as HTMLInputElement).checked).toBe(true);
   });
 
   it("selects Push to Talk when push_to_talk=true", () => {
     renderPanel({ push_to_talk: true });
-    expect(
-      (screen.getByLabelText("Push to Talk") as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByLabelText("Push to Talk") as HTMLInputElement).checked).toBe(true);
   });
 
   it("switches to Continuous mode", () => {
@@ -329,9 +325,7 @@ describe("Calibrate", () => {
 
   it("does not start if invoke throws", async () => {
     invokeMock.mockImplementation((cmd) =>
-      cmd === "start_mic_test"
-        ? Promise.reject(new Error("no mic"))
-        : Promise.resolve(undefined),
+      cmd === "start_mic_test" ? Promise.reject(new Error("no mic")) : Promise.resolve(undefined),
     );
     renderPanel({ auto_input_sensitivity: true });
     await act(async () => {

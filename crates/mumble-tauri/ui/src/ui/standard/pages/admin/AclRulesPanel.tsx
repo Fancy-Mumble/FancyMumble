@@ -90,8 +90,16 @@ function AclRuleCard({
             className={styles.removeSmallBtn}
             role="button"
             tabIndex={0}
-            onClick={(e) => { e.stopPropagation(); onRemove(index); }}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onRemove(index); } }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(index);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.stopPropagation();
+                onRemove(index);
+              }
+            }}
           >
             &times;
           </span>
@@ -102,11 +110,21 @@ function AclRuleCard({
         <div className={styles.aclCardBody}>
           <div className={styles.aclRuleOptions}>
             <label className={styles.checkboxLabel}>
-              <input type="checkbox" checked={entry.apply_here} disabled={entry.inherited} onChange={(e) => onPatch(index, { apply_here: e.target.checked })} />
+              <input
+                type="checkbox"
+                checked={entry.apply_here}
+                disabled={entry.inherited}
+                onChange={(e) => onPatch(index, { apply_here: e.target.checked })}
+              />
               {t("aclRules.applyHere")}
             </label>
             <label className={styles.checkboxLabel}>
-              <input type="checkbox" checked={entry.apply_subs} disabled={entry.inherited} onChange={(e) => onPatch(index, { apply_subs: e.target.checked })} />
+              <input
+                type="checkbox"
+                checked={entry.apply_subs}
+                disabled={entry.inherited}
+                onChange={(e) => onPatch(index, { apply_subs: e.target.checked })}
+              />
               {t("aclRules.applySubChannels")}
             </label>
           </div>

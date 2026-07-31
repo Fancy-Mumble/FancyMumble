@@ -4,8 +4,22 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { load } from "@core/utils/store";
-import type { AudioDevice, AudioSettings, FancyProfile, UserMode, TimeFormat, DateFormat, NumberFormat, WelcomeMessageDisplay } from "@core/types";
-import { getPreferences, updatePreferences, getSavedAudioSettings, saveAudioSettings } from "@core/preferencesStorage";
+import type {
+  AudioDevice,
+  AudioSettings,
+  FancyProfile,
+  UserMode,
+  TimeFormat,
+  DateFormat,
+  NumberFormat,
+  WelcomeMessageDisplay,
+} from "@core/types";
+import {
+  getPreferences,
+  updatePreferences,
+  getSavedAudioSettings,
+  saveAudioSettings,
+} from "@core/preferencesStorage";
 import { serializeProfile, dataUrlToBytes } from "@core/profileFormat";
 import { setKlipyApiKey } from "@core/features/chat/gif/klipyConfig";
 import { useAppStore } from "@core/store";
@@ -16,7 +30,11 @@ import {
   saveShortcuts,
   applyChangedShortcut,
 } from "@core/features/settings/shortcutHelpers";
-import { loadProfileData, saveProfileData, migrateProfilesToIdentities } from "@core/features/settings/profileData";
+import {
+  loadProfileData,
+  saveProfileData,
+  migrateProfilesToIdentities,
+} from "@core/features/settings/profileData";
 import { ProfilePanel } from "./ProfilePanel";
 import { AudioPanel } from "./AudioPanel";
 import { ShortcutsPanel } from "./ShortcutsPanel";
@@ -29,11 +47,24 @@ import { NotificationsPanel, DEFAULT_NOTIFICATION_SOUNDS } from "./Notifications
 import { SettingsSearch } from "./SettingsSearch";
 import { getNotificationSounds, saveNotificationSounds } from "@core/preferencesStorage";
 import { ProfilePreviewCard } from "./ProfilePreviewCard";
-import { loadPersonalization, savePersonalization, type PersonalizationData } from "../../personalizationStorage";
+import {
+  loadPersonalization,
+  savePersonalization,
+  type PersonalizationData,
+} from "../../personalizationStorage";
 import { TabbedPage, type TabDef } from "../../components/elements/TabbedPage";
 import {
-  UserIcon, MicIcon, KeyboardIcon, KeyIcon, BellIcon, LockIcon,
-  PaletteIcon, GlobeIcon, PuzzleIcon, SlidersIcon, UsersGroupIcon,
+  UserIcon,
+  MicIcon,
+  KeyboardIcon,
+  KeyIcon,
+  BellIcon,
+  LockIcon,
+  PaletteIcon,
+  GlobeIcon,
+  PuzzleIcon,
+  SlidersIcon,
+  UsersGroupIcon,
   ShieldIcon,
 } from "../../icons";
 import { AccountPanel } from "./AccountPanel";
@@ -46,7 +77,19 @@ import styles from "./SettingsPage.module.css";
 
 // -- Types & constants ----------------------------------------------
 
-type Tab = "profile" | "account" | "voice" | "shortcuts" | "identities" | "advanced" | "personalize" | "localization" | "notifications" | "privacy" | "channels-roles" | "plugins";
+type Tab =
+  | "profile"
+  | "account"
+  | "voice"
+  | "shortcuts"
+  | "identities"
+  | "advanced"
+  | "personalize"
+  | "localization"
+  | "notifications"
+  | "privacy"
+  | "channels-roles"
+  | "plugins";
 
 const DEFAULT_AUDIO: AudioSettings = {
   selected_device: null,
@@ -90,19 +133,55 @@ const TAB_ICON_SIZE = 16;
 
 function buildTabs(t: (key: string) => string, hasPlugins: boolean): TabDef<Tab>[] {
   const tabs: TabDef<Tab>[] = [
-    { id: "profile",        label: t("tabs.profile"),        icon: <UserIcon     width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
-    { id: "voice",          label: t("tabs.voice"),          icon: <MicIcon      width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
-    { id: "shortcuts",      label: t("tabs.shortcuts"),      icon: <KeyboardIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
-    { id: "identities",     label: t("tabs.identities"),     icon: <KeyIcon      width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
-    { id: "notifications",  label: t("tabs.notifications"),  icon: <BellIcon     width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
-    { id: "privacy",        label: t("tabs.privacy"),        icon: <LockIcon     width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
-    { id: "personalize",    label: t("tabs.personalize"),    icon: <PaletteIcon  width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
-    { id: "localization",   label: t("tabs.localization"),   icon: <GlobeIcon    width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    {
+      id: "profile",
+      label: t("tabs.profile"),
+      icon: <UserIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} />,
+    },
+    { id: "voice", label: t("tabs.voice"), icon: <MicIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+    {
+      id: "shortcuts",
+      label: t("tabs.shortcuts"),
+      icon: <KeyboardIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} />,
+    },
+    {
+      id: "identities",
+      label: t("tabs.identities"),
+      icon: <KeyIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} />,
+    },
+    {
+      id: "notifications",
+      label: t("tabs.notifications"),
+      icon: <BellIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} />,
+    },
+    {
+      id: "privacy",
+      label: t("tabs.privacy"),
+      icon: <LockIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} />,
+    },
+    {
+      id: "personalize",
+      label: t("tabs.personalize"),
+      icon: <PaletteIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} />,
+    },
+    {
+      id: "localization",
+      label: t("tabs.localization"),
+      icon: <GlobeIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} />,
+    },
   ];
   if (hasPlugins) {
-    tabs.push({ id: "plugins", label: t("tabs.plugins"), icon: <PuzzleIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> });
+    tabs.push({
+      id: "plugins",
+      label: t("tabs.plugins"),
+      icon: <PuzzleIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} />,
+    });
   }
-  tabs.push({ id: "advanced", label: t("tabs.advanced"), icon: <SlidersIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> });
+  tabs.push({
+    id: "advanced",
+    label: t("tabs.advanced"),
+    icon: <SlidersIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} />,
+  });
   return tabs;
 }
 
@@ -164,21 +243,26 @@ export default function SettingsPage() {
     return own?.user_id ?? null;
   });
   const showAccountTab =
-    isConnected
-    && ownUserId != null
-    && ownUserId > 0
-    && isAccountSettingsSupported(serverFancyVersion);
+    isConnected && ownUserId != null && ownUserId > 0 && isAccountSettingsSupported(serverFancyVersion);
   const WITH_ACCOUNT: TabDef<Tab>[] = showAccountTab
     ? [
         BASE_TABS[0],
-        { id: "account", label: t("tabs.account"), icon: <ShieldIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+        {
+          id: "account",
+          label: t("tabs.account"),
+          icon: <ShieldIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} />,
+        },
         ...BASE_TABS.slice(1),
       ]
     : BASE_TABS;
   const TABS: TabDef<Tab>[] = onboardingSupported
     ? [
         ...WITH_ACCOUNT.slice(0, WITH_ACCOUNT.length - 1),
-        { id: "channels-roles", label: t("tabs.channelsRoles"), icon: <UsersGroupIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} /> },
+        {
+          id: "channels-roles",
+          label: t("tabs.channelsRoles"),
+          icon: <UsersGroupIcon width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} />,
+        },
         WITH_ACCOUNT[WITH_ACCOUNT.length - 1],
       ]
     : WITH_ACCOUNT;
@@ -194,8 +278,7 @@ export default function SettingsPage() {
   // Audio
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [outputDevices, setOutputDevices] = useState<AudioDevice[]>([]);
-  const [audioSettings, setAudioSettings] =
-    useState<AudioSettings>(DEFAULT_AUDIO);
+  const [audioSettings, setAudioSettings] = useState<AudioSettings>(DEFAULT_AUDIO);
   const initialLoadDone = useRef(false);
 
   // Preferences
@@ -435,11 +518,14 @@ export default function SettingsPage() {
     if (!initialLoadDone.current) return;
     const timer = setTimeout(async () => {
       try {
-        await saveProfileData({
-          profile,
-          bio,
-          avatarDataUrl,
-        }, activeIdentity);
+        await saveProfileData(
+          {
+            profile,
+            bio,
+            avatarDataUrl,
+          },
+          activeIdentity,
+        );
       } catch (e) {
         console.error("Auto-save profile error:", e);
       }
@@ -501,22 +587,17 @@ export default function SettingsPage() {
     await updatePreferences({ klipyApiKey: key });
   }, []);
 
-  const handleChangeShortcut = useCallback(
-    async (key: keyof ShortcutBindings, value: string) => {
-      setShortcuts((prev) => {
-        const updated = { ...prev, [key]: value };
-        (async () => {
-          await applyChangedShortcut(key, prev[key], value);
-          await saveShortcuts(updated);
-          globalThis.dispatchEvent(
-            new CustomEvent("shortcuts-changed", { detail: updated }),
-          );
-        })();
-        return updated;
-      });
-    },
-    [],
-  );
+  const handleChangeShortcut = useCallback(async (key: keyof ShortcutBindings, value: string) => {
+    setShortcuts((prev) => {
+      const updated = { ...prev, [key]: value };
+      (async () => {
+        await applyChangedShortcut(key, prev[key], value);
+        await saveShortcuts(updated);
+        globalThis.dispatchEvent(new CustomEvent("shortcuts-changed", { detail: updated }));
+      })();
+      return updated;
+    });
+  }, []);
 
   const handleTimeFormatChange = useCallback(async (fmt: TimeFormat) => {
     setTimeFormat(fmt);
@@ -557,12 +638,9 @@ export default function SettingsPage() {
     void updatePreferences({ welcomeMessageDisplay: value });
   }, []);
 
-  const handleNotificationSoundsChange = useCallback(
-    (patch: Partial<typeof notificationSounds>) => {
-      setNotificationSounds((prev) => ({ ...prev, ...patch }));
-    },
-    [],
-  );
+  const handleNotificationSoundsChange = useCallback((patch: Partial<typeof notificationSounds>) => {
+    setNotificationSounds((prev) => ({ ...prev, ...patch }));
+  }, []);
 
   const handleToggleDualPath = useCallback(async () => {
     setEnableDualPath((prev) => {
@@ -806,140 +884,140 @@ export default function SettingsPage() {
         {loadError && <p className={styles.error}>{loadError}</p>}
 
         {tab === "profile" && (
-            <ProfilePanel
-              defaultUsername={defaultUsername}
-              setDefaultUsername={setDefaultUsername}
-              profile={profile}
-              onPatchProfile={patchProfile}
-              bio={bio}
-              onBioChange={setBio}
-              avatar={avatarDataUrl}
-              onAvatarChange={setAvatarDataUrl}
-              profileError={profileError}
-              isExpert={userMode !== "normal"}
-              activeIdentity={activeIdentity}
-              identities={identities}
-              connectedCertLabel={connectedCertLabel}
-              onSwitchIdentity={switchIdentity}
-              onGoToIdentities={() => setTab("identities")}
-            />
-          )}
+          <ProfilePanel
+            defaultUsername={defaultUsername}
+            setDefaultUsername={setDefaultUsername}
+            profile={profile}
+            onPatchProfile={patchProfile}
+            bio={bio}
+            onBioChange={setBio}
+            avatar={avatarDataUrl}
+            onAvatarChange={setAvatarDataUrl}
+            profileError={profileError}
+            isExpert={userMode !== "normal"}
+            activeIdentity={activeIdentity}
+            identities={identities}
+            connectedCertLabel={connectedCertLabel}
+            onSwitchIdentity={switchIdentity}
+            onGoToIdentities={() => setTab("identities")}
+          />
+        )}
 
-          {tab === "account" && <AccountPanel />}
+        {tab === "account" && <AccountPanel />}
 
-          {tab === "voice" && (
-            <AudioPanel
-              devices={devices}
-              outputDevices={outputDevices}
-              settings={audioSettings}
-              onChange={patchAudio}
-              isExpert={userMode !== "normal"}
-              useRodioBackend={useRodioBackend}
-              onToggleAudioBackend={handleToggleAudioBackend}
-            />
-          )}
+        {tab === "voice" && (
+          <AudioPanel
+            devices={devices}
+            outputDevices={outputDevices}
+            settings={audioSettings}
+            onChange={patchAudio}
+            isExpert={userMode !== "normal"}
+            useRodioBackend={useRodioBackend}
+            onToggleAudioBackend={handleToggleAudioBackend}
+          />
+        )}
 
-          {tab === "shortcuts" && (
-            <ShortcutsPanel
-              shortcuts={shortcuts}
-              onChangeShortcut={handleChangeShortcut}
-              isExpert={userMode !== "normal"}
-            />
-          )}
+        {tab === "shortcuts" && (
+          <ShortcutsPanel
+            shortcuts={shortcuts}
+            onChangeShortcut={handleChangeShortcut}
+            isExpert={userMode !== "normal"}
+          />
+        )}
 
-          {tab === "identities" && (
-            <IdentitiesPanel
-              identities={identities}
-              connectedCertLabel={connectedCertLabel}
-              onRefresh={refreshIdentities}
-              onEditProfile={handleEditIdentityProfile}
-              isExpert={userMode !== "normal"}
-            />
-          )}
+        {tab === "identities" && (
+          <IdentitiesPanel
+            identities={identities}
+            connectedCertLabel={connectedCertLabel}
+            onRefresh={refreshIdentities}
+            onEditProfile={handleEditIdentityProfile}
+            isExpert={userMode !== "normal"}
+          />
+        )}
 
-          {tab === "personalize" && (
-            <PersonalizationPanel
-              data={personalization}
-              onChange={(patch) => setPersonalization((prev) => ({ ...prev, ...patch }))}
-              isExpert={userMode !== "normal"}
-            />
-          )}
+        {tab === "personalize" && (
+          <PersonalizationPanel
+            data={personalization}
+            onChange={(patch) => setPersonalization((prev) => ({ ...prev, ...patch }))}
+            isExpert={userMode !== "normal"}
+          />
+        )}
 
-          {tab === "localization" && (
-            <LocalizationPanel
-              timeFormat={timeFormat}
-              convertToLocalTime={convertToLocalTime}
-              dateFormat={dateFormat}
-              numberFormat={numberFormat}
-              onTimeFormatChange={handleTimeFormatChange}
-              onConvertToLocalTimeChange={handleConvertToLocalTimeChange}
-              onDateFormatChange={handleDateFormatChange}
-              onNumberFormatChange={handleNumberFormatChange}
-            />
-          )}
+        {tab === "localization" && (
+          <LocalizationPanel
+            timeFormat={timeFormat}
+            convertToLocalTime={convertToLocalTime}
+            dateFormat={dateFormat}
+            numberFormat={numberFormat}
+            onTimeFormatChange={handleTimeFormatChange}
+            onConvertToLocalTimeChange={handleConvertToLocalTimeChange}
+            onDateFormatChange={handleDateFormatChange}
+            onNumberFormatChange={handleNumberFormatChange}
+          />
+        )}
 
-          {tab === "notifications" && (
-            <NotificationsPanel
-              settings={notificationSounds}
-              onChange={handleNotificationSoundsChange}
-              enableNativeNotifications={enableNotifications}
-              onToggleNativeNotifications={handleToggleNotifications}
-              welcomeMessageDisplay={welcomeMessageDisplay}
-              onWelcomeMessageDisplayChange={handleWelcomeMessageDisplayChange}
-              isExpert={userMode !== "normal"}
-            />
-          )}
+        {tab === "notifications" && (
+          <NotificationsPanel
+            settings={notificationSounds}
+            onChange={handleNotificationSoundsChange}
+            enableNativeNotifications={enableNotifications}
+            onToggleNativeNotifications={handleToggleNotifications}
+            welcomeMessageDisplay={welcomeMessageDisplay}
+            onWelcomeMessageDisplayChange={handleWelcomeMessageDisplayChange}
+            isExpert={userMode !== "normal"}
+          />
+        )}
 
-          {tab === "privacy" && (
-            <PrivacyPanel
-              enableDualPath={enableDualPath}
-              disableReadReceipts={disableReadReceipts}
-              disableTypingIndicators={disableTypingIndicators}
-              disableOsmMaps={disableOsmMaps}
-              disableLinkPreviews={disableLinkPreviews}
-              enableExternalEmbeds={enableExternalEmbeds}
-              streamerMode={streamerMode}
-              onToggleDualPath={handleToggleDualPath}
-              onToggleReadReceipts={handleToggleReadReceipts}
-              onToggleTypingIndicators={handleToggleTypingIndicators}
-              onToggleOsmMaps={handleToggleOsmMaps}
-              onToggleLinkPreviews={handleToggleLinkPreviews}
-              onToggleExternalEmbeds={handleToggleExternalEmbeds}
-              onToggleStreamerMode={handleToggleStreamerMode}
-            />
-          )}
+        {tab === "privacy" && (
+          <PrivacyPanel
+            enableDualPath={enableDualPath}
+            disableReadReceipts={disableReadReceipts}
+            disableTypingIndicators={disableTypingIndicators}
+            disableOsmMaps={disableOsmMaps}
+            disableLinkPreviews={disableLinkPreviews}
+            enableExternalEmbeds={enableExternalEmbeds}
+            streamerMode={streamerMode}
+            onToggleDualPath={handleToggleDualPath}
+            onToggleReadReceipts={handleToggleReadReceipts}
+            onToggleTypingIndicators={handleToggleTypingIndicators}
+            onToggleOsmMaps={handleToggleOsmMaps}
+            onToggleLinkPreviews={handleToggleLinkPreviews}
+            onToggleExternalEmbeds={handleToggleExternalEmbeds}
+            onToggleStreamerMode={handleToggleStreamerMode}
+          />
+        )}
 
-          {tab === "channels-roles" && <ChannelsAndRolesPanel />}
+        {tab === "channels-roles" && <ChannelsAndRolesPanel />}
 
-          {tab === "plugins" && <PluginsPanel />}
+        {tab === "plugins" && <PluginsPanel />}
 
-          {tab === "advanced" && (
-            <AdvancedPanel
-              userMode={userMode}
-              klipyApiKey={klipyApiKey}
-              logLevel={logLevel}
-              logToFile={logToFile}
-              terminalLogging={terminalLogging}
-              autoZipLogs={autoZipLogs}
-              autoReconnect={autoReconnect}
-              autoUpdateOnStartup={autoUpdateOnStartup}
-              persistDms={persistDms}
-              showDisconnectWarning={showDisconnectWarning}
-              onToggleMode={handleToggleMode}
-              onKlipyApiKeyChange={handleKlipyApiKeyChange}
-              onLogLevelChange={handleLogLevelChange}
-              onToggleLogToFile={handleToggleLogToFile}
-              onToggleTerminalLogging={handleToggleTerminalLogging}
-              onToggleAutoZipLogs={handleToggleAutoZipLogs}
-              onToggleAutoReconnect={handleToggleAutoReconnect}
-              onToggleAutoUpdate={handleToggleAutoUpdate}
-              onTogglePersistDms={handleTogglePersistDms}
-              onToggleDisconnectWarning={handleToggleDisconnectWarning}
-              onToggleDeveloperMode={handleToggleDeveloperMode}
-              onReset={handleReset}
-            />
-          )}
-        </main>
+        {tab === "advanced" && (
+          <AdvancedPanel
+            userMode={userMode}
+            klipyApiKey={klipyApiKey}
+            logLevel={logLevel}
+            logToFile={logToFile}
+            terminalLogging={terminalLogging}
+            autoZipLogs={autoZipLogs}
+            autoReconnect={autoReconnect}
+            autoUpdateOnStartup={autoUpdateOnStartup}
+            persistDms={persistDms}
+            showDisconnectWarning={showDisconnectWarning}
+            onToggleMode={handleToggleMode}
+            onKlipyApiKeyChange={handleKlipyApiKeyChange}
+            onLogLevelChange={handleLogLevelChange}
+            onToggleLogToFile={handleToggleLogToFile}
+            onToggleTerminalLogging={handleToggleTerminalLogging}
+            onToggleAutoZipLogs={handleToggleAutoZipLogs}
+            onToggleAutoReconnect={handleToggleAutoReconnect}
+            onToggleAutoUpdate={handleToggleAutoUpdate}
+            onTogglePersistDms={handleTogglePersistDms}
+            onToggleDisconnectWarning={handleToggleDisconnectWarning}
+            onToggleDeveloperMode={handleToggleDeveloperMode}
+            onReset={handleReset}
+          />
+        )}
+      </main>
 
       {/* Profile preview (sticky right column) */}
       {tab === "profile" && (

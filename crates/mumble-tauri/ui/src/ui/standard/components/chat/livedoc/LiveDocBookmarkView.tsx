@@ -92,9 +92,7 @@ export default function LiveDocBookmarkView({ node, updateAttributes }: Readonly
       }}
     >
       <PinIcon width={11} height={11} aria-hidden="true" />
-      <span className={styles.bookmarkLabel}>
-        {label || t("liveDoc.references.bookmarkUnnamed")}
-      </span>
+      <span className={styles.bookmarkLabel}>{label || t("liveDoc.references.bookmarkUnnamed")}</span>
     </NodeViewWrapper>
   );
 }

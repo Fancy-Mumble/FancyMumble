@@ -33,10 +33,7 @@ const SIGNAL_SDP_ANSWER = 3;
 const SIGNAL_ICE_CANDIDATE = 4;
 
 const RTC_CONFIG: RTCConfiguration = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-  ],
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }],
 };
 
 interface StreamPayload {
@@ -80,13 +77,13 @@ function applyAnswer(pc: RTCPeerConnection, sdp: string, queue: RTCIceCandidateI
     .catch((e) => console.error("[stream-popout] setRemoteDescription failed", e));
 }
 
-function applyIceCandidate(
-  pc: RTCPeerConnection,
-  data: string,
-  queue: RTCIceCandidateInit[],
-) {
+function applyIceCandidate(pc: RTCPeerConnection, data: string, queue: RTCIceCandidateInit[]) {
   let cand: RTCIceCandidateInit | null = null;
-  try { cand = JSON.parse(data) as RTCIceCandidateInit; } catch { return; }
+  try {
+    cand = JSON.parse(data) as RTCIceCandidateInit;
+  } catch {
+    return;
+  }
   if (!cand) return;
   if (pc.remoteDescription) {
     pc.addIceCandidate(cand).catch((e) => console.error("[stream-popout] addIceCandidate", e));
@@ -156,9 +153,15 @@ export default function StreamPopoutPage() {
     startedRef.current = true;
     (async () => {
       const id = popoutIdFromLabel();
-      if (!id) { setError(t("pages.streamPopout.missingId")); return; }
+      if (!id) {
+        setError(t("pages.streamPopout.missingId"));
+        return;
+      }
       const p = await invoke<StreamPayload | null>("take_popout_stream", { id });
-      if (!p) { setError(t("pages.streamPopout.contextUnavailable")); return; }
+      if (!p) {
+        setError(t("pages.streamPopout.contextUnavailable"));
+        return;
+      }
       setPayload(p);
       pcRef.current = await setupViewerPeer(p, setStream, setError, t("pages.streamPopout.connectionLost"));
     })().catch((e) => setError(String(e)));
@@ -184,8 +187,14 @@ export default function StreamPopoutPage() {
       } else if (signal_type === SIGNAL_ICE_CANDIDATE) {
         applyIceCandidate(pc, data, pendingIceRef.current);
       }
-    }).then((u) => { unlisten = u; }).catch(() => {});
-    return () => { unlisten?.(); };
+    })
+      .then((u) => {
+        unlisten = u;
+      })
+      .catch(() => {});
+    return () => {
+      unlisten?.();
+    };
   }, [payload]);
 
   // Bind stream to the video element.
@@ -194,7 +203,9 @@ export default function StreamPopoutPage() {
     if (!v) return;
     v.srcObject = stream;
     if (stream) v.play().catch(() => {});
-    return () => { v.srcObject = null; };
+    return () => {
+      v.srcObject = null;
+    };
   }, [stream]);
 
   // Announce popout state to other windows so the main window can hide
@@ -207,8 +218,9 @@ export default function StreamPopoutPage() {
   // in JS, which previously prevented the window from closing at all.
   useEffect(() => {
     if (!payload) return;
-    emit("stream-popout-state", { session: payload.broadcaster_session, opened: true })
-      .catch((e) => console.error("[stream-popout] announce failed", e));
+    emit("stream-popout-state", { session: payload.broadcaster_session, opened: true }).catch((e) =>
+      console.error("[stream-popout] announce failed", e),
+    );
   }, [payload]);
 
   // Auto-close when the broadcaster stops sharing.  The main window
@@ -220,9 +232,17 @@ export default function StreamPopoutPage() {
     let unlisten: (() => void) | undefined;
     listen<{ session: number }>("screen-share-stopped", (event) => {
       if (event.payload.session !== target) return;
-      getCurrentWindow().close().catch((e) => console.error("[stream-popout] self close failed", e));
-    }).then((u) => { unlisten = u; }).catch(() => {});
-    return () => { unlisten?.(); };
+      getCurrentWindow()
+        .close()
+        .catch((e) => console.error("[stream-popout] self close failed", e));
+    })
+      .then((u) => {
+        unlisten = u;
+      })
+      .catch(() => {});
+    return () => {
+      unlisten?.();
+    };
   }, [payload]);
 
   return (
@@ -232,21 +252,29 @@ export default function StreamPopoutPage() {
       mediaLabel={t("pages.streamPopout.mediaLabel")}
       aspectStorageKey="popout-stream.aspectLocked"
       error={error}
-      placeholder={stream ? null : (
-        <div className={styles.error} style={{ color: "rgba(255,255,255,0.7)" }}>
-          {t("pages.streamPopout.connecting")}
-        </div>
-      )}
-      infoBar={payload ? {
-        name: payload.broadcaster_name ?? t("pages.streamPopout.screenshare"),
-        avatar: payload.broadcaster_avatar,
-        caption: t("pages.streamPopout.caption"),
-      } : null}
-      extraMenuItems={[{
-        label: t("chat:screenShare.stats.toggle"),
-        checked: statsOn,
-        onClick: () => setStatsOn((v) => !v),
-      }]}
+      placeholder={
+        stream ? null : (
+          <div className={styles.error} style={{ color: "rgba(255,255,255,0.7)" }}>
+            {t("pages.streamPopout.connecting")}
+          </div>
+        )
+      }
+      infoBar={
+        payload
+          ? {
+              name: payload.broadcaster_name ?? t("pages.streamPopout.screenshare"),
+              avatar: payload.broadcaster_avatar,
+              caption: t("pages.streamPopout.caption"),
+            }
+          : null
+      }
+      extraMenuItems={[
+        {
+          label: t("chat:screenShare.stats.toggle"),
+          checked: statsOn,
+          onClick: () => setStatsOn((v) => !v),
+        },
+      ]}
     >
       <video
         ref={videoRef}

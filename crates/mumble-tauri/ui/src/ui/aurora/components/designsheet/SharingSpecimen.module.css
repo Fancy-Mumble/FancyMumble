@@ -1,0 +1,116 @@
+/* Design sheet: chatSharing. Split from AuroraApp.module.css. */
+
+.fileCard {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  border-color: rgb(255 255 255 / 8%);
+  background: rgb(255 255 255 / 3%);
+  box-shadow: none;
+  backdrop-filter: blur(20px) saturate(105%);
+}
+
+.fileCard > span {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 42px;
+  color: #ff9d94;
+  border-radius: 7px;
+  background: rgb(255 120 106 / 10%);
+}
+
+.fileCard > div {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.fileCard strong {
+  font-size: var(--type-label);
+}
+
+.fileCard small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: var(--type-caption);
+}
+
+.fileCard button {
+  color: var(--muted);
+  border: 0;
+  background: transparent;
+}
+
+.uploadZone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 10px;
+  padding: 24px;
+  color: #727a88;
+  border: 1px dashed #3e4552;
+  border-radius: 11px;
+}
+
+.uploadZone svg {
+  width: 22px;
+}
+
+.uploadZone strong {
+  margin-top: 8px;
+  color: #adb3be;
+  font-size: 9px;
+}
+
+.uploadZone small {
+  margin-top: 4px;
+  font-size: 8px;
+}
+
+.poll {
+  display: grid;
+  gap: 8px;
+}
+
+.poll > small {
+  color: var(--iris);
+  font-size: 8px;
+}
+
+.poll > strong {
+  margin-bottom: 5px;
+  font-size: 12px;
+}
+
+.poll button {
+  position: relative;
+  min-height: 38px;
+  overflow: hidden;
+  padding: 0 10px;
+  color: #bbc0c9;
+  font-size: 9px;
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  border-color: rgb(255 255 255 / 8%);
+  background: rgb(255 255 255 / 3%);
+}
+
+.poll button span {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+}
+
+.poll button i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  opacity: .12;
+  background: var(--iris);
+}

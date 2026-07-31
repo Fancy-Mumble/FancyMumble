@@ -108,9 +108,7 @@ describe("computeVisibleChannels", () => {
 
   it("ignores selections that reference unknown answer ids", () => {
     const cfg = makeConfig();
-    const resp = makeResponse([
-      { question_id: "q1", answer_ids: ["nope"] },
-    ]);
+    const resp = makeResponse([{ question_id: "q1", answer_ids: ["nope"] }]);
     const visible = [...computeVisibleChannels(cfg, resp)].sort((a, b) => a - b);
     expect(visible).toEqual([0, 1]);
   });

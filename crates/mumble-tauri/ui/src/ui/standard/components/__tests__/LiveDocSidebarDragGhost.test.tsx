@@ -21,13 +21,7 @@ const SECTIONS: LiveDocFolder[] = [
 ];
 
 function renderTree() {
-  return render(
-    <LiveDocSidebarTree
-      sections={SECTIONS}
-      currentSlug=""
-      onOpenDoc={() => {}}
-    />,
-  );
+  return render(<LiveDocSidebarTree sections={SECTIONS} currentSlug="" onOpenDoc={() => {}} />);
 }
 
 describe("LiveDocSidebarTree drag ghost", () => {

@@ -52,10 +52,7 @@ export const EndnoteRef = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return [
-      "sup",
-      mergeAttributes(HTMLAttributes, { "data-livedoc-endnote": "" }),
-    ];
+    return ["sup", mergeAttributes(HTMLAttributes, { "data-livedoc-endnote": "" })];
   },
 
   addNodeView() {

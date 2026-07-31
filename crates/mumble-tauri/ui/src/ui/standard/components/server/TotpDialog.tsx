@@ -49,9 +49,7 @@ export default function TotpDialog({
 
   if (!open) return null;
 
-  const target = username && serverHost
-    ? `${username} on ${serverHost}`
-    : serverHost ?? "this server";
+  const target = username && serverHost ? `${username} on ${serverHost}` : (serverHost ?? "this server");
 
   return (
     <Modal
@@ -100,11 +98,7 @@ export default function TotpDialog({
           </div>
 
           <div className={styles.actions}>
-            <button
-              className={styles.cancelBtn}
-              type="button"
-              onClick={onCancel}
-            >
+            <button className={styles.cancelBtn} type="button" onClick={onCancel}>
               {t("common:actions.cancel")}
             </button>
             <button

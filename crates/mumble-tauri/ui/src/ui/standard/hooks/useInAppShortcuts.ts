@@ -15,10 +15,7 @@ export interface InAppShortcutHandlers {
   onToggleDevOverlay?: () => void;
 }
 
-function shortcutMatchesEvent(
-  shortcut: string,
-  e: KeyboardEvent,
-): boolean {
+function shortcutMatchesEvent(shortcut: string, e: KeyboardEvent): boolean {
   if (!shortcut) return false;
   const parts = shortcut.split("+");
   const modifiers = new Set(parts.slice(0, -1));
@@ -41,10 +38,7 @@ function shortcutMatchesEvent(
  *  handles that naturally).  Global (OS-level) shortcuts are registered
  *  separately via tauri-plugin-global-shortcut in shortcutHelpers.ts.
  */
-export function useInAppShortcuts(
-  shortcuts: ShortcutBindings,
-  handlers: InAppShortcutHandlers,
-): void {
+export function useInAppShortcuts(shortcuts: ShortcutBindings, handlers: InAppShortcutHandlers): void {
   const {
     onToggleActivationMode,
     onMoveChannelUp,
