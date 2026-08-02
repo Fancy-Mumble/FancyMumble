@@ -15,27 +15,28 @@ use crate::proto::mumble_tcp;
 use crate::state::ServerState;
 use crate::transport::codec;
 
-/// Minimum server fancy version that supports native Fancy message types.
-///
-/// Servers at or above this version receive extension messages directly.
-/// Servers below this version (or without `fancy_version` at all) require
-/// the [`LegacyCodec`] `PluginData` wrapper.
-///
-/// 0.2.12 = `(0 << 48) | (2 << 32) | (12 << 16)`.
-pub const FANCY_NATIVE_MIN_VERSION: u64 =
-    fancy_utils::version::fancy_version_encode(0, 2, 12);
-
 /// The Fancy wire epoch this client can speak natively.
 ///
-/// Epoch 0 is the interleaved 100–999 layout every shipped Fancy build uses,
-/// and it is what [`NativeCodec`] encodes. See `Version.fancy_protocol` in
-/// `Mumble.proto` for what an epoch is and why it is not the product version.
-pub const FANCY_PROTOCOL_EPOCH: u32 = 0;
+/// Epoch 1 is one outer type per service with the message nested in that
+/// service's envelope, and it is what [`NativeCodec`] encodes. See
+/// `Version.fancy_protocol` in `Mumble.proto` for what an epoch is and why it
+/// is not the product version.
+///
+/// Epoch 0 — the interleaved 100–999 layout — is not spoken any more. A server
+/// still on it is handled as a plain Mumble server by [`speaks_epoch`], which
+/// needs no compatibility code: it is the same branch a vanilla server takes.
+pub const FANCY_PROTOCOL_EPOCH: u32 = 1;
+
+/// The epoch a peer that does not announce one is speaking.
+///
+/// Every server built before the field existed speaks the only numbering that
+/// existed when it was built. This is deliberately a literal and not
+/// [`FANCY_PROTOCOL_EPOCH`]: silence means *epoch 0*, not "whatever we happen
+/// to speak", and tying the two together would make a vanilla Mumble server
+/// look like a peer the moment we changed epochs.
+const EPOCH_WHEN_UNANNOUNCED: u32 = 0;
 
 /// Whether this client speaks the epoch a server announced.
-///
-/// An absent field means epoch 0: every server that predates the field speaks
-/// the only numbering that existed when it was built.
 ///
 /// The point of asking is what happens when the answer is *no*. Before this
 /// existed the client decided purely on `fancy_version`, so a server that had
@@ -46,7 +47,7 @@ pub const FANCY_PROTOCOL_EPOCH: u32 = 0;
 /// plain Mumble client instead, which always works.
 #[must_use]
 pub fn speaks_epoch(server_fancy_protocol: Option<u32>) -> bool {
-    server_fancy_protocol.unwrap_or(FANCY_PROTOCOL_EPOCH) == FANCY_PROTOCOL_EPOCH
+    server_fancy_protocol.unwrap_or(EPOCH_WHEN_UNANNOUNCED) == FANCY_PROTOCOL_EPOCH
 }
 
 /// Prefix for `PluginDataTransmission.data_id` identifying a wrapped
@@ -58,11 +59,11 @@ const WRAPPED_DATA_ID_PREFIX: &str = "fancy-native:";
 /// Codec for encoding/decoding Fancy Mumble extension messages.
 ///
 /// Two implementations exist:
-/// - [`NativeCodec`]: version-aware codec for Fancy servers (>= 0.2.12).
-///   Messages the server is too old for are automatically wrapped in
-///   `PluginData` when their [`FallbackPolicy`] allows it.
-/// - [`LegacyCodec`]: wraps *all* extension types in `PluginData` for
-///   legacy (non-Fancy) Mumble servers.
+/// - [`NativeCodec`]: for a peer on our wire epoch, which speaks every Fancy
+///   message there is.
+/// - [`LegacyCodec`]: for everything else, which means vanilla Mumble. Relays
+///   what a [`FallbackPolicy`] says can be relayed through `PluginData` and
+///   refuses the rest.
 pub trait FancyCodec: Send + Sync + Debug {
     /// Encode an outbound [`ControlMessage`] for the wire.
     ///
@@ -78,13 +79,17 @@ pub trait FancyCodec: Send + Sync + Debug {
 
 /// Select the appropriate codec for a server.
 ///
-/// Two questions, in order, and the epoch comes first: a version only means
-/// anything once both sides agree on what the numbers on the wire *are*. A
-/// server speaking an epoch this client does not know is handled as a plain
-/// Mumble server no matter how new its `fancy_version` is — [`LegacyCodec`]
-/// still relays everything relayable through `PluginDataTransmission`, which
-/// is epoch-independent, so the basics keep working and nothing is sent to a
-/// type the peer cannot route.
+/// The epoch is the whole question. A peer that speaks our epoch is a Fancy
+/// peer and speaks all of it — epoch 1 ships both ends together, so there is
+/// no per-message version to negotiate. Anything else, from vanilla Mumble to
+/// a Fancy server still on epoch 0, is handled as a plain Mumble server:
+/// [`LegacyCodec`] relays everything relayable through
+/// `PluginDataTransmission`, which is epoch-independent, so the basics keep
+/// working and nothing is sent to a type the peer cannot route.
+///
+/// `server_fancy_version` is no longer consulted here. It remains a product
+/// version the UI uses to decide which features to *offer*; it is not what
+/// decides how bytes are framed.
 pub fn select_codec(
     server_fancy_version: Option<u64>,
     server_fancy_protocol: Option<u32>,
@@ -103,68 +108,27 @@ pub fn select_codec(
         );
         return Box::new(LegacyCodec);
     }
-    match server_fancy_version {
-        Some(v) if v >= FANCY_NATIVE_MIN_VERSION => {
-            Box::new(NativeCodec { server_version: v })
-        }
-        _ => Box::new(LegacyCodec),
-    }
+    Box::new(NativeCodec)
 }
 
 // ---- NativeCodec ---------------------------------------------------
 
-/// Version-aware codec for Fancy Mumble servers (>= 0.2.12).
+/// Codec for a Fancy Mumble server that speaks our wire epoch.
 ///
-/// Messages that the connected server natively understands are sent
-/// as-is.  Messages added in a *newer* server version than the one we
-/// are connected to are either wrapped in `PluginData` (when the
-/// message's [`FallbackPolicy`] is [`FallbackPolicy::PluginData`]) or
-/// dropped with a warning.
+/// Everything goes out natively — the framing into service envelopes is the
+/// wire codec's job ([`crate::transport::codec::encode`]), and a peer on this
+/// epoch understands every message we can send, so there is nothing to gate
+/// and nothing to drop.
 ///
-/// The decode path always attempts to unwrap `fancy-native:*`
-/// `PluginData` envelopes so that fallback messages from peers are
-/// handled correctly.
+/// The decode path still unwraps `fancy-native:*` `PluginData` envelopes, so a
+/// message relayed by a *peer* through a vanilla server is handled even while
+/// we are talking to a Fancy one.
 #[derive(Debug)]
-pub struct NativeCodec {
-    server_version: u64,
-}
+pub struct NativeCodec;
 
 impl FancyCodec for NativeCodec {
-    fn encode(&self, msg: ControlMessage, state: &ServerState) -> Option<ControlMessage> {
-        if !msg.is_fancy_extension() {
-            return Some(msg);
-        }
-
-        let support = message_support(&msg);
-        debug!(
-            type_id = msg.type_id(),
-            server_version = self.server_version,
-            min_version = support.map(|s| s.min_version),
-            version_ok = support.map(|s| self.server_version >= s.min_version),
-            fallback = ?support.map(|s| s.fallback),
-            "NativeCodec: encode decision"
-        );
-        match support {
-            Some(s) if self.server_version >= s.min_version => {
-                debug!(type_id = msg.type_id(), "NativeCodec: sending natively");
-                Some(msg)
-            }
-            Some(MessageSupport { fallback: FallbackPolicy::PluginData, .. }) => {
-                debug!(
-                    type_id = msg.type_id(),
-                    "NativeCodec: server too old, falling back to PluginData"
-                );
-                LegacyCodec.encode(msg, state)
-            }
-            Some(_) => {
-                debug!(
-                    type_id = msg.type_id(),
-                    "NativeCodec: server too old, no fallback, dropping"
-                );
-                None
-            }
-            None => Some(msg),
-        }
+    fn encode(&self, msg: ControlMessage, _state: &ServerState) -> Option<ControlMessage> {
+        Some(msg)
     }
 
     fn decode(&self, msg: ControlMessage) -> ControlMessage {
@@ -196,6 +160,19 @@ impl FancyCodec for LegacyCodec {
     fn encode(&self, msg: ControlMessage, state: &ServerState) -> Option<ControlMessage> {
         if !msg.is_fancy_extension() {
             return Some(msg);
+        }
+
+        // A server-processed message has nowhere to go on a server that will
+        // not process it. This is the same set `extract_receiver_sessions`
+        // would return no receivers for; asking the policy says so outright
+        // rather than inferring it from an empty list.
+        if let Some(MessageSupport { fallback: FallbackPolicy::ServerOnly }) = message_support(&msg)
+        {
+            debug!(
+                type_id = msg.type_id(),
+                "server-processed message on a non-Fancy server; dropping"
+            );
+            return None;
         }
 
         let receiver_sessions = extract_receiver_sessions(&msg, state);
@@ -381,15 +358,17 @@ mod tests {
     // ---- select_codec ------------------------------------------------
 
     #[test]
-    fn select_codec_native_for_new_server() {
-        let codec = select_codec(Some(FANCY_NATIVE_MIN_VERSION), None);
+    fn select_codec_native_for_a_peer_on_our_epoch() {
+        let codec = select_codec(None, Some(FANCY_PROTOCOL_EPOCH));
         assert!(format!("{codec:?}").contains("NativeCodec"));
     }
 
     #[test]
-    fn select_codec_legacy_for_old_server() {
-        let old_version = fancy_utils::version::fancy_version_encode(0, 2, 11);
-        let codec = select_codec(Some(old_version), None);
+    fn a_version_alone_no_longer_buys_native_encoding() {
+        // A Fancy server that never announces an epoch is on epoch 0, whatever
+        // its product version says, and epoch 0 is not spoken any more.
+        let new_version = fancy_utils::version::fancy_version_encode(9, 9, 9);
+        let codec = select_codec(Some(new_version), None);
         assert!(format!("{codec:?}").contains("LegacyCodec"));
     }
 
@@ -401,9 +380,11 @@ mod tests {
 
     #[test]
     fn an_absent_epoch_is_the_one_that_existed_when_the_server_was_built() {
-        // Every server predating the field speaks epoch 0, so its silence is an
-        // answer rather than a reason to disable anything.
-        assert!(speaks_epoch(None));
+        // Silence means epoch 0 — the only numbering that existed before the
+        // field did. It must not be read as "whatever we currently speak", or
+        // a vanilla Mumble server would look like a peer the moment we moved
+        // epochs, and we would send it natives it cannot route.
+        assert!(!speaks_epoch(None));
         assert!(speaks_epoch(Some(FANCY_PROTOCOL_EPOCH)));
     }
 
@@ -423,12 +404,18 @@ mod tests {
     }
 
     #[test]
-    fn the_epoch_decides_before_the_version_does() {
-        // Ordering matters: a version high enough for natives must not override
-        // an epoch mismatch, because the version says which features exist and
-        // the epoch says whether we agree on what the numbers mean.
-        let codec = select_codec(Some(FANCY_NATIVE_MIN_VERSION), Some(1));
-        assert!(format!("{codec:?}").contains("LegacyCodec"));
+    fn the_epoch_decides_and_the_version_does_not() {
+        // The version says which features exist; the epoch says whether we
+        // agree on what the numbers mean. Only the second one can decide how
+        // to frame bytes, so a stale epoch loses however new the server is...
+        let newer = fancy_utils::version::fancy_version_encode(9, 9, 9);
+        let stale_epoch = select_codec(Some(newer), Some(FANCY_PROTOCOL_EPOCH - 1));
+        assert!(format!("{stale_epoch:?}").contains("LegacyCodec"));
+
+        // ...and a matching epoch wins with no version announced at all, which
+        // is exactly what an epoch-1 server sends.
+        let no_version = select_codec(None, Some(FANCY_PROTOCOL_EPOCH));
+        assert!(format!("{no_version:?}").contains("NativeCodec"));
     }
 
     // ---- NativeCodec -------------------------------------------------
@@ -440,7 +427,7 @@ mod tests {
 
     #[test]
     fn native_codec_passthrough_standard_message() {
-        let codec = NativeCodec { server_version: V_0_2_12 };
+        let codec = NativeCodec;
         let state = ServerState::new();
         let ping = ControlMessage::Ping(mumble_tcp::Ping {
             timestamp: Some(42),
@@ -452,7 +439,7 @@ mod tests {
 
     #[test]
     fn native_codec_passthrough_fancy_message_when_server_supports_it() {
-        let codec = NativeCodec { server_version: V_0_2_12 };
+        let codec = NativeCodec;
         let state = ServerState::new();
         let signal = ControlMessage::WebRtcSignal(mumble_tcp::WebRtcSignal {
             target_session: Some(5),
@@ -465,48 +452,31 @@ mod tests {
     }
 
     #[test]
-    fn native_codec_falls_back_to_plugin_data_when_server_too_old() {
-        let codec = NativeCodec { server_version: V_0_2_14 };
+    fn native_codec_sends_every_fancy_message_as_is() {
+        // A peer on our epoch speaks all of it, so nothing is wrapped and
+        // nothing is dropped — including the server-processed messages the
+        // legacy path has to refuse (`legacy_codec_drops_server_only_fancy_message`).
+        let codec = NativeCodec;
         let state = state_with_users();
-        let msg = ControlMessage::FancyTypingIndicator(mumble_tcp::FancyTypingIndicator {
+
+        let relayable = ControlMessage::FancyTypingIndicator(mumble_tcp::FancyTypingIndicator {
             channel_id: Some(0),
             actor: None,
         });
-
-        let encoded = codec.encode(msg, &state).unwrap();
-        let ControlMessage::PluginDataTransmission(pd) = &encoded else {
-            panic!("expected PluginDataTransmission, got {encoded:?}");
-        };
-        assert_eq!(pd.data_id.as_deref(), Some("fancy-native:131"));
-        assert_eq!(pd.receiver_sessions, vec![2]);
-    }
-
-    #[test]
-    fn native_codec_passthrough_typing_indicator_when_server_new_enough() {
-        let codec = NativeCodec { server_version: V_0_2_18 };
-        let state = state_with_users();
-        let msg = ControlMessage::FancyTypingIndicator(mumble_tcp::FancyTypingIndicator {
-            channel_id: Some(0),
-            actor: None,
-        });
-        let encoded = codec.encode(msg, &state).unwrap();
+        let encoded = codec.encode(relayable, &state).unwrap();
         assert!(matches!(encoded, ControlMessage::FancyTypingIndicator(_)));
-    }
 
-    #[test]
-    fn native_codec_drops_server_only_message_when_unsupported() {
-        let codec = NativeCodec { server_version: V_0_2_14 };
-        let state = state_with_users();
-        let msg = ControlMessage::PchatPin(mumble_tcp::PchatPin {
+        let server_processed = ControlMessage::PchatPin(mumble_tcp::PchatPin {
             channel_id: Some(0),
             ..Default::default()
         });
-        assert!(codec.encode(msg, &state).is_none());
+        let encoded = codec.encode(server_processed, &state).unwrap();
+        assert!(matches!(encoded, ControlMessage::PchatPin(_)));
     }
 
     #[test]
     fn native_codec_decode_passthrough() {
-        let codec = NativeCodec { server_version: V_0_2_12 };
+        let codec = NativeCodec;
         let msg = ControlMessage::Ping(mumble_tcp::Ping {
             timestamp: Some(99),
             ..Default::default()
@@ -517,7 +487,7 @@ mod tests {
 
     #[test]
     fn native_codec_decode_unwraps_and_patches_sender() {
-        let codec = NativeCodec { server_version: V_0_2_14 };
+        let codec = NativeCodec;
 
         // actor is None in the inner payload (client never sets it).
         let original = mumble_tcp::FancyTypingIndicator {
@@ -750,8 +720,8 @@ mod tests {
     // ---- NativeCodec fallback round-trip -----------------------------
 
     #[test]
-    fn native_codec_roundtrip_typing_indicator_via_fallback() {
-        let codec = NativeCodec { server_version: V_0_2_14 };
+    fn legacy_codec_roundtrip_typing_indicator_via_plugin_data() {
+        let codec = LegacyCodec;
         let state = state_with_users();
 
         let original = ControlMessage::FancyTypingIndicator(
@@ -805,10 +775,10 @@ mod tests {
     // ---- FancyWatchSync codec coverage ------------------------------
 
     #[test]
-    fn native_codec_roundtrip_watch_sync_via_fallback() {
+    fn legacy_codec_roundtrip_watch_sync_via_plugin_data() {
         use mumble_tcp::fancy_watch_sync::{Event, Start};
 
-        let codec = NativeCodec { server_version: V_0_2_14 };
+        let codec = LegacyCodec;
         let state = state_with_users();
 
         let original = ControlMessage::FancyWatchSync(mumble_tcp::FancyWatchSync {
@@ -842,7 +812,7 @@ mod tests {
 
     #[test]
     fn native_codec_passthrough_watch_sync_when_server_new_enough() {
-        let codec = NativeCodec { server_version: V_0_2_20 };
+        let codec = NativeCodec;
         let state = state_with_users();
         let msg = ControlMessage::FancyWatchSync(mumble_tcp::FancyWatchSync {
             session_id: Some("sess-pass".into()),

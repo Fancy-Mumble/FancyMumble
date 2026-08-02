@@ -40,11 +40,14 @@ message Version {
     // the Fancy extensions are off and the connection degrades to plain Mumble
     // — plus anything relayable through PluginDataTransmission, which works
     // through any Mumble server and is therefore epoch-independent.
-    // 100, not the next free number: Fancy fields start at 100 so upstream can
-    // keep growing into 1-99 (see the same note in Starling's copy). And it
+    // 1000, not the next free number: Fancy fields start at 1000 so upstream can
+    // keep growing into 1-999 (see the same note in Starling's copy). And it
     // must be *this* number in every copy of this file — it is read before any
-    // epoch is known, so the two sides cannot negotiate where to find it.
-    optional uint32 fancy_protocol = 100;
+    // epoch is known, so the two sides cannot negotiate where to find it. That
+    // is also why moving it off 100 is a hard break rather than a soft one: a
+    // peer built before this change looks at 100, finds nothing, and correctly
+    // concludes it is talking to a plain Mumble server.
+    optional uint32 fancy_protocol = 1000;
 
 	// Client release name.
 	optional string release = 2;
@@ -76,7 +79,7 @@ message Authenticate {
 	// Client extension (FancyMumble): time-based one-time password (RFC 6238)
 	// for accounts with two-factor authentication enabled. The server rejects
 	// with RejectType TOTPRequired / TOTPInvalid when missing or wrong.
-	optional string totp_code = 100;
+	optional string totp_code = 1000;
 }
 
 // Sent by the client to notify the server that the client is still alive.
@@ -231,42 +234,42 @@ message ChannelState {
 	optional bool can_enter = 13 [deprecated = true];
 
 	// Fancy Mumble persistent chat extension.
-	// Field IDs start at 100 to avoid clashing with future upstream
+	// Field IDs start at 1000 to avoid clashing with future upstream
 	// Mumble protocol additions. Legacy clients silently ignore
 	// unknown fields (standard protobuf behaviour).
 	// Protocol and persistence mode for this channel.
 	// Uses the top-level PchatProtocol enum.
-	optional PchatProtocol pchat_protocol = 100;
+	optional PchatProtocol pchat_protocol = 1000;
 	// Maximum number of messages to store (0 = unlimited).
-	optional uint32 pchat_max_history = 101;
+	optional uint32 pchat_max_history = 1001;
 	// Auto-delete messages after this many days (0 = forever).
-	optional uint32 pchat_retention_days = 102;
+	optional uint32 pchat_retention_days = 1002;
 	// Cert hashes of users designated as key custodians for this channel.
 	// Key custodians can countersign epoch transitions and are trusted
 	// authorities for key distribution. Set by channel operators.
-	repeated string pchat_key_custodians = 103;
+	repeated string pchat_key_custodians = 1003;
 	// Channel access password.  Empty string means "remove the password".
 	// When set, the server creates (or updates) an ACL group named
 	// `~pwd_<channel_id>` that grants Enter permission, and denies Enter
 	// to @all.  Clients joining a password-protected channel must include
 	// the password in UserState.temporary_access_tokens.
-	optional string channel_info_password = 104;
+	optional string channel_info_password = 1004;
 
 	// Hidden-channel extension. When true, only users with the SeeChannel
 	// permission are told the channel exists (and see the users inside it).
-	optional bool hidden = 105;
+	optional bool hidden = 1005;
 
 	// Channel expiry extension. expiry_mode: 0 = none, 1 = absolute (removed at
 	// created_at + duration), 2 = sliding (removed after `duration` seconds of
 	// inactivity). On expiry the channel is deleted and occupants move to parent.
-	optional uint32 expiry_mode = 106;
-	optional uint32 expiry_duration_secs = 107;
+	optional uint32 expiry_mode = 1006;
+	optional uint32 expiry_duration_secs = 1007;
 	// Server-computed absolute deadline (unix seconds), for client countdown UI.
-	optional uint64 expires_at = 108;
+	optional uint64 expires_at = 1008;
 	// Meeting-room convenience (input-only, on create): registered user_ids to
 	// invite. The server grants each SeeChannel|Enter|Traverse and denies those to
 	// @all, making the new channel a private room only invitees can see and join.
-	repeated uint32 invitee_user_ids = 109;
+	repeated uint32 invitee_user_ids = 1009;
 
 	// Fancy extension: the set of attributes describing this channel from the
 	// receiving user's perspective (see ChannelAttribute). Supersedes `can_enter`
@@ -279,7 +282,7 @@ message ChannelState {
 	//     ignored as input, always recomputed per recipient;
 	//   - create-only (DETACHED): honoured on create, ignored on edit;
 	//   - settable (STRUCTURAL): honoured on create and edit, requires Write.
-	repeated ChannelAttribute attributes = 110;
+	repeated ChannelAttribute attributes = 1010;
 	// Fancy extension: generic write-mask for `attributes`, so a client can
 	// assign attributes without a dedicated field per trait.
 	//
@@ -292,7 +295,7 @@ message ChannelState {
 	//
 	// Omitting the mask keeps the original create-time behaviour: `attributes`
 	// is read additively and nothing is cleared.
-	repeated ChannelAttribute attribute_mask = 111;
+	repeated ChannelAttribute attribute_mask = 1011;
 }
 
 // Used to communicate user leaving or being kicked. May be sent by the client
@@ -384,7 +387,7 @@ message UserState {
 		// Client supports E2EE persistent chat (pchat).
 		FEATURE_PCHAT_E2EE = 0;
 	}
-	repeated ClientFeature client_features = 100;
+	repeated ClientFeature client_features = 1000;
 }
 
 // Relays information on the bans. The client may send the BanList message to
@@ -429,15 +432,15 @@ message TextMessage {
 	// The UTF-8 encoded message. May be HTML if the server allows.
 	required string message = 5;
 	// unique identifier for this message
-	optional string message_id = 100;
+	optional string message_id = 1000;
 	// message timestamp
-	optional uint64 timestamp = 101;
+	optional uint64 timestamp = 1001;
 	// When set, this message is an edit replacing the message with this ID.
-	optional string edit_id = 102;
+	optional string edit_id = 1002;
 	// When set, pin or unpin the message with this ID in the channel.
-	optional string pin_target = 103;
+	optional string pin_target = 1003;
 	// When true combined with pin_target, unpin instead of pin.
-	optional bool unpin = 104;
+	optional bool unpin = 1004;
 }
 
 message PermissionDenied {
@@ -509,13 +512,13 @@ message ACL {
 		// Users inherited, identified by user_id.
 		repeated uint32 inherited_members = 7;
 		// FancyMumble: optional CSS color string for role chip (e.g. "#5865F2").
-		optional string color = 100;
+		optional string color = 1000;
 		// FancyMumble: optional raw icon image bytes (PNG/JPEG) for the role.
-		optional bytes icon = 101;
+		optional bytes icon = 1001;
 		// FancyMumble: optional named visual style preset id.
-		optional string style_preset = 102;
+		optional string style_preset = 1002;
 		// FancyMumble: arbitrary key-value metadata for client-side extensions.
-		repeated KeyValue metadata = 103;
+		repeated KeyValue metadata = 1003;
 	}
 	message ChanACL {
 		// True if this ACL applies to the current channel.
@@ -616,13 +619,13 @@ message UserList {
 		optional string last_seen = 3;
 		optional uint32 last_channel = 4;
 		// Registered user avatar (PNG/JPEG bytes).
-		optional bytes texture = 100;
+		optional bytes texture = 1000;
 		// SHA-1 hash of the comment when len >= 128; empty otherwise.
 		// If set without comment, the client must request the full text
 		// via RequestBlob.user_id_comment.
-		optional bytes comment_hash = 101;
+		optional bytes comment_hash = 1001;
 		// Full comment text when len < 128, or in blob responses.
-		optional string comment = 102;
+		optional string comment = 1002;
 	}
 	// A list of registered users.
 	repeated User users = 1;
@@ -760,7 +763,7 @@ message RequestBlob {
 	// channel_ids of the requested ChannelState descriptions.
 	repeated uint32 channel_description = 3;
 	// registered user_ids whose comment should be fetched (offline support).
-	repeated uint32 user_id_comment = 100;
+	repeated uint32 user_id_comment = 1000;
 }
 
 // Sent by the server when it informs the clients on server configuration
@@ -782,7 +785,7 @@ message ServerConfig {
 	optional bool recording_allowed = 7;
 	// True when the server has a WebRTC SFU module loaded and can
 	// relay screen-share streams server-side.
-	optional bool webrtc_sfu_available = 100;
+	optional bool webrtc_sfu_available = 1000;
 	// Optional public base URL of the Fancy Mumble REST API (file
 	// server, custom emotes, capabilities, ...). Set this when the
 	// server's HTTP interface is exposed under a different hostname
@@ -790,7 +793,7 @@ message ServerConfig {
 	// or Kubernetes ingress. Clients should prefer this URL over any
 	// per-plugin `base_url` when contacting the REST API. Empty /
 	// unset means "no override; use whatever the plugin advertises".
-	optional string fancy_rest_api_url = 101;
+	optional string fancy_rest_api_url = 1001;
 }
 
 // Sent by the server to inform the clients of suggested client configuration
@@ -2219,4 +2222,150 @@ message FancyAuditConfig {
 // Wire type ID = 171.
 message FancyAuditConfigUpdate {
   repeated Setting settings = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Fancy wire epoch 1: one outer type per service, nested envelope.
+//
+// Each service owns exactly one outer type at 1000+, and its payload is the
+// envelope below. The arms are the same messages epoch 0 sent as top-level
+// types 100-171, unchanged: crossing the epoch reframes traffic, it does not
+// redesign a single feature, and all three implementations keep sharing these
+// definitions.
+//
+// Adding a message to a service is a new arm here and nothing else - no shared
+// type enum to edit, no number to allocate outside the service that owns it.
+// The cost is that a capture shows `type 1014` rather than a name; the inner
+// tag is the payload's first field, so one nested read recovers it.
+//
+// Inner tags are permanent. Removing an arm burns its tag, exactly as removing
+// a field burns a field number.
+// ---------------------------------------------------------------------------
+
+// 1006 - persistent chat: the store, the key ladder, pins.
+// Reactions live in SocialEnvelope despite the `Pchat` prefix: the name records
+// where they were introduced, not which service owns them.
+message PchatEnvelope {
+  oneof body {
+    PchatMessage message = 1;
+    PchatFetch fetch = 2;
+    PchatFetchResponse fetch_response = 3;
+    PchatMessageDeliver deliver = 4;
+    PchatKeyAnnounce key_announce = 5;
+    PchatKeyExchange key_exchange = 6;
+    PchatKeyRequest key_request = 7;
+    PchatAck ack = 8;
+    PchatEpochCountersig epoch_countersig = 9;
+    PchatKeyHolderReport key_holder_report = 10;
+    PchatKeyHoldersQuery key_holders_query = 11;
+    PchatKeyHoldersList key_holders_list = 12;
+    PchatKeyChallenge key_challenge = 13;
+    PchatKeyChallengeResponse key_challenge_response = 14;
+    PchatKeyChallengeResult key_challenge_result = 15;
+    PchatDeleteMessages delete_messages = 16;
+    PchatOfflineQueueDrain offline_queue_drain = 17;
+    PchatSenderKeyDistribution sender_key_distribution = 18;
+    PchatPin pin = 19;
+    PchatPinDeliver pin_deliver = 20;
+    PchatPinFetchResponse pin_fetch_response = 21;
+  }
+}
+
+// 1015 - social: reactions, receipts, typing, polls, watch-together, drawing.
+message SocialEnvelope {
+  oneof body {
+    PchatReaction reaction = 1;
+    PchatReactionDeliver reaction_deliver = 2;
+    PchatReactionFetchResponse reaction_fetch_response = 3;
+    FancyCustomReactionsConfig custom_reactions = 4;
+    FancyReadReceipt read_receipt = 5;
+    FancyReadReceiptDeliver read_receipt_deliver = 6;
+    FancyTypingIndicator typing = 7;
+    FancyWatchSync watch_sync = 8;
+    FancyDrawStroke draw_stroke = 9;
+    FancyPoll poll = 10;
+    FancyPollVote poll_vote = 11;
+  }
+}
+
+// 1011 - push notifications.
+message PushEnvelope {
+  oneof body {
+    // Not `register`: it is a reserved word in C++, and protoc would rename the
+    // accessor to `register_` on that side only.
+    FancyPushRegister push_register = 1;
+    FancyPushUpdate update = 2;
+    FancySubscribePush subscribe = 3;
+  }
+}
+
+// 1008 - screen share. Camera share rides the same signalling type rather than
+// getting its own, exactly as it did at epoch-0 type 120.
+message ScreenshareEnvelope {
+  oneof body {
+    WebRtcSignal signal = 1;
+  }
+}
+
+// 1016 - link previews.
+message LinkPreviewEnvelope {
+  oneof body {
+    FancyLinkPreviewRequest request = 1;
+    FancyLinkPreviewResponse response = 2;
+  }
+}
+
+// 1014 - onboarding flow.
+message OnboardingEnvelope {
+  oneof body {
+    FancyOnboardingConfig config = 1;
+    FancyOnboardingConfigUpdate config_update = 2;
+    FancyOnboardingResponse response = 3;
+    FancyOnboardingResponseQuery response_query = 4;
+    FancyOnboardingResponseDeliver response_deliver = 5;
+  }
+}
+
+// 1010 - server plugin administration.
+message PluginsEnvelope {
+  oneof body {
+    FancyPluginAdminListRequest list_request = 1;
+    FancyPluginAdminList list = 2;
+    FancyPluginAdminSetEnabled set_enabled = 3;
+    FancyPluginAdminInstall install = 4;
+    FancyPluginAdminUninstall uninstall = 5;
+    FancyPluginAdminAck ack = 6;
+    // The generic plugin relay (epoch-0 types 200/201): a plugin's own
+    // envelope and the inventory the server announces after ServerSync.
+    PluginMessage plugin_message = 7;
+    PluginRegistry registry = 8;
+  }
+}
+
+// 1013 - runtime-mutable server settings.
+message ServerConfigEnvelope {
+  oneof body {
+    FancyServerSettings settings = 1;
+    FancyServerSettingsUpdate settings_update = 2;
+  }
+}
+
+// 1003 - userdata, including self-service account settings.
+message UserdataEnvelope {
+  oneof body {
+    FancyAccountSettings account_settings = 1;
+    FancyAccountSettingsUpdate account_settings_update = 2;
+    FancyAccountAck account_ack = 3;
+  }
+}
+
+// 1012 - the operator record: query, live events, retention config.
+message AuditEnvelope {
+  oneof body {
+    FancyAuditQuery query = 1;
+    FancyAuditResponse response = 2;
+    FancyAuditEvent event = 3;
+    FancyAuditConfig config = 4;
+    FancyAuditConfigUpdate config_update = 5;
+  }
 }

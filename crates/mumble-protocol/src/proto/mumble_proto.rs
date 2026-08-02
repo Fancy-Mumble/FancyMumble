@@ -33,11 +33,14 @@ pub struct Version {
     /// the Fancy extensions are off and the connection degrades to plain Mumble
     /// — plus anything relayable through PluginDataTransmission, which works
     /// through any Mumble server and is therefore epoch-independent.
-    /// 100, not the next free number: Fancy fields start at 100 so upstream can
-    /// keep growing into 1-99 (see the same note in Starling's copy). And it
+    /// 1000, not the next free number: Fancy fields start at 1000 so upstream can
+    /// keep growing into 1-999 (see the same note in Starling's copy). And it
     /// must be *this* number in every copy of this file — it is read before any
-    /// epoch is known, so the two sides cannot negotiate where to find it.
-    #[prost(uint32, optional, tag = "100")]
+    /// epoch is known, so the two sides cannot negotiate where to find it. That
+    /// is also why moving it off 100 is a hard break rather than a soft one: a
+    /// peer built before this change looks at 100, finds nothing, and correctly
+    /// concludes it is talking to a plain Mumble server.
+    #[prost(uint32, optional, tag = "1000")]
     pub fancy_protocol: ::core::option::Option<u32>,
     /// Client release name.
     #[prost(string, optional, tag = "2")]
@@ -79,7 +82,7 @@ pub struct Authenticate {
     /// Client extension (FancyMumble): time-based one-time password (RFC 6238)
     /// for accounts with two-factor authentication enabled. The server rejects
     /// with RejectType TOTPRequired / TOTPInvalid when missing or wrong.
-    #[prost(string, optional, tag = "100")]
+    #[prost(string, optional, tag = "1000")]
     pub totp_code: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Sent by the client to notify the server that the client is still alive.
@@ -297,49 +300,49 @@ pub struct ChannelState {
     #[prost(bool, optional, tag = "13")]
     pub can_enter: ::core::option::Option<bool>,
     /// Fancy Mumble persistent chat extension.
-    /// Field IDs start at 100 to avoid clashing with future upstream
+    /// Field IDs start at 1000 to avoid clashing with future upstream
     /// Mumble protocol additions. Legacy clients silently ignore
     /// unknown fields (standard protobuf behaviour).
     /// Protocol and persistence mode for this channel.
     /// Uses the top-level PchatProtocol enum.
-    #[prost(enumeration = "PchatProtocol", optional, tag = "100")]
+    #[prost(enumeration = "PchatProtocol", optional, tag = "1000")]
     pub pchat_protocol: ::core::option::Option<i32>,
     /// Maximum number of messages to store (0 = unlimited).
-    #[prost(uint32, optional, tag = "101")]
+    #[prost(uint32, optional, tag = "1001")]
     pub pchat_max_history: ::core::option::Option<u32>,
     /// Auto-delete messages after this many days (0 = forever).
-    #[prost(uint32, optional, tag = "102")]
+    #[prost(uint32, optional, tag = "1002")]
     pub pchat_retention_days: ::core::option::Option<u32>,
     /// Cert hashes of users designated as key custodians for this channel.
     /// Key custodians can countersign epoch transitions and are trusted
     /// authorities for key distribution. Set by channel operators.
-    #[prost(string, repeated, tag = "103")]
+    #[prost(string, repeated, tag = "1003")]
     pub pchat_key_custodians: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// Channel access password.  Empty string means "remove the password".
     /// When set, the server creates (or updates) an ACL group named
     /// `~pwd_<channel_id>` that grants Enter permission, and denies Enter
     /// to @all.  Clients joining a password-protected channel must include
     /// the password in UserState.temporary_access_tokens.
-    #[prost(string, optional, tag = "104")]
+    #[prost(string, optional, tag = "1004")]
     pub channel_info_password: ::core::option::Option<::prost::alloc::string::String>,
     /// Hidden-channel extension. When true, only users with the SeeChannel
     /// permission are told the channel exists (and see the users inside it).
-    #[prost(bool, optional, tag = "105")]
+    #[prost(bool, optional, tag = "1005")]
     pub hidden: ::core::option::Option<bool>,
     /// Channel expiry extension. expiry_mode: 0 = none, 1 = absolute (removed at
     /// created_at + duration), 2 = sliding (removed after `duration` seconds of
     /// inactivity). On expiry the channel is deleted and occupants move to parent.
-    #[prost(uint32, optional, tag = "106")]
+    #[prost(uint32, optional, tag = "1006")]
     pub expiry_mode: ::core::option::Option<u32>,
-    #[prost(uint32, optional, tag = "107")]
+    #[prost(uint32, optional, tag = "1007")]
     pub expiry_duration_secs: ::core::option::Option<u32>,
     /// Server-computed absolute deadline (unix seconds), for client countdown UI.
-    #[prost(uint64, optional, tag = "108")]
+    #[prost(uint64, optional, tag = "1008")]
     pub expires_at: ::core::option::Option<u64>,
     /// Meeting-room convenience (input-only, on create): registered user_ids to
     /// invite. The server grants each SeeChannel|Enter|Traverse and denies those to
     /// @all, making the new channel a private room only invitees can see and join.
-    #[prost(uint32, repeated, packed = "false", tag = "109")]
+    #[prost(uint32, repeated, packed = "false", tag = "1009")]
     pub invitee_user_ids: ::prost::alloc::vec::Vec<u32>,
     /// Fancy extension: the set of attributes describing this channel from the
     /// receiving user's perspective (see ChannelAttribute). Supersedes `can_enter`
@@ -352,7 +355,7 @@ pub struct ChannelState {
     ///      ignored as input, always recomputed per recipient;
     ///    - create-only (DETACHED): honoured on create, ignored on edit;
     ///    - settable (STRUCTURAL): honoured on create and edit, requires Write.
-    #[prost(enumeration = "ChannelAttribute", repeated, packed = "false", tag = "110")]
+    #[prost(enumeration = "ChannelAttribute", repeated, packed = "false", tag = "1010")]
     pub attributes: ::prost::alloc::vec::Vec<i32>,
     /// Fancy extension: generic write-mask for `attributes`, so a client can
     /// assign attributes without a dedicated field per trait.
@@ -366,7 +369,7 @@ pub struct ChannelState {
     ///
     /// Omitting the mask keeps the original create-time behaviour: `attributes`
     /// is read additively and nothing is cleared.
-    #[prost(enumeration = "ChannelAttribute", repeated, packed = "false", tag = "111")]
+    #[prost(enumeration = "ChannelAttribute", repeated, packed = "false", tag = "1011")]
     pub attribute_mask: ::prost::alloc::vec::Vec<i32>,
 }
 /// Used to communicate user leaving or being kicked. May be sent by the client
@@ -484,7 +487,7 @@ pub struct UserState {
         enumeration = "user_state::ClientFeature",
         repeated,
         packed = "false",
-        tag = "100"
+        tag = "1000"
     )]
     pub client_features: ::prost::alloc::vec::Vec<i32>,
 }
@@ -595,19 +598,19 @@ pub struct TextMessage {
     #[prost(string, required, tag = "5")]
     pub message: ::prost::alloc::string::String,
     /// unique identifier for this message
-    #[prost(string, optional, tag = "100")]
+    #[prost(string, optional, tag = "1000")]
     pub message_id: ::core::option::Option<::prost::alloc::string::String>,
     /// message timestamp
-    #[prost(uint64, optional, tag = "101")]
+    #[prost(uint64, optional, tag = "1001")]
     pub timestamp: ::core::option::Option<u64>,
     /// When set, this message is an edit replacing the message with this ID.
-    #[prost(string, optional, tag = "102")]
+    #[prost(string, optional, tag = "1002")]
     pub edit_id: ::core::option::Option<::prost::alloc::string::String>,
     /// When set, pin or unpin the message with this ID in the channel.
-    #[prost(string, optional, tag = "103")]
+    #[prost(string, optional, tag = "1003")]
     pub pin_target: ::core::option::Option<::prost::alloc::string::String>,
     /// When true combined with pin_target, unpin instead of pin.
-    #[prost(bool, optional, tag = "104")]
+    #[prost(bool, optional, tag = "1004")]
     pub unpin: ::core::option::Option<bool>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -766,16 +769,16 @@ pub mod acl {
         #[prost(uint32, repeated, packed = "false", tag = "7")]
         pub inherited_members: ::prost::alloc::vec::Vec<u32>,
         /// FancyMumble: optional CSS color string for role chip (e.g. "#5865F2").
-        #[prost(string, optional, tag = "100")]
+        #[prost(string, optional, tag = "1000")]
         pub color: ::core::option::Option<::prost::alloc::string::String>,
         /// FancyMumble: optional raw icon image bytes (PNG/JPEG) for the role.
-        #[prost(bytes = "vec", optional, tag = "101")]
+        #[prost(bytes = "vec", optional, tag = "1001")]
         pub icon: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
         /// FancyMumble: optional named visual style preset id.
-        #[prost(string, optional, tag = "102")]
+        #[prost(string, optional, tag = "1002")]
         pub style_preset: ::core::option::Option<::prost::alloc::string::String>,
         /// FancyMumble: arbitrary key-value metadata for client-side extensions.
-        #[prost(message, repeated, tag = "103")]
+        #[prost(message, repeated, tag = "1003")]
         pub metadata: ::prost::alloc::vec::Vec<chan_group::KeyValue>,
     }
     /// Nested message and enum types in `ChanGroup`.
@@ -978,15 +981,15 @@ pub mod user_list {
         #[prost(uint32, optional, tag = "4")]
         pub last_channel: ::core::option::Option<u32>,
         /// Registered user avatar (PNG/JPEG bytes).
-        #[prost(bytes = "vec", optional, tag = "100")]
+        #[prost(bytes = "vec", optional, tag = "1000")]
         pub texture: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
         /// SHA-1 hash of the comment when len >= 128; empty otherwise.
         /// If set without comment, the client must request the full text
         /// via RequestBlob.user_id_comment.
-        #[prost(bytes = "vec", optional, tag = "101")]
+        #[prost(bytes = "vec", optional, tag = "1001")]
         pub comment_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
         /// Full comment text when len < 128, or in blob responses.
-        #[prost(string, optional, tag = "102")]
+        #[prost(string, optional, tag = "1002")]
         pub comment: ::core::option::Option<::prost::alloc::string::String>,
     }
 }
@@ -1171,7 +1174,7 @@ pub struct RequestBlob {
     #[prost(uint32, repeated, packed = "false", tag = "3")]
     pub channel_description: ::prost::alloc::vec::Vec<u32>,
     /// registered user_ids whose comment should be fetched (offline support).
-    #[prost(uint32, repeated, packed = "false", tag = "100")]
+    #[prost(uint32, repeated, packed = "false", tag = "1000")]
     pub user_id_comment: ::prost::alloc::vec::Vec<u32>,
 }
 /// Sent by the server when it informs the clients on server configuration
@@ -1201,7 +1204,7 @@ pub struct ServerConfig {
     pub recording_allowed: ::core::option::Option<bool>,
     /// True when the server has a WebRTC SFU module loaded and can
     /// relay screen-share streams server-side.
-    #[prost(bool, optional, tag = "100")]
+    #[prost(bool, optional, tag = "1000")]
     pub webrtc_sfu_available: ::core::option::Option<bool>,
     /// Optional public base URL of the Fancy Mumble REST API (file
     /// server, custom emotes, capabilities, ...). Set this when the
@@ -1210,7 +1213,7 @@ pub struct ServerConfig {
     /// or Kubernetes ingress. Clients should prefer this URL over any
     /// per-plugin `base_url` when contacting the REST API. Empty /
     /// unset means "no override; use whatever the plugin advertises".
-    #[prost(string, optional, tag = "101")]
+    #[prost(string, optional, tag = "1001")]
     pub fancy_rest_api_url: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Sent by the server to inform the clients of suggested client configuration
@@ -3149,6 +3152,258 @@ pub struct FancyAuditConfig {
 pub struct FancyAuditConfigUpdate {
     #[prost(message, repeated, tag = "1")]
     pub settings: ::prost::alloc::vec::Vec<Setting>,
+}
+/// 1006 - persistent chat: the store, the key ladder, pins.
+/// Reactions live in SocialEnvelope despite the `Pchat` prefix: the name records
+/// where they were introduced, not which service owns them.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PchatEnvelope {
+    #[prost(
+        oneof = "pchat_envelope::Body",
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21"
+    )]
+    pub body: ::core::option::Option<pchat_envelope::Body>,
+}
+/// Nested message and enum types in `PchatEnvelope`.
+pub mod pchat_envelope {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Body {
+        #[prost(message, tag = "1")]
+        Message(super::PchatMessage),
+        #[prost(message, tag = "2")]
+        Fetch(super::PchatFetch),
+        #[prost(message, tag = "3")]
+        FetchResponse(super::PchatFetchResponse),
+        #[prost(message, tag = "4")]
+        Deliver(super::PchatMessageDeliver),
+        #[prost(message, tag = "5")]
+        KeyAnnounce(super::PchatKeyAnnounce),
+        #[prost(message, tag = "6")]
+        KeyExchange(super::PchatKeyExchange),
+        #[prost(message, tag = "7")]
+        KeyRequest(super::PchatKeyRequest),
+        #[prost(message, tag = "8")]
+        Ack(super::PchatAck),
+        #[prost(message, tag = "9")]
+        EpochCountersig(super::PchatEpochCountersig),
+        #[prost(message, tag = "10")]
+        KeyHolderReport(super::PchatKeyHolderReport),
+        #[prost(message, tag = "11")]
+        KeyHoldersQuery(super::PchatKeyHoldersQuery),
+        #[prost(message, tag = "12")]
+        KeyHoldersList(super::PchatKeyHoldersList),
+        #[prost(message, tag = "13")]
+        KeyChallenge(super::PchatKeyChallenge),
+        #[prost(message, tag = "14")]
+        KeyChallengeResponse(super::PchatKeyChallengeResponse),
+        #[prost(message, tag = "15")]
+        KeyChallengeResult(super::PchatKeyChallengeResult),
+        #[prost(message, tag = "16")]
+        DeleteMessages(super::PchatDeleteMessages),
+        #[prost(message, tag = "17")]
+        OfflineQueueDrain(super::PchatOfflineQueueDrain),
+        #[prost(message, tag = "18")]
+        SenderKeyDistribution(super::PchatSenderKeyDistribution),
+        #[prost(message, tag = "19")]
+        Pin(super::PchatPin),
+        #[prost(message, tag = "20")]
+        PinDeliver(super::PchatPinDeliver),
+        #[prost(message, tag = "21")]
+        PinFetchResponse(super::PchatPinFetchResponse),
+    }
+}
+/// 1015 - social: reactions, receipts, typing, polls, watch-together, drawing.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SocialEnvelope {
+    #[prost(oneof = "social_envelope::Body", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11")]
+    pub body: ::core::option::Option<social_envelope::Body>,
+}
+/// Nested message and enum types in `SocialEnvelope`.
+pub mod social_envelope {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Body {
+        #[prost(message, tag = "1")]
+        Reaction(super::PchatReaction),
+        #[prost(message, tag = "2")]
+        ReactionDeliver(super::PchatReactionDeliver),
+        #[prost(message, tag = "3")]
+        ReactionFetchResponse(super::PchatReactionFetchResponse),
+        #[prost(message, tag = "4")]
+        CustomReactions(super::FancyCustomReactionsConfig),
+        #[prost(message, tag = "5")]
+        ReadReceipt(super::FancyReadReceipt),
+        #[prost(message, tag = "6")]
+        ReadReceiptDeliver(super::FancyReadReceiptDeliver),
+        #[prost(message, tag = "7")]
+        Typing(super::FancyTypingIndicator),
+        #[prost(message, tag = "8")]
+        WatchSync(super::FancyWatchSync),
+        #[prost(message, tag = "9")]
+        DrawStroke(super::FancyDrawStroke),
+        #[prost(message, tag = "10")]
+        Poll(super::FancyPoll),
+        #[prost(message, tag = "11")]
+        PollVote(super::FancyPollVote),
+    }
+}
+/// 1011 - push notifications.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PushEnvelope {
+    #[prost(oneof = "push_envelope::Body", tags = "1, 2, 3")]
+    pub body: ::core::option::Option<push_envelope::Body>,
+}
+/// Nested message and enum types in `PushEnvelope`.
+pub mod push_envelope {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Body {
+        /// Not `register`: it is a reserved word in C++, and protoc would rename the
+        /// accessor to `register_` on that side only.
+        #[prost(message, tag = "1")]
+        PushRegister(super::FancyPushRegister),
+        #[prost(message, tag = "2")]
+        Update(super::FancyPushUpdate),
+        #[prost(message, tag = "3")]
+        Subscribe(super::FancySubscribePush),
+    }
+}
+/// 1008 - screen share. Camera share rides the same signalling type rather than
+/// getting its own, exactly as it did at epoch-0 type 120.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ScreenshareEnvelope {
+    #[prost(oneof = "screenshare_envelope::Body", tags = "1")]
+    pub body: ::core::option::Option<screenshare_envelope::Body>,
+}
+/// Nested message and enum types in `ScreenshareEnvelope`.
+pub mod screenshare_envelope {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Body {
+        #[prost(message, tag = "1")]
+        Signal(super::WebRtcSignal),
+    }
+}
+/// 1016 - link previews.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LinkPreviewEnvelope {
+    #[prost(oneof = "link_preview_envelope::Body", tags = "1, 2")]
+    pub body: ::core::option::Option<link_preview_envelope::Body>,
+}
+/// Nested message and enum types in `LinkPreviewEnvelope`.
+pub mod link_preview_envelope {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Body {
+        #[prost(message, tag = "1")]
+        Request(super::FancyLinkPreviewRequest),
+        #[prost(message, tag = "2")]
+        Response(super::FancyLinkPreviewResponse),
+    }
+}
+/// 1014 - onboarding flow.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OnboardingEnvelope {
+    #[prost(oneof = "onboarding_envelope::Body", tags = "1, 2, 3, 4, 5")]
+    pub body: ::core::option::Option<onboarding_envelope::Body>,
+}
+/// Nested message and enum types in `OnboardingEnvelope`.
+pub mod onboarding_envelope {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Body {
+        #[prost(message, tag = "1")]
+        Config(super::FancyOnboardingConfig),
+        #[prost(message, tag = "2")]
+        ConfigUpdate(super::FancyOnboardingConfigUpdate),
+        #[prost(message, tag = "3")]
+        Response(super::FancyOnboardingResponse),
+        #[prost(message, tag = "4")]
+        ResponseQuery(super::FancyOnboardingResponseQuery),
+        #[prost(message, tag = "5")]
+        ResponseDeliver(super::FancyOnboardingResponseDeliver),
+    }
+}
+/// 1010 - server plugin administration.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PluginsEnvelope {
+    #[prost(oneof = "plugins_envelope::Body", tags = "1, 2, 3, 4, 5, 6, 7, 8")]
+    pub body: ::core::option::Option<plugins_envelope::Body>,
+}
+/// Nested message and enum types in `PluginsEnvelope`.
+pub mod plugins_envelope {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Body {
+        #[prost(message, tag = "1")]
+        ListRequest(super::FancyPluginAdminListRequest),
+        #[prost(message, tag = "2")]
+        List(super::FancyPluginAdminList),
+        #[prost(message, tag = "3")]
+        SetEnabled(super::FancyPluginAdminSetEnabled),
+        #[prost(message, tag = "4")]
+        Install(super::FancyPluginAdminInstall),
+        #[prost(message, tag = "5")]
+        Uninstall(super::FancyPluginAdminUninstall),
+        #[prost(message, tag = "6")]
+        Ack(super::FancyPluginAdminAck),
+        /// The generic plugin relay (epoch-0 types 200/201): a plugin's own
+        /// envelope and the inventory the server announces after ServerSync.
+        #[prost(message, tag = "7")]
+        PluginMessage(super::PluginMessage),
+        #[prost(message, tag = "8")]
+        Registry(super::PluginRegistry),
+    }
+}
+/// 1013 - runtime-mutable server settings.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ServerConfigEnvelope {
+    #[prost(oneof = "server_config_envelope::Body", tags = "1, 2")]
+    pub body: ::core::option::Option<server_config_envelope::Body>,
+}
+/// Nested message and enum types in `ServerConfigEnvelope`.
+pub mod server_config_envelope {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Body {
+        #[prost(message, tag = "1")]
+        Settings(super::FancyServerSettings),
+        #[prost(message, tag = "2")]
+        SettingsUpdate(super::FancyServerSettingsUpdate),
+    }
+}
+/// 1003 - userdata, including self-service account settings.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UserdataEnvelope {
+    #[prost(oneof = "userdata_envelope::Body", tags = "1, 2, 3")]
+    pub body: ::core::option::Option<userdata_envelope::Body>,
+}
+/// Nested message and enum types in `UserdataEnvelope`.
+pub mod userdata_envelope {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Body {
+        #[prost(message, tag = "1")]
+        AccountSettings(super::FancyAccountSettings),
+        #[prost(message, tag = "2")]
+        AccountSettingsUpdate(super::FancyAccountSettingsUpdate),
+        #[prost(message, tag = "3")]
+        AccountAck(super::FancyAccountAck),
+    }
+}
+/// 1012 - the operator record: query, live events, retention config.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AuditEnvelope {
+    #[prost(oneof = "audit_envelope::Body", tags = "1, 2, 3, 4, 5")]
+    pub body: ::core::option::Option<audit_envelope::Body>,
+}
+/// Nested message and enum types in `AuditEnvelope`.
+pub mod audit_envelope {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Body {
+        #[prost(message, tag = "1")]
+        Query(super::FancyAuditQuery),
+        #[prost(message, tag = "2")]
+        Response(super::FancyAuditResponse),
+        #[prost(message, tag = "3")]
+        Event(super::FancyAuditEvent),
+        #[prost(message, tag = "4")]
+        Config(super::FancyAuditConfig),
+        #[prost(message, tag = "5")]
+        ConfigUpdate(super::FancyAuditConfigUpdate),
+    }
 }
 /// Fancy Mumble extension: a single channel attribute flag. ChannelState carries
 /// a repeated set of these (its `attributes` field), describing the channel from

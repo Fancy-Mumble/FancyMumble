@@ -79,7 +79,17 @@ opus-codec = ["opus"]
 # Adds ~130 KiB of code + a small embedded model (~85 KiB).
 rnnoise-denoiser = ["nnnoiseless"]
 # DeepFilterNet deep-learning denoiser (SOTA, ~+0.4 PESQ vs. RNNoise).
-# Adds ~5 MiB of embedded ONNX model + tract-onnx runtime.
+#
+# Adds the embedded ONNX model plus the tract-onnx runtime. The model
+# `default-model` embeds is `DeepFilterNet3_onnx.tar.gz`, which is
+# **7.6 MiB** on disk, not the ~5 MiB this line claimed before anyone
+# measured it. On by default for Windows in `mumble-tauri`; see the
+# target block there for why that platform and not the rest.
+#
+# The published "+0.4 PESQ vs RNNoise" is a *perceptual* result on
+# non-stationary noise. On stationary white noise a plain SNR measurement
+# puts RNNoise ahead — see the table in
+# `tests/denoiser_quality.rs`, which deliberately asserts no ranking.
 deepfilternet-denoiser = ["fancy-denoiser-deepfilter"]
 persistent-chat = [
     "x25519-dalek",

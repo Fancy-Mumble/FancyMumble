@@ -3417,20 +3417,13 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
     await listen<OnboardingConfigEvent>(TauriEvent.OnboardingConfig, (event) => {
       const { config } = event.payload;
       const onboarding = useOnboardingStore.getState();
+      onboarding.setServerId(event.payload.serverId ?? useAppStore.getState().activeServerId ?? null);
       onboarding.setConfig(config);
 
-      // If a fresh config arrived and the user has not answered the
-      // current revision yet, surface the modal automatically.
-      const { response } = useOnboardingStore.getState();
-      if (config?.enabled && (!response || response.config_revision < config.revision)) {
-        const serverId = useAppStore.getState().activeServerId ?? null;
-        const dismissed = serverId
-          ? sessionStorage.getItem(`onboarding-dismissed:${serverId}`) === "1"
-          : false;
-        if (!dismissed) {
-          onboarding.setModalOpen(true);
-        }
-      }
+      // Whether a fresh config means "prompt this user" is the store's
+      // call: it first makes sure the server has said whether the user
+      // already answered, so a returning member is not re-asked.
+      onboarding.evaluateAutoOpen();
     }),
   );
 

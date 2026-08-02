@@ -156,6 +156,12 @@ impl EventHandler for TauriEventHandler {
             let session = audio.sender_session;
             let is_terminator = audio.is_terminator;
 
+            // e2e decoded-audio dump (no-op unless FANCY_E2E_AUDIO_DUMP_DIR is
+            // set). Started here rather than at audio init because this is the
+            // first point that is guaranteed to run before any audio is
+            // decoded; the call is idempotent.
+            crate::e2e_stats::start_audio_dump();
+
             // e2e timing assertions (no-op unless FANCY_E2E_AUDIO_STATS_FILE
             // is set): tallies wire-level packet stats per sender.
             crate::e2e_stats::record_packet(

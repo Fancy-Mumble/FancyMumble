@@ -1,8 +1,8 @@
-//! Per-message server version requirements and fallback policies.
+//! Per-message fallback policies.
 //!
-//! Each Fancy extension message type declares the minimum server
-//! `fancy_version` required for native handling and whether a
-//! `PluginData` fallback is available when the server is too old.
+//! Each Fancy extension message type declares whether a `PluginData` relay is
+//! a meaningful substitute when the peer cannot process it natively — which,
+//! since wire epoch 1, means "the peer is not a Fancy server at all".
 //!
 //! The [`fancy_message_support!`] macro generates the
 //! [`message_support`] lookup function from a compact declaration table.
@@ -21,43 +21,38 @@ pub enum FallbackPolicy {
     ServerOnly,
 }
 
-/// Minimum server version and fallback policy for a Fancy extension
-/// message.
+/// What a Fancy extension message does on a server that cannot process it.
 #[derive(Debug, Clone, Copy)]
 pub struct MessageSupport {
-    /// Minimum `fancy_version` the server must report for native
-    /// handling.
-    pub min_version: u64,
-    /// What to do when the server is too old.
+    /// What to do when the peer is not a Fancy server.
     pub fallback: FallbackPolicy,
 }
 
-/// Declares the server version requirements and fallback policy for
-/// each Fancy extension message type.
+/// Declares the fallback policy for each Fancy extension message type.
 ///
 /// Each entry has the form:
 ///
 /// ```text
-/// (major, minor, patch) Variant => Policy
+/// Variant => Policy
 /// ```
 ///
-/// where *version* is the Fancy Mumble server release that first
-/// understands the message natively, and *Policy* is either
-/// `PluginData` (client-to-client relay is possible) or `ServerOnly`
-/// (no sensible fallback).
+/// where *Policy* is either `PluginData` (client-to-client relay is possible)
+/// or `ServerOnly` (no sensible fallback).
+///
+/// There is no per-message minimum server version any more: since wire epoch 1
+/// a peer either speaks the epoch and therefore all of it, or is not a Fancy
+/// peer at all. The version a message first appeared in is kept in the section
+/// comments below, where it is history rather than a runtime gate.
 macro_rules! fancy_message_support {
-    ($(($major:literal, $minor:literal, $patch:literal) $variant:ident => $fallback:ident),* $(,)?) => {
-        /// Look up the server version requirement and fallback policy
-        /// for a Fancy extension [`ControlMessage`].
+    ($($variant:ident => $fallback:ident),* $(,)?) => {
+        /// Look up the fallback policy for a Fancy extension
+        /// [`ControlMessage`].
         ///
         /// Returns `None` for standard Mumble messages (type < 100).
         pub fn message_support(msg: &ControlMessage) -> Option<MessageSupport> {
             match msg {
                 $(
                     ControlMessage::$variant(_) => Some(MessageSupport {
-                        min_version: fancy_utils::version::fancy_version_encode(
-                            $major, $minor, $patch,
-                        ),
                         fallback: FallbackPolicy::$fallback,
                     }),
                 )*
@@ -69,91 +64,91 @@ macro_rules! fancy_message_support {
 
 fancy_message_support! {
     // -- Persistent chat (server-processed) -- 0.2.12 ----------------
-    (0, 2, 12) PchatMessage              => ServerOnly,
-    (0, 2, 12) PchatFetch                => ServerOnly,
-    (0, 2, 12) PchatFetchResponse        => ServerOnly,
-    (0, 2, 12) PchatMessageDeliver       => ServerOnly,
-    (0, 2, 12) PchatKeyAnnounce          => ServerOnly,
-    (0, 2, 12) PchatKeyExchange          => ServerOnly,
-    (0, 2, 12) PchatKeyRequest           => ServerOnly,
-    (0, 2, 12) PchatAck                  => ServerOnly,
-    (0, 2, 12) PchatEpochCountersig      => ServerOnly,
-    (0, 2, 12) PchatKeyHolderReport      => ServerOnly,
-    (0, 2, 12) PchatKeyHoldersQuery      => ServerOnly,
-    (0, 2, 12) PchatKeyHoldersList       => ServerOnly,
-    (0, 2, 12) PchatKeyChallenge         => ServerOnly,
-    (0, 2, 12) PchatKeyChallengeResponse => ServerOnly,
-    (0, 2, 12) PchatKeyChallengeResult   => ServerOnly,
-    (0, 2, 12) PchatDeleteMessages       => ServerOnly,
-    (0, 2, 12) PchatOfflineQueueDrain    => ServerOnly,
-    (0, 2, 12) PchatReaction             => ServerOnly,
-    (0, 2, 12) PchatReactionDeliver      => ServerOnly,
-    (0, 2, 12) PchatReactionFetchResponse => ServerOnly,
+    PchatMessage              => ServerOnly,
+    PchatFetch                => ServerOnly,
+    PchatFetchResponse        => ServerOnly,
+    PchatMessageDeliver       => ServerOnly,
+    PchatKeyAnnounce          => ServerOnly,
+    PchatKeyExchange          => ServerOnly,
+    PchatKeyRequest           => ServerOnly,
+    PchatAck                  => ServerOnly,
+    PchatEpochCountersig      => ServerOnly,
+    PchatKeyHolderReport      => ServerOnly,
+    PchatKeyHoldersQuery      => ServerOnly,
+    PchatKeyHoldersList       => ServerOnly,
+    PchatKeyChallenge         => ServerOnly,
+    PchatKeyChallengeResponse => ServerOnly,
+    PchatKeyChallengeResult   => ServerOnly,
+    PchatDeleteMessages       => ServerOnly,
+    PchatOfflineQueueDrain    => ServerOnly,
+    PchatReaction             => ServerOnly,
+    PchatReactionDeliver      => ServerOnly,
+    PchatReactionFetchResponse => ServerOnly,
 
     // -- Client-to-client relay -- 0.2.12 ----------------------------
-    (0, 2, 12) WebRtcSignal               => PluginData,
-    (0, 2, 12) PchatSenderKeyDistribution => PluginData,
+    WebRtcSignal               => PluginData,
+    PchatSenderKeyDistribution => PluginData,
 
     // -- Push / notification / config (server-processed) -- 0.2.12 ---
-    (0, 2, 12) FancyPushRegister          => ServerOnly,
-    (0, 2, 12) FancyPushUpdate            => ServerOnly,
-    (0, 2, 12) FancyCustomReactionsConfig => ServerOnly,
-    (0, 2, 12) FancySubscribePush         => ServerOnly,
-    (0, 2, 12) FancyReadReceipt           => ServerOnly,
-    (0, 2, 12) FancyReadReceiptDeliver    => ServerOnly,
+    FancyPushRegister          => ServerOnly,
+    FancyPushUpdate            => ServerOnly,
+    FancyCustomReactionsConfig => ServerOnly,
+    FancySubscribePush         => ServerOnly,
+    FancyReadReceipt           => ServerOnly,
+    FancyReadReceiptDeliver    => ServerOnly,
 
     // -- Pin messages (server-processed) -- 0.2.16 -------------------
-    (0, 2, 16) PchatPin                   => ServerOnly,
-    (0, 2, 16) PchatPinDeliver            => ServerOnly,
-    (0, 2, 16) PchatPinFetchResponse      => ServerOnly,
+    PchatPin                   => ServerOnly,
+    PchatPinDeliver            => ServerOnly,
+    PchatPinFetchResponse      => ServerOnly,
 
     // -- Typing indicator (client-to-client relay) -- 0.2.18 ---------
-    (0, 2, 18) FancyTypingIndicator       => PluginData,
+    FancyTypingIndicator       => PluginData,
 
     // -- Watch together (client-to-client relay) -- 0.2.20 -----------
-    (0, 2, 20) FancyWatchSync             => PluginData,
+    FancyWatchSync             => PluginData,
 
     // -- Screen-share drawing (server-relayed) -- 0.3.0 --------------
-    (0, 3, 0) FancyDrawStroke             => ServerOnly,
+    FancyDrawStroke             => ServerOnly,
 
     // -- Onboarding workflow (server-processed) -- 0.3.1 -------------
-    (0, 3, 1) FancyOnboardingConfig          => ServerOnly,
-    (0, 3, 1) FancyOnboardingConfigUpdate    => ServerOnly,
-    (0, 3, 1) FancyOnboardingResponse        => ServerOnly,
-    (0, 3, 1) FancyOnboardingResponseQuery   => ServerOnly,
-    (0, 3, 1) FancyOnboardingResponseDeliver => ServerOnly,
+    FancyOnboardingConfig          => ServerOnly,
+    FancyOnboardingConfigUpdate    => ServerOnly,
+    FancyOnboardingResponse        => ServerOnly,
+    FancyOnboardingResponseQuery   => ServerOnly,
+    FancyOnboardingResponseDeliver => ServerOnly,
 
     // -- Polls (server-relayed within a channel) -- 0.3.2 ------------
-    (0, 3, 2) FancyPoll                      => ServerOnly,
-    (0, 3, 2) FancyPollVote                  => ServerOnly,
+    FancyPoll                      => ServerOnly,
+    FancyPollVote                  => ServerOnly,
 
     // -- Generic plugin envelope (server-routed) -- 0.4.0 ------------
-    (0, 4, 0) PluginMessage                  => ServerOnly,
-    (0, 4, 0) PluginRegistry                 => ServerOnly,
+    PluginMessage                  => ServerOnly,
+    PluginRegistry                 => ServerOnly,
 
     // -- Plugin admin / marketplace (server-processed) -- 0.4.0 ------
-    (0, 4, 0) FancyPluginAdminListRequest    => ServerOnly,
-    (0, 4, 0) FancyPluginAdminList           => ServerOnly,
-    (0, 4, 0) FancyPluginAdminSetEnabled     => ServerOnly,
-    (0, 4, 0) FancyPluginAdminInstall        => ServerOnly,
-    (0, 4, 0) FancyPluginAdminUninstall      => ServerOnly,
-    (0, 4, 0) FancyPluginAdminAck            => ServerOnly,
+    FancyPluginAdminListRequest    => ServerOnly,
+    FancyPluginAdminList           => ServerOnly,
+    FancyPluginAdminSetEnabled     => ServerOnly,
+    FancyPluginAdminInstall        => ServerOnly,
+    FancyPluginAdminUninstall      => ServerOnly,
+    FancyPluginAdminAck            => ServerOnly,
 
     // -- Runtime server settings (server-processed) -- 0.4.x ---------
-    (0, 4, 0) FancyServerSettings            => ServerOnly,
-    (0, 4, 0) FancyServerSettingsUpdate      => ServerOnly,
+    FancyServerSettings            => ServerOnly,
+    FancyServerSettingsUpdate      => ServerOnly,
 
     // -- Self-service account settings (server-processed) -- 0.4.1 ---
-    (0, 4, 1) FancyAccountSettings           => ServerOnly,
-    (0, 4, 1) FancyAccountSettingsUpdate     => ServerOnly,
-    (0, 4, 1) FancyAccountAck                => ServerOnly,
+    FancyAccountSettings           => ServerOnly,
+    FancyAccountSettingsUpdate     => ServerOnly,
+    FancyAccountAck                => ServerOnly,
 
     // -- Audit log (server-processed, mumble-audit plugin) -- 0.4.2 --
-    (0, 4, 2) FancyAuditQuery                => ServerOnly,
-    (0, 4, 2) FancyAuditResponse             => ServerOnly,
-    (0, 4, 2) FancyAuditEvent                => ServerOnly,
-    (0, 4, 2) FancyAuditConfig               => ServerOnly,
-    (0, 4, 2) FancyAuditConfigUpdate         => ServerOnly,
+    FancyAuditQuery                => ServerOnly,
+    FancyAuditResponse             => ServerOnly,
+    FancyAuditEvent                => ServerOnly,
+    FancyAuditConfig               => ServerOnly,
+    FancyAuditConfigUpdate         => ServerOnly,
 }
 
 #[cfg(test)]
@@ -163,8 +158,6 @@ mod tests {
     use super::*;
     use crate::proto::mumble_tcp;
 
-    const V_0_2_12: u64 = fancy_utils::version::fancy_version_encode(0, 2, 12);
-    const V_0_2_18: u64 = fancy_utils::version::fancy_version_encode(0, 2, 18);
 
     #[test]
     fn returns_none_for_standard_messages() {
@@ -179,7 +172,6 @@ mod tests {
         );
         let support = message_support(&msg).unwrap();
         assert_eq!(support.fallback, FallbackPolicy::PluginData);
-        assert_eq!(support.min_version, V_0_2_18);
     }
 
     #[test]
@@ -189,7 +181,6 @@ mod tests {
         );
         let support = message_support(&msg).unwrap();
         assert_eq!(support.fallback, FallbackPolicy::ServerOnly);
-        assert_eq!(support.min_version, V_0_2_12);
     }
 
     #[test]
@@ -200,7 +191,6 @@ mod tests {
         });
         let support = message_support(&msg).unwrap();
         assert_eq!(support.fallback, FallbackPolicy::PluginData);
-        assert_eq!(support.min_version, V_0_2_12);
     }
 
     #[test]
@@ -210,15 +200,12 @@ mod tests {
         );
         let support = message_support(&msg).unwrap();
         assert_eq!(support.fallback, FallbackPolicy::ServerOnly);
-        assert_eq!(
-            support.min_version,
-            fancy_utils::version::fancy_version_encode(0, 3, 0),
-        );
     }
 
     #[test]
-    fn onboarding_messages_require_0_3_1_server() {
-        let v_0_3_1 = fancy_utils::version::fancy_version_encode(0, 3, 1);
+    fn every_onboarding_message_is_server_only() {
+        // Relaying these client-to-client would be meaningless: the answers
+        // are stored and the flow is served by the server itself.
         let cases: [ControlMessage; 5] = [
             ControlMessage::FancyOnboardingConfig(
                 mumble_tcp::FancyOnboardingConfig::default(),
@@ -239,7 +226,6 @@ mod tests {
         for msg in &cases {
             let support = message_support(msg).unwrap();
             assert_eq!(support.fallback, FallbackPolicy::ServerOnly);
-            assert_eq!(support.min_version, v_0_3_1);
         }
     }
 }
