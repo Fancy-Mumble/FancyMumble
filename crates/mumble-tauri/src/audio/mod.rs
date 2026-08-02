@@ -171,7 +171,7 @@ impl AudioDeviceFactory for PlatformAudioFactory {
             const PUMP_FRAME: usize = 480;
             let neutral = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
             if let Ok(spec) = std::env::var(virtual_mic::ENV_VIRTUAL_MIC) {
-                return virtual_mic::VirtualSineCapture::from_spec(&spec, PUMP_FRAME, neutral)
+                return virtual_mic::VirtualCapture::from_spec(&spec, PUMP_FRAME, neutral)
                     .map(|c| Box::new(c) as _)
                     .map_err(|e| format!("virtual mic init: {e}"));
             }

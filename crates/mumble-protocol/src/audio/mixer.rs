@@ -40,6 +40,39 @@ const MAX_SPEAKER_BUFFER_SAMPLES: usize = 19_200;
 /// playback callback reads + mixes them in real time.
 pub type SpeakerBuffers = Arc<Mutex<HashMap<u32, VecDeque<f32>>>>;
 
+/// An observer of decoded audio, in the order a listener would hear it.
+///
+/// Exists for one reason: the e2e suite needs to compare what arrived against
+/// what was spoken, and there is no other place to read that. The speaker
+/// buffers are a ring the playback callback drains concurrently, so polling
+/// them both misses audio and repeats it — the only faithful tap is here,
+/// where each sample passes exactly once.
+///
+/// Notified for **inserted silence as well as decoded frames**, because
+/// concealment is part of what the listener hears. A dump that omitted it
+/// would show a clean stream where the real one had a gap.
+pub type DecodedTap = Box<dyn Fn(u32, &[f32]) + Send + Sync>;
+
+static DECODED_TAP: std::sync::OnceLock<DecodedTap> = std::sync::OnceLock::new();
+
+/// Install the observer. The first call wins; later ones are ignored.
+///
+/// Deliberately write-once and global. It is test instrumentation, it is set
+/// before any audio flows, and making it removable would add a lock on the
+/// decode path to support something nothing needs.
+pub fn set_decoded_tap(tap: DecodedTap) {
+    let _ = DECODED_TAP.set(tap);
+}
+
+/// Hand `samples` to the observer, if one was installed.
+///
+/// A single `OnceLock` read when it was not, which is every production build.
+fn notify_decoded(session: u32, samples: &[f32]) {
+    if let Some(tap) = DECODED_TAP.get() {
+        tap(session, samples);
+    }
+}
+
 /// Shared per-speaker volume overrides (0.0 - 2.0, default 1.0).
 ///
 /// Set from the UI when the user adjusts a specific speaker's volume
@@ -350,6 +383,9 @@ fn insert_silence(
         let remaining = MAX_SPEAKER_BUFFER_SAMPLES.saturating_sub(buf.len());
         let to_insert = requested.min(remaining);
         buf.resize(buf.len() + to_insert, 0.0);
+        // Concealment is audible, so an observer has to see it as the gap it
+        // is rather than as audio that never arrived.
+        notify_decoded(session, &vec![0.0; to_insert]);
         if to_insert < requested {
             tracing::debug!(
                 "insert_silence: clamped {requested} samples to {to_insert} for session {session} (buffer near cap, refusing to evict real audio)"
@@ -364,6 +400,7 @@ fn push_samples(
     frame: &crate::audio::sample::AudioFrame,
 ) {
     let samples = frame.as_f32_samples();
+    notify_decoded(session, &samples);
     if let Ok(mut bufs) = buffers.lock() {
         let buf = bufs
             .entry(session)
@@ -464,6 +501,71 @@ mod tests {
 
     fn make_buffers() -> SpeakerBuffers {
         Arc::new(Mutex::new(HashMap::new()))
+    }
+
+    #[test]
+    fn the_decoded_tap_sees_audio_and_concealment_in_order() {
+        // The tap exists so a test can compare what a listener heard against
+        // what was spoken, and both halves of "heard" matter: decoded frames
+        // *and* the silence inserted to cover a gap. A tap that saw only the
+        // first would show a clean stream where the real one had a hole, which
+        // is the failure it is meant to detect.
+        //
+        // `set_decoded_tap` is write-once and global, so this is the only test
+        // that may install one — a second would be silently ignored and would
+        // then assert against the first one's channel.
+        //
+        // It is also global across the *whole binary*, and the test harness runs
+        // these in parallel, so every other test that decodes audio arrives on
+        // this channel too. Hence the private session id below and the filter:
+        // asserting on the first event to turn up passes or fails depending on
+        // which test happened to run alongside.
+        const SESSION: u32 = 909_090;
+        let (tx, rx) = std::sync::mpsc::channel::<(u32, usize, bool)>();
+        let tx = Mutex::new(tx);
+        set_decoded_tap(Box::new(move |session, samples| {
+            let silent = samples.iter().all(|s| *s == 0.0);
+            if let Ok(tx) = tx.lock() {
+                let _ = tx.send((session, samples.len(), silent));
+            }
+        }));
+
+        /// The next event for our own session, ignoring other tests' traffic.
+        fn ours(
+            rx: &std::sync::mpsc::Receiver<(u32, usize, bool)>,
+            session: u32,
+        ) -> Option<(usize, bool)> {
+            let deadline = Instant::now() + std::time::Duration::from_secs(5);
+            while Instant::now() < deadline {
+                match rx.recv_timeout(std::time::Duration::from_millis(200)) {
+                    Ok((got, len, silent)) if got == session => return Some((len, silent)),
+                    Ok(_) => continue,
+                    Err(_) => continue,
+                }
+            }
+            None
+        }
+
+        let bufs = make_buffers();
+        let frame = crate::audio::sample::AudioFrame {
+            data: vec![0u8; 4 * 480]
+                .into_iter()
+                .enumerate()
+                .map(|(i, _)| if i % 4 == 0 { 64 } else { 0 })
+                .collect(),
+            format: AudioFormat::MONO_48KHZ_F32,
+            sequence: 1,
+            is_silent: false,
+        };
+        push_samples(&bufs, SESSION, &frame);
+        insert_silence(&bufs, SESSION, 1, AudioFormat::MONO_48KHZ_F32);
+
+        let (len, silent) = ours(&rx, SESSION).expect("the decoded frame was not observed");
+        assert_eq!(len, 480, "the whole frame must be observed, once");
+        assert!(!silent, "a decoded frame is not concealment");
+
+        let (len, silent) = ours(&rx, SESSION).expect("the concealment was not observed");
+        assert!(len > 0 && silent, "inserted silence must be observed as silence");
     }
 
     #[test]

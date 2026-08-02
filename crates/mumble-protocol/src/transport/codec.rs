@@ -2,6 +2,7 @@
 
 use bytes::{Buf, BufMut, BytesMut};
 use prost::Message;
+use tracing::debug;
 
 use crate::error::{Error, Result};
 use crate::message::{ControlMessage, TcpMessageType};
@@ -14,8 +15,16 @@ const MAX_PAYLOAD_SIZE: u32 = 8 * 1024 * 1024;
 pub const HEADER_SIZE: usize = 6;
 
 /// Encode a [`ControlMessage`] into a framed byte buffer ready for the wire.
+///
+/// Fancy messages go out under their service's outer type with the message
+/// nested in that service's envelope (wire epoch 1); upstream messages stay
+/// flat. The flat Fancy numbering still exists, but only inside a
+/// `PluginDataTransmission` relay — see [`serialize_control_message`].
 pub fn encode(msg: &ControlMessage) -> Result<Vec<u8>> {
-    let (type_id, payload) = serialize_control_message(msg)?;
+    let (type_id, payload) = match msg.to_service_payload() {
+        Some(framed) => framed,
+        None => serialize_control_message(msg)?,
+    };
     let len = payload.len() as u32;
 
     let mut buf = Vec::with_capacity(HEADER_SIZE + payload.len());
@@ -51,12 +60,32 @@ pub fn decode(buf: &mut BytesMut) -> Result<Option<ControlMessage>> {
     buf.advance(HEADER_SIZE);
     let payload = buf.split_to(payload_len as usize);
 
+    // Service envelope first: on the epoch-1 wire every Fancy message arrives
+    // under a service outer type.
+    if msg_type >= crate::message::FANCY_SERVICE_TYPE_MIN {
+        let decoded = crate::message::control_message_from_service(msg_type, &payload)?;
+        if decoded.is_none() {
+            // A service this build does not route, or an arm added by a newer
+            // peer. The frame is consumed and skipped rather than fatal: the
+            // whole point of the envelope is that unknown members of a service
+            // cost nothing to ignore. `recv` loops, so `None` just reads on.
+            debug!(msg_type, len = payload.len(), "skipping unknown service message");
+        }
+        return Ok(decoded);
+    }
+
     let msg = deserialize_control_message(msg_type, &payload)?;
     Ok(Some(msg))
 }
 
 // -- Serialization helpers ------------------------------------------
 
+/// Serialize a message flat: its own type ID and a bare payload.
+///
+/// This is *not* the epoch-1 wire framing. It is what the `PluginData` relay
+/// needs — it tags the tunnelled message with this ID and vanilla Mumble
+/// forwards the blob untouched — so this function keeps the epoch-0 numbering
+/// on purpose. [`encode`] is the one that frames for the wire.
 pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Vec<u8>)> {
     use ControlMessage::*;
 
@@ -716,7 +745,7 @@ mod tests {
         let encoded = encode(&msg)?;
         // First 2 bytes are the type ID (big-endian u16).
         let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 109, "PchatKeyHolderReport must be wire type 109");
+        assert_eq!(type_id, 1006, "PchatKeyHolderReport is framed under the pchat service (1006)");
         Ok(())
     }
 
@@ -727,7 +756,7 @@ mod tests {
         });
         let encoded = encode(&msg)?;
         let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 110, "PchatKeyHoldersQuery must be wire type 110");
+        assert_eq!(type_id, 1006, "PchatKeyHoldersQuery is framed under the pchat service (1006)");
         Ok(())
     }
 
@@ -739,7 +768,7 @@ mod tests {
         });
         let encoded = encode(&msg)?;
         let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 111, "PchatKeyHoldersList must be wire type 111");
+        assert_eq!(type_id, 1006, "PchatKeyHoldersList is framed under the pchat service (1006)");
         Ok(())
     }
 
@@ -815,7 +844,7 @@ mod tests {
         });
         let encoded = encode(&msg)?;
         let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 112, "PchatKeyChallenge must be wire type 112");
+        assert_eq!(type_id, 1006, "PchatKeyChallenge is framed under the pchat service (1006)");
         Ok(())
     }
 
@@ -827,7 +856,7 @@ mod tests {
         });
         let encoded = encode(&msg)?;
         let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 113, "PchatKeyChallengeResponse must be wire type 113");
+        assert_eq!(type_id, 1006, "PchatKeyChallengeResponse is framed under the pchat service (1006)");
         Ok(())
     }
 
@@ -839,7 +868,7 @@ mod tests {
         });
         let encoded = encode(&msg)?;
         let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 114, "PchatKeyChallengeResult must be wire type 114");
+        assert_eq!(type_id, 1006, "PchatKeyChallengeResult is framed under the pchat service (1006)");
         Ok(())
     }
 
@@ -889,7 +918,7 @@ mod tests {
 
         // Wire type ID must be 116.
         let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 116, "PchatOfflineQueueDrain must be wire type 116");
+        assert_eq!(type_id, 1006, "PchatOfflineQueueDrain is framed under the pchat service (1006)");
 
         let mut buf = BytesMut::from(&encoded[..]);
         let decoded = decode(&mut buf)?.unwrap();
@@ -919,7 +948,7 @@ mod tests {
         let encoded = encode(&msg)?;
 
         let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 121, "PchatSenderKeyDistribution must be wire type 121");
+        assert_eq!(type_id, 1006, "PchatSenderKeyDistribution is framed under the pchat service (1006)");
 
         let mut buf = BytesMut::from(&encoded[..]);
         let decoded = decode(&mut buf)?.unwrap();
@@ -975,7 +1004,7 @@ mod tests {
         let msg = ControlMessage::FancyOnboardingConfig(cfg);
         let encoded = encode(&msg)?;
         let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 136, "FancyOnboardingConfig must be wire type 136");
+        assert_eq!(type_id, 1014, "FancyOnboardingConfig is framed under the onboarding service (1014)");
 
         let mut buf = BytesMut::from(&encoded[..]);
         let decoded = decode(&mut buf)?.unwrap();
@@ -1018,7 +1047,7 @@ mod tests {
         let msg = ControlMessage::FancyOnboardingResponse(resp);
         let encoded = encode(&msg)?;
         let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 138, "FancyOnboardingResponse must be wire type 138");
+        assert_eq!(type_id, 1014, "FancyOnboardingResponse is framed under the onboarding service (1014)");
 
         let mut buf = BytesMut::from(&encoded[..]);
         let decoded = decode(&mut buf)?.unwrap();
@@ -1043,7 +1072,7 @@ mod tests {
         );
         let encoded_q = encode(&q)?;
         let type_id_q = u16::from_be_bytes([encoded_q[0], encoded_q[1]]);
-        assert_eq!(type_id_q, 139);
+        assert_eq!(type_id_q, 1014, "the query is framed under the onboarding service");
 
         let mut buf = BytesMut::from(&encoded_q[..]);
         let decoded_q = decode(&mut buf)?.unwrap();
@@ -1058,7 +1087,7 @@ mod tests {
         );
         let encoded_d = encode(&d_empty)?;
         let type_id_d = u16::from_be_bytes([encoded_d[0], encoded_d[1]]);
-        assert_eq!(type_id_d, 140);
+        assert_eq!(type_id_d, 1014, "so is the delivery");
 
         let mut buf = BytesMut::from(&encoded_d[..]);
         let decoded_d = decode(&mut buf)?.unwrap();
@@ -1080,7 +1109,7 @@ mod tests {
         let encoded = encode(&msg)?;
 
         let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 131, "FancyTypingIndicator must be wire type 131");
+        assert_eq!(type_id, 1015, "FancyTypingIndicator is framed under the social service (1015)");
 
         let mut buf = BytesMut::from(&encoded[..]);
         let decoded = decode(&mut buf)?.unwrap();
