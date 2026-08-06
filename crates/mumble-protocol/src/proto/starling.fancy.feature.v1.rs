@@ -318,7 +318,7 @@ pub struct Register {
     pub token: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub platform: ::prost::alloc::string::String,
-    /// The channels to stay quiet about, as `Subscribe.muted` — carried here so a
+    /// The channels to stay quiet about, as `Subscribe.muted`, carried here so a
     /// device that has just registered is not loud until its first subscribe.
     #[prost(uint32, repeated, tag = "3")]
     pub muted: ::prost::alloc::vec::Vec<u32>,
@@ -330,15 +330,15 @@ pub struct Unregister {
 }
 /// Which channels a device wants *no* notification from.
 ///
-/// An exclusion list, and the direction matters. This was an inclusion list —
-/// `channels` plus an `all` flag — which is the wrong shape twice over: a user
+/// An exclusion list, and the direction matters. This was an inclusion list,
+/// `channels` plus an `all` flag, which is the wrong shape twice over: a user
 /// mutes two rooms out of forty and cannot be asked to enumerate the other
 /// thirty-eight, and any channel created after the list was sent would silently
 /// stop notifying. Muting is the thing a person does; being notified is the
 /// default they are changing.
 ///
 /// The whole set is replaced on every send, so a client can always say "I have
-/// forgotten that one" — the same reason `permissions.TokenSet` replaces rather
+/// forgotten that one", the same reason `permissions.TokenSet` replaces rather
 /// than adds.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Subscribe {
@@ -408,7 +408,7 @@ pub struct AuditRecord {
     pub entry_hash: ::prost::alloc::string::String,
     /// Who and where it was done to. The store has held both since it existed and
     /// the record dropped them, so "banned" arrived without saying whom, and a
-    /// reader had to parse `detail` — prose written for a human — to find out.
+    /// reader had to parse `detail` (prose written for a human) to find out.
     #[prost(uint64, tag = "8")]
     pub target_account: u64,
     #[prost(uint32, tag = "9")]
@@ -497,7 +497,7 @@ pub mod step {
         pub label: ::prost::alloc::string::String,
         #[prost(string, tag = "3")]
         pub description: ::prost::alloc::string::String,
-        /// Rendered beside the label. A Unicode grapheme cluster — deliberately not
+        /// Rendered beside the label. A Unicode grapheme cluster, deliberately not
         /// `wire.Emoji`, because a server shortcode would have to resolve against a
         /// custom-emoji set the onboarding flow is shown before the client has.
         #[prost(string, tag = "4")]
@@ -590,7 +590,7 @@ pub struct Response {
     /// and without this the server cannot tell that from everybody having.
     #[prost(uint64, tag = "3")]
     pub flow_version: u64,
-    /// Server-filled. **Zero means nothing is stored** — the reply to a query from
+    /// Server-filled. **Zero means nothing is stored**, the reply to a query from
     /// a user who has never answered, which is a different thing from a user who
     /// answered and chose nothing.
     #[prost(uint64, tag = "4")]
@@ -631,12 +631,22 @@ pub mod link_preview_envelope {
         Error(super::PreviewError),
     }
 }
+/// "Preview these links for me."
+///
+/// **Several URLs, one request.** A chat message carries as many links as
+/// somebody typed, and a canon that took one per request would have the client
+/// either send N frames — through a rate limiter that counts frames — or drop
+/// all but the first, which is what the epoch-0 translation did.
+///
+/// The answers come back one `Preview` (or `PreviewError`) per URL, each
+/// carrying the `request_id` and its own `url`, so a client can render them as
+/// they arrive rather than waiting for the slowest host in the message.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PreviewRequest {
     #[prost(string, tag = "1")]
     pub request_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub url: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "2")]
+    pub urls: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// Fetched by the server, never by the client, so a chat link cannot be used to
 /// probe a viewer's network. The fetch is SSRF-guarded on the server side.

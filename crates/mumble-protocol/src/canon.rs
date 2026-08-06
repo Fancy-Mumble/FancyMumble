@@ -38,6 +38,8 @@ const SOCIAL: u16 = 1015;
 const PCHAT: u16 = 1006;
 /// Outer type for push notifications.
 const PUSH: u16 = 1011;
+/// Outer type for server-fetched link previews.
+const LINK_PREVIEW: u16 = 1016;
 
 /// Frame `msg` as the canon, or `None` when it has no faithful canon form.
 ///
@@ -93,6 +95,21 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
             width: stroke.width_frac.or(stroke.width).unwrap_or_default(),
             points: stroke.points.clone(),
         }),
+        ControlMessage::FancyLinkPreviewRequest(request) => {
+            // Every URL in one frame. The canon takes `repeated urls` for this
+            // reason: a chat message carries as many links as somebody typed,
+            // and one frame per link would meter a single message against a
+            // rate limiter that counts frames.
+            let envelope = fancy::feature::LinkPreviewEnvelope {
+                body: Some(fancy::feature::link_preview_envelope::Body::Request(
+                    fancy::feature::PreviewRequest {
+                        request_id: request.request_id.clone().unwrap_or_default(),
+                        urls: request.urls.clone(),
+                    },
+                )),
+            };
+            return Some((LINK_PREVIEW, envelope.encode_to_vec()));
+        }
         ControlMessage::FancyPushRegister(register) => {
             // The canon used to model this as an *inclusion* list, which no
             // client could fill: a user mutes two rooms out of forty. It now
@@ -240,6 +257,35 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 _ => None,
             })
         }
+        LINK_PREVIEW => {
+            let Ok(envelope) = fancy::feature::LinkPreviewEnvelope::decode(payload) else {
+                return Ok(None);
+            };
+            Ok(match envelope.body {
+                Some(fancy::feature::link_preview_envelope::Body::Preview(preview)) => {
+                    Some(ControlMessage::FancyLinkPreviewResponse(preview_response(
+                        &preview,
+                    )))
+                }
+                // A refusal becomes an answer with no embeds.
+                //
+                // `FancyLinkPreviewResponse` has no error field — epoch 0 never
+                // modelled one — so the reason stays in the server's log and
+                // the client gets the one thing it needs from here: the
+                // correlation id, so it stops waiting. Dropped instead, it
+                // spins on a preview that is never coming.
+                Some(fancy::feature::link_preview_envelope::Body::Error(failed)) => {
+                    tracing::debug!(reason = %failed.reason, "link preview refused by the server");
+                    Some(ControlMessage::FancyLinkPreviewResponse(
+                        mumble_tcp::FancyLinkPreviewResponse {
+                            request_id: Some(failed.request_id),
+                            embeds: Vec::new(),
+                        },
+                    ))
+                }
+                Some(fancy::feature::link_preview_envelope::Body::Request(_)) | None => None,
+            })
+        }
         PCHAT => {
             let Ok(envelope) = fancy::pchat::PchatEnvelope::decode(payload) else {
                 return Ok(None);
@@ -313,6 +359,34 @@ fn emoji_to_canon(emoji: Option<&mumble_tcp::pchat_reaction::Emoji>) -> Option<f
     Some(fancy::wire::Emoji { kind: Some(kind) })
 }
 
+/// One canon `Preview` as the client's own response message.
+///
+/// The canon is deliberately smaller than the epoch-0 shape: it carries what a
+/// server can honestly extract from a page — title, description, site — and not
+/// the video/author/favicon/timestamp surface `Embed` has room for. Those are
+/// left unset rather than invented, so a client renders what was actually read.
+///
+/// `image_key` is not mapped either: it names an object in the files service,
+/// and nothing stores one yet (`PROTOCOL-MIGRATION.md` M2b). Putting a remote
+/// URL in `Media.url` would send every viewer to fetch it, which is the network
+/// probe that server-side previews exist to prevent.
+fn preview_response(
+    preview: &fancy::feature::Preview,
+) -> mumble_tcp::FancyLinkPreviewResponse {
+    mumble_tcp::FancyLinkPreviewResponse {
+        request_id: Some(preview.request_id.clone()),
+        embeds: vec![mumble_tcp::fancy_link_preview_response::Embed {
+            url: Some(preview.url.clone()),
+            title: Some(preview.title.clone()),
+            description: Some(preview.description.clone()),
+            site_name: Some(preview.site.clone()),
+            r#type: Some("link".to_owned()),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
 /// `0xRRGGBB` as the CSS the canon asks for.
 fn css_colour(packed: u32) -> String {
     format!("#{:06x}", packed & 0x00ff_ffff)
@@ -377,6 +451,83 @@ mod tests {
             panic!("expected a typing indicator");
         };
         assert_eq!(typing.channel_id, Some(4));
+    }
+
+    #[test]
+    fn every_link_in_one_message_is_asked_for() {
+        // The gap this closed: the client sent `FancyLinkPreviewRequest` flat
+        // as type 132, which has no canon home, so it took the PluginData
+        // relay — and Starling's link-preview service only ever decodes a
+        // `LinkPreviewEnvelope` under outer type 1016. The server fetched
+        // correctly and the request never arrived.
+        let sent = ControlMessage::FancyLinkPreviewRequest(mumble_tcp::FancyLinkPreviewRequest {
+            request_id: Some("r-1".to_owned()),
+            urls: vec![
+                "https://example.com/a".to_owned(),
+                "https://example.org/b".to_owned(),
+            ],
+        });
+        let (outer, payload) = to_canon(&sent).expect("link preview has a canon home");
+        assert_eq!(outer, LINK_PREVIEW);
+
+        let envelope = fancy::feature::LinkPreviewEnvelope::decode(payload.as_slice())
+            .expect("the server's own decode");
+        let Some(fancy::feature::link_preview_envelope::Body::Request(request)) = envelope.body
+        else {
+            panic!("expected a request");
+        };
+        assert_eq!(request.request_id, "r-1");
+        assert_eq!(
+            request.urls,
+            vec!["https://example.com/a".to_owned(), "https://example.org/b".to_owned()],
+            "a message with two links must ask about both"
+        );
+    }
+
+    #[test]
+    fn a_preview_comes_back_as_an_embed_and_a_refusal_as_an_empty_answer() {
+        let preview = fancy::feature::LinkPreviewEnvelope {
+            body: Some(fancy::feature::link_preview_envelope::Body::Preview(
+                fancy::feature::Preview {
+                    request_id: "r-2".to_owned(),
+                    url: "https://example.com/a".to_owned(),
+                    title: "Example Domain".to_owned(),
+                    description: "A page".to_owned(),
+                    site: "Example".to_owned(),
+                    image_key: String::new(),
+                },
+            )),
+        };
+        let back = from_canon(LINK_PREVIEW, &preview.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::FancyLinkPreviewResponse(response) = back else {
+            panic!("expected a preview response");
+        };
+        assert_eq!(response.request_id.as_deref(), Some("r-2"));
+        assert_eq!(
+            response.embeds.first().and_then(|e| e.title.as_deref()),
+            Some("Example Domain")
+        );
+
+        // A refusal carries no embeds, and must still carry the correlation id:
+        // without it the client waits for a preview that is never coming.
+        let refused = fancy::feature::LinkPreviewEnvelope {
+            body: Some(fancy::feature::link_preview_envelope::Body::Error(
+                fancy::feature::PreviewError {
+                    request_id: "r-3".to_owned(),
+                    reason: "that address is inside the server's network".to_owned(),
+                },
+            )),
+        };
+        let back = from_canon(LINK_PREVIEW, &refused.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::FancyLinkPreviewResponse(response) = back else {
+            panic!("expected a preview response");
+        };
+        assert_eq!(response.request_id.as_deref(), Some("r-3"));
+        assert!(response.embeds.is_empty());
     }
 
     #[test]
