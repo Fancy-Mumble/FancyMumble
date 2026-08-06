@@ -1,0 +1,120 @@
+syntax = "proto3";
+
+// Outer type 1015 — the small social surface that has no upstream message:
+// reactions, read receipts, typing indicators, polls, watch-together and
+// drawing strokes. One service, because each is a few hundred bytes of state
+// and a fan-out, and nineteen services with one message each is worse.
+package starling.fancy.social.v1;
+
+import "fancy/wire.proto";
+
+message SocialEnvelope {
+  oneof body {
+    Reaction reaction = 1;
+    Typing typing = 2;
+    ReadReceipt receipt = 3;
+    Poll poll = 4;
+    PollVote vote = 5;
+    PollState poll_state = 6;
+    WatchSync watch = 7;
+    WatchState watch_state = 8;
+    DrawStroke stroke = 9;
+    DrawClear clear = 10;
+  }
+}
+
+// The one reaction message. pchat carried a second, weaker one until the
+// epoch-1 canon settled (docs/PROTOCOL-REDESIGN.md §2).
+//
+// `channel` and `message_id` stay flat rather than folding into a
+// `wire.MessageRef`: this is the fan-out address the service reads on every
+// reaction, and nesting it would put an "absent" case in front of a field
+// routing cannot do without.
+message Reaction {
+  uint32 channel = 1;
+  string message_id = 2;
+  starling.fancy.wire.v1.Emoji emoji = 3;
+  uint32 actor = 4;
+  bool remove = 5;
+}
+
+message Typing {
+  uint32 channel = 1;
+  uint32 actor = 2;
+  bool typing = 3;
+}
+
+message ReadReceipt {
+  uint32 channel = 1;
+  string message_id = 2;
+  uint32 actor = 3;
+  uint64 at_ms = 4;
+}
+
+message Poll {
+  string poll_id = 1;
+  uint32 channel = 2;
+  string question = 3;
+  repeated string options = 4;
+  bool multiple = 5;
+  uint64 closes_at_ms = 6;
+  uint32 creator = 7;
+}
+
+message PollVote {
+  string poll_id = 1;
+  repeated uint32 options = 2;
+  uint32 voter = 3;
+}
+
+message PollState {
+  Poll poll = 1;
+  repeated uint32 tallies = 2;
+  bool closed = 3;
+}
+
+// Watch-together: a host drives, everyone else follows. The host is explicit
+// because a transfer has to be observable — a silent one desyncs every viewer.
+message WatchSync {
+  string session_id = 1;
+  uint32 channel = 2;
+  enum Kind {
+    START = 0;
+    JOIN = 1;
+    LEAVE = 2;
+    STATE = 3;
+    END = 4;
+    TRANSFER_HOST = 5;
+  }
+  Kind kind = 3;
+  string url = 4;
+  double position_s = 5;
+  bool playing = 6;
+  uint32 actor = 7;
+  uint32 new_host = 8;
+}
+
+message WatchState {
+  string session_id = 1;
+  uint32 channel = 2;
+  uint32 host = 3;
+  repeated uint32 viewers = 4;
+  string url = 5;
+  double position_s = 6;
+  bool playing = 7;
+}
+
+message DrawStroke {
+  uint32 channel = 1;
+  uint32 actor = 2;
+  string colour = 3;
+  float width = 4;
+  // Flat x,y pairs. Bounded before it is stored: an unbounded point list from
+  // an unauthenticated peer is an allocation attack.
+  repeated float points = 5;
+}
+
+message DrawClear {
+  uint32 channel = 1;
+  uint32 actor = 2;
+}

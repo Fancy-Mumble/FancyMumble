@@ -142,6 +142,40 @@ impl ClientHandle {
     }
 }
 
+/// The `Version` this client opens every connection with.
+///
+/// Its own function because two of these fields are a *claim about the wire*
+/// that a peer acts on, and a claim needs somewhere a test can read it.
+/// `fancy_protocol` being wrong is what made an epoch-1 server send us payloads
+/// we then misparsed in silence — see the field comment below and M2h in
+/// Starling's `docs/PROTOCOL-REDESIGN.md`.
+pub(crate) fn version_announcement(ver: MumbleVersion) -> mumble_tcp::Version {
+    mumble_tcp::Version {
+        version_v1: Some(ver.encode_v1()),
+        version_v2: Some(ver.encode_v2()),
+        release: Some(format!("FancyMumble {}", env!("CARGO_PKG_VERSION"))),
+        os: Some(std::env::consts::OS.into()),
+        os_version: None,
+        // Which features exist. Still true, so still announced: a server reads
+        // it to decide what to offer, not how to frame anything.
+        fancy_version: Some(crate::FANCY_VERSION),
+        // Which numbering the fields above are expressed in.
+        //
+        // Announced again as of M2c, and only because the codec now earns it:
+        // `crate::canon` frames the epoch-1 message sets that an epoch-1 peer
+        // decodes. It briefly said this while `NativeCodec` still framed the
+        // *proto2* envelope shapes under the canon's outer types, and the two
+        // ends silently corrupted each other — so the rule this pairing exists
+        // to enforce is that **the claim and the codec move together**.
+        //
+        // Messages the canon cannot yet carry faithfully are not affected by
+        // the claim: they travel through `PluginDataTransmission`, which is
+        // epoch-independent by design and which an epoch-1 peer relays. See
+        // `canon`'s module docs for which those are.
+        fancy_protocol: Some(fancy_codec::FANCY_PROTOCOL_EPOCH),
+    }
+}
+
 /// Build and run the Mumble client.
 ///
 /// Returns a [`ClientHandle`] for submitting commands and a `JoinHandle`
@@ -162,21 +196,7 @@ pub async fn run<H: EventHandler>(
     // 2. Send the Version message FIRST - before anything else touches the
     //    stream.  The server requires version >= 1.4 for channel listen.
     let ver = config.version;
-    let version_msg = ControlMessage::Version(mumble_tcp::Version {
-        version_v1: Some(ver.encode_v1()),
-        version_v2: Some(ver.encode_v2()),
-        release: Some(format!("FancyMumble {}", env!("CARGO_PKG_VERSION"))),
-        os: Some(std::env::consts::OS.into()),
-        os_version: None,
-        // Announce Fancy Mumble extension support, version derived from Cargo.toml.
-        // The server responds with its own fancy_version if it supports them.
-        fancy_version: Some(crate::FANCY_VERSION),
-        // And which wire numbering that version is expressed in, so the server
-        // can make the same judgement about us that we make about it. Announced
-        // even though it is the default: a server distinguishing "epoch 0" from
-        // "too old to have an opinion" needs to see the field.
-        fancy_protocol: Some(fancy_codec::FANCY_PROTOCOL_EPOCH),
-    });
+    let version_msg = ControlMessage::Version(version_announcement(ver));
     tcp.send(&version_msg).await?;
     info!("Version {ver} sent");
 

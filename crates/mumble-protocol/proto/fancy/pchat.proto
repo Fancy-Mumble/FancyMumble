@@ -1,0 +1,193 @@
+syntax = "proto3";
+
+// Outer type 1006 — persistent chat.
+//
+// The server is a relay and a store. The end-to-end crypto lives in the
+// client, so nothing here decrypts anything: payloads are opaque ciphertext,
+// and the service's job is storage, fan-out, offline queues, key-holder
+// bookkeeping and rate limiting (PORTING-PLAN.md §4, Phase 4).
+package starling.fancy.pchat.v1;
+
+import "fancy/wire.proto";
+
+message PchatEnvelope {
+
+  oneof body {
+    Message message = 1;
+    Fetch fetch = 2;
+    FetchResponse fetch_response = 3;
+    Ack ack = 4;
+    KeyAnnounce key_announce = 5;
+    KeyRequest key_request = 6;
+    KeyDeliver key_deliver = 7;
+    HolderReport holder_report = 8;
+    HolderQuery holder_query = 9;
+    Pin pin = 10;
+    PinList pin_list = 11;
+    Delete delete = 12;
+  }
+}
+
+message Message {
+  // UUIDv7 as a string on the wire, kept as 16 bytes in storage — the wire
+  // type does not change (docs/STORAGE.md L3).
+  string message_id = 1;
+  uint32 channel = 2;
+  // Who sent it, *while they are connected*. Server-stamped, and useful for
+  // addressing a live reply — but not an identity, because session ids are
+  // handed out per connection and reused.
+  uint32 sender = 3;
+  bytes ciphertext = 4;
+  uint64 sent_at_ms = 5;
+  string supersedes = 6;
+  uint32 epoch = 7;
+  // Who sent it, durably: the SHA-1 of their leaf certificate.
+  //
+  // **Server-stamped from the TLS connection, never read from the client.**
+  // That is what makes it an identity rather than a claim — a client cannot
+  // attribute a message to somebody else, and the recipient's crypto verifies
+  // against the key announced for this same hash.
+  //
+  // It exists because `sender` cannot carry the archive. A stored message
+  // outlives the connection that produced it, and a session id is recycled, so
+  // an archive keyed on one attributes yesterday's messages to whoever holds
+  // the number today. The client's key ladder is keyed on this hash for the
+  // same reason (`peer_keys`, channel originators, key holders).
+  //
+  // Empty for a peer that presented no certificate; such a peer cannot take
+  // part in the key ladder anyway.
+  bytes sender_cert = 8;
+
+  // -- What the recipient needs to decrypt it --------------------------------
+  //
+  // Opaque to this server, like the ciphertext beside them, and carried for the
+  // same reason: the recipient cannot derive any of the three. `epoch` alone
+  // says *which generation* of key, not which key — a channel that forked
+  // during a membership change has two epoch 4s, and picking the wrong one
+  // fails to decrypt with no way to tell why.
+
+  // SHA-256(epoch_key)[0..8]. Identifies the exact key, and is what the
+  // client's consensus code compares when two distributions disagree.
+  bytes epoch_fingerprint = 9;
+  // Position in the sender's chain, for ordering within an epoch.
+  uint32 chain_index = 10;
+  // Which end-to-end scheme sealed it. Per message rather than per channel
+  // because a channel's setting can change while messages sealed under the old
+  // one are still in the archive, and those stay readable.
+  Protocol protocol = 11;
+}
+
+// The end-to-end schemes a message can be sealed under.
+//
+// The server never acts on this — it cannot read any of them — but it is on the
+// wire because the recipient has to know which one to try.
+enum Protocol {
+  PROTOCOL_UNSPECIFIED = 0;
+  // Readable from the point of joining onward.
+  FANCY_V1_POST_JOIN = 1;
+  // The whole archive, re-keyed to each new member.
+  FANCY_V1_FULL_ARCHIVE = 2;
+  // Not end-to-end at all: the server holds the key.
+  SERVER_MANAGED = 3;
+  SIGNAL_V1 = 4;
+}
+
+message Fetch {
+  // Flat, not inside the cursor: this is the routing and authorisation
+  // address, and the service reads it on every fetch.
+  uint32 channel = 1;
+  starling.fancy.wire.v1.Cursor page = 2;
+}
+
+message FetchResponse {
+  uint32 channel = 1;
+  repeated Message messages = 2;
+  uint64 total_stored = 3;
+  starling.fancy.wire.v1.PageInfo page = 4;
+}
+
+message Ack {
+  string message_id = 1;
+  enum Status {
+    STORED = 0;
+    DUPLICATE = 1;
+    REFUSED = 2;
+    RATE_LIMITED = 3;
+  }
+  Status status = 2;
+  string detail = 3;
+}
+
+// -- The key ladder ---------------------------------------------------------
+//
+// These are relayed **verbatim**: the bodies carry signatures over their own
+// canonical encoding, so a server that re-encoded one would invalidate it. The
+// certificate hashes below are therefore *client-filled*, unlike
+// `Message.sender_cert` which the server stamps.
+//
+// That does not make them a free-for-all. The server reads the claimed hash and
+// refuses to relay a body claiming an identity that is not the connection's own
+// — the same kind of read it already does on `channel` to route and authorise,
+// and no more understanding of the payload than that. It is defence in depth
+// rather than the guarantee: the guarantee is the recipients' own key pinning,
+// because a server is not trusted with content here.
+
+message KeyAnnounce {
+  uint32 channel = 1;
+  uint32 epoch = 2;
+  bytes public_key = 3;
+  // Whose key this is. Refused unless it is the sender's own certificate.
+  bytes holder_cert = 4;
+}
+
+message KeyRequest {
+  uint32 channel = 1;
+  uint32 epoch = 2;
+  bytes requester_key = 3;
+  // Who is asking, so a distributor knows which identity to seal to. Refused
+  // unless it is the sender's own certificate.
+  bytes requester_cert = 4;
+}
+
+message KeyDeliver {
+  uint32 channel = 1;
+  uint32 epoch = 2;
+  // Where to send it. A session, because this is the one arm the server
+  // unicasts and routing needs a live connection.
+  uint32 recipient = 3;
+  bytes sealed_key = 4;
+  bytes countersignature = 5;
+  // Who it was sealed *for*, which is not the same question as where to send
+  // it — and the difference is a real race: the requester can disconnect
+  // between asking and being answered, and a recycled session id would hand
+  // the reply to whoever holds that number now. The recipient compares this
+  // against its own certificate and discards a delivery meant for somebody
+  // else, which it cannot do from a session id alone.
+  bytes recipient_cert = 6;
+}
+
+message HolderReport {
+  uint32 channel = 1;
+  uint32 epoch = 2;
+  repeated bytes holder_certs = 3;
+}
+
+message HolderQuery {
+  uint32 channel = 1;
+}
+
+message Pin {
+  string message_id = 1;
+  uint32 channel = 2;
+  bool unpin = 3;
+}
+
+message PinList {
+  uint32 channel = 1;
+  repeated Message pinned = 2;
+}
+
+message Delete {
+  uint32 channel = 1;
+  repeated string message_ids = 2;
+}

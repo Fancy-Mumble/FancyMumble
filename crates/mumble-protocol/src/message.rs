@@ -222,15 +222,6 @@ macro_rules! message_type_mapping {
                 self.type_id() >= FANCY_EXTENSION_TYPE_THRESHOLD
             }
         }
-
-        /// Every Fancy message type ID this build knows.
-        #[cfg(test)]
-        pub(crate) fn all_fancy_type_ids() -> Vec<u16> {
-            [$(TcpMessageType::$variant as u16,)*]
-                .into_iter()
-                .filter(|id| *id >= FANCY_EXTENSION_TYPE_THRESHOLD)
-                .collect()
-        }
     };
 }
 
@@ -426,186 +417,13 @@ pub const FANCY_EXTENSION_TYPE_THRESHOLD: u16 = TcpMessageType::PchatMessage as 
 
 /// First service outer type. Epoch 1 gives every Fancy service exactly one
 /// outer type from here up, and nests its messages in that service's envelope.
-pub const FANCY_SERVICE_TYPE_MIN: u16 = 1000;
-
-/// Maps every Fancy message to the service envelope that carries it on the
-/// epoch-1 wire, and generates both directions of the framing.
 ///
-/// One list, so a message cannot be encodable but not decodable — the pair of
-/// `match` arms is generated from the same line.
-macro_rules! fancy_services {
-    ($(
-        $envelope:ident as $module:ident => $outer:expr => {
-            $($variant:ident => $arm:ident),* $(,)?
-        }
-    )*) => {
-        impl ControlMessage {
-            /// The epoch-1 outer type carrying this message, or `None` for an
-            /// upstream message — those stay flat and frozen at 0–99.
-            #[must_use]
-            pub fn service_type(&self) -> Option<u16> {
-                match self {
-                    $($(Self::$variant(_) => Some($outer),)*)*
-                    _ => None,
-                }
-            }
-
-            /// Frame this message as `(service outer type, envelope bytes)`.
-            ///
-            /// `None` for upstream messages, which the caller sends flat.
-            #[must_use]
-            pub fn to_service_payload(&self) -> Option<(u16, Vec<u8>)> {
-                use prost::Message as _;
-                match self {
-                    $($(Self::$variant(m) => Some((
-                        $outer,
-                        mumble_tcp::$envelope {
-                            body: Some(mumble_tcp::$module::Body::$arm(m.clone())),
-                        }
-                        .encode_to_vec(),
-                    )),)*)*
-                    _ => None,
-                }
-            }
-        }
-
-        /// Every Fancy message type ID that has an epoch-1 service home.
-        #[cfg(test)]
-        pub(crate) fn serviced_fancy_type_ids() -> Vec<u16> {
-            vec![$($(TcpMessageType::$variant as u16,)*)*]
-        }
-
-        /// Decode a service envelope back into the message it carries.
-        ///
-        /// `Ok(None)` means `type_id` is not a service type, so the caller
-        /// should fall through to the flat upstream table.
-        pub(crate) fn control_message_from_service(
-            type_id: u16,
-            payload: &[u8],
-        ) -> crate::error::Result<Option<ControlMessage>> {
-            use prost::Message as _;
-            match type_id {
-                $($outer => {
-                    let envelope = mumble_tcp::$envelope::decode(payload)?;
-                    match envelope.body {
-                        $(Some(mumble_tcp::$module::Body::$arm(m))
-                            => Ok(Some(ControlMessage::$variant(m))),)*
-                        // A peer that knows an arm this build does not. The
-                        // envelope is still valid; only the arm is unreadable,
-                        // so this is a skip rather than a connection error.
-                        None => Ok(None),
-                    }
-                })*
-                _ => Ok(None),
-            }
-        }
-    };
-}
-
-fancy_services! {
-    // 1006 — persistent chat: the store, the key ladder, pins. Reactions are
-    // social despite the `Pchat` prefix; the prefix records where they were
-    // introduced, not which service owns them.
-    PchatEnvelope as pchat_envelope => 1006 => {
-        PchatMessage => Message,
-        PchatFetch => Fetch,
-        PchatFetchResponse => FetchResponse,
-        PchatMessageDeliver => Deliver,
-        PchatKeyAnnounce => KeyAnnounce,
-        PchatKeyExchange => KeyExchange,
-        PchatKeyRequest => KeyRequest,
-        PchatAck => Ack,
-        PchatEpochCountersig => EpochCountersig,
-        PchatKeyHolderReport => KeyHolderReport,
-        PchatKeyHoldersQuery => KeyHoldersQuery,
-        PchatKeyHoldersList => KeyHoldersList,
-        PchatKeyChallenge => KeyChallenge,
-        PchatKeyChallengeResponse => KeyChallengeResponse,
-        PchatKeyChallengeResult => KeyChallengeResult,
-        PchatDeleteMessages => DeleteMessages,
-        PchatOfflineQueueDrain => OfflineQueueDrain,
-        PchatSenderKeyDistribution => SenderKeyDistribution,
-        PchatPin => Pin,
-        PchatPinDeliver => PinDeliver,
-        PchatPinFetchResponse => PinFetchResponse,
-    }
-
-    // 1015 — reactions, receipts, typing, polls, watch-together, drawing.
-    SocialEnvelope as social_envelope => 1015 => {
-        PchatReaction => Reaction,
-        PchatReactionDeliver => ReactionDeliver,
-        PchatReactionFetchResponse => ReactionFetchResponse,
-        FancyCustomReactionsConfig => CustomReactions,
-        FancyReadReceipt => ReadReceipt,
-        FancyReadReceiptDeliver => ReadReceiptDeliver,
-        FancyTypingIndicator => Typing,
-        FancyWatchSync => WatchSync,
-        FancyDrawStroke => DrawStroke,
-        FancyPoll => Poll,
-        FancyPollVote => PollVote,
-    }
-
-    // 1011 — push notifications.
-    PushEnvelope as push_envelope => 1011 => {
-        FancyPushRegister => PushRegister,
-        FancyPushUpdate => Update,
-        FancySubscribePush => Subscribe,
-    }
-
-    // 1008 — screen share. Camera share rides the same signalling type.
-    ScreenshareEnvelope as screenshare_envelope => 1008 => {
-        WebRtcSignal => Signal,
-    }
-
-    // 1016 — link previews.
-    LinkPreviewEnvelope as link_preview_envelope => 1016 => {
-        FancyLinkPreviewRequest => Request,
-        FancyLinkPreviewResponse => Response,
-    }
-
-    // 1014 — onboarding flow.
-    OnboardingEnvelope as onboarding_envelope => 1014 => {
-        FancyOnboardingConfig => Config,
-        FancyOnboardingConfigUpdate => ConfigUpdate,
-        FancyOnboardingResponse => Response,
-        FancyOnboardingResponseQuery => ResponseQuery,
-        FancyOnboardingResponseDeliver => ResponseDeliver,
-    }
-
-    // 1010 — server plugin administration.
-    PluginsEnvelope as plugins_envelope => 1010 => {
-        FancyPluginAdminListRequest => ListRequest,
-        FancyPluginAdminList => List,
-        FancyPluginAdminSetEnabled => SetEnabled,
-        FancyPluginAdminInstall => Install,
-        FancyPluginAdminUninstall => Uninstall,
-        FancyPluginAdminAck => Ack,
-        PluginMessage => PluginMessage,
-        PluginRegistry => Registry,
-    }
-
-    // 1013 — runtime-mutable server settings.
-    ServerConfigEnvelope as server_config_envelope => 1013 => {
-        FancyServerSettings => Settings,
-        FancyServerSettingsUpdate => SettingsUpdate,
-    }
-
-    // 1003 — userdata, including self-service account settings.
-    UserdataEnvelope as userdata_envelope => 1003 => {
-        FancyAccountSettings => AccountSettings,
-        FancyAccountSettingsUpdate => AccountSettingsUpdate,
-        FancyAccountAck => AccountAck,
-    }
-
-    // 1012 — the operator record: query, live events, retention config.
-    AuditEnvelope as audit_envelope => 1012 => {
-        FancyAuditQuery => Query,
-        FancyAuditResponse => Response,
-        FancyAuditEvent => Event,
-        FancyAuditConfig => Config,
-        FancyAuditConfigUpdate => ConfigUpdate,
-    }
-}
+/// What travels under one is the proto3 canon, translated by [`crate::canon`].
+/// The proto2 envelopes that used to live in `Mumble.proto` are deleted (M3):
+/// they were a second, incompatible definition of these same outer types, and
+/// keeping them meant every frame had two possible readings — which is exactly
+/// how the two ends silently disagreed.
+pub const FANCY_SERVICE_TYPE_MIN: u16 = 1000;
 
 message_type_mapping! {
     Version, UdpTunnel, Authenticate, Ping, Reject, ServerSync,
@@ -875,31 +693,44 @@ mod tests {
     }
 
     #[test]
-    fn every_fancy_message_has_a_service_home() {
-        // Totality is the whole contract of epoch 1: a Fancy message with no
-        // service would be framed flat, in the 100-999 range that the epoch
-        // burned, and route nowhere. This caught exactly that for the generic
-        // plugin relay at 200/201.
-        let mut all = all_fancy_type_ids();
-        let mut serviced = serviced_fancy_type_ids();
-        all.sort_unstable();
-        serviced.sort_unstable();
+    fn a_service_outer_type_only_ever_carries_the_canon() {
+        // What replaced `every_fancy_message_has_a_service_home`, which asserted
+        // totality over the proto2 service mapping that M3 deleted.
+        //
+        // The surviving property is the one that matters, and it is the D1
+        // invariant stated as code: a frame goes out under a service outer type
+        // **only** when `canon` produced it. Anything else with a service type
+        // would be a shape no epoch-1 peer can read — which is what the proto2
+        // envelopes were, framed under exactly these numbers.
+        use crate::transport::codec::encode;
 
-        let missing: Vec<u16> = all
-            .iter()
-            .copied()
-            .filter(|id| !serviced.contains(id))
-            .collect();
-        assert!(missing.is_empty(), "Fancy types with no service: {missing:?}");
-        assert_eq!(all, serviced, "a service claims a type that is not Fancy");
-    }
+        // Carried by the canon: a service type, and the payload is canon.
+        let carried = ControlMessage::FancyTypingIndicator(mumble_tcp::FancyTypingIndicator {
+            channel_id: Some(4),
+            actor: None,
+        });
+        let framed = encode(&carried).expect("encodes");
+        let outer = u16::from_be_bytes([framed[0], framed[1]]);
+        assert!(outer >= FANCY_SERVICE_TYPE_MIN, "expected a service type");
+        assert!(
+            crate::canon::from_canon(outer, &framed[6..])
+                .expect("canon payload")
+                .is_some(),
+            "a service-typed frame must be readable as the canon"
+        );
 
-    #[test]
-    fn no_two_services_claim_the_same_message() {
-        let mut serviced = serviced_fancy_type_ids();
-        let count = serviced.len();
-        serviced.sort_unstable();
-        serviced.dedup();
-        assert_eq!(serviced.len(), count, "a message is mapped to two services");
+        // Not carried: it must not acquire a service type on the way out. The
+        // codec above turns these into a relay before they reach `encode`; what
+        // is asserted here is that `encode` itself invents no framing for one.
+        let uncarried = ControlMessage::WebRtcSignal(mumble_tcp::WebRtcSignal {
+            signal_type: Some(4),
+            payload: Some("candidate:...".into()),
+            ..Default::default()
+        });
+        assert!(crate::canon::to_canon(&uncarried).is_none(), "premise");
+        assert!(
+            encode(&uncarried).is_err(),
+            "an untranslated Fancy message must be refused, not given a framing              that no peer reads"
+        );
     }
 }

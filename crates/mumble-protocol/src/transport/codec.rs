@@ -14,6 +14,20 @@ const MAX_PAYLOAD_SIZE: u32 = 8 * 1024 * 1024;
 /// Header size: 2 bytes type + 4 bytes length.
 pub const HEADER_SIZE: usize = 6;
 
+/// The resume sequence, when a connection has negotiated one.
+pub const SEQ_SIZE: usize = 8;
+
+/// A compressed batch of whole frames. Not a service — see Starling's
+/// `types::COMPRESSED_BATCH`.
+pub const COMPRESSED_BATCH: u16 = 1900;
+
+/// The most one batch may expand to.
+///
+/// The expanded size is chosen by whoever sent the batch, so a few kilobytes
+/// can claim to be gigabytes. Bounded for the same reason the frame length is,
+/// and only a peer we asked can send one at all.
+const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
+
 /// Encode a [`ControlMessage`] into a framed byte buffer ready for the wire.
 ///
 /// Fancy messages go out under their service's outer type with the message
@@ -21,8 +35,32 @@ pub const HEADER_SIZE: usize = 6;
 /// flat. The flat Fancy numbering still exists, but only inside a
 /// `PluginDataTransmission` relay — see [`serialize_control_message`].
 pub fn encode(msg: &ControlMessage) -> Result<Vec<u8>> {
-    let (type_id, payload) = match msg.to_service_payload() {
+    // The canon, or flat. There is no third framing: the proto2 envelopes that
+    // used to sit between them are gone (M3), and with them the way an
+    // untranslated Fancy message could be framed under a canon outer type in a
+    // shape no peer reads.
+    //
+    // A Fancy message reaching here untranslated has already been turned into a
+    // `PluginDataTransmission` by the codec above, which is an upstream type and
+    // serialises flat.
+    let (type_id, payload) = match crate::canon::to_canon(msg) {
         Some(framed) => framed,
+        None if msg.is_fancy_extension() => {
+            // A Fancy message with no canon form must have been turned into a
+            // relay by the codec above (`NativeCodec`/`LegacyCodec`) before
+            // reaching here. If one arrives raw, the only framing left is its
+            // epoch-0 flat id — which lives in the burned 100-999 range and
+            // routes nowhere on either kind of peer.
+            //
+            // Refused rather than framed. Emitting it would put a frame on the
+            // wire that no peer can act on and nothing would report; this way
+            // the caller that skipped the codec finds out.
+            return Err(Error::InvalidState(format!(
+                "Fancy message type {} has no canon form and was not relayed; \
+                 framing it flat would use the burned 100-999 range",
+                msg.type_id()
+            )));
+        }
         None => serialize_control_message(msg)?,
     };
     let len = payload.len() as u32;
@@ -39,6 +77,31 @@ pub fn encode(msg: &ControlMessage) -> Result<Vec<u8>> {
 /// Returns `Ok(Some(msg))` if a full frame was available (consumed from `buf`),
 /// `Ok(None)` if more data is needed, or `Err` on protocol errors.
 pub fn decode(buf: &mut BytesMut) -> Result<Option<ControlMessage>> {
+    decode_with(buf, &mut Framing::default())
+}
+
+/// How this connection's frames are shaped, and how far it has got.
+///
+/// A frame carries a sequence number only once the peer has negotiated resume
+/// and been acknowledged (`PROTOCOL-REDESIGN.md` §5, S2). Until then the layout
+/// is exactly murmur's, which is what a stock client reads — so this defaults
+/// to off and nothing changes for anyone who never asked.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Framing {
+    /// Whether inbound frames carry `seq` between `len` and the payload.
+    pub sequenced: bool,
+    /// The highest sequence seen. What a reconnect resumes from.
+    pub last_seq: u64,
+    /// Set when a sequence arrived out of step with the last one.
+    ///
+    /// The server does not announce a failed replay: a gap in the numbers *is*
+    /// the announcement, and it covers every cause rather than the one the
+    /// server happened to know about. A client that sees this re-syncs.
+    pub gap: bool,
+}
+
+/// [`decode`], threading the per-connection framing state.
+pub fn decode_with(buf: &mut BytesMut, framing: &mut Framing) -> Result<Option<ControlMessage>> {
     if buf.len() < HEADER_SIZE {
         return Ok(None);
     }
@@ -58,17 +121,80 @@ pub fn decode(buf: &mut BytesMut) -> Result<Option<ControlMessage>> {
     }
 
     buf.advance(HEADER_SIZE);
-    let payload = buf.split_to(payload_len as usize);
+    let mut payload = buf.split_to(payload_len as usize);
 
-    // Service envelope first: on the epoch-1 wire every Fancy message arrives
-    // under a service outer type.
+    // `len` covers the sequence as well as the payload, so the frame is already
+    // whole; this only takes the eight bytes off the front of it.
+    if framing.sequenced {
+        if payload.len() < SEQ_SIZE {
+            return Err(Error::InvalidState(
+                "a sequenced frame shorter than its sequence".to_owned(),
+            ));
+        }
+        let seq = u64::from_be_bytes([
+            payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6],
+            payload[7],
+        ]);
+        payload.advance(SEQ_SIZE);
+        // A replay re-sends frames under the numbers they were written with, so
+        // a resumed stream legitimately repeats or steps forward — what it must
+        // not do is skip, which means the ring could not reach back far enough.
+        if seq > framing.last_seq + 1 && framing.last_seq != 0 {
+            framing.gap = true;
+        }
+        framing.last_seq = framing.last_seq.max(seq);
+    }
+
+    // A compressed batch is unwrapped before anything is routed: what comes out
+    // is ordinary frames, which the caller reads with this same function. It is
+    // handled here rather than in the service table because it is a property of
+    // the connection and not a destination on it.
+    //
+    // The frames are put back at the *front* of the buffer, so they are read
+    // next and in order — appending would deliver them after whatever else had
+    // already arrived, which reorders a stream whose ordering is the one thing
+    // the gateway guarantees.
+    if msg_type == COMPRESSED_BATCH {
+        let expanded = zstd::stream::decode_all(payload.as_ref()).map_err(|_| {
+            Error::InvalidState("undecodable compressed batch".to_owned())
+        })?;
+        if expanded.len() > MAX_BATCH_BYTES {
+            return Err(Error::InvalidState(format!(
+                "compressed batch expands to {} bytes",
+                expanded.len()
+            )));
+        }
+        let mut rest = std::mem::take(buf);
+        buf.extend_from_slice(&expanded);
+        buf.unsplit(std::mem::take(&mut rest));
+        return decode_with(buf, framing);
+    }
+
+    // Every Fancy message on the epoch-1 wire arrives under a service outer
+    // type, and the canon is the only thing that reads one.
+    //
+    // There is deliberately no second attempt. Until M3 this fell through to
+    // the proto2 envelopes when the canon did not recognise a payload — which
+    // meant a canon frame at a service the canon does not *cover* (server-config
+    // at 1013, say) was decoded as proto2, and where the wire types happened to
+    // coincide it produced a message that looked valid and was not. That is D1
+    // inbound. Skipping is the only honest answer, and costs nothing: an
+    // unreadable member of a service is exactly what the envelope design says
+    // may be ignored.
     if msg_type >= crate::message::FANCY_SERVICE_TYPE_MIN {
-        let decoded = crate::message::control_message_from_service(msg_type, &payload)?;
+        let decoded = crate::canon::from_canon(msg_type, &payload).unwrap_or_else(|e| {
+            debug!(
+                msg_type,
+                len = payload.len(),
+                error = %e,
+                "undecodable canon payload; skipping the frame"
+            );
+            None
+        });
         if decoded.is_none() {
-            // A service this build does not route, or an arm added by a newer
-            // peer. The frame is consumed and skipped rather than fatal: the
-            // whole point of the envelope is that unknown members of a service
-            // cost nothing to ignore. `recv` loops, so `None` just reads on.
+            // A service this build does not translate, or an arm added by a
+            // newer peer. The frame is consumed and skipped rather than fatal;
+            // `recv` loops, so `None` just reads on.
             debug!(msg_type, len = payload.len(), "skipping unknown service message");
         }
         return Ok(decoded);
@@ -286,6 +412,225 @@ mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
     #![allow(deprecated, reason = "tests exercise the legacy PluginDataTransmission wire fields")]
     use super::*;
+
+    /// Build a sequenced frame exactly as the gateway's `codec::header` does:
+    /// `type ‖ len ‖ seq ‖ payload`, with `len` covering the sequence too.
+    ///
+    /// Written out by hand rather than shared, because the two ends encode this
+    /// independently — a helper both sides imported would agree with itself
+    /// while disagreeing with the wire.
+    fn sequenced_frame(type_id: u16, seq: u64, payload: &[u8]) -> BytesMut {
+        let mut buf = BytesMut::new();
+        buf.put_u16(type_id);
+        buf.put_u32((payload.len() + SEQ_SIZE) as u32);
+        buf.put_u64(seq);
+        buf.extend_from_slice(payload);
+        buf
+    }
+
+    #[test]
+    fn a_compressed_batch_yields_every_frame_it_held_in_order() {
+        // Built the way the gateway builds one — whole frames concatenated and
+        // zstd'd — rather than through a shared helper, because the two ends
+        // implement this independently and a helper would agree with itself.
+        let first = encode(&ControlMessage::Ping(mumble_tcp::Ping {
+            timestamp: Some(1),
+            ..Default::default()
+        }))
+        .expect("encodes");
+        let second = encode(&ControlMessage::Ping(mumble_tcp::Ping {
+            timestamp: Some(2),
+            ..Default::default()
+        }))
+        .expect("encodes");
+
+        let mut joined = first.clone();
+        joined.extend_from_slice(&second);
+        let compressed = zstd::stream::encode_all(joined.as_slice(), 1).expect("compresses");
+
+        let mut buf = BytesMut::new();
+        buf.put_u16(COMPRESSED_BATCH);
+        buf.put_u32(compressed.len() as u32);
+        buf.extend_from_slice(&compressed);
+        // Something already behind the batch, to prove ordering is preserved.
+        let third = encode(&ControlMessage::Ping(mumble_tcp::Ping {
+            timestamp: Some(3),
+            ..Default::default()
+        }))
+        .expect("encodes");
+        buf.extend_from_slice(&third);
+
+        let mut framing = Framing::default();
+        let mut seen = Vec::new();
+        while let Some(msg) = decode_with(&mut buf, &mut framing).expect("decodes") {
+            match msg {
+                ControlMessage::Ping(ping) => seen.push(ping.timestamp.unwrap_or_default()),
+                other => panic!("unexpected {other:?}"),
+            }
+        }
+        assert_eq!(
+            seen,
+            vec![1, 2, 3],
+            "a batch must deliver its frames in order and before what followed it"
+        );
+    }
+
+    #[test]
+    fn a_batch_that_is_not_zstd_is_refused_rather_than_guessed_at() {
+        let mut buf = BytesMut::new();
+        buf.put_u16(COMPRESSED_BATCH);
+        buf.put_u32(4);
+        buf.extend_from_slice(b"junk");
+        assert!(decode_with(&mut buf, &mut Framing::default()).is_err());
+    }
+
+    #[test]
+    fn a_sequenced_frame_yields_its_message_and_its_number() {
+        let ping = mumble_tcp::Ping {
+            timestamp: Some(42),
+            ..Default::default()
+        };
+        let mut buf = sequenced_frame(3, 900, &Message::encode_to_vec(&ping));
+        let mut framing = Framing {
+            sequenced: true,
+            ..Framing::default()
+        };
+
+        let decoded = decode_with(&mut buf, &mut framing)
+            .expect("decodes")
+            .expect("complete");
+        assert!(matches!(decoded, ControlMessage::Ping(_)));
+        assert_eq!(framing.last_seq, 900, "the number is what a resume asks from");
+        assert!(!framing.gap);
+        assert!(buf.is_empty(), "the whole frame was consumed");
+    }
+
+    #[test]
+    fn a_skipped_sequence_is_noticed() {
+        // The server does not announce a replay it could not satisfy — the gap
+        // in the numbers is the announcement, and it covers every cause rather
+        // than the one the server happened to know about.
+        let mut framing = Framing {
+            sequenced: true,
+            last_seq: 10,
+            ..Framing::default()
+        };
+        let ping = Message::encode_to_vec(&mumble_tcp::Ping::default());
+
+        let mut next = sequenced_frame(3, 11, &ping);
+        let _ = decode_with(&mut next, &mut framing).expect("decodes");
+        assert!(!framing.gap, "the very next number is not a gap");
+
+        let mut jumped = sequenced_frame(3, 47, &ping);
+        let _ = decode_with(&mut jumped, &mut framing).expect("decodes");
+        assert!(framing.gap, "a skip means the ring could not reach back");
+    }
+
+    #[test]
+    fn a_replayed_frame_is_not_mistaken_for_a_gap() {
+        // A replay re-sends frames under the numbers they were written with, so
+        // a resumed stream repeats. Treating a repeat as a gap would make every
+        // successful resume look like a failed one.
+        let mut framing = Framing {
+            sequenced: true,
+            last_seq: 20,
+            ..Framing::default()
+        };
+        let ping = Message::encode_to_vec(&mumble_tcp::Ping::default());
+        let mut replayed = sequenced_frame(3, 15, &ping);
+        let _ = decode_with(&mut replayed, &mut framing).expect("decodes");
+        assert!(!framing.gap);
+        assert_eq!(framing.last_seq, 20, "a replay does not rewind the mark");
+    }
+
+    #[test]
+    fn an_unsequenced_connection_reads_exactly_what_murmur_sends() {
+        // The compatibility half: nothing changes for a peer that never asked,
+        // and a stock Mumble client never asks.
+        let msg = ControlMessage::Ping(mumble_tcp::Ping {
+            timestamp: Some(7),
+            ..Default::default()
+        });
+        let encoded = encode(&msg).expect("encodes");
+        let mut buf = BytesMut::from(&encoded[..]);
+        let mut framing = Framing::default();
+        let decoded = decode_with(&mut buf, &mut framing)
+            .expect("decodes")
+            .expect("complete");
+        assert!(matches!(decoded, ControlMessage::Ping(_)));
+        assert_eq!(framing.last_seq, 0);
+    }
+
+    // These replaced six tests that each asserted a pchat key message was framed
+    // under 1006. That framing came from the proto2 envelope mapping M3 deleted,
+    // and those messages have no canon form: the canon's key ladder is
+    // announce/request/deliver/holder, and the challenge trio was dropped from
+    // the design entirely (`PROTOCOL-REDESIGN.md` §6).
+
+    /// Every Fancy type this build has no canon form for.
+    ///
+    /// Each had a `roundtrip_*` test asserting it survived `encode`/`decode` —
+    /// true when the proto2 envelopes framed them under a service outer type,
+    /// and meaningless now that M3 deleted those. They reach a peer through the
+    /// `PluginData` relay instead, which `fancy_codec`'s round-trip tests cover;
+    /// what matters here is that the wire codec refuses to invent a framing.
+    fn untranslated_samples() -> Vec<ControlMessage> {
+        vec![
+            ControlMessage::PchatKeyChallenge(mumble_tcp::PchatKeyChallenge {
+                channel_id: Some(1),
+                challenge: Some(vec![0; 32]),
+            }),
+            ControlMessage::PchatKeyHoldersQuery(mumble_tcp::PchatKeyHoldersQuery {
+                channel_id: Some(1),
+            }),
+            ControlMessage::PchatAck(mumble_tcp::PchatAck {
+                channel_id: Some(1),
+                ..Default::default()
+            }),
+            ControlMessage::FancyOnboardingConfig(mumble_tcp::FancyOnboardingConfig {
+                version: Some(1),
+                ..Default::default()
+            }),
+            ControlMessage::WebRtcSignal(mumble_tcp::WebRtcSignal {
+                signal_type: Some(4),
+                ..Default::default()
+            }),
+        ]
+    }
+
+    #[test]
+    fn nothing_untranslated_is_framed_in_the_burned_range() {
+        // The burned 100-999 outer types route nowhere on any peer: an epoch-1
+        // server has no handler, and a stock Mumble client ignores them. Framing
+        // one is strictly worse than refusing, because it looks like a send.
+        for msg in untranslated_samples() {
+            assert!(
+                crate::canon::to_canon(&msg).is_none(),
+                "sample must have no canon form"
+            );
+            assert!(
+                encode(&msg).is_err(),
+                "type {} must be refused, not framed flat",
+                msg.type_id()
+            );
+        }
+    }
+
+    #[test]
+    fn a_key_message_with_no_canon_form_is_refused_rather_than_framed_flat() {
+        // Refused because the only framing left would be its epoch-0 flat id,
+        // which is in the burned 100-999 range and routes nowhere on any peer.
+        // These reach the wire through the relay instead, which the codec above
+        // arranges — so a raw one here means somebody skipped it.
+        let msg = ControlMessage::PchatKeyChallenge(mumble_tcp::PchatKeyChallenge {
+            channel_id: Some(1),
+            challenge: Some(vec![0; 32]),
+        });
+        assert!(
+            encode(&msg).is_err(),
+            "framing a Fancy message in the burned range must fail loudly"
+        );
+    }
 
     #[test]
     fn roundtrip_ping() -> Result<()> {
@@ -641,464 +986,7 @@ mod tests {
 
     // -- PchatKeyHolder* codec tests ----------------------------------
 
-    #[test]
-    fn roundtrip_pchat_key_holder_report() -> Result<()> {
-        let msg = ControlMessage::PchatKeyHolderReport(mumble_tcp::PchatKeyHolderReport {
-            channel_id: Some(42),
-            cert_hash: Some("abcdef0123456789".into()),
-            takeover_mode: None,
-        });
-        let encoded = encode(&msg)?;
-        let mut buf = BytesMut::from(&encoded[..]);
-        let decoded = decode(&mut buf)?.unwrap();
-
-        match decoded {
-            ControlMessage::PchatKeyHolderReport(r) => {
-                assert_eq!(r.channel_id, Some(42));
-                assert_eq!(r.cert_hash.as_deref(), Some("abcdef0123456789"));
-            }
-            other => panic!("expected PchatKeyHolderReport, got {other:?}"),
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn roundtrip_pchat_key_holders_query() -> Result<()> {
-        let msg = ControlMessage::PchatKeyHoldersQuery(mumble_tcp::PchatKeyHoldersQuery {
-            channel_id: Some(7),
-        });
-        let encoded = encode(&msg)?;
-        let mut buf = BytesMut::from(&encoded[..]);
-        let decoded = decode(&mut buf)?.unwrap();
-
-        match decoded {
-            ControlMessage::PchatKeyHoldersQuery(q) => {
-                assert_eq!(q.channel_id, Some(7));
-            }
-            other => panic!("expected PchatKeyHoldersQuery, got {other:?}"),
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn roundtrip_pchat_key_holders_list() -> Result<()> {
-        use mumble_tcp::pchat_key_holders_list::Entry;
-
-        let msg = ControlMessage::PchatKeyHoldersList(mumble_tcp::PchatKeyHoldersList {
-            channel_id: Some(3),
-            holders: vec![
-                Entry {
-                    cert_hash: Some("hash_alice".into()),
-                    name: Some("Alice".into()),
-                },
-                Entry {
-                    cert_hash: Some("hash_bob".into()),
-                    name: Some("Bob".into()),
-                },
-            ],
-        });
-        let encoded = encode(&msg)?;
-        let mut buf = BytesMut::from(&encoded[..]);
-        let decoded = decode(&mut buf)?.unwrap();
-
-        match decoded {
-            ControlMessage::PchatKeyHoldersList(l) => {
-                assert_eq!(l.channel_id, Some(3));
-                assert_eq!(l.holders.len(), 2);
-                assert_eq!(l.holders[0].cert_hash.as_deref(), Some("hash_alice"));
-                assert_eq!(l.holders[0].name.as_deref(), Some("Alice"));
-                assert_eq!(l.holders[1].cert_hash.as_deref(), Some("hash_bob"));
-                assert_eq!(l.holders[1].name.as_deref(), Some("Bob"));
-            }
-            other => panic!("expected PchatKeyHoldersList, got {other:?}"),
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn roundtrip_pchat_key_holders_list_empty() -> Result<()> {
-        let msg = ControlMessage::PchatKeyHoldersList(mumble_tcp::PchatKeyHoldersList {
-            channel_id: Some(0),
-            holders: vec![],
-        });
-        let encoded = encode(&msg)?;
-        let mut buf = BytesMut::from(&encoded[..]);
-        let decoded = decode(&mut buf)?.unwrap();
-
-        match decoded {
-            ControlMessage::PchatKeyHoldersList(l) => {
-                assert_eq!(l.channel_id, Some(0));
-                assert!(l.holders.is_empty());
-            }
-            other => panic!("expected PchatKeyHoldersList, got {other:?}"),
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn pchat_key_holder_report_wire_type_id() -> Result<()> {
-        let msg = ControlMessage::PchatKeyHolderReport(mumble_tcp::PchatKeyHolderReport {
-            channel_id: Some(1),
-            cert_hash: Some("abc".into()),
-            takeover_mode: None,
-        });
-        let encoded = encode(&msg)?;
-        // First 2 bytes are the type ID (big-endian u16).
-        let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 1006, "PchatKeyHolderReport is framed under the pchat service (1006)");
-        Ok(())
-    }
-
-    #[test]
-    fn pchat_key_holders_query_wire_type_id() -> Result<()> {
-        let msg = ControlMessage::PchatKeyHoldersQuery(mumble_tcp::PchatKeyHoldersQuery {
-            channel_id: Some(1),
-        });
-        let encoded = encode(&msg)?;
-        let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 1006, "PchatKeyHoldersQuery is framed under the pchat service (1006)");
-        Ok(())
-    }
-
-    #[test]
-    fn pchat_key_holders_list_wire_type_id() -> Result<()> {
-        let msg = ControlMessage::PchatKeyHoldersList(mumble_tcp::PchatKeyHoldersList {
-            channel_id: Some(1),
-            holders: vec![],
-        });
-        let encoded = encode(&msg)?;
-        let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 1006, "PchatKeyHoldersList is framed under the pchat service (1006)");
-        Ok(())
-    }
-
     // -- PchatKeyChallenge* codec tests -------------------------------
-
-    #[test]
-    fn roundtrip_pchat_key_challenge() -> Result<()> {
-        let challenge = vec![0xAA; 32];
-        let msg = ControlMessage::PchatKeyChallenge(mumble_tcp::PchatKeyChallenge {
-            channel_id: Some(5),
-            challenge: Some(challenge.clone()),
-        });
-        let encoded = encode(&msg)?;
-        let mut buf = BytesMut::from(&encoded[..]);
-        let decoded = decode(&mut buf)?.unwrap();
-
-        match decoded {
-            ControlMessage::PchatKeyChallenge(c) => {
-                assert_eq!(c.channel_id, Some(5));
-                assert_eq!(c.challenge.as_deref(), Some(challenge.as_slice()));
-            }
-            other => panic!("expected PchatKeyChallenge, got {other:?}"),
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn roundtrip_pchat_key_challenge_response() -> Result<()> {
-        let proof = vec![0xBB; 32];
-        let msg = ControlMessage::PchatKeyChallengeResponse(mumble_tcp::PchatKeyChallengeResponse {
-            channel_id: Some(5),
-            proof: Some(proof.clone()),
-        });
-        let encoded = encode(&msg)?;
-        let mut buf = BytesMut::from(&encoded[..]);
-        let decoded = decode(&mut buf)?.unwrap();
-
-        match decoded {
-            ControlMessage::PchatKeyChallengeResponse(r) => {
-                assert_eq!(r.channel_id, Some(5));
-                assert_eq!(r.proof.as_deref(), Some(proof.as_slice()));
-            }
-            other => panic!("expected PchatKeyChallengeResponse, got {other:?}"),
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn roundtrip_pchat_key_challenge_result() -> Result<()> {
-        let msg = ControlMessage::PchatKeyChallengeResult(mumble_tcp::PchatKeyChallengeResult {
-            channel_id: Some(5),
-            passed: Some(true),
-        });
-        let encoded = encode(&msg)?;
-        let mut buf = BytesMut::from(&encoded[..]);
-        let decoded = decode(&mut buf)?.unwrap();
-
-        match decoded {
-            ControlMessage::PchatKeyChallengeResult(r) => {
-                assert_eq!(r.channel_id, Some(5));
-                assert_eq!(r.passed, Some(true));
-            }
-            other => panic!("expected PchatKeyChallengeResult, got {other:?}"),
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn pchat_key_challenge_wire_type_id() -> Result<()> {
-        let msg = ControlMessage::PchatKeyChallenge(mumble_tcp::PchatKeyChallenge {
-            channel_id: Some(1),
-            challenge: Some(vec![0; 32]),
-        });
-        let encoded = encode(&msg)?;
-        let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 1006, "PchatKeyChallenge is framed under the pchat service (1006)");
-        Ok(())
-    }
-
-    #[test]
-    fn pchat_key_challenge_response_wire_type_id() -> Result<()> {
-        let msg = ControlMessage::PchatKeyChallengeResponse(mumble_tcp::PchatKeyChallengeResponse {
-            channel_id: Some(1),
-            proof: Some(vec![0; 32]),
-        });
-        let encoded = encode(&msg)?;
-        let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 1006, "PchatKeyChallengeResponse is framed under the pchat service (1006)");
-        Ok(())
-    }
-
-    #[test]
-    fn pchat_key_challenge_result_wire_type_id() -> Result<()> {
-        let msg = ControlMessage::PchatKeyChallengeResult(mumble_tcp::PchatKeyChallengeResult {
-            channel_id: Some(1),
-            passed: Some(false),
-        });
-        let encoded = encode(&msg)?;
-        let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 1006, "PchatKeyChallengeResult is framed under the pchat service (1006)");
-        Ok(())
-    }
-
-    #[test]
-    fn roundtrip_pchat_ack_with_channel_id() -> Result<()> {
-        let ack = mumble_tcp::PchatAck {
-            message_ids: vec!["msg-1".into(), "msg-2".into()],
-            status: Some(mumble_tcp::PchatAckStatus::PchatAckStored as i32),
-            reason: None,
-            channel_id: Some(42),
-        };
-        let msg = ControlMessage::PchatAck(ack);
-        let encoded = encode(&msg)?;
-        let mut buf = BytesMut::from(&encoded[..]);
-        let decoded = decode(&mut buf)?.unwrap();
-
-        match decoded {
-            ControlMessage::PchatAck(a) => {
-                assert_eq!(a.message_ids, vec!["msg-1", "msg-2"]);
-                assert_eq!(a.status, Some(mumble_tcp::PchatAckStatus::PchatAckStored as i32));
-                assert_eq!(a.channel_id, Some(42));
-            }
-            other => panic!("expected PchatAck, got {other:?}"),
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn roundtrip_pchat_offline_queue_drain() -> Result<()> {
-        let drain = mumble_tcp::PchatOfflineQueueDrain {
-            channel_id: Some(7),
-            messages: vec![
-                mumble_tcp::PchatMessageDeliver {
-                    message_id: Some("offline-1".into()),
-                    channel_id: Some(7),
-                    sender_hash: Some("abc123".into()),
-                    timestamp: Some(1_700_000_000),
-                    envelope: Some(b"encrypted-payload".to_vec()),
-                    protocol: Some(mumble_tcp::PchatProtocol::SignalV1 as i32),
-                    replaces_id: None,
-                },
-            ],
-            distributions: vec![],
-        };
-        let msg = ControlMessage::PchatOfflineQueueDrain(drain);
-        let encoded = encode(&msg)?;
-
-        // Wire type ID must be 116.
-        let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 1006, "PchatOfflineQueueDrain is framed under the pchat service (1006)");
-
-        let mut buf = BytesMut::from(&encoded[..]);
-        let decoded = decode(&mut buf)?.unwrap();
-
-        match decoded {
-            ControlMessage::PchatOfflineQueueDrain(d) => {
-                assert_eq!(d.channel_id, Some(7));
-                assert_eq!(d.messages.len(), 1);
-                assert_eq!(d.messages[0].message_id.as_deref(), Some("offline-1"));
-                assert_eq!(d.messages[0].sender_hash.as_deref(), Some("abc123"));
-                assert_eq!(d.messages[0].timestamp, Some(1_700_000_000));
-                assert_eq!(d.messages[0].envelope.as_deref(), Some(b"encrypted-payload".as_ref()));
-            }
-            other => panic!("expected PchatOfflineQueueDrain, got {other:?}"),
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn roundtrip_pchat_sender_key_distribution() -> Result<()> {
-        let skd = mumble_tcp::PchatSenderKeyDistribution {
-            channel_id: Some(10),
-            sender_hash: Some("sender_abc".into()),
-            distribution: Some(b"skdm-bytes-here".to_vec()),
-        };
-        let msg = ControlMessage::PchatSenderKeyDistribution(skd);
-        let encoded = encode(&msg)?;
-
-        let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 1006, "PchatSenderKeyDistribution is framed under the pchat service (1006)");
-
-        let mut buf = BytesMut::from(&encoded[..]);
-        let decoded = decode(&mut buf)?.unwrap();
-
-        match decoded {
-            ControlMessage::PchatSenderKeyDistribution(d) => {
-                assert_eq!(d.channel_id, Some(10));
-                assert_eq!(d.sender_hash.as_deref(), Some("sender_abc"));
-                assert_eq!(d.distribution.as_deref(), Some(b"skdm-bytes-here".as_ref()));
-            }
-            other => panic!("expected PchatSenderKeyDistribution, got {other:?}"),
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn roundtrip_fancy_onboarding_config() -> Result<()> {
-        use mumble_tcp::fancy_onboarding_config::{Answer, Question};
-
-        let cfg = mumble_tcp::FancyOnboardingConfig {
-            version: Some(1),
-            enabled: Some(true),
-            default_channel_ids: vec![0, 1, 2],
-            questions: vec![Question {
-                id: Some("q1".into()),
-                text: Some("What brings you here?".into()),
-                multi_select: Some(false),
-                answers: vec![
-                    Answer {
-                        id: Some("a1".into()),
-                        label: Some("Gaming".into()),
-                        channel_ids: vec![5, 6],
-                        group_names: vec!["gamers".into()],
-                        emoji: Some("🎮".into()),
-                        description: None,
-                    },
-                    Answer {
-                        id: Some("a2".into()),
-                        label: Some("Music".into()),
-                        channel_ids: vec![7],
-                        group_names: vec!["music".into()],
-                        emoji: None,
-                        description: Some("Producers, listeners, jam sessions".into()),
-                    },
-                ],
-                ask_before_join: Some(true),
-                required: Some(true),
-            }],
-            revision: Some(42),
-            updated_by: Some("admin-cert".into()),
-            updated_at: Some(1_700_000_000),
-        };
-        let msg = ControlMessage::FancyOnboardingConfig(cfg);
-        let encoded = encode(&msg)?;
-        let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 1014, "FancyOnboardingConfig is framed under the onboarding service (1014)");
-
-        let mut buf = BytesMut::from(&encoded[..]);
-        let decoded = decode(&mut buf)?.unwrap();
-        match decoded {
-            ControlMessage::FancyOnboardingConfig(c) => {
-                assert_eq!(c.version, Some(1));
-                assert!(c.enabled.unwrap());
-                assert_eq!(c.default_channel_ids, vec![0, 1, 2]);
-                assert_eq!(c.questions.len(), 1);
-                assert_eq!(c.questions[0].answers.len(), 2);
-                assert_eq!(c.questions[0].answers[0].label.as_deref(), Some("Gaming"));
-                assert_eq!(c.questions[0].answers[0].channel_ids, vec![5, 6]);
-                assert_eq!(c.questions[0].answers[0].group_names, vec!["gamers".to_string()]);
-                assert_eq!(c.revision, Some(42));
-            }
-            other => panic!("expected FancyOnboardingConfig, got {other:?}"),
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn roundtrip_fancy_onboarding_response() -> Result<()> {
-        use mumble_tcp::fancy_onboarding_response::Selection;
-
-        let resp = mumble_tcp::FancyOnboardingResponse {
-            user_hash: Some("hash_alice".into()),
-            submitted_at: Some(1_700_000_001),
-            selections: vec![
-                Selection {
-                    question_id: Some("q1".into()),
-                    answer_ids: vec!["a1".into(), "a2".into()],
-                },
-                Selection {
-                    question_id: Some("q2".into()),
-                    answer_ids: vec!["b1".into()],
-                },
-            ],
-            config_revision: Some(42),
-        };
-        let msg = ControlMessage::FancyOnboardingResponse(resp);
-        let encoded = encode(&msg)?;
-        let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 1014, "FancyOnboardingResponse is framed under the onboarding service (1014)");
-
-        let mut buf = BytesMut::from(&encoded[..]);
-        let decoded = decode(&mut buf)?.unwrap();
-        match decoded {
-            ControlMessage::FancyOnboardingResponse(r) => {
-                assert_eq!(r.user_hash.as_deref(), Some("hash_alice"));
-                assert_eq!(r.config_revision, Some(42));
-                assert_eq!(r.selections.len(), 2);
-                assert_eq!(r.selections[0].answer_ids, vec!["a1", "a2"]);
-                assert_eq!(r.selections[1].question_id.as_deref(), Some("q2"));
-            }
-            other => panic!("expected FancyOnboardingResponse, got {other:?}"),
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn roundtrip_fancy_onboarding_response_query_and_deliver() -> Result<()> {
-        // Query
-        let q = ControlMessage::FancyOnboardingResponseQuery(
-            mumble_tcp::FancyOnboardingResponseQuery {},
-        );
-        let encoded_q = encode(&q)?;
-        let type_id_q = u16::from_be_bytes([encoded_q[0], encoded_q[1]]);
-        assert_eq!(type_id_q, 1014, "the query is framed under the onboarding service");
-
-        let mut buf = BytesMut::from(&encoded_q[..]);
-        let decoded_q = decode(&mut buf)?.unwrap();
-        assert!(matches!(
-            decoded_q,
-            ControlMessage::FancyOnboardingResponseQuery(_)
-        ));
-
-        // Deliver (with no stored response)
-        let d_empty = ControlMessage::FancyOnboardingResponseDeliver(
-            mumble_tcp::FancyOnboardingResponseDeliver { response: None },
-        );
-        let encoded_d = encode(&d_empty)?;
-        let type_id_d = u16::from_be_bytes([encoded_d[0], encoded_d[1]]);
-        assert_eq!(type_id_d, 1014, "so is the delivery");
-
-        let mut buf = BytesMut::from(&encoded_d[..]);
-        let decoded_d = decode(&mut buf)?.unwrap();
-        match decoded_d {
-            ControlMessage::FancyOnboardingResponseDeliver(d) => {
-                assert!(d.response.is_none());
-            }
-            other => panic!("expected FancyOnboardingResponseDeliver, got {other:?}"),
-        }
-        Ok(())
-    }
 
     #[test]
     fn roundtrip_fancy_typing_indicator() -> Result<()> {

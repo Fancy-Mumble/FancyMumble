@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+// Outer type 1000 — session-lifecycle's Fancy extensions.
+//
+// The upstream handshake (0, 2, 3, 4, 5, 15, 21) stays flat and frozen; only
+// what Mumble has no message for lives here.
+package starling.fancy.session.v1;
+
+message SessionEnvelope {
+  oneof body {
+    Hello hello = 1;
+    ResumeRequest resume = 2;
+    ResumeAck resume_ack = 3;
+    Throttled throttled = 4;
+    VoiceEndpoint voice_endpoint = 5;
+    LazySubscribe subscribe = 6;
+  }
+}
+
+// What a Fancy client announces beyond the Version message: the capabilities
+// it actually implements, rather than what its version implies.
+message Hello {
+  uint64 fancy_version = 1;
+  bool zstd = 2;
+  bool resume = 3;
+  bool lazy_subscribe = 4;
+}
+
+// Replay from a sequence number rather than take the full flood. Legacy
+// clients cannot do this, which is why staggered drain is required regardless
+// — docs/ARCHITECTURE.md §5.
+message ResumeRequest {
+  string session_token = 1;
+  uint64 last_seq = 2;
+}
+
+message ResumeAck {
+  bool accepted = 1;
+  uint64 from_seq = 2;
+  // Set when the gap is longer than the replay ring: the client must re-sync
+  // from scratch, and is told so rather than left with a silent hole.
+  bool full_resync_required = 3;
+  string session_token = 4;
+}
+
+// murmur drops a throttled message in silence, which is how a screen-share
+// SDP offer disappeared with nothing in any log. Fancy clients are told.
+message Throttled {
+  uint32 type = 1;
+  uint32 retry_after_ms = 2;
+  string route = 3;
+}
+
+// Where to send audio, for deployments where voice is not reachable at the
+// gateway's own address. A legacy client cannot be told this and is pinned to
+// the advertised pod.
+message VoiceEndpoint {
+  string host = 1;
+  uint32 port = 2;
+}
+
+// Mumble broadcasts all channel and user state to everyone; a Fancy client
+// declares what it is looking at and gets only that.
+message LazySubscribe {
+  repeated uint32 channels = 1;
+  bool everything = 2;
+}
