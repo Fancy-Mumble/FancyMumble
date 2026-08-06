@@ -192,7 +192,7 @@ message PushEnvelope {
 message Register {
   string token = 1;
   string platform = 2;
-  // The channels to stay quiet about, as `Subscribe.muted` — carried here so a
+  // The channels to stay quiet about, as `Subscribe.muted`, carried here so a
   // device that has just registered is not loud until its first subscribe.
   repeated uint32 muted = 3;
 }
@@ -203,15 +203,15 @@ message Unregister {
 
 // Which channels a device wants *no* notification from.
 //
-// An exclusion list, and the direction matters. This was an inclusion list —
-// `channels` plus an `all` flag — which is the wrong shape twice over: a user
+// An exclusion list, and the direction matters. This was an inclusion list,
+// `channels` plus an `all` flag, which is the wrong shape twice over: a user
 // mutes two rooms out of forty and cannot be asked to enumerate the other
 // thirty-eight, and any channel created after the list was sent would silently
 // stop notifying. Muting is the thing a person does; being notified is the
 // default they are changing.
 //
 // The whole set is replaced on every send, so a client can always say "I have
-// forgotten that one" — the same reason `permissions.TokenSet` replaces rather
+// forgotten that one", the same reason `permissions.TokenSet` replaces rather
 // than adds.
 message Subscribe {
   repeated uint32 muted = 1;
@@ -256,7 +256,7 @@ message AuditRecord {
   string entry_hash = 7;
   // Who and where it was done to. The store has held both since it existed and
   // the record dropped them, so "banned" arrived without saying whom, and a
-  // reader had to parse `detail` — prose written for a human — to find out.
+  // reader had to parse `detail` (prose written for a human) to find out.
   uint64 target_account = 8;
   uint32 target_channel = 9;
 }
@@ -320,7 +320,7 @@ message Step {
     string id = 1;
     string label = 2;
     string description = 3;
-    // Rendered beside the label. A Unicode grapheme cluster — deliberately not
+    // Rendered beside the label. A Unicode grapheme cluster, deliberately not
     // `wire.Emoji`, because a server shortcode would have to resolve against a
     // custom-emoji set the onboarding flow is shown before the client has.
     string emoji = 4;
@@ -357,7 +357,7 @@ message Response {
   // ask again: an admin who adds a question has a flow nobody has answered,
   // and without this the server cannot tell that from everybody having.
   uint64 flow_version = 3;
-  // Server-filled. **Zero means nothing is stored** — the reply to a query from
+  // Server-filled. **Zero means nothing is stored**, the reply to a query from
   // a user who has never answered, which is a different thing from a user who
   // answered and chose nothing.
   uint64 submitted_at_ms = 4;
@@ -384,9 +384,19 @@ message LinkPreviewEnvelope {
   }
 }
 
+// "Preview these links for me."
+//
+// **Several URLs, one request.** A chat message carries as many links as
+// somebody typed, and a canon that took one per request would have the client
+// either send N frames — through a rate limiter that counts frames — or drop
+// all but the first, which is what the epoch-0 translation did.
+//
+// The answers come back one `Preview` (or `PreviewError`) per URL, each
+// carrying the `request_id` and its own `url`, so a client can render them as
+// they arrive rather than waiting for the slowest host in the message.
 message PreviewRequest {
   string request_id = 1;
-  string url = 2;
+  repeated string urls = 2;
 }
 
 // Fetched by the server, never by the client, so a chat link cannot be used to
