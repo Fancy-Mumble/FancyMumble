@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+// Outer type 1008 — screen-share signalling. Media never appears here: it goes
+// client↔SFU directly (docs/ARCHITECTURE.md §3).
+package starling.fancy.screenshare.v1;
+
+message ScreenshareEnvelope {
+  oneof body {
+    Offer offer = 1;
+    Answer answer = 2;
+    Start start = 3;
+    Stop stop = 4;
+    Viewers viewers = 5;
+    Health health = 6;
+  }
+}
+
+// The SFU is ICE-lite: it ignores trickled candidates and its own ride in the
+// answer. Never trickle ICE through the control plane — that is a contract
+// constraint, and each half of it cost a debugging session.
+message Offer {
+  string share_id = 1;
+  uint32 channel = 2;
+  string sdp = 3;
+  // Offers retry until answered, because the control plane rate-limits and a
+  // silently dropped offer looks exactly like a client bug.
+  uint32 attempt = 4;
+}
+
+message Answer {
+  string share_id = 1;
+  string sdp = 2;
+  string sfu_host = 3;
+  uint32 sfu_port = 4;
+}
+
+message Start {
+  string share_id = 1;
+  uint32 channel = 2;
+  uint32 presenter = 3;
+  string title = 4;
+  uint32 width = 5;
+  uint32 height = 6;
+}
+
+message Stop {
+  string share_id = 1;
+  uint32 actor = 2;
+}
+
+message Viewers {
+  string share_id = 1;
+  repeated uint32 sessions = 2;
+}
+
+message Health {
+  string share_id = 1;
+  uint32 fps = 2;
+  uint32 kbps = 3;
+  uint32 dropped = 4;
+}

@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+// Outer type 1009 — the control-plane half of bulk transfer: ask for a URL,
+// get a short-lived signed one, then move the bytes over HTTP.
+package starling.fancy.files.v1;
+
+import "fancy/wire.proto";
+
+message FilesEnvelope {
+  oneof body {
+    UploadRequest upload = 1;
+    DownloadRequest download = 2;
+    Grant grant = 3;
+    Share share = 4;
+    Listing listing = 5;
+    ListRequest list = 6;
+    Refused refused = 7;
+  }
+}
+
+message UploadRequest {
+  string request_id = 1;
+  uint32 channel = 2;
+  string filename = 3;
+  string content_type = 4;
+  uint64 size = 5;
+  bytes sha256 = 6;
+}
+
+message DownloadRequest {
+  string request_id = 1;
+  string key = 2;
+}
+
+message Grant {
+  string request_id = 1;
+  string url = 2;
+  string method = 3;
+  uint64 expires_at_ms = 4;
+  string key = 5;
+}
+
+message Share {
+  string key = 1;
+  uint32 channel = 2;
+  uint32 owner = 3;
+  string filename = 4;
+  uint64 size = 5;
+  uint64 shared_at_ms = 6;
+  bool public = 7;
+}
+
+message ListRequest {
+  uint32 channel = 1;
+  uint32 limit = 2;
+  string before_key = 3;
+}
+
+message Listing {
+  uint32 channel = 1;
+  repeated Share files = 2;
+}
+
+message Refused {
+  string request_id = 1;
+  starling.fancy.wire.v1.Refusal refusal = 2;
+}

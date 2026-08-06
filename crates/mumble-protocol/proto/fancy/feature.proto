@@ -1,0 +1,437 @@
+syntax = "proto3";
+
+// The remaining client-facing envelopes, one message set per service:
+//
+//   1004 voice   1005 text   1007 moderation   1010 plugins   1011 push
+//   1012 audit   1014 onboarding   1016 link-preview   1017 context-actions
+package starling.fancy.feature.v1;
+
+import "fancy/wire.proto";
+
+// -- 1004 voice -------------------------------------------------------------
+
+message VoiceEnvelope {
+  oneof body {
+    ListenRequest listen = 1;
+    ListenerVolume volume = 2;
+    VoiceStats stats = 3;
+    CipherNotice cipher = 4;
+  }
+}
+
+// Hear a channel without joining it. Upstream carries listeners inside
+// UserState; the volume adjustment has no upstream field at all.
+message ListenRequest {
+  repeated uint32 listen = 1;
+  repeated uint32 unlisten = 2;
+}
+
+message ListenerVolume {
+  uint32 channel = 1;
+  float volume = 2;
+}
+
+message VoiceStats {
+  uint32 session = 1;
+  uint32 good = 2;
+  uint32 late = 3;
+  uint32 lost = 4;
+  uint32 resync = 5;
+  bool udp = 6;
+}
+
+// Which cipher the peer was given, so a client can show it rather than infer
+// it from the shape of the key material.
+message CipherNotice {
+  string cipher = 1;
+}
+
+// -- 1005 text --------------------------------------------------------------
+
+message TextEnvelope {
+  oneof body {
+    HistoryRequest history = 1;
+    HistoryPage page = 2;
+    Edit edit = 3;
+    Delete delete = 4;
+  }
+}
+
+message HistoryRequest {
+  // Flat for the same reason pchat's is: routing and authorisation read it.
+  uint32 channel = 1;
+  starling.fancy.wire.v1.Cursor page = 2;
+}
+
+message StoredMessage {
+  string message_id = 1;
+  uint32 channel = 2;
+  uint32 sender = 3;
+  string sender_name = 4;
+  string body = 5;
+  uint64 sent_at_ms = 6;
+  bool edited = 7;
+}
+
+message HistoryPage {
+  uint32 channel = 1;
+  repeated StoredMessage messages = 2;
+  starling.fancy.wire.v1.PageInfo page = 3;
+}
+
+// Both of these named a message and no channel, which left the service unable
+// to route or authorise one without first looking the id up. `MessageRef`
+// carries the pair, and unlike the fan-out paths above nothing here reads the
+// channel before the body is understood.
+message Edit {
+  starling.fancy.wire.v1.MessageRef target = 1;
+  string body = 2;
+}
+
+message Delete {
+  starling.fancy.wire.v1.MessageRef target = 1;
+}
+
+// -- 1007 moderation --------------------------------------------------------
+
+message ModerationEnvelope {
+  oneof body {
+    BanEntry ban = 1;
+    BanEntries bans = 2;
+    Unban unban = 3;
+    Refused refused = 4;
+  }
+}
+
+message BanEntry {
+  uint64 id = 1;
+  string address = 2;
+  uint32 prefix_len = 3;
+  string name = 4;
+  string hash = 5;
+  string reason = 6;
+  uint64 start_ms = 7;
+  uint32 duration_s = 8;
+}
+
+message BanEntries {
+  repeated BanEntry bans = 1;
+}
+
+message Unban {
+  uint64 id = 1;
+}
+
+message Refused {
+  string action = 1;
+  starling.fancy.wire.v1.Refusal refusal = 2;
+}
+
+// -- 1010 plugins -----------------------------------------------------------
+
+message PluginsEnvelope {
+  oneof body {
+    Registry registry = 1;
+    RegistryQuery query = 2;
+    Opaque opaque = 3;
+    Admin admin = 4;
+    AdminResult admin_result = 5;
+  }
+}
+
+message PluginDescriptor {
+  string id = 1;
+  string name = 2;
+  string version = 3;
+  bool enabled = 4;
+}
+
+message Registry {
+  repeated PluginDescriptor plugins = 1;
+}
+
+message RegistryQuery {}
+
+// The server never learns what is inside. That is the whole opacity rule, and
+// it is why this is `bytes` and not a oneof of plugin message types.
+message Opaque {
+  string plugin = 1;
+  bytes payload = 2;
+  repeated uint32 recipients = 3;
+  uint32 sender = 4;
+}
+
+message Admin {
+  enum Kind {
+    ENABLE = 0;
+    DISABLE = 1;
+    INSTALL = 2;
+    UNINSTALL = 3;
+  }
+  Kind kind = 1;
+  string id = 2;
+  string source_key = 3;
+}
+
+message AdminResult {
+  bool ok = 1;
+  string detail = 2;
+}
+
+// -- 1011 push --------------------------------------------------------------
+
+message PushEnvelope {
+  oneof body {
+    Register register = 1;
+    Unregister unregister = 2;
+    Subscribe subscribe = 3;
+    PushAck ack = 4;
+  }
+}
+
+message Register {
+  string token = 1;
+  string platform = 2;
+  // The channels to stay quiet about, as `Subscribe.muted` — carried here so a
+  // device that has just registered is not loud until its first subscribe.
+  repeated uint32 muted = 3;
+}
+
+message Unregister {
+  string token = 1;
+}
+
+// Which channels a device wants *no* notification from.
+//
+// An exclusion list, and the direction matters. This was an inclusion list —
+// `channels` plus an `all` flag — which is the wrong shape twice over: a user
+// mutes two rooms out of forty and cannot be asked to enumerate the other
+// thirty-eight, and any channel created after the list was sent would silently
+// stop notifying. Muting is the thing a person does; being notified is the
+// default they are changing.
+//
+// The whole set is replaced on every send, so a client can always say "I have
+// forgotten that one" — the same reason `permissions.TokenSet` replaces rather
+// than adds.
+message Subscribe {
+  repeated uint32 muted = 1;
+}
+
+message PushAck {
+  bool ok = 1;
+  string detail = 2;
+}
+
+// -- 1012 audit -------------------------------------------------------------
+
+message AuditEnvelope {
+  oneof body {
+    Query query = 1;
+    Page page = 2;
+    Config config = 3;
+    ConfigUpdate config_update = 4;
+    Event event = 5;
+  }
+}
+
+message Query {
+  uint64 since_ms = 1;
+  uint64 until_ms = 2;
+  string category = 3;
+  starling.fancy.wire.v1.Cursor page = 4;
+  // Narrow to what was done to one account. Indexed
+  // (`ix_audit_target`), which is why this is offered as a filter and
+  // `target_channel` below is not: a filter that table-scans the log is a
+  // way to make the server slow from a chat window.
+  uint64 target_account = 5;
+}
+
+message AuditRecord {
+  string id = 1;
+  uint64 at_ms = 2;
+  string category = 3;
+  string action = 4;
+  string actor = 5;
+  string detail = 6;
+  string entry_hash = 7;
+  // Who and where it was done to. The store has held both since it existed and
+  // the record dropped them, so "banned" arrived without saying whom, and a
+  // reader had to parse `detail` — prose written for a human — to find out.
+  uint64 target_account = 8;
+  uint32 target_channel = 9;
+}
+
+message Page {
+  repeated AuditRecord records = 1;
+  starling.fancy.wire.v1.PageInfo page = 2;
+}
+
+message Config {
+  bool enabled = 1;
+  repeated string categories = 2;
+  uint32 retention_days = 3;
+}
+
+message ConfigUpdate {
+  Config config = 1;
+}
+
+// Pushed live to an admin watching the log, rather than polled.
+message Event {
+  AuditRecord record = 1;
+}
+
+// -- 1014 onboarding --------------------------------------------------------
+
+message OnboardingEnvelope {
+  oneof body {
+    Flow flow = 1;
+    FlowQuery query = 2;
+    Response response = 3;
+    FlowUpdate update = 4;
+  }
+}
+
+message Step {
+  string id = 1;
+  string title = 2;
+  string body = 3;
+  enum Kind {
+    INFO = 0;
+    CONSENT = 1;
+    CHOICE = 2;
+    TEXT = 3;
+  }
+  Kind kind = 4;
+  bool required = 5;
+  repeated Choice choices = 6;
+  // Asked before the user may enter a channel at all, rather than at leisure
+  // afterwards. murmur has no such gate, so a stock client never sees one.
+  bool before_join = 7;
+  bool multi_select = 8;
+
+  // One selectable answer, and what choosing it grants.
+  //
+  // The grants are the feature. An onboarding answer is not a survey datum: it
+  // is a request for channel visibility and group membership that the server
+  // applies on submission, which is why a shape carrying only a label would
+  // make the whole questionnaire decorative.
+  message Choice {
+    string id = 1;
+    string label = 2;
+    string description = 3;
+    // Rendered beside the label. A Unicode grapheme cluster — deliberately not
+    // `wire.Emoji`, because a server shortcode would have to resolve against a
+    // custom-emoji set the onboarding flow is shown before the client has.
+    string emoji = 4;
+    // Channels this answer reveals to the user...
+    repeated uint32 channels = 5;
+    // ...and the ACL groups it joins them to.
+    repeated string groups = 6;
+  }
+}
+
+message Flow {
+  string flow_id = 1;
+  repeated Step steps = 2;
+  uint64 version = 3;
+  // Off means no client shows the flow. Kept rather than deleting the flow, so
+  // an operator can turn it off without losing what they wrote.
+  bool enabled = 4;
+  // Granted to everyone who arrives, whatever they answer.
+  repeated uint32 default_channels = 5;
+  // Who last changed it, and when. Server-filled; ignored as input.
+  string updated_by = 6;
+  uint64 updated_at_ms = 7;
+}
+
+message FlowQuery {
+  // Also send back this user's own stored answers.
+  bool include_answers = 1;
+}
+
+message Response {
+  string flow_id = 1;
+  repeated Answer answers = 2;
+  // The flow version these answers were given against. What decides whether to
+  // ask again: an admin who adds a question has a flow nobody has answered,
+  // and without this the server cannot tell that from everybody having.
+  uint64 flow_version = 3;
+  // Server-filled. **Zero means nothing is stored** — the reply to a query from
+  // a user who has never answered, which is a different thing from a user who
+  // answered and chose nothing.
+  uint64 submitted_at_ms = 4;
+
+  message Answer {
+    string step_id = 1;
+    // The `Choice.id`s picked. A TEXT step carries `text` instead.
+    repeated string choice_ids = 2;
+    string text = 3;
+  }
+}
+
+message FlowUpdate {
+  Flow flow = 1;
+}
+
+// -- 1016 link-preview ------------------------------------------------------
+
+message LinkPreviewEnvelope {
+  oneof body {
+    PreviewRequest request = 1;
+    Preview preview = 2;
+    PreviewError error = 3;
+  }
+}
+
+message PreviewRequest {
+  string request_id = 1;
+  string url = 2;
+}
+
+// Fetched by the server, never by the client, so a chat link cannot be used to
+// probe a viewer's network. The fetch is SSRF-guarded on the server side.
+message Preview {
+  string request_id = 1;
+  string url = 2;
+  string title = 3;
+  string description = 4;
+  string image_key = 5;
+  string site = 6;
+}
+
+message PreviewError {
+  string request_id = 1;
+  string reason = 2;
+}
+
+// -- 1017 context-actions ---------------------------------------------------
+
+message ContextActionsEnvelope {
+  oneof body {
+    Action action = 1;
+    Menu menu = 2;
+  }
+}
+
+// The Fancy half of upstream's ContextAction (17): an action a plugin added,
+// carrying which plugin owns it so the trigger routes back without the server
+// knowing what it does.
+message Action {
+  string action = 1;
+  string plugin = 2;
+  uint32 session = 3;
+  uint32 channel = 4;
+}
+
+message MenuEntry {
+  string action = 1;
+  string text = 2;
+  string plugin = 3;
+  uint32 context = 4;
+}
+
+message Menu {
+  repeated MenuEntry entries = 1;
+  repeated string removed = 2;
+}

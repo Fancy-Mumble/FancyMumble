@@ -1,0 +1,54 @@
+{
+  "_comment": [
+    "Golden canon frames: what an epoch-1 client puts on the wire, and what",
+    "Starling's services must read back. Checked in as bytes rather than",
+    "generated at test time, deliberately — a fixture both sides build from",
+    "their own encoder agrees with itself while disagreeing with the wire,",
+    "which is exactly the failure D1 was.",
+    "",
+    "Each entry is one complete frame: type:u16 BE, len:u32 BE, payload.",
+    "The client asserts it *produces* these; Starling asserts it *consumes*",
+    "them. Either side drifting fails on its own side, with a name.",
+    "",
+    "A frame only belongs here if its bytes are the same everywhere. Push",
+    "registration is the counter-example and the reason this is written down:",
+    "the client fills `platform` from std::env::consts::OS, so the frame it",
+    "produces on Windows is not the one it produces in CI. That is fine on the",
+    "wire and fatal in a fixture.",
+    "",
+    "Regenerate only when the canon deliberately changes, and update both",
+    "sides in the same commit — see PROTOCOL-MIGRATION.md M6."
+  ],
+  "frames": [
+    {
+      "name": "social: typing indicator in channel 4",
+      "outer": 1015,
+      "hex": "03f700000006120408041801",
+      "means": "SocialEnvelope{ Typing{ channel: 4, typing: true } }"
+    },
+    {
+      "name": "social: thumbs-up reaction on message m-1 in channel 4",
+      "outer": 1015,
+      "hex": "03f7000000110a0f080412036d2d311a060a04f09f918d",
+      "means": "SocialEnvelope{ Reaction{ channel: 4, message_id: 'm-1', unicode emoji } }"
+    },
+    {
+      "name": "social: a poll with two options in channel 4",
+      "outer": 1015,
+      "hex": "03f70000001a22180a03702d3110041a066c756e63683f220379657322026e6f",
+      "means": "SocialEnvelope{ Poll{ poll_id: 'p-1', channel: 4, question: 'lunch?', options: ['yes', 'no'] } }"
+    },
+    {
+      "name": "pchat: an encrypted message in channel 4",
+      "outer": 1006,
+      "hex": "03ee0000001a0a180a036d2d3710042204deadbeef2880d095ffbc3138025009",
+      "means": "PchatEnvelope{ Message{ message_id: 'm-7', channel: 4, ciphertext: deadbeef, sent_at_ms: 1700000000000, epoch: 2, chain_index: 9, sender_cert: empty } }"
+    },
+    {
+      "name": "pchat: fetch the last 50 messages of channel 4",
+      "outer": 1006,
+      "hex": "03ee000000081206080412021832",
+      "means": "PchatEnvelope{ Fetch{ channel: 4, page: Cursor{ limit: 50 } } }"
+    }
+  ]
+}

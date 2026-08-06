@@ -1,0 +1,248 @@
+syntax = "proto3";
+
+// Fancy extensions for the four essential domain services, in the file each
+// one owns a message set in.
+//
+// They share a file because they share a shape, every one of them is a small
+// addition to an upstream message that already exists, unlike pchat or social
+// which are whole features. The outer types stay one per service:
+//
+//   1001 permissions   1002 metadata   1003 userdata   1013 server-config
+package starling.fancy.domain.v1;
+
+// -- 1001 permissions -------------------------------------------------------
+
+message PermissionsEnvelope {
+  oneof body {
+    TokenSet tokens = 1;
+    Invalidated invalidated = 2;
+    GroupQuery group_query = 3;
+    GroupList group_list = 4;
+  }
+}
+
+// Access tokens are secrets a client presents to unlock ACL entries. Replacing
+// the whole set is deliberate: an incremental API would leave a client unable
+// to say "I have forgotten that one".
+message TokenSet {
+  repeated string tokens = 1;
+}
+
+// The client's cached PermissionQuery answers are stale. Sent rather than left
+// implicit, because a stale grant in a UI is how a user learns about a
+// permission they no longer have by being refused mid-action.
+message Invalidated {
+  repeated uint32 channels = 1;
+  bool everything = 2;
+}
+
+message GroupQuery {
+  uint32 channel = 1;
+}
+
+message GroupList {
+  uint32 channel = 1;
+  repeated string groups = 2;
+}
+
+// -- 1002 metadata ----------------------------------------------------------
+
+message MetadataEnvelope {
+  oneof body {
+    ChannelExtras extras = 1;
+    StructuralHint structural = 2;
+    Subscribe subscribe = 3;
+    SyncDelta delta = 4;
+  }
+}
+
+// Fancy channel properties that upstream's ChannelState has no field for.
+// Upstream owns 1–99 in every upstream message; these live out here instead of
+// squatting on upstream's next field number, docs/PROTOCOL-COMPATIBILITY.md §1.
+message ChannelExtras {
+  uint32 channel = 1;
+  uint32 expiry_mode = 2;
+  uint32 expiry_duration_s = 3;
+  uint64 created_at_ms = 4;
+  uint64 last_active_ms = 5;
+  bool hidden = 6;
+  bool structural = 7;
+  uint32 pchat_protocol = 8;
+  uint32 pchat_max_history = 9;
+  uint32 pchat_retention_days = 10;
+}
+
+// A structural channel is a grouping node no one can enter. Stock clients have
+// no idea, so they are told nothing and simply never see anyone in it.
+message StructuralHint {
+  repeated uint32 channels = 1;
+}
+
+message Subscribe {
+  repeated uint32 channels = 1;
+  bool everything = 2;
+}
+
+// A coalesced batch of state changes for a lazy subscriber, the delivery
+// half of Subscribe, and the mechanism that takes presence fan-out from
+// Θ(events × clients) to Θ(events × subscribers of the changed entity).
+//
+// Legacy clients keep the murmur flood: one UserState broadcast to every
+// session per change. A subscribed Fancy client instead receives these, and
+// only for entities inside its subscription. The server MAY coalesce a burst
+// (a mass-move, a reconnect wave) into one delta; a client applies entries in
+// order and treats the batch as atomic.
+//
+// The frames inside are *encoded upstream messages*, embedded as bytes. A
+// protobuf submessage and a bytes field share one wire shape (tag ‖ len ‖
+// payload), so the buffer encoded once for the legacy flood is placed here
+// verbatim, never re-encoded per recipient, and decoded by the parsers a
+// client already has (docs/PROTOCOL-REDESIGN.md §4, rule Z3).
+message SyncDelta {
+  // Encoded MumbleProto.UserState frames, verbatim.
+  repeated bytes user_states = 1;
+  // Encoded MumbleProto.ChannelState frames, verbatim.
+  repeated bytes channel_states = 2;
+  // Sessions gone from the subscribed view. Deliberately one list: left the
+  // server, or moved somewhere unsubscribed, the render outcome is the same,
+  // and distinguishing them would leak movement the subscriber cannot see.
+  repeated uint32 users_gone = 3;
+  // Channels removed from the subscribed view.
+  repeated uint32 channels_gone = 4;
+}
+
+// -- 1003 userdata ----------------------------------------------------------
+
+message UserdataEnvelope {
+  oneof body {
+    AccountAction action = 1;
+    AccountAck ack = 2;
+    Settings settings = 3;
+    SettingsUpdate settings_update = 4;
+    SettingsQuery settings_query = 5;
+  }
+}
+
+// The account self-service surface: everything a user may change about their
+// own account. Each carries the current password, because a hijacked session
+// must not be able to lock the owner out.
+//
+// **Nothing here names an account.** The server resolves the caller's own from
+// the session the frame arrived on, so this is a surface that can only ever act
+// on the person using it; an id on the wire would be an id a client could
+// change.
+message AccountAction {
+  enum Kind {
+    // Not an action, and the zero value on purpose.
+    //
+    // proto3 cannot distinguish an unset enum from its first value, so with
+    // `SET_PASSWORD = 0` a default-constructed message — a client that forgot
+    // the field, a decode of the wrong bytes — *was* a request to set the
+    // password to the empty string. The dangerous default has to be the one
+    // that means nothing.
+    UNSPECIFIED = 0;
+    SET_PASSWORD = 1;
+    SET_EMAIL = 2;
+    RENAME = 3;
+    ENABLE_TOTP = 4;
+    DISABLE_TOTP = 5;
+    UNREGISTER = 6;
+  }
+  Kind kind = 1;
+  string current_password = 2;
+  string value = 3;
+  // A code from the authenticator, when one is needed: confirming an
+  // enrolment, and proving the device is still in hand before TOTP comes off.
+  string totp = 4;
+}
+
+message AccountAck {
+  AccountAction.Kind kind = 1;
+  bool ok = 2;
+  string detail = 3;
+  // The new secret, base32 as an authenticator expects it. Sent **only** in
+  // answer to the first half of an ENABLE_TOTP, and never stored anywhere it
+  // can be read back: enrolment is not finished until a code derived from it
+  // comes back, so a client that loses this asks again and gets a new one
+  // rather than a locked account.
+  string totp_secret = 4;
+}
+
+// This account's stored client settings.
+//
+// Server to client. Sent in answer to a `SettingsQuery` and after every
+// `SettingsUpdate`, so the client's copy is always something the server said
+// rather than something the client assumed took effect.
+message Settings {
+  map<string, string> values = 1;
+}
+
+message SettingsUpdate {
+  map<string, string> set = 1;
+  repeated string unset = 2;
+}
+
+// "Send me my settings."
+//
+// Explicit rather than implied by an empty `Settings`: a client and a server
+// that both use one message for the question and the answer eventually send it
+// to each other at the same time, and neither can tell which it received.
+message SettingsQuery {}
+
+// -- 1013 server-config -----------------------------------------------------
+
+message ServerConfigEnvelope {
+  oneof body {
+    ConfigQuery query = 1;
+    ConfigValues values = 2;
+    ConfigUpdate update = 3;
+  }
+}
+
+message ConfigQuery {}
+
+// One editable setting: its current value, and everything a client needs to
+// render a field for it without knowing the key.
+//
+// The schema travels with the value because the server is the only thing that
+// knows it. A client that hard-codes "max_users is an integer labelled Maximum
+// users" has to ship a release whenever an operator-facing knob is added, and
+// `Snapshot.extra` exists precisely so a service can add one without a proto
+// change; those would arrive as untyped, unlabelled keys and render as raw
+// strings, which is how a settings screen rots.
+message Setting {
+  string key = 1;
+  Kind kind = 2;
+  // The section it belongs under, so a form groups without a lookup table.
+  string group = 3;
+  string label = 4;
+  // **Empty when `secret`.** Those are write-only.
+  string value = 5;
+  // The permitted values. Meaningful for CHOICE, empty otherwise.
+  repeated string options = 6;
+  // Never carries a value outward, and only ever received. Named rather than
+  // omitted, so a client can tell "no password set" from "password withheld",
+  // they mean very different things to whoever is looking at the screen.
+  bool secret = 7;
+  string help = 8;
+
+  enum Kind {
+    STRING = 0;
+    // Multi-line: the welcome text is a paragraph, not a field.
+    TEXT = 1;
+    BOOL = 2;
+    INT = 3;
+    CHOICE = 4;
+  }
+}
+
+message ConfigValues {
+  repeated Setting settings = 1;
+  // Monotonic. A client drops a snapshot older than the one it holds, which is
+  // what stops a slow reply from overwriting a fresh edit.
+  uint64 version = 2;
+}
+
+message ConfigUpdate {
+  map<string, string> values = 1;
+}

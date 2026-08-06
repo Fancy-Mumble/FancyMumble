@@ -41,6 +41,7 @@ const fn parse_u16(s: &str) -> u16 {
 }
 
 pub mod audio;
+pub mod canon;
 pub mod client;
 pub mod command;
 pub mod error;

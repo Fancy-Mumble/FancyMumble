@@ -11,6 +11,10 @@ license = "MIT"
 [dependencies]
 fancy-utils = { path = "../fancy-utils" }
 
+# Control-stream decompression (Starling docs/PROTOCOL-REDESIGN.md §5, S3).
+# Only ever needed for a batch this client asked for by announcing `zstd`.
+zstd = "0.13"
+
 # Async runtime
 tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "macros", "time", "io-util"] }
 

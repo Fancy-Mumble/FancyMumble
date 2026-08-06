@@ -4159,6 +4159,7 @@ dependencies = [
  "webpki-roots",
  "x25519-dalek",
  "zeroize",
+ "zstd",
 ]
 
 [[package]]

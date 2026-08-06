@@ -59,8 +59,8 @@ const WRAPPED_DATA_ID_PREFIX: &str = "fancy-native:";
 /// Codec for encoding/decoding Fancy Mumble extension messages.
 ///
 /// Two implementations exist:
-/// - [`NativeCodec`]: for a peer on our wire epoch, which speaks every Fancy
-///   message there is.
+/// - [`NativeCodec`]: for a peer on our wire epoch. Sends the canon where
+///   [`crate::canon`] has a faithful form and relays the rest.
 /// - [`LegacyCodec`]: for everything else, which means vanilla Mumble. Relays
 ///   what a [`FallbackPolicy`] says can be relayed through `PluginData` and
 ///   refuses the rest.
@@ -79,10 +79,12 @@ pub trait FancyCodec: Send + Sync + Debug {
 
 /// Select the appropriate codec for a server.
 ///
-/// The epoch is the whole question. A peer that speaks our epoch is a Fancy
-/// peer and speaks all of it — epoch 1 ships both ends together, so there is
-/// no per-message version to negotiate. Anything else, from vanilla Mumble to
-/// a Fancy server still on epoch 0, is handled as a plain Mumble server:
+/// The epoch is the whole question — but only about *framing*. A peer that
+/// speaks our epoch agrees on what the outer types mean, which is not the same
+/// as both ends having a canon form for every feature; where one is missing
+/// [`NativeCodec`] relays instead, and the relay is epoch-independent. Anything
+/// else, from vanilla Mumble to a Fancy server still on epoch 0, is handled as
+/// a plain Mumble server:
 /// [`LegacyCodec`] relays everything relayable through
 /// `PluginDataTransmission`, which is epoch-independent, so the basics keep
 /// working and nothing is sent to a type the peer cannot route.
@@ -108,6 +110,7 @@ pub fn select_codec(
         );
         return Box::new(LegacyCodec);
     }
+
     Box::new(NativeCodec)
 }
 
@@ -115,10 +118,17 @@ pub fn select_codec(
 
 /// Codec for a Fancy Mumble server that speaks our wire epoch.
 ///
-/// Everything goes out natively — the framing into service envelopes is the
-/// wire codec's job ([`crate::transport::codec::encode`]), and a peer on this
-/// epoch understands every message we can send, so there is nothing to gate
-/// and nothing to drop.
+/// Anything [`crate::canon`] can carry goes out as the canon, framed by
+/// [`crate::transport::codec::encode`]. Anything it cannot is **relayed
+/// through `PluginData`**, not passed through.
+///
+/// That last part is load-bearing and was briefly wrong. Passing an untranslated
+/// Fancy message through sends it to `to_service_payload`, which frames the
+/// *proto2* envelope under the canon's outer type — so an epoch-1 peer would
+/// decode proto3 out of proto2 bytes at type 1008 and get silence or nonsense.
+/// That is D1, reintroduced one service at a time as the canon's coverage
+/// lagged. The relay is epoch-independent and the peer handles it, so those
+/// features keep working until their canon lands.
 ///
 /// The decode path still unwraps `fancy-native:*` `PluginData` envelopes, so a
 /// message relayed by a *peer* through a vanilla server is handled even while
@@ -127,8 +137,11 @@ pub fn select_codec(
 pub struct NativeCodec;
 
 impl FancyCodec for NativeCodec {
-    fn encode(&self, msg: ControlMessage, _state: &ServerState) -> Option<ControlMessage> {
-        Some(msg)
+    fn encode(&self, msg: ControlMessage, state: &ServerState) -> Option<ControlMessage> {
+        if !msg.is_fancy_extension() || crate::canon::to_canon(&msg).is_some() {
+            return Some(msg);
+        }
+        LegacyCodec.encode(msg, state)
     }
 
     fn decode(&self, msg: ControlMessage) -> ControlMessage {
@@ -359,6 +372,10 @@ mod tests {
 
     #[test]
     fn select_codec_native_for_a_peer_on_our_epoch() {
+        // Restored at M2c, when `crate::canon` gave the codec something true to
+        // encode. It spent the interval asserting the opposite — deliberately,
+        // because between the two commits this client announced an epoch whose
+        // payloads it could not produce, and the honest answer was the relay.
         let codec = select_codec(None, Some(FANCY_PROTOCOL_EPOCH));
         assert!(format!("{codec:?}").contains("NativeCodec"));
     }
@@ -406,24 +423,47 @@ mod tests {
     #[test]
     fn the_epoch_decides_and_the_version_does_not() {
         // The version says which features exist; the epoch says whether we
-        // agree on what the numbers mean. Only the second one can decide how
-        // to frame bytes, so a stale epoch loses however new the server is...
+        // agree on what the numbers mean. Only the second one can decide how to
+        // frame bytes, so a stale epoch loses however new the server is.
         let newer = fancy_utils::version::fancy_version_encode(9, 9, 9);
         let stale_epoch = select_codec(Some(newer), Some(FANCY_PROTOCOL_EPOCH - 1));
         assert!(format!("{stale_epoch:?}").contains("LegacyCodec"));
 
         // ...and a matching epoch wins with no version announced at all, which
         // is exactly what an epoch-1 server sends.
-        let no_version = select_codec(None, Some(FANCY_PROTOCOL_EPOCH));
-        assert!(format!("{no_version:?}").contains("NativeCodec"));
+        let matching = select_codec(None, Some(FANCY_PROTOCOL_EPOCH));
+        assert!(format!("{matching:?}").contains("NativeCodec"));
+    }
+
+    #[test]
+    fn the_epoch_we_announce_is_the_one_we_encode() {
+        // D1 was these two disagreeing: the announcement said epoch 1 while the
+        // codec framed proto2 shapes under epoch-1 outer types. They are
+        // asserted together, in one test, so that changing either alone fails
+        // here rather than on somebody's wire.
+        //
+        // Asserted on the handshake `Version` itself, because this is a claim
+        // made on the wire and nowhere else — a peer believes the field, not
+        // our intentions about it.
+        let version = crate::client::version_announcement(crate::client::MumbleVersion::default());
+        assert_eq!(
+            version.fancy_protocol,
+            Some(FANCY_PROTOCOL_EPOCH),
+            "the epoch we announce must be the one the codec encodes"
+        );
+        assert!(
+            version.fancy_version.is_some(),
+            "the product version stays: it says which features exist, and that \
+             much is still true"
+        );
     }
 
     // ---- NativeCodec -------------------------------------------------
 
-    const V_0_2_12: u64 = fancy_utils::version::fancy_version_encode(0, 2, 12);
-    const V_0_2_14: u64 = fancy_utils::version::fancy_version_encode(0, 2, 14);
-    const V_0_2_18: u64 = fancy_utils::version::fancy_version_encode(0, 2, 18);
-    const V_0_2_20: u64 = fancy_utils::version::fancy_version_encode(0, 2, 20);
+    // The per-feature version constants that used to live here are gone with
+    // the thing they fed: epoch 1 dropped the per-message `min_version` gate,
+    // because both ends now ship together and a Fancy peer speaks all of it or
+    // none of it (`PROTOCOL-COMPATIBILITY.md`, "What is dropped with epoch 0").
 
     #[test]
     fn native_codec_passthrough_standard_message() {
@@ -438,40 +478,89 @@ mod tests {
     }
 
     #[test]
-    fn native_codec_passthrough_fancy_message_when_server_supports_it() {
+    fn native_codec_passthrough_fancy_message_when_the_canon_carries_it() {
+        // Used to assert this of `WebRtcSignal`, which the canon does not carry
+        // — so it now relays, and the passthrough claim moved to a message the
+        // canon actually has: a reaction.
         let codec = NativeCodec;
         let state = ServerState::new();
-        let signal = ControlMessage::WebRtcSignal(mumble_tcp::WebRtcSignal {
-            target_session: Some(5),
-            signal_type: Some(0),
-            payload: Some("test".into()),
+        let reaction = ControlMessage::PchatReaction(mumble_tcp::PchatReaction {
+            channel_id: Some(0),
+            message_id: Some("m-1".into()),
             ..Default::default()
         });
-        let encoded = codec.encode(signal, &state).unwrap();
-        assert!(matches!(encoded, ControlMessage::WebRtcSignal(_)));
+        let encoded = codec.encode(reaction, &state).unwrap();
+        assert!(matches!(encoded, ControlMessage::PchatReaction(_)));
     }
 
     #[test]
-    fn native_codec_sends_every_fancy_message_as_is() {
-        // A peer on our epoch speaks all of it, so nothing is wrapped and
-        // nothing is dropped — including the server-processed messages the
-        // legacy path has to refuse (`legacy_codec_drops_server_only_fancy_message`).
+    fn a_peer_on_our_epoch_gets_the_canon_where_there_is_one_and_the_relay_elsewhere() {
+        // This used to assert that *everything* went out untouched, on the
+        // premise that "a peer on our epoch speaks all of it". That premise
+        // died with partial canon coverage: an untranslated message passed
+        // through is framed as a proto2 envelope under a canon outer type,
+        // which the peer cannot read.
         let codec = NativeCodec;
         let state = state_with_users();
 
-        let relayable = ControlMessage::FancyTypingIndicator(mumble_tcp::FancyTypingIndicator {
+        // Carried by the canon: out natively.
+        let typing = ControlMessage::FancyTypingIndicator(mumble_tcp::FancyTypingIndicator {
             channel_id: Some(0),
             actor: None,
         });
-        let encoded = codec.encode(relayable, &state).unwrap();
-        assert!(matches!(encoded, ControlMessage::FancyTypingIndicator(_)));
+        assert!(matches!(
+            codec.encode(typing, &state).unwrap(),
+            ControlMessage::FancyTypingIndicator(_)
+        ));
 
+        // Not carried, and server-processed, so it cannot be relayed either:
+        // dropped rather than sent somewhere it will be misread. The feature is
+        // off until its canon lands, which is visible instead of silent.
         let server_processed = ControlMessage::PchatPin(mumble_tcp::PchatPin {
             channel_id: Some(0),
             ..Default::default()
         });
-        let encoded = codec.encode(server_processed, &state).unwrap();
-        assert!(matches!(encoded, ControlMessage::PchatPin(_)));
+        assert!(codec.encode(server_processed, &state).is_none());
+    }
+
+    #[test]
+    fn a_message_the_canon_cannot_carry_is_relayed_rather_than_framed_as_proto2() {
+        // The way D1 comes back. `to_service_payload` still frames the proto2
+        // envelopes under the canon's outer types, so a Fancy message that
+        // `canon` does not translate must never reach it — an epoch-1 peer
+        // would decode proto3 out of proto2 bytes at type 1008.
+        //
+        // Screen-share signalling is the case: no canon form (the SFU is
+        // ICE-lite and the canon models a share, not a relayed blob), so it
+        // goes through `PluginData`, which the peer relays.
+        let codec = NativeCodec;
+        let state = state_with_users();
+        let signal = ControlMessage::WebRtcSignal(mumble_tcp::WebRtcSignal {
+            target_session: Some(2),
+            signal_type: Some(4),
+            payload: Some("candidate:...".into()),
+            ..Default::default()
+        });
+        assert!(crate::canon::to_canon(&signal).is_none(), "premise");
+
+        let encoded = codec.encode(signal, &state).expect("relayable");
+        assert!(
+            matches!(encoded, ControlMessage::PluginDataTransmission(_)),
+            "an untranslated Fancy message must be relayed, not framed under a \
+             canon outer type as proto2"
+        );
+    }
+
+    #[test]
+    fn a_message_the_canon_carries_goes_out_natively() {
+        let codec = NativeCodec;
+        let state = state_with_users();
+        let typing = ControlMessage::FancyTypingIndicator(mumble_tcp::FancyTypingIndicator {
+            channel_id: Some(0),
+            actor: None,
+        });
+        let encoded = codec.encode(typing, &state).expect("native");
+        assert!(matches!(encoded, ControlMessage::FancyTypingIndicator(_)));
     }
 
     #[test]
@@ -811,7 +900,7 @@ mod tests {
     }
 
     #[test]
-    fn native_codec_passthrough_watch_sync_when_server_new_enough() {
+    fn watch_sync_takes_the_relay_until_its_canon_lands() {
         let codec = NativeCodec;
         let state = state_with_users();
         let msg = ControlMessage::FancyWatchSync(mumble_tcp::FancyWatchSync {
@@ -819,7 +908,10 @@ mod tests {
             actor: None,
             event: None,
         });
+        // Watch-sync has no canon translation yet (its canon is a flat state
+        // where this is a oneof of events, and `StateRequest` has no canon
+        // kind), so it takes the relay — which is where it already worked.
         let encoded = codec.encode(msg, &state).unwrap();
-        assert!(matches!(encoded, ControlMessage::FancyWatchSync(_)));
+        assert!(matches!(encoded, ControlMessage::PluginDataTransmission(_)));
     }
 }

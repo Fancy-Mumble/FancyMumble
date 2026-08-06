@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+// Primitives shared by more than one client-facing envelope.
+//
+// This is the wire plane's counterpart to `common.proto`, and deliberately a
+// separate file: `starling.common.v1` carries mesh concepts (Scope, Actor)
+// that a client build has no business compiling, and this file carries wire
+// concepts the mesh never sees. Each plane imports its own common and never
+// the other's — docs/PROTOCOL-REDESIGN.md §7.
+//
+// The bar for adding a type here is the same as common.proto's: two envelopes
+// already carrying the shape by hand. A shared type is a coupling; one
+// consumer is not a pattern.
+package starling.fancy.wire.v1;
+
+// Keyset pagination over a UUIDv7-ordered store. Used by every fetch that
+// pages history: pchat Fetch, text HistoryRequest, audit Query, files
+// ListRequest all carry this trio by hand today and adopt Cursor at the M2
+// rewrite (docs/PROTOCOL-REDESIGN.md §9).
+//
+// Keyset, not offset: an offset shifts under concurrent inserts and rescans
+// rows the store already paged past. UUIDv7 ids are time-ordered, so `before`
+// and `after` are stable positions for free.
+message Cursor {
+  // Return entries older than this id. Empty means "from the newest".
+  string before_id = 1;
+  // Return entries newer than this id. Empty means no lower bound.
+  string after_id = 2;
+  // Capped server-side; the cap is the server's, not the client's.
+  uint32 limit = 3;
+}
+
+// The tail of a page, so a client knows whether and where to continue.
+message PageInfo {
+  bool more = 1;
+  // Pass as Cursor.before_id of the next request.
+  string next_before_id = 2;
+}
+
+// The coordinate every message-scoped feature shares: reactions, pins,
+// receipts, edits and deletes all address (channel, message).
+message MessageRef {
+  uint32 channel = 1;
+  // UUIDv7 as a string on the wire, 16 bytes in storage (docs/STORAGE.md L3).
+  string message_id = 2;
+}
+
+// One emoji, either a Unicode grapheme cluster or a server-defined shortcode
+// ("mumble_parrot", no colons). A bare string cannot carry the distinction,
+// and both reactions (social) and custom-reaction config need it.
+message Emoji {
+  oneof kind {
+    string unicode = 1;
+    string shortcode = 2;
+  }
+}
+
+// Why a request did not happen, in a shape a client can act on rather than
+// only display. Moderation's Refused, files' Refused and the throttle notice
+// each carry a fragment of this today.
+//
+// Machine-readable kind first, prose second: the kind decides client
+// behaviour (re-auth, back off, give up), the detail is for the human.
+message Refusal {
+  enum Kind {
+    // Catch-all; detail carries the story.
+    OTHER = 0;
+    // The actor lacks a permission. Retrying unchanged is pointless.
+    PERMISSION = 1;
+    // A server-side ceiling was met (history depth, listener count, size).
+    LIMIT = 2;
+    // The request itself was malformed or referenced something unknown.
+    INVALID = 3;
+    // Rate-limited; retry_after_ms says when it is worth trying again.
+    RATE_LIMITED = 4;
+  }
+  Kind kind = 1;
+  string detail = 2;
+  // Only meaningful for RATE_LIMITED; zero elsewhere.
+  uint32 retry_after_ms = 3;
+}
