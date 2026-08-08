@@ -231,6 +231,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::system::get_log_directory,
         super::system::export_logs,
         super::system::set_notifications_enabled,
+        super::system::show_desktop_notification,
         super::system::set_disable_dual_path,
         super::system::update_badge_count,
         super::system::get_system_clock_format,
@@ -258,6 +259,11 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::stream_view::stop_native_stream_view,
         super::stream_view::request_stream_keyframe,
         super::stream_view::native_stream_view_stats,
+        // -- discord rich presence (desktop only) ----------------------
+        #[cfg(not(target_os = "android"))]
+        super::presence::presence_set_enabled,
+        #[cfg(not(target_os = "android"))]
+        super::presence::presence_snapshot,
         // -- updater (desktop only) ------------------------------------
         #[cfg(not(target_os = "android"))]
         crate::updater::commands::updater_check,

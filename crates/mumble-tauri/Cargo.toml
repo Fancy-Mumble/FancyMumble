@@ -140,6 +140,9 @@ gtk = { version = "0.18", default-features = false }
 # Same crate/version line wry uses; v2_38 gates the set_enable_webrtc binding.
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = { version = "2.0.1", features = ["v2_38"] }
+# Same version the notification plugin uses; see event_handler.rs for why
+# Linux notifications bypass the plugin.
+notify-rust = "4"
 
 [lints]
 workspace = true
