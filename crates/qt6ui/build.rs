@@ -157,20 +157,38 @@ fn generate_shared_constants_and_locales() {
         .expect("failed to write fancy_locales.rs");
 }
 
-/// Best-effort discovery of the Qt library directory: ask `qmake`, then fall
+/// Best-effort discovery of the Qt library directory: ask qmake, then fall
 /// back to `QT6_MINGW_DIR/lib` or the default kit path.
+///
+/// `qmake6` is tried as well as `qmake`, because Debian and Ubuntu ship the Qt6
+/// binary under the versioned name and leave plain `qmake` to Qt5 (often absent
+/// entirely). Looking only for `qmake` is why this fell back to a `C:/Qt/...`
+/// path on Linux and the link then failed for a reason that named neither Qt
+/// nor the platform.
 fn qt_lib_dir() -> Option<String> {
-    let qmake = std::env::var("QMAKE").unwrap_or_else(|_| "qmake".to_owned());
-    if let Ok(out) = std::process::Command::new(&qmake)
-        .args(["-query", "QT_INSTALL_LIBS"])
-        .output()
-    {
-        if out.status.success() {
-            let path = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-            if !path.is_empty() {
-                return Some(path);
+    let explicit = std::env::var("QMAKE").ok();
+    let candidates: Vec<String> = explicit
+        .into_iter()
+        .chain(["qmake6".to_owned(), "qmake".to_owned()])
+        .collect();
+    for qmake in &candidates {
+        if let Ok(out) = std::process::Command::new(qmake)
+            .args(["-query", "QT_INSTALL_LIBS"])
+            .output()
+        {
+            if out.status.success() {
+                let path = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+                if !path.is_empty() {
+                    return Some(path);
+                }
             }
         }
+    }
+    // The MinGW kit fallbacks are Windows-shaped; on any other platform a wrong
+    // guess is worse than none, because it turns "Qt was not found" into a link
+    // error against a path that cannot exist here.
+    if !cfg!(windows) {
+        return None;
     }
     std::env::var("QT6_MINGW_DIR")
         .map(|d| format!("{d}/lib"))
