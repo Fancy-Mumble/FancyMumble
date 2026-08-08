@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 #[cfg(target_os = "windows")]
 use tauri::Manager;
 use tauri::{AppHandle, Emitter};
+#[cfg(not(target_os = "linux"))]
 use tauri_plugin_notification::NotificationExt;
 use tracing::{debug, info, warn};
 
@@ -68,30 +69,61 @@ impl EventEmitter for TauriEmitter {
         icon: Option<&[u8]>,
         channel_id: Option<u32>,
     ) {
-        // On Android, route through our ConnectionServicePlugin so we can
-        // decode the sender avatar as a Bitmap for the notification large-icon.
-        #[cfg(target_os = "android")]
+        show_desktop_notification(&self.app, title, body, icon, channel_id);
+    }
+}
+
+/// Show a desktop notification through the platform-appropriate channel.
+///
+/// Shared by the protocol emitter above and the `show_desktop_notification`
+/// command (the webview's calendar reminders), so every caller gets the same
+/// platform routing - in particular the Linux branch, which nothing may
+/// bypass.
+pub(crate) fn show_desktop_notification(
+    app: &AppHandle,
+    title: &str,
+    body: &str,
+    icon: Option<&[u8]>,
+    channel_id: Option<u32>,
+) {
+    // On Android, route through our ConnectionServicePlugin so we can
+    // decode the sender avatar as a Bitmap for the notification large-icon.
+    #[cfg(target_os = "android")]
+    {
+        use tauri::Manager;
+        if let Some(cs_handle) =
+            app.try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>()
         {
-            use tauri::Manager;
-            if let Some(cs_handle) = self
-                .app
-                .try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>()
-            {
-                crate::platform::android::connection_service::show_chat_notification(
-                    &cs_handle,
-                    title,
-                    body,
-                    icon,
-                    channel_id,
-                );
-                return;
-            }
+            crate::platform::android::connection_service::show_chat_notification(
+                &cs_handle, title, body, icon, channel_id,
+            );
+            return;
         }
-        // Non-Android fallback: standard Tauri notification API (no avatar).
-        let _ = icon;
-        let _ = channel_id;
-        let _ = self
-            .app
+    }
+    // Non-Android fallback: standard Tauri notification API (no avatar).
+    let _ = icon;
+    let _ = channel_id;
+    // On Linux, NOT the notification plugin: its show() spawns notify-rust's
+    // BLOCKING zbus call onto the tokio runtime (async_runtime::spawn in the
+    // plugin's desktop.rs), where zbus's tokio flavor (forced by ashpd)
+    // block_on's a private runtime and panics "Cannot start a runtime from
+    // within a runtime" - with panic=abort that kills the app whenever a
+    // notification fires. Drive notify-rust from a blocking thread.
+    #[cfg(target_os = "linux")]
+    {
+        let _ = app;
+        let title = title.to_owned();
+        let body = body.to_owned();
+        let _ = tauri::async_runtime::spawn_blocking(move || {
+            let _ = notify_rust::Notification::new()
+                .summary(&title)
+                .body(&body)
+                .show();
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app
             .notification()
             .builder()
             .channel_id("messages")

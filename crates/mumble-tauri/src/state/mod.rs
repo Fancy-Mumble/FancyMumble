@@ -41,6 +41,10 @@ mod offload_ops;
 mod onboarding;
 pub(crate) mod pchat;
 mod plugin_admin;
+/// Discord Rich Presence listener. Desktop only: it hosts the Discord IPC
+/// endpoint, which has no Android equivalent.
+#[cfg(not(target_os = "android"))]
+pub(crate) mod presence;
 mod profile;
 pub(crate) mod protocol_commands;
 mod query;
@@ -54,6 +58,7 @@ mod shared_handle;
 pub mod types;
 
 // Re-export everything that lib.rs needs.
+pub(crate) use event_handler::show_desktop_notification;
 pub(crate) use registry::UserHashMatch;
 pub use sessions::{ServerId, SessionMeta};
 pub use types::{
@@ -288,6 +293,9 @@ pub struct AppState {
     /// Aborted when the overlay closes.
     #[cfg(not(target_os = "android"))]
     pub(crate) draw_overlay_tracker: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    /// Discord Rich Presence listener, idle until the user enables it.
+    #[cfg(not(target_os = "android"))]
+    pub(crate) presence: presence::PresenceManager,
 }
 
 impl AppState {
@@ -316,6 +324,8 @@ impl AppState {
             draw_overlay_context: Mutex::new(None),
             #[cfg(not(target_os = "android"))]
             draw_overlay_tracker: Mutex::new(None),
+            #[cfg(not(target_os = "android"))]
+            presence: presence::PresenceManager::default(),
         }
     }
 
