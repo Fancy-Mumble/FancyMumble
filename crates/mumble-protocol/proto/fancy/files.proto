@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-// Outer type 1009 — the control-plane half of bulk transfer: ask for a URL,
+// Outer type 1009 - the control-plane half of bulk transfer: ask for a URL,
 // get a short-lived signed one, then move the bytes over HTTP.
 package starling.fancy.files.v1;
 

@@ -173,7 +173,24 @@ pub enum TcpMessageType {
     FancyAccountSettingsUpdate = 155,
     /// Fancy Mumble: server status reply for an account operation.
     FancyAccountAck = 156,
-    // 157-165 are claimed by the forum / scheduled-message features;
+    /// Fancy Mumble: create/edit or broadcast of a forum post.
+    FancyForumPost = 157,
+    /// Fancy Mumble: fetch forum threads or a thread's posts.
+    FancyForumFetch = 158,
+    /// Fancy Mumble: response to a forum fetch.
+    FancyForumFetchResponse = 159,
+    /// Fancy Mumble: delete a forum post (or thread).
+    FancyForumDelete = 160,
+    /// Fancy Mumble: schedule a message for future delivery.
+    FancyScheduledMessage = 161,
+    /// Fancy Mumble: request the caller's pending scheduled messages.
+    FancyScheduledMessageList = 162,
+    /// Fancy Mumble: the caller's scheduled messages.
+    FancyScheduledMessageListResponse = 163,
+    /// Fancy Mumble: cancel a pending scheduled message.
+    FancyScheduledMessageCancel = 164,
+    /// Fancy Mumble: acknowledge a schedule/cancel/delivery outcome.
+    FancyScheduledMessageAck = 165,
     // 169 is reserved for FancyModSignal (audit spec section 6.5).
     /// Fancy Mumble: auditor searches the audit log / subscribes to a tail.
     FancyAuditQuery = 166,
@@ -388,6 +405,24 @@ pub enum ControlMessage {
     FancyAccountSettingsUpdate(mumble_tcp::FancyAccountSettingsUpdate),
     /// Fancy: server status reply for an account operation.
     FancyAccountAck(mumble_tcp::FancyAccountAck),
+    /// Fancy: create/edit or broadcast of a forum post.
+    FancyForumPost(mumble_tcp::FancyForumPost),
+    /// Fancy: fetch forum threads or a thread's posts.
+    FancyForumFetch(mumble_tcp::FancyForumFetch),
+    /// Fancy: response to a forum fetch.
+    FancyForumFetchResponse(mumble_tcp::FancyForumFetchResponse),
+    /// Fancy: delete a forum post (or thread).
+    FancyForumDelete(mumble_tcp::FancyForumDelete),
+    /// Fancy: schedule a message for future delivery.
+    FancyScheduledMessage(mumble_tcp::FancyScheduledMessage),
+    /// Fancy: request the caller's pending scheduled messages.
+    FancyScheduledMessageList(mumble_tcp::FancyScheduledMessageList),
+    /// Fancy: the caller's scheduled messages.
+    FancyScheduledMessageListResponse(mumble_tcp::FancyScheduledMessageListResponse),
+    /// Fancy: cancel a pending scheduled message.
+    FancyScheduledMessageCancel(mumble_tcp::FancyScheduledMessageCancel),
+    /// Fancy: acknowledge a schedule/cancel/delivery outcome.
+    FancyScheduledMessageAck(mumble_tcp::FancyScheduledMessageAck),
     /// Fancy: auditor searches the audit log / subscribes to a live tail.
     FancyAuditQuery(mumble_tcp::FancyAuditQuery),
     /// Fancy: server replies with a page of audit entries.
@@ -409,7 +444,7 @@ pub enum ControlMessage {
 /// First Fancy Mumble extension type ID. All IDs at or above this
 /// threshold are Fancy-specific and unknown to legacy Mumble servers.
 ///
-/// On the epoch-1 wire these numbers are no longer outer types — every Fancy
+/// On the epoch-1 wire these numbers are no longer outer types - every Fancy
 /// message is framed under its service instead (see [`fancy_services`]). They
 /// survive as the identity of a message inside a `PluginDataTransmission`
 /// relay, which is how a Fancy client keeps working against vanilla Mumble.
@@ -421,7 +456,7 @@ pub const FANCY_EXTENSION_TYPE_THRESHOLD: u16 = TcpMessageType::PchatMessage as 
 /// What travels under one is the proto3 canon, translated by [`crate::canon`].
 /// The proto2 envelopes that used to live in `Mumble.proto` are deleted (M3):
 /// they were a second, incompatible definition of these same outer types, and
-/// keeping them meant every frame had two possible readings — which is exactly
+/// keeping them meant every frame had two possible readings - which is exactly
 /// how the two ends silently disagreed.
 pub const FANCY_SERVICE_TYPE_MIN: u16 = 1000;
 
@@ -454,6 +489,10 @@ message_type_mapping! {
     FancyPluginAdminUninstall, FancyPluginAdminAck,
     FancyServerSettings, FancyServerSettingsUpdate,
     FancyAccountSettings, FancyAccountSettingsUpdate, FancyAccountAck,
+    FancyForumPost, FancyForumFetch, FancyForumFetchResponse, FancyForumDelete,
+    FancyScheduledMessage, FancyScheduledMessageList,
+    FancyScheduledMessageListResponse, FancyScheduledMessageCancel,
+    FancyScheduledMessageAck,
     FancyAuditQuery, FancyAuditResponse, FancyAuditEvent,
     FancyAuditConfig, FancyAuditConfigUpdate,
     PluginMessage, PluginRegistry,
@@ -620,7 +659,7 @@ mod tests {
         assert!(TcpMessageType::try_from(141u16).is_err());
         assert!(TcpMessageType::try_from(142u16).is_err());
         assert!(TcpMessageType::try_from(143u16).is_err());
-        assert!(TcpMessageType::try_from(157u16).is_err());
+        assert!(TcpMessageType::try_from(169u16).is_err());
         assert!(TcpMessageType::try_from(199u16).is_err());
         assert!(TcpMessageType::try_from(202u16).is_err());
         assert!(TcpMessageType::try_from(u16::MAX).is_err());
@@ -700,7 +739,7 @@ mod tests {
         // The surviving property is the one that matters, and it is the D1
         // invariant stated as code: a frame goes out under a service outer type
         // **only** when `canon` produced it. Anything else with a service type
-        // would be a shape no epoch-1 peer can read — which is what the proto2
+        // would be a shape no epoch-1 peer can read - which is what the proto2
         // envelopes were, framed under exactly these numbers.
         use crate::transport::codec::encode;
 

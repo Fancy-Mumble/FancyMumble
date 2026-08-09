@@ -49,6 +49,17 @@ pub struct Reaction {
     pub actor: u32,
     #[prost(bool, tag = "5")]
     pub remove: bool,
+    /// The actor's leaf certificate, written by the server on relay.
+    ///
+    /// `actor` is a session id, which is per connection and recycled, and a
+    /// receiver keys reactions per reactor so it can render "you reacted" and
+    /// undo the right one. With no durable identity on the wire every reactor
+    /// collapsed into one, so two people reacting counted once and either one
+    /// removing it removed both. murmur carries the same hash for the same
+    /// reason (`PersistentChatManager.cpp:1461`). Empty for a peer that
+    /// presented no certificate.
+    #[prost(bytes = "vec", tag = "6")]
+    pub actor_cert: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Typing {
@@ -69,6 +80,12 @@ pub struct ReadReceipt {
     pub actor: u32,
     #[prost(uint64, tag = "4")]
     pub at_ms: u64,
+    /// The reader's certificate hash, written by the server on relay - the same
+    /// reason `Reaction.actor_cert` exists: a receiver keys read watermarks per
+    /// reader, and a session id is recycled. Empty for a peer that presented no
+    /// certificate.
+    #[prost(bytes = "vec", tag = "5")]
+    pub actor_cert: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Poll {
@@ -95,6 +112,15 @@ pub struct PollVote {
     pub options: ::prost::alloc::vec::Vec<u32>,
     #[prost(uint32, tag = "3")]
     pub voter: u32,
+    /// The poll's channel, written by the server on relay.
+    ///
+    /// A vote used to carry only the poll id, on the reasoning that the poll id
+    /// identifies everything about it. It does not identify where to *put* it: a
+    /// receiver holds polls per channel, so a vote with no channel is one it
+    /// cannot route and drops. The server has the channel from the poll and is
+    /// the only party that cannot get it wrong.
+    #[prost(uint32, tag = "4")]
+    pub channel: u32,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PollState {
@@ -106,7 +132,7 @@ pub struct PollState {
     pub closed: bool,
 }
 /// Watch-together: a host drives, everyone else follows. The host is explicit
-/// because a transfer has to be observable — a silent one desyncs every viewer.
+/// because a transfer has to be observable - a silent one desyncs every viewer.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WatchSync {
     #[prost(string, tag = "1")]

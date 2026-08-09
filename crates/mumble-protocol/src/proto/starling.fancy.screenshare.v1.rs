@@ -23,7 +23,7 @@ pub mod screenshare_envelope {
     }
 }
 /// The SFU is ICE-lite: it ignores trickled candidates and its own ride in the
-/// answer. Never trickle ICE through the control plane — that is a contract
+/// answer. Never trickle ICE through the control plane - that is a contract
 /// constraint, and each half of it cost a debugging session.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Offer {

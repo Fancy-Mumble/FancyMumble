@@ -58,7 +58,7 @@ pub struct CipherNotice {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TextEnvelope {
-    #[prost(oneof = "text_envelope::Body", tags = "1, 2, 3, 4")]
+    #[prost(oneof = "text_envelope::Body", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9")]
     pub body: ::core::option::Option<text_envelope::Body>,
 }
 /// Nested message and enum types in `TextEnvelope`.
@@ -73,6 +73,16 @@ pub mod text_envelope {
         Edit(super::Edit),
         #[prost(message, tag = "4")]
         Delete(super::Delete),
+        #[prost(message, tag = "5")]
+        Schedule(super::Scheduled),
+        #[prost(message, tag = "6")]
+        Query(super::ScheduleQuery),
+        #[prost(message, tag = "7")]
+        List(super::ScheduleList),
+        #[prost(message, tag = "8")]
+        Cancel(super::ScheduleCancel),
+        #[prost(message, tag = "9")]
+        Ack(super::ScheduleAck),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -124,6 +134,73 @@ pub struct Edit {
 pub struct Delete {
     #[prost(message, optional, tag = "1")]
     pub target: ::core::option::Option<crate::proto::fancy::wire::MessageRef>,
+}
+/// Client -> server to schedule; server -> client as the elements of a
+/// `ScheduleList`. Every identity and time field below the body is written by
+/// the server, so a client that fills one in changes nothing.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Scheduled {
+    /// Assigned by the server. A client that sends one is ignored, because an id
+    /// a peer chooses is an id a peer can collide with somebody else's.
+    #[prost(string, tag = "1")]
+    pub schedule_id: ::prost::alloc::string::String,
+    /// Where it goes. At least one channel or tree is required, and a tree means
+    /// the channel and everything under it, as `TextMessage.tree_id` does.
+    #[prost(uint32, repeated, tag = "2")]
+    pub channels: ::prost::alloc::vec::Vec<u32>,
+    #[prost(uint32, repeated, tag = "3")]
+    pub trees: ::prost::alloc::vec::Vec<u32>,
+    #[prost(string, tag = "4")]
+    pub body: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "5")]
+    pub deliver_at_ms: u64,
+    /// The creator's session when they scheduled it. Delivery attributes the
+    /// message to this session only if the same person is still connected, so it
+    /// is a display hint and never the owner.
+    #[prost(uint32, tag = "6")]
+    pub creator: u32,
+    /// The owner. A session id is per connection and recycled; only the
+    /// certificate still names the same person after a reconnect, which is what
+    /// "only the creator may cancel" has to mean.
+    #[prost(bytes = "vec", tag = "7")]
+    pub creator_cert: ::prost::alloc::vec::Vec<u8>,
+    #[prost(string, tag = "8")]
+    pub creator_name: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "9")]
+    pub created_at_ms: u64,
+    #[prost(enumeration = "ScheduleStatus", tag = "10")]
+    pub status: i32,
+}
+/// Client -> server: the caller's own scheduled messages.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ScheduleQuery {
+    /// Include what has already been delivered or cancelled. Pending only by
+    /// default, which is what a "pending" panel shows.
+    #[prost(bool, tag = "1")]
+    pub include_finished: bool,
+}
+/// Server -> client: the answer to a `ScheduleQuery`.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ScheduleList {
+    #[prost(message, repeated, tag = "1")]
+    pub messages: ::prost::alloc::vec::Vec<Scheduled>,
+}
+/// Client -> server: cancel a pending message. Only its creator may.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ScheduleCancel {
+    #[prost(string, tag = "1")]
+    pub schedule_id: ::prost::alloc::string::String,
+}
+/// Server -> client: the outcome of a schedule or a cancel.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ScheduleAck {
+    #[prost(string, tag = "1")]
+    pub schedule_id: ::prost::alloc::string::String,
+    #[prost(enumeration = "ScheduleStatus", tag = "2")]
+    pub status: i32,
+    /// Why it was refused, in words a client can show. Empty otherwise.
+    #[prost(string, tag = "3")]
+    pub reason: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ModerationEnvelope {
@@ -354,7 +431,7 @@ pub struct PushAck {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuditEnvelope {
-    #[prost(oneof = "audit_envelope::Body", tags = "1, 2, 3, 4, 5")]
+    #[prost(oneof = "audit_envelope::Body", tags = "1, 2, 3, 4, 5, 6, 7, 8")]
     pub body: ::core::option::Option<audit_envelope::Body>,
 }
 /// Nested message and enum types in `AuditEnvelope`.
@@ -371,7 +448,45 @@ pub mod audit_envelope {
         ConfigUpdate(super::ConfigUpdate),
         #[prost(message, tag = "5")]
         Event(super::Event),
+        #[prost(message, tag = "6")]
+        ConfigQuery(super::ConfigQuery),
+        #[prost(message, tag = "7")]
+        Verify(super::Verify),
+        #[prost(message, tag = "8")]
+        VerifyResult(super::VerifyResult),
     }
+}
+/// Asks for the Config below. Client-initiated rather than pushed after sync:
+/// the admin surface is opened long after the handshake, and a snapshot pushed
+/// at sync is one the client has to hold and invalidate for a tab most sessions
+/// never open.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ConfigQuery {}
+/// Walk the chain and report the first link that does not hold.
+///
+/// Separate from Query because it is not a search: it reads every row in the
+/// scope, so it is an explicit operator action behind its own button rather
+/// than something a filter change can trigger.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Verify {
+    /// Echoed on VerifyResult, for the reason Query.query_id exists.
+    #[prost(string, tag = "1")]
+    pub query_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VerifyResult {
+    #[prost(bool, tag = "1")]
+    pub intact: bool,
+    /// How many links held. On a break this is where the walk stopped, which is
+    /// the entry *before* the tampered one.
+    #[prost(uint64, tag = "2")]
+    pub checked: u64,
+    /// The first entry whose link does not hold, empty when intact.
+    #[prost(string, tag = "3")]
+    pub broken_at: ::prost::alloc::string::String,
+    /// The `Verify.query_id` this answers.
+    #[prost(string, tag = "4")]
+    pub query_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Query {
@@ -389,6 +504,12 @@ pub struct Query {
     /// way to make the server slow from a chat window.
     #[prost(uint64, tag = "5")]
     pub target_account: u64,
+    /// Echoed on the reply. A client shows one audit tab but a filter change and
+    /// a page-down are two queries in flight, and without a correlation id the
+    /// slower one's page overwrites the newer one's. Same reason
+    /// `PreviewRequest.request_id` exists.
+    #[prost(string, tag = "6")]
+    pub query_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AuditRecord {
@@ -420,6 +541,9 @@ pub struct Page {
     pub records: ::prost::alloc::vec::Vec<AuditRecord>,
     #[prost(message, optional, tag = "2")]
     pub page: ::core::option::Option<crate::proto::fancy::wire::PageInfo>,
+    /// The `Query.query_id` this answers.
+    #[prost(string, tag = "3")]
+    pub query_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Config {
@@ -429,6 +553,11 @@ pub struct Config {
     pub categories: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(uint32, tag = "3")]
     pub retention_days: u32,
+    /// How many entries the chain holds, for the config half's chain-status card.
+    /// Sent with the config so the card can render a height before anybody asks
+    /// for a verify, which is the expensive part.
+    #[prost(uint64, tag = "4")]
+    pub chain_height: u64,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ConfigUpdate {
@@ -635,7 +764,7 @@ pub mod link_preview_envelope {
 ///
 /// **Several URLs, one request.** A chat message carries as many links as
 /// somebody typed, and a canon that took one per request would have the client
-/// either send N frames — through a rate limiter that counts frames — or drop
+/// either send N frames - through a rate limiter that counts frames - or drop
 /// all but the first, which is what the epoch-0 translation did.
 ///
 /// The answers come back one `Preview` (or `PreviewError`) per URL, each
@@ -718,4 +847,38 @@ pub struct Menu {
     pub entries: ::prost::alloc::vec::Vec<MenuEntry>,
     #[prost(string, repeated, tag = "2")]
     pub removed: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+/// What a scheduled message is doing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ScheduleStatus {
+    SchedulePending = 0,
+    ScheduleDelivered = 1,
+    ScheduleCancelled = 2,
+    /// Never stored: the schedule was refused, and the ack says why.
+    ScheduleRefused = 3,
+}
+impl ScheduleStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::SchedulePending => "SCHEDULE_PENDING",
+            Self::ScheduleDelivered => "SCHEDULE_DELIVERED",
+            Self::ScheduleCancelled => "SCHEDULE_CANCELLED",
+            Self::ScheduleRefused => "SCHEDULE_REFUSED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SCHEDULE_PENDING" => Some(Self::SchedulePending),
+            "SCHEDULE_DELIVERED" => Some(Self::ScheduleDelivered),
+            "SCHEDULE_CANCELLED" => Some(Self::ScheduleCancelled),
+            "SCHEDULE_REFUSED" => Some(Self::ScheduleRefused),
+            _ => None,
+        }
+    }
 }

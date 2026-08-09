@@ -6,8 +6,8 @@
 //! the other, so this exercises the entire relay rather than a passthrough.
 //!
 //! Skips when no server is listening, so it is safe in the suite; when one is,
-//! it opens two sessions against it — one announcing nothing (stock Mumble: OCB2) and one announcing Fancy
-//! 0.4.0 (XChaCha20-Poly1305) — proves each one's UDP path with a ping, then has
+//! it opens two sessions against it - one announcing nothing (stock Mumble: OCB2) and one announcing Fancy
+//! 0.4.0 (XChaCha20-Poly1305) - proves each one's UDP path with a ping, then has
 //! the legacy peer speak and checks whether the frame reaches the modern one.
 //!
 //! Every step prints, because the point is to find *which* one stops.
@@ -165,7 +165,7 @@ impl Peer {
     /// Speak one frame through `UDPTunnel` over TCP instead of UDP.
     ///
     /// What a real Mumble client does the moment it decides its UDP path is
-    /// unreliable — and it never goes back for the rest of the session. The
+    /// unreliable - and it never goes back for the rest of the session. The
     /// payload is byte-identical to the UDP one; only the transport differs.
     ///
     /// Note it is **not** encrypted: the TLS connection already protects it, and
@@ -223,8 +223,8 @@ async fn legacy_and_modern_peers_can_hear_each_other() {
     assert!(modern.prove_udp(), "the modern peer has no UDP path");
 
     // Legacy speaks; modern must hear it, re-encrypted under its own cipher.
-    // The frame that leaves is never the frame that arrived — different cipher,
-    // different keys — so this is the whole relay path, not a passthrough.
+    // The frame that leaves is never the frame that arrived - different cipher,
+    // different keys - so this is the whole relay path, not a passthrough.
     let (legacy_session, modern_session) = (legacy.session, modern.session);
     legacy.speak(b"legacy opus payload");
     let heard = modern
@@ -249,7 +249,7 @@ async fn legacy_and_modern_peers_can_hear_each_other() {
 
     // The fallback path. A real Mumble client that decides UDP is unreliable
     // switches to this and never switches back, so a server that routes UDP
-    // perfectly and drops tunnelled audio is silent for exactly those clients —
+    // perfectly and drops tunnelled audio is silent for exactly those clients -
     // and looks healthy in every aggregate counter.
     legacy.speak_tunnelled(b"tunnelled opus payload").await;
     match modern.listen() {
@@ -258,7 +258,7 @@ async fn legacy_and_modern_peers_can_hear_each_other() {
             assert_eq!(audio.sender_session, legacy_session);
             println!("PROBE: *** tunnelled audio WAS relayed ***");
         }
-        None => panic!("PROBE: *** tunnelled audio was NOT relayed — this is the bug ***"),
+        None => panic!("PROBE: *** tunnelled audio was NOT relayed - this is the bug ***"),
     }
 
     // Keep the connections alive until the end; dropping them mid-test would

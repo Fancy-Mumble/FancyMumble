@@ -35,7 +35,7 @@ pub mod mumble_udp {
 /// The epoch-1 client wire: one message set per Fancy service.
 ///
 /// Mirrored from Starling's `crates/proto-fancy/proto/fancy/`, which owns
-/// them. Nothing encodes these yet — the codec still frames the proto2
+/// them. Nothing encodes these yet - the codec still frames the proto2
 /// envelopes out of `Mumble.proto`, and swapping it over is step M2c of
 /// Starling's `docs/PROTOCOL-REDESIGN.md`. They are compiled now so the
 /// drift check has both halves to compare, because a copy nobody verifies is
@@ -57,7 +57,7 @@ pub mod fancy {
     pub mod wire {
         include!("starling.fancy.wire.v1.rs");
     }
-    /// Outer type 1000 — session-lifecycle.
+    /// Outer type 1000 - session-lifecycle.
     pub mod session {
         include!("starling.fancy.session.v1.rs");
     }
@@ -69,19 +69,19 @@ pub mod fancy {
     pub mod feature {
         include!("starling.fancy.feature.v1.rs");
     }
-    /// Outer type 1006 — persistent chat.
+    /// Outer type 1006 - persistent chat.
     pub mod pchat {
         include!("starling.fancy.pchat.v1.rs");
     }
-    /// Outer type 1015 — reactions, typing, polls, watch-together, drawing.
+    /// Outer type 1015 - reactions, typing, polls, watch-together, drawing.
     pub mod social {
         include!("starling.fancy.social.v1.rs");
     }
-    /// Outer type 1008 — screen-share signalling.
+    /// Outer type 1008 - screen-share signalling.
     pub mod screenshare {
         include!("starling.fancy.screenshare.v1.rs");
     }
-    /// Outer type 1009 — the control half of bulk transfer.
+    /// Outer type 1009 - the control half of bulk transfer.
     pub mod files {
         include!("starling.fancy.files.v1.rs");
     }

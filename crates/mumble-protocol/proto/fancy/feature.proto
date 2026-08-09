@@ -54,6 +54,11 @@ message TextEnvelope {
     HistoryPage page = 2;
     Edit edit = 3;
     Delete delete = 4;
+    Scheduled schedule = 5;
+    ScheduleQuery query = 6;
+    ScheduleList list = 7;
+    ScheduleCancel cancel = 8;
+    ScheduleAck ack = 9;
   }
 }
 
@@ -90,6 +95,74 @@ message Edit {
 
 message Delete {
   starling.fancy.wire.v1.MessageRef target = 1;
+}
+
+// -- Scheduled messages -----------------------------------------------------
+//
+// A message the server holds and posts to its channels at a future time. It
+// lives under `text` because that is what it becomes: at the due time the
+// server sends an ordinary `TextMessage`, subject to the same length limit,
+// the same markup filter and the same history. murmur's is the same design at
+// wire ids 161-165 (`Messages.cpp:5322`, `Server.cpp:2427`).
+
+// What a scheduled message is doing.
+enum ScheduleStatus {
+  SCHEDULE_PENDING = 0;
+  SCHEDULE_DELIVERED = 1;
+  SCHEDULE_CANCELLED = 2;
+  // Never stored: the schedule was refused, and the ack says why.
+  SCHEDULE_REFUSED = 3;
+}
+
+// Client -> server to schedule; server -> client as the elements of a
+// `ScheduleList`. Every identity and time field below the body is written by
+// the server, so a client that fills one in changes nothing.
+message Scheduled {
+  // Assigned by the server. A client that sends one is ignored, because an id
+  // a peer chooses is an id a peer can collide with somebody else's.
+  string schedule_id = 1;
+  // Where it goes. At least one channel or tree is required, and a tree means
+  // the channel and everything under it, as `TextMessage.tree_id` does.
+  repeated uint32 channels = 2;
+  repeated uint32 trees = 3;
+  string body = 4;
+  uint64 deliver_at_ms = 5;
+  // The creator's session when they scheduled it. Delivery attributes the
+  // message to this session only if the same person is still connected, so it
+  // is a display hint and never the owner.
+  uint32 creator = 6;
+  // The owner. A session id is per connection and recycled; only the
+  // certificate still names the same person after a reconnect, which is what
+  // "only the creator may cancel" has to mean.
+  bytes creator_cert = 7;
+  string creator_name = 8;
+  uint64 created_at_ms = 9;
+  ScheduleStatus status = 10;
+}
+
+// Client -> server: the caller's own scheduled messages.
+message ScheduleQuery {
+  // Include what has already been delivered or cancelled. Pending only by
+  // default, which is what a "pending" panel shows.
+  bool include_finished = 1;
+}
+
+// Server -> client: the answer to a `ScheduleQuery`.
+message ScheduleList {
+  repeated Scheduled messages = 1;
+}
+
+// Client -> server: cancel a pending message. Only its creator may.
+message ScheduleCancel {
+  string schedule_id = 1;
+}
+
+// Server -> client: the outcome of a schedule or a cancel.
+message ScheduleAck {
+  string schedule_id = 1;
+  ScheduleStatus status = 2;
+  // Why it was refused, in words a client can show. Empty otherwise.
+  string reason = 3;
 }
 
 // -- 1007 moderation --------------------------------------------------------
@@ -231,7 +304,37 @@ message AuditEnvelope {
     Config config = 3;
     ConfigUpdate config_update = 4;
     Event event = 5;
+    ConfigQuery config_query = 6;
+    Verify verify = 7;
+    VerifyResult verify_result = 8;
   }
+}
+
+// Asks for the Config below. Client-initiated rather than pushed after sync:
+// the admin surface is opened long after the handshake, and a snapshot pushed
+// at sync is one the client has to hold and invalidate for a tab most sessions
+// never open.
+message ConfigQuery {}
+
+// Walk the chain and report the first link that does not hold.
+//
+// Separate from Query because it is not a search: it reads every row in the
+// scope, so it is an explicit operator action behind its own button rather
+// than something a filter change can trigger.
+message Verify {
+  // Echoed on VerifyResult, for the reason Query.query_id exists.
+  string query_id = 1;
+}
+
+message VerifyResult {
+  bool intact = 1;
+  // How many links held. On a break this is where the walk stopped, which is
+  // the entry *before* the tampered one.
+  uint64 checked = 2;
+  // The first entry whose link does not hold, empty when intact.
+  string broken_at = 3;
+  // The `Verify.query_id` this answers.
+  string query_id = 4;
 }
 
 message Query {
@@ -244,6 +347,11 @@ message Query {
   // `target_channel` below is not: a filter that table-scans the log is a
   // way to make the server slow from a chat window.
   uint64 target_account = 5;
+  // Echoed on the reply. A client shows one audit tab but a filter change and
+  // a page-down are two queries in flight, and without a correlation id the
+  // slower one's page overwrites the newer one's. Same reason
+  // `PreviewRequest.request_id` exists.
+  string query_id = 6;
 }
 
 message AuditRecord {
@@ -264,12 +372,18 @@ message AuditRecord {
 message Page {
   repeated AuditRecord records = 1;
   starling.fancy.wire.v1.PageInfo page = 2;
+  // The `Query.query_id` this answers.
+  string query_id = 3;
 }
 
 message Config {
   bool enabled = 1;
   repeated string categories = 2;
   uint32 retention_days = 3;
+  // How many entries the chain holds, for the config half's chain-status card.
+  // Sent with the config so the card can render a height before anybody asks
+  // for a verify, which is the expensive part.
+  uint64 chain_height = 4;
 }
 
 message ConfigUpdate {
@@ -388,7 +502,7 @@ message LinkPreviewEnvelope {
 //
 // **Several URLs, one request.** A chat message carries as many links as
 // somebody typed, and a canon that took one per request would have the client
-// either send N frames — through a rate limiter that counts frames — or drop
+// either send N frames - through a rate limiter that counts frames - or drop
 // all but the first, which is what the epoch-0 translation did.
 //
 // The answers come back one `Preview` (or `PreviewError`) per URL, each

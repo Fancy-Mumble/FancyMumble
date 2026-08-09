@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-// Outer type 1015 — the small social surface that has no upstream message:
+// Outer type 1015 - the small social surface that has no upstream message:
 // reactions, read receipts, typing indicators, polls, watch-together and
 // drawing strokes. One service, because each is a few hundred bytes of state
 // and a fan-out, and nineteen services with one message each is worse.
@@ -36,6 +36,16 @@ message Reaction {
   starling.fancy.wire.v1.Emoji emoji = 3;
   uint32 actor = 4;
   bool remove = 5;
+  // The actor's leaf certificate, written by the server on relay.
+  //
+  // `actor` is a session id, which is per connection and recycled, and a
+  // receiver keys reactions per reactor so it can render "you reacted" and
+  // undo the right one. With no durable identity on the wire every reactor
+  // collapsed into one, so two people reacting counted once and either one
+  // removing it removed both. murmur carries the same hash for the same
+  // reason (`PersistentChatManager.cpp:1461`). Empty for a peer that
+  // presented no certificate.
+  bytes actor_cert = 6;
 }
 
 message Typing {
@@ -49,6 +59,11 @@ message ReadReceipt {
   string message_id = 2;
   uint32 actor = 3;
   uint64 at_ms = 4;
+  // The reader's certificate hash, written by the server on relay - the same
+  // reason `Reaction.actor_cert` exists: a receiver keys read watermarks per
+  // reader, and a session id is recycled. Empty for a peer that presented no
+  // certificate.
+  bytes actor_cert = 5;
 }
 
 message Poll {
@@ -65,6 +80,14 @@ message PollVote {
   string poll_id = 1;
   repeated uint32 options = 2;
   uint32 voter = 3;
+  // The poll's channel, written by the server on relay.
+  //
+  // A vote used to carry only the poll id, on the reasoning that the poll id
+  // identifies everything about it. It does not identify where to *put* it: a
+  // receiver holds polls per channel, so a vote with no channel is one it
+  // cannot route and drops. The server has the channel from the poll and is
+  // the only party that cannot get it wrong.
+  uint32 channel = 4;
 }
 
 message PollState {
@@ -74,7 +97,7 @@ message PollState {
 }
 
 // Watch-together: a host drives, everyone else follows. The host is explicit
-// because a transfer has to be observable — a silent one desyncs every viewer.
+// because a transfer has to be observable - a silent one desyncs every viewer.
 message WatchSync {
   string session_id = 1;
   uint32 channel = 2;

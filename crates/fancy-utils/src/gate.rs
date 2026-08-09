@@ -8,8 +8,8 @@
 //!
 //! The same gate answers two questions:
 //!
-//! * *what may we send this server* — built from `server_fancy_version`;
-//! * *what may a server give us* — the server builds the same gate from the
+//! * *what may we send this server* - built from `server_fancy_version`;
+//! * *what may a server give us* - the server builds the same gate from the
 //!   `fancy_version` we announced.
 //!
 //! Because the table is duplicated in two crates it can drift, so the versions
@@ -94,7 +94,7 @@ impl Gate {
 
     /// Whether the peer announced the Fancy extensions at all.
     ///
-    /// Rarely the right question — prefer [`Self::allows`], which distinguishes
+    /// Rarely the right question - prefer [`Self::allows`], which distinguishes
     /// *which* version.
     #[must_use]
     pub const fn is_fancy(&self) -> bool {

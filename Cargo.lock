@@ -2105,6 +2105,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fancy-presence"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "fancy-screenshare"
 version = "0.1.0"
 dependencies = [
@@ -4173,6 +4184,7 @@ dependencies = [
  "cpal",
  "dhat",
  "fancy-audio-device",
+ "fancy-presence",
  "fancy-screenshare",
  "fancy-utils",
  "futures-util",
@@ -4180,6 +4192,7 @@ dependencies = [
  "hound",
  "mimalloc",
  "mumble-protocol",
+ "notify-rust",
  "objc2 0.5.2",
  "objc2-foundation 0.2.2",
  "oboe",

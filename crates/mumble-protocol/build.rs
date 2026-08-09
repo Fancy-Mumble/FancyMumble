@@ -6,9 +6,9 @@
 //! Two contracts are compiled, and keeping them apart is the compatibility
 //! guarantee:
 //!
-//! * **`proto/Mumble.proto`, `proto/MumbleUDP.proto`** — the frozen upstream
+//! * **`proto/Mumble.proto`, `proto/MumbleUDP.proto`** - the frozen upstream
 //!   Mumble surface, shared byte-for-byte with `vendor/server` and Starling.
-//! * **`proto/fancy/*.proto`** — the epoch-1 client wire, mirrored from
+//! * **`proto/fancy/*.proto`** - the epoch-1 client wire, mirrored from
 //!   Starling's `crates/proto-fancy/proto/fancy/`. Starling owns those; this
 //!   copy exists so the client can encode them, and
 //!   `scripts/check-proto-drift.sh` over there asserts the two stay identical.
@@ -44,7 +44,7 @@ fn main() -> Result<()> {
     // Two passes, for the reason Starling's build script hits as well: the
     // generated modules are `include!`d flat rather than nested, so without
     // `extern_path` prost emits a `super::super::wire::v1` path at a module
-    // depth that does not exist here — and *with* it prost treats wire as
+    // depth that does not exist here - and *with* it prost treats wire as
     // somebody else's crate and generates nothing for it at all. So it is
     // compiled once on its own, and once declared external for its importers.
     prost_build::Config::new()

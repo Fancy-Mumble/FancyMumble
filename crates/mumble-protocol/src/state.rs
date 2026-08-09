@@ -257,7 +257,7 @@ pub struct ConnectionInfo {
     pub server_fancy_version: Option<u64>,
     /// The Fancy *wire epoch* the server announced (`Version.fancy_protocol`).
     ///
-    /// `None` means the server predates the field, which is epoch 0 — the only
+    /// `None` means the server predates the field, which is epoch 0 - the only
     /// numbering that existed when it was built. Read this before
     /// `server_fancy_version`: the version says which features exist, the epoch
     /// says whether this client and the server agree on what the message

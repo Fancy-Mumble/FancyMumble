@@ -16,7 +16,14 @@ fancy-utils = { path = "../fancy-utils" }
 zstd = "0.13"
 
 # Async runtime
-tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "macros", "time", "io-util"] }
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "net",
+    "sync",
+    "macros",
+    "time",
+    "io-util",
+] }
 
 # TLS for Mumble TCP connection
 tokio-rustls = "0.26"
@@ -72,6 +79,10 @@ hmac = { version = "0.12", optional = true }
 rand = { version = "0.10.0", optional = true }
 rmp-serde = { version = "1", optional = true }
 serde = { version = "1", features = ["derive"] }
+# `AuditEntry.detail_json` is JSON by contract, and the values going into it are
+# free text from the server. Escaping that by hand is where the injected quote
+# gets through.
+serde_json = "1"
 serde_bytes = { version = "0.11", optional = true }
 uuid = { version = "1", features = ["v4"], optional = true }
 libloading = { version = "0.8", optional = true }
@@ -92,7 +103,7 @@ rnnoise-denoiser = ["nnnoiseless"]
 #
 # The published "+0.4 PESQ vs RNNoise" is a *perceptual* result on
 # non-stationary noise. On stationary white noise a plain SNR measurement
-# puts RNNoise ahead — see the table in
+# puts RNNoise ahead - see the table in
 # `tests/denoiser_quality.rs`, which deliberately asserts no ranking.
 deepfilternet-denoiser = ["fancy-denoiser-deepfilter"]
 persistent-chat = [
@@ -107,7 +118,15 @@ persistent-chat = [
 ]
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "macros", "time", "io-util", "test-util"] }
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "net",
+    "sync",
+    "macros",
+    "time",
+    "io-util",
+    "test-util",
+] }
 tokio-rustls = "0.26"
 rustls = { version = "0.23", features = ["ring"] }
 minimp3 = "0.6.1"
