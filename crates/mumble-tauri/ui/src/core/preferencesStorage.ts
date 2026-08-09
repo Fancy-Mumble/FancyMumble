@@ -40,6 +40,8 @@ const DEFAULTS: UserPreferences = {
   disableLinkPreviews: false,
   enableExternalEmbeds: false,
   streamerMode: false,
+  enableRichPresence: false,
+  richPresenceArtwork: true,
   autoReconnect: false,
   autoUpdateOnStartup: false,
   skippedUpdateVersion: null,

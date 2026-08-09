@@ -63,10 +63,12 @@
     "closeStream": "Fermer le flux",
     "pinnedMessages": "Messages épinglés",
     "downloads": "Téléchargements",
+    "richPresence": "Activité en cours",
     "calendar": "Calendrier",
     "mySharedFiles": "Mes fichiers partagés",
     "createPoll": "Créer un sondage",
     "browseDocuments": "Parcourir les documents",
+    "scheduledMessages": "Messages programmés",
     "muteChannel": "Mettre le canal en sourdine",
     "unmuteChannel": "Sortir le canal de la sourdine",
     "channelOptions": "Options du canal",
@@ -236,6 +238,16 @@
     "fileSharingDisabled": "Le partage de fichiers n'est pas activé sur ce serveur.",
     "fileSharingNoPermission": "Vous n'avez pas la permission de partager des fichiers dans ce canal.",
     "filePickerFailed": "Échec du sélecteur de fichier : {{detail}}"
+  },
+  "richPresence": {
+    "title": "Activité en cours",
+    "empty": "Aucune application ne publie d'activité pour le moment.",
+    "disabled": "La présence enrichie Discord est désactivée. Activez-la dans Paramètres → Confidentialité.",
+    "blocked": "Discord a démarré en premier, rien n'est donc reçu. Lancez Fancy Mumble avant Discord.",
+    "elapsed": "{{time}} écoulé",
+    "remaining": "{{time}} restant",
+    "party": "{{current}} sur {{max}}",
+    "closeAriaLabel": "Fermer le panneau d'activité"
   },
   "downloads": {
     "title": "Téléchargements",

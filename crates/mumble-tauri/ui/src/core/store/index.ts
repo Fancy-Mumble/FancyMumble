@@ -79,6 +79,8 @@ import {
   type NotificationsSlice,
 } from "./slices/notifications";
 import { createDownloadsSlice, downloadsInitialState, type DownloadsSlice } from "./slices/downloads";
+import { createPresenceSlice, type PresenceSlice } from "./slices/presence";
+import { createScheduledSlice, scheduledInitialState, type ScheduledSlice } from "./slices/scheduled";
 import { loadProfileData, loadServerProfileData } from "../features/settings/profileData";
 import { base64ToBytes } from "../utils/base64";
 import { serializeProfile, dataUrlToBytes } from "../profileFormat";
@@ -129,6 +131,8 @@ import {
   type PersistentChatSlice,
 } from "./slices/persistentChat";
 import { registerPersistentChatEvents } from "./slices/persistentChat.events";
+import { registerPresenceEvents } from "./slices/presence.events";
+import { registerScheduledEvents } from "./slices/scheduled.events";
 
 /** Sessions that have already had their stored volume applied this connection. */
 const volumeAppliedSessions = new Set<number>();
@@ -304,7 +308,7 @@ export function liveDocKey(appServerId: import("../types").ServerId | null, chan
 // --- Store shape --------------------------------------------------
 
 export interface AppState
-  extends PersistentChatSlice, DmSlice, VoiceSlice, NotificationsSlice, DownloadsSlice {
+  extends PersistentChatSlice, DmSlice, VoiceSlice, NotificationsSlice, DownloadsSlice, PresenceSlice, ScheduledSlice {
   // Reactive state
   status: ConnectionStatus;
   channels: ChannelEntry[];
@@ -374,6 +378,16 @@ export interface AppState
   // (store/slices/downloads.ts).
   /** Fancy Mumble version of the connected server (v2-encoded), null if not a fancy server. */
   serverFancyVersion: number | null;
+  /**
+   * Which Fancy wire numbering the server speaks; null/0 is the epoch-0
+   * interleaved layout, 1 is one outer type per service.
+   *
+   * Separate from the version on purpose. The version says which features a
+   * build has; this says how bytes are framed, and a server may announce
+   * either without the other - Starling announces this and no version at all.
+   * A feature gated only on the version is one Starling can never offer.
+   */
+  serverFancyProtocol: number | null;
   /** Plugin ABI version the connected server's plugin host was compiled
    *  against (from FancyPluginAdminList.host_abi_version). null until an
    *  admin plugin list is received, or on a non-fancy server. */
@@ -819,7 +833,11 @@ const INITIAL: Pick<
   | "fileServerAdminOpen"
   | "downloads"
   | "unseenDownloadCount"
+  | "scheduledMessages"
+  | "scheduledLastAck"
+  | "scheduledLoading"
   | "serverFancyVersion"
+  | "serverFancyProtocol"
   | "serverHostAbiVersion"
   | "voiceState"
   | "udpActive"
@@ -873,6 +891,7 @@ const INITIAL: Pick<
   ...voiceInitialState,
   ...notificationsInitialState,
   ...downloadsInitialState,
+  ...scheduledInitialState,
   status: "disconnected",
   channels: [],
   users: [],
@@ -907,6 +926,7 @@ const INITIAL: Pick<
   pluginDisabledNotice: null,
   fileServerAdminOpen: false,
   serverFancyVersion: null,
+  serverFancyProtocol: null,
   serverHostAbiVersion: null,
   polls: new Map(),
   pollMessages: [],
@@ -998,6 +1018,10 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
   ...createVoiceSlice(set, get, store),
   ...createNotificationsSlice(set, get, store),
   ...createDownloadsSlice(set, get, store),
+  ...createScheduledSlice(set, get, store),
+  // Rich presence is local-machine state, unrelated to the Mumble
+  // connection, so its slice sits outside INITIAL and survives disconnects.
+  ...createPresenceSlice(set, get, store),
   disableLinkPreviews: false,
   enableExternalEmbeds: false,
   streamerMode: false,
@@ -2517,7 +2541,10 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
       // doesn't help -- we have to pull the cached value from the backend.
       try {
         const info = await invoke<ServerInfo>("get_server_info");
-        useAppStore.setState({ serverFancyVersion: info.fancy_version });
+        useAppStore.setState({
+          serverFancyVersion: info.fancy_version,
+          serverFancyProtocol: info.fancy_protocol ?? null,
+        });
       } catch {
         // Standard server or not connected; leave as-is.
       }
@@ -2690,7 +2717,11 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
           // Fetch the server's Fancy Mumble version (null for standard servers).
           try {
             const info = await invoke<ServerInfo>("get_server_info");
-            useAppStore.setState({ serverFancyVersion: info.fancy_version, serverHostAbiVersion: null });
+            useAppStore.setState({
+              serverFancyVersion: info.fancy_version,
+              serverFancyProtocol: info.fancy_protocol ?? null,
+              serverHostAbiVersion: null,
+            });
           } catch {
             // Server info unavailable - leave as null.
           }
@@ -3233,7 +3264,11 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
     // extension version in a `Version` message that arrives after the
     // initial `get_server_info` bootstrap read, which would otherwise leave
     // the UI gating Fancy-only features off until the next reconnect.
-    await listen<{ serverId?: string | null; fancy_version: number | null }>(
+    await listen<{
+      serverId?: string | null;
+      fancy_version: number | null;
+      fancy_protocol?: number | null;
+    }>(
       TauriEvent.ServerVersion,
       (event) => {
         const { activeServerId } = useAppStore.getState();
@@ -3241,7 +3276,10 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
         if (eventServerId !== null && eventServerId !== activeServerId) {
           return;
         }
-        useAppStore.setState({ serverFancyVersion: event.payload.fancy_version });
+        useAppStore.setState({
+          serverFancyVersion: event.payload.fancy_version,
+          serverFancyProtocol: event.payload.fancy_protocol ?? null,
+        });
       },
     ),
 
@@ -3475,6 +3513,12 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
 
   // -- Persistent chat events (in store/slices/persistentChat.events.ts) ---
   await registerPersistentChatEvents(unlisteners);
+
+  // -- Discord rich presence (in store/slices/presence.events.ts) ---------
+  await registerPresenceEvents(unlisteners);
+
+  // -- Scheduled messages (in store/slices/scheduled.events.ts) -----------
+  await registerScheduledEvents(unlisteners);
 
   return unlisteners;
 }

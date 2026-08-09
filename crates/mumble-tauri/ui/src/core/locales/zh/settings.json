@@ -313,7 +313,15 @@
     "externalEmbedsWarning": "按需加载第三方代码",
     "externalEmbedsWarningPara": "在“一起看”会话期间，会从 youtube.com 加载 YouTube 的 IFrame API。Google 可以观察到这些请求，并将其与你的 IP 关联。",
     "streamerMode": "主播模式",
-    "streamerModeHint": "隐藏可识别信息（服务器主机、端口、IP 地址、地理位置），并抑制系统通知，避免在录屏时泄露个人数据。"
+    "streamerModeHint": "隐藏可识别信息（服务器主机、端口、IP 地址、地理位置），并抑制系统通知，避免在录屏时泄露个人数据。",
+    "richPresence": "显示其他应用的 Discord 富状态",
+    "richPresenceHint": "读取游戏和其他应用为 Discord 发布的“正在进行”活动，并在此处显示。完全在本机运行。如果 Discord 正在运行，它仍会原样收到全部内容。",
+    "richPresenceArtwork": "加载应用名称和图片",
+    "richPresenceArtworkHint": "从 Discord 的公共 CDN 获取应用名称和封面图。这是此功能中唯一使用网络的部分；关闭后活动将仅以文本显示。",
+    "richPresenceStandalone": "正在监听。Discord 未运行，因此应用直接与 Fancy Mumble 通信。",
+    "richPresenceBridged": "正在监听，并将全部内容转发给正在运行的 Discord 客户端，不影响其正常显示。",
+    "richPresenceIntercepting": "正在监听，但转发已关闭，因此正在运行的 Discord 客户端不会显示任何活动。",
+    "richPresenceBlocked": "未收到任何内容：Discord 先启动并占用了应用使用的连接。请在 Discord 之前启动 Fancy Mumble，或退出 Discord 后将此项关闭再打开。"
   },
   "personalize": {
     "panelTitle": "个性化",

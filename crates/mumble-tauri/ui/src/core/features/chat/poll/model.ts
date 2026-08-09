@@ -28,7 +28,7 @@ const localVotes = new Map<string, number[]>();
  *
  * These are plain `Map`s, so writing to one is invisible to React. A card that
  * only re-rendered when its own click handler called `forceUpdate` therefore
- * showed the local user's vote immediately and a remote one never — the vote
+ * showed the local user's vote immediately and a remote one never - the vote
  * arrived and was recorded, and nothing redrew. Anything else that re-rendered
  * the message tree made it appear, which is what made it look intermittent.
  */

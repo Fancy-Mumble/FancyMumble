@@ -14,6 +14,12 @@
  *    on translated text or hashed CSS-module class names.
  */
 export const TID = {
+  // -- Discord rich presence ------------------------------------------------
+  /** The rich-presence side panel. */
+  richPresencePanel: "rich-presence-panel",
+  /** One observed activity; carries `data-application-id`. */
+  richPresenceEntry: "rich-presence-entry",
+
   // -- Connect page / wizard ------------------------------------------------
   connectHostInput: "connect-host-input",
   connectPortInput: "connect-port-input",
@@ -343,6 +349,31 @@ export const TID = {
   auditVerifyChain: "audit-verify-chain",
   /** Saves changed audit configuration. */
   auditConfigSave: "audit-config-save",
+
+  // -- Chat header kebab menu -----------------------------------------------
+  /** The chat header's kebab (overflow) menu trigger. */
+  chatHeaderKebab: "chat-header-kebab",
+  /** An entry in an open kebab menu. Carries `data-item-id`
+   *  ({@link KEBAB_ITEM_ATTR}) with the item's stable id (e.g.
+   *  "scheduled-messages"). */
+  kebabMenuItem: "kebab-menu-item",
+
+  // -- Scheduled messages -----------------------------------------------
+  /** Root of the ScheduledMessagesPanel split view. */
+  scheduledPanel: "scheduled-panel",
+  scheduledBodyInput: "scheduled-body-input",
+  /** The `datetime-local` delivery-time input. */
+  scheduledTimeInput: "scheduled-time-input",
+  scheduledSubmit: "scheduled-submit",
+  /** Client-side validation / server rejection error line. */
+  scheduledError: "scheduled-error",
+  /** A pending scheduled message row. */
+  scheduledItem: "scheduled-item",
+  /** Per-row cancel button. */
+  scheduledItemCancel: "scheduled-item-cancel",
+  scheduledRefresh: "scheduled-refresh",
+  /** Empty-state ("no pending messages") placeholder. */
+  scheduledEmpty: "scheduled-empty",
 } as const;
 
 export type TestId = (typeof TID)[keyof typeof TID];
@@ -361,3 +392,6 @@ export const STREAM_SOURCE_TITLE_ATTR = "data-source-title";
 /** Data attribute key carrying a broadcaster's display name, used alongside
  *  {@link TID.broadcastBanner}. */
 export const BROADCASTER_NAME_ATTR = "data-broadcaster-name";
+/** Data attribute key carrying a kebab menu entry's stable id, used alongside
+ *  {@link TID.kebabMenuItem}. */
+export const KEBAB_ITEM_ATTR = "data-item-id";

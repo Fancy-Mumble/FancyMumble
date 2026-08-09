@@ -63,10 +63,12 @@
     "closeStream": "Stream schließen",
     "pinnedMessages": "Angeheftete Nachrichten",
     "downloads": "Downloads",
+    "richPresence": "Aktuelle Aktivität",
     "calendar": "Kalender",
     "mySharedFiles": "Meine geteilten Dateien",
     "createPoll": "Umfrage erstellen",
     "browseDocuments": "Dokumente durchsuchen",
+    "scheduledMessages": "Geplante Nachrichten",
     "muteChannel": "Kanal stummschalten",
     "unmuteChannel": "Stummschaltung des Kanals aufheben",
     "channelOptions": "Kanaloptionen",
@@ -236,6 +238,16 @@
     "fileSharingDisabled": "Dateifreigabe ist auf diesem Server nicht aktiviert.",
     "fileSharingNoPermission": "Du hast keine Berechtigung, Dateien in diesem Kanal zu teilen.",
     "filePickerFailed": "Dateiauswahl fehlgeschlagen: {{detail}}"
+  },
+  "richPresence": {
+    "title": "Aktuelle Aktivität",
+    "empty": "Zurzeit veröffentlicht keine App eine Aktivität.",
+    "disabled": "Discord-Rich-Presence ist aus. Aktiviere es unter Einstellungen → Privatsphäre.",
+    "blocked": "Discord wurde zuerst gestartet, daher kommt nichts an. Starte Fancy Mumble vor Discord.",
+    "elapsed": "{{time}} vergangen",
+    "remaining": "noch {{time}}",
+    "party": "{{current}} von {{max}}",
+    "closeAriaLabel": "Aktivitätsleiste schließen"
   },
   "downloads": {
     "title": "Downloads",
