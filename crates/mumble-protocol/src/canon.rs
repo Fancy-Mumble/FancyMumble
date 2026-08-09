@@ -9,19 +9,19 @@
 //!
 //! Only the services whose canon can carry the feature are translated. The rest
 //! return `None` and fall back to the `PluginDataTransmission` relay, which is
-//! epoch-independent and works through any Mumble server — so those features
+//! epoch-independent and works through any Mumble server - so those features
 //! keep working rather than being silently truncated. The rule is the one
 //! `PROTOCOL-REDESIGN.md` M2b arrived at the hard way: **a message is only
 //! translated when nothing a receiver needs is lost on the way.**
 //!
 //! Not translated today, and why:
 //!
-//! * **screenshare** — the canon models a share (`share_id`, explicit
+//! * **screenshare** - the canon models a share (`share_id`, explicit
 //!   offer/answer/start/stop) where `WebRtcSignal` is one relayed blob, and it
 //!   has no home for `ICE_CANDIDATE` at all *by design* (the SFU is ICE-lite;
 //!   never trickle through the control plane). Mapping one onto the other is a
 //!   redesign of the signalling, not a translation.
-//! * **link-preview, userdata, plugins admin** — the canon does not cover these
+//! * **link-preview, userdata, plugins admin** - the canon does not cover these
 //!   yet, deliberately: their services do not implement them, and designing a
 //!   wire ahead of the code is what produced the gaps in the first place.
 
@@ -40,12 +40,28 @@ const PCHAT: u16 = 1006;
 const PUSH: u16 = 1011;
 /// Outer type for server-fetched link previews.
 const LINK_PREVIEW: u16 = 1016;
+/// Outer type for the operator record.
+const AUDIT: u16 = 1012;
+/// Outer type for chat and its history - which is where scheduled messages
+/// live, because at the due time a scheduled message *is* a text message.
+const TEXT: u16 = 1005;
+
+/// The page size the server caps a query at, mirrored so the client can say
+/// `has_more` from the size of the page it got back.
+const AUDIT_MAX_LIMIT: u32 = 200;
+/// What an audit query asks for when it names no limit.
+const AUDIT_DEFAULT_LIMIT: u32 = 50;
 
 /// Frame `msg` as the canon, or `None` when it has no faithful canon form.
 ///
 /// `None` is not a failure: it means the caller should use the relay path. See
 /// the module docs for which messages that covers and why.
 #[must_use]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one match arm per translated ControlMessage variant, mechanically; splitting it \
+              adds indirection without reducing what a reader has to check"
+)]
 pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
     use fancy::social::social_envelope::Body as Social;
 
@@ -53,11 +69,11 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
         ControlMessage::FancyTypingIndicator(typing) => Social::Typing(fancy::social::Typing {
             channel: typing.channel_id.unwrap_or_default(),
             // Carried rather than blanked. The server overwrites every actor
-            // field on relay, so this changes nothing on the wire — but keeping
+            // field on relay, so this changes nothing on the wire - but keeping
             // it makes the translation lossless, and a translation that drops
             // what it could have kept is one nobody can reason about.
             actor: typing.actor.unwrap_or_default(),
-            // Epoch 0 had no way to say "stopped typing" — the indicator simply
+            // Epoch 0 had no way to say "stopped typing" - the indicator simply
             // expired. Sending `true` keeps that behaviour rather than inventing
             // a stop the client never sends.
             typing: true,
@@ -66,10 +82,31 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
             channel: reaction.channel_id.unwrap_or_default(),
             message_id: reaction.message_id.clone().unwrap_or_default(),
             actor: 0,
+            // Both identity fields are the server's to write, so both go out
+            // empty: it resolves them from the connection the frame arrived
+            // on, and anything written here would be a claim it overwrites.
+            actor_cert: Vec::new(),
             // `REACTION_REMOVE` is 1; anything else is an add.
             remove: reaction.action == Some(1),
             emoji: emoji_to_canon(reaction.emoji.as_ref()),
         }),
+        // Only the watermark update. A query (`query = true`) asks the server
+        // for stored read state, and the canon models a receipt as an event it
+        // relays, not state it keeps - so a query has no canon form and stays
+        // untranslated, like the audit config write below.
+        ControlMessage::FancyReadReceipt(receipt) if receipt.query != Some(true) => {
+            Social::Receipt(fancy::social::ReadReceipt {
+                channel: receipt.channel_id.unwrap_or_default(),
+                message_id: receipt.last_read_message_id.clone().unwrap_or_default(),
+                // Identity and time are the server's to write, as with a
+                // reaction: it resolves both from the connection the frame
+                // arrived on, and anything written here is a claim it
+                // overwrites.
+                actor: 0,
+                actor_cert: Vec::new(),
+                at_ms: receipt.timestamp.unwrap_or_default(),
+            })
+        }
         ControlMessage::FancyPoll(poll) => Social::Poll(fancy::social::Poll {
             poll_id: poll.poll_id.clone().unwrap_or_default(),
             channel: poll.channel_id.unwrap_or_default(),
@@ -84,13 +121,17 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
             poll_id: vote.poll_id.clone().unwrap_or_default(),
             options: vote.selected.clone(),
             voter: vote.voter_session.unwrap_or_default(),
+            // Carried, like the typing actor above: the server replaces it
+            // with the poll's own channel, and a translation that drops what
+            // it could have kept is one nobody can reason about.
+            channel: vote.channel_id.unwrap_or_default(),
         }),
         ControlMessage::FancyDrawStroke(stroke) => Social::Stroke(fancy::social::DrawStroke {
             channel: stroke.channel_id.unwrap_or_default(),
             actor: stroke.sender_session.unwrap_or_default(),
             colour: css_colour(stroke.color.unwrap_or_default()),
             // The fractional width is the resolution-independent one, so it
-            // wins when present — a stroke sized in pixels of the sharer's
+            // wins when present - a stroke sized in pixels of the sharer's
             // screen is the wrong thickness on every other screen.
             width: stroke.width_frac.or(stroke.width).unwrap_or_default(),
             points: stroke.points.clone(),
@@ -132,6 +173,44 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
         ControlMessage::FancySubscribePush(subscribe_push) => {
             return Some((PUSH, subscribe(&subscribe_push.muted_channels)));
         }
+        ControlMessage::FancyAuditQuery(query) => {
+            return Some((AUDIT, audit_query_to_canon(query)));
+        }
+        ControlMessage::FancyAuditConfigUpdate(_) => {
+            // The epoch-0 shape is a list of `Setting` rows whose schema the
+            // *plugin* owned, and the canon has three typed fields. There is no
+            // faithful mapping from arbitrary key/value rows onto them, and
+            // guessing which key means `retention_days` is how a config write
+            // silently sets the wrong thing. Reading the config is translated
+            // below; writing it waits for a canon that models the same schema.
+            return None;
+        }
+        ControlMessage::FancyScheduledMessage(request) => {
+            return Some((TEXT, schedule_to_canon(request)));
+        }
+        ControlMessage::FancyScheduledMessageList(_) => {
+            let envelope = fancy::feature::TextEnvelope {
+                body: Some(fancy::feature::text_envelope::Body::Query(
+                    fancy::feature::ScheduleQuery {
+                        // The panel this feeds shows what is still pending, and
+                        // epoch 0 never modelled asking for the finished ones -
+                        // so the faithful translation is the canon's default.
+                        include_finished: false,
+                    },
+                )),
+            };
+            return Some((TEXT, envelope.encode_to_vec()));
+        }
+        ControlMessage::FancyScheduledMessageCancel(cancel) => {
+            let envelope = fancy::feature::TextEnvelope {
+                body: Some(fancy::feature::text_envelope::Body::Cancel(
+                    fancy::feature::ScheduleCancel {
+                        schedule_id: cancel.schedule_id.clone().unwrap_or_default(),
+                    },
+                )),
+            };
+            return Some((TEXT, envelope.encode_to_vec()));
+        }
         ControlMessage::PchatMessage(message) => {
             return Some((PCHAT, pchat_message_to_canon(message)));
         }
@@ -156,6 +235,149 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
         SOCIAL,
         fancy::social::SocialEnvelope { body: Some(body) }.encode_to_vec(),
     ))
+}
+
+/// One audit query, as the canon envelope that carries it.
+///
+/// Three different asks arrive as one epoch-0 message, and they are three
+/// separate canon bodies: `verify_chain` walks the chain, an empty query on a
+/// freshly-opened tab wants the config, and everything else is a search. The
+/// split is on the wire rather than in the service because a verify reads every
+/// row and a search reads a page; conflating them is how a filter change turns
+/// into a full-table scan.
+fn audit_query_to_canon(query: &mumble_tcp::FancyAuditQuery) -> Vec<u8> {
+    use fancy::feature::audit_envelope::Body;
+
+    let query_id = query.query_id.clone().unwrap_or_default();
+    let body = if query.verify_chain.unwrap_or_default() {
+        Body::Verify(fancy::feature::Verify { query_id })
+    } else {
+        Body::Query(fancy::feature::Query {
+            query_id,
+            since_ms: query.since_ms.unwrap_or_default(),
+            until_ms: query.until_ms.unwrap_or_default(),
+            // The canon filters on one category; the epoch-0 message offers a
+            // list. Taking the first is lossy only when a client sends several,
+            // which the tab's filter rail cannot do - it is a single select.
+            category: query.categories.first().cloned().unwrap_or_default(),
+            target_account: u64::from(query.target_user_id.unwrap_or_default()),
+            page: Some(fancy::wire::Cursor {
+                // Keyset pagination by entry id. Epoch 0 numbers entries and
+                // the canon names them, so a cursor is the id as text; empty
+                // means "from the newest", which is what a first page wants.
+                before_id: query
+                    .before_id
+                    .filter(|id| *id > 0)
+                    .map_or_else(String::new, |id| id.to_string()),
+                after_id: String::new(),
+                limit: query
+                    .limit
+                    .filter(|limit| *limit > 0)
+                    .unwrap_or(AUDIT_DEFAULT_LIMIT)
+                    .min(AUDIT_MAX_LIMIT),
+            }),
+        })
+    };
+
+    fancy::feature::AuditEnvelope { body: Some(body) }.encode_to_vec()
+}
+
+/// One canon page, as the response the audit tab reads.
+fn audit_response(page: &fancy::feature::Page) -> mumble_tcp::FancyAuditResponse {
+    let cursor = page.page.clone().unwrap_or_default();
+    mumble_tcp::FancyAuditResponse {
+        query_id: Some(page.query_id.clone()),
+        entries: page.records.iter().map(audit_entry).collect(),
+        has_more: Some(cursor.more),
+        // The canon pages by entry id as text and epoch 0 by number. Nothing
+        // parses this back into an id: `before_id` is round-tripped through
+        // `audit_query_to_canon`, so a non-numeric id would come back as 0 and
+        // page from the top for ever. Starling's ids are UUIDv7 and do not fit
+        // a u64, so the numeric cursor is left unset and the client's
+        // `nextBeforeId` stays empty, which is the honest answer: this build
+        // pages forward only.
+        next_before_id: None,
+        ..Default::default()
+    }
+}
+
+/// One canon record, as the entry the results table renders.
+fn audit_entry(record: &fancy::feature::AuditRecord) -> mumble_tcp::AuditEntry {
+    mumble_tcp::AuditEntry {
+        // Epoch 0 numbers entries; the canon names them. The table keys rows on
+        // this only for React, and the id is shown from `detail_json` instead,
+        // so a hash of the name is a stable key rather than a lie about order.
+        id: None,
+        ts: Some(record.at_ms),
+        // Everything Starling records is server-authoritative; it has no plugin
+        // ingest and takes no client claims, so the UI's "reported claim"
+        // rendering never applies.
+        source: Some("server".to_owned()),
+        category: Some(record.category.clone()),
+        actor_name: Some(record.actor.clone()),
+        target_user_id: (record.target_account > 0)
+            .then(|| u32::try_from(record.target_account).unwrap_or(u32::MAX)),
+        channel_id: (record.target_channel > 0).then_some(record.target_channel),
+        // The canon's `action` is the verb ("muted", "created"); epoch 0 has no
+        // field for it and the tab shows `reason` beside the category, which is
+        // where a reader looks for what happened.
+        reason: Some(record.action.clone()),
+        detail_json: Some(
+            serde_json::json!({
+                "id": record.id,
+                "action": record.action,
+                "detail": record.detail,
+                "entry_hash": record.entry_hash,
+            })
+            .to_string(),
+        ),
+        entry_hash: Some(record.entry_hash.clone().into_bytes()),
+        ..Default::default()
+    }
+}
+
+/// The canon config, as the `Setting` rows the config half renders.
+///
+/// Epoch 0 let the plugin own the schema and sent typed rows for it. The canon
+/// has three fields, so these are the three, described here rather than
+/// invented in the UI.
+fn audit_settings(config: &fancy::feature::Config) -> Vec<mumble_tcp::Setting> {
+    vec![
+        mumble_tcp::Setting {
+            key: Some("audit.enabled".to_owned()),
+            r#type: Some("bool".to_owned()),
+            group: Some("audit".to_owned()),
+            label: Some("Record operator actions".to_owned()),
+            value: Some(config.enabled.to_string()),
+            help: Some("Whether new entries are added to the chain.".to_owned()),
+            options: Vec::new(),
+            secret: Some(false),
+        },
+        mumble_tcp::Setting {
+            key: Some("audit.retention_days".to_owned()),
+            r#type: Some("int".to_owned()),
+            group: Some("audit".to_owned()),
+            label: Some("Keep entries for (days)".to_owned()),
+            value: Some(config.retention_days.to_string()),
+            help: Some(
+                "0 keeps everything. Retention is a deletion: the chain does \
+                 not re-link across a sweep, so a verify reports a break at the seam."
+                    .to_owned(),
+            ),
+            options: Vec::new(),
+            secret: Some(false),
+        },
+        mumble_tcp::Setting {
+            key: Some("audit.categories".to_owned()),
+            r#type: Some("string".to_owned()),
+            group: Some("audit".to_owned()),
+            label: Some("Recorded categories".to_owned()),
+            value: Some(config.categories.join(",")),
+            help: Some("What the server records, and what the filter offers.".to_owned()),
+            options: Vec::new(),
+            secret: Some(false),
+        },
+    ]
 }
 
 /// One pchat message, encoded as a canon envelope.
@@ -187,8 +409,14 @@ fn pchat_message_to_canon(message: &mumble_tcp::PchatMessage) -> Vec<u8> {
 /// Decode a canon envelope into the client's own vocabulary.
 ///
 /// `Ok(None)` means "not a service type this build translates", which the
-/// caller skips rather than treating as an error — an unreadable member of a
+/// caller skips rather than treating as an error - an unreadable member of a
 /// service costs nothing to ignore, which is the whole promise of the envelope.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one outer-type arm per translated service, each expanding into one match arm per \
+              body variant, mechanically; splitting it adds indirection without reducing what a \
+              reader has to check"
+)]
 pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>> {
     use fancy::social::social_envelope::Body as Social;
 
@@ -209,6 +437,9 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                         &reaction,
                     )))
                 }
+                Some(Social::Receipt(receipt)) => Some(
+                    ControlMessage::FancyReadReceiptDeliver(receipt_deliver(&receipt)),
+                ),
                 Some(Social::Poll(poll)) => Some(ControlMessage::FancyPoll(mumble_tcp::FancyPoll {
                     channel_id: Some(poll.channel),
                     poll_id: Some(poll.poll_id),
@@ -223,6 +454,10 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                         poll_id: Some(vote.poll_id),
                         selected: vote.options,
                         voter_session: session(vote.voter),
+                        // The card this vote belongs to is held per channel,
+                        // so a vote that arrives without one is dropped by the
+                        // handler and the tally never moves.
+                        channel_id: Some(vote.channel),
                         ..Default::default()
                     }))
                 }
@@ -269,8 +504,8 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 }
                 // A refusal becomes an answer with no embeds.
                 //
-                // `FancyLinkPreviewResponse` has no error field — epoch 0 never
-                // modelled one — so the reason stays in the server's log and
+                // `FancyLinkPreviewResponse` has no error field - epoch 0 never
+                // modelled one - so the reason stays in the server's log and
                 // the client gets the one thing it needs from here: the
                 // correlation id, so it stops waiting. Dropped instead, it
                 // spins on a preview that is never coming.
@@ -286,6 +521,79 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 Some(fancy::feature::link_preview_envelope::Body::Request(_)) | None => None,
             })
         }
+        AUDIT => {
+            use fancy::feature::audit_envelope::Body as Audit;
+
+            let Ok(envelope) = fancy::feature::AuditEnvelope::decode(payload) else {
+                return Ok(None);
+            };
+            Ok(match envelope.body {
+                Some(Audit::Page(page)) => {
+                    Some(ControlMessage::FancyAuditResponse(audit_response(&page)))
+                }
+                Some(Audit::VerifyResult(result)) => Some(ControlMessage::FancyAuditResponse(
+                    mumble_tcp::FancyAuditResponse {
+                        query_id: Some(result.query_id),
+                        chain_ok: Some(result.intact),
+                        chain_height: Some(result.checked),
+                        // Only on a break, and it names where. The card prints
+                        // this verbatim, so "entry <id>" is the whole message a
+                        // reader gets; an empty string here would render as
+                        // "BROKEN: ?".
+                        chain_error: (!result.intact)
+                            .then(|| format!("chain breaks at entry {}", result.broken_at)),
+                        ..Default::default()
+                    },
+                )),
+                Some(Audit::Config(config)) => Some(ControlMessage::FancyAuditConfig(
+                    mumble_tcp::FancyAuditConfig {
+                        settings: audit_settings(&config),
+                        // The canon has no revision; the client uses it only to
+                        // drop stale snapshots, and one snapshot per query is
+                        // never out of order with itself.
+                        revision: Some(0),
+                        // Starling has no SQL sandbox, so the editor stays
+                        // hidden rather than offering a mode that is refused
+                        // on use.
+                        advanced_sql_available: Some(false),
+                        chain_height: Some(config.chain_height),
+                        sql_schema_json: None,
+                    },
+                )),
+                // Client->server bodies, and `Event`, which needs a live tail
+                // the canon does not model yet.
+                _ => None,
+            })
+        }
+        TEXT => {
+            use fancy::feature::text_envelope::Body as Text;
+
+            let Ok(envelope) = fancy::feature::TextEnvelope::decode(payload) else {
+                return Ok(None);
+            };
+            Ok(match envelope.body {
+                Some(Text::List(list)) => Some(
+                    ControlMessage::FancyScheduledMessageListResponse(
+                        mumble_tcp::FancyScheduledMessageListResponse {
+                            messages: list.messages.iter().map(scheduled_deliver).collect(),
+                        },
+                    ),
+                ),
+                Some(Text::Ack(ack)) => Some(ControlMessage::FancyScheduledMessageAck(
+                    mumble_tcp::FancyScheduledMessageAck {
+                        // Empty on a refusal that never stored anything, and an
+                        // id that never existed is one the client must not see.
+                        schedule_id: (!ack.schedule_id.is_empty()).then_some(ack.schedule_id),
+                        status: Some(ack.status),
+                        reason: (!ack.reason.is_empty()).then_some(ack.reason),
+                    },
+                )),
+                // The chat surface itself still speaks upstream `TextMessage`
+                // on this client; `Schedule`, `Query` and `Cancel` are
+                // client->server bodies.
+                _ => None,
+            })
+        }
         PCHAT => {
             let Ok(envelope) = fancy::pchat::PchatEnvelope::decode(payload) else {
                 return Ok(None);
@@ -293,6 +601,16 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
             Ok(match envelope.body {
                 Some(fancy::pchat::pchat_envelope::Body::Message(message)) => Some(
                     ControlMessage::PchatMessageDeliver(pchat_deliver(&message)),
+                ),
+                Some(fancy::pchat::pchat_envelope::Body::FetchResponse(response)) => Some(
+                    ControlMessage::PchatFetchResponse(mumble_tcp::PchatFetchResponse {
+                        channel_id: Some(response.channel),
+                        messages: response.messages.iter().map(pchat_stored).collect(),
+                        has_more: response.page.as_ref().map(|page| page.more),
+                        total_stored: Some(
+                            u32::try_from(response.total_stored).unwrap_or(u32::MAX),
+                        ),
+                    }),
                 ),
                 _ => None,
             })
@@ -308,7 +626,12 @@ fn reaction_deliver(reaction: &fancy::social::Reaction) -> mumble_tcp::PchatReac
         channel_id: Some(reaction.channel),
         message_id: Some(reaction.message_id.clone()),
         action: Some(i32::from(reaction.remove)),
-        sender_hash: None,
+        // Hex, because that is the form the rest of this client keys identity
+        // on (`peer_keys`, channel originators, the reaction store's reactor
+        // set). Absent rather than empty for a peer with no certificate, so
+        // "unknown reactor" stays distinguishable from "reactor with an empty
+        // hash", which every such peer would otherwise share.
+        sender_hash: (!reaction.actor_cert.is_empty()).then(|| hex(&reaction.actor_cert)),
         sender_name: None,
         timestamp: None,
         emoji: reaction.emoji.as_ref().and_then(|emoji| {
@@ -343,6 +666,94 @@ fn pchat_deliver(message: &fancy::pchat::Message) -> mumble_tcp::PchatMessageDel
     }
 }
 
+/// A canon read receipt, as the delivery this client's store already handles.
+///
+/// The epoch-0 shape is a server-aggregated list of read states; the canon
+/// relays one reader's watermark at a time, so the list has one entry and the
+/// receiving store merges it per reader.
+fn receipt_deliver(receipt: &fancy::social::ReadReceipt) -> mumble_tcp::FancyReadReceiptDeliver {
+    mumble_tcp::FancyReadReceiptDeliver {
+        channel_id: Some(receipt.channel),
+        read_states: vec![mumble_tcp::fancy_read_receipt_deliver::ReadState {
+            // Hex for the same reason as a reaction's; absent rather than
+            // empty for a peer with no certificate, so the handler can filter
+            // it instead of collapsing every such peer into one reader.
+            cert_hash: (!receipt.actor_cert.is_empty()).then(|| hex(&receipt.actor_cert)),
+            name: None,
+            last_read_message_id: Some(receipt.message_id.clone()),
+            timestamp: Some(receipt.at_ms),
+        }],
+        query_message_id: None,
+    }
+}
+
+/// A canon archive message, as the stored shape a fetch response lists.
+///
+/// The same translation as [`pchat_deliver`], into `PchatMessage` rather than
+/// the deliver, because that is what `PchatFetchResponse` carries and what the
+/// fetch-response handler decrypts - including the decryption context
+/// (`epoch`, `chain_index`, `epoch_fingerprint`) the live deliver keeps inside
+/// its envelope.
+fn pchat_stored(message: &fancy::pchat::Message) -> mumble_tcp::PchatMessage {
+    mumble_tcp::PchatMessage {
+        message_id: Some(message.message_id.clone()),
+        channel_id: Some(message.channel),
+        timestamp: Some(message.sent_at_ms),
+        sender_hash: Some(hex(&message.sender_cert)),
+        protocol: Some(message.protocol),
+        envelope: Some(message.ciphertext.clone()),
+        epoch: Some(message.epoch),
+        chain_index: Some(message.chain_index),
+        epoch_fingerprint: Some(message.epoch_fingerprint.clone()),
+        replaces_id: Some(message.supersedes.clone()),
+    }
+}
+
+/// One scheduled message, as the text-service envelope that carries it.
+fn schedule_to_canon(request: &mumble_tcp::FancyScheduledMessage) -> Vec<u8> {
+    let envelope = fancy::feature::TextEnvelope {
+        body: Some(fancy::feature::text_envelope::Body::Schedule(
+            fancy::feature::Scheduled {
+                // The id and every identity/time field are the server's to
+                // write; what the client happens to know is carried anyway,
+                // because a translation that drops what it could have kept is
+                // one nobody can reason about.
+                schedule_id: request.schedule_id.clone().unwrap_or_default(),
+                channels: request.channel_id.clone(),
+                trees: request.tree_id.clone(),
+                body: request.message.clone().unwrap_or_default(),
+                deliver_at_ms: request.deliver_at.unwrap_or_default(),
+                creator: request.creator_session.unwrap_or_default(),
+                // Bytes on the canon, a hex string on epoch 0. The server
+                // stamps it from the connection either way, so nothing is
+                // lost by not guessing at a decode.
+                creator_cert: Vec::new(),
+                creator_name: request.creator_name.clone().unwrap_or_default(),
+                created_at_ms: request.created_at.unwrap_or_default(),
+                status: request.status.unwrap_or_default(),
+            },
+        )),
+    };
+    envelope.encode_to_vec()
+}
+
+/// One canon scheduled message, as the row the client's panel renders.
+fn scheduled_deliver(message: &fancy::feature::Scheduled) -> mumble_tcp::FancyScheduledMessage {
+    mumble_tcp::FancyScheduledMessage {
+        schedule_id: Some(message.schedule_id.clone()),
+        channel_id: message.channels.clone(),
+        tree_id: message.trees.clone(),
+        message: Some(message.body.clone()),
+        deliver_at: Some(message.deliver_at_ms),
+        creator_session: session(message.creator),
+        creator_hash: (!message.creator_cert.is_empty()).then(|| hex(&message.creator_cert)),
+        creator_name: (!message.creator_name.is_empty())
+            .then(|| message.creator_name.clone()),
+        created_at: Some(message.created_at_ms),
+        status: Some(message.status),
+    }
+}
+
 /// The client's emoji, as the canon's.
 fn emoji_to_canon(emoji: Option<&mumble_tcp::pchat_reaction::Emoji>) -> Option<fancy::wire::Emoji> {
     use mumble_tcp::pchat_reaction::Emoji;
@@ -362,7 +773,7 @@ fn emoji_to_canon(emoji: Option<&mumble_tcp::pchat_reaction::Emoji>) -> Option<f
 /// One canon `Preview` as the client's own response message.
 ///
 /// The canon is deliberately smaller than the epoch-0 shape: it carries what a
-/// server can honestly extract from a page — title, description, site — and not
+/// server can honestly extract from a page - title, description, site - and not
 /// the video/author/favicon/timestamp surface `Embed` has room for. Those are
 /// left unset rather than invented, so a client renders what was actually read.
 ///
@@ -404,7 +815,7 @@ fn packed_colour(css: &str) -> u32 {
 /// The whole mute set, replaced rather than added to.
 ///
 /// Both of this client's messages carry the complete list, which is what lets a
-/// user say "I have un-muted that one" — an incremental API could not express
+/// user say "I have un-muted that one" - an incremental API could not express
 /// a removal.
 fn subscribe(muted: &[u32]) -> Vec<u8> {
     fancy::feature::PushEnvelope {
@@ -420,7 +831,7 @@ fn subscribe(muted: &[u32]) -> Vec<u8> {
 /// A session id, or `None` when the canon left it unset.
 ///
 /// proto3 cannot tell an unset `uint32` from a zero, and this client's messages
-/// can — so the zero has to be interpreted rather than passed through. Session 0
+/// can - so the zero has to be interpreted rather than passed through. Session 0
 /// is not a real session, which is what makes the interpretation safe: nothing
 /// is ever legitimately attributed to it.
 fn session(id: u32) -> Option<u32> {
@@ -436,6 +847,72 @@ fn hex(bytes: &[u8]) -> String {
 mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
     use super::*;
+
+    #[test]
+    fn a_vote_arrives_with_the_channel_its_card_is_held_under() {
+        // The handler drops a vote with no channel, so the tally never moved
+        // however faithfully everything else was translated. The server writes
+        // the poll's channel; this is the half that reads it.
+        let sent = ControlMessage::FancyPollVote(mumble_tcp::FancyPollVote {
+            poll_id: Some("p-1".to_owned()),
+            channel_id: Some(4),
+            selected: vec![1],
+            ..Default::default()
+        });
+        let (outer, payload) = to_canon(&sent).expect("a vote has a canon home");
+        assert_eq!(outer, SOCIAL);
+
+        let back = from_canon(outer, &payload).unwrap().expect("decodes");
+        let ControlMessage::FancyPollVote(vote) = back else {
+            panic!("expected a poll vote");
+        };
+        assert_eq!(vote.channel_id, Some(4));
+        assert_eq!(vote.selected, vec![1]);
+    }
+
+    #[test]
+    fn a_relayed_reaction_names_the_reactor_by_certificate() {
+        // Without it every reactor keys as the same empty hash: two people
+        // reacting count once, and either removing it removes both.
+        let relayed = fancy::social::SocialEnvelope {
+            body: Some(fancy::social::social_envelope::Body::Reaction(
+                fancy::social::Reaction {
+                    channel: 4,
+                    message_id: "m-1".to_owned(),
+                    emoji: None,
+                    actor: 7,
+                    actor_cert: vec![0xab, 0xcd],
+                    remove: false,
+                },
+            )),
+        };
+        let back = from_canon(SOCIAL, &relayed.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::PchatReactionDeliver(deliver) = back else {
+            panic!("expected a reaction delivery");
+        };
+        assert_eq!(deliver.sender_hash.as_deref(), Some("abcd"));
+
+        // And a peer that presented no certificate has no identity, which is
+        // not the same as an identity that is the empty string.
+        let anonymous = fancy::social::SocialEnvelope {
+            body: Some(fancy::social::social_envelope::Body::Reaction(
+                fancy::social::Reaction {
+                    channel: 4,
+                    message_id: "m-1".to_owned(),
+                    ..Default::default()
+                },
+            )),
+        };
+        let back = from_canon(SOCIAL, &anonymous.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::PchatReactionDeliver(deliver) = back else {
+            panic!("expected a reaction delivery");
+        };
+        assert_eq!(deliver.sender_hash, None);
+    }
 
     #[test]
     fn a_typing_indicator_round_trips_through_the_canon() {
@@ -454,10 +931,124 @@ mod tests {
     }
 
     #[test]
+    fn a_read_watermark_round_trips_as_the_deliver_its_author_renders() {
+        // The gap this closed: `FancyReadReceipt` had no canon home, and it is
+        // marked ServerOnly - so on a canon server the codec dropped it with a
+        // debug log and the author's "Read" tick never had anything to render.
+        let sent = ControlMessage::FancyReadReceipt(mumble_tcp::FancyReadReceipt {
+            channel_id: Some(4),
+            last_read_message_id: Some("m-9".to_owned()),
+            ..Default::default()
+        });
+        let (outer, payload) = to_canon(&sent).expect("a watermark has a canon home");
+        assert_eq!(outer, SOCIAL);
+        let envelope = fancy::social::SocialEnvelope::decode(payload.as_slice()).unwrap();
+        let Some(fancy::social::social_envelope::Body::Receipt(receipt)) = envelope.body else {
+            panic!("expected a canon receipt");
+        };
+        assert_eq!(receipt.channel, 4);
+        assert_eq!(receipt.message_id, "m-9");
+        assert_eq!(receipt.actor_cert, Vec::<u8>::new(), "identity is the server's to write");
+
+        // What the server relays back, stamped, becomes the aggregated shape
+        // the read-receipt store merges - one reader per relay, keyed by the
+        // certificate in the form the client compares hashes in.
+        let relayed = fancy::social::SocialEnvelope {
+            body: Some(fancy::social::social_envelope::Body::Receipt(
+                fancy::social::ReadReceipt {
+                    channel: 4,
+                    message_id: "m-9".to_owned(),
+                    actor: 7,
+                    at_ms: 1_000,
+                    actor_cert: vec![0xab, 0xcd],
+                },
+            )),
+        };
+        let back = from_canon(SOCIAL, &relayed.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::FancyReadReceiptDeliver(deliver) = back else {
+            panic!("expected a read-receipt delivery");
+        };
+        assert_eq!(deliver.channel_id, Some(4));
+        let [state] = deliver.read_states.as_slice() else {
+            panic!("one relay carries one reader");
+        };
+        assert_eq!(state.cert_hash.as_deref(), Some("abcd"));
+        assert_eq!(state.last_read_message_id.as_deref(), Some("m-9"));
+        assert_eq!(state.timestamp, Some(1_000));
+    }
+
+    #[test]
+    fn a_read_state_query_stays_off_the_canon() {
+        // The canon models a receipt as an event the server relays, not state
+        // it stores, so a query has nothing to be translated into. Truncating
+        // it into a watermark update would *write* a watermark - the one thing
+        // a read-only ask must never do.
+        let query = ControlMessage::FancyReadReceipt(mumble_tcp::FancyReadReceipt {
+            channel_id: Some(4),
+            query: Some(true),
+            ..Default::default()
+        });
+        assert!(to_canon(&query).is_none());
+    }
+
+    #[test]
+    fn a_fetched_page_comes_back_as_the_response_the_store_decrypts() {
+        // The other half of history replay: `PchatFetch` was translated out,
+        // the server answered, and the answer had no inbound arm - so the
+        // archive was served and then skipped as an unknown service message.
+        let page = fancy::pchat::PchatEnvelope {
+            body: Some(fancy::pchat::pchat_envelope::Body::FetchResponse(
+                fancy::pchat::FetchResponse {
+                    channel: 4,
+                    messages: vec![fancy::pchat::Message {
+                        message_id: "m-1".to_owned(),
+                        channel: 4,
+                        sender: 7,
+                        ciphertext: b"sealed".to_vec(),
+                        sent_at_ms: 1_000,
+                        supersedes: String::new(),
+                        epoch: 3,
+                        sender_cert: vec![0xab, 0xcd],
+                        epoch_fingerprint: vec![1, 2, 3, 4, 5, 6, 7, 8],
+                        chain_index: 9,
+                        protocol: 4,
+                    }],
+                    total_stored: 12,
+                    page: Some(fancy::wire::PageInfo {
+                        more: true,
+                        next_before_id: "m-1".to_owned(),
+                    }),
+                },
+            )),
+        };
+        let back = from_canon(PCHAT, &page.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::PchatFetchResponse(response) = back else {
+            panic!("expected a fetch response");
+        };
+        assert_eq!(response.channel_id, Some(4));
+        assert_eq!(response.has_more, Some(true));
+        assert_eq!(response.total_stored, Some(12));
+        let [message] = response.messages.as_slice() else {
+            panic!("expected the one stored message");
+        };
+        assert_eq!(message.message_id.as_deref(), Some("m-1"));
+        assert_eq!(message.sender_hash.as_deref(), Some("abcd"));
+        assert_eq!(message.envelope.as_deref(), Some(b"sealed".as_slice()));
+        assert_eq!(message.epoch, Some(3));
+        assert_eq!(message.chain_index, Some(9));
+        assert_eq!(message.epoch_fingerprint.as_deref(), Some([1, 2, 3, 4, 5, 6, 7, 8].as_slice()));
+        assert_eq!(message.protocol, Some(4));
+    }
+
+    #[test]
     fn every_link_in_one_message_is_asked_for() {
         // The gap this closed: the client sent `FancyLinkPreviewRequest` flat
         // as type 132, which has no canon home, so it took the PluginData
-        // relay — and Starling's link-preview service only ever decodes a
+        // relay - and Starling's link-preview service only ever decodes a
         // `LinkPreviewEnvelope` under outer type 1016. The server fetched
         // correctly and the request never arrived.
         let sent = ControlMessage::FancyLinkPreviewRequest(mumble_tcp::FancyLinkPreviewRequest {
@@ -655,6 +1246,11 @@ mod tests {
                 points: vec![1.0, 2.0],
                 ..Default::default()
             }),
+            ControlMessage::FancyReadReceipt(mumble_tcp::FancyReadReceipt {
+                channel_id: Some(4),
+                last_read_message_id: Some("m".to_owned()),
+                ..Default::default()
+            }),
             ControlMessage::PchatMessage(mumble_tcp::PchatMessage {
                 channel_id: Some(4),
                 envelope: Some(b"sealed".to_vec()),
@@ -675,6 +1271,300 @@ mod tests {
                 "type {label} encodes into the canon but nothing decodes it back"
             );
         }
+    }
+
+    #[test]
+    fn a_scheduled_message_goes_out_under_the_text_service() {
+        // The gap this closes is the pchat_protocol lesson again: without a
+        // text arm the schedule takes the PluginData relay, and Starling's
+        // text service only reads a `TextEnvelope` under outer type 1005 - so
+        // the panel would say "scheduled" over a frame that routed nowhere.
+        let sent = ControlMessage::FancyScheduledMessage(mumble_tcp::FancyScheduledMessage {
+            channel_id: vec![4],
+            tree_id: vec![7],
+            message: Some("stand-up in five".to_owned()),
+            deliver_at: Some(1_723_200_000_000),
+            ..Default::default()
+        });
+        let (outer, payload) = to_canon(&sent).expect("a schedule has a canon home");
+        assert_eq!(outer, TEXT);
+
+        let envelope = fancy::feature::TextEnvelope::decode(payload.as_slice())
+            .expect("the server's own decode");
+        let Some(fancy::feature::text_envelope::Body::Schedule(schedule)) = envelope.body else {
+            panic!("expected a schedule");
+        };
+        assert_eq!(schedule.channels, vec![4]);
+        assert_eq!(schedule.trees, vec![7]);
+        assert_eq!(schedule.body, "stand-up in five");
+        assert_eq!(schedule.deliver_at_ms, 1_723_200_000_000);
+        assert!(schedule.schedule_id.is_empty(), "the id is the server's to assign");
+    }
+
+    #[test]
+    fn a_schedule_list_comes_back_as_the_rows_the_panel_renders() {
+        let list = fancy::feature::TextEnvelope {
+            body: Some(fancy::feature::text_envelope::Body::List(
+                fancy::feature::ScheduleList {
+                    messages: vec![fancy::feature::Scheduled {
+                        schedule_id: "s-1".to_owned(),
+                        channels: vec![4],
+                        trees: Vec::new(),
+                        body: "stand-up in five".to_owned(),
+                        deliver_at_ms: 1_723_200_000_000,
+                        creator: 9,
+                        creator_cert: vec![0xab, 0xcd],
+                        creator_name: "alice".to_owned(),
+                        created_at_ms: 1_723_100_000_000,
+                        status: fancy::feature::ScheduleStatus::SchedulePending as i32,
+                    }],
+                },
+            )),
+        };
+        let back = from_canon(TEXT, &list.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::FancyScheduledMessageListResponse(response) = back else {
+            panic!("expected a schedule list");
+        };
+        let [row] = response.messages.as_slice() else {
+            panic!("expected the one pending row");
+        };
+        assert_eq!(row.schedule_id.as_deref(), Some("s-1"));
+        assert_eq!(row.channel_id, vec![4]);
+        assert_eq!(row.message.as_deref(), Some("stand-up in five"));
+        assert_eq!(row.deliver_at, Some(1_723_200_000_000));
+        assert_eq!(row.creator_session, Some(9));
+        assert_eq!(row.creator_hash.as_deref(), Some("abcd"));
+        assert_eq!(row.creator_name.as_deref(), Some("alice"));
+        assert_eq!(row.status, Some(0), "pending, in both vocabularies");
+    }
+
+    #[test]
+    fn a_cancel_names_its_schedule_and_a_refusal_arrives_with_the_reason() {
+        let sent = ControlMessage::FancyScheduledMessageCancel(
+            mumble_tcp::FancyScheduledMessageCancel {
+                schedule_id: Some("s-1".to_owned()),
+            },
+        );
+        let (outer, payload) = to_canon(&sent).expect("a cancel has a canon home");
+        assert_eq!(outer, TEXT);
+        let envelope = fancy::feature::TextEnvelope::decode(payload.as_slice())
+            .expect("the server's own decode");
+        let Some(fancy::feature::text_envelope::Body::Cancel(cancel)) = envelope.body else {
+            panic!("expected a cancel");
+        };
+        assert_eq!(cancel.schedule_id, "s-1");
+
+        // A refusal never stored anything, so its ack names no id - and the
+        // client must see `None` rather than an id that never existed.
+        let refusal = fancy::feature::TextEnvelope {
+            body: Some(fancy::feature::text_envelope::Body::Ack(
+                fancy::feature::ScheduleAck {
+                    schedule_id: String::new(),
+                    status: fancy::feature::ScheduleStatus::ScheduleRefused as i32,
+                    reason: "a scheduled message needs a target channel".to_owned(),
+                },
+            )),
+        };
+        let back = from_canon(TEXT, &refusal.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::FancyScheduledMessageAck(ack) = back else {
+            panic!("expected an ack");
+        };
+        assert_eq!(ack.schedule_id, None);
+        assert_eq!(ack.status, Some(3), "refused, in both vocabularies");
+        assert_eq!(
+            ack.reason.as_deref(),
+            Some("a scheduled message needs a target channel")
+        );
+    }
+
+    /// The canon body an audit query becomes.
+    fn audit_body(query: mumble_tcp::FancyAuditQuery) -> fancy::feature::audit_envelope::Body {
+        let (outer, payload) =
+            to_canon(&ControlMessage::FancyAuditQuery(query)).expect("audit has a canon home");
+        assert_eq!(outer, AUDIT);
+        fancy::feature::AuditEnvelope::decode(payload.as_slice())
+            .expect("our own envelope")
+            .body
+            .expect("a body")
+    }
+
+    #[test]
+    fn an_audit_query_carries_its_filters_into_the_canon() {
+        // Before this translation existed the tab's query was `ServerOnly` with
+        // no canon form, so the codec refused to send it at all: against
+        // Starling the Audit tab produced silence, not an error.
+        let body = audit_body(mumble_tcp::FancyAuditQuery {
+            query_id: Some("q-1".to_owned()),
+            categories: vec!["audit.ban".to_owned()],
+            target_user_id: Some(7),
+            since_ms: Some(100),
+            until_ms: Some(200),
+            limit: Some(25),
+            ..Default::default()
+        });
+        let fancy::feature::audit_envelope::Body::Query(query) = body else {
+            panic!("a search must become a Query");
+        };
+        assert_eq!(query.query_id, "q-1");
+        assert_eq!(query.category, "audit.ban");
+        assert_eq!(query.target_account, 7);
+        assert_eq!(query.since_ms, 100);
+        assert_eq!(query.until_ms, 200);
+        assert_eq!(query.page.expect("a cursor").limit, 25);
+    }
+
+    #[test]
+    fn an_unlimited_query_asks_for_a_page_rather_than_none() {
+        // proto3 cannot tell "no limit" from zero, and a zero forwarded as-is
+        // is what made an unbounded query return a single row.
+        let body = audit_body(mumble_tcp::FancyAuditQuery::default());
+        let fancy::feature::audit_envelope::Body::Query(query) = body else {
+            panic!("a search must become a Query");
+        };
+        assert_eq!(query.page.expect("a cursor").limit, AUDIT_DEFAULT_LIMIT);
+
+        // And a client asking for more than the server will give is clamped
+        // here rather than being silently given less than it asked for.
+        let body = audit_body(mumble_tcp::FancyAuditQuery {
+            limit: Some(10_000),
+            ..Default::default()
+        });
+        let fancy::feature::audit_envelope::Body::Query(query) = body else {
+            panic!("a search must become a Query");
+        };
+        assert_eq!(query.page.expect("a cursor").limit, AUDIT_MAX_LIMIT);
+    }
+
+    #[test]
+    fn a_chain_verification_is_its_own_canon_body() {
+        // Not a search with a flag on it: a verify reads every row and a search
+        // reads a page, so they are separated on the wire.
+        let body = audit_body(mumble_tcp::FancyAuditQuery {
+            query_id: Some("v-1".to_owned()),
+            verify_chain: Some(true),
+            ..Default::default()
+        });
+        let fancy::feature::audit_envelope::Body::Verify(verify) = body else {
+            panic!("verify_chain must become a Verify");
+        };
+        assert_eq!(verify.query_id, "v-1");
+    }
+
+    #[test]
+    fn a_page_comes_back_correlated_to_the_query_that_asked_for_it() {
+        // The store drops any response whose `queryId` is not the one it last
+        // sent, so a page that loses the id is a page the tab never renders -
+        // indistinguishable, on screen, from a server that answered nothing.
+        let envelope = fancy::feature::AuditEnvelope {
+            body: Some(fancy::feature::audit_envelope::Body::Page(
+                fancy::feature::Page {
+                    query_id: "q-9".to_owned(),
+                    records: vec![fancy::feature::AuditRecord {
+                        id: "0192-abc".to_owned(),
+                        at_ms: 1_700_000_000_000,
+                        category: "audit.ban".to_owned(),
+                        action: "issued".to_owned(),
+                        actor: "SuperUser".to_owned(),
+                        detail: "spam".to_owned(),
+                        entry_hash: "deadbeef".to_owned(),
+                        target_account: 7,
+                        target_channel: 3,
+                    }],
+                    page: Some(fancy::wire::PageInfo {
+                        more: true,
+                        ..Default::default()
+                    }),
+                },
+            )),
+        };
+
+        let decoded = from_canon(AUDIT, &envelope.encode_to_vec())
+            .expect("decodable")
+            .expect("a page is translated");
+        let ControlMessage::FancyAuditResponse(response) = decoded else {
+            panic!("a Page must become a FancyAuditResponse");
+        };
+        assert_eq!(response.query_id.as_deref(), Some("q-9"));
+        assert_eq!(response.has_more, Some(true));
+        assert_eq!(response.entries.len(), 1);
+
+        let entry = &response.entries[0];
+        assert_eq!(entry.category.as_deref(), Some("audit.ban"));
+        assert_eq!(entry.actor_name.as_deref(), Some("SuperUser"));
+        assert_eq!(entry.target_user_id, Some(7));
+        assert_eq!(entry.channel_id, Some(3));
+        // The verb has to survive: the table shows it, and a row that says
+        // "audit.ban" without "issued" has lost what happened.
+        assert_eq!(entry.reason.as_deref(), Some("issued"));
+        assert!(
+            entry
+                .detail_json
+                .as_deref()
+                .unwrap_or_default()
+                .contains("spam")
+        );
+    }
+
+    #[test]
+    fn a_verify_result_becomes_the_chain_status_the_card_renders() {
+        for (intact, checked) in [(true, 12_u64), (false, 4)] {
+            let envelope = fancy::feature::AuditEnvelope {
+                body: Some(fancy::feature::audit_envelope::Body::VerifyResult(
+                    fancy::feature::VerifyResult {
+                        intact,
+                        checked,
+                        broken_at: if intact { String::new() } else { "0192-x".to_owned() },
+                        query_id: "v-2".to_owned(),
+                    },
+                )),
+            };
+            let decoded = from_canon(AUDIT, &envelope.encode_to_vec())
+                .expect("decodable")
+                .expect("a verify result is translated");
+            let ControlMessage::FancyAuditResponse(response) = decoded else {
+                panic!("a VerifyResult must become a FancyAuditResponse");
+            };
+            assert_eq!(response.query_id.as_deref(), Some("v-2"));
+            assert_eq!(response.chain_ok, Some(intact));
+            assert_eq!(response.chain_height, Some(checked));
+            // The card prints this verbatim on a break and hides it otherwise.
+            assert_eq!(response.chain_error.is_some(), !intact);
+        }
+    }
+
+    #[test]
+    fn a_config_carries_the_chain_height_the_card_shows_before_any_verify() {
+        let envelope = fancy::feature::AuditEnvelope {
+            body: Some(fancy::feature::audit_envelope::Body::Config(
+                fancy::feature::Config {
+                    enabled: true,
+                    categories: vec!["audit.ban".to_owned(), "audit.move".to_owned()],
+                    retention_days: 30,
+                    chain_height: 41,
+                },
+            )),
+        };
+        let decoded = from_canon(AUDIT, &envelope.encode_to_vec())
+            .expect("decodable")
+            .expect("a config is translated");
+        let ControlMessage::FancyAuditConfig(config) = decoded else {
+            panic!("a Config must become a FancyAuditConfig");
+        };
+        assert_eq!(config.chain_height, Some(41));
+        // Starling has no SQL sandbox; offering the editor would be offering a
+        // mode every use of which is refused.
+        assert_eq!(config.advanced_sql_available, Some(false));
+        assert!(
+            config
+                .settings
+                .iter()
+                .any(|s| s.key.as_deref() == Some("audit.retention_days")
+                    && s.value.as_deref() == Some("30"))
+        );
     }
 
     #[test]

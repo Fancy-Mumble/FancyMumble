@@ -22,7 +22,7 @@ use crate::transport::codec;
 /// `Version.fancy_protocol` in `Mumble.proto` for what an epoch is and why it
 /// is not the product version.
 ///
-/// Epoch 0 — the interleaved 100–999 layout — is not spoken any more. A server
+/// Epoch 0 - the interleaved 100–999 layout - is not spoken any more. A server
 /// still on it is handled as a plain Mumble server by [`speaks_epoch`], which
 /// needs no compatibility code: it is the same branch a vanilla server takes.
 pub const FANCY_PROTOCOL_EPOCH: u32 = 1;
@@ -40,8 +40,8 @@ const EPOCH_WHEN_UNANNOUNCED: u32 = 0;
 ///
 /// The point of asking is what happens when the answer is *no*. Before this
 /// existed the client decided purely on `fancy_version`, so a server that had
-/// renumbered the wire — announcing features it does implement, at types this
-/// client would send to the wrong place — was indistinguishable from an old
+/// renumbered the wire - announcing features it does implement, at types this
+/// client would send to the wrong place - was indistinguishable from an old
 /// Fancy server. It would then emit natives the peer could route nowhere and
 /// they would vanish silently. A `false` here is the client choosing to be a
 /// plain Mumble client instead, which always works.
@@ -79,7 +79,7 @@ pub trait FancyCodec: Send + Sync + Debug {
 
 /// Select the appropriate codec for a server.
 ///
-/// The epoch is the whole question — but only about *framing*. A peer that
+/// The epoch is the whole question - but only about *framing*. A peer that
 /// speaks our epoch agrees on what the outer types mean, which is not the same
 /// as both ends having a canon form for every feature; where one is missing
 /// [`NativeCodec`] relays instead, and the relay is epoch-independent. Anything
@@ -124,7 +124,7 @@ pub fn select_codec(
 ///
 /// That last part is load-bearing and was briefly wrong. Passing an untranslated
 /// Fancy message through sends it to `to_service_payload`, which frames the
-/// *proto2* envelope under the canon's outer type — so an epoch-1 peer would
+/// *proto2* envelope under the canon's outer type - so an epoch-1 peer would
 /// decode proto3 out of proto2 bytes at type 1008 and get silence or nonsense.
 /// That is D1, reintroduced one service at a time as the canon's coverage
 /// lagged. The relay is epoch-independent and the peer handles it, so those
@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn select_codec_native_for_a_peer_on_our_epoch() {
         // Restored at M2c, when `crate::canon` gave the codec something true to
-        // encode. It spent the interval asserting the opposite — deliberately,
+        // encode. It spent the interval asserting the opposite - deliberately,
         // because between the two commits this client announced an epoch whose
         // payloads it could not produce, and the honest answer was the relay.
         let codec = select_codec(None, Some(FANCY_PROTOCOL_EPOCH));
@@ -397,7 +397,7 @@ mod tests {
 
     #[test]
     fn an_absent_epoch_is_the_one_that_existed_when_the_server_was_built() {
-        // Silence means epoch 0 — the only numbering that existed before the
+        // Silence means epoch 0 - the only numbering that existed before the
         // field did. It must not be read as "whatever we currently speak", or
         // a vanilla Mumble server would look like a peer the moment we moved
         // epochs, and we would send it natives it cannot route.
@@ -409,7 +409,7 @@ mod tests {
     fn a_newer_epoch_drops_to_basic_features_however_new_the_server_is() {
         // The case this field exists for. The server is *newer* than us and
         // announces a full feature set, but its wire numbering is one we do not
-        // speak — so every native we sent would land on nothing and vanish. A
+        // speak - so every native we sent would land on nothing and vanish. A
         // plain Mumble client is the honest thing to be here.
         let future = fancy_utils::version::fancy_version_encode(9, 9, 9);
         let codec = select_codec(Some(future), Some(FANCY_PROTOCOL_EPOCH + 1));
@@ -443,7 +443,7 @@ mod tests {
         // here rather than on somebody's wire.
         //
         // Asserted on the handshake `Version` itself, because this is a claim
-        // made on the wire and nowhere else — a peer believes the field, not
+        // made on the wire and nowhere else - a peer believes the field, not
         // our intentions about it.
         let version = crate::client::version_announcement(crate::client::MumbleVersion::default());
         assert_eq!(
@@ -480,7 +480,7 @@ mod tests {
     #[test]
     fn native_codec_passthrough_fancy_message_when_the_canon_carries_it() {
         // Used to assert this of `WebRtcSignal`, which the canon does not carry
-        // — so it now relays, and the passthrough claim moved to a message the
+        // - so it now relays, and the passthrough claim moved to a message the
         // canon actually has: a reaction.
         let codec = NativeCodec;
         let state = ServerState::new();
@@ -527,7 +527,7 @@ mod tests {
     fn a_message_the_canon_cannot_carry_is_relayed_rather_than_framed_as_proto2() {
         // The way D1 comes back. `to_service_payload` still frames the proto2
         // envelopes under the canon's outer types, so a Fancy message that
-        // `canon` does not translate must never reach it — an epoch-1 peer
+        // `canon` does not translate must never reach it - an epoch-1 peer
         // would decode proto3 out of proto2 bytes at type 1008.
         //
         // Screen-share signalling is the case: no canon form (the SFU is
@@ -910,7 +910,7 @@ mod tests {
         });
         // Watch-sync has no canon translation yet (its canon is a flat state
         // where this is a oneof of events, and `StateRequest` has no canon
-        // kind), so it takes the relay — which is where it already worked.
+        // kind), so it takes the relay - which is where it already worked.
         let encoded = codec.encode(msg, &state).unwrap();
         assert!(matches!(encoded, ControlMessage::PluginDataTransmission(_)));
     }

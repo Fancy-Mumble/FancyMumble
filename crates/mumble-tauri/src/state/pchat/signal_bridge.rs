@@ -230,7 +230,7 @@ pub(crate) fn send_signal_distribution(shared: &Arc<Mutex<SharedState>>, channel
         }
     }
 
-    let (handle, distribution) = {
+    let (handle, distribution, sender_hash) = {
         let Ok(mut state) = shared.lock() else { return };
 
         let Some(ref mut pchat) = state.pchat_ctx.pchat else {
@@ -259,7 +259,11 @@ pub(crate) fn send_signal_distribution(shared: &Arc<Mutex<SharedState>>, channel
             }
         };
 
-        (state.conn.client_handle.clone(), dist)
+        // Taken here, while `pchat` is still borrowed; reading `state.conn`
+        // below ends that borrow.
+        let own_hash = pchat.own_cert_hash.clone();
+
+        (state.conn.client_handle.clone(), dist, own_hash)
     };
 
     let Some(handle) = handle else { return };
@@ -269,6 +273,7 @@ pub(crate) fn send_signal_distribution(shared: &Arc<Mutex<SharedState>>, channel
             .send(command::SendPchatSenderKeyDistribution {
                 channel_id,
                 distribution,
+                sender_hash,
             })
             .await
         {
