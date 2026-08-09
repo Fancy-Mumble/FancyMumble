@@ -140,7 +140,7 @@ export function DesignSheet({ onBackToClient }: { onBackToClient?: () => void })
             </h1>
             <p>
               A tactile, calm visual system for voice, chat, community, collaboration, and
-              administration—built to scale without losing character.
+              administration-built to scale without losing character.
             </p>
             <div className={hero.heroActions}>
               <a href="#foundation" className={controls.primaryButton}>

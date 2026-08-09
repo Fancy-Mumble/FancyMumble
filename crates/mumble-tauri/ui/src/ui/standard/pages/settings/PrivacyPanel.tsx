@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Toggle } from "./SharedControls";
 import styles from "./SettingsPage.module.css";
 import { registerSettings } from "@core/features/settings/settingsSearchRegistry";
+import type { PresenceStatus } from "@core/types";
 
 registerSettings("privacy")
   .add("privacy.dualPath", ["encryption"])
@@ -10,7 +11,9 @@ registerSettings("privacy")
   .add("privacy.osmMaps", ["maps", "geolocation", "openstreetmap"])
   .add("privacy.linkPreviews", ["embeds", "previews"])
   .add("privacy.externalEmbeds", ["youtube", "watch together"])
-  .add("privacy.streamerMode", ["stream", "hide ip"]);
+  .add("privacy.streamerMode", ["stream", "hide ip"])
+  .add("privacy.richPresence", ["discord", "rich presence", "game activity", "playing"])
+  .add("privacy.richPresenceArtwork", ["discord", "artwork", "game art", "cover"]);
 
 export function PrivacyPanel({
   enableDualPath,
@@ -20,6 +23,9 @@ export function PrivacyPanel({
   disableLinkPreviews,
   enableExternalEmbeds,
   streamerMode,
+  enableRichPresence,
+  richPresenceArtwork,
+  richPresenceStatus,
   onToggleDualPath,
   onToggleReadReceipts,
   onToggleTypingIndicators,
@@ -27,6 +33,8 @@ export function PrivacyPanel({
   onToggleLinkPreviews,
   onToggleExternalEmbeds,
   onToggleStreamerMode,
+  onToggleRichPresence,
+  onToggleRichPresenceArtwork,
 }: {
   enableDualPath: boolean;
   disableReadReceipts: boolean;
@@ -35,6 +43,9 @@ export function PrivacyPanel({
   disableLinkPreviews: boolean;
   enableExternalEmbeds: boolean;
   streamerMode: boolean;
+  enableRichPresence: boolean;
+  richPresenceArtwork: boolean;
+  richPresenceStatus: PresenceStatus;
   onToggleDualPath: () => void;
   onToggleReadReceipts: () => void;
   onToggleTypingIndicators: () => void;
@@ -42,8 +53,22 @@ export function PrivacyPanel({
   onToggleLinkPreviews: () => void;
   onToggleExternalEmbeds: () => void;
   onToggleStreamerMode: () => void;
+  onToggleRichPresence: () => void;
+  onToggleRichPresenceArtwork: () => void;
 }) {
   const { t } = useTranslation("settings");
+
+  // Whether presence is actually being observed depends on who reached
+  // Discord's IPC socket first, which the user cannot see and would
+  // otherwise experience as the feature silently doing nothing.
+  const bridgeNote = enableRichPresence
+    ? {
+        blocked: t("privacy.richPresenceBlocked"),
+        bridged: t("privacy.richPresenceBridged"),
+        standalone: t("privacy.richPresenceStandalone"),
+        intercepting: t("privacy.richPresenceIntercepting"),
+      }[richPresenceStatus.bridgeState ?? "standalone"]
+    : null;
 
   return (
     <>
@@ -147,6 +172,28 @@ export function PrivacyPanel({
           </div>
           <Toggle checked={streamerMode} onChange={onToggleStreamerMode} />
         </div>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.toggleRow}>
+          <div className={styles.toggleInfo}>
+            <h3 className={styles.sectionTitle}>{t("privacy.richPresence")}</h3>
+            <p className={styles.fieldHint}>{t("privacy.richPresenceHint")}</p>
+          </div>
+          <Toggle checked={enableRichPresence} onChange={onToggleRichPresence} />
+        </div>
+        {enableRichPresence && (
+          <>
+            <div className={styles.toggleRow}>
+              <div className={styles.toggleInfo}>
+                <h3 className={styles.sectionTitle}>{t("privacy.richPresenceArtwork")}</h3>
+                <p className={styles.fieldHint}>{t("privacy.richPresenceArtworkHint")}</p>
+              </div>
+              <Toggle checked={richPresenceArtwork} onChange={onToggleRichPresenceArtwork} />
+            </div>
+            {bridgeNote && <div className={styles.warningBannerMuted}>{bridgeNote}</div>}
+          </>
+        )}
       </section>
     </>
   );

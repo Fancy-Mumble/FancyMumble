@@ -25,7 +25,7 @@ export default function ChannelOccupant({ user, talking, own }: ChannelOccupantP
   const state = deafened ? "Muted and deafened" : muted ? "Muted" : talking ? "Speaking" : "Listening";
 
   return (
-    <span className={`${styles.occupant} ${own ? styles.occupantOwn : ""}`} title={`${user.name} — ${state}`}>
+    <span className={`${styles.occupant} ${own ? styles.occupantOwn : ""}`} title={`${user.name} - ${state}`}>
       <ChannelPresenceAvatar name={user.name} talking={talking} />
       <span className={styles.occupantName}>{user.name}</span>
       <span className={styles.occupantState} aria-label={state}>

@@ -31,6 +31,13 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     if (key === "enableExternalEmbeds")
       useAppStore.setState({ enableExternalEmbeds: next.enableExternalEmbeds ?? false });
     if (key === "streamerMode") useAppStore.setState({ streamerMode: next.streamerMode ?? false });
+    // Either toggle has to reach the backend now: enabling binds Discord's
+    // IPC slot, and the artwork flag changes what the running listener does.
+    if (key === "enableRichPresence" || key === "richPresenceArtwork") {
+      void useAppStore
+        .getState()
+        .setRichPresenceEnabled(next.enableRichPresence ?? false, next.richPresenceArtwork ?? true);
+    }
   };
   const patchPreference = async (change: Partial<UserPreferences>) =>
     setPrefs(await updatePreferences(change));
