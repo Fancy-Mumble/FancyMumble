@@ -394,8 +394,17 @@ fn finalize_key_acceptance(
 fn retry_decrypt_pending_messages(
     state: &mut SharedState,
     channel_id: u32,
-    _protocol: PchatProtocol,
+    protocol: PchatProtocol,
 ) {
+    // SignalV1 never re-fetches: a stashed placeholder from a live message
+    // that outran its sender key is retried in place by
+    // `retry_stashed_signal_envelopes` once the key lands, not by asking the
+    // server for the channel's history again - which for SignalV1 would
+    // hand back exactly the pre-join messages forward secrecy must withhold.
+    if protocol == PchatProtocol::SignalV1 {
+        return;
+    }
+
     let has_placeholders = state
         .msgs
         .by_channel

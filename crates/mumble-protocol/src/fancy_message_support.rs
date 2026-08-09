@@ -1,7 +1,7 @@
 //! Per-message fallback policies.
 //!
 //! Each Fancy extension message type declares whether a `PluginData` relay is
-//! a meaningful substitute when the peer cannot process it natively — which,
+//! a meaningful substitute when the peer cannot process it natively - which,
 //! since wire epoch 1, means "the peer is not a Fancy server at all".
 //!
 //! The [`fancy_message_support!`] macro generates the
@@ -149,6 +149,19 @@ fancy_message_support! {
     FancyAuditEvent                => ServerOnly,
     FancyAuditConfig               => ServerOnly,
     FancyAuditConfigUpdate         => ServerOnly,
+
+    // -- Forums (server-stored message board) -- 0.4.3 ---------------
+    FancyForumPost                 => ServerOnly,
+    FancyForumFetch                => ServerOnly,
+    FancyForumFetchResponse        => ServerOnly,
+    FancyForumDelete               => ServerOnly,
+
+    // -- Scheduled messages (server-stored and -timed) -- 0.4.3 ------
+    FancyScheduledMessage          => ServerOnly,
+    FancyScheduledMessageList      => ServerOnly,
+    FancyScheduledMessageListResponse => ServerOnly,
+    FancyScheduledMessageCancel    => ServerOnly,
+    FancyScheduledMessageAck       => ServerOnly,
 }
 
 #[cfg(test)]

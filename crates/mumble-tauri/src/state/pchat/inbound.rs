@@ -193,11 +193,34 @@ fn insert_or_replace_message(
         }
     }
 
-    if let Some(msgs) = state.msgs.by_channel.get(&channel_id) {
-        if msgs
+    if let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id) {
+        if let Some(pos) = msgs
             .iter()
-            .any(|m| m.message_id.as_deref() == Some(message_id))
+            .position(|m| m.message_id.as_deref() == Some(message_id))
         {
+            // A Fancy sender sends both halves of the dual path under **one**
+            // id: a plaintext `TextMessage` (the "[Encrypted message]"
+            // placeholder, for a server or peer that cannot read the real
+            // thing) and the encrypted `PchatMessage`. The receiver is meant
+            // to drop the plaintext half on sight, but that test reads the
+            // sender's advertised `FeaturePchatE2ee`, and no shipped client
+            // sets it - so the placeholder is accepted as a legacy message and
+            // whichever half lands first wins this dedup.
+            //
+            // The decrypted copy is the authoritative one and takes the slot.
+            // Left as a plain first-wins, a channel rendered "[Encrypted
+            // message]" forever whenever the text service beat the pchat
+            // service to the client, which is the usual order - the plaintext
+            // is sent first and stores less on the way through.
+            //
+            // Only ever this direction: a placeholder arriving after the real
+            // message is dropped, never written over it.
+            if msgs[pos].is_legacy && !chat_msg.is_legacy {
+                chat_msg.pinned = msgs[pos].pinned;
+                chat_msg.pinned_by = msgs[pos].pinned_by.clone();
+                chat_msg.pinned_at = msgs[pos].pinned_at;
+                msgs[pos] = chat_msg;
+            }
             return;
         }
     }
@@ -732,4 +755,121 @@ fn send_offline_queue_ack(state: &SharedState, channel_id: u32, acked_ids: Vec<S
             );
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
+    use super::*;
+
+    /// One half of the dual path. A Fancy sender emits both under one id: the
+    /// plaintext placeholder (`is_legacy`) and the encrypted message.
+    fn half(id: &str, body: &str, is_legacy: bool) -> ChatMessage {
+        ChatMessage {
+            sender_session: Some(7),
+            sender_name: "alice".to_owned(),
+            sender_hash: Some("abcd".to_owned()),
+            body: body.to_owned(),
+            channel_id: 4,
+            is_own: false,
+            dm_session: None,
+            message_id: Some(id.to_owned()),
+            timestamp: Some(1_000),
+            is_legacy,
+            send_failed: false,
+            edited_at: None,
+            pinned: false,
+            pinned_by: None,
+            pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
+        }
+    }
+
+    fn bodies(state: &SharedState) -> Vec<String> {
+        state
+            .msgs
+            .by_channel
+            .get(&4)
+            .map(|msgs| msgs.iter().map(|m| m.body.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn the_decrypted_half_replaces_the_placeholder_that_arrived_first() {
+        // The order this actually happens in: the plaintext is sent first and
+        // stores less on the way through, so it lands first. Left as a plain
+        // first-wins dedup, the channel reads "[Encrypted message]" forever
+        // and the real message is thrown away after being decrypted.
+        let mut state = SharedState::default();
+        state
+            .msgs
+            .by_channel
+            .entry(4)
+            .or_default()
+            .push(half("m-1", PLACEHOLDER_BODY, true));
+
+        insert_or_replace_message(&mut state, 4, "m-1", None, half("m-1", "the real body", false));
+
+        assert_eq!(
+            bodies(&state),
+            vec!["the real body".to_owned()],
+            "the decrypted copy takes the slot, and does not sit beside it"
+        );
+    }
+
+    #[test]
+    fn a_placeholder_never_overwrites_the_message_it_stands_in_for() {
+        // The other order. The placeholder is a fallback for a peer that could
+        // not read the real thing; once the real thing is here it is never
+        // allowed to go back.
+        let mut state = SharedState::default();
+        state
+            .msgs
+            .by_channel
+            .entry(4)
+            .or_default()
+            .push(half("m-1", "the real body", false));
+
+        insert_or_replace_message(&mut state, 4, "m-1", None, half("m-1", PLACEHOLDER_BODY, true));
+
+        assert_eq!(bodies(&state), vec!["the real body".to_owned()]);
+    }
+
+    #[test]
+    fn a_pin_survives_the_replacement() {
+        // Pin state is held on the message rather than beside it, so replacing
+        // the row would silently unpin whatever the placeholder was pinned as.
+        let mut state = SharedState::default();
+        let mut pinned = half("m-1", PLACEHOLDER_BODY, true);
+        pinned.pinned = true;
+        pinned.pinned_by = Some("abcd".to_owned());
+        pinned.pinned_at = Some(99);
+        state.msgs.by_channel.entry(4).or_default().push(pinned);
+
+        insert_or_replace_message(&mut state, 4, "m-1", None, half("m-1", "the real body", false));
+
+        let msgs = state.msgs.by_channel.get(&4).unwrap();
+        assert_eq!(msgs[0].body, "the real body");
+        assert!(msgs[0].pinned, "the replacement keeps the pin");
+        assert_eq!(msgs[0].pinned_by.as_deref(), Some("abcd"));
+        assert_eq!(msgs[0].pinned_at, Some(99));
+    }
+
+    #[test]
+    fn a_genuine_duplicate_is_still_dropped() {
+        // The dedup this rule sits inside still has to hold: two copies of the
+        // same real message are one message.
+        let mut state = SharedState::default();
+        state
+            .msgs
+            .by_channel
+            .entry(4)
+            .or_default()
+            .push(half("m-1", "the real body", false));
+
+        insert_or_replace_message(&mut state, 4, "m-1", None, half("m-1", "the real body", false));
+
+        assert_eq!(bodies(&state).len(), 1);
+    }
 }
