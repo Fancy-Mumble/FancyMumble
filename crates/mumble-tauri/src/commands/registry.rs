@@ -124,6 +124,13 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::profile::send_plugin_message,
         super::profile::send_fancy_poll,
         super::profile::send_fancy_poll_vote,
+        // -- forums / scheduled messages ---------------------------------
+        super::forum::send_forum_post,
+        super::forum::fetch_forum,
+        super::forum::delete_forum_post,
+        super::scheduled_message::schedule_message,
+        super::scheduled_message::list_scheduled_messages,
+        super::scheduled_message::cancel_scheduled_message,
         // -- files / file-server ---------------------------------------
         super::files::upload_file,
         super::files::upload_bytes,

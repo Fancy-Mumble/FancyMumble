@@ -208,18 +208,29 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
-                // Flush the dhat heap profile before the process exits.
-                #[cfg(feature = "dhat-heap")]
-                if let Ok(mut guard) = DHAT_PROFILER.lock() {
-                    drop(guard.take());
-                }
-                // Tear down the Vite dev server if we started it.
-                #[cfg(all(dev, not(target_os = "android")))]
-                app::dev_server::stop();
-                if let Some(state) = app.try_state::<AppState>() {
-                    state.shutdown_offload_store();
-                }
-                platform::teardown();
+                handle_exit(app);
             }
         });
+}
+
+/// Final teardown, on the platform event loop's exit event.
+///
+/// Everything here must be synchronous: this runs on the main thread outside
+/// the async runtime, and blocking on that runtime from here aborts the
+/// process rather than waiting.
+fn handle_exit(app: &tauri::AppHandle) {
+    // Flush the dhat heap profile before the process exits.
+    #[cfg(feature = "dhat-heap")]
+    if let Ok(mut guard) = DHAT_PROFILER.lock() {
+        drop(guard.take());
+    }
+    // Tear down the Vite dev server if we started it.
+    #[cfg(all(dev, not(target_os = "android")))]
+    app::dev_server::stop();
+    if let Some(state) = app.try_state::<AppState>() {
+        state.shutdown_offload_store();
+        #[cfg(not(target_os = "android"))]
+        state.presence.release_slot_files();
+    }
+    platform::teardown();
 }
