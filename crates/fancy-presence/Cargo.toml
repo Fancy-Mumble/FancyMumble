@@ -1,0 +1,31 @@
+[package]
+name = "fancy-presence"
+version = "0.1.0"
+edition = "2021"
+# Internal workspace crate - never published to crates.io (this also lets
+# cargo-deny's wildcard gate exempt the path dependencies).
+publish = false
+license = "MIT"
+description = "Discord Rich Presence IPC listener: observes local apps' presence without displacing Discord"
+
+[dependencies]
+# Async runtime. `net` carries both the Unix socket and the Windows
+# named-pipe server used by the IPC transports.
+tokio = { version = "1", features = [
+    "net",
+    "io-util",
+    "sync",
+    "rt",
+    "time",
+    "macros",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+tempfile = "3"
+
+[lints]
+workspace = true
