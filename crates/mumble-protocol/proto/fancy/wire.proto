@@ -6,7 +6,7 @@ syntax = "proto3";
 // separate file: `starling.common.v1` carries mesh concepts (Scope, Actor)
 // that a client build has no business compiling, and this file carries wire
 // concepts the mesh never sees. Each plane imports its own common and never
-// the other's — docs/PROTOCOL-REDESIGN.md §7.
+// the other's - docs/PROTOCOL-REDESIGN.md §7.
 //
 // The bar for adding a type here is the same as common.proto's: two envelopes
 // already carrying the shape by hand. A shared type is a coupling; one

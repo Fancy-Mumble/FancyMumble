@@ -6,6 +6,7 @@ members = [
     "crates/mumble-protocol",
     "crates/fancy-audio-device",
     "crates/fancy-screenshare",
+    "crates/fancy-presence",
     "crates/mumble-tauri",
 ]
 # The Mumble server-side plugin host crates (mumble-plugin-api, mumble-file-server,

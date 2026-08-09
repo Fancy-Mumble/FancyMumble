@@ -17,7 +17,7 @@ pub const HEADER_SIZE: usize = 6;
 /// The resume sequence, when a connection has negotiated one.
 pub const SEQ_SIZE: usize = 8;
 
-/// A compressed batch of whole frames. Not a service — see Starling's
+/// A compressed batch of whole frames. Not a service - see Starling's
 /// `types::COMPRESSED_BATCH`.
 pub const COMPRESSED_BATCH: u16 = 1900;
 
@@ -33,7 +33,7 @@ const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
 /// Fancy messages go out under their service's outer type with the message
 /// nested in that service's envelope (wire epoch 1); upstream messages stay
 /// flat. The flat Fancy numbering still exists, but only inside a
-/// `PluginDataTransmission` relay — see [`serialize_control_message`].
+/// `PluginDataTransmission` relay - see [`serialize_control_message`].
 pub fn encode(msg: &ControlMessage) -> Result<Vec<u8>> {
     // The canon, or flat. There is no third framing: the proto2 envelopes that
     // used to sit between them are gone (M3), and with them the way an
@@ -49,7 +49,7 @@ pub fn encode(msg: &ControlMessage) -> Result<Vec<u8>> {
             // A Fancy message with no canon form must have been turned into a
             // relay by the codec above (`NativeCodec`/`LegacyCodec`) before
             // reaching here. If one arrives raw, the only framing left is its
-            // epoch-0 flat id — which lives in the burned 100-999 range and
+            // epoch-0 flat id - which lives in the burned 100-999 range and
             // routes nowhere on either kind of peer.
             //
             // Refused rather than framed. Emitting it would put a frame on the
@@ -84,7 +84,7 @@ pub fn decode(buf: &mut BytesMut) -> Result<Option<ControlMessage>> {
 ///
 /// A frame carries a sequence number only once the peer has negotiated resume
 /// and been acknowledged (`PROTOCOL-REDESIGN.md` §5, S2). Until then the layout
-/// is exactly murmur's, which is what a stock client reads — so this defaults
+/// is exactly murmur's, which is what a stock client reads - so this defaults
 /// to off and nothing changes for anyone who never asked.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Framing {
@@ -137,7 +137,7 @@ pub fn decode_with(buf: &mut BytesMut, framing: &mut Framing) -> Result<Option<C
         ]);
         payload.advance(SEQ_SIZE);
         // A replay re-sends frames under the numbers they were written with, so
-        // a resumed stream legitimately repeats or steps forward — what it must
+        // a resumed stream legitimately repeats or steps forward - what it must
         // not do is skip, which means the ring could not reach back far enough.
         if seq > framing.last_seq + 1 && framing.last_seq != 0 {
             framing.gap = true;
@@ -151,7 +151,7 @@ pub fn decode_with(buf: &mut BytesMut, framing: &mut Framing) -> Result<Option<C
     // the connection and not a destination on it.
     //
     // The frames are put back at the *front* of the buffer, so they are read
-    // next and in order — appending would deliver them after whatever else had
+    // next and in order - appending would deliver them after whatever else had
     // already arrived, which reorders a stream whose ordering is the one thing
     // the gateway guarantees.
     if msg_type == COMPRESSED_BATCH {
@@ -174,7 +174,7 @@ pub fn decode_with(buf: &mut BytesMut, framing: &mut Framing) -> Result<Option<C
     // type, and the canon is the only thing that reads one.
     //
     // There is deliberately no second attempt. Until M3 this fell through to
-    // the proto2 envelopes when the canon did not recognise a payload — which
+    // the proto2 envelopes when the canon did not recognise a payload - which
     // meant a canon frame at a service the canon does not *cover* (server-config
     // at 1013, say) was decoded as proto2, and where the wire types happened to
     // coincide it produced a message that looked valid and was not. That is D1
@@ -209,9 +209,14 @@ pub fn decode_with(buf: &mut BytesMut, framing: &mut Framing) -> Result<Option<C
 /// Serialize a message flat: its own type ID and a bare payload.
 ///
 /// This is *not* the epoch-1 wire framing. It is what the `PluginData` relay
-/// needs — it tags the tunnelled message with this ID and vanilla Mumble
-/// forwards the blob untouched — so this function keeps the epoch-0 numbering
+/// needs - it tags the tunnelled message with this ID and vanilla Mumble
+/// forwards the blob untouched - so this function keeps the epoch-0 numbering
 /// on purpose. [`encode`] is the one that frames for the wire.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one match arm per ControlMessage variant, mechanically; splitting it adds \
+              indirection without reducing what a reader has to check"
+)]
 pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Vec<u8>)> {
     use ControlMessage::*;
 
@@ -297,6 +302,15 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
         FancyAccountSettings(m) => m.encode_to_vec(),
         FancyAccountSettingsUpdate(m) => m.encode_to_vec(),
         FancyAccountAck(m) => m.encode_to_vec(),
+        FancyForumPost(m) => m.encode_to_vec(),
+        FancyForumFetch(m) => m.encode_to_vec(),
+        FancyForumFetchResponse(m) => m.encode_to_vec(),
+        FancyForumDelete(m) => m.encode_to_vec(),
+        FancyScheduledMessage(m) => m.encode_to_vec(),
+        FancyScheduledMessageList(m) => m.encode_to_vec(),
+        FancyScheduledMessageListResponse(m) => m.encode_to_vec(),
+        FancyScheduledMessageCancel(m) => m.encode_to_vec(),
+        FancyScheduledMessageAck(m) => m.encode_to_vec(),
         FancyAuditQuery(m) => m.encode_to_vec(),
         FancyAuditResponse(m) => m.encode_to_vec(),
         FancyAuditEvent(m) => m.encode_to_vec(),
@@ -310,6 +324,11 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
     Ok((type_id, payload))
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one match arm per TcpMessageType variant, mechanically; splitting it adds \
+              indirection without reducing what a reader has to check"
+)]
 pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Result<ControlMessage> {
     let msg_type = TcpMessageType::try_from(type_id)?;
     use TcpMessageType::*;
@@ -396,6 +415,15 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
         FancyAccountSettings => ControlMessage::FancyAccountSettings(mumble_tcp::FancyAccountSettings::decode(payload)?),
         FancyAccountSettingsUpdate => ControlMessage::FancyAccountSettingsUpdate(mumble_tcp::FancyAccountSettingsUpdate::decode(payload)?),
         FancyAccountAck => ControlMessage::FancyAccountAck(mumble_tcp::FancyAccountAck::decode(payload)?),
+        FancyForumPost => ControlMessage::FancyForumPost(mumble_tcp::FancyForumPost::decode(payload)?),
+        FancyForumFetch => ControlMessage::FancyForumFetch(mumble_tcp::FancyForumFetch::decode(payload)?),
+        FancyForumFetchResponse => ControlMessage::FancyForumFetchResponse(mumble_tcp::FancyForumFetchResponse::decode(payload)?),
+        FancyForumDelete => ControlMessage::FancyForumDelete(mumble_tcp::FancyForumDelete::decode(payload)?),
+        FancyScheduledMessage => ControlMessage::FancyScheduledMessage(mumble_tcp::FancyScheduledMessage::decode(payload)?),
+        FancyScheduledMessageList => ControlMessage::FancyScheduledMessageList(mumble_tcp::FancyScheduledMessageList::decode(payload)?),
+        FancyScheduledMessageListResponse => ControlMessage::FancyScheduledMessageListResponse(mumble_tcp::FancyScheduledMessageListResponse::decode(payload)?),
+        FancyScheduledMessageCancel => ControlMessage::FancyScheduledMessageCancel(mumble_tcp::FancyScheduledMessageCancel::decode(payload)?),
+        FancyScheduledMessageAck => ControlMessage::FancyScheduledMessageAck(mumble_tcp::FancyScheduledMessageAck::decode(payload)?),
         FancyAuditQuery => ControlMessage::FancyAuditQuery(mumble_tcp::FancyAuditQuery::decode(payload)?),
         FancyAuditResponse => ControlMessage::FancyAuditResponse(mumble_tcp::FancyAuditResponse::decode(payload)?),
         FancyAuditEvent => ControlMessage::FancyAuditEvent(mumble_tcp::FancyAuditEvent::decode(payload)?),
@@ -417,7 +445,7 @@ mod tests {
     /// `type ‖ len ‖ seq ‖ payload`, with `len` covering the sequence too.
     ///
     /// Written out by hand rather than shared, because the two ends encode this
-    /// independently — a helper both sides imported would agree with itself
+    /// independently - a helper both sides imported would agree with itself
     /// while disagreeing with the wire.
     fn sequenced_frame(type_id: u16, seq: u64, payload: &[u8]) -> BytesMut {
         let mut buf = BytesMut::new();
@@ -430,8 +458,8 @@ mod tests {
 
     #[test]
     fn a_compressed_batch_yields_every_frame_it_held_in_order() {
-        // Built the way the gateway builds one — whole frames concatenated and
-        // zstd'd — rather than through a shared helper, because the two ends
+        // Built the way the gateway builds one - whole frames concatenated and
+        // zstd'd - rather than through a shared helper, because the two ends
         // implement this independently and a helper would agree with itself.
         let first = encode(&ControlMessage::Ping(mumble_tcp::Ping {
             timestamp: Some(1),
@@ -507,7 +535,7 @@ mod tests {
 
     #[test]
     fn a_skipped_sequence_is_noticed() {
-        // The server does not announce a replay it could not satisfy — the gap
+        // The server does not announce a replay it could not satisfy - the gap
         // in the numbers is the announcement, and it covers every cause rather
         // than the one the server happened to know about.
         let mut framing = Framing {
@@ -569,7 +597,7 @@ mod tests {
 
     /// Every Fancy type this build has no canon form for.
     ///
-    /// Each had a `roundtrip_*` test asserting it survived `encode`/`decode` —
+    /// Each had a `roundtrip_*` test asserting it survived `encode`/`decode` -
     /// true when the proto2 envelopes framed them under a service outer type,
     /// and meaningless now that M3 deleted those. They reach a peer through the
     /// `PluginData` relay instead, which `fancy_codec`'s round-trip tests cover;
@@ -621,7 +649,7 @@ mod tests {
         // Refused because the only framing left would be its epoch-0 flat id,
         // which is in the burned 100-999 range and routes nowhere on any peer.
         // These reach the wire through the relay instead, which the codec above
-        // arranges — so a raw one here means somebody skipped it.
+        // arranges - so a raw one here means somebody skipped it.
         let msg = ControlMessage::PchatKeyChallenge(mumble_tcp::PchatKeyChallenge {
             channel_id: Some(1),
             challenge: Some(vec![0; 32]),

@@ -8,7 +8,7 @@
 //! # Why real speech, and not a tone
 //!
 //! `DeepFilterNet3` is a **speech** enhancer. Measured against a 440 Hz
-//! sine it applies its full attenuation limit — around 24 dB — because a
+//! sine it applies its full attenuation limit - around 24 dB - because a
 //! pure tone is, correctly, not speech. So a test built on the sine the
 //! rest of the e2e suite uses would either fail against a working model
 //! or, worse, pass for the wrong reason: the `tone_ratio` metric the
@@ -32,8 +32,8 @@
 //! delivers roughly **−24 dB** on the pause, **−1.2 dB** on speech and a
 //! **+22 dB** SNR gain. The assertions sit well below those so ordinary
 //! model or parameter drift does not fail the build, while a backend that
-//! silently fell through to pass-through — which is exactly what happens
-//! when the cargo feature is off — cannot pass any of them.
+//! silently fell through to pass-through - which is exactly what happens
+//! when the cargo feature is off - cannot pass any of them.
 //!
 //! # What this measurement does *not* say
 //!
@@ -51,7 +51,7 @@
 //! underperforming:
 //!
 //! * `DeepFilterNet` lands on exactly −24.0 dB because *this application
-//!   caps it there* — `deepfilter.rs` sets `atten_lim_db` to 24, on the
+//!   caps it there* - `deepfilter.rs` sets `atten_lim_db` to 24, on the
 //!   grounds that unlimited attenuation sounds unnatural on a voice call.
 //!   It is hitting its ceiling, not its limit.
 //! * The fixture mixes **stationary white noise**, which is the easiest
@@ -101,7 +101,7 @@ const FRAME: usize = 480;
 
 /// Noise amplitude mixed under the speech.
 ///
-/// Chosen to sit in the range a real noisy room produces — loud enough
+/// Chosen to sit in the range a real noisy room produces - loud enough
 /// that suppressing it is a visible effect, quiet enough that the speech
 /// is still clearly dominant. Below roughly this level the model leaves
 /// more of the input alone, which is correct behaviour and a poor test.
@@ -211,7 +211,7 @@ fn denoise(input: &[f32], algorithm: NoiseSuppressionAlgorithm) -> Vec<f32> {
 ///
 /// Found rather than hard-coded, so re-cutting the sample does not
 /// silently move the measurement onto the wrong part of the audio. The
-/// quiet window is a real speech pause — where noise is all there is —
+/// quiet window is a real speech pause - where noise is all there is -
 /// and the loud one is speech at full level.
 fn pause_and_speech(clean: &[f32]) -> (usize, usize) {
     const WINDOW: usize = 24_000;
@@ -270,7 +270,7 @@ fn deepfilternet_removes_the_noise_and_keeps_the_speech() {
     };
 
     // Between words, where there is nothing but hiss. Measured at −24 dB,
-    // which is the configured attenuation limit — the model is doing all
+    // which is the configured attenuation limit - the model is doing all
     // it is allowed to do.
     assert!(
         m.pause_db < -12.0,
@@ -285,7 +285,7 @@ fn deepfilternet_removes_the_noise_and_keeps_the_speech() {
     // perfectly on the assertion above and makes the person inaudible.
     assert!(
         m.speech_db > -6.0,
-        "speech was attenuated by {:.1} dB. The noise may be gone, but so is the speaker — \
+        "speech was attenuated by {:.1} dB. The noise may be gone, but so is the speaker - \
          this is over-suppression, not enhancement.",
         m.speech_db
     );

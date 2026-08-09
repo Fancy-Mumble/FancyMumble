@@ -895,7 +895,7 @@ fn base64_encode(data: &[u8]) -> String {
 ///
 /// The negotiation has no message of its own: the server picks a cipher from the
 /// Fancy version the *client* announced and expresses the choice in the shape of
-/// the key material it sends. This walks that whole path against a live server —
+/// the key material it sends. This walks that whole path against a live server -
 /// announce 0.4.0, read `CryptSetup`, and key the cipher from what arrived.
 ///
 /// Everything here passes against an OCB2 server too, except the one assertion

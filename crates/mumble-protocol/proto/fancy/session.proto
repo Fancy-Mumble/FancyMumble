@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-// Outer type 1000 — session-lifecycle's Fancy extensions.
+// Outer type 1000 - session-lifecycle's Fancy extensions.
 //
 // The upstream handshake (0, 2, 3, 4, 5, 15, 21) stays flat and frozen; only
 // what Mumble has no message for lives here.
@@ -28,7 +28,7 @@ message Hello {
 
 // Replay from a sequence number rather than take the full flood. Legacy
 // clients cannot do this, which is why staggered drain is required regardless
-// — docs/ARCHITECTURE.md §5.
+// - docs/ARCHITECTURE.md §5.
 message ResumeRequest {
   string session_token = 1;
   uint64 last_seq = 2;

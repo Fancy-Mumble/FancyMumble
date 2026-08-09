@@ -147,7 +147,7 @@ impl ClientHandle {
 /// Its own function because two of these fields are a *claim about the wire*
 /// that a peer acts on, and a claim needs somewhere a test can read it.
 /// `fancy_protocol` being wrong is what made an epoch-1 server send us payloads
-/// we then misparsed in silence — see the field comment below and M2h in
+/// we then misparsed in silence - see the field comment below and M2h in
 /// Starling's `docs/PROTOCOL-REDESIGN.md`.
 pub(crate) fn version_announcement(ver: MumbleVersion) -> mumble_tcp::Version {
     mumble_tcp::Version {
@@ -165,7 +165,7 @@ pub(crate) fn version_announcement(ver: MumbleVersion) -> mumble_tcp::Version {
         // `crate::canon` frames the epoch-1 message sets that an epoch-1 peer
         // decodes. It briefly said this while `NativeCodec` still framed the
         // *proto2* envelope shapes under the canon's outer types, and the two
-        // ends silently corrupted each other — so the rule this pairing exists
+        // ends silently corrupted each other - so the rule this pairing exists
         // to enforce is that **the claim and the codec move together**.
         //
         // Messages the canon cannot yet carry faithfully are not affected by

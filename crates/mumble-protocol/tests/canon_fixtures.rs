@@ -1,7 +1,7 @@
 //! The client half of the epoch-honesty check: we still write what Starling reads.
 //!
 //! `tests/canon-fixtures.json` is a mirror of `scripts/canon-fixtures.json` in
-//! Starling, and Starling has the other half of this test — it decodes these
+//! Starling, and Starling has the other half of this test - it decodes these
 //! same bytes and asserts they mean what the fixture names. Together the pair
 //! says the two codecs agree, which is the one thing the structural checks
 //! cannot establish: they prove the `.proto` files are identical, the frozen
@@ -11,7 +11,7 @@
 //! # Why bytes rather than a shared helper
 //!
 //! Because a helper both sides imported would agree with itself while
-//! disagreeing with the wire — which is not hypothetical, it is exactly D1 in
+//! disagreeing with the wire - which is not hypothetical, it is exactly D1 in
 //! Starling's `docs/PROTOCOL-REDESIGN.md` §0, where both ends were confident
 //! and wrong for months.
 //!
@@ -137,7 +137,7 @@ fn a_history_fetch_is_still_the_bytes_starling_reads() {
 #[test]
 fn our_copy_of_the_fixture_is_starlings_copy() {
     // Two copies of one file, checked into two trees, and until this test
-    // nothing compared them — the same shape as the outer-type table that
+    // nothing compared them - the same shape as the outer-type table that
     // `check-proto-hygiene.py` had to grow a check for.
     //
     // Without it the pair is only as strong as the weaker copy: editing this

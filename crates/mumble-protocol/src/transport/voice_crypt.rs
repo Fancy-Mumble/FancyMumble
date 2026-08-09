@@ -6,15 +6,15 @@
 //!
 //! # Who decides, and how this end finds out
 //!
-//! The server decides. It generates every byte of key material — the key and
-//! both nonces — from the Fancy version *this client* announced, and sends the
+//! The server decides. It generates every byte of key material - the key and
+//! both nonces - from the Fancy version *this client* announced, and sends the
 //! result in `CryptSetup`. There is no round trip and nothing to agree on.
 //!
 //! So this end does not re-derive the decision from the server's version. It
 //! reads the decision it was handed, from the shape of the material: OCB2 takes
 //! a 16-byte AES key, `XChaCha20-Poly1305` a 32-byte master secret. The material
 //! *is* the announcement, which is why there is no cipher identifier on the wire
-//! — an identifier would be a second source of truth about a decision already
+//! - an identifier would be a second source of truth about a decision already
 //! made, and could disagree with the bytes beside it.
 //!
 //! ## Why not the server's announced version
@@ -26,7 +26,7 @@
 //! when the client's *Mumble* version forces legacy audio framing, because the
 //! legacy packet type is the codec and has nowhere to name a cipher. A modern
 //! Fancy server serving a 1.4 client therefore announces a version that says
-//! "modern" and sends material that says "OCB2" — and version-based selection
+//! "modern" and sends material that says "OCB2" - and version-based selection
 //! refuses a session that is perfectly correct.
 //!
 //! The gate is still consulted, as corroboration rather than as the decision:
@@ -57,22 +57,22 @@ use crate::transport::udp::CryptState;
 /// The voice cipher in use on one connection.
 #[derive(Debug)]
 pub enum VoiceCrypt {
-    /// OCB2-AES128 — every stock Mumble server, and every Fancy server before
+    /// OCB2-AES128 - every stock Mumble server, and every Fancy server before
     /// 0.4.0.
     ///
     /// Boxed: it carries a 256-entry replay history, and an unboxed variant
     /// would size the whole enum for it whichever cipher is actually live.
     Ocb2(Box<Ocb2CryptState>),
 
-    /// `XChaCha20-Poly1305` — a Fancy server at 0.4.0 or later.
+    /// `XChaCha20-Poly1305` - a Fancy server at 0.4.0 or later.
     Modern(ModernCryptState),
 }
 
 impl VoiceCrypt {
     /// Build the cipher the server's key material calls for.
     ///
-    /// `gate` is what the *server* announced. It does not decide anything here —
-    /// the material does — but a server that announced the modern cipher and
+    /// `gate` is what the *server* announced. It does not decide anything here -
+    /// the material does - but a server that announced the modern cipher and
     /// then sent OCB2-shaped material is worth a line in the log, because the
     /// two legitimate reasons for it (a legacy-framed client, or a server bug)
     /// look identical from here and only one is fine.
@@ -96,7 +96,7 @@ impl VoiceCrypt {
         if gate.allows(Capability::ModernVoiceCrypto) {
             // Legitimate when this client's Mumble version forced legacy audio
             // framing, which has nowhere to name a cipher. Not legitimate
-            // otherwise, and indistinguishable from here — so it is recorded
+            // otherwise, and indistinguishable from here - so it is recorded
             // rather than judged.
             info!(
                 key_len = key.len(),
@@ -126,7 +126,7 @@ impl VoiceCrypt {
     ///
     /// `XChaCha20-Poly1305` reconstructs its counter from the two bytes every
     /// packet carries, over a window of ~32 768 packets. Nothing to resync, so
-    /// this is a no-op rather than an error — the server may still send one, and
+    /// this is a no-op rather than an error - the server may still send one, and
     /// refusing it would turn a harmless message into a disconnect.
     pub fn adopt_resync(&mut self, server_nonce: &[u8]) {
         match self {
@@ -200,7 +200,7 @@ mod tests {
 
     #[test]
     fn a_stock_server_gets_ocb2() {
-        // No Fancy version at all — the overwhelming majority of servers,
+        // No Fancy version at all - the overwhelming majority of servers,
         // forever. Anything else here is a client that cannot decrypt a packet.
         let crypt =
             VoiceCrypt::negotiate(&Gate::stock(), &OCB2_KEY, &NONCE, &NONCE).expect("stock keying");

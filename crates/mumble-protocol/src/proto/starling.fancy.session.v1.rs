@@ -37,7 +37,7 @@ pub struct Hello {
 }
 /// Replay from a sequence number rather than take the full flood. Legacy
 /// clients cannot do this, which is why staggered drain is required regardless
-/// — docs/ARCHITECTURE.md §5.
+/// - docs/ARCHITECTURE.md §5.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ResumeRequest {
     #[prost(string, tag = "1")]

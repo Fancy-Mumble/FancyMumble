@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-// Outer type 1008 — screen-share signalling. Media never appears here: it goes
+// Outer type 1008 - screen-share signalling. Media never appears here: it goes
 // client↔SFU directly (docs/ARCHITECTURE.md §3).
 package starling.fancy.screenshare.v1;
 
@@ -16,7 +16,7 @@ message ScreenshareEnvelope {
 }
 
 // The SFU is ICE-lite: it ignores trickled candidates and its own ride in the
-// answer. Never trickle ICE through the control plane — that is a contract
+// answer. Never trickle ICE through the control plane - that is a contract
 // constraint, and each half of it cost a debugging session.
 message Offer {
   string share_id = 1;

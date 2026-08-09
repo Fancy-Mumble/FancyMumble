@@ -45,7 +45,7 @@ pub type SpeakerBuffers = Arc<Mutex<HashMap<u32, VecDeque<f32>>>>;
 /// Exists for one reason: the e2e suite needs to compare what arrived against
 /// what was spoken, and there is no other place to read that. The speaker
 /// buffers are a ring the playback callback drains concurrently, so polling
-/// them both misses audio and repeats it — the only faithful tap is here,
+/// them both misses audio and repeats it - the only faithful tap is here,
 /// where each sample passes exactly once.
 ///
 /// Notified for **inserted silence as well as decoded frames**, because
@@ -512,7 +512,7 @@ mod tests {
         // is the failure it is meant to detect.
         //
         // `set_decoded_tap` is write-once and global, so this is the only test
-        // that may install one — a second would be silently ignored and would
+        // that may install one - a second would be silently ignored and would
         // then assert against the first one's channel.
         //
         // It is also global across the *whole binary*, and the test harness runs

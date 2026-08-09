@@ -2,7 +2,7 @@
   "_comment": [
     "Golden canon frames: what an epoch-1 client puts on the wire, and what",
     "Starling's services must read back. Checked in as bytes rather than",
-    "generated at test time, deliberately — a fixture both sides build from",
+    "generated at test time, deliberately, a fixture both sides build from",
     "their own encoder agrees with itself while disagreeing with the wire,",
     "which is exactly the failure D1 was.",
     "",
@@ -17,7 +17,7 @@
     "wire and fatal in a fixture.",
     "",
     "Regenerate only when the canon deliberately changes, and update both",
-    "sides in the same commit — see PROTOCOL-MIGRATION.md M6."
+    "sides in the same commit, see PROTOCOL-MIGRATION.md M6."
   ],
   "frames": [
     {

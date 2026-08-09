@@ -29,7 +29,7 @@
 //! `starling-voice-v1 s2c` for what it receives.
 //!
 //! The server derives the same keys and then hoists `HChaCha20` out of its
-//! per-packet path, which is an optimisation and not a different construction —
+//! per-packet path, which is an optimisation and not a different construction -
 //! its own test proves the two produce identical bytes. This uses the stock
 //! `XChaCha20Poly1305` because there is no per-packet budget here worth the
 //! extra machinery.
@@ -66,7 +66,7 @@ pub const TAG_LEN: usize = 16;
 /// Counter bytes placed on the wire.
 ///
 /// Two. The rest is reconstructed from the receiver's own count, which tolerates
-/// a gap of just under 32 768 packets — around eleven minutes of continuous loss
+/// a gap of just under 32 768 packets - around eleven minutes of continuous loss
 /// at 50 packets a second.
 pub const WIRE_COUNTER_BYTES: usize = 2;
 
@@ -153,7 +153,7 @@ impl Stream {
     /// Decrypt one packet.
     ///
     /// The replay window is consulted against a *copy* and only committed once
-    /// the tag verifies, so a forged packet cannot advance it — the bug that
+    /// the tag verifies, so a forged packet cannot advance it - the bug that
     /// would let one attacker silence a stream with a single datagram.
     fn open(&mut self, packet: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
         if packet.len() < OVERHEAD {
@@ -252,7 +252,7 @@ impl Stream {
 ///
 /// Two streams, never one. A single stream sealing and opening would use one
 /// keystream for both halves of a two-party conversation, and the failure is
-/// silent — everything round-trips against itself and nothing against the
+/// silent - everything round-trips against itself and nothing against the
 /// server.
 pub struct ModernCryptState {
     sending: Stream,
@@ -285,7 +285,7 @@ impl ModernCryptState {
     /// Whether `key` is the right length for this cipher.
     ///
     /// A cross-check on the gate: both ends compute the same capability from the
-    /// same announced version, and this catches the case where they disagree —
+    /// same announced version, and this catches the case where they disagree -
     /// which would otherwise show up as every packet failing its tag.
     #[must_use]
     pub fn accepts_key(key: &[u8]) -> bool {
@@ -357,7 +357,7 @@ mod tests {
     /// These bytes are what a server implementing the same construction produces
     /// for counter 0 of the c2s direction under the constants above. The same
     /// vector is pinned in `starling-crypto`. If either implementation changes in
-    /// a way that would break the other, one of the two tests fails — which is
+    /// a way that would break the other, one of the two tests fails - which is
     /// the only protection two implementations of one wire format can have.
     #[test]
     fn the_known_vector_still_holds() {
@@ -384,7 +384,7 @@ mod tests {
     ///
     /// Confirmed against `starling-crypto`'s independent implementation, which
     /// derives the same keys and then hoists `HChaCha20` out of its per-packet
-    /// path — different code, identical bytes.
+    /// path - different code, identical bytes.
     const KNOWN_VECTOR: &str =
         "0000e67fe8959303117e9c1b5efcc120278f6013774c9545d68cbcd545bfaff3793a";
 
@@ -533,8 +533,8 @@ mod tests {
 
     #[test]
     fn a_long_run_stays_in_step_across_the_counter_wrap() {
-        // Only two counter bytes reach the wire. Past 65 536 packets — about 22
-        // minutes of talking — a broken reconstruction goes silent, and nothing
+        // Only two counter bytes reach the wire. Past 65 536 packets - about 22
+        // minutes of talking - a broken reconstruction goes silent, and nothing
         // before that would have shown it.
         let (mut client, mut server) = (client(), server());
         for i in 0..70_000_u32 {

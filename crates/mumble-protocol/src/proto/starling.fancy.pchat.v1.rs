@@ -39,14 +39,14 @@ pub mod pchat_envelope {
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Message {
-    /// UUIDv7 as a string on the wire, kept as 16 bytes in storage — the wire
+    /// UUIDv7 as a string on the wire, kept as 16 bytes in storage - the wire
     /// type does not change (docs/STORAGE.md L3).
     #[prost(string, tag = "1")]
     pub message_id: ::prost::alloc::string::String,
     #[prost(uint32, tag = "2")]
     pub channel: u32,
     /// Who sent it, *while they are connected*. Server-stamped, and useful for
-    /// addressing a live reply — but not an identity, because session ids are
+    /// addressing a live reply - but not an identity, because session ids are
     /// handed out per connection and reused.
     #[prost(uint32, tag = "3")]
     pub sender: u32,
@@ -61,7 +61,7 @@ pub struct Message {
     /// Who sent it, durably: the SHA-1 of their leaf certificate.
     ///
     /// **Server-stamped from the TLS connection, never read from the client.**
-    /// That is what makes it an identity rather than a claim — a client cannot
+    /// That is what makes it an identity rather than a claim - a client cannot
     /// attribute a message to somebody else, and the recipient's crypto verifies
     /// against the key announced for this same hash.
     ///
@@ -202,7 +202,7 @@ pub struct KeyDeliver {
     #[prost(bytes = "vec", tag = "5")]
     pub countersignature: ::prost::alloc::vec::Vec<u8>,
     /// Who it was sealed *for*, which is not the same question as where to send
-    /// it — and the difference is a real race: the requester can disconnect
+    /// it - and the difference is a real race: the requester can disconnect
     /// between asking and being answered, and a recycled session id would hand
     /// the reply to whoever holds that number now. The recipient compares this
     /// against its own certificate and discards a delivery meant for somebody
@@ -249,7 +249,7 @@ pub struct Delete {
 }
 /// The end-to-end schemes a message can be sealed under.
 ///
-/// The server never acts on this — it cannot read any of them — but it is on the
+/// The server never acts on this - it cannot read any of them - but it is on the
 /// wire because the recipient has to know which one to try.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

@@ -199,8 +199,8 @@ pub mod account_action {
         /// Not an action, and the zero value on purpose.
         ///
         /// proto3 cannot distinguish an unset enum from its first value, so with
-        /// `SET_PASSWORD = 0` a default-constructed message — a client that forgot
-        /// the field, a decode of the wrong bytes — *was* a request to set the
+        /// `SET_PASSWORD = 0` a default-constructed message - a client that forgot
+        /// the field, a decode of the wrong bytes - *was* a request to set the
         /// password to the empty string. The dangerous default has to be the one
         /// that means nothing.
         Unspecified = 0,

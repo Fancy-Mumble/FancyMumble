@@ -20,7 +20,7 @@
 //!
 //! Babble is the one that matters. It is built by summing several
 //! time-shifted, detuned copies of the speech itself, so it has the spectrum
-//! and the modulation of real voices — which is exactly why a noise estimator
+//! and the modulation of real voices - which is exactly why a noise estimator
 //! that assumes stationarity cannot subtract it, and why a learned model is
 //! supposed to win.
 //!
@@ -29,7 +29,7 @@
 //! The noise gain is computed against the **active** speech level, not the
 //! level of the whole file. A recording that is half silence has an RMS far
 //! below its speech level, so mixing against the plain RMS quietly produces a
-//! corpus several dB noisier than its label says — and every published number
+//! corpus several dB noisier than its label says - and every published number
 //! it is compared against becomes meaningless. Frames below a floor relative
 //! to the loudest frame are treated as silence, which is the idea behind
 //! ITU-T P.56 without the full machinery.
@@ -47,7 +47,7 @@
 //! | `DeepFilterNet` | **40.0 ms** |
 //!
 //! Measured, by cross-correlating a chirp through each. Uncompensated, that
-//! 40 ms alone drives `DeepFilterNet`'s SI-SDR *negative* — it would score as
+//! 40 ms alone drives `DeepFilterNet`'s SI-SDR *negative* - it would score as
 //! catastrophically broken while sounding perfect. So the alignment below is
 //! load-bearing, and the reason the earlier RMS-window test did not need it is
 //! only that a 24 000-sample window swamps a 1 919-sample shift.
@@ -63,8 +63,8 @@
 //! it penalises removing speech as heavily as leaving noise. That two-sided
 //! property is what a plain noise-floor measurement lacks. PESQ and STOI are
 //! the published metrics for this task and neither has a usable Rust
-//! implementation — upstream `DeepFilterNet` computes both in Python
-//! (`df/stoi.py`, `df/sepm.py`) — so a like-for-like comparison against
+//! implementation - upstream `DeepFilterNet` computes both in Python
+//! (`df/stoi.py`, `df/sepm.py`) - so a like-for-like comparison against
 //! published PESQ numbers needs the Python path and the real corpus; see
 //! `E2E_VOICEBANK_DEMAND` below.
 //!
@@ -95,13 +95,13 @@
 //!   users complain about, and no amount of tuning gets a classical backend
 //!   there.
 //! * **On already-clean audio it does harm.** At 15 dB SNR it is *below the
-//!   untouched input* on white, babble and impulsive — worst on babble, 13.5
+//!   untouched input* on white, babble and impulsive - worst on babble, 13.5
 //!   down to 3.6, where it removes the talker along with the crowd. Most
 //!   calls are made in quiet rooms, which is why it ships selectable and not
 //!   selected, and why `deepfilternet_must_not_be_the_default` exists.
 //!
 //! Babble is the standing weakness for everything here, `RNNoise` included:
-//! nothing gains more than half a dB on it at any SNR. That is expected —
+//! nothing gains more than half a dB on it at any SNR. That is expected -
 //! babble is speech, and a single-channel denoiser has no cue to separate one
 //! talker from many.
 //!
@@ -203,7 +203,7 @@ fn pink(len: usize, rng: &mut Lcg) -> Vec<f32> {
 ///
 /// The reversal is not cosmetic. Only one recording is in the tree, so an
 /// un-reversed babble is the target speaker's own voice, and the
-/// measurement then asks the model to separate a talker from himself —
+/// measurement then asks the model to separate a talker from himself -
 /// a degenerate case no real deployment produces. Reversed speech keeps the
 /// long-term spectrum and the syllabic modulation while destroying the
 /// correlation with the target, which is the standard construction.
@@ -345,7 +345,7 @@ fn denoise(input: &[f32], algorithm: NoiseSuppressionAlgorithm) -> Vec<f32> {
 /// The lag at which `estimate` best lines up with `reference`.
 ///
 /// Without this every metric below measures the backend's latency instead of
-/// its quality — see the module header.
+/// its quality - see the module header.
 fn best_lag(reference: &[f32], estimate: &[f32]) -> usize {
     let span = reference.len().min(estimate.len()).saturating_sub(MAX_DELAY);
     if span == 0 {
@@ -520,7 +520,7 @@ fn deepfilternet_is_a_large_win_in_a_noisy_room() {
     // best backend available by a margin no parameter tweak closes.
     //
     // Babble is excluded deliberately and not because it is inconvenient
-    // — see `deepfilternet_must_not_be_the_default` for what it does
+    // - see `deepfilternet_must_not_be_the_default` for what it does
     // there and why that is the more important test.
     let Some(items) = corpus(&[0.0, 5.0]) else {
         eprintln!("skipping: {SAMPLE} is not present");
@@ -551,7 +551,7 @@ fn deepfilternet_must_not_be_the_default() {
     //
     // On an input that is *already clean* the model does not help, it
     // harms: at 15 dB SNR it drops white noise from 13.5 to 9.0 dB SI-SDR
-    // and babble from 13.5 to 3.6 — it removes the speaker along with the
+    // and babble from 13.5 to 3.6 - it removes the speaker along with the
     // noise. Most calls are made in quiet rooms, so a build that defaulted
     // to DeepFilterNet would make the majority of users sound worse in
     // exchange for helping the minority in noisy ones.
