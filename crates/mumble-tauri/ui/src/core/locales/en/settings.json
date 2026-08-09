@@ -313,7 +313,15 @@
     "externalEmbedsWarning": "Third-party code loaded on demand",
     "externalEmbedsWarningPara": "YouTube's IFrame API is fetched from youtube.com during watch-together sessions. Google can observe these requests and associate them with your IP address.",
     "streamerMode": "Streamer mode",
-    "streamerModeHint": "Hides identifying information (server host, ports, IP addresses, geolocation) and suppresses native notifications so they cannot leak personal data into a screen recording."
+    "streamerModeHint": "Hides identifying information (server host, ports, IP addresses, geolocation) and suppresses native notifications so they cannot leak personal data into a screen recording.",
+    "richPresence": "Show Discord rich presence from other apps",
+    "richPresenceHint": "Reads the \"now playing\" activity that games and other apps publish for Discord, and shows it here. Runs entirely on this machine. If Discord is running it still receives everything unchanged.",
+    "richPresenceArtwork": "Load app names and artwork",
+    "richPresenceArtworkHint": "Fetches application names and cover art from Discord's public CDN. This is the only part of the feature that uses the network; with it off, activities are shown as text only.",
+    "richPresenceStandalone": "Listening. Discord is not running, so apps are talking to Fancy Mumble directly.",
+    "richPresenceBridged": "Listening, and forwarding everything to the running Discord client, which is unaffected.",
+    "richPresenceIntercepting": "Listening, but forwarding is off, so the running Discord client will not show any activity.",
+    "richPresenceBlocked": "Not receiving anything: Discord started first and holds the connection apps use. Start Fancy Mumble before Discord, or quit Discord and turn this off and on again."
   },
   "personalize": {
     "panelTitle": "Personalize",

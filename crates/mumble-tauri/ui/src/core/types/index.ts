@@ -13,6 +13,7 @@ export * from "./fileserver";
 export * from "./livedoc";
 export * from "./plugins";
 export * from "./preferences";
+export * from "./presence";
 export * from "./audio";
 export * from "./stats";
 export * from "./search";

@@ -313,7 +313,15 @@
     "externalEmbedsWarning": "Drittanbieter-Code wird bei Bedarf geladen",
     "externalEmbedsWarningPara": "Die IFrame-API von YouTube wird während Watch-Together-Sitzungen von youtube.com geladen. Google kann diese Anfragen sehen und mit deiner IP-Adresse verknüpfen.",
     "streamerMode": "Streamer-Modus",
-    "streamerModeHint": "Verbirgt identifizierende Informationen (Server-Host, Ports, IP-Adressen, Standort) und unterdrückt native Benachrichtigungen, damit keine persönlichen Daten in einer Bildschirmaufnahme zu sehen sind."
+    "streamerModeHint": "Verbirgt identifizierende Informationen (Server-Host, Ports, IP-Adressen, Standort) und unterdrückt native Benachrichtigungen, damit keine persönlichen Daten in einer Bildschirmaufnahme zu sehen sind.",
+    "richPresence": "Discord-Rich-Presence anderer Apps anzeigen",
+    "richPresenceHint": "Liest die „Spielt gerade“-Aktivität, die Spiele und andere Apps für Discord veröffentlichen, und zeigt sie hier an. Läuft vollständig auf diesem Gerät. Ein laufender Discord-Client erhält weiterhin alles unverändert.",
+    "richPresenceArtwork": "App-Namen und Bilder laden",
+    "richPresenceArtworkHint": "Lädt Anwendungsnamen und Titelbilder vom öffentlichen CDN von Discord. Das ist der einzige Teil der Funktion, der das Netzwerk nutzt; ohne ihn werden Aktivitäten nur als Text angezeigt.",
+    "richPresenceStandalone": "Aktiv. Discord läuft nicht, Apps sprechen also direkt mit Fancy Mumble.",
+    "richPresenceBridged": "Aktiv, und alles wird an den laufenden Discord-Client weitergeleitet, der davon unberührt bleibt.",
+    "richPresenceIntercepting": "Aktiv, aber die Weiterleitung ist aus, daher zeigt der laufende Discord-Client keine Aktivität an.",
+    "richPresenceBlocked": "Es kommt nichts an: Discord wurde zuerst gestartet und belegt die Verbindung, die Apps nutzen. Starte Fancy Mumble vor Discord, oder beende Discord und schalte dies aus und wieder ein."
   },
   "personalize": {
     "panelTitle": "Anpassen",

@@ -63,10 +63,12 @@
     "closeStream": "关闭直播",
     "pinnedMessages": "已置顶的消息",
     "downloads": "下载",
+    "richPresence": "正在进行",
     "calendar": "日历",
     "mySharedFiles": "我分享的文件",
     "createPoll": "创建投票",
     "browseDocuments": "浏览文档",
+    "scheduledMessages": "定时消息",
     "muteChannel": "静音频道",
     "unmuteChannel": "取消频道静音",
     "channelOptions": "频道选项",
@@ -236,6 +238,16 @@
     "fileSharingDisabled": "此服务器未启用文件分享。",
     "fileSharingNoPermission": "你没有在此频道中分享文件的权限。",
     "filePickerFailed": "文件选择器出错：{{detail}}"
+  },
+  "richPresence": {
+    "title": "正在进行",
+    "empty": "当前没有应用发布活动。",
+    "disabled": "Discord 富状态已关闭。可在“设置 → 隐私”中开启。",
+    "blocked": "Discord 先启动，因此未收到任何内容。请在 Discord 之前启动 Fancy Mumble。",
+    "elapsed": "已进行 {{time}}",
+    "remaining": "剩余 {{time}}",
+    "party": "{{current}} / {{max}}",
+    "closeAriaLabel": "关闭活动面板"
   },
   "downloads": {
     "title": "下载",

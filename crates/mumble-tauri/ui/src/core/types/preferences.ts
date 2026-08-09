@@ -91,6 +91,14 @@ export interface UserPreferences {
    *  and suppresses native notifications so personal data does not leak
    *  into screen captures or recordings. */
   streamerMode?: boolean;
+  /** Host Discord's local IPC endpoint so rich presence published by other
+   *  applications on this machine is visible here too. Purely local: nothing
+   *  leaves the machine unless {@link richPresenceArtwork} is also on. When a
+   *  Discord client is running, everything is forwarded to it unchanged. */
+  enableRichPresence?: boolean;
+  /** Resolve application names and artwork for observed presence through
+   *  Discord's public CDN. The only part of the feature that uses the network. */
+  richPresenceArtwork?: boolean;
   /** When true, automatically retry connecting after an unexpected disconnect. */
   autoReconnect?: boolean;
   /** When true, app updates are downloaded and installed automatically on

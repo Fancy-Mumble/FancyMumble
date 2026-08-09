@@ -53,6 +53,8 @@ export interface ServerInfo {
   max_users: number | null;
   protocol_version: string | null;
   fancy_version: number | null;
+  /** Which Fancy wire numbering the server speaks; null/0 = epoch 0. */
+  fancy_protocol?: number | null;
   release: string | null;
   os: string | null;
   max_bandwidth: number | null;

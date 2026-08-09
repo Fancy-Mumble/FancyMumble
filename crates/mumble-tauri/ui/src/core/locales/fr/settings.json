@@ -313,7 +313,15 @@
     "externalEmbedsWarning": "Code tiers chargé à la demande",
     "externalEmbedsWarningPara": "L'API IFrame de YouTube est chargée depuis youtube.com pendant les sessions « Regarder ensemble ». Google peut voir ces requêtes et les associer à votre adresse IP.",
     "streamerMode": "Mode streamer",
-    "streamerModeHint": "Masque les informations identifiantes (hôte du serveur, ports, adresses IP, géolocalisation) et supprime les notifications natives pour qu'elles ne révèlent pas d'informations personnelles dans un enregistrement d'écran."
+    "streamerModeHint": "Masque les informations identifiantes (hôte du serveur, ports, adresses IP, géolocalisation) et supprime les notifications natives pour qu'elles ne révèlent pas d'informations personnelles dans un enregistrement d'écran.",
+    "richPresence": "Afficher la présence enrichie Discord des autres applications",
+    "richPresenceHint": "Lit l'activité « en cours » que les jeux et autres applications publient pour Discord, et l'affiche ici. Fonctionne entièrement sur cet appareil. Si Discord est lancé, il continue de tout recevoir sans changement.",
+    "richPresenceArtwork": "Charger les noms et les visuels des applications",
+    "richPresenceArtworkHint": "Récupère les noms d'applications et les jaquettes depuis le CDN public de Discord. C'est la seule partie de la fonctionnalité qui utilise le réseau ; sans elle, les activités sont affichées en texte seul.",
+    "richPresenceStandalone": "À l'écoute. Discord n'est pas lancé, les applications parlent donc directement à Fancy Mumble.",
+    "richPresenceBridged": "À l'écoute, et tout est transmis au client Discord en cours d'exécution, qui n'est pas affecté.",
+    "richPresenceIntercepting": "À l'écoute, mais la transmission est désactivée : le client Discord lancé n'affichera aucune activité.",
+    "richPresenceBlocked": "Rien n'est reçu : Discord a démarré en premier et occupe la connexion utilisée par les applications. Lancez Fancy Mumble avant Discord, ou quittez Discord puis désactivez et réactivez cette option."
   },
   "personalize": {
     "panelTitle": "Personnaliser",
