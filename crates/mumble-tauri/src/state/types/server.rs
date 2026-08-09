@@ -69,6 +69,8 @@ pub struct ServerVersionInfo {
     pub version_v2: Option<u64>,
     /// Fancy Mumble extension version (None = standard server).
     pub fancy_version: Option<u64>,
+    /// Which wire numbering the server speaks (None/0 = the epoch-0 layout).
+    pub fancy_protocol: Option<u32>,
 }
 
 /// Full server info payload sent to the frontend.
@@ -86,6 +88,8 @@ pub struct ServerInfo {
     pub protocol_version: Option<String>,
     /// Fancy Mumble extension version.
     pub fancy_version: Option<u64>,
+    /// Which wire numbering the server speaks (None/0 = the epoch-0 layout).
+    pub fancy_protocol: Option<u32>,
     /// Server release string.
     pub release: Option<String>,
     /// Server operating system.

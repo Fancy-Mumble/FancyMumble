@@ -18,7 +18,7 @@
 //!   `tone_ratio` **cannot see loudness**: it is normalised by total
 //!   power, so it reads 1.000 for a clean tone whether that tone arrives
 //!   at full scale or 24 dB down. Anything that changes level rather than
-//!   spectral content — a denoiser, AGC, a volume control — is invisible
+//!   spectral content - a denoiser, AGC, a volume control - is invisible
 //!   to every other field here.
 //!
 //! Everything is a no-op (a single `OnceLock` read) when the env var is
@@ -39,7 +39,7 @@ pub const ENV_STATS_FILE: &str = "FANCY_E2E_AUDIO_STATS_FILE";
 /// Separate from [`ENV_STATS_FILE`] because they answer different questions and
 /// cost different amounts. The JSON is a few numbers a second; this is every
 /// decoded sample, and it exists so a test can compare what arrived against
-/// what was spoken — the only assertion that can tell speech from a tone that
+/// what was spoken - the only assertion that can tell speech from a tone that
 /// merely survived.
 pub const ENV_DUMP_DIR: &str = "FANCY_E2E_AUDIO_DUMP_DIR";
 
@@ -67,7 +67,7 @@ struct SessionStats {
     ///
     /// The only field here that reports *loudness*. A denoiser is a change
     /// in level, so without this the suite cannot distinguish audio that
-    /// was cleaned up from audio that was crushed — or from a denoiser
+    /// was cleaned up from audio that was crushed - or from a denoiser
     /// that was never linked into the build.
     rms: f64,
 }
@@ -144,7 +144,7 @@ fn dump_dir() -> Option<&'static str> {
 /// Start recording every decoded sample, if [`ENV_DUMP_DIR`] is set.
 ///
 /// Installs the mixer's decoded tap, which sees each sample exactly once and
-/// includes inserted silence — so the dump is what the listener would have
+/// includes inserted silence - so the dump is what the listener would have
 /// heard, gaps and all, rather than what was successfully decoded.
 ///
 /// Held in memory and written at the end rather than streamed: this is called
@@ -175,7 +175,7 @@ pub fn start_audio_dump() {
             // Without this the dump is a pile of decoded samples rather than a
             // timeline: a speaker who stops talking simply stops producing
             // any, so the pause vanishes and everything after it slides
-            // earlier. The mixer's own concealment does not cover it either —
+            // earlier. The mixer's own concealment does not cover it either -
             // `detect_certain_gap` caps insertion at 400 ms, so a one-second
             // pause still loses half a second.
             //
@@ -185,8 +185,8 @@ pub fn start_audio_dump() {
             // real run it turned 12.2 s of speech into 11.3 s and dropped the
             // envelope correlation to 0.2.
             //
-            // The tolerance absorbs ordinary jitter — decoded audio arrives in
-            // bursts as packets do — so padding only appears for a gap larger
+            // The tolerance absorbs ordinary jitter - decoded audio arrives in
+            // bursts as packets do - so padding only appears for a gap larger
             // than any jitter buffer would explain.
             const RATE: f64 = 48_000.0;
             const TOLERANCE_SAMPLES: usize = 4_800; // 100 ms
@@ -240,7 +240,7 @@ pub fn write_audio_dump() -> usize {
                 for s in samples {
                     // Clamped rather than wrapped: a sample that overshot
                     // full scale is loud, and wrapping would render it as a
-                    // sign flip — an artefact the analysis would then blame
+                    // sign flip - an artefact the analysis would then blame
                     // on the pipeline.
                     let clamped = s.clamp(-1.0, 1.0);
                     let _ = writer.write_sample((clamped * f32::from(i16::MAX)) as i16);
@@ -436,7 +436,7 @@ mod tests {
     fn rms_sees_the_level_change_that_tone_ratio_cannot() {
         // The whole reason `rms` exists, asserted directly. A denoiser
         // that attenuates a clean tone by 24 dB leaves `tone_ratio`
-        // untouched — it is normalised by total power — so a suite with
+        // untouched - it is normalised by total power - so a suite with
         // only that metric reports "the tone is present" about audio the
         // user can no longer hear.
         let rate = 48_000.0;

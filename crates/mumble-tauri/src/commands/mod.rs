@@ -15,6 +15,7 @@ pub(crate) mod connection;
 pub(crate) mod dm;
 pub(crate) mod draw_overlay;
 pub(crate) mod files;
+pub(crate) mod forum;
 pub(crate) mod image;
 pub(crate) mod keyshare;
 pub(crate) mod messaging;
@@ -24,6 +25,10 @@ pub(crate) mod plugin_admin;
 pub(crate) mod audit;
 pub(crate) mod plugin_info;
 pub(crate) mod popout;
+/// Discord Rich Presence: hosts the local Discord IPC endpoint so other
+/// applications' presence is visible here too. Desktop only.
+#[cfg(not(target_os = "android"))]
+pub(crate) mod presence;
 pub(crate) mod profile;
 pub(crate) mod public_servers;
 pub(crate) mod realtime;
@@ -37,6 +42,7 @@ pub(crate) mod screenshare;
 /// every other platform, Android included, so a stray invoke fails with a
 /// message instead of "command not found".
 pub(crate) mod stream_view;
+pub(crate) mod scheduled_message;
 pub(crate) mod server;
 pub(crate) mod server_settings;
 pub(crate) mod servers;

@@ -6,7 +6,7 @@
 //! `sine:192000:440`.
 //!
 //! A trailing `+noise:<amp>` mixes deterministic broadband noise under the
-//! tone — `sine:48000:440+noise:0.10`. That is what makes a **denoiser**
+//! tone - `sine:48000:440+noise:0.10`. That is what makes a **denoiser**
 //! measurable end to end: a pure tone gives noise suppression nothing to
 //! remove, so a suite built only on the spec above cannot tell a working
 //! denoiser from one that was never linked in.
@@ -25,8 +25,8 @@
 //! speech from one that mangles it:
 //!
 //! * **Opus picks its mode from the content.** A steady tone steers the
-//!   encoder toward CELT; SILK's LPC/LTP path — the one actual speech
-//!   goes through — may never execute, so a fault confined to it is
+//!   encoder toward CELT; SILK's LPC/LTP path - the one actual speech
+//!   goes through - may never execute, so a fault confined to it is
 //!   invisible.
 //! * **A tone never stops.** Real speech is roughly half silence, so
 //!   discontinuous transmission and every "resumes after a pause" path
@@ -39,7 +39,7 @@
 //!
 //! The tone also makes for a weak oracle at the far end. A dominant-bin
 //! ratio survives clipping, wrong gain, short dropouts and resampler
-//! aliasing — it answers "something tonal arrived", not "this is
+//! aliasing - it answers "something tonal arrived", not "this is
 //! intelligible". A file source lets the far end be compared against the
 //! very samples that were fed in.
 //!
@@ -74,9 +74,9 @@ const GEN_BATCH: usize = 1024;
 
 /// Where a virtual microphone's samples come from.
 ///
-/// Split out so the pacing, resampling and framing below — which is the part
+/// Split out so the pacing, resampling and framing below - which is the part
 /// that actually mirrors a real capture backend, and the part worth getting
-/// right once — is shared by every source. A source only has to answer "the
+/// right once - is shared by every source. A source only has to answer "the
 /// next `n` samples, please".
 trait SampleSource: Send {
     /// Append exactly `n` samples in `[-1.0, 1.0]` to `out`.
@@ -151,7 +151,7 @@ impl SampleSource for SineSource {
 ///
 /// Read into memory once rather than streamed from disk. A capture backend is
 /// called on the audio thread every 10 ms, and a file read there is a syscall
-/// on the one path in this program that must never block — the same reason the
+/// on the one path in this program that must never block - the same reason the
 /// real backends hand over a pre-filled buffer. Test fixtures are seconds long,
 /// so the whole thing is a few hundred kilobytes.
 ///
@@ -340,7 +340,7 @@ fn split_file_spec(rest: &str) -> std::result::Result<(&str, f64), String> {
 /// `sine:<rate>:<freq>[+noise:<amp>]`, unchanged in meaning.
 fn parse_sine(spec: &str) -> std::result::Result<(f64, SineSource), String> {
     // The noise suffix is split off first so the tone spec keeps
-    // parsing exactly as it did — an existing `sine:44100:440` must
+    // parsing exactly as it did - an existing `sine:44100:440` must
     // not start meaning something new.
     let (tone_spec, noise_amp) = match spec.split_once("+noise:") {
         Some((tone, amp)) => (

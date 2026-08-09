@@ -501,7 +501,18 @@ async fn pchat_init_task(shared: Arc<Mutex<SharedState>>, ch: u32) {
         return; // mode init already emitted the loading-finished signal
     }
     derive_channel_key_if_needed(&shared, ch).await;
-    send_join_pchat_fetch(&shared, ch).await;
+    // SignalV1 keeps no server-side history by design (forward secrecy): a
+    // late joiner must never read what was said before it joined, even once
+    // it holds every sender's key. The server stores SignalV1 ciphertext too
+    // (for redelivery to a member who was briefly offline) and its fetch
+    // handler does not distinguish that from a fresh join, so skipping the
+    // request here is the actual guarantee, not the re-fetch site any other
+    // channel mode relies on.
+    if mode != Some(PchatProtocol::SignalV1) {
+        send_join_pchat_fetch(&shared, ch).await;
+    } else {
+        pchat::emit_history_loading(&shared, ch, false);
+    }
 }
 
 /// Mode-specific channel init (archive key report / Signal distribution).

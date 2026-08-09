@@ -262,6 +262,13 @@ async fn pchat_key_gen_and_fetch(shared: Arc<Mutex<SharedState>>, id: u32) {
     if !mode.is_encrypted() {
         return;
     }
+    // SignalV1 has no server-side history to fetch (forward secrecy) - see
+    // the matching guards in `user_state.rs::pchat_init_task` and
+    // `key_exchange.rs::retry_decrypt_pending_messages`. A mode change never
+    // needs to backfill it either way.
+    if mode == PchatProtocol::SignalV1 {
+        return;
+    }
 
     let needs_key = shared
         .lock()

@@ -645,6 +645,19 @@ fn self_generate_key(shared: &Arc<Mutex<SharedState>>, ch: u32) {
 /// Mark the channel as fetched and send the `PchatFetch` request, then
 /// schedule a safety-net timeout to clear the loading indicator.
 async fn fetch_channel_history(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: PchatProtocol) {
+    // SignalV1 keeps no server-side history by design (forward secrecy: a late
+    // joiner must never read what was said before it joined, even once it has
+    // every sender's key). Fetching here would ask the server for exactly that
+    // history, and the server does return it - `pchat_message` stores SignalV1
+    // ciphertext too, for redelivery to a member who was briefly offline, and
+    // the fetch handler does not distinguish "was already a member" from "just
+    // joined". Skipping the request is the guarantee; nothing downstream
+    // re-checks it once fetched.
+    if mode == PchatProtocol::SignalV1 {
+        debug!(channel_id = ch, "pchat: skipping fetch for SignalV1 (no history by design)");
+        pchat::emit_history_loading(shared, ch, false);
+        return;
+    }
     debug!(channel_id = ch, "pchat: about to send pchat-fetch");
     {
         let s = shared.lock().ok();

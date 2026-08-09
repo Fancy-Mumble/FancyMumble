@@ -107,4 +107,33 @@ pub(crate) fn hydrate_persisted_prefs(app: &tauri::AppHandle, state: &AppState) 
             tracing::warn!("hydrate_persisted_prefs: enable file logging failed: {e}");
         }
     }
+
+    // Rich Presence has to come up at launch rather than when the settings
+    // page is first opened: whoever binds Discord's IPC slot 0 first receives
+    // everything, so starting late means losing the race to a Discord client
+    // that started in between.
+    #[cfg(not(target_os = "android"))]
+    if bool_pref("enableRichPresence").unwrap_or(false) {
+        start_rich_presence(app.clone(), bool_pref("richPresenceArtwork").unwrap_or(true));
+    }
+}
+
+/// Bring the Rich Presence listener up in the background.
+///
+/// Spawned rather than awaited so a slow bind cannot delay the rest of
+/// startup; failures are logged and leave the feature simply off.
+#[cfg(not(target_os = "android"))]
+fn start_rich_presence(app: tauri::AppHandle, resolve_artwork: bool) {
+    let _task = tauri::async_runtime::spawn(async move {
+        let Some(state) = app.try_state::<AppState>() else {
+            return;
+        };
+        match state
+            .set_presence_enabled(&app, true, resolve_artwork)
+            .await
+        {
+            Ok(status) => tracing::info!(?status, "rich presence restored from preferences"),
+            Err(e) => tracing::warn!("hydrate_persisted_prefs: rich presence failed to start: {e}"),
+        }
+    });
 }

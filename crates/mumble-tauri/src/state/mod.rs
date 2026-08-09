@@ -117,6 +117,8 @@ pub(super) struct AudioPipelineState {
 #[derive(Default)]
 pub(super) struct ServerMetadata {
     pub fancy_version: Option<u64>,
+    /// Which wire numbering the server speaks (None/0 = the epoch-0 layout).
+    pub fancy_protocol: Option<u32>,
     pub version_info: ServerVersionInfo,
     pub host: String,
     pub port: u16,

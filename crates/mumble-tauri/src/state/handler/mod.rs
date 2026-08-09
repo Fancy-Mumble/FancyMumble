@@ -13,6 +13,7 @@ mod channel_state;
 mod codec_version;
 mod custom_reactions_config;
 mod draw_stroke;
+mod forum;
 mod link_preview;
 mod onboarding;
 mod pchat;
@@ -25,6 +26,7 @@ mod plugin_message;
 mod poll;
 mod read_receipt;
 mod reject;
+mod scheduled_message;
 mod server_config;
 mod server_settings;
 mod server_sync;
@@ -186,6 +188,10 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::PluginRegistry(m) => m.handle(ctx),
         ControlMessage::FancyPoll(m) => m.handle(ctx),
         ControlMessage::FancyPollVote(m) => m.handle(ctx),
+        ControlMessage::FancyForumPost(m) => m.handle(ctx),
+        ControlMessage::FancyForumFetchResponse(m) => m.handle(ctx),
+        ControlMessage::FancyScheduledMessageListResponse(m) => m.handle(ctx),
+        ControlMessage::FancyScheduledMessageAck(m) => m.handle(ctx),
         ControlMessage::BanList(m) => m.handle(ctx),
         ControlMessage::UserList(m) => m.handle(ctx),
         ControlMessage::Acl(m) => m.handle(ctx),

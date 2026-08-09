@@ -202,6 +202,100 @@ impl AppState {
             .map_err(|e| format!("Failed to send FancyPollVote: {e}"))
     }
 
+    /// Create a new forum thread, reply to a thread, or edit a post.
+    /// Leave `thread_id`/`post_id` empty to start a new thread.
+    pub async fn send_fancy_forum_post(
+        &self,
+        channel_id: u32,
+        post_id: Option<String>,
+        thread_id: Option<String>,
+        title: Option<String>,
+        body: String,
+    ) -> Result<(), String> {
+        let handle = self.client_handle()?;
+        handle
+            .send(command::SendFancyForumPost {
+                channel_id,
+                post_id: post_id.filter(|s| !s.is_empty()),
+                thread_id: thread_id.filter(|s| !s.is_empty()),
+                title: title.filter(|s| !s.is_empty()),
+                body,
+            })
+            .await
+            .map_err(|e| format!("Failed to send FancyForumPost: {e}"))
+    }
+
+    /// Fetch forum threads for a channel, or the posts within one thread.
+    pub async fn fetch_fancy_forum(
+        &self,
+        channel_id: u32,
+        thread_id: Option<String>,
+        before_id: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<(), String> {
+        let handle = self.client_handle()?;
+        handle
+            .send(command::SendFancyForumFetch {
+                channel_id,
+                thread_id: thread_id.filter(|s| !s.is_empty()),
+                before_id: before_id.filter(|s| !s.is_empty()),
+                limit,
+            })
+            .await
+            .map_err(|e| format!("Failed to send FancyForumFetch: {e}"))
+    }
+
+    /// Delete a forum post (or thread, when the id is a thread root).
+    pub async fn delete_fancy_forum_post(
+        &self,
+        channel_id: u32,
+        post_id: String,
+    ) -> Result<(), String> {
+        let handle = self.client_handle()?;
+        handle
+            .send(command::SendFancyForumDelete { channel_id, post_id })
+            .await
+            .map_err(|e| format!("Failed to send FancyForumDelete: {e}"))
+    }
+
+    /// Schedule a text message for delivery to channels at a future time.
+    pub async fn send_fancy_scheduled_message(
+        &self,
+        channel_ids: Vec<u32>,
+        tree_ids: Vec<u32>,
+        message: String,
+        deliver_at: u64,
+    ) -> Result<(), String> {
+        let handle = self.client_handle()?;
+        handle
+            .send(command::SendFancyScheduledMessage {
+                channel_ids,
+                tree_ids,
+                message,
+                deliver_at,
+            })
+            .await
+            .map_err(|e| format!("Failed to send FancyScheduledMessage: {e}"))
+    }
+
+    /// Request the caller's own pending scheduled messages.
+    pub async fn request_fancy_scheduled_messages(&self) -> Result<(), String> {
+        let handle = self.client_handle()?;
+        handle
+            .send(command::RequestFancyScheduledMessages)
+            .await
+            .map_err(|e| format!("Failed to request scheduled messages: {e}"))
+    }
+
+    /// Cancel a pending scheduled message.
+    pub async fn cancel_fancy_scheduled_message(&self, schedule_id: String) -> Result<(), String> {
+        let handle = self.client_handle()?;
+        handle
+            .send(command::SendFancyScheduledMessageCancel { schedule_id })
+            .await
+            .map_err(|e| format!("Failed to cancel scheduled message: {e}"))
+    }
+
     fn client_handle(&self) -> Result<mumble_protocol::client::ClientHandle, String> {
         let __session = self.inner.snapshot();
         let state = __session.lock().map_err(|e| e.to_string())?;

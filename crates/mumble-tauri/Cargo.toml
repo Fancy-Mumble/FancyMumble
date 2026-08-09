@@ -37,12 +37,21 @@ dhat-heap = ["dep:dhat"]
 
 [dependencies]
 fancy-utils = { path = "../fancy-utils" }
-tauri = { version = "2.10.1", features = ["protocol-asset", "tray-icon", "image-png"] }
+tauri = { version = "2.10.1", features = [
+    "protocol-asset",
+    "tray-icon",
+    "image-png",
+] }
 tauri-plugin-store = "2"
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time"] }
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "sync",
+    "macros",
+    "time",
+] }
 futures-util = { version = "0.3", default-features = false }
 tokio-util = { version = "0.7", features = ["io"] }
 rustls = { version = "0.23", features = ["ring"] }
@@ -57,7 +66,15 @@ base64 = "0.22"
 prost = "0.14"
 zstd = "0.13"
 sha2 = "0.10"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "brotli", "deflate", "multipart", "stream", "json"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "gzip",
+    "brotli",
+    "deflate",
+    "multipart",
+    "stream",
+    "json",
+] }
 quick-xml = { version = "0.39.2", features = ["serialize"] }
 tauri-plugin-notification = "2.3.3"
 tauri-plugin-dialog = "2"
@@ -74,10 +91,17 @@ mimalloc = { version = "0.1", default-features = false }
 # Optional heap profiler, enabled only via the `dhat-heap` feature.
 dhat = { version = "0.3", optional = true }
 png = "0.18"
-mumble-protocol = { path = "../mumble-protocol", features = ["opus-codec", "persistent-chat", "rnnoise-denoiser"] }
+mumble-protocol = { path = "../mumble-protocol", features = [
+    "opus-codec",
+    "persistent-chat",
+    "rnnoise-denoiser",
+] }
 cpal = "0.17.3"
 # Screen sharing core (source enumeration, capture, encode, WebRTC broadcast).
 fancy-screenshare = { path = "../fancy-screenshare" }
+# Discord Rich Presence listener. Desktop only: it hosts the Discord IPC
+# endpoint (Unix socket / named pipe), which has no Android equivalent.
+fancy-presence = { path = "../fancy-presence" }
 rodio = { version = "0.22", features = ["recording"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-window-state = "2"
@@ -86,7 +110,11 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 # Android: mumble-protocol with Opus codec + oboe for native audio I/O.
 [target.'cfg(target_os = "android")'.dependencies]
-mumble-protocol = { path = "../mumble-protocol", features = ["opus-codec", "persistent-chat", "rnnoise-denoiser"] }
+mumble-protocol = { path = "../mumble-protocol", features = [
+    "opus-codec",
+    "persistent-chat",
+    "rnnoise-denoiser",
+] }
 oboe = "0.6.1"
 
 # Windows-only: native window subclassing for aspect-ratio constraints
@@ -96,7 +124,7 @@ oboe = "0.6.1"
 # path used by the exclusive-input setting), shared with the Qt client.
 fancy-audio-device = { path = "../fancy-audio-device" }
 # DeepFilterNet3 on Windows, on top of the features the desktop block above
-# already asks for — cargo unions the two, so this adds the backend rather
+# already asks for - cargo unions the two, so this adds the backend rather
 # than replacing the set.
 #
 # Windows only, deliberately. It costs ~5 MiB of embedded ONNX model plus the
@@ -105,7 +133,9 @@ fancy-audio-device = { path = "../fancy-audio-device" }
 # already reports per-build availability and the UI dropdown is populated from
 # it, so a platform without the feature offers RNNoise and never shows a
 # choice it cannot honour.
-mumble-protocol = { path = "../mumble-protocol", features = ["deepfilternet-denoiser"] }
+mumble-protocol = { path = "../mumble-protocol", features = [
+    "deepfilternet-denoiser",
+] }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
