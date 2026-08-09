@@ -294,6 +294,9 @@ export default function SettingsPage() {
   const [disableLinkPreviews, setDisableLinkPreviews] = useState(false);
   const [enableExternalEmbeds, setEnableExternalEmbeds] = useState(false);
   const [streamerMode, setStreamerMode] = useState(false);
+  const [enableRichPresence, setEnableRichPresence] = useState(false);
+  const [richPresenceArtwork, setRichPresenceArtwork] = useState(true);
+  const richPresenceStatus = useAppStore((state) => state.richPresenceStatus);
   const [autoReconnect, setAutoReconnect] = useState(false);
   const [autoUpdateOnStartup, setAutoUpdateOnStartup] = useState(false);
   const [persistDms, setPersistDms] = useState(false);
@@ -370,6 +373,8 @@ export default function SettingsPage() {
         setDisableLinkPreviews(prefs.disableLinkPreviews ?? false);
         setEnableExternalEmbeds(prefs.enableExternalEmbeds ?? false);
         setStreamerMode(prefs.streamerMode ?? false);
+        setEnableRichPresence(prefs.enableRichPresence ?? false);
+        setRichPresenceArtwork(prefs.richPresenceArtwork ?? true);
         setAutoReconnect(prefs.autoReconnect ?? false);
         setAutoUpdateOnStartup(prefs.autoUpdateOnStartup ?? false);
         setPersistDms(prefs.persistDms ?? false);
@@ -539,7 +544,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!initialLoadDone.current || !isConnected) return;
     // Guard against pushing one identity's profile to a connection made as
-    // another — but only when the connection actually has an identity to
+    // another - but only when the connection actually has an identity to
     // conflict with.
     //
     // A connection made without choosing a certificate stores
@@ -705,6 +710,24 @@ export default function SettingsPage() {
       return next;
     });
   }, [enableNotifications]);
+
+  const handleToggleRichPresence = useCallback(() => {
+    const next = !enableRichPresence;
+    setEnableRichPresence(next);
+    updatePreferences({ enableRichPresence: next });
+    // Starting binds Discord's IPC slot, so this has to reach the backend
+    // immediately rather than waiting for the next launch.
+    void useAppStore.getState().setRichPresenceEnabled(next, richPresenceArtwork);
+  }, [enableRichPresence, richPresenceArtwork]);
+
+  const handleToggleRichPresenceArtwork = useCallback(() => {
+    const next = !richPresenceArtwork;
+    setRichPresenceArtwork(next);
+    updatePreferences({ richPresenceArtwork: next });
+    if (enableRichPresence) {
+      void useAppStore.getState().setRichPresenceEnabled(true, next);
+    }
+  }, [enableRichPresence, richPresenceArtwork]);
 
   const handleToggleAutoReconnect = useCallback(() => {
     setAutoReconnect((prev) => {
@@ -977,6 +1000,9 @@ export default function SettingsPage() {
             disableLinkPreviews={disableLinkPreviews}
             enableExternalEmbeds={enableExternalEmbeds}
             streamerMode={streamerMode}
+            enableRichPresence={enableRichPresence}
+            richPresenceArtwork={richPresenceArtwork}
+            richPresenceStatus={richPresenceStatus}
             onToggleDualPath={handleToggleDualPath}
             onToggleReadReceipts={handleToggleReadReceipts}
             onToggleTypingIndicators={handleToggleTypingIndicators}
@@ -984,6 +1010,8 @@ export default function SettingsPage() {
             onToggleLinkPreviews={handleToggleLinkPreviews}
             onToggleExternalEmbeds={handleToggleExternalEmbeds}
             onToggleStreamerMode={handleToggleStreamerMode}
+            onToggleRichPresence={handleToggleRichPresence}
+            onToggleRichPresenceArtwork={handleToggleRichPresenceArtwork}
           />
         )}
 

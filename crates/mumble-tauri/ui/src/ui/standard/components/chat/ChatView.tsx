@@ -13,6 +13,8 @@ import MobileCallControls from "./mobile/MobileCallControls";
 import ResizableSplitPanel from "./ResizableSplitPanel";
 const PinnedMessagesPanel = lazy(() => import("./pinned/PinnedMessagesPanel"));
 const DownloadsPanel = lazy(() => import("./download/DownloadsPanel"));
+const RichPresencePanel = lazy(() => import("./presence/RichPresencePanel"));
+const ScheduledMessagesPanel = lazy(() => import("./scheduled/ScheduledMessagesPanel"));
 const MySharedFilesPanel = lazy(() => import("./MySharedFilesPanel"));
 import UploadProgressItem, { type UploadPlaceholder } from "./upload/UploadProgressItem";
 import PendingMessageItem from "./pending/PendingMessageItem";
@@ -184,6 +186,8 @@ export default function ChatView({
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [showPinnedPanel, setShowPinnedPanel] = useState(false);
   const [showDownloadsPanel, setShowDownloadsPanel] = useState(false);
+  const [showRichPresencePanel, setShowRichPresencePanel] = useState(false);
+  const [showScheduledPanel, setShowScheduledPanel] = useState(false);
   const [showMySharedFilesPanel, setShowMySharedFilesPanel] = useState(false);
   const [showCalendarPanel, setShowCalendarPanel] = useState(false);
   const {
@@ -445,6 +449,19 @@ export default function ChatView({
 
   const markDownloadsSeen = useAppStore((s) => s.markDownloadsSeen);
   const unseenDownloadCount = useAppStore((s) => s.unseenDownloadCount);
+  const handleOpenRichPresencePanel = useCallback(() => {
+    setShowRichPresencePanel(true);
+  }, []);
+  const handleCloseRichPresencePanel = useCallback(() => {
+    setShowRichPresencePanel(false);
+  }, []);
+  const handleOpenScheduledPanel = useCallback(() => {
+    setShowScheduledPanel(true);
+  }, []);
+  const handleCloseScheduledPanel = useCallback(() => {
+    setShowScheduledPanel(false);
+  }, []);
+
   const handleOpenDownloadsPanel = useCallback(() => {
     setShowDownloadsPanel(true);
     markDownloadsSeen();
@@ -1243,9 +1260,11 @@ export default function ChatView({
             onPinnedMessages={handleOpenPinnedPanel}
             hasNewDownloads={unseenDownloadCount > 0}
             onDownloads={handleOpenDownloadsPanel}
+            onRichPresence={handleOpenRichPresencePanel}
             onOpenCalendar={calendarActive ? handleOpenCalendar : undefined}
             onMySharedFiles={fileServerConfig ? handleOpenMySharedFiles : undefined}
             onOpenDocLibrary={liveDocActive ? handleOpenDocLibrary : undefined}
+            onScheduledMessages={!isDmMode && selectedChannel !== null ? handleOpenScheduledPanel : undefined}
             onPopOutDm={inPopout ? undefined : handlePopOutDm}
           />
         ))}
@@ -1278,6 +1297,32 @@ export default function ChatView({
         >
           <Suspense fallback={null}>
             <DownloadsPanel />
+          </Suspense>
+        </ResizableSplitPanel>
+      )}
+
+      {showRichPresencePanel && (
+        <ResizableSplitPanel
+          defaultPx={340}
+          minPx={200}
+          onClose={handleCloseRichPresencePanel}
+          closeLabel={t("richPresence.closeAriaLabel")}
+        >
+          <Suspense fallback={null}>
+            <RichPresencePanel />
+          </Suspense>
+        </ResizableSplitPanel>
+      )}
+
+      {showScheduledPanel && selectedChannel !== null && (
+        <ResizableSplitPanel
+          defaultPx={420}
+          minPx={240}
+          onClose={handleCloseScheduledPanel}
+          closeLabel={t("header.scheduledMessages")}
+        >
+          <Suspense fallback={null}>
+            <ScheduledMessagesPanel channelId={selectedChannel} />
           </Suspense>
         </ResizableSplitPanel>
       )}

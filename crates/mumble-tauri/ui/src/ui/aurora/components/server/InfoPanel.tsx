@@ -53,7 +53,7 @@ export function InfoPanel({
           <>
             <Fact
               label="Users"
-              value={`${server?.user_count ?? "—"}${server?.max_users ? ` / ${server.max_users}` : ""}`}
+              value={`${server?.user_count ?? "-"}${server?.max_users ? ` / ${server.max_users}` : ""}`}
             />
             <Fact label="Version" value={server?.release ?? server?.protocol_version ?? "Unknown"} />
             <Fact label="Platform" value={server?.os ?? "Unknown"} />

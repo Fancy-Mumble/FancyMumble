@@ -77,7 +77,7 @@ export default function CommunicationSection() {
                     </span>
                     <div>
                       <small>FIGMA · DESIGN SYSTEM</small>
-                      <strong>Voice room — final interaction pass</strong>
+                      <strong>Voice room - final interaction pass</strong>
                       <p>18 frames · Updated 3 minutes ago</p>
                     </div>
                     <ChevronRight />

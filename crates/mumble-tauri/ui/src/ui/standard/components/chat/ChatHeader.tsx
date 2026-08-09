@@ -3,6 +3,7 @@ import {
   BellIcon,
   BellOffIcon,
   CalendarIcon,
+  ClockIcon,
   DatabaseIcon,
   FileTextIcon,
   FolderIcon,
@@ -15,6 +16,7 @@ import {
   ShieldIcon,
   UsersGroupIcon,
   WebcamIcon,
+  ActivityIcon,
 } from "../../icons";
 import { useTranslation } from "react-i18next";
 import { isMobile } from "@core/utils/platform";
@@ -80,12 +82,15 @@ interface ChatHeaderProps {
   readonly hasNewDownloads?: boolean;
   /** Called when the user opens the downloads panel. */
   readonly onDownloads?: () => void;
+  readonly onRichPresence?: () => void;
   /** Called when the user opens the "my shared files" panel. */
   readonly onMySharedFiles?: () => void;
   /** Called when the user opens the saved document library. */
   readonly onOpenDocLibrary?: () => void;
   /** Called when the user opens the calendar panel. */
   readonly onOpenCalendar?: () => void;
+  /** Called when the user opens the scheduled-messages panel. */
+  readonly onScheduledMessages?: () => void;
   /** Called when the user clicks "Pop out DM" (only meaningful when isDm). */
   readonly onPopOutDm?: () => void;
 }
@@ -98,8 +103,10 @@ function buildKebabItems({
   onPinnedMessages,
   hasNewDownloads,
   onDownloads,
+  onRichPresence,
   onMySharedFiles,
   onOpenDocLibrary,
+  onScheduledMessages,
   onChannelSearch,
   onChannelInfoToggle,
   t,
@@ -112,8 +119,10 @@ function buildKebabItems({
   | "onPinnedMessages"
   | "hasNewDownloads"
   | "onDownloads"
+  | "onRichPresence"
   | "onMySharedFiles"
   | "onOpenDocLibrary"
+  | "onScheduledMessages"
   | "onChannelSearch"
   | "onChannelInfoToggle"
 > & { t: (key: string) => string }): KebabMenuItem[] {
@@ -152,6 +161,14 @@ function buildKebabItems({
       onClick: onDownloads,
     });
   }
+  if (onRichPresence) {
+    items.push({
+      id: "rich-presence",
+      label: t("header.richPresence"),
+      icon: <ActivityIcon width={16} height={16} />,
+      onClick: onRichPresence,
+    });
+  }
   if (onMySharedFiles) {
     items.push({
       id: "my-shared-files",
@@ -174,6 +191,14 @@ function buildKebabItems({
       label: t("header.browseDocuments"),
       icon: <FileTextIcon width={16} height={16} />,
       onClick: onOpenDocLibrary,
+    });
+  }
+  if (onScheduledMessages) {
+    items.push({
+      id: "scheduled-messages",
+      label: t("header.scheduledMessages"),
+      icon: <ClockIcon width={16} height={16} />,
+      onClick: onScheduledMessages,
     });
   }
   if (onToggleSilence) {
@@ -214,9 +239,11 @@ export default function ChatHeader({
   onPinnedMessages,
   hasNewDownloads,
   onDownloads,
+  onRichPresence,
   onMySharedFiles,
   onOpenDocLibrary,
   onOpenCalendar,
+  onScheduledMessages,
   onPopOutDm,
 }: ChatHeaderProps) {
   const { t } = useTranslation("chat");
@@ -409,14 +436,17 @@ export default function ChatHeader({
               onPinnedMessages,
               hasNewDownloads,
               onDownloads,
+              onRichPresence,
               onMySharedFiles,
               onOpenDocLibrary,
+              onScheduledMessages,
               onChannelSearch: isMobile ? onChannelSearch : undefined,
               onChannelInfoToggle: isMobile ? onChannelInfoToggle : undefined,
               t: tStr,
             })}
             ariaLabel={t("header.channelOptions")}
             badge={hasNewPins || hasNewDownloads}
+            testId={TID.chatHeaderKebab}
           />
         )}
         {!isInChannel && onJoin && (

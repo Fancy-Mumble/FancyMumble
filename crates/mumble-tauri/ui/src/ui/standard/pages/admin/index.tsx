@@ -41,7 +41,30 @@ export function isPluginAdminSupported(v: number | null | undefined): boolean {
 /** Minimum server version for the audit-log protocol (0.4.2). */
 export const AUDIT_LOG_MIN_FANCY_VERSION = fancyVersionEncode(0, 4, 2);
 
-export function isAuditLogSupported(v: number | null | undefined): boolean {
+/** The wire epoch on which every Fancy service has its own outer type. */
+export const FANCY_PROTOCOL_EPOCH = 1;
+
+/**
+ * Whether the connected server can answer an audit query.
+ *
+ * Two ways to be sure, because there are two kinds of server that can.
+ *
+ * An epoch-0 server (the C++ fork) answers if its *product* version is new
+ * enough, which is what the version is for. An epoch-1 server (Starling)
+ * announces the epoch and deliberately **no version at all** - announcing one
+ * would invite clients to send epoch-0 natives it cannot route. Audit is not
+ * optional at epoch 1: the outer type is allocated to a service that every
+ * epoch-1 server has, so speaking the epoch is itself the capability statement.
+ *
+ * Gating on the version alone is what hid the tab against Starling for ever,
+ * and it would have hidden it on merit: no version is announced, and none ever
+ * will be.
+ */
+export function isAuditLogSupported(
+  v: number | null | undefined,
+  fancyProtocol?: number | null,
+): boolean {
+  if (fancyProtocol === FANCY_PROTOCOL_EPOCH) return true;
   return v != null && v >= AUDIT_LOG_MIN_FANCY_VERSION;
 }
 
@@ -96,6 +119,7 @@ export default function AdminPanel() {
   const rootChannelPerms = useAppStore((s) => s.channels.find((c) => c.id === 0)?.permissions ?? 0);
   const canManageEmotes = customEmotesSupported && (rootChannelPerms & PERM_MANAGE_EMOTES) !== 0;
   const serverFancyVersion = useAppStore((s) => s.serverFancyVersion);
+  const serverFancyProtocol = useAppStore((s) => s.serverFancyProtocol);
   const onboardingSupported = isOnboardingSupported(serverFancyVersion);
   const canAdminPlugins = (rootChannelPerms & PERM_WRITE) !== 0;
   // The file-server admin dashboard needs server-admin rights (Write on root,
@@ -103,7 +127,9 @@ export default function AdminPanel() {
   const canManageFileServer = fileServerEnabled && (rootChannelPerms & PERM_WRITE) !== 0;
   // The audit page needs the audit protocol (0.4.2+) and the ViewAudit gate,
   // which resolves to Write on root today (same as the other admin surfaces).
-  const canViewAudit = isAuditLogSupported(serverFancyVersion) && (rootChannelPerms & PERM_WRITE) !== 0;
+  const canViewAudit =
+    isAuditLogSupported(serverFancyVersion, serverFancyProtocol) &&
+    (rootChannelPerms & PERM_WRITE) !== 0;
   // If the file-server plugin is disabled at runtime while its tab is open,
   // its gate flips false - redirect back to a tab that still exists.
   useEffect(() => {

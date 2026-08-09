@@ -6,7 +6,7 @@ migration:
 
 - `standard` is the mature, feature-complete design and the default. It has the
   broadest feature coverage and the most testing.
-- `aurora` is an opt-in **design beta** — a distinct visual style offered
+- `aurora` is an opt-in **design beta** - a distinct visual style offered
   alongside `standard`, surfaced in Settings › Advanced as "Aurora design
   (beta)". It is not a replacement for `standard`.
 

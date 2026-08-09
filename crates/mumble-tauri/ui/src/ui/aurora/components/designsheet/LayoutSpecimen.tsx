@@ -25,7 +25,7 @@ export default function LayoutSpecimen() {
       </Box>
 
       <Box display="flex" direction="column" gap={2}>
-        <small className={styles.caption}>BOX — PADDING, GAP, ALIGNMENT</small>
+        <small className={styles.caption}>BOX - PADDING, GAP, ALIGNMENT</small>
         <Box display="flex" gap={3} wrap>
           {([2, 3, 4] as const).map((step) => (
             <Box key={step} p={step} gap={2} display="flex" align="center" className={styles.surface}>
@@ -45,7 +45,7 @@ export default function LayoutSpecimen() {
       </Box>
 
       <Box display="flex" direction="column" gap={2}>
-        <small className={styles.caption}>CONTAINER — CENTRED, UNIFORM GUTTERS</small>
+        <small className={styles.caption}>CONTAINER - CENTRED, UNIFORM GUTTERS</small>
         {(["sm", "md", "lg"] as const).map((width) => (
           <Container key={width} maxWidth={width} gutter={4} className={styles.container}>
             <span className={styles.label}>maxWidth={width}</span>

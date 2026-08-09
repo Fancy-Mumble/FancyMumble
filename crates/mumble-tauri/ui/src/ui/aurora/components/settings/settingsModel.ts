@@ -58,6 +58,16 @@ export const settingRows: PreferenceRow[] = [
     title: "Streamer mode",
     detail: "Hide sensitive connection information while recording.",
   },
+  {
+    key: "enableRichPresence",
+    title: "Show Discord rich presence from other apps",
+    detail: "Read what games and other apps publish for Discord. Local only; a running Discord still gets everything.",
+  },
+  {
+    key: "richPresenceArtwork",
+    title: "Load app names and artwork",
+    detail: "Fetch names and cover art from Discord's public CDN. The only part that uses the network.",
+  },
   { key: "hideEmptyChannels", title: "Hide empty channels", detail: "Reduce channel lists to active rooms." },
   {
     key: "persistDms",
@@ -133,6 +143,8 @@ export const sectionPreferenceKeys: Record<SettingsSectionId, Array<keyof UserPr
     "disableLinkPreviews",
     "enableExternalEmbeds",
     "streamerMode",
+    "enableRichPresence",
+    "richPresenceArtwork",
     "persistDms",
     "enableDualPath",
   ],

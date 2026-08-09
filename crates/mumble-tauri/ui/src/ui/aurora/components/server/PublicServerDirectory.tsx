@@ -168,10 +168,10 @@ export default function PublicServerDirectory({
                   </small>
                 </div>
                 <span className={ping?.online ? styles.onlinePing : styles.unknownPing}>
-                  {ping ? (ping.online ? `${ping.latency_ms ?? "—"} ms` : "Offline") : "Checking…"}
+                  {ping ? (ping.online ? `${ping.latency_ms ?? "-"} ms` : "Offline") : "Checking…"}
                 </span>
                 <span className={styles.userCapacity}>
-                  {ping?.user_count ?? "—"}
+                  {ping?.user_count ?? "-"}
                   {ping?.max_user_count ? ` / ${ping.max_user_count}` : ""} users
                 </span>
                 <Button

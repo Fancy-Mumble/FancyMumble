@@ -113,7 +113,7 @@ export default function WindowTitleBar({
           </div>
         )}
         <span className={styles.macTitle}>
-          {serverTitle ? `Fancy Mumble — ${serverTitle}` : "Fancy Mumble"}
+          {serverTitle ? `Fancy Mumble - ${serverTitle}` : "Fancy Mumble"}
         </span>
         <TitleBarActions actions={actions} />
       </div>

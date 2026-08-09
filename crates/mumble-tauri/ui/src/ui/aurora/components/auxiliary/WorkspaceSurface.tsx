@@ -7,9 +7,12 @@ import styles from "./WorkspaceSurface.module.css";
 
 const DownloadsPanel = lazy(() => import("@ui/standard/components/chat/download/DownloadsPanel"));
 const CalendarPanel = lazy(() => import("@ui/standard/components/chat/calendar/CalendarPanel"));
+const RichPresencePanel = lazy(
+  () => import("@ui/standard/components/chat/presence/RichPresencePanel"),
+);
 const LiveDocPanel = lazy(() => import("@ui/standard/components/chat/livedoc/LiveDocPanel"));
 
-type WorkspaceTab = "documents" | "downloads" | "calendar";
+type WorkspaceTab = "documents" | "downloads" | "calendar" | "activity";
 
 function collectDocuments(folder: LiveDocFolder): LiveDocDocLink[] {
   return [...folder.docs, ...folder.folders.flatMap(collectDocuments)];
@@ -89,7 +92,7 @@ export default function WorkspaceSurface({
     >
       <div className={styles.layout}>
         <nav>
-          {(["documents", "downloads", "calendar"] as WorkspaceTab[]).map((item) => (
+          {(["documents", "downloads", "calendar", "activity"] as WorkspaceTab[]).map((item) => (
             <Button
               key={item}
               variant="bare"
@@ -104,6 +107,7 @@ export default function WorkspaceSurface({
           {status && <p className={styles.status}>{status}</p>}
           <Suspense fallback={<div className={styles.loading}>Loading workspace…</div>}>
             {tab === "downloads" && <DownloadsPanel />}
+            {tab === "activity" && <RichPresencePanel />}
             {tab === "calendar" && <CalendarPanel />}
             {tab === "documents" &&
               (activeDoc ? (
