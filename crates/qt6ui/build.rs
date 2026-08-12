@@ -66,7 +66,7 @@ fn main() {
     }
 }
 
-/// Parse the repo-root `constants.json` (single source of truth for
+/// Parse `config/constants.json` (single source of truth for
 /// cross-client integration constants, mirrored from
 /// `mumble-tauri/build.rs` because this crate is workspace-excluded) and
 /// emit `$OUT_DIR/fancy_constants.rs`. Also emits
@@ -75,12 +75,12 @@ fn main() {
 fn generate_shared_constants_and_locales() {
     use std::fmt::Write as _;
 
-    println!("cargo:rerun-if-changed=../../constants.json");
+    println!("cargo:rerun-if-changed=../../config/constants.json");
 
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
     let root = std::path::Path::new(&manifest_dir).join("../..");
-    let raw = std::fs::read_to_string(root.join("constants.json"))
-        .expect("failed to read constants.json at repo root");
+    let raw = std::fs::read_to_string(root.join("config/constants.json"))
+        .expect("failed to read config/constants.json");
     let c: serde_json::Value =
         serde_json::from_str(&raw).expect("invalid JSON in constants.json");
 

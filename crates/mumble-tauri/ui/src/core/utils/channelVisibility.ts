@@ -18,7 +18,7 @@ export function channelDisplayName(channel: ChannelEntry): string {
 /** Name prefix of a friend-chat / self-notepad detached channel (the
  *  `fancy-friends` plugin's `__dm:<lo>-<hi>` convention). These are surfaced
  *  through the friends list / DM UI, never the channel viewer. The value
- *  lives in the repo-root constants.json (shared with the qt6ui client). */
+ *  lives in the config/constants.json (shared with the qt6ui client). */
 export { DM_CHANNEL_PREFIX };
 
 /** Whether a channel is a friend-chat (or self-notepad) DM channel. */
