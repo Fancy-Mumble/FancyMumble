@@ -114,3 +114,23 @@ codegen-units = 256       # parallel codegen
 debug = true              # full debug info so dhat/perf symbolicate stacks
 strip = false             # keep symbols
 split-debuginfo = "packed"
+
+# -- Patched dependencies ---------------------------------------------------
+# cros-libva 0.0.12 (and 0.0.13, which has the identical bug) cannot be built
+# against libva >= 1.23. That release added `seg_id_block_size` and
+# `va_reserved8` to VAEncPictureParameterBufferVP9, and the crate's own
+# constructor initialises neither, so bindgen produces a struct the crate then
+# fails to build. Ubuntu 26.04 ships libva 1.23, where the published crate
+# simply does not compile.
+#
+# Our fork is 0.0.12 with those two fields added behind a
+# `libva_1_23_or_higher` cfg its build.rs now emits, so it still builds
+# unchanged against older libva. Drop this once upstream supports 1.23.
+#
+# A fork rather than a vendored tree: the patch is two files against an
+# upstream tag, and as a fork it stays visibly that -- one commit anybody can
+# read, rebase onto a later release, or send upstream. Vendored, it was seven
+# thousand lines of third-party BSD code in this repo with the actual change
+# invisible inside it.
+[patch.crates-io]
+cros-libva = { git = "https://github.com/Fancy-Mumble/cros-libva", branch = "fancy/libva-1.23" }
