@@ -571,7 +571,7 @@ dependencies = [
  "bitflags 2.11.0",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -1317,8 +1317,7 @@ dependencies = [
 [[package]]
 name = "cros-libva"
 version = "0.0.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "902c9726e953b678595456bd38f95f31aaf1947c56dd9f4a2290f3f1eca4d228"
+source = "git+https://github.com/Fancy-Mumble/cros-libva?branch=fancy%2Flibva-1.23#0efe4268a2c3299879d5d668d48b76ff5a63785b"
 dependencies = [
  "bindgen 0.70.1",
  "bitflags 2.11.0",
@@ -1712,7 +1711,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
- "libloading 0.8.9",
+ "libloading 0.7.4",
 ]
 
 [[package]]
