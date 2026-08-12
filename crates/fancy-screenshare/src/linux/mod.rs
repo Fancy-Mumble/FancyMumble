@@ -101,6 +101,78 @@ enum EncoderTier {
     Cpu(Box<H264Encoder>),
 }
 
+/// The environment variable that names where the encoder ladder starts.
+const ENCODER_ENV: &str = "FANCY_SCREENSHARE_ENCODER";
+
+/// Which tier [`GpuPipelineLinux::probe_encoder`] starts the ladder at.
+///
+/// VA-API first is the right default nearly everywhere, and it is what
+/// Chromium does. On a machine with BOTH an integrated GPU and a discrete
+/// NVIDIA one it is the wrong default, and silently so: [`vaapi`]'s probe
+/// calls `libva::Display::open`, which takes the FIRST `/dev/dri` render
+/// node, and that is the integrated card. Its VA driver answers, the probe
+/// succeeds, and the discrete card's NVENC is never reached. Nothing inside
+/// the probe order can notice - both tiers really do work - so the choice
+/// has to come from outside the process.
+///
+/// [`ENCODER_ENV`] names the tier to START at; the ladder then continues in
+/// its usual order, and openh264 remains the last resort in every case.
+/// `nvenc` therefore means "skip VA-API", not "NVENC or nothing": a
+/// broadcast is never worth failing over a preference.
+///
+/// | Value            | Ladder                        |
+/// |------------------|-------------------------------|
+/// | unset, `vaapi`   | VA-API -> NVENC -> openh264   |
+/// | `nvenc`          | NVENC -> openh264             |
+/// | `cpu`            | openh264                      |
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EncoderPreference {
+    Vaapi,
+    Nvenc,
+    Cpu,
+}
+
+impl EncoderPreference {
+    /// The tier `value` names, or `None` when it names none of them.
+    fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "vaapi" | "va-api" => Some(Self::Vaapi),
+            "nvenc" | "nvidia" => Some(Self::Nvenc),
+            "cpu" | "openh264" | "software" => Some(Self::Cpu),
+            _ => None,
+        }
+    }
+
+    /// What the environment asks for, defaulting to the VA-API-first ladder.
+    ///
+    /// An unrecognised value is reported and then ignored rather than
+    /// refused. This runs when somebody starts a broadcast, and killing that
+    /// over a stray environment variable helps nobody. But a typo that
+    /// quietly changed nothing would be worse in the one situation this
+    /// exists for - a benchmark that measured the iGPU while its operator
+    /// believed it measured NVENC - so it is logged at error level rather
+    /// than dropped.
+    fn from_env() -> Self {
+        let Some(raw) = std::env::var_os(ENCODER_ENV) else {
+            return Self::Vaapi;
+        };
+        let text = raw.to_string_lossy();
+        match Self::parse(&text) {
+            Some(preference) => {
+                tracing::info!("screenshare: {ENCODER_ENV}={text}; ladder starts at {preference:?}");
+                preference
+            }
+            None => {
+                tracing::error!(
+                    "screenshare: {ENCODER_ENV}={text} names no encoder tier \
+                     (expected vaapi, nvenc or cpu); using the default ladder"
+                );
+                Self::Vaapi
+            }
+        }
+    }
+}
+
 /// Portal + PipeWire capture with VA-API (preferred) or openh264 encode.
 pub(crate) struct GpuPipelineLinux {
     /// Held for its lifetime: dropping it closes the cast.
@@ -125,7 +197,8 @@ impl std::fmt::Debug for GpuPipelineLinux {
 
 impl GpuPipelineLinux {
     /// Open the portal (this pops the compositor's source dialog and blocks
-    /// on the user's choice), connect the PipeWire stream, probe VA-API.
+    /// on the user's choice), connect the PipeWire stream, then walk the
+    /// encoder ladder from wherever [`EncoderPreference`] says it starts.
     pub(crate) fn new(
         kind: SourceKind,
         _source_id: u32,
@@ -137,22 +210,7 @@ impl GpuPipelineLinux {
             .ok_or_else(|| "portal fd already taken".to_owned())?;
         let stream = pipewire_stream::PwCaptureStream::start(fd, portal.node_id)?;
 
-        let encoder = match vaapi::VaapiEncoder::probe(settings) {
-            Ok(vaapi) => EncoderTier::Vaapi(vaapi),
-            Err(va_err) => match nvenc::NvencEncoder::probe(settings) {
-                Ok(nvenc) => {
-                    tracing::info!("screenshare: VA-API unavailable ({va_err}); using NVENC");
-                    EncoderTier::Nvenc(nvenc)
-                }
-                Err(nv_err) => {
-                    tracing::info!(
-                        "screenshare: no GPU encoder (VA-API: {va_err}; NVENC: {nv_err}); \
-                         encoding with openh264 instead"
-                    );
-                    EncoderTier::Cpu(Box::new(H264Encoder::new(settings)))
-                }
-            },
-        };
+        let encoder = Self::probe_encoder(settings, EncoderPreference::from_env());
 
         Ok(Self {
             portal,
@@ -163,6 +221,44 @@ impl GpuPipelineLinux {
             last_scaled: None,
             timings: StageTimings::default(),
         })
+    }
+
+    /// Walk the encoder ladder from `preference` down, ending at openh264.
+    ///
+    /// A tier the preference skips is not probed at all, which is the point:
+    /// on the dual-GPU machines this exists for, probing VA-API is exactly
+    /// what goes wrong, so declining to ask is the only answer.
+    fn probe_encoder(settings: EncodeSettings, preference: EncoderPreference) -> EncoderTier {
+        // Why each tier above the one chosen was passed over, so a single log
+        // line explains the result instead of the reader inferring it from an
+        // absence.
+        let mut passed_over: Vec<String> = Vec::new();
+
+        if preference == EncoderPreference::Vaapi {
+            match vaapi::VaapiEncoder::probe(settings) {
+                Ok(vaapi) => return EncoderTier::Vaapi(vaapi),
+                Err(err) => passed_over.push(format!("VA-API: {err}")),
+            }
+        } else {
+            passed_over.push(format!("VA-API: skipped ({ENCODER_ENV})"));
+        }
+
+        if preference == EncoderPreference::Cpu {
+            passed_over.push(format!("NVENC: skipped ({ENCODER_ENV})"));
+        } else {
+            match nvenc::NvencEncoder::probe(settings) {
+                Ok(nvenc) => {
+                    let why = passed_over.join("; ");
+                    tracing::info!("screenshare: using NVENC ({why})");
+                    return EncoderTier::Nvenc(nvenc);
+                }
+                Err(err) => passed_over.push(format!("NVENC: {err}")),
+            }
+        }
+
+        let why = passed_over.join("; ");
+        tracing::info!("screenshare: no GPU encoder ({why}); encoding with openh264 instead");
+        EncoderTier::Cpu(Box::new(H264Encoder::new(settings)))
     }
 
     /// Encode with the current tier; a GPU-tier failure mid-stream demotes
@@ -328,5 +424,41 @@ pub fn portal_probe_main() -> Result<(), String> {
             );
             frames = 0;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::EncoderPreference;
+
+    #[test]
+    fn each_tier_has_a_name() {
+        assert_eq!(EncoderPreference::parse("vaapi"), Some(EncoderPreference::Vaapi));
+        assert_eq!(EncoderPreference::parse("nvenc"), Some(EncoderPreference::Nvenc));
+        assert_eq!(EncoderPreference::parse("cpu"), Some(EncoderPreference::Cpu));
+    }
+
+    #[test]
+    fn the_spellings_a_person_would_actually_type_are_accepted() {
+        // Whitespace and case come free with pasting a value into a shell or
+        // a CI variable; the aliases are the names these tiers go by outside
+        // this module (the driver, the vendor, the codec).
+        assert_eq!(EncoderPreference::parse("  NVENC \n"), Some(EncoderPreference::Nvenc));
+        assert_eq!(EncoderPreference::parse("VA-API"), Some(EncoderPreference::Vaapi));
+        assert_eq!(EncoderPreference::parse("nvidia"), Some(EncoderPreference::Nvenc));
+        assert_eq!(EncoderPreference::parse("openh264"), Some(EncoderPreference::Cpu));
+        assert_eq!(EncoderPreference::parse("software"), Some(EncoderPreference::Cpu));
+    }
+
+    #[test]
+    fn a_typo_names_nothing_rather_than_guessing() {
+        // The caller logs and falls back to the default ladder. Guessing here
+        // (a prefix or fuzzy match) would turn `nvidia-smi` or `vaapi-off`
+        // into a silent tier change, which is the failure this whole knob
+        // exists to prevent.
+        assert_eq!(EncoderPreference::parse("nvnec"), None);
+        assert_eq!(EncoderPreference::parse("vaapi-off"), None);
+        assert_eq!(EncoderPreference::parse(""), None);
+        assert_eq!(EncoderPreference::parse("gpu"), None);
     }
 }
