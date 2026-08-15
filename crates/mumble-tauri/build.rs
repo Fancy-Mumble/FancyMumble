@@ -151,6 +151,26 @@ fn main() {
 fn build_tauri() {
     println!("cargo:rerun-if-changed=capabilities");
 
+    // `tauri.linux.conf.json` declares `bundle.resources: ["signal-bridge/*.so"]`,
+    // and tauri-build fails outright when a resource glob matches nothing:
+    //
+    //   glob pattern signal-bridge/*.so path not found or didn't match any files
+    //
+    // With SKIP_SIGNAL_BRIDGE set, `build_signal_bridge()` above never runs, so
+    // nothing ever produces that file and the build cannot succeed from a clean
+    // checkout. It only appears to work in a tree where an earlier unskipped
+    // build happened to leave the .so behind.
+    //
+    // Every packaging path that skips the bridge hits this - the AUR
+    // `fancy-mumble` package and the Flatpak both build with SKIP_SIGNAL_BRIDGE=1
+    // and ship the bridge separately, for the AGPL boundary. So clear the list:
+    // TAURI_CONFIG is a JSON document deep-merged over the config files, and an
+    // empty `resources` leaves nothing to glob.
+    if std::env::var_os("SKIP_SIGNAL_BRIDGE").is_some() {
+        println!("cargo:rerun-if-env-changed=SKIP_SIGNAL_BRIDGE");
+        std::env::set_var("TAURI_CONFIG", r#"{"bundle":{"resources":[]}}"#);
+    }
+
     let self_updater = std::env::var_os("CARGO_FEATURE_SELF_UPDATER").is_some();
     let pattern = if self_updater {
         "./capabilities/**/*"
