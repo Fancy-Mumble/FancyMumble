@@ -4,12 +4,16 @@
 //! query string `?updater=1` so the React entry point routes to
 //! `ui/src/updater/UpdaterWindow.tsx` instead of the regular app.
 
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::Manager;
+#[cfg(feature = "self-updater")]
+use tauri::{WebviewUrl, WebviewWindowBuilder};
 
 pub(crate) const UPDATER_WINDOW_LABEL: &str = "updater";
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
 
+#[cfg(feature = "self-updater")]
 const UPDATER_WINDOW_WIDTH: f64 = 520.0;
+#[cfg(feature = "self-updater")]
 const UPDATER_WINDOW_HEIGHT: f64 = 720.0;
 
 /// Reveal the main app window, focusing it if necessary. The main
@@ -30,6 +34,7 @@ pub(crate) fn show_main_window(app: &tauri::AppHandle) {
 ///
 /// When `auto_install` is true the window URL gets a `&auto=1` flag so
 /// the React bootstrapper starts the download/install immediately.
+#[cfg(feature = "self-updater")]
 pub(crate) fn open_updater_window(app: &tauri::AppHandle, auto_install: bool) -> tauri::Result<()> {
     if let Some(existing) = app.get_webview_window(UPDATER_WINDOW_LABEL) {
         let _ = existing.set_focus();

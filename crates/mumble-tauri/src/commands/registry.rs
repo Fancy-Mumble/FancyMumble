@@ -272,17 +272,17 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         #[cfg(not(target_os = "android"))]
         super::presence::presence_snapshot,
         // -- updater (desktop only) ------------------------------------
-        #[cfg(not(target_os = "android"))]
+        #[cfg(all(not(target_os = "android"), feature = "self-updater"))]
         crate::updater::commands::updater_check,
-        #[cfg(not(target_os = "android"))]
+        #[cfg(all(not(target_os = "android"), feature = "self-updater"))]
         crate::updater::commands::updater_pending,
-        #[cfg(not(target_os = "android"))]
+        #[cfg(all(not(target_os = "android"), feature = "self-updater"))]
         crate::updater::commands::updater_download_and_install,
-        #[cfg(not(target_os = "android"))]
+        #[cfg(all(not(target_os = "android"), feature = "self-updater"))]
         crate::updater::commands::updater_dismiss,
-        #[cfg(not(target_os = "android"))]
+        #[cfg(all(not(target_os = "android"), feature = "self-updater"))]
         crate::updater::commands::updater_set_auto_install,
-        #[cfg(not(target_os = "android"))]
+        #[cfg(all(not(target_os = "android"), feature = "self-updater"))]
         crate::updater::commands::updater_set_skipped_version,
     ])
 }
