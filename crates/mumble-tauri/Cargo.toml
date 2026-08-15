@@ -17,7 +17,25 @@ name = "mumble-tauri"
 path = "src/main.rs"
 
 [features]
-default = []
+default = ["self-updater"]
+# The bundled auto-updater: checks GitHub releases on launch, and can download
+# and swap the binary in place. On by default, because that is how the .deb,
+# the AppImage and the Windows installer are expected to behave.
+#
+# Turn it OFF for any build whose updates are somebody else's job - Flathub
+# above all, where a self-updating app is both against the submission rules and
+# impossible against a read-only /app. Distro packages (AUR, deb repos) want it
+# off for the same reason.
+#
+#   cargo build --release --no-default-features --features custom-protocol
+#
+# Dropping it takes `updater/{commands,manager}.rs`, the six `updater_*`
+# commands and both plugins out of the binary, and build.rs stops feeding
+# `capabilities/self-updater/` to the ACL so the now-absent `updater:` and
+# `process:` permissions are not referenced. What stays is the window plumbing
+# in `updater/window.rs` (`MAIN_WINDOW_LABEL`, `show_main_window`), which the
+# rest of the app uses to reveal the main window on launch.
+self-updater = ["dep:tauri-plugin-updater", "dep:tauri-plugin-process"]
 deepfilternet-denoiser = ["mumble-protocol/deepfilternet-denoiser"]
 # Production asset mode: serve the embedded `ui/dist` via the custom Tauri
 # protocol instead of loading `devUrl` (localhost:1420). The Tauri CLI enables
@@ -106,8 +124,11 @@ rodio = { version = "0.22", features = ["recording"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-window-state = "2"
 # Auto-updater (desktop only). All updater logic lives in `src/updater/`.
-tauri-plugin-updater = "2"
-tauri-plugin-process = "2"
+# Optional so a distro/Flathub build can drop it - see the `self-updater`
+# feature above. `process` is only here for the bootstrapper's relaunch, so it
+# is gated by the same feature.
+tauri-plugin-updater = { version = "2", optional = true }
+tauri-plugin-process = { version = "2", optional = true }
 # Android: mumble-protocol with Opus codec + oboe for native audio I/O.
 [target.'cfg(target_os = "android")'.dependencies]
 mumble-protocol = { path = "../mumble-protocol", features = [

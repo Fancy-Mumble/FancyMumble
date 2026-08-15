@@ -47,7 +47,7 @@ fn main() {
         build_qt6ui();
     }
 
-    tauri_build::build();
+    build_tauri();
 
     // Oboe (Android audio) is a C++ library whose pure-virtual functions
     // need the C++ runtime (`__cxa_pure_virtual` etc.).  The Rust linker
@@ -132,6 +132,36 @@ fn main() {
     if target_os == "windows" {
         println!("cargo:rustc-link-lib=delayimp");
         println!("cargo:rustc-link-arg=/DELAYLOAD:comctl32.dll");
+    }
+}
+
+/// Run `tauri-build`, choosing which capability files it may see.
+///
+/// The capability that grants the `updater:` and `process:` permissions lives
+/// in `capabilities/self-updater/` rather than next to the others, because the
+/// ACL is resolved at build time against the plugins actually in the dependency
+/// graph: with the `self-updater` feature off those two plugins are gone, and a
+/// capability still asking for their permissions is a hard build error.
+///
+/// So the glob is narrowed to the top level in that case. `**/*` (the
+/// tauri-build default) picks the subdirectory up again when the feature is on.
+///
+/// `cfg!(feature = ...)` would be wrong here - inside a build script that reads
+/// the build script's *own* features, not the crate's - hence `CARGO_FEATURE_*`.
+fn build_tauri() {
+    println!("cargo:rerun-if-changed=capabilities");
+
+    let self_updater = std::env::var_os("CARGO_FEATURE_SELF_UPDATER").is_some();
+    let pattern = if self_updater {
+        "./capabilities/**/*"
+    } else {
+        "./capabilities/*.json"
+    };
+
+    if let Err(e) =
+        tauri_build::try_build(tauri_build::Attributes::new().capabilities_path_pattern(pattern))
+    {
+        panic!("tauri-build failed: {e}");
     }
 }
 

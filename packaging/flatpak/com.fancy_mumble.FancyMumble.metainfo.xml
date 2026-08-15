@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.fancy_mumble.FancyMumble</id>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <!-- The AGPL half (encrypted private chat) is not in this ref. It ships as
+       the com.fancy_mumble.FancyMumble.SignalBridge add-on, which carries its
+       own AGPL-3.0-only licence tag. -->
+  <project_license>MIT</project_license>
+
+  <name>Fancy Mumble</name>
+  <summary>Talk, chat and share your screen on a Mumble server</summary>
+
+  <developer id="com.fancy_mumble">
+    <name>Fancy Mumble</name>
+  </developer>
+
+  <description>
+    <p>
+      Fancy Mumble is a desktop client for Mumble, the low-latency voice chat
+      protocol. It speaks the standard Mumble protocol, so it connects to any
+      existing server, and adds a modern interface on top of it.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Low-latency Opus voice with noise suppression, automatic gain control and a noise gate</li>
+      <li>Push-to-talk, voice activity detection, and per-channel listening</li>
+      <li>Rich text chat with Markdown, inline images, a GIF picker and polls</li>
+      <li>Screen and window sharing through the desktop portal, with hardware video encoding</li>
+      <li>Profile customisation: avatar frames, banners, nameplates and a bio editor</li>
+      <li>TLS throughout, support for self-signed server certificates, and no telemetry</li>
+    </ul>
+    <p>
+      End-to-end encrypted private chat is available as a separate add-on,
+      because the Signal Protocol library it builds on is licensed under the
+      AGPL. Install com.fancy_mumble.FancyMumble.SignalBridge to enable it.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">com.fancy_mumble.FancyMumble.desktop</launchable>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Channels on the left, chat in the middle, user details on the right</caption>
+      <image type="source" width="1348" height="929">https://raw.githubusercontent.com/Fancy-Mumble/FancyMumble/v0.3.0/images/chat.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The main view during a conversation</caption>
+      <image type="source" width="1348" height="929">https://raw.githubusercontent.com/Fancy-Mumble/FancyMumble/v0.3.0/images/mainchat.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Microphone settings, including AI noise suppression</caption>
+      <image type="source" width="1348" height="929">https://raw.githubusercontent.com/Fancy-Mumble/FancyMumble/v0.3.0/images/audiosettings.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Profile editor with frames, banners and a bio editor</caption>
+      <image type="source" width="1348" height="929">https://raw.githubusercontent.com/Fancy-Mumble/FancyMumble/v0.3.0/images/profileeditor.png</image>
+    </screenshot>
+  </screenshots>
+
+  <url type="homepage">https://fancy-mumble.com/</url>
+  <url type="bugtracker">https://github.com/Fancy-Mumble/FancyMumble/issues</url>
+  <url type="vcs-browser">https://github.com/Fancy-Mumble/FancyMumble</url>
+
+  <categories>
+    <category>Network</category>
+    <category>InstantMessaging</category>
+  </categories>
+
+  <keywords>
+    <keyword>mumble</keyword>
+    <keyword>voice</keyword>
+    <keyword>voip</keyword>
+    <keyword>chat</keyword>
+  </keywords>
+
+  <provides>
+    <binary>mumble-tauri</binary>
+  </provides>
+
+  <recommends>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </recommends>
+  <requires>
+    <!-- The UI has a hard breakpoint below this: under 768 logical pixels the
+         sidebar collapses over the chat pane. -->
+    <display_length compare="ge">768</display_length>
+  </requires>
+
+  <!-- It is a chat client: the people using it supply the content, and voice
+       and text both reach strangers on a public server. -->
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-audio">intense</content_attribute>
+  </content_rating>
+
+  <releases>
+    <release version="0.3.0" date="2026-06-14"/>
+  </releases>
+</component>

@@ -63,3 +63,6 @@ dhat-heap*.json
 # npm, but `pnpm-debug.log*` above shows pnpm does get invoked here sometimes,
 # and the store it leaves behind is a large untracked tree nobody wants staged.
 .pnpm-store/
+
+# flatpak-builder scratch (packaging/flatpak/README.md)
+.flatpak-builder/

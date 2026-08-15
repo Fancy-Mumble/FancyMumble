@@ -15,32 +15,57 @@
 
 #![cfg(not(target_os = "android"))]
 
+#[cfg(feature = "self-updater")]
 pub(crate) mod commands;
+#[cfg(feature = "self-updater")]
 mod manager;
 mod window;
 
+#[cfg(feature = "self-updater")]
 pub(crate) use manager::UpdaterState;
 pub(crate) use window::{show_main_window, MAIN_WINDOW_LABEL, UPDATER_WINDOW_LABEL};
 
-use tauri::{Manager, Wry};
+#[cfg(feature = "self-updater")]
+use tauri::Manager;
+use tauri::Wry;
 
 /// Register the `updater` and `process` Tauri plugins on the builder.
 ///
 /// `process` is needed so the bootstrapper UI can call `relaunch()`
 /// after a successful update on macOS / Linux (Windows relaunches
-/// automatically as part of the installer flow).
+/// automatically as part of the installer flow). Both go away together
+/// when `self-updater` is off - `process` has no other consumer.
 pub(crate) fn register_plugins(builder: tauri::Builder<Wry>) -> tauri::Builder<Wry> {
-    builder
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+    #[cfg(not(feature = "self-updater"))]
+    {
+        builder
+    }
+    #[cfg(feature = "self-updater")]
+    {
+        builder
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .plugin(tauri_plugin_process::init())
+    }
 }
 
 /// Install the shared [`UpdaterState`] and kick off the background
 /// check-on-startup task. Safe to call once from the main `setup` hook.
+///
+/// With `self-updater` off there is nothing to check, but the main window
+/// still starts hidden (`visible: false` in `tauri.conf.json`) and this is
+/// what reveals it - so the no-op path has to show it immediately, or the
+/// app launches to no window at all.
 pub(crate) fn init(app: &tauri::AppHandle) {
-    let _ = app.manage(UpdaterState::default());
-    load_persisted_prefs(app);
-    spawn_startup_check(app.clone());
+    #[cfg(not(feature = "self-updater"))]
+    {
+        show_main_window(app);
+    }
+    #[cfg(feature = "self-updater")]
+    {
+        let _ = app.manage(UpdaterState::default());
+        load_persisted_prefs(app);
+        spawn_startup_check(app.clone());
+    }
 }
 
 /// Read `preferences.json` (written by `@tauri-apps/plugin-store`) and
@@ -48,6 +73,7 @@ pub(crate) fn init(app: &tauri::AppHandle) {
 /// avoids a race where the JS in the main webview hasn't yet pushed
 /// the user's preferences via the `updater_set_*` commands by the time
 /// `spawn_startup_check` decides whether to auto-install.
+#[cfg(feature = "self-updater")]
 fn load_persisted_prefs(app: &tauri::AppHandle) {
     let Some(state) = app.try_state::<UpdaterState>() else {
         return;
@@ -82,6 +108,7 @@ fn load_persisted_prefs(app: &tauri::AppHandle) {
 /// * If an update is available and not skipped: open the branded
 ///   bootstrapper window and keep the main window hidden.
 /// * Otherwise: reveal the main window immediately.
+#[cfg(feature = "self-updater")]
 fn spawn_startup_check(app: tauri::AppHandle) {
     drop(tauri::async_runtime::spawn(async move {
         // Tiny delay so the main webview has a chance to register its

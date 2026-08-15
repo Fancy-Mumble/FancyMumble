@@ -1,0 +1,333 @@
+# Flathub manifest for Fancy Mumble.
+#
+# App ID: the reverse-DNS of fancy-mumble.com, with the hyphen replaced by an
+# underscore because a Flatpak app ID has to be a valid D-Bus name. Flathub's
+# website verification understands that mapping, so serving the token at
+#   https://fancy-mumble.com/.well-known/org.flathub.VerifiedApps.txt
+# is what turns the blue check on.
+#
+# Deliberately NOT changed to match: the Tauri identifier in tauri.conf.json
+# (com.fancymumble.app). It is what `app_config_dir()` derives the settings
+# path from on every platform, so renaming it would strand the existing
+# .deb/AppImage/AUR users' configs. Flathub only cares about the ID on the
+# .desktop/metainfo files, and inside the sandbox the Tauri dir just nests
+# under ~/.var/app/com.fancy_mumble.FancyMumble/config/.
+id: com.fancy_mumble.FancyMumble
+
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  # The workspace sets no rust-version, so this just needs to be recent enough
+  # for the dependency tree; the 25.08 extension is 1.97.1.
+  - org.freedesktop.Sdk.Extension.rust-stable
+  # ui/package.json targets modern Node; 25.08's node22 is 22.23.2.
+  - org.freedesktop.Sdk.Extension.node22
+  # libclang, for bindgen. libspa-sys (PipeWire, pulled in by fancy-screenshare's
+  # `gpu` feature) generates its bindings at build time and panics without it:
+  #   Unable to find libclang: "couldn't find any valid shared libraries
+  #   matching: ['libclang.so', ...] set the `LIBCLANG_PATH` environment
+  #   variable". Neither the GNOME nor the freedesktop SDK ships one.
+  - org.freedesktop.Sdk.Extension.llvm21
+
+command: mumble-tauri
+
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+
+  # The whole point of the app: reaching a Mumble server, plus the file-server
+  # and live-doc plugin endpoints alongside it.
+  - --share=network
+
+  # Voice. pipewire-pulse serves this too, so one socket covers both stacks.
+  - --socket=pulseaudio
+
+  # Tray. tray-icon dlopens libayatana-appindicator3 (built as a module below)
+  # and then talks StatusNotifierItem; the two legacy names are what the
+  # Ayatana/Canonical indicator hosts still listen on.
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=com.canonical.indicator.application
+  - --talk-name=org.ayatana.indicator.application
+
+  # Desktop notifications for mentions and DMs.
+  - --talk-name=org.freedesktop.Notifications
+
+  # Discord rich presence (fancy-presence) speaks to the Discord client over
+  # this socket. Absent when Discord isn't running; the feature just stays off.
+  - --filesystem=xdg-run/discord-ipc-0
+
+  # No --filesystem for user documents, deliberately. Every path in or out of
+  # the sandbox is a portal: save_markdown_file() in commands/files.rs opens the
+  # native save dialog (blocking_save_file -> portal FileChooser), uploads use
+  # the same chooser in the other direction, and downloads come back as base64
+  # or a signed URL rather than a path. The document portal grants access to the
+  # one file the user picked, which is the whole permission needed.
+
+  # Screen sharing runs entirely through the ScreenCast portal: the PipeWire
+  # remote arrives as a passed fd, so no --socket=pipewire is needed. VA-API
+  # encode happens on the --device=dri node above.
+
+modules:
+  # -- Build-time only ------------------------------------------------
+
+  # protoc, for prost-build in mumble-protocol's build.rs. The SDK has no
+  # protobuf at all.
+  #
+  # 21.12 rather than a current release on purpose: from 22 onwards protobuf
+  # needs abseil-cpp built alongside it, which is two more modules and several
+  # minutes, and buys nothing here. Every .proto in the tree is plain proto3
+  # (no editions), and proto3 `optional` has been supported since 3.15, so
+  # 3.21.12 generates byte-identical Rust. It never ships - `cleanup: ['*']`
+  # takes the whole module back out of the finished app.
+  - name: protobuf
+    buildsystem: autotools
+    config-opts:
+      - --disable-static
+    sources:
+      - type: archive
+        url: https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protobuf-cpp-3.21.12.tar.gz
+        sha256: 4eab9b524aa5913c6fffb20b2a8abf5ef7f95a80bc0701f3a6dbb4c607f73460
+    cleanup:
+      - '*'
+
+  # -- Tray icon ------------------------------------------------------
+  #
+  # libappindicator-sys dlopens libayatana-appindicator3.so.1 at runtime rather
+  # than linking it, so none of this is needed to *build* - but without it in
+  # /app/lib the dlopen fails and the tray silently never appears.
+
+  # libdbusmenu is a 2016 autotools project and its configure hard-requires
+  # intltool >= 0.35, which the GNOME SDK does not ship at all (configure fails
+  # with "intltool-update: command not found", then "Your intltool is too old").
+  # Nothing else here needs it, so it is build-time only.
+  - name: intltool
+    buildsystem: autotools
+    sources:
+      - type: archive
+        url: https://launchpad.net/intltool/trunk/0.51.0/+download/intltool-0.51.0.tar.gz
+        sha256: 67c74d94196b153b774ab9f89b2fa6c6ba79352407037c8c14d5aeb334e959cd
+    cleanup:
+      - '*'
+
+  - name: libdbusmenu
+    buildsystem: autotools
+    build-options:
+      # 16.04-era sources against a 2026 GCC and a current glib. The blanket
+      # -Wno-error is the point: libdbusmenu builds with GNOME_COMPILE_WARNINGS
+      # at error level, and current glib headers emit a deprecation for
+      # g_type_class_add_private, which this code still uses throughout. Every
+      # single .lo in libdbusmenu-glib fails without it.
+      cflags: -Wno-error -Wno-error=incompatible-pointer-types -Wno-error=int-conversion
+      env:
+        # The configure script only sets these when valgrind is present, and
+        # the generated Makefile references them unconditionally.
+        HAVE_VALGRIND_TRUE: '#'
+        HAVE_VALGRIND_FALSE: ''
+    config-opts:
+      # Belt and braces with the -Wno-error above: this is the knob that
+      # actually removes -Werror from the generated flags.
+      - --enable-compile-warnings=minimum
+      - --with-gtk=3
+      - --disable-dumper
+      - --disable-static
+      - --disable-tests
+      - --disable-gtk-doc
+      - --enable-introspection=no
+      - --enable-vala=no
+    sources:
+      - type: archive
+        url: https://launchpad.net/libdbusmenu/16.04/16.04.0/+download/libdbusmenu-16.04.0.tar.gz
+        sha256: b9cc4a2acd74509435892823607d966d424bd9ad5d0b00938f27240a1bfa878a
+    cleanup:
+      - /include
+      - /libexec
+      - /lib/pkgconfig
+      - /share/doc
+      - /share/gtk-doc
+      - '*.la'
+
+  # libayatana-indicator's CMakeLists hard-requires libayatana-ido3-0.4 >= 0.8.2
+  # via pkg_check_modules, so this comes first. (The repository is called
+  # ayatana-ido; the pkg-config module it installs is libayatana-ido3-0.4.)
+  - name: ayatana-ido
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DENABLE_TESTS=OFF
+    sources:
+      - type: archive
+        url: https://github.com/AyatanaIndicators/ayatana-ido/archive/refs/tags/0.10.4.tar.gz
+        sha256: bd59abd5f1314e411d0d55ce3643e91cef633271f58126be529de5fb71c5ab38
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+      - /share/gir-1.0
+      - '*.la'
+
+  - name: libayatana-indicator
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DENABLE_TESTS=OFF
+    sources:
+      - type: archive
+        url: https://github.com/AyatanaIndicators/libayatana-indicator/archive/refs/tags/0.9.4.tar.gz
+        sha256: a18d3c682e29afd77db24366f8475b26bda22b0e16ff569a2ec71cd6eb4eac95
+    cleanup:
+      - /include
+      - /libexec
+      - /lib/pkgconfig
+      - '*.la'
+
+  - name: libayatana-appindicator
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DENABLE_BINDINGS_MONO=OFF
+      - -DENABLE_BINDINGS_VALA=OFF
+      - -DENABLE_TESTS=OFF
+      - -DFLAVOUR_GTK3=ON
+      # Defaults to ON, and it is the one part of this module that does not
+      # build here. The library itself links fine; gtk-doc's scangobj.sh then
+      # compiles and links a throwaway probe binary using only the `-l` names
+      # from pkg-config, with none of the matching library directories, so it
+      # fails with "cannot find -layatana-indicator3" (and ido3, and both
+      # dbusmenu libraries) - all four of which this manifest has just put in
+      # /app/lib. Nothing needs the generated HTML, so turn it off rather than
+      # patching a search path into somebody else's docs tooling.
+      - -DENABLE_GTKDOC=OFF
+    sources:
+      - type: archive
+        url: https://github.com/AyatanaIndicators/libayatana-appindicator/archive/refs/tags/0.5.93.tar.gz
+        sha256: cbefed7a918a227bf71286246e237fcd3a9c8499b3eaac4897811a869409edf0
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+      - /share/gir-1.0
+      - '*.la'
+
+  # -- The app --------------------------------------------------------
+
+  - name: fancy-mumble
+    buildsystem: simple
+
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node22/bin:/usr/lib/sdk/llvm21/bin
+      append-ld-library-path: /usr/lib/sdk/llvm21/lib
+      env:
+        # bindgen looks for libclang here rather than on the linker path.
+        LIBCLANG_PATH: /usr/lib/sdk/llvm21/lib
+        # All absolute, and all rooted at this module's build directory, which
+        # flatpak-builder names after the module. The generated *-sources.json
+        # unpack into exactly these paths, so renaming the module means fixing
+        # every one of them.
+        CARGO_HOME: /run/build/fancy-mumble/cargo
+        CARGO_NET_OFFLINE: 'true'
+        # node-gyp and friends write here; pointing it into the build dir keeps
+        # them from reaching for a home directory that does not exist.
+        XDG_CACHE_HOME: /run/build/fancy-mumble/flatpak-node/cache
+        npm_config_cache: /run/build/fancy-mumble/flatpak-node/npm-cache
+        npm_config_offline: 'true'
+        npm_config_audit: 'false'
+        npm_config_fund: 'false'
+        # Headers for any package that still wants to run node-gyp.
+        npm_config_nodedir: /usr/lib/sdk/node22
+        # esbuild ships as a prebuilt per-arch binary that its postinstall would
+        # normally fetch. flatpak-node-generator stages the right one for the
+        # arch being built and leaves it here; this is how esbuild finds it
+        # instead of trying to download.
+        ESBUILD_BINARY_PATH: /run/build/fancy-mumble/flatpak-node/cache/esbuild/bin/esbuild-current
+
+    build-commands:
+      # 1. Frontend first. The Rust build embeds crates/mumble-tauri/ui/dist as
+      #    the asset bundle (the custom-protocol feature below), so it has to
+      #    exist before cargo runs.
+      #
+      #    `leveldown` in the lockfile is an optional dependency with a native
+      #    install script. It cannot build offline and does not need to - npm
+      #    tolerates a failed optional dependency, and nothing in the vite build
+      #    imports it. Do not "fix" this with --omit=optional: esbuild's own
+      #    per-arch binary is an optional dependency too, and dropping it breaks
+      #    the build outright.
+      - |
+        set -e
+        cd crates/mumble-tauri/ui
+        npm ci --offline
+        npm run build
+
+      # 2. The binary.
+      #
+      #    --no-default-features drops `self-updater`. Flathub installs are
+      #    updated by Flathub; an app that downloads and swaps its own binary is
+      #    both against the submission rules and impossible inside the sandbox.
+      #    See the feature's definition in crates/mumble-tauri/Cargo.toml.
+      #
+      #    SKIP_* stop mumble-tauri's build.rs shelling out to two nested cargo
+      #    builds that would each want the network:
+      #      signal-bridge  links AGPL-3.0 libsignal-protocol. It ships as the
+      #                     .SignalBridge extension instead, so this ref stays
+      #                     MIT - see that manifest for the full reasoning.
+      #      qt6ui          is a Windows/MinGW-Qt build; it cannot happen here.
+      - |
+        set -e
+        export SKIP_SIGNAL_BRIDGE=1 SKIP_QT6UI=1
+        cargo build --offline --release --locked \
+          --no-default-features --features custom-protocol \
+          -p mumble-tauri
+      - install -Dm755 target/release/mumble-tauri /app/bin/mumble-tauri
+
+      # 3. The mount point for the AGPL bridge extension. `load_signal_bridge`
+      #    walks a candidate list relative to the executable and
+      #    `../lib/fancy-mumble/` is on it, so from /app/bin/mumble-tauri this
+      #    resolves to exactly the directory the extension mounts over. Nothing
+      #    has to be configured at runtime; installing the extension is what
+      #    turns encrypted private chat on.
+      - install -d /app/lib/fancy-mumble
+
+      # 4. Desktop integration.
+      - install -Dm644 crates/mumble-tauri/icons/icon.png
+          /app/share/icons/hicolor/128x128/apps/com.fancy_mumble.FancyMumble.png
+      - install -Dm644 packaging/flatpak/com.fancy_mumble.FancyMumble.desktop
+          /app/share/applications/com.fancy_mumble.FancyMumble.desktop
+      - install -Dm644 packaging/flatpak/com.fancy_mumble.FancyMumble.metainfo.xml
+          /app/share/metainfo/com.fancy_mumble.FancyMumble.metainfo.xml
+
+    sources:
+      - type: git
+        url: https://github.com/Fancy-Mumble/FancyMumble.git
+        tag: v0.3.0
+        commit: efa71528ab1c0883498842dbb418796f82c59bab
+        x-checker-data:
+          type: git
+          tag-pattern: ^v([\d.]+)$
+
+      # Both generated - see packaging/flatpak/generate-sources.sh. Regenerate
+      # them in the same commit that moves the tag above, or the build fails
+      # offline with a lockfile mismatch.
+      - cargo-sources.json
+      - node-sources.json
+
+# The AGPL half, kept as a separate ref rather than bundled. Mounted at
+# /app/lib/fancy-mumble, which is on load_signal_bridge()'s search path.
+#
+# no-autodownload: installing Fancy Mumble does not pull AGPL code onto the
+# machine. A user who wants encrypted private chat opts in with
+#   flatpak install flathub com.fancy_mumble.FancyMumble.SignalBridge
+# autodelete: removing the app removes it again.
+add-extensions:
+  com.fancy_mumble.FancyMumble.SignalBridge:
+    directory: lib/fancy-mumble
+    version: stable
+    add-ld-path: .
+    autodelete: true
+    no-autodownload: true
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/man
+  - '*.a'
+  - '*.la'
