@@ -38,6 +38,18 @@ finish-args:
   - --socket=fallback-x11
   - --device=dri
 
+  # Without this the app aborts on launch in a Wayland session:
+  #
+  #   Failed to initialize gtk backend!: BoolError { message: "Failed to
+  #   initialize GTK", ... gtk::rt::init }
+  #
+  # `fallback-x11` correctly withholds the X11 socket when Wayland is present,
+  # and flatpak then leaves DISPLAY set but *empty* rather than unset. GTK reads
+  # that as "an X display was requested", tries the X11 backend, and aborts
+  # instead of falling back. A backend priority list makes the order explicit:
+  # Wayland first, X11 for an actual X session, which keeps both working.
+  - --env=GDK_BACKEND=wayland,x11
+
   # The whole point of the app: reaching a Mumble server, plus the file-server
   # and live-doc plugin endpoints alongside it.
   - --share=network
