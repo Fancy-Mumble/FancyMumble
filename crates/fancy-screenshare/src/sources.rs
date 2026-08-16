@@ -103,7 +103,23 @@ fn native_sources() -> Result<Vec<CaptureSource>, String> {
         });
     }
 
-    for window in Window::all().map_err(|e| e.to_string())? {
+    // A window list is a window-manager service (`_NET_CLIENT_LIST_STACKING`),
+    // and a bare X server - Xvfb, a kiosk - has no WM to publish it. xcap
+    // reports that absence as an *error*, and propagating it here threw away
+    // the real monitors enumerated just above: the picker then degraded to
+    // the portal-only synthetic cards, and on a server with no portal either
+    // (the same bare X server), a screen share died at start with a portal
+    // error that had nothing to do with anything the user picked. Missing
+    // windows must not disqualify present screens; true Wayland still gets
+    // the synthetic cards because there the monitor list itself is empty.
+    let windows = match Window::all() {
+        Ok(windows) => windows,
+        Err(e) => {
+            tracing::info!("screenshare: window enumeration unavailable ({e}); screens only");
+            Vec::new()
+        }
+    };
+    for window in windows {
         let Ok(id) = window.id() else { continue };
         if window.is_minimized().unwrap_or(true) {
             continue;

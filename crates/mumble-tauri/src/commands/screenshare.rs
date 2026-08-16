@@ -265,21 +265,40 @@ pub(crate) async fn start_screen_broadcast(
         })
         .collect();
     tauri::async_runtime::spawn_blocking(move || {
+        // Take the OLD broadcaster out of the slot and stop it BEFORE the new
+        // one opens its sources. Both halves outside the lock, for the reason
+        // recorded below; but the order between them is not free either. This
+        // used to construct the new broadcaster first and stop the old one
+        // after, and the two then raced for the same devices: a camera share
+        // extended with the screen re-opens the camera while the old capture
+        // thread still holds it, the open lands but every frame read fails
+        // (V4L2: EINVAL) for as long as the old handle lives, and the new
+        // broadcast declares "camera lost" on a device that is fine.
+        //
+        // Stopping the old one first also does not reopen the intercept race
+        // it looks like it might: the SFU's answer is to the *new* offer,
+        // which cannot exist until `start` below has run, so nothing can
+        // arrive for a slot that is briefly empty.
+        let old = broadcaster_slot()
+            .lock()
+            .map_err(|_| "broadcaster mutex poisoned")?
+            .take();
+        if let Some(mut old) = old {
+            // Joins the capture threads, which is what releases the devices.
+            // Held OUTSIDE the lock: a capture teardown wedged in the portal
+            // once held this lock forever - freezing the receive thread and
+            // every later share.
+            old.stop();
+        }
         // Hold the slot lock across construction so the answer racing back
         // from the SFU finds the broadcaster registered (the intercept uses
-        // try_lock and a missed race is healed by the offer retry). The OLD
-        // broadcaster stops OUTSIDE the lock: stopping joins capture threads,
-        // and a capture teardown wedged in the portal once held this lock
-        // forever - freezing the receive thread and every later share.
-        let old = {
+        // try_lock and a missed race is healed by the offer retry).
+        {
             let mut slot = broadcaster_slot()
                 .lock()
                 .map_err(|_| "broadcaster mutex poisoned")?;
             let broadcaster = ScreenBroadcaster::start(broadcast_sources, settings, sink)?;
-            slot.replace(broadcaster)
-        };
-        if let Some(mut old) = old {
-            old.stop();
+            let _ = slot.replace(broadcaster);
         }
         Ok::<(), String>(())
     })

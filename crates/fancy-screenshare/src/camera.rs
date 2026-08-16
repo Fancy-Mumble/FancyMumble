@@ -358,6 +358,17 @@ impl EncodePipeline for CameraPipeline {
     ) -> Result<Option<EncodedFrame>, String> {
         let tick_start = std::time::Instant::now();
 
+        // The outage budget before the broadcast is declared dead. Longer than
+        // the screen pipeline's, deliberately: a camera device that was just
+        // closed - the broadcast restart behind "extend with the screen" does
+        // exactly that - can refuse both frames and reopens with EINVAL for a
+        // second or two while the kernel side settles (v4l2loopback is the
+        // worst offender, real UVC cams do it too). The old budget was ~1 s
+        // with a single mid-budget reopen whose failure made the *next* tick
+        // instantly fatal, so extending a camera share killed the whole
+        // broadcast with "camera lost" while the device was fine.
+        const OUTAGE_BUDGET: u32 = MAX_CAPTURE_FAILURES * 4;
+
         let mut fresh: Option<RgbaImage> = None;
         if let Some(source) = &mut self.source {
             match source.next_frame() {
@@ -367,20 +378,32 @@ impl EncodePipeline for CameraPipeline {
                 }
                 Err(e) => {
                     // Transient stalls happen (exposure changes, USB hiccups);
-                    // a persistent failure means the device is gone. Re-open
-                    // once mid-way through the budget in case the OS handle
-                    // went stale (device re-enumerated).
+                    // a persistent failure means a stale OS handle or a gone
+                    // device. Re-open periodically through the budget - once
+                    // is not enough, because a reopen during the settle window
+                    // yields a handle that still cannot deliver frames.
                     self.failures += 1;
-                    if self.failures == MAX_CAPTURE_FAILURES / 2 {
+                    if self.failures.is_multiple_of(MAX_CAPTURE_FAILURES / 2) {
                         self.source = open_source(self.id).ok();
                     }
-                    if self.failures >= MAX_CAPTURE_FAILURES {
+                    if self.failures >= OUTAGE_BUDGET {
                         return Err(format!("camera lost: {e}"));
                     }
                 }
             }
         } else {
-            self.source = Some(open_source(self.id).map_err(|e| format!("camera lost: {e}"))?);
+            // No handle (a reopen above failed). Keep trying inside the same
+            // budget rather than dying on the first refused open: an open that
+            // fails once during the settle window is not a lost camera.
+            match open_source(self.id) {
+                Ok(source) => self.source = Some(source),
+                Err(e) => {
+                    self.failures += 1;
+                    if self.failures >= OUTAGE_BUDGET {
+                        return Err(format!("camera lost: {e}"));
+                    }
+                }
+            }
         }
         self.timings.capture += tick_start.elapsed();
 
