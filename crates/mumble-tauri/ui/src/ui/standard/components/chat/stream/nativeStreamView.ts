@@ -425,8 +425,29 @@ export function useNativeStreamView(
         const bytes = new Uint8Array(buf, offset + HEADER_LEN, recordLen - HEADER_LEN);
         // The START announcement says what each mid carries; without one
         // the first track is the display, the second the camera.
-        const content = getTrackContentMap(session)[mid] ?? (mid === "0" ? "screen" : "camera");
-        const slot = content === "camera" ? slots.camera : slots.display;
+        const contentMap = getTrackContentMap(session);
+        const content = contentMap[mid] ?? (mid === "0" ? "screen" : "camera");
+        // A camera goes to the camera slot only when a screen track exists
+        // beside it. The camera slot is the PiP, and the PiP is an *aside*:
+        // it mounts only next to a display track (`hasMedia &&
+        // hasCameraMedia` in the viewer components), and the display canvas
+        // itself stays hidden until the display slot paints. Routing a
+        // camera-ONLY share to the PiP slot therefore decodes every frame
+        // against a canvas that can never mount - `markContent` flips
+        // `hasCamera` and drops the frame "so the tile appears", but the
+        // tile's other condition can never come true - and the share is
+        // invisible to everyone, own preview and remote viewers alike. The
+        // webview family binds a camera-only stream to the main <video>, so
+        // the camera takes the display slot here too: a camera-only share
+        // IS the main view.
+        //
+        // When a screen track joins later (share extended), the updated map
+        // moves the camera to the PiP slot; the next IDR re-delivers its
+        // avcC to the new slot (configs are rebuilt from in-band SPS/PPS),
+        // and the slot's keyframe-request loop forces that IDR.
+        const asideCamera =
+          content === "camera" && Object.values(contentMap).includes("screen");
+        const slot = asideCamera ? slots.camera : slots.display;
         if (isConfig) slot.configure(bytes);
         else slot.feed(isH264, keyframe, timestampUs, bytes);
         offset += recordLen;
@@ -498,7 +519,11 @@ function createNativeStatsSampler(session: number): StatsSampler {
       const codecLabel = WEBVIEW_HAS_WEBCODECS ? "H264 (WebCodecs)" : "H264 → JPEG (Rust)";
       const videos: VideoTrackStats[] = (rust?.videos ?? []).map((v) => {
         const content = contentMap[v.mid] ?? (v.mid === "0" ? "screen" : "camera");
-        const m = content === "camera" ? metrics?.camera : metrics?.display;
+        // Slot attribution mirrors the frame routing above: a camera-only
+        // share paints in the display slot, so reading `metrics.camera` for
+        // it reports an idle slot for a track that is decoding fine.
+        const aside = content === "camera" && Object.values(contentMap).includes("screen");
+        const m = aside ? metrics?.camera : metrics?.display;
         return {
           mid: v.mid,
           frameWidth: m && m.width > 0 ? m.width : null,
