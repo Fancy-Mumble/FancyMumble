@@ -1,0 +1,33 @@
+pkgbase = fancy-mumble-bin
+	pkgdesc = Tauri desktop client for Mumble, with rich text chat, screen sharing and E2EE private chat (binary release)
+	pkgver = 0.3.0
+	pkgrel = 1
+	url = https://github.com/Fancy-Mumble/FancyMumble
+	arch = x86_64
+	license = MIT
+	depends = alsa-lib
+	depends = cairo
+	depends = gcc-libs
+	depends = gdk-pixbuf2
+	depends = glib2
+	depends = glibc
+	depends = gtk3
+	depends = hicolor-icon-theme
+	depends = libayatana-appindicator
+	depends = librsvg
+	depends = libsoup3
+	depends = webkit2gtk-4.1
+	optdepends = pipewire: screen and window capture
+	optdepends = xdg-desktop-portal: screen-capture source picker on Wayland
+	optdepends = libva: hardware video encode for screen sharing
+	provides = fancy-mumble=0.3.0
+	conflicts = fancy-mumble
+	options = !strip
+	source = fancy-mumble-0.3.0.deb::https://github.com/Fancy-Mumble/FancyMumble/releases/download/v0.3.0/FancyMumble_0.3.0_amd64.deb
+	source = LICENSE-0.3.0::https://github.com/Fancy-Mumble/FancyMumble/raw/v0.3.0/LICENSE
+	source = fancy-mumble.desktop
+	sha256sums = 12de8ac15bfff11ae8cf4f024d86e17f9f66bafa0a48c60f897c9db6daa130c7
+	sha256sums = 29564c0ee86651c54c1ebb9af05a2d2e0dee10701fd42c1679450d8e318e1fee
+	sha256sums = 3b4b18e80ec4fa74164c3f77db4da36792ddd06907d160997d250a85b284e3e2
+
+pkgname = fancy-mumble-bin

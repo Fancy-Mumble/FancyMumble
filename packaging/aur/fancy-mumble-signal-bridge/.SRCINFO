@@ -1,0 +1,17 @@
+pkgbase = fancy-mumble-signal-bridge
+	pkgdesc = Signal-protocol bridge for end-to-end encrypted private chat in Fancy Mumble
+	pkgver = 0.3.0
+	pkgrel = 1
+	url = https://github.com/Fancy-Mumble/FancyMumble
+	arch = x86_64
+	arch = aarch64
+	license = AGPL-3.0-only
+	makedepends = cargo
+	makedepends = protobuf
+	depends = gcc-libs
+	depends = glibc
+	depends = fancy-mumble
+	source = fancy-mumble-0.3.0.tar.gz::https://github.com/Fancy-Mumble/FancyMumble/archive/refs/tags/v0.3.0.tar.gz
+	sha256sums = a9440f48b7832408590603f56f2fdb02817075cefdd129e06c065e2e8ceb0163
+
+pkgname = fancy-mumble-signal-bridge
