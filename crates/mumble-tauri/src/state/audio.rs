@@ -14,8 +14,9 @@ use super::AppState;
 
 /// Tauri event carrying the latest microphone capture-start result to the
 /// UI. A `null` payload clears any shown error; an object payload shows a
-/// banner. `kind = "device_busy"` is detected from the WASAPI HRESULTs so
-/// the UI can suggest exclusive mode.
+/// banner. `kind = "device_busy"` is detected from the WASAPI HRESULTs
+/// (Windows) or from the ALSA PCM owner (Linux) so the UI can suggest a
+/// way out (exclusive mode / the shared sound-server device).
 pub(crate) const CAPTURE_ERROR_EVENT: &str = "capture-error";
 
 /// True when a capture-start error string reports the device is in use /
@@ -36,7 +37,7 @@ pub(crate) struct CaptureState {
     kind: String,
     /// Raw error message.
     message: String,
-    /// Other apps holding the microphone (best-effort, Windows).
+    /// Other apps holding the microphone (best-effort, Windows + Linux).
     holders: Vec<String>,
 }
 
@@ -58,15 +59,20 @@ pub(crate) fn current_capture_state() -> Option<CaptureState> {
 /// late-mounting views can query it. When the device is busy, includes the
 /// name(s) of the other application(s) holding the microphone.
 pub(crate) fn emit_capture_error(app: Option<&tauri::AppHandle>, err: &str) {
-    let busy = is_device_busy(err);
     #[cfg(target_os = "windows")]
-    let holders: Vec<String> = if busy {
+    let holders: Vec<String> = if is_device_busy(err) {
         fancy_audio_device::capture_device_users()
     } else {
         Vec::new()
     };
-    #[cfg(not(target_os = "windows"))]
+    // Linux: cpal folds EBUSY into "device no longer available", so the
+    // audio backend probes the ALSA PCM owner when the open fails and
+    // leaves the holders for us; a non-empty list IS the busy signal.
+    #[cfg(target_os = "linux")]
+    let holders: Vec<String> = crate::audio::devices::take_busy_holders();
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     let holders: Vec<String> = Vec::new();
+    let busy = is_device_busy(err) || !holders.is_empty();
     let state = CaptureState {
         kind: if busy { "device_busy" } else { "other" }.to_owned(),
         message: err.to_owned(),

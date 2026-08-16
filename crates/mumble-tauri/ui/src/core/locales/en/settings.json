@@ -79,6 +79,8 @@
     "captureBusySuggestExclusive": "Another app is holding your microphone, so it couldn't be opened. Enabling exclusive mode lets this client take the device directly from the driver.",
     "captureBusyExclusiveOn": "The microphone is held exclusively by another app (exclusive mode is already enabled here). Close the other app using it, then try again.",
     "captureBusyGeneric": "The microphone is being used by another application. Close it, or switch to a different input device, then try again.",
+    "captureBusyLinux": "The selected input is the raw ALSA device, and another process is holding it — on most systems that's the sound server (PipeWire or PulseAudio), which keeps the hardware open for all apps. Pick “System default” to capture through the sound server, or close the app that holds it.",
+    "captureUseSystemDefault": "Use system default",
     "captureEnableExclusive": "Enable exclusive mode",
     "captureDismiss": "Dismiss",
     "captureHeldBy": "Currently using it: {{app}}.",

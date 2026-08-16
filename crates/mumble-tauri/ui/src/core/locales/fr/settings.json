@@ -79,6 +79,8 @@
     "captureBusySuggestExclusive": "Une autre application occupe votre microphone, il n'a donc pas pu être ouvert. Le mode exclusif permet à ce client de prendre le périphérique directement depuis le pilote.",
     "captureBusyExclusiveOn": "Le microphone est occupé en exclusivité par une autre application (le mode exclusif est déjà activé ici). Fermez l'autre application qui l'utilise, puis réessayez.",
     "captureBusyGeneric": "Le microphone est utilisé par une autre application. Fermez-la ou choisissez un autre périphérique d'entrée, puis réessayez.",
+    "captureBusyLinux": "L'entrée sélectionnée est le périphérique ALSA brut, et un autre processus le détient — sur la plupart des systèmes il s'agit du serveur audio (PipeWire ou PulseAudio), qui garde le matériel ouvert pour toutes les applications. Choisissez « Système par défaut » pour capturer via le serveur audio, ou fermez l'application qui le détient.",
+    "captureUseSystemDefault": "Utiliser le système par défaut",
     "captureEnableExclusive": "Activer le mode exclusif",
     "captureDismiss": "Fermer",
     "captureHeldBy": "Actuellement utilisé par : {{app}}.",

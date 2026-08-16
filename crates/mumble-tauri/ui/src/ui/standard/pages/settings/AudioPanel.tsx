@@ -18,7 +18,7 @@ import {
   SparklesIcon,
   WarningIcon,
 } from "../../icons";
-import { isDesktopPlatform, isWindows } from "@core/utils/platform";
+import { isDesktopPlatform, isLinux, isWindows } from "@core/utils/platform";
 import { Toggle, SliderField } from "./SharedControls";
 import { DenoiserAdvancedControls } from "./DenoiserAdvancedControls";
 import { ActivationModeSelector } from "./ActivationModeSelector";
@@ -218,6 +218,10 @@ export function AudioPanel({
 
   const busy = captureError?.kind === "device_busy";
   const canSuggestExclusive = busy && isWindows && !settings.exclusive_input;
+  // Linux: a busy device is almost always a raw ALSA endpoint that the
+  // sound server (PipeWire/PulseAudio) keeps open for everyone; the way
+  // out is to capture through the sound server, i.e. the system default.
+  const canSuggestSystemDefault = busy && isLinux && settings.selected_device != null;
 
   return (
     <>
@@ -234,9 +238,11 @@ export function AudioPanel({
               {busy
                 ? canSuggestExclusive
                   ? t("audio.captureBusySuggestExclusive")
-                  : settings.exclusive_input
-                    ? t("audio.captureBusyExclusiveOn")
-                    : t("audio.captureBusyGeneric")
+                  : isLinux
+                    ? t("audio.captureBusyLinux")
+                    : settings.exclusive_input
+                      ? t("audio.captureBusyExclusiveOn")
+                      : t("audio.captureBusyGeneric")
                 : captureError.message}
             </p>
             {busy && captureHolderText && (
@@ -254,6 +260,18 @@ export function AudioPanel({
                 }}
               >
                 {t("audio.captureEnableExclusive")}
+              </button>
+            )}
+            {canSuggestSystemDefault && (
+              <button
+                type="button"
+                className={panelStyles.captureErrorAction}
+                onClick={() => {
+                  onChange({ selected_device: null });
+                  setCaptureError(null);
+                }}
+              >
+                {t("audio.captureUseSystemDefault")}
               </button>
             )}
           </div>

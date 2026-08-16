@@ -21,7 +21,7 @@ use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes};
 use mumble_protocol::audio::resampler::StreamResampler;
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use mumble_protocol::error::{Error, Result};
-use rodio::microphone::{available_inputs, MicrophoneBuilder};
+use rodio::microphone::MicrophoneBuilder;
 use rodio::source::Source;
 use tracing::{debug, trace, warn};
 
@@ -88,8 +88,7 @@ impl RodioCapture {
     /// found, in which case the caller should fall back to the
     /// default device.
     fn find_input_by_name(name: &str) -> Option<rodio::microphone::Input> {
-        let inputs = available_inputs().ok()?;
-        inputs.into_iter().find(|i| i.to_string() == name)
+        super::devices::rodio_input(name)
     }
 }
 
@@ -138,9 +137,16 @@ impl AudioCapture for RodioCapture {
             match Self::find_input_by_name(name) {
                 Some(input) => {
                     debug!("rodio capture: using selected input device '{name}'");
-                    device_builder
-                        .device(input)
-                        .map_err(|e| Error::InvalidState(format!("Open input '{name}': {e}")))?
+                    device_builder.device(input).map_err(|e| {
+                        // rodio's message names the device but drops the
+                        // cpal cause; explain in terms the user can act on
+                        // (who holds the device) where we can.
+                        let cause = error_chain(&e);
+                        let msg = super::devices::find_input(name)
+                            .map(|d| super::devices::describe_open_failure(name, &d, &cause))
+                            .unwrap_or_else(|| format!("Open input '{name}': {cause}"));
+                        Error::InvalidState(msg)
+                    })?
                 }
                 None => {
                     warn!(
@@ -749,18 +755,10 @@ impl RodioMixingPlayback {
         })
     }
 
-    /// Look up a cpal output device by description name (matching the
+    /// Look up a cpal output device by display name (matching the
     /// names returned by `get_output_devices`).
     fn find_output_by_name(name: &str) -> Option<cpal::Device> {
-        use cpal::traits::{DeviceTrait, HostTrait};
-        let host = cpal::default_host();
-        host.output_devices().ok()?.find(|d| {
-            d.description()
-                .ok()
-                .map(|desc| desc.name().to_string())
-                .as_deref()
-                == Some(name)
-        })
+        super::devices::find_output(name)
     }
 }
 
@@ -938,7 +936,7 @@ mod tests {
     #[test]
     #[ignore = "requires audio hardware; run manually with --ignored --nocapture"]
     fn rodio_mic_hw_probe() {
-        match available_inputs() {
+        match rodio::microphone::available_inputs() {
             Ok(inputs) => {
                 for i in &inputs {
                     println!("input device: {i}");

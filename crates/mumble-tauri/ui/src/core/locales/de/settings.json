@@ -79,6 +79,8 @@
     "captureBusySuggestExclusive": "Eine andere App belegt dein Mikrofon, daher konnte es nicht geöffnet werden. Im exklusiven Modus kann dieser Client das Gerät direkt vom Treiber übernehmen.",
     "captureBusyExclusiveOn": "Das Mikrofon wird von einer anderen App exklusiv belegt (der exklusive Modus ist hier bereits aktiviert). Schließe die andere App und versuche es erneut.",
     "captureBusyGeneric": "Das Mikrofon wird von einer anderen Anwendung verwendet. Schließe sie oder wähle ein anderes Eingabegerät und versuche es erneut.",
+    "captureBusyLinux": "Der gewählte Eingang ist das rohe ALSA-Gerät, und ein anderer Prozess hält es offen – auf den meisten Systemen ist das der Sound-Server (PipeWire oder PulseAudio), der die Hardware für alle Anwendungen belegt. Wähle „Systemstandard“, um über den Sound-Server aufzunehmen, oder schließe die Anwendung, die das Gerät belegt.",
+    "captureUseSystemDefault": "Systemstandard verwenden",
     "captureEnableExclusive": "Exklusiven Modus aktivieren",
     "captureDismiss": "Schließen",
     "captureHeldBy": "Wird aktuell verwendet von: {{app}}.",

@@ -22,26 +22,13 @@ pub(crate) async fn get_audio_devices() -> Vec<AudioDevice> {
 
 #[cfg(not(target_os = "android"))]
 fn enumerate_input_devices() -> Vec<AudioDevice> {
-    use cpal::traits::{DeviceTrait, HostTrait};
-
-    let host = cpal::default_host();
-    let default_name = host
-        .default_input_device()
-        .and_then(|d| d.description().ok().map(|desc| desc.name().to_string()));
-
-    host.input_devices()
-        .map(|devices| {
-            devices
-                .filter_map(|d| {
-                    let name = d.description().ok().map(|desc| desc.name().to_string())?;
-                    Some(AudioDevice {
-                        name: name.clone(),
-                        is_default: default_name.as_deref() == Some(&name),
-                    })
-                })
-                .collect()
+    audio::devices::inputs()
+        .into_iter()
+        .map(|d| AudioDevice {
+            name: d.name,
+            is_default: d.is_default,
         })
-        .unwrap_or_default()
+        .collect()
 }
 
 /// Stub: on Android, return an empty device list.
@@ -65,26 +52,13 @@ pub(crate) async fn get_output_devices() -> Vec<AudioDevice> {
 
 #[cfg(not(target_os = "android"))]
 fn enumerate_output_devices() -> Vec<AudioDevice> {
-    use cpal::traits::{DeviceTrait, HostTrait};
-
-    let host = cpal::default_host();
-    let default_name = host
-        .default_output_device()
-        .and_then(|d| d.description().ok().map(|desc| desc.name().to_string()));
-
-    host.output_devices()
-        .map(|devices| {
-            devices
-                .filter_map(|d| {
-                    let name = d.description().ok().map(|desc| desc.name().to_string())?;
-                    Some(AudioDevice {
-                        name: name.clone(),
-                        is_default: default_name.as_deref() == Some(&name),
-                    })
-                })
-                .collect()
+    audio::devices::outputs()
+        .into_iter()
+        .map(|d| AudioDevice {
+            name: d.name,
+            is_default: d.is_default,
         })
-        .unwrap_or_default()
+        .collect()
 }
 
 /// Stub: on Android, return an empty device list.
