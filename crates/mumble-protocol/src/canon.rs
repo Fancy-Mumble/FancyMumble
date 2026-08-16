@@ -16,14 +16,21 @@
 //!
 //! Not translated today, and why:
 //!
-//! * **screenshare** - the canon models a share (`share_id`, explicit
-//!   offer/answer/start/stop) where `WebRtcSignal` is one relayed blob, and it
-//!   has no home for `ICE_CANDIDATE` at all *by design* (the SFU is ICE-lite;
-//!   never trickle through the control plane). Mapping one onto the other is a
-//!   redesign of the signalling, not a translation.
 //! * **link-preview, userdata, plugins admin** - the canon does not cover these
 //!   yet, deliberately: their services do not implement them, and designing a
 //!   wire ahead of the code is what produced the gaps in the first place.
+//!
+//! # Screen sharing
+//!
+//! `WebRtcSignal` was on that list once, on the argument that the canon models
+//! a share where this models a relayed blob. What made that wrong is what
+//! `None` *does*: it routes the feature down the `PluginDataTransmission`
+//! relay, which is client-to-client mesh, so screen sharing worked against
+//! Starling while its SFU never saw a packet - and an SFU is exactly what a
+//! share with more than a couple of viewers needs.
+//!
+//! The canon carries `WebRtcSignal` at inner tag 7 of the screenshare
+//! envelope: same four fields, same numbers, same meanings.
 
 use prost::Message as _;
 
@@ -40,6 +47,8 @@ const PCHAT: u16 = 1006;
 const PUSH: u16 = 1011;
 /// Outer type for server-fetched link previews.
 const LINK_PREVIEW: u16 = 1016;
+/// Outer type for screen- and camera-share signalling.
+const SCREENSHARE: u16 = 1008;
 /// Outer type for the operator record.
 const AUDIT: u16 = 1012;
 /// Outer type for chat and its history - which is where scheduled messages
@@ -171,10 +180,35 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
             return Some((PUSH, subscribe(&update.muted_channels)));
         }
         ControlMessage::FancySubscribePush(subscribe_push) => {
-            return Some((PUSH, subscribe(&subscribe_push.muted_channels)));
+            // Not `subscribe`, which is the *device* mute set. This is the
+            // live-delivery subscription for this session (fork wire 125), and
+            // the two were one body until Starling grew the second: a client
+            // muting a channel for its phone was also silently re-registering
+            // for live delivery, and the server could not tell which had been
+            // asked for.
+            return Some((PUSH, live_subscribe(&subscribe_push.muted_channels)));
         }
         ControlMessage::FancyAuditQuery(query) => {
             return Some((AUDIT, audit_query_to_canon(query)));
+        }
+        // The screen-share signalling, reframed rather than mapped: the canon
+        // carries this message itself, with the same four fields under the same
+        // numbers. `sender_session` goes out empty whatever this client put
+        // there - the server stamps it from the connection the frame arrived
+        // on, and on this path a sender field a client fills is a client
+        // signalling as somebody else, which is hijacking their broadcast.
+        ControlMessage::WebRtcSignal(signal) => {
+            let envelope = fancy::screenshare::ScreenshareEnvelope {
+                body: Some(fancy::screenshare::screenshare_envelope::Body::Signal(
+                    fancy::screenshare::WebRtcSignal {
+                        target_session: signal.target_session.unwrap_or_default(),
+                        sender_session: 0,
+                        signal_type: signal.signal_type.unwrap_or_default(),
+                        payload: signal.payload.clone().unwrap_or_default(),
+                    },
+                )),
+            };
+            return Some((SCREENSHARE, envelope.encode_to_vec()));
         }
         ControlMessage::FancyAuditConfigUpdate(_) => {
             // The epoch-0 shape is a list of `Setting` rows whose schema the
@@ -213,6 +247,115 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
         }
         ControlMessage::PchatMessage(message) => {
             return Some((PCHAT, pchat_message_to_canon(message)));
+        }
+        // -- The fancy_v1 key ladder ---------------------------------------
+        //
+        // Every field below is load-bearing, and the reason this arm is written
+        // out rather than mapped mechanically: the recipient *verifies* these.
+        // An announce is refused unless its Ed25519 self-signature checks out
+        // over the tuple it carries, and a delivery cannot even be opened
+        // without `sender_cert` to resolve the sealer's keys. A translation
+        // that dropped any of them would put a frame on the wire that looks
+        // right, relays fine, and fails at the far end as a crypto error.
+        //
+        // Certificate hashes cross as bytes and live in this client as lowercase
+        // hex, the same convention `pchat_deliver` reads them back under. The
+        // hex form is what the announce signature is computed over, so the
+        // round trip has to be exact - `canon-fixtures.json` is what holds that
+        // to account rather than a comment.
+        ControlMessage::PchatKeyAnnounce(announce) => {
+            let envelope = fancy::pchat::PchatEnvelope {
+                body: Some(fancy::pchat::pchat_envelope::Body::KeyAnnounce(
+                    fancy::pchat::KeyAnnounce {
+                        channel: announce.channel_id.unwrap_or_default(),
+                        epoch: 0,
+                        public_key: announce.identity_public.clone().unwrap_or_default(),
+                        holder_cert: unhex(announce.cert_hash.as_deref().unwrap_or_default()),
+                        signing_public: announce.signing_public.clone().unwrap_or_default(),
+                        signature: announce.signature.clone().unwrap_or_default(),
+                        tls_signature: announce.tls_signature.clone().unwrap_or_default(),
+                        algorithm_version: announce.algorithm_version.unwrap_or_default(),
+                        announced_at_ms: announce.timestamp.unwrap_or_default(),
+                    },
+                )),
+            };
+            return Some((PCHAT, envelope.encode_to_vec()));
+        }
+        ControlMessage::PchatKeyRequest(request) => {
+            let envelope = fancy::pchat::PchatEnvelope {
+                body: Some(fancy::pchat::pchat_envelope::Body::KeyRequest(
+                    fancy::pchat::KeyRequest {
+                        channel: request.channel_id.unwrap_or_default(),
+                        epoch: 0,
+                        requester_key: request.requester_public.clone().unwrap_or_default(),
+                        requester_cert: unhex(
+                            request.requester_hash.as_deref().unwrap_or_default(),
+                        ),
+                        request_id: request.request_id.clone().unwrap_or_default(),
+                        protocol: request.protocol.unwrap_or_default(),
+                        relay_cap: request.relay_cap.unwrap_or_default(),
+                        requested_at_ms: request.timestamp.unwrap_or_default(),
+                    },
+                )),
+            };
+            return Some((PCHAT, envelope.encode_to_vec()));
+        }
+        // A key exchange is this client's name for the canon's `KeyDeliver`.
+        // `recipient` is left 0 deliberately: the sender addresses an identity,
+        // and the server resolves it to a live session from `recipient_cert`,
+        // which is the only end that holds that map.
+        ControlMessage::PchatKeyExchange(exchange) => {
+            let envelope = fancy::pchat::PchatEnvelope {
+                body: Some(fancy::pchat::pchat_envelope::Body::KeyDeliver(
+                    fancy::pchat::KeyDeliver {
+                        channel: exchange.channel_id.unwrap_or_default(),
+                        epoch: exchange.epoch.unwrap_or_default(),
+                        recipient: 0,
+                        sealed_key: exchange.encrypted_key.clone().unwrap_or_default(),
+                        countersignature: exchange.countersignature.clone().unwrap_or_default(),
+                        recipient_cert: unhex(
+                            exchange.recipient_hash.as_deref().unwrap_or_default(),
+                        ),
+                        sender_cert: unhex(exchange.sender_hash.as_deref().unwrap_or_default()),
+                        signature: exchange.signature.clone().unwrap_or_default(),
+                        request_id: exchange.request_id.clone().unwrap_or_default(),
+                        epoch_fingerprint: exchange.epoch_fingerprint.clone().unwrap_or_default(),
+                        parent_fingerprint: exchange.parent_fingerprint.clone().unwrap_or_default(),
+                        countersigner_cert: unhex(
+                            exchange.countersigner_hash.as_deref().unwrap_or_default(),
+                        ),
+                        algorithm_version: exchange.algorithm_version.unwrap_or_default(),
+                        protocol: exchange.protocol.unwrap_or_default(),
+                        delivered_at_ms: exchange.timestamp.unwrap_or_default(),
+                    },
+                )),
+            };
+            return Some((PCHAT, envelope.encode_to_vec()));
+        }
+        // One holder, ourselves: this client reports what it holds, and the
+        // canon's plural carries the whole set a server would have aggregated.
+        ControlMessage::PchatKeyHolderReport(report) => {
+            let envelope = fancy::pchat::PchatEnvelope {
+                body: Some(fancy::pchat::pchat_envelope::Body::HolderReport(
+                    fancy::pchat::HolderReport {
+                        channel: report.channel_id.unwrap_or_default(),
+                        epoch: 0,
+                        holder_certs: vec![unhex(report.cert_hash.as_deref().unwrap_or_default())],
+                        takeover_mode: report.takeover_mode.unwrap_or_default(),
+                    },
+                )),
+            };
+            return Some((PCHAT, envelope.encode_to_vec()));
+        }
+        ControlMessage::PchatKeyHoldersQuery(query) => {
+            let envelope = fancy::pchat::PchatEnvelope {
+                body: Some(fancy::pchat::pchat_envelope::Body::HolderQuery(
+                    fancy::pchat::HolderQuery {
+                        channel: query.channel_id.unwrap_or_default(),
+                    },
+                )),
+            };
+            return Some((PCHAT, envelope.encode_to_vec()));
         }
         ControlMessage::PchatFetch(fetch) => {
             let envelope = fancy::pchat::PchatEnvelope {
@@ -432,15 +575,14 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                         channel_id: Some(typing.channel),
                     },
                 )),
-                Some(Social::Reaction(reaction)) => {
-                    Some(ControlMessage::PchatReactionDeliver(reaction_deliver(
-                        &reaction,
-                    )))
-                }
-                Some(Social::Receipt(receipt)) => Some(
-                    ControlMessage::FancyReadReceiptDeliver(receipt_deliver(&receipt)),
-                ),
-                Some(Social::Poll(poll)) => Some(ControlMessage::FancyPoll(mumble_tcp::FancyPoll {
+                Some(Social::Reaction(reaction)) => Some(ControlMessage::PchatReactionDeliver(
+                    reaction_deliver(&reaction),
+                )),
+                Some(Social::Receipt(receipt)) => Some(ControlMessage::FancyReadReceiptDeliver(
+                    receipt_deliver(&receipt),
+                )),
+                Some(Social::Poll(poll)) => {
+                    Some(ControlMessage::FancyPoll(mumble_tcp::FancyPoll {
                     channel_id: Some(poll.channel),
                     poll_id: Some(poll.poll_id),
                     question: Some(poll.question),
@@ -448,7 +590,8 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                     multiple: Some(poll.multiple),
                     creator_session: session(poll.creator),
                     ..Default::default()
-                })),
+                    }))
+                }
                 Some(Social::Vote(vote)) => {
                     Some(ControlMessage::FancyPollVote(mumble_tcp::FancyPollVote {
                         poll_id: Some(vote.poll_id),
@@ -482,13 +625,16 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 // The server answers a registration; the client's own message
                 // set has no ack type, so the mute set is echoed back as the
                 // update it is a confirmation of.
-                Some(fancy::feature::push_envelope::Body::Subscribe(subscribe)) => {
-                    Some(ControlMessage::FancySubscribePush(
-                        mumble_tcp::FancySubscribePush {
+                Some(fancy::feature::push_envelope::Body::Subscribe(subscribe)) => Some(
+                    ControlMessage::FancySubscribePush(mumble_tcp::FancySubscribePush {
                             muted_channels: subscribe.muted,
-                        },
-                    ))
-                }
+                    }),
+                ),
+                Some(fancy::feature::push_envelope::Body::LiveSubscribe(subscribe)) => Some(
+                    ControlMessage::FancySubscribePush(mumble_tcp::FancySubscribePush {
+                        muted_channels: subscribe.muted,
+                    }),
+                ),
                 _ => None,
             })
         }
@@ -519,6 +665,27 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                     ))
                 }
                 Some(fancy::feature::link_preview_envelope::Body::Request(_)) | None => None,
+            })
+        }
+        SCREENSHARE => {
+            let Ok(envelope) = fancy::screenshare::ScreenshareEnvelope::decode(payload) else {
+                return Ok(None);
+            };
+            Ok(match envelope.body {
+                Some(fancy::screenshare::screenshare_envelope::Body::Signal(signal)) => {
+                    Some(ControlMessage::WebRtcSignal(mumble_tcp::WebRtcSignal {
+                        target_session: Some(signal.target_session),
+                        sender_session: Some(signal.sender_session),
+                        signal_type: Some(signal.signal_type),
+                        payload: Some(signal.payload),
+                    }))
+                }
+                // The share canon's own arms. This client speaks the signal
+                // dialect and has no handler for them, and inventing one here
+                // would be translating into a vocabulary the app above does not
+                // have. `None` leaves them to the codec's unknown-arm path,
+                // which is what a message from a newer peer should hit.
+                _ => None,
             })
         }
         AUDIT => {
@@ -610,6 +777,66 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                         total_stored: Some(
                             u32::try_from(response.total_stored).unwrap_or(u32::MAX),
                         ),
+                    }),
+                ),
+                // The key ladder, relayed to us by a peer. The inverse of the
+                // arms in `to_canon`, and lossless in the same way: what
+                // arrives here is what the peer's key manager will verify.
+                Some(fancy::pchat::pchat_envelope::Body::KeyAnnounce(announce)) => Some(
+                    ControlMessage::PchatKeyAnnounce(mumble_tcp::PchatKeyAnnounce {
+                        algorithm_version: Some(announce.algorithm_version),
+                        identity_public: Some(announce.public_key.clone()),
+                        signing_public: Some(announce.signing_public.clone()),
+                        cert_hash: Some(hex(&announce.holder_cert)),
+                        timestamp: Some(announce.announced_at_ms),
+                        signature: Some(announce.signature.clone()),
+                        tls_signature: Some(announce.tls_signature.clone()),
+                        channel_id: Some(announce.channel),
+                    }),
+                ),
+                Some(fancy::pchat::pchat_envelope::Body::KeyRequest(request)) => Some(
+                    ControlMessage::PchatKeyRequest(mumble_tcp::PchatKeyRequest {
+                        channel_id: Some(request.channel),
+                        protocol: Some(request.protocol),
+                        requester_hash: Some(hex(&request.requester_cert)),
+                        requester_public: Some(request.requester_key.clone()),
+                        request_id: Some(request.request_id.clone()),
+                        timestamp: Some(request.requested_at_ms),
+                        relay_cap: Some(request.relay_cap),
+                    }),
+                ),
+                Some(fancy::pchat::pchat_envelope::Body::KeyDeliver(deliver)) => Some(
+                    ControlMessage::PchatKeyExchange(mumble_tcp::PchatKeyExchange {
+                        channel_id: Some(deliver.channel),
+                        protocol: Some(deliver.protocol),
+                        epoch: Some(deliver.epoch),
+                        encrypted_key: Some(deliver.sealed_key.clone()),
+                        sender_hash: Some(hex(&deliver.sender_cert)),
+                        recipient_hash: Some(hex(&deliver.recipient_cert)),
+                        request_id: Some(deliver.request_id.clone()),
+                        timestamp: Some(deliver.delivered_at_ms),
+                        algorithm_version: Some(deliver.algorithm_version),
+                        signature: Some(deliver.signature.clone()),
+                        parent_fingerprint: Some(deliver.parent_fingerprint.clone()),
+                        epoch_fingerprint: Some(deliver.epoch_fingerprint.clone()),
+                        countersignature: Some(deliver.countersignature.clone()),
+                        countersigner_hash: Some(hex(&deliver.countersigner_cert)),
+                    }),
+                ),
+                // One report per holder, which is the shape this client's
+                // handler folds in; the canon carries the set a server would
+                // have aggregated, so a multi-holder report becomes the first
+                // entry and the rest arrive as their own reports.
+                Some(fancy::pchat::pchat_envelope::Body::HolderReport(report)) => Some(
+                    ControlMessage::PchatKeyHolderReport(mumble_tcp::PchatKeyHolderReport {
+                        channel_id: Some(report.channel),
+                        cert_hash: report.holder_certs.first().map(|cert| hex(cert)),
+                        takeover_mode: Some(report.takeover_mode),
+                    }),
+                ),
+                Some(fancy::pchat::pchat_envelope::Body::HolderQuery(query)) => Some(
+                    ControlMessage::PchatKeyHoldersQuery(mumble_tcp::PchatKeyHoldersQuery {
+                        channel_id: Some(query.channel),
                     }),
                 ),
                 _ => None,
@@ -828,6 +1055,23 @@ fn subscribe(muted: &[u32]) -> Vec<u8> {
     .encode_to_vec()
 }
 
+/// The same list, asking for live delivery to *this session* rather than for
+/// quiet on this device.
+///
+/// The client sends both after a sync and both when the user changes a mute,
+/// carrying the same set; they are separate bodies because they are separate
+/// questions, and the server answers them in different places.
+fn live_subscribe(muted: &[u32]) -> Vec<u8> {
+    fancy::feature::PushEnvelope {
+        body: Some(fancy::feature::push_envelope::Body::LiveSubscribe(
+            fancy::feature::LiveSubscribe {
+                muted: muted.to_vec(),
+            },
+        )),
+    }
+    .encode_to_vec()
+}
+
 /// A session id, or `None` when the canon left it unset.
 ///
 /// proto3 cannot tell an unset `uint32` from a zero, and this client's messages
@@ -841,6 +1085,16 @@ fn session(id: u32) -> Option<u32> {
 /// Lower-case hex, the form cert hashes are compared in throughout the client.
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+/// The inverse of [`hex`], for a certificate hash on its way to the canon.
+///
+/// Lenient by borrowing `fancy_utils`: a malformed hash yields short bytes
+/// rather than an error, and the far end refuses it on the signature it fails
+/// to verify - a better failure than a frame this client declines to send for
+/// a reason the user cannot see.
+fn unhex(value: &str) -> Vec<u8> {
+    fancy_utils::hex::hex_to_bytes(value)
 }
 
 #[cfg(test)]
@@ -1197,16 +1451,71 @@ mod tests {
 
     #[test]
     fn a_message_with_no_faithful_canon_form_is_left_to_the_relay() {
-        // Screen-share signalling: the canon models a share where this models a
-        // relayed blob, and it has no home for a trickled ICE candidate at all.
-        // Truncating it into the nearest canon shape would lose the candidate
-        // and break the connection; the relay carries it intact.
-        let signal = ControlMessage::WebRtcSignal(mumble_tcp::WebRtcSignal {
+        // An audit config write: the epoch-0 shape is key/value rows whose
+        // schema the plugin owned, and the canon has three typed fields.
+        // Guessing which key means `retention_days` is how a config write
+        // silently sets the wrong thing.
+        let write = ControlMessage::FancyAuditConfigUpdate(mumble_tcp::FancyAuditConfigUpdate {
+            settings: Vec::new(),
+        });
+        assert!(to_canon(&write).is_none());
+    }
+
+    #[test]
+    fn screen_share_signalling_crosses_intact_in_both_directions() {
+        // The translation that decides whether the server's SFU is reachable at
+        // all: with no canon form this went down the `PluginData` relay, which
+        // is client-to-client mesh, and the SFU never saw a packet.
+        let sent = ControlMessage::WebRtcSignal(mumble_tcp::WebRtcSignal {
+            target_session: Some(7),
+            sender_session: Some(999),
+            signal_type: Some(2),
+            payload: Some("v=0 offer".to_owned()),
+        });
+        let (outer, payload) = to_canon(&sent).expect("screenshare has a canon home");
+        assert_eq!(outer, SCREENSHARE);
+
+        let envelope = fancy::screenshare::ScreenshareEnvelope::decode(payload.as_slice()).unwrap();
+        let Some(fancy::screenshare::screenshare_envelope::Body::Signal(signal)) = envelope.body
+        else {
+            panic!("expected a WebRtcSignal");
+        };
+        assert_eq!(signal.target_session, 7);
+        assert_eq!(signal.signal_type, 2);
+        assert_eq!(signal.payload, "v=0 offer");
+        assert_eq!(
+            signal.sender_session, 0,
+            "identity is the server's to stamp; on this path a sender field a \
+             client fills is a client hijacking somebody else's broadcast"
+        );
+
+        let back = from_canon(outer, &payload).unwrap().expect("decodes");
+        let ControlMessage::WebRtcSignal(returned) = back else {
+            panic!("expected a WebRtcSignal back");
+        };
+        assert_eq!(returned.target_session, Some(7));
+        assert_eq!(returned.signal_type, Some(2));
+        assert_eq!(returned.payload.as_deref(), Some("v=0 offer"));
+    }
+
+    #[test]
+    fn an_ice_candidate_still_crosses_even_though_nothing_sends_one() {
+        // The half of the old objection that was about `ICE_CANDIDATE` having
+        // no home. It has one now, and it matters that it does: this client
+        // stopped trickling when the SFU turned out to be ICE-lite, but a peer
+        // that trickles anyway must not have its signalling silently reshaped.
+        let candidate = ControlMessage::WebRtcSignal(mumble_tcp::WebRtcSignal {
             signal_type: Some(4),
             payload: Some("candidate:...".to_owned()),
             ..Default::default()
         });
-        assert!(to_canon(&signal).is_none());
+        let (_, payload) = to_canon(&candidate).expect("a candidate has a home");
+        let back = from_canon(SCREENSHARE, &payload).unwrap().expect("decodes");
+        let ControlMessage::WebRtcSignal(returned) = back else {
+            panic!("expected a WebRtcSignal back");
+        };
+        assert_eq!(returned.signal_type, Some(4));
+        assert_eq!(returned.payload.as_deref(), Some("candidate:..."));
     }
 
     #[test]
@@ -1271,6 +1580,39 @@ mod tests {
                 "type {label} encodes into the canon but nothing decodes it back"
             );
         }
+    }
+
+    #[test]
+    fn muting_a_device_and_subscribing_a_session_are_different_messages() {
+        // They were one: both translated to `Subscribe`, so a user muting a
+        // channel for their phone also re-registered for live delivery, and
+        // Starling could not tell which of the two had been asked for. The
+        // fork carries them as separate wire types (123 and 125) for the same
+        // reason, and they are answered in different places on the server.
+        let update = ControlMessage::FancyPushUpdate(mumble_tcp::FancyPushUpdate {
+            muted_channels: vec![7],
+        });
+        let (outer, payload) = to_canon(&update).expect("push update has a canon home");
+        assert_eq!(outer, PUSH);
+        let envelope = fancy::feature::PushEnvelope::decode(payload.as_slice()).unwrap();
+        assert!(
+            matches!(
+                envelope.body,
+                Some(fancy::feature::push_envelope::Body::Subscribe(_))
+            ),
+            "a device mute update is a Subscribe"
+        );
+
+        let subscribe = ControlMessage::FancySubscribePush(mumble_tcp::FancySubscribePush {
+            muted_channels: vec![7],
+        });
+        let (outer, payload) = to_canon(&subscribe).expect("live subscribe has a canon home");
+        assert_eq!(outer, PUSH);
+        let envelope = fancy::feature::PushEnvelope::decode(payload.as_slice()).unwrap();
+        let Some(fancy::feature::push_envelope::Body::LiveSubscribe(live)) = envelope.body else {
+            panic!("a live subscription is a LiveSubscribe");
+        };
+        assert_eq!(live.muted, vec![7], "and it still carries the whole set");
     }
 
     #[test]

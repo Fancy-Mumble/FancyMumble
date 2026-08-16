@@ -12,7 +12,51 @@ message ScreenshareEnvelope {
     Stop stop = 4;
     Viewers viewers = 5;
     Health health = 6;
+    WebRtcSignal signal = 7;
   }
+}
+
+// Epoch-0 type 120, which is the signalling this client speaks: one relayed
+// blob per step rather than a share with an identity. It is here, at inner tag
+// 7, because the alternative was worse in both directions - this client's whole
+// screen-share stack is built on it, and a canon with no home for it left
+// `canon.rs` returning `None`, which routes the feature down the
+// `PluginDataTransmission` relay. That relay works, and it is pure client-to-
+// client mesh: the server's SFU never sees a packet, so the one deployment that
+// needs an SFU - more than a couple of viewers - is the one that cannot have it.
+//
+// The field numbers are murmur's `WebRtcSignal`, deliberately. The two are
+// separate messages in separate contracts and nothing requires them to agree,
+// but this client, the C++ fork and Starling all reason about the same four
+// fields, and a renumbering here would be a difference with no meaning behind
+// it.
+message WebRtcSignal {
+  // Who it is for; 0 means the sender's whole channel.
+  uint32 target_session = 1;
+  // Who it is from. **Stamped by the server**, and whatever a client puts here
+  // is overwritten: a sender field a client fills is a client signalling as
+  // somebody else, which on this path means hijacking their broadcast.
+  uint32 sender_session = 2;
+
+  enum SignalType {
+    // START is zero, which is murmur's numbering and therefore not negotiable.
+    // In proto3 that also makes it the value an absent field decodes to, so a
+    // signal with no type reads as START - exactly what murmur's `signal_type()`
+    // accessor returns for the same message, so the behaviour is unchanged.
+    START = 0;
+    STOP = 1;
+    SDP_OFFER = 2;
+    SDP_ANSWER = 3;
+    // Accepted and dropped. The SFU is ICE-lite: it learns the peer's address
+    // from the incoming STUN binding requests and its own candidate rides in
+    // the answer, so a trickled candidate has nothing to do. This client
+    // already does not send them; a peer that does is not an error.
+    ICE_CANDIDATE = 4;
+  }
+  SignalType signal_type = 3;
+
+  // SDP for the offer and answer types, JSON for a candidate, empty otherwise.
+  string payload = 4;
 }
 
 // The SFU is ICE-lite: it ignores trickled candidates and its own ride in the

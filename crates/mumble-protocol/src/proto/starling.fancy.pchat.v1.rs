@@ -39,14 +39,14 @@ pub mod pchat_envelope {
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Message {
-    /// UUIDv7 as a string on the wire, kept as 16 bytes in storage - the wire
+    /// UUIDv7 as a string on the wire, kept as 16 bytes in storage, the wire
     /// type does not change (docs/STORAGE.md L3).
     #[prost(string, tag = "1")]
     pub message_id: ::prost::alloc::string::String,
     #[prost(uint32, tag = "2")]
     pub channel: u32,
     /// Who sent it, *while they are connected*. Server-stamped, and useful for
-    /// addressing a live reply - but not an identity, because session ids are
+    /// addressing a live reply, but not an identity, because session ids are
     /// handed out per connection and reused.
     #[prost(uint32, tag = "3")]
     pub sender: u32,
@@ -61,7 +61,7 @@ pub struct Message {
     /// Who sent it, durably: the SHA-1 of their leaf certificate.
     ///
     /// **Server-stamped from the TLS connection, never read from the client.**
-    /// That is what makes it an identity rather than a claim - a client cannot
+    /// That is what makes it an identity rather than a claim, a client cannot
     /// attribute a message to somebody else, and the recipient's crypto verifies
     /// against the key announced for this same hash.
     ///
@@ -168,11 +168,32 @@ pub struct KeyAnnounce {
     pub channel: u32,
     #[prost(uint32, tag = "2")]
     pub epoch: u32,
+    /// The X25519 key agreement key. Named `public_key` from when this message
+    /// modelled a single key; `fancy_v1` has two and the signing half is below.
     #[prost(bytes = "vec", tag = "3")]
     pub public_key: ::prost::alloc::vec::Vec<u8>,
     /// Whose key this is. Refused unless it is the sender's own certificate.
     #[prost(bytes = "vec", tag = "4")]
     pub holder_cert: ::prost::alloc::vec::Vec<u8>,
+    /// Ed25519 verification key. 32 bytes for algorithm_version 1.
+    #[prost(bytes = "vec", tag = "5")]
+    pub signing_public: ::prost::alloc::vec::Vec<u8>,
+    /// Ed25519 self-signature over the tuple above. 64 bytes.
+    #[prost(bytes = "vec", tag = "6")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+    /// Signature by the TLS identity, binding this announce to the certificate
+    /// the connection presented.
+    #[prost(bytes = "vec", tag = "7")]
+    pub tls_signature: ::prost::alloc::vec::Vec<u8>,
+    /// 1 = X25519 + Ed25519. A recipient refuses a version it does not implement
+    /// rather than guessing at the key lengths.
+    #[prost(uint32, tag = "8")]
+    pub algorithm_version: u32,
+    /// Anti-rollback: a recipient discards an announce that does not advance on
+    /// the newest it holds for this identity, so a replayed old key cannot
+    /// displace a current one.
+    #[prost(uint64, tag = "9")]
+    pub announced_at_ms: u64,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct KeyRequest {
@@ -186,6 +207,21 @@ pub struct KeyRequest {
     /// unless it is the sender's own certificate.
     #[prost(bytes = "vec", tag = "4")]
     pub requester_cert: ::prost::alloc::vec::Vec<u8>,
+    /// Correlates the answer with this request. `fancy_v1` evaluates consensus
+    /// across several answers to one request before trusting a key, so an answer
+    /// that cannot be tied back to what was asked cannot take part in it.
+    #[prost(string, tag = "5")]
+    pub request_id: ::prost::alloc::string::String,
+    /// Which pchat protocol is being asked for; a key is only meaningful under
+    /// the protocol it belongs to.
+    #[prost(int32, tag = "6")]
+    pub protocol: i32,
+    /// How many onward relays the requester will accept, so a request cannot be
+    /// amplified indefinitely by intermediaries.
+    #[prost(uint32, tag = "7")]
+    pub relay_cap: u32,
+    #[prost(uint64, tag = "8")]
+    pub requested_at_ms: u64,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct KeyDeliver {
@@ -194,7 +230,9 @@ pub struct KeyDeliver {
     #[prost(uint32, tag = "2")]
     pub epoch: u32,
     /// Where to send it. A session, because this is the one arm the server
-    /// unicasts and routing needs a live connection.
+    /// unicasts and routing needs a live connection. May be left 0, in which case
+    /// the server resolves it from `recipient_cert`: a sender addresses an
+    /// identity, and only the server holds the identity-to-connection map.
     #[prost(uint32, tag = "3")]
     pub recipient: u32,
     #[prost(bytes = "vec", tag = "4")]
@@ -202,13 +240,40 @@ pub struct KeyDeliver {
     #[prost(bytes = "vec", tag = "5")]
     pub countersignature: ::prost::alloc::vec::Vec<u8>,
     /// Who it was sealed *for*, which is not the same question as where to send
-    /// it - and the difference is a real race: the requester can disconnect
+    /// it, and the difference is a real race: the requester can disconnect
     /// between asking and being answered, and a recycled session id would hand
     /// the reply to whoever holds that number now. The recipient compares this
     /// against its own certificate and discards a delivery meant for somebody
     /// else, which it cannot do from a session id alone.
     #[prost(bytes = "vec", tag = "6")]
     pub recipient_cert: ::prost::alloc::vec::Vec<u8>,
+    /// Who sealed it. The recipient resolves the sender's key-agreement and
+    /// signing keys from this to open the envelope at all, so a delivery without
+    /// it is undecryptable no matter how intact the ciphertext is - the single
+    /// field whose absence made this arm unusable for `fancy_v1`.
+    #[prost(bytes = "vec", tag = "7")]
+    pub sender_cert: ::prost::alloc::vec::Vec<u8>,
+    /// Ed25519 signature by the sender over the sealed key and its context.
+    #[prost(bytes = "vec", tag = "8")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+    /// The `KeyRequest.request_id` this answers, for consensus evaluation.
+    #[prost(string, tag = "9")]
+    pub request_id: ::prost::alloc::string::String,
+    /// Identifies the key epoch this delivers, and the one it descends from, so a
+    /// recipient can place it in the ladder rather than trusting it flat.
+    #[prost(bytes = "vec", tag = "10")]
+    pub epoch_fingerprint: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "11")]
+    pub parent_fingerprint: ::prost::alloc::vec::Vec<u8>,
+    /// Who countersigned, when `countersignature` is present.
+    #[prost(bytes = "vec", tag = "12")]
+    pub countersigner_cert: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint32, tag = "13")]
+    pub algorithm_version: u32,
+    #[prost(int32, tag = "14")]
+    pub protocol: i32,
+    #[prost(uint64, tag = "15")]
+    pub delivered_at_ms: u64,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct HolderReport {
@@ -218,6 +283,11 @@ pub struct HolderReport {
     pub epoch: u32,
     #[prost(bytes = "vec", repeated, tag = "3")]
     pub holder_certs: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    /// Whether this report claims the key by takeover rather than by holding it
+    /// already, which is what lets recipients distinguish a new custodian from a
+    /// peer restating what they knew.
+    #[prost(int32, tag = "4")]
+    pub takeover_mode: i32,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct HolderQuery {
@@ -249,7 +319,7 @@ pub struct Delete {
 }
 /// The end-to-end schemes a message can be sealed under.
 ///
-/// The server never acts on this - it cannot read any of them - but it is on the
+/// The server never acts on this (it cannot read any of them) but it is on the
 /// wire because the recipient has to know which one to try.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

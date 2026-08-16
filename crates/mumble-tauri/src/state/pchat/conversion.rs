@@ -44,6 +44,8 @@ pub(crate) fn wire_key_announce_to_proto(w: &WireKeyAnnounce) -> mumble_tcp::Pch
         timestamp: Some(w.timestamp),
         signature: Some(w.signature.clone()),
         tls_signature: Some(w.tls_signature.clone()),
+        // Filled by the caller, which knows the room being announced into.
+        channel_id: None,
     }
 }
 

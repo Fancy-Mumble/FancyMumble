@@ -259,6 +259,7 @@ message PushEnvelope {
     Unregister unregister = 2;
     Subscribe subscribe = 3;
     PushAck ack = 4;
+    LiveSubscribe live_subscribe = 5;
   }
 }
 
@@ -287,6 +288,25 @@ message Unregister {
 // forgotten that one", the same reason `permissions.TokenSet` replaces rather
 // than adds.
 message Subscribe {
+  repeated uint32 muted = 1;
+}
+
+// "Send me messages from channels I am not in, while I am here."
+//
+// The fork's `FancySubscribePush` (wire 125), and a different feature from
+// `Subscribe` above however alike the two look: that one is about a *device*
+// that is asleep, this one is about a *session* that is connected. A subscriber
+// is added to the recipients of a text message addressed at a channel they hold
+// `SubscribePush` in, without joining it and without a listener. It is how a
+// phone that is awake sees the room it has notifications for.
+//
+// Session-scoped, so it needs no account and dies with the connection --
+// deliberately, since a subscription that outlived the session would belong to
+// whoever inherits the session id.
+//
+// `muted` is an exclusion list, as everywhere else here: the channels to leave
+// out of that delivery, and the whole set is replaced on every send.
+message LiveSubscribe {
   repeated uint32 muted = 1;
 }
 

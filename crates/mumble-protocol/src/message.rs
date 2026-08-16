@@ -761,9 +761,10 @@ mod tests {
         // Not carried: it must not acquire a service type on the way out. The
         // codec above turns these into a relay before they reach `encode`; what
         // is asserted here is that `encode` itself invents no framing for one.
-        let uncarried = ControlMessage::WebRtcSignal(mumble_tcp::WebRtcSignal {
-            signal_type: Some(4),
-            payload: Some("candidate:...".into()),
+        // Untranslated today; the sample is here for that property alone.
+        // `WebRtcSignal` stood here until the canon grew a home for it.
+        let uncarried = ControlMessage::FancyWatchSync(mumble_tcp::FancyWatchSync {
+            session_id: Some("sess-4".into()),
             ..Default::default()
         });
         assert!(crate::canon::to_canon(&uncarried).is_none(), "premise");

@@ -49,6 +49,18 @@
       "outer": 1006,
       "hex": "03ee000000081206080412021832",
       "means": "PchatEnvelope{ Fetch{ channel: 4, page: Cursor{ limit: 50 } } }"
+    },
+    {
+      "name": "pchat: a fancy_v1 key announce into channel 4",
+      "outer": 1006,
+      "hex": "03ee000000a42aa10108041a2011111111111111111111111111111111111111111111111111111111111111112204aabbccdd2a2022222222222222222222222222222222222222222222222222222222222222223240333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333a08444444444444444440014880d095ffbc31",
+      "means": "PchatEnvelope{ KeyAnnounce{ channel: 4, public_key: 32x11, holder_cert: aabbccdd, signing_public: 32x22, signature: 64x33, tls_signature: 8x44, algorithm_version: 1, announced_at_ms: 1700000000000 } } -- the identity proof must survive whole: a recipient refuses an announce whose self-signature does not verify over exactly these fields"
+    },
+    {
+      "name": "pchat: a fancy_v1 key delivery sealed to one recipient",
+      "outer": 1006,
+      "hex": "03ee0000008f3a8c01080410032204deadbeef2a0888888888888888883204112233443a04aabbccdd4240555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555554a03722d31520877777777777777775a086666666666666666620455667788680170027880d095ffbc31",
+      "means": "PchatEnvelope{ KeyDeliver{ channel: 4, epoch: 3, recipient: 0 (server resolves from recipient_cert), sealed_key: deadbeef, countersignature: 8x88, recipient_cert: 11223344, sender_cert: aabbccdd, signature: 64x55, request_id: 'r-1', epoch_fingerprint: 8x77, parent_fingerprint: 8x66, countersigner_cert: 55667788, algorithm_version: 1, protocol: 2, delivered_at_ms: 1700000000000 } } -- without sender_cert the recipient cannot resolve the sealer's keys and the envelope is unopenable"
     }
   ]
 }
