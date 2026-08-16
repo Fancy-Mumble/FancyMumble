@@ -20,6 +20,12 @@ const APPLICATIONS_DIR: &str = "applications";
 const ICON_SUBDIR: &str = "icons/hicolor/256x256/apps";
 /// Desktop file name (must match the GTK application ID).
 const DESKTOP_FILE_NAME: &str = "com.fancymumble.app.desktop";
+/// Desktop file name for a build running straight out of `target/`.
+///
+/// A separate file, so a working copy and an installed Fancy Mumble - a
+/// Flatpak, a `.deb`, the AUR package - show up as two clearly different
+/// launcher entries instead of two identical ones.
+const DEV_DESKTOP_FILE_NAME: &str = "com.fancymumble.app.dev.desktop";
 /// Icon name (without extension) referenced by the desktop file.
 const ICON_NAME: &str = "com.fancymumble.app";
 
@@ -28,16 +34,33 @@ const SOCKET_NAME: &str = "com.fancymumble.app.sock";
 
 // -- Desktop file template ------------------------------------------------
 
+/// Is this binary running out of a cargo build directory?
+///
+/// `cfg!(debug_assertions)` is the wrong test: a local `cargo build --release`
+/// is still a working copy, and that is precisely the case that used to install
+/// a launcher entry indistinguishable from a packaged one. The install path is
+/// what actually separates them - a packaged build lives in `/usr/bin`,
+/// `/app/bin` or an AppImage mount, never in `target/`.
+fn is_dev_build(exec_path: &str) -> bool {
+    exec_path.contains("/target/debug/") || exec_path.contains("/target/release/")
+}
+
 /// Render the `.desktop` file contents.
 ///
 /// `exec_path` is substituted into the `Exec` lines so that quick actions
-/// work regardless of where the binary is installed.
-fn desktop_file_contents(exec_path: &str) -> String {
+/// work regardless of where the binary is installed. `dev` marks the entry as
+/// a working copy so it is tellable apart from an installed Fancy Mumble.
+fn desktop_file_contents(exec_path: &str, dev: bool) -> String {
+    let name = if dev {
+        "Fancy Mumble (Dev)"
+    } else {
+        "Fancy Mumble"
+    };
     format!(
         "\
 [Desktop Entry]
 Type=Application
-Name=Fancy Mumble
+Name={name}
 GenericName=Mumble Client
 Comment=Modern Mumble voice chat client
 Exec={exec_path} %U
@@ -117,8 +140,30 @@ pub fn install_desktop_entry() {
         return;
     }
 
-    let desktop_path = apps_dir.join(DESKTOP_FILE_NAME);
-    let contents = desktop_file_contents(&exec_path);
+    let dev = is_dev_build(&exec_path);
+    let desktop_path = apps_dir.join(if dev {
+        DEV_DESKTOP_FILE_NAME
+    } else {
+        DESKTOP_FILE_NAME
+    });
+    let contents = desktop_file_contents(&exec_path, dev);
+
+    // Earlier versions wrote the plain name from a working copy too, so a
+    // machine that has ever run one carries a stale entry pointing into
+    // `target/` - the duplicate this split exists to remove. Only ever touches
+    // the per-user copy; a packaged install owns /usr/share and is untouched.
+    if dev {
+        let stale = apps_dir.join(DESKTOP_FILE_NAME);
+        if std::fs::read_to_string(&stale)
+            .map(|c| c.contains("/target/debug/") || c.contains("/target/release/"))
+            .unwrap_or(false)
+        {
+            match std::fs::remove_file(&stale) {
+                Ok(()) => info!("Removed stale dev desktop file: {}", stale.display()),
+                Err(e) => warn!("Failed to remove {}: {e}", stale.display()),
+            }
+        }
+    }
 
     // Only write when changed (avoids unnecessary inotify churn).
     let needs_write = std::fs::read_to_string(&desktop_path)
@@ -365,8 +410,26 @@ mod tests {
     }
 
     #[test]
+    fn dev_build_is_detected_by_cargo_target_path() {
+        assert!(is_dev_build("/home/u/src/client/target/release/mumble-tauri"));
+        assert!(is_dev_build("/home/u/src/client/target/debug/mumble-tauri"));
+        // Packaged installs, which must keep the plain entry.
+        assert!(!is_dev_build("/usr/bin/mumble-tauri"));
+        assert!(!is_dev_build("/app/bin/mumble-tauri"));
+    }
+
+    #[test]
+    fn dev_entry_is_named_apart_from_an_installed_one() {
+        let dev = desktop_file_contents("/home/u/src/client/target/release/mumble-tauri", true);
+        assert!(dev.contains("Name=Fancy Mumble (Dev)"));
+        let packaged = desktop_file_contents("/usr/bin/mumble-tauri", false);
+        assert!(packaged.contains("Name=Fancy Mumble\n"));
+        assert_ne!(DESKTOP_FILE_NAME, DEV_DESKTOP_FILE_NAME);
+    }
+
+    #[test]
     fn desktop_file_contains_required_fields() {
-        let content = desktop_file_contents("/usr/bin/fancy-mumble");
+        let content = desktop_file_contents("/usr/bin/fancy-mumble", false);
         assert!(content.contains("Name=Fancy Mumble"));
         assert!(content.contains("Exec=/usr/bin/fancy-mumble %U"));
         assert!(content.contains("[Desktop Action mute]"));
