@@ -56,8 +56,9 @@ pub(crate) use key_exchange::{
 
 // Key sharing
 pub(crate) use key_sharing::{
-    handle_proto_key_challenge, handle_proto_key_challenge_result, query_key_holders,
-    send_key_holder_report_async, send_key_takeover,
+    handle_proto_key_challenge, handle_proto_key_challenge_result, handle_proto_key_holder_report,
+    handle_proto_key_holders_query, query_key_holders, send_key_announce,
+    send_key_holder_report_async, send_key_takeover, should_mint_archive_key,
 };
 
 // Signal bridge

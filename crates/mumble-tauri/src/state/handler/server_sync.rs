@@ -361,7 +361,14 @@ impl HandlerContext {
     fn spawn_key_announce_and_channel_init(&self) {
         let shared = Arc::clone(&self.shared);
         let _key_announce_task = tokio::spawn(async move {
-            send_key_announce(&shared).await;
+            // The channel we land in on connect; an archive room we join later
+            // announces again on the way in.
+            let landing = shared
+                .lock()
+                .ok()
+                .and_then(|s| s.current_channel)
+                .unwrap_or(0);
+            pchat::send_key_announce(&shared, landing).await;
 
             let (ch, mode) = resolve_initial_channel(&shared);
             debug!(channel = ?ch, mode = ?mode, "pchat: initial channel/mode resolved");
@@ -450,41 +457,6 @@ impl PchatState {
 // Async helpers (used inside tokio::spawn, no access to HandlerContext)
 // ---------------------------------------------------------------------------
 
-/// Build and send the `PchatKeyAnnounce` message to the server.
-async fn send_key_announce(shared: &Arc<Mutex<SharedState>>) {
-    let (announce_proto, cert, handle) = {
-        let state = shared.lock().ok();
-        if let Some(ref s) = state {
-            if let Some(ref p) = s.pchat_ctx.pchat {
-                let wire = p
-                    .key_manager
-                    .build_key_announce(&p.own_cert_hash, pchat::now_millis());
-                let proto = pchat::wire_key_announce_to_proto(&wire);
-                (
-                    Some(proto),
-                    Some(p.own_cert_hash.clone()),
-                    s.conn.client_handle.clone(),
-                )
-            } else {
-                (None, None, None)
-            }
-        } else {
-            (None, None, None)
-        }
-    };
-
-    if let (Some(proto), Some(cert), Some(handle)) = (announce_proto, cert, handle) {
-        if let Err(e) = handle
-            .send(command::SendPchatKeyAnnounce { announce: proto })
-            .await
-        {
-            warn!("failed to send key-announce: {e}");
-        } else {
-            info!(cert_hash = %cert, "sent pchat key-announce");
-        }
-    }
-}
-
 /// Look up the current channel and its pchat protocol mode.
 fn resolve_initial_channel(
     shared: &Arc<Mutex<SharedState>>,
@@ -522,8 +494,13 @@ async fn ensure_protocol_key(
 ) -> bool {
     if mode == PchatProtocol::FancyV1FullArchive {
         if let Ok(mut s) = shared.lock() {
+            // Gated, and deliberately before the wait below: this used to mint
+            // unconditionally, so `await_or_generate_key`'s 2s window for a
+            // peer's key never had anything left to decide -- the key already
+            // existed, and it was the wrong one.
+            let mint = pchat::should_mint_archive_key(&s, ch);
             if let Some(ref mut p) = s.pchat_ctx.pchat {
-                if !p.key_manager.has_key(ch, mode) {
+                if mint {
                     let cert = p.own_cert_hash.clone();
                     let key =
                         mumble_protocol::persistent::encryption::derive_archive_key(&p.seed, ch);
@@ -610,10 +587,12 @@ fn self_generate_key(shared: &Arc<Mutex<SharedState>>, ch: u32) {
 
     if let Ok(mut s) = shared.lock() {
         let mode = s.channels.get(&ch).and_then(|c| c.pchat_protocol);
+        // Even after waiting, minting is only right when no peer holds a key.
+        let mint = pchat::should_mint_archive_key(&s, ch);
         if let Some(ref mut p) = s.pchat_ctx.pchat {
             let cert = p.own_cert_hash.clone();
             match mode {
-                Some(PchatProtocol::FancyV1FullArchive) => {
+                Some(PchatProtocol::FancyV1FullArchive) if mint => {
                     let key =
                         mumble_protocol::persistent::encryption::derive_archive_key(&p.seed, ch);
                     p.key_manager

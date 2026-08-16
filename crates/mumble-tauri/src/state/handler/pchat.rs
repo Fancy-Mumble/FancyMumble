@@ -172,6 +172,31 @@ impl HandleMessage for mumble_tcp::PchatKeyRequest {
     }
 }
 
+/// A peer saying it holds the archive key for a channel.
+///
+/// On murmur this went to the server, which folded it into the
+/// `PchatKeyHoldersList` it answered queries with. Starling relays it to the
+/// channel instead, so each client keeps the list itself. What it feeds is the
+/// mint decision (`should_mint_archive_key`: a known holder means "ask, do not
+/// invent") and the consent check (a holder is not offered the key again).
+impl HandleMessage for mumble_tcp::PchatKeyHolderReport {
+    fn handle(&self, ctx: &HandlerContext) {
+        debug!("received PchatKeyHolderReport");
+        pchat::handle_proto_key_holder_report(&ctx.shared, self);
+    }
+}
+
+/// A peer asking who holds the archive key for a channel.
+///
+/// Answered by whoever does, with a `PchatKeyHolderReport` back to the
+/// channel; a client without the key stays quiet, which is the honest answer.
+impl HandleMessage for mumble_tcp::PchatKeyHoldersQuery {
+    fn handle(&self, ctx: &HandlerContext) {
+        debug!("received PchatKeyHoldersQuery");
+        pchat::handle_proto_key_holders_query(&ctx.shared, self);
+    }
+}
+
 impl HandleMessage for mumble_tcp::PchatAck {
     fn handle(&self, ctx: &HandlerContext) {
         debug!("received PchatAck");

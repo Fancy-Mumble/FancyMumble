@@ -443,16 +443,19 @@ fn maybe_derive_archive_key_for_join(
     let Ok(mut s) = shared.lock() else {
         return None;
     };
-    let p = s.pchat_ctx.pchat.as_mut()?;
-    if p.key_manager.has_key(ch, PchatProtocol::FancyV1FullArchive) {
+    // Only when the key is ours to mint. A joiner that derives here invents a
+    // key nobody else can read and then reports itself as a holder, which
+    // suppresses the consent prompt that would have got it the real one.
+    if !pchat::should_mint_archive_key(&s, ch) {
         return None;
     }
+    let p = s.pchat_ctx.pchat.as_mut()?;
     let cert = p.own_cert_hash.clone();
     let key = mumble_protocol::persistent::encryption::derive_archive_key(&p.seed, ch);
     p.key_manager
         .store_archive_key(ch, key, KeyTrustLevel::Verified);
     p.key_manager.set_channel_originator(ch, cert.clone());
-    info!(channel_id = ch, cert_hash = %cert, "derived archive key immediately on join");
+    info!(channel_id = ch, cert_hash = %cert, "minted archive key on join (no other holder)");
     p.identity_dir.clone().map(|dir| (dir, key, cert))
 }
 
@@ -464,10 +467,14 @@ fn derive_channel_key_as_originator(
         return None;
     };
     let mode = s.channels.get(&ch).and_then(|c| c.pchat_protocol);
+    // The name was the whole assumption: this minted "as originator" without
+    // ever asking whether we are one, so a joiner that had correctly declined
+    // to mint on arrival simply did it here two seconds later instead.
+    let mint = pchat::should_mint_archive_key(&s, ch);
     let p = s.pchat_ctx.pchat.as_mut()?;
     let cert = p.own_cert_hash.clone();
     match mode {
-        Some(PchatProtocol::FancyV1FullArchive) => {
+        Some(PchatProtocol::FancyV1FullArchive) if mint => {
             let key = mumble_protocol::persistent::encryption::derive_archive_key(&p.seed, ch);
             p.key_manager
                 .store_archive_key(ch, key, KeyTrustLevel::Verified);
@@ -524,10 +531,33 @@ async fn run_pchat_mode_init(
     mode: Option<PchatProtocol>,
 ) -> bool {
     if mode == Some(PchatProtocol::FancyV1FullArchive) {
+        // Asked, not waited on: the answer feeds the consent flow, while the
+        // mint decision is taken from who is already standing in the channel.
+        pchat::query_key_holders(shared, ch);
+
+        // Announce our public key on arrival, key or no key. The announce at
+        // connect is relayed only to the channel we were in *then*, so a
+        // holder who was elsewhere never recorded us -- and a holder that has
+        // never seen our key cannot be prompted to share theirs, nor seal it
+        // to us if they were. Holders announce too: a keyless peer already in
+        // the room answers a stranger's announce with its own, which is how
+        // the holder who arrives second still learns who to offer the key to.
+        pchat::send_key_announce(shared, ch).await;
+
         if let Some((dir, key, cert)) = maybe_derive_archive_key_for_join(shared, ch) {
             pchat::persist_archive_key(&dir, ch, &key, Some(&cert));
         }
-        pchat::send_key_holder_report_async(shared, ch).await;
+        // Only claim to hold a key we actually have: the report is what other
+        // clients consult before offering to share theirs, so claiming one we
+        // lack withdraws the very prompt that would have supplied it.
+        if channel_has_key(shared, ch) {
+            pchat::send_key_holder_report_async(shared, ch).await;
+            // Offer it to whoever is already here. The consent check normally
+            // runs when a *peer* arrives, and a peer who arrived before this
+            // key existed was checked against no key and skipped - the moment
+            // the key exists is the other half of that trigger.
+            pchat::check_key_share_for_channel(shared, ch);
+        }
     }
 
     if mode == Some(PchatProtocol::SignalV1) {
@@ -587,7 +617,11 @@ async fn derive_channel_key_if_needed(shared: &Arc<Mutex<SharedState>>, ch: u32)
     if let Some((dir, key, cert)) = derive_channel_key_as_originator(shared, ch) {
         pchat::persist_archive_key(&dir, ch, &key, Some(&cert));
     }
-    pchat::send_key_holder_report_async(shared, ch).await;
+    // Claiming to hold a key we do not have is what withdraws the prompt that
+    // would supply one.
+    if channel_has_key(shared, ch) {
+        pchat::send_key_holder_report_async(shared, ch).await;
+    }
 }
 
 /// Request recent history for the joined channel, arming a timeout that
