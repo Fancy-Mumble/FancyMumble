@@ -1,0 +1,107 @@
+# Maintainer: Fancy Mumble <https://github.com/Fancy-Mumble/FancyMumble/issues>
+
+pkgname=fancy-mumble
+pkgver=0.3.0
+pkgrel=1
+pkgdesc='Tauri desktop client for Mumble, with rich text chat, screen sharing and E2EE private chat'
+arch=('x86_64' 'aarch64')
+url='https://github.com/Fancy-Mumble/FancyMumble'
+license=('MIT')
+depends=(
+	'alsa-lib'
+	'cairo'
+	'gcc-libs'
+	'gdk-pixbuf2'
+	'glib2'
+	'glibc'
+	'gtk3'
+	'hicolor-icon-theme'
+	'libayatana-appindicator'  # the tray icon; tauri's tray-icon feature is on
+	'librsvg'
+	'libsoup3'
+	'webkit2gtk-4.1'
+)
+makedepends=(
+	'cargo'
+	'cmake'      # audiopus_sys vendors an Opus CMake project and builds it in
+	'libdrm'     # fancy-screenshare's `gpu` feature (default-on): VA-API path
+	'libva'
+	'mesa'       # gbm
+	'npm'
+	'pipewire'   # libspa-sys' build script panics without libpipewire-0.3.pc
+	'pkgconf'
+	'protobuf'   # mumble-protocol's build.rs shells out to protoc
+)
+optdepends=(
+	'fancy-mumble-signal-bridge: end-to-end encrypted private chat (AGPL-3.0)'
+	'pipewire: screen and window capture'
+	'xdg-desktop-portal: screen-capture source picker on Wayland'
+	'libva: hardware video encode for screen sharing'
+)
+source=(
+	"$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
+	'fancy-mumble.desktop'
+)
+sha256sums=(
+	'a9440f48b7832408590603f56f2fdb02817075cefdd129e06c065e2e8ceb0163'
+	'3b4b18e80ec4fa74164c3f77db4da36792ddd06907d160997d250a85b284e3e2'
+)
+_srcdir="FancyMumble-$pkgver"
+
+prepare() {
+	cd "$_srcdir"
+	export RUSTUP_TOOLCHAIN=stable
+	cargo fetch --locked --target "$(rustc -vV | sed -n 's/^host: //p')"
+
+	# The frontend's dependencies. This is the one step that needs the network
+	# outside makepkg's own source fetching: the tree ships a package-lock.json
+	# but not the packages it pins, and there is no npm equivalent of
+	# `cargo vendor` that makepkg understands.
+	cd crates/mumble-tauri/ui
+	npm ci --cache "$srcdir/npm-cache"
+}
+
+build() {
+	cd "$_srcdir"
+
+	# Vite first: the Rust build embeds crates/mumble-tauri/ui/dist as the
+	# frontend asset bundle (the `custom-protocol` feature below), so it has to
+	# exist before cargo runs.
+	(cd crates/mumble-tauri/ui && npm run build)
+
+	export RUSTUP_TOOLCHAIN=stable
+	export CARGO_TARGET_DIR=target
+	# mumble-tauri's build.rs otherwise shells out to a second `cargo build`:
+	#
+	#   signal-bridge  links AGPL-3.0 libsignal-protocol and is a separate,
+	#                  workspace-excluded crate with its own lockfile. It ships
+	#                  as fancy-mumble-signal-bridge so the licence boundary
+	#                  upstream draws survives packaging, and so this package
+	#                  stays MIT.
+	#   qt6ui          is a Windows/MinGW-Qt build and cannot be produced here.
+	#
+	# Both nested builds would also want the network from inside build().
+	export SKIP_SIGNAL_BRIDGE=1 SKIP_QT6UI=1
+	# custom-protocol: serve the embedded ui/dist rather than loading devUrl
+	# (localhost:1420), which is what makes this a standalone binary. The Tauri
+	# CLI sets it for `cargo tauri build`; a plain cargo build has to say so.
+	cargo build --frozen --release --features custom-protocol -p mumble-tauri
+}
+
+# No check(). `cargo test` here opens audio devices and real sockets, and the
+# vitest suite wants a browser environment; neither survives a build chroot.
+
+package() {
+	cd "$_srcdir"
+
+	# Upstream's own .deb installs the binary under its crate name, and the
+	# desktop entry's StartupWMClass matches it. Keep both.
+	install -Dm755 target/release/mumble-tauri "$pkgdir/usr/bin/mumble-tauri"
+
+	install -Dm644 crates/mumble-tauri/icons/icon.png \
+		"$pkgdir/usr/share/icons/hicolor/128x128/apps/mumble-tauri.png"
+	install -Dm644 "$srcdir/fancy-mumble.desktop" \
+		"$pkgdir/usr/share/applications/fancy-mumble.desktop"
+
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
