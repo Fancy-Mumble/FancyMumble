@@ -114,11 +114,20 @@ pub(crate) fn create_pipeline(
                 );
                 return Ok(Box::new(p));
             }
-            Err(e) if source_id == 0 => {
+            Err(e)
+                if source_id == 0 && sources::ensure_present(kind, source_id).is_err() =>
+            {
                 // Advisory portal id (the compositor's dialog picks the real
                 // source): no OS handle exists for the CPU fallback to
                 // resolve, so falling through would bury this real failure
                 // under a nonsense "screen 0 not found".
+                //
+                // `ensure_present` is what distinguishes that advisory 0 from
+                // a *real* monitor whose id happens to be 0 - xcap's single
+                // screen on a bare X server (Xvfb) is exactly that, and on
+                // "id == 0" alone a portal-less X session was refused the CPU
+                // fallback it needs most: the share died at start with the
+                // portal's error on a display that never had a portal.
                 return Err(e);
             }
             Err(e) => {
@@ -158,6 +167,24 @@ impl std::fmt::Debug for CpuPipeline {
 }
 
 impl CpuPipeline {
+    /// One polled grab to prime a change-driven recorder that has reported no
+    /// change yet.
+    ///
+    /// Logged, never swallowed: a failing grab looks identical to "the screen
+    /// is still" from every other observation point, and that ambiguity
+    /// already cost a debugging session on a display whose root was not
+    /// readable at all. `None` simply retries on the next tick (~100 ms),
+    /// which is the cadence the pure-polling path pays anyway.
+    fn priming_grab(&self) -> Option<image::RgbaImage> {
+        match self.target.capture() {
+            Ok(img) => Some(img),
+            Err(e) => {
+                tracing::debug!("screenshare: priming grab failed ({e}); retrying next tick");
+                None
+            }
+        }
+    }
+
     pub(crate) fn new(
         kind: SourceKind,
         source_id: u32,
@@ -206,7 +233,23 @@ impl EncodePipeline for CpuPipeline {
                 sources::RecorderFrame::Frame(f) => {
                     fresh = image::RgbaImage::from_raw(f.width, f.height, f.raw);
                 }
-                sources::RecorderFrame::Idle => {}
+                sources::RecorderFrame::Idle => {
+                    // A change-driven recorder reports *changes*, and a still
+                    // screen has none - including at t=0. Without this, a
+                    // monitor share of an idle desktop never produces even its
+                    // FIRST frame: no initial IDR, nothing cached for
+                    // `encode_repeat` or a demanded keyframe to re-encode, and
+                    // the track sends zero RTP while the broadcaster raises a
+                    // capture-stall hint that blames scanout. Viewers wait on
+                    // a keyframe that cannot come. One polled grab primes the
+                    // stream; from then on the cached frame serves keyframe
+                    // demands and the recorder serves changes. A failed grab
+                    // stays `None` and the next tick (~100 ms) retries, which
+                    // is the cadence the pure-polling path pays anyway.
+                    if self.last_scaled.is_none() {
+                        fresh = self.priming_grab();
+                    }
+                }
                 sources::RecorderFrame::Dead => {
                     tracing::warn!("screenshare: screen recorder died; falling back to polling");
                     self.recorder = None;
