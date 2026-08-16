@@ -157,6 +157,8 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::PchatKeyExchange(m) => m.handle(ctx),
         ControlMessage::PchatKeyRequest(m) => m.handle(ctx),
         ControlMessage::PchatAck(m) => m.handle(ctx),
+        ControlMessage::PchatKeyHolderReport(m) => m.handle(ctx),
+        ControlMessage::PchatKeyHoldersQuery(m) => m.handle(ctx),
         ControlMessage::PchatKeyHoldersList(m) => m.handle(ctx),
         ControlMessage::PchatKeyChallenge(m) => m.handle(ctx),
         ControlMessage::PchatKeyChallengeResult(m) => m.handle(ctx),

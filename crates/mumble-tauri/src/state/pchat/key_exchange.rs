@@ -38,6 +38,14 @@ pub(crate) fn handle_proto_key_announce(
     let mut should_push_keys = false;
     let peer_cert_hash = wire.cert_hash.clone();
 
+    // Whether this peer was a stranger a moment ago. Decided before the record
+    // so it cannot be confused with a refresh of a key we already held.
+    let stranger = state
+        .pchat_ctx
+        .pchat
+        .as_ref()
+        .is_some_and(|p| p.key_manager.get_peer(&peer_cert_hash).is_none());
+
     if let Some(ref mut pchat) = state.pchat_ctx.pchat {
         match pchat.key_manager.record_peer_key(&wire) {
             Ok(true) => {
@@ -54,9 +62,11 @@ pub(crate) fn handle_proto_key_announce(
     // Also collect channels that need a key-holder refresh.
     let channels_to_query: Vec<u32>;
 
+    let has_shareable: bool;
     if should_push_keys {
         let channels_for_peer = find_shareable_channels(&state, &peer_cert_hash);
         channels_to_query = channels_for_peer.clone();
+        has_shareable = !channels_for_peer.is_empty();
 
         if !channels_for_peer.is_empty() {
             let peer_name = resolve_peer_name(&state, &peer_cert_hash);
@@ -66,6 +76,7 @@ pub(crate) fn handle_proto_key_announce(
         }
     } else {
         channels_to_query = Vec::new();
+        has_shareable = false;
     }
 
     // Drop the lock before sending network queries.
@@ -73,6 +84,29 @@ pub(crate) fn handle_proto_key_announce(
 
     for ch_id in channels_to_query {
         query_key_holders(shared, ch_id);
+    }
+
+    // Answer a stranger with our own announce. Announces are relayed to the
+    // channel, not stored, so whoever was already in a room never heard the
+    // one we sent on the way in - and a holder who has never seen our public
+    // key cannot be prompted to share theirs, let alone seal it to us. One
+    // reply per new peer, never per refresh: replying to a refresh would
+    // hand them a fresh timestamp, they would refresh back, and the two of
+    // us would announce at each other indefinitely.
+    // Into the channel the announce named, which is the room whose key is at
+    // stake - not our own current channel, which may be somewhere else.
+    //
+    // Only a holder with something to offer replies. Replying to every stranger
+    // announced our key into rooms nobody was waiting on it in, and each hop
+    // emits `state-changed`: enough re-renders to dismiss a context menu the
+    // user (or a test) had open, which is how this surfaced - as channel
+    // creation failing, three suites away from anything to do with keys.
+    if stranger && should_push_keys && has_shareable {
+        let channel = msg.channel_id.unwrap_or_default();
+        let shared = Arc::clone(shared);
+        let _reply = tokio::spawn(async move {
+            super::send_key_announce(&shared, channel).await;
+        });
     }
 }
 

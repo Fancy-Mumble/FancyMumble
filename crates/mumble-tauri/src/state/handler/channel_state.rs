@@ -328,6 +328,12 @@ async fn pchat_key_gen_and_fetch(shared: Arc<Mutex<SharedState>>, id: u32) {
 fn derive_and_store_archive_key(shared: &Arc<Mutex<SharedState>>, id: u32) {
     let Ok(mut s) = shared.lock() else { return };
     let m = s.channels.get(&id).and_then(|c| c.pchat_protocol);
+    // Every client observing the mode change ran this, not just the one that
+    // made it, so each minted a key of its own the moment a channel became an
+    // archive. Only the client whose key it is to mint may.
+    if !crate::state::pchat::should_mint_archive_key(&s, id) {
+        return;
+    }
     let Some(ref mut pchat) = s.pchat_ctx.pchat else {
         return;
     };
