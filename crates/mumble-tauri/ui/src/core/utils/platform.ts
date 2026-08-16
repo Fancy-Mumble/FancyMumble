@@ -35,6 +35,16 @@ export function isWindowsPlatform(): boolean {
 /** Cached `isWindowsPlatform()` - the user-agent is stable per session. */
 export const isWindows: boolean = isWindowsPlatform();
 
+/** Detect whether the app is running on desktop Linux (for ALSA/PipeWire
+ *  specific audio guidance). Android also reports "Linux" in its UA, so
+ *  mobile is excluded explicitly. */
+export function isLinuxPlatform(): boolean {
+  return /Linux|X11/i.test(navigator.userAgent) && !isMobilePlatform();
+}
+
+/** Cached `isLinuxPlatform()` - the user-agent is stable per session. */
+export const isLinux: boolean = isLinuxPlatform();
+
 /**
  * CSS class helper: returns the given class name only on mobile,
  * empty string on desktop.

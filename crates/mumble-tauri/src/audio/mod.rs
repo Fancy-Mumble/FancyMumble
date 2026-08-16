@@ -31,6 +31,9 @@ use mumble_protocol::error::Result;
 mod desktop;
 
 #[cfg(not(target_os = "android"))]
+pub(crate) mod devices;
+
+#[cfg(not(target_os = "android"))]
 mod rodio_desktop;
 
 #[cfg(not(target_os = "android"))]

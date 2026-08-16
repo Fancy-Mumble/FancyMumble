@@ -32,6 +32,8 @@ pub struct CpalCapture {
     buffer: Arc<Mutex<VecDeque<f32>>>,
     stream: Option<cpal::Stream>,
     device: cpal::Device,
+    /// Display name of the selected device (or "default"), for errors.
+    label: String,
     /// Number of channels the hardware actually uses.
     hw_channels: u16,
     /// The device's native sample rate; the stream is opened at this
@@ -65,23 +67,15 @@ impl CpalCapture {
         frame_size: usize,
         volume: Arc<AtomicU32>,
     ) -> Result<Self> {
-        let host = cpal::default_host();
-
         let device = if let Some(name) = device_name {
-            host.input_devices()
-                .map_err(|e| Error::InvalidState(e.to_string()))?
-                .find(|d| {
-                    d.description()
-                        .ok()
-                        .map(|desc| desc.name().to_string())
-                        .as_deref()
-                        == Some(name)
-                })
+            super::devices::find_input(name)
                 .ok_or_else(|| Error::InvalidState(format!("Input device '{name}' not found")))?
         } else {
-            host.default_input_device()
+            cpal::default_host()
+                .default_input_device()
                 .ok_or_else(|| Error::InvalidState("No default input device".into()))?
         };
+        let label = device_name.unwrap_or("default").to_owned();
 
         // Use the device's preferred channel count AND sample rate.
         // Opening at the native rate and resampling ourselves is
@@ -89,9 +83,13 @@ impl CpalCapture {
         // AUTOCONVERTPCM (or worse, a virtual driver that merely
         // relabels the rate) responsible for the conversion, which is
         // exactly what produced mistimed audio on non-48 kHz devices.
-        let default_cfg = device
-            .default_input_config()
-            .map_err(|e| Error::InvalidState(e.to_string()))?;
+        let default_cfg = device.default_input_config().map_err(|e| {
+            Error::InvalidState(super::devices::describe_open_failure(
+                &label,
+                &device,
+                &e.to_string(),
+            ))
+        })?;
         let hw_channels = default_cfg.channels();
         let hw_rate = default_cfg.sample_rate();
 
@@ -102,6 +100,7 @@ impl CpalCapture {
             buffer: Arc::new(Mutex::new(VecDeque::with_capacity(9_600))),
             stream: None,
             device,
+            label,
             hw_channels,
             hw_rate,
             volume,
@@ -230,7 +229,13 @@ impl AudioCapture for CpalCapture {
                 |err| error!("cpal input error: {err}"),
                 None,
             )
-            .map_err(|e| Error::InvalidState(e.to_string()))?;
+            .map_err(|e| {
+                Error::InvalidState(super::devices::describe_open_failure(
+                    &self.label,
+                    &self.device,
+                    &e.to_string(),
+                ))
+            })?;
 
         stream
             .play()
@@ -476,19 +481,12 @@ impl CpalMixingPlayback {
         buffers: mumble_protocol::audio::mixer::SpeakerBuffers,
         speaker_volumes: mumble_protocol::audio::mixer::SpeakerVolumes,
     ) -> Result<Self> {
-        let host = cpal::default_host();
         let device = if let Some(name) = device_name {
-            host.output_devices()
-                .map_err(|e| Error::InvalidState(e.to_string()))?
-                .find(|d| {
-                    d.description()
-                        .ok()
-                        .map(|desc| desc.name() == name)
-                        .unwrap_or(false)
-                })
+            super::devices::find_output(name)
                 .ok_or_else(|| Error::InvalidState(format!("Output device not found: {name}")))?
         } else {
-            host.default_output_device()
+            cpal::default_host()
+                .default_output_device()
                 .ok_or_else(|| Error::InvalidState("No default output device".into()))?
         };
 
