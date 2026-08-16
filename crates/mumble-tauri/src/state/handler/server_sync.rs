@@ -167,38 +167,135 @@ impl HandlerContext {
 
     /// Request description blobs for channels whose descriptions were
     /// omitted during the initial sync (only a hash was sent).
+    ///
+    /// A few at a time, waiting for each batch to land before asking for the
+    /// next. Asking for all of them in one `RequestBlob` is what the server
+    /// answers in one burst, and a tree whose descriptions carry inline artwork
+    /// answers with megabytes: against a real server (36 channels, 5.75 MiB of
+    /// descriptions) that burst passed the gateway's per-client control budget
+    /// and the connection was reset a few hundred milliseconds after
+    /// `ServerSync` — the client killed by the reply it asked for. Paced, the
+    /// same fetch costs a few round trips and cannot outrun any budget.
+    ///
+    /// Re-deriving what is still missing each round is what makes it also a
+    /// retry: a server that answers only part of a batch (its own reply cap) is
+    /// asked again for the rest on the next pass.
     fn request_channel_descriptions(&self) {
-        let channel_ids: Vec<u32> = self
-            .shared
-            .lock()
-            .ok()
-            .map(|s| {
-                s.channels
-                    .values()
-                    .filter(|ch| ch.description.is_empty() && ch.description_hash.is_some())
-                    .map(|ch| ch.id)
-                    .collect()
-            })
-            .unwrap_or_default();
+        /// Channels per `RequestBlob`. Descriptions are unbounded in principle
+        /// and a few hundred KiB in practice, so a handful in flight stays well
+        /// inside a 4 MiB budget while still costing far fewer round trips than
+        /// one at a time.
+        const BATCH: usize = 4;
+        /// How long a batch is given before the fetch gives up on it. Generous:
+        /// it is a whole-tree transfer on a slow link, not a UI interaction.
+        const BATCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+        /// How long a *partly* answered batch waits for the rest. A server that
+        /// has already replied and then goes quiet has said what it will say --
+        /// its own reply cap -- and the remainder belongs in the next request,
+        /// not in the rest of this timeout.
+        const QUIET_AFTER_PROGRESS: std::time::Duration = std::time::Duration::from_secs(1);
+        const POLL: std::time::Duration = std::time::Duration::from_millis(50);
 
-        if channel_ids.is_empty() {
+        /// Channels that announced a description but have not received one.
+        fn pending(shared: &Mutex<SharedState>) -> Vec<u32> {
+            shared
+                .lock()
+                .ok()
+                .map(|s| {
+                    s.channels
+                        .values()
+                        .filter(|ch| ch.description.is_empty() && ch.description_hash.is_some())
+                        .map(|ch| ch.id)
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
+
+        /// Wait for a requested batch to arrive, and answer how much of it did
+        /// not. Returns early once the batch is whole, and once a batch that
+        /// was answered in part has gone quiet.
+        async fn settle(shared: &Mutex<SharedState>, batch: &[u32]) -> usize {
+            let missing = |ids: &[u32]| {
+                let still = pending(shared);
+                ids.iter().filter(|id| still.contains(id)).count()
+            };
+            let deadline = tokio::time::Instant::now() + BATCH_TIMEOUT;
+            let mut outstanding = batch.len();
+            let mut quiet = std::time::Duration::ZERO;
+            while tokio::time::Instant::now() < deadline {
+                tokio::time::sleep(POLL).await;
+                let left = missing(batch);
+                if left == 0 {
+                    return 0;
+                }
+                if left < outstanding {
+                    outstanding = left;
+                    quiet = std::time::Duration::ZERO;
+                    continue;
+                }
+                quiet += POLL;
+                if outstanding < batch.len() && quiet >= QUIET_AFTER_PROGRESS {
+                    break;
+                }
+            }
+            missing(batch)
+        }
+
+        if pending(&self.shared).is_empty() {
             return;
         }
         let shared = Arc::clone(&self.shared);
+        // The connection this fetch belongs to. A reconnect raises the epoch,
+        // and a fetch that outlived its connection would otherwise keep pacing
+        // requests alongside the new connection's own fetch -- two paced
+        // fetches being exactly the unpaced burst this avoids. Same guard the
+        // event handler uses on a reused `SharedState`.
+        let epoch = self.shared.lock().map(|s| s.conn.epoch).unwrap_or_default();
         let _desc_blob_task = tokio::spawn(async move {
-            let handle = shared
-                .lock()
-                .ok()
-                .and_then(|s| s.conn.client_handle.clone());
-            if let Some(handle) = handle {
-                let _ = handle
+            loop {
+                let mut batch = pending(&shared);
+                if batch.is_empty() {
+                    break;
+                }
+                batch.sort_unstable();
+                batch.truncate(BATCH);
+
+                // Taken per round rather than held: a disconnect drops the
+                // handle, and this task must end with the connection that
+                // started it rather than fetch into a dead socket.
+                let Some(handle) = shared
+                    .lock()
+                    .ok()
+                    .filter(|s| s.conn.epoch == epoch)
+                    .and_then(|s| s.conn.client_handle.clone())
+                else {
+                    break;
+                };
+                if handle
                     .send(command::RequestBlob {
                         session_texture: Vec::new(),
                         session_comment: Vec::new(),
-                        channel_description: channel_ids,
+                        channel_description: batch.clone(),
                         user_id_comment: Vec::new(),
                     })
-                    .await;
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+
+                // A round that moved nothing means the server is not going to
+                // answer these — a description too large for it to send, or a
+                // server that does not serve the blob at all. Stopping keeps
+                // that from becoming an endless re-request loop; anything still
+                // missing simply renders empty.
+                if settle(&shared, &batch).await == batch.len() {
+                    debug!(
+                        channels = ?batch,
+                        "no channel descriptions arrived for a batch; giving up on the rest"
+                    );
+                    break;
+                }
             }
         });
     }
