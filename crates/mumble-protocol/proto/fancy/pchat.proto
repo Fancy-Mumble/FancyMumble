@@ -1,11 +1,11 @@
 syntax = "proto3";
 
-// Outer type 1006 - persistent chat.
+// Outer type 1006, persistent chat.
 //
 // The server is a relay and a store. The end-to-end crypto lives in the
 // client, so nothing here decrypts anything: payloads are opaque ciphertext,
 // and the service's job is storage, fan-out, offline queues, key-holder
-// bookkeeping and rate limiting (PORTING-PLAN.md §4, Phase 4).
+// bookkeeping and rate limiting (docs/PORTING-PLAN.md §4, persistent chat).
 package starling.fancy.pchat.v1;
 
 import "fancy/wire.proto";
@@ -29,12 +29,12 @@ message PchatEnvelope {
 }
 
 message Message {
-  // UUIDv7 as a string on the wire, kept as 16 bytes in storage - the wire
+  // UUIDv7 as a string on the wire, kept as 16 bytes in storage, the wire
   // type does not change (docs/STORAGE.md L3).
   string message_id = 1;
   uint32 channel = 2;
   // Who sent it, *while they are connected*. Server-stamped, and useful for
-  // addressing a live reply - but not an identity, because session ids are
+  // addressing a live reply, but not an identity, because session ids are
   // handed out per connection and reused.
   uint32 sender = 3;
   bytes ciphertext = 4;
@@ -44,7 +44,7 @@ message Message {
   // Who sent it, durably: the SHA-1 of their leaf certificate.
   //
   // **Server-stamped from the TLS connection, never read from the client.**
-  // That is what makes it an identity rather than a claim - a client cannot
+  // That is what makes it an identity rather than a claim, a client cannot
   // attribute a message to somebody else, and the recipient's crypto verifies
   // against the key announced for this same hash.
   //
@@ -62,7 +62,7 @@ message Message {
   //
   // Opaque to this server, like the ciphertext beside them, and carried for the
   // same reason: the recipient cannot derive any of the three. `epoch` alone
-  // says *which generation* of key, not which key - a channel that forked
+  // says *which generation* of key, not which key, a channel that forked
   // during a membership change has two epoch 4s, and picking the wrong one
   // fails to decrypt with no way to tell why.
 
@@ -79,7 +79,7 @@ message Message {
 
 // The end-to-end schemes a message can be sealed under.
 //
-// The server never acts on this - it cannot read any of them - but it is on the
+// The server never acts on this (it cannot read any of them) but it is on the
 // wire because the recipient has to know which one to try.
 enum Protocol {
   PROTOCOL_UNSPECIFIED = 0;
@@ -127,7 +127,7 @@ message Ack {
 //
 // That does not make them a free-for-all. The server reads the claimed hash and
 // refuses to relay a body claiming an identity that is not the connection's own
-// - the same kind of read it already does on `channel` to route and authorise,
+// the same kind of read it already does on `channel` to route and authorise,
 // and no more understanding of the payload than that. It is defence in depth
 // rather than the guarantee: the guarantee is the recipients' own key pinning,
 // because a server is not trusted with content here.
@@ -135,9 +135,38 @@ message Ack {
 message KeyAnnounce {
   uint32 channel = 1;
   uint32 epoch = 2;
+  // The X25519 key agreement key. Named `public_key` from when this message
+  // modelled a single key; `fancy_v1` has two and the signing half is below.
   bytes public_key = 3;
   // Whose key this is. Refused unless it is the sender's own certificate.
   bytes holder_cert = 4;
+
+  // -- fancy_v1 identity proof --------------------------------------------
+  //
+  // An announce is only worth anything if a recipient can tell it came from
+  // the identity it names, and these five fields are what makes that possible.
+  // They are not optional decoration: `record_peer_key` refuses an announce
+  // whose Ed25519 self-signature does not verify over
+  // (algorithm_version, holder_cert, announced_at_ms, public_key,
+  // signing_public), and refuses one whose timestamp does not advance. An
+  // announce arriving without them is not a degraded announce, it is an
+  // unverifiable one, and dropping them in translation would hand every
+  // recipient a peer key it cannot attribute.
+
+  // Ed25519 verification key. 32 bytes for algorithm_version 1.
+  bytes signing_public = 5;
+  // Ed25519 self-signature over the tuple above. 64 bytes.
+  bytes signature = 6;
+  // Signature by the TLS identity, binding this announce to the certificate
+  // the connection presented.
+  bytes tls_signature = 7;
+  // 1 = X25519 + Ed25519. A recipient refuses a version it does not implement
+  // rather than guessing at the key lengths.
+  uint32 algorithm_version = 8;
+  // Anti-rollback: a recipient discards an announce that does not advance on
+  // the newest it holds for this identity, so a replayed old key cannot
+  // displace a current one.
+  uint64 announced_at_ms = 9;
 }
 
 message KeyRequest {
@@ -147,29 +176,70 @@ message KeyRequest {
   // Who is asking, so a distributor knows which identity to seal to. Refused
   // unless it is the sender's own certificate.
   bytes requester_cert = 4;
+
+  // -- fancy_v1 --------------------------------------------------------------
+
+  // Correlates the answer with this request. `fancy_v1` evaluates consensus
+  // across several answers to one request before trusting a key, so an answer
+  // that cannot be tied back to what was asked cannot take part in it.
+  string request_id = 5;
+  // Which pchat protocol is being asked for; a key is only meaningful under
+  // the protocol it belongs to.
+  int32 protocol = 6;
+  // How many onward relays the requester will accept, so a request cannot be
+  // amplified indefinitely by intermediaries.
+  uint32 relay_cap = 7;
+  uint64 requested_at_ms = 8;
 }
 
 message KeyDeliver {
   uint32 channel = 1;
   uint32 epoch = 2;
   // Where to send it. A session, because this is the one arm the server
-  // unicasts and routing needs a live connection.
+  // unicasts and routing needs a live connection. May be left 0, in which case
+  // the server resolves it from `recipient_cert`: a sender addresses an
+  // identity, and only the server holds the identity-to-connection map.
   uint32 recipient = 3;
   bytes sealed_key = 4;
   bytes countersignature = 5;
   // Who it was sealed *for*, which is not the same question as where to send
-  // it - and the difference is a real race: the requester can disconnect
+  // it, and the difference is a real race: the requester can disconnect
   // between asking and being answered, and a recycled session id would hand
   // the reply to whoever holds that number now. The recipient compares this
   // against its own certificate and discards a delivery meant for somebody
   // else, which it cannot do from a session id alone.
   bytes recipient_cert = 6;
+
+  // -- fancy_v1 --------------------------------------------------------------
+
+  // Who sealed it. The recipient resolves the sender's key-agreement and
+  // signing keys from this to open the envelope at all, so a delivery without
+  // it is undecryptable no matter how intact the ciphertext is - the single
+  // field whose absence made this arm unusable for `fancy_v1`.
+  bytes sender_cert = 7;
+  // Ed25519 signature by the sender over the sealed key and its context.
+  bytes signature = 8;
+  // The `KeyRequest.request_id` this answers, for consensus evaluation.
+  string request_id = 9;
+  // Identifies the key epoch this delivers, and the one it descends from, so a
+  // recipient can place it in the ladder rather than trusting it flat.
+  bytes epoch_fingerprint = 10;
+  bytes parent_fingerprint = 11;
+  // Who countersigned, when `countersignature` is present.
+  bytes countersigner_cert = 12;
+  uint32 algorithm_version = 13;
+  int32 protocol = 14;
+  uint64 delivered_at_ms = 15;
 }
 
 message HolderReport {
   uint32 channel = 1;
   uint32 epoch = 2;
   repeated bytes holder_certs = 3;
+  // Whether this report claims the key by takeover rather than by holding it
+  // already, which is what lets recipients distinguish a new custodian from a
+  // peer restating what they knew.
+  int32 takeover_mode = 4;
 }
 
 message HolderQuery {

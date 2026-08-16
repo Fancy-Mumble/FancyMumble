@@ -304,12 +304,8 @@ fn extract_receiver_sessions(msg: &ControlMessage, state: &ServerState) -> Vec<u
                 .map(|u| u.session)
                 .collect()
         }
-        ControlMessage::FancyTypingIndicator(_) => {
-            channel_members_except_self(state, own_session)
-        }
-        ControlMessage::FancyWatchSync(_) => {
-            channel_members_except_self(state, own_session)
-        }
+        ControlMessage::FancyTypingIndicator(_) => channel_members_except_self(state, own_session),
+        ControlMessage::FancyWatchSync(_) => channel_members_except_self(state, own_session),
         _ => Vec::new(),
     }
 }
@@ -530,15 +526,14 @@ mod tests {
         // `canon` does not translate must never reach it - an epoch-1 peer
         // would decode proto3 out of proto2 bytes at type 1008.
         //
-        // Screen-share signalling is the case: no canon form (the SFU is
-        // ICE-lite and the canon models a share, not a relayed blob), so it
-        // goes through `PluginData`, which the peer relays.
+        // Watch-together is the case standing here: no canon form today, and a
+        // `PluginData` fallback, so it relays. Screen-share signalling stood
+        // here until the canon grew a home for it - which is the point of the
+        // assertion, not a property of any one message.
         let codec = NativeCodec;
         let state = state_with_users();
-        let signal = ControlMessage::WebRtcSignal(mumble_tcp::WebRtcSignal {
-            target_session: Some(2),
-            signal_type: Some(4),
-            payload: Some("candidate:...".into()),
+        let signal = ControlMessage::FancyWatchSync(mumble_tcp::FancyWatchSync {
+            session_id: Some("sess-relay".into()),
             ..Default::default()
         });
         assert!(crate::canon::to_canon(&signal).is_none(), "premise");
@@ -548,6 +543,30 @@ mod tests {
             matches!(encoded, ControlMessage::PluginDataTransmission(_)),
             "an untranslated Fancy message must be relayed, not framed under a \
              canon outer type as proto2"
+        );
+    }
+
+    #[test]
+    fn screen_share_signalling_goes_out_natively_rather_than_through_the_relay() {
+        // The point of giving screenshare a canon home, stated as the thing
+        // that changes on the wire. Relayed, the signalling is client-to-client
+        // mesh and the server's SFU never sees a packet - so the deployment
+        // that needs an SFU is the one that cannot have it. Native, it reaches
+        // the screenshare service at outer type 1008, which is what drives it.
+        let codec = NativeCodec;
+        let state = state_with_users();
+        let signal = ControlMessage::WebRtcSignal(mumble_tcp::WebRtcSignal {
+            target_session: Some(0),
+            signal_type: Some(2),
+            payload: Some("v=0 offer".into()),
+            ..Default::default()
+        });
+
+        let encoded = codec.encode(signal, &state).expect("carried");
+        assert!(
+            matches!(encoded, ControlMessage::WebRtcSignal(_)),
+            "the canon carries this now; wrapping it in PluginData is the mesh \
+             fallback and hides it from the SFU"
         );
     }
 

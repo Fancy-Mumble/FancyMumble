@@ -608,9 +608,6 @@ mod tests {
                 channel_id: Some(1),
                 challenge: Some(vec![0; 32]),
             }),
-            ControlMessage::PchatKeyHoldersQuery(mumble_tcp::PchatKeyHoldersQuery {
-                channel_id: Some(1),
-            }),
             ControlMessage::PchatAck(mumble_tcp::PchatAck {
                 channel_id: Some(1),
                 ..Default::default()
@@ -619,8 +616,10 @@ mod tests {
                 version: Some(1),
                 ..Default::default()
             }),
-            ControlMessage::WebRtcSignal(mumble_tcp::WebRtcSignal {
-                signal_type: Some(4),
+            // Untranslated *today*, and here purely for that property - not a
+            // claim that it should stay so.
+            ControlMessage::FancyWatchSync(mumble_tcp::FancyWatchSync {
+                session_id: Some("sess-1".into()),
                 ..Default::default()
             }),
         ]

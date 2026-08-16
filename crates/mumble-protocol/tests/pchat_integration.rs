@@ -410,6 +410,9 @@ fn wire_key_announce_to_proto(w: &WireKeyAnnounce) -> mumble_tcp::PchatKeyAnnoun
         timestamp: Some(w.timestamp),
         signature: Some(w.signature.clone()),
         tls_signature: Some(w.tls_signature.clone()),
+        // The fixture announces an identity, not a room; the client fills this
+        // in per archive channel it joins.
+        channel_id: None,
     }
 }
 

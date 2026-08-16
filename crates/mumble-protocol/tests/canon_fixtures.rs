@@ -157,3 +157,85 @@ fn our_copy_of_the_fixture_is_starlings_copy() {
         "the two copies of the fixture have diverged; both move in one commit"
     );
 }
+
+#[test]
+fn a_key_announce_is_still_the_bytes_starling_reads() {
+    // The identity proof, whole. A recipient refuses an announce whose Ed25519
+    // self-signature does not verify over exactly these fields, so a
+    // translation that quietly dropped `signing_public`, `signature` or
+    // `announced_at_ms` would produce a frame that relays perfectly and fails
+    // at the far end as a crypto error. That is what this pins.
+    let announce = ControlMessage::PchatKeyAnnounce(mumble_tcp::PchatKeyAnnounce {
+        algorithm_version: Some(1),
+        identity_public: Some(vec![0x11; 32]),
+        signing_public: Some(vec![0x22; 32]),
+        cert_hash: Some("aabbccdd".into()),
+        timestamp: Some(1_700_000_000_000),
+        signature: Some(vec![0x33; 64]),
+        tls_signature: Some(vec![0x44; 8]),
+        channel_id: Some(4),
+    });
+    assert_eq!(
+        hex_of(&encode(&announce).expect("encodes")),
+        fixture("key announce")
+    );
+}
+
+#[test]
+fn a_key_delivery_is_still_the_bytes_starling_reads() {
+    // `sender_cert` is the field this arm was unusable without: the recipient
+    // resolves the sealer's key-agreement and signing keys from it, so a
+    // delivery missing it cannot be opened however intact the ciphertext is.
+    let exchange = ControlMessage::PchatKeyExchange(mumble_tcp::PchatKeyExchange {
+        channel_id: Some(4),
+        protocol: Some(2),
+        epoch: Some(3),
+        encrypted_key: Some(vec![0xde, 0xad, 0xbe, 0xef]),
+        sender_hash: Some("aabbccdd".into()),
+        recipient_hash: Some("11223344".into()),
+        request_id: Some("r-1".into()),
+        timestamp: Some(1_700_000_000_000),
+        algorithm_version: Some(1),
+        signature: Some(vec![0x55; 64]),
+        parent_fingerprint: Some(vec![0x66; 8]),
+        epoch_fingerprint: Some(vec![0x77; 8]),
+        countersignature: Some(vec![0x88; 8]),
+        countersigner_hash: Some("55667788".into()),
+    });
+    assert_eq!(
+        hex_of(&encode(&exchange).expect("encodes")),
+        fixture("key delivery")
+    );
+}
+
+#[test]
+fn a_certificate_hash_survives_the_round_trip_to_the_canon_and_back() {
+    // The canon carries certificate hashes as bytes; this client keys its whole
+    // ladder on the lowercase hex string, and the announce signature is
+    // computed over *that string*. So hex -> bytes -> hex has to be exact:
+    // a single case or padding difference verifies as a forged announce, which
+    // reads as a crypto failure and is really a codec one.
+    let cert = "aabbccdd00112233445566778899aabbccddeeff";
+    let announce = ControlMessage::PchatKeyAnnounce(mumble_tcp::PchatKeyAnnounce {
+        algorithm_version: Some(1),
+        identity_public: Some(vec![0x11; 32]),
+        signing_public: Some(vec![0x22; 32]),
+        cert_hash: Some(cert.into()),
+        timestamp: Some(7),
+        signature: Some(vec![0x33; 64]),
+        tls_signature: Some(vec![0x44; 8]),
+        channel_id: Some(4),
+    });
+    let framed = encode(&announce).expect("encodes");
+    let decoded = mumble_protocol::canon::from_canon(1006, &framed[6..])
+        .expect("decodes")
+        .expect("a key announce");
+    let ControlMessage::PchatKeyAnnounce(back) = decoded else {
+        panic!("expected a key announce");
+    };
+    assert_eq!(back.cert_hash.as_deref(), Some(cert));
+    assert_eq!(back.signing_public, Some(vec![0x22; 32]));
+    assert_eq!(back.signature, Some(vec![0x33; 64]));
+    assert_eq!(back.timestamp, Some(7));
+    assert_eq!(back.channel_id, Some(4));
+}

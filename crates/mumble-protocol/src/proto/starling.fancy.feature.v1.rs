@@ -372,7 +372,7 @@ pub struct AdminResult {
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PushEnvelope {
-    #[prost(oneof = "push_envelope::Body", tags = "1, 2, 3, 4")]
+    #[prost(oneof = "push_envelope::Body", tags = "1, 2, 3, 4, 5")]
     pub body: ::core::option::Option<push_envelope::Body>,
 }
 /// Nested message and enum types in `PushEnvelope`.
@@ -387,6 +387,8 @@ pub mod push_envelope {
         Subscribe(super::Subscribe),
         #[prost(message, tag = "4")]
         Ack(super::PushAck),
+        #[prost(message, tag = "5")]
+        LiveSubscribe(super::LiveSubscribe),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -419,6 +421,26 @@ pub struct Unregister {
 /// than adds.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Subscribe {
+    #[prost(uint32, repeated, tag = "1")]
+    pub muted: ::prost::alloc::vec::Vec<u32>,
+}
+/// "Send me messages from channels I am not in, while I am here."
+///
+/// The fork's `FancySubscribePush` (wire 125), and a different feature from
+/// `Subscribe` above however alike the two look: that one is about a *device*
+/// that is asleep, this one is about a *session* that is connected. A subscriber
+/// is added to the recipients of a text message addressed at a channel they hold
+/// `SubscribePush` in, without joining it and without a listener. It is how a
+/// phone that is awake sees the room it has notifications for.
+///
+/// Session-scoped, so it needs no account and dies with the connection --
+/// deliberately, since a subscription that outlived the session would belong to
+/// whoever inherits the session id.
+///
+/// `muted` is an exclusion list, as everywhere else here: the channels to leave
+/// out of that delivery, and the whole set is replaced on every send.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct LiveSubscribe {
     #[prost(uint32, repeated, tag = "1")]
     pub muted: ::prost::alloc::vec::Vec<u32>,
 }

@@ -1354,6 +1354,15 @@ pub struct PchatKeyAnnounce {
     /// TLS signature proving control of the TLS certificate
     #[prost(bytes = "vec", optional, tag = "7")]
     pub tls_signature: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Which channel this announce is for.
+    ///
+    /// The epoch-1 canon routes and authorises a key announce per channel
+    /// (`KeyAnnounce.channel`), which is what lets a server refuse one from a
+    /// peer without Enter there. An identity announce carries no channel of its
+    /// own, so the sender names the room it is announcing into - one per
+    /// archive channel it joins.
+    #[prost(uint32, optional, tag = "8")]
+    pub channel_id: ::core::option::Option<u32>,
 }
 /// Peer-to-peer key exchange relayed through the server.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
