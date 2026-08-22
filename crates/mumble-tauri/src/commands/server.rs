@@ -14,6 +14,13 @@ pub(crate) struct PingResult {
     max_user_count: Option<u32>,
     /// Server version string (e.g. "1.5.634"), None if unavailable.
     server_version: Option<String>,
+    /// The server's livery digest as lowercase hex, when it sent one.
+    ///
+    /// `None` from a server that does not speak Fancy and from the legacy ping
+    /// format, which is fixed-width and has nowhere to put it. `Some("")` means
+    /// a Fancy server that has no livery set, which is a different answer: the
+    /// first leaves a cached livery alone, the second clears it.
+    livery_digest: Option<String>,
 }
 
 #[tauri::command]
@@ -56,9 +63,8 @@ pub(crate) async fn ping_server(host: String, port: u16) -> PingResult {
     };
 
     // UDP ping for user count + version (best-effort, does not affect online status)
-    let (user_count, max_user_count, server_version) = udp_ping_server_info(&addr)
-        .await
-        .unwrap_or((None, None, None));
+    let (user_count, max_user_count, server_version, livery_digest) =
+        udp_ping_server_info(&addr).await.unwrap_or_default();
 
     PingResult {
         online,
@@ -66,6 +72,7 @@ pub(crate) async fn ping_server(host: String, port: u16) -> PingResult {
         user_count,
         max_user_count,
         server_version,
+        livery_digest,
     }
 }
 
@@ -97,12 +104,12 @@ fn format_version_legacy(v: u32) -> Option<String> {
 
 /// Send a Mumble UDP ping to retrieve extended server information.
 ///
-/// Returns `(user_count, max_user_count, server_version)` on success.
+/// Returns `(user_count, max_user_count, server_version, livery_digest)`.
 /// Tries the protobuf format first; falls back to the legacy 12-byte
 /// format if the server doesn't respond to protobuf within the timeout.
-async fn udp_ping_server_info(
-    addr: &str,
-) -> Result<(Option<u32>, Option<u32>, Option<String>), ()> {
+type PingInfo = (Option<u32>, Option<u32>, Option<String>, Option<String>);
+
+async fn udp_ping_server_info(addr: &str) -> Result<PingInfo, ()> {
     use prost::Message;
     use tokio::net::UdpSocket;
     use tokio::time::{timeout, Duration};
@@ -133,7 +140,22 @@ async fn udp_ping_server_info(
             if let Ok(resp) = mumble_protocol::proto::mumble_udp::Ping::decode(&recv_buf[1..n]) {
                 if resp.user_count > 0 || resp.max_user_count > 0 || resp.server_version_v2 > 0 {
                     let version = format_version_v2(resp.server_version_v2);
-                    return Ok((Some(resp.user_count), Some(resp.max_user_count), version));
+                    // Always `Some` on this path, empty when the server set no
+                    // livery: a Fancy server saying "none" has to clear a
+                    // cached one, and a plain Mumble server saying nothing must
+                    // not.
+                    let digest = Some(
+                        resp.livery_digest
+                            .iter()
+                            .map(|byte| format!("{byte:02x}"))
+                            .collect::<String>(),
+                    );
+                    return Ok((
+                        Some(resp.user_count),
+                        Some(resp.max_user_count),
+                        version,
+                        digest,
+                    ));
                 }
             }
         }
@@ -145,7 +167,15 @@ async fn udp_ping_server_info(
                 u32::from_be_bytes([recv_buf[12], recv_buf[13], recv_buf[14], recv_buf[15]]);
             let max_users =
                 u32::from_be_bytes([recv_buf[16], recv_buf[17], recv_buf[18], recv_buf[19]]);
-            return Ok((Some(users), Some(max_users), format_version_legacy(ver)));
+            // The legacy reply is six fixed big-endian u32s with no extension
+            // point, so a client that falls back this far stays unbranded until
+            // it connects.
+            return Ok((
+                Some(users),
+                Some(max_users),
+                format_version_legacy(ver),
+                None,
+            ));
         }
     }
 
@@ -161,9 +191,17 @@ async fn udp_ping_server_info(
                 u32::from_be_bytes([recv_buf[12], recv_buf[13], recv_buf[14], recv_buf[15]]);
             let max_users =
                 u32::from_be_bytes([recv_buf[16], recv_buf[17], recv_buf[18], recv_buf[19]]);
-            return Ok((Some(users), Some(max_users), format_version_legacy(ver)));
+            // The legacy reply is six fixed big-endian u32s with no extension
+            // point, so a client that falls back this far stays unbranded until
+            // it connects.
+            return Ok((
+                Some(users),
+                Some(max_users),
+                format_version_legacy(ver),
+                None,
+            ));
         }
     }
 
-    Ok((None, None, None))
+    Ok((None, None, None, None))
 }

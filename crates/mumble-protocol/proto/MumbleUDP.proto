@@ -30,4 +30,10 @@ message Ping {
 	uint32 user_count = 4;
 	uint32 max_user_count = 5;
 	uint32 max_bandwidth_per_user = 6;
+
+	// Fancy fields start at 1000; upstream owns 1-999 in every upstream
+	// message. Truncated SHA-256 of the server's livery, so the connect screen
+	// can tell a cached copy is current without fetching. Empty means none is
+	// set, and a server that does not send it leaves the client unbranded.
+	bytes livery_digest = 1000;
 }
