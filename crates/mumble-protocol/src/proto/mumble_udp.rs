@@ -26,7 +26,7 @@ pub mod audio {
         Context(u32),
     }
 }
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Ping {
     #[prost(uint64, tag = "1")]
     pub timestamp: u64,
@@ -40,4 +40,10 @@ pub struct Ping {
     pub max_user_count: u32,
     #[prost(uint32, tag = "6")]
     pub max_bandwidth_per_user: u32,
+    /// Fancy fields start at 1000; upstream owns 1-999 in every upstream
+    /// message. Truncated SHA-256 of the server's livery, so the connect screen
+    /// can tell a cached copy is current without fetching. Empty means none is
+    /// set, and a server that does not send it leaves the client unbranded.
+    #[prost(bytes = "vec", tag = "1000")]
+    pub livery_digest: ::prost::alloc::vec::Vec<u8>,
 }

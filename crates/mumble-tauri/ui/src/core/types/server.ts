@@ -74,6 +74,12 @@ export interface SavedServer {
   cert_label: string | null;
   /** Whether this server is pinned as a favourite (shown at the top). */
   favorite?: boolean;
+  /**
+   * Epoch ms of the last successful connect made with this identity, absent
+   * until it has been used once. Quick connect ranks by recency rather than by
+   * the alphabet, which is the only ordering a saved list can offer otherwise.
+   */
+  last_joined?: number;
 }
 
 /** Result of pinging a server via TCP + UDP. */
@@ -87,6 +93,18 @@ export interface ServerPingResult {
   max_user_count: number | null;
   /** Server version string (e.g. "1.5.634"), null if unavailable. */
   server_version: string | null;
+  /**
+   * The server's livery digest as lowercase hex, when it sent one.
+   *
+   * Three states, not two. Absent or `null` is a server that said nothing -
+   * plain Mumble, or a ping that fell back to the legacy format, which is
+   * fixed-width and has nowhere to carry it - and leaves a cached livery alone.
+   * `""` is a Fancy server saying it has none, and clears one.
+   *
+   * Optional rather than required so the offline literals callers build for an
+   * unreachable server stay honest: they know nothing about livery either.
+   */
+  livery_digest?: string | null;
 }
 
 // --- Public Server List -------------------------------------------
