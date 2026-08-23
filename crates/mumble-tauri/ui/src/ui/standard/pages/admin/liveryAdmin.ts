@@ -8,11 +8,73 @@
  * must not live in the page.
  */
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 /** Where the operator API is, and the credential for it. */
 export interface OperatorCreds {
   readonly baseUrl: string;
   readonly token: string;
+}
+
+/**
+ * A short-lived credential minted for the session this client already holds -
+ * no address or token typed by anyone.
+ *
+ * `grantedScopes` may be a subset of what was asked for, or empty; `token` and
+ * `baseUrl` are both empty exactly when nothing was granted, and
+ * `deniedReason` says why.
+ */
+export interface OperatorTicket {
+  readonly token: string;
+  readonly grantedScopes: readonly string[];
+  readonly expiresAtMs: number;
+  readonly baseUrl: string;
+  readonly deniedReason?: string;
+}
+
+/** How long to wait for the server to answer a ticket request. */
+const TICKET_TIMEOUT_MS = 8000;
+
+/**
+ * Ask the server for a ticket scoped to `scopes`, bridging this session's own
+ * permission into an operator credential without anyone typing one.
+ *
+ * The request and its reply are two separate round trips over the same
+ * connection - a Tauri command that sends the frame, and an `operator-ticket`
+ * event that carries the answer - so the listener is attached *before* the
+ * request goes out, or a fast reply could arrive with nobody listening yet.
+ */
+export function requestOperatorTicket(scopes: readonly string[]): Promise<OperatorTicket> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let unlisten: (() => void) | null = null;
+    const finish = (action: () => void) => {
+      if (settled) return;
+      settled = true;
+      unlisten?.();
+      action();
+    };
+    const timeout = setTimeout(() => {
+      finish(() => reject(new Error("the server did not answer the ticket request in time")));
+    }, TICKET_TIMEOUT_MS);
+
+    listen<{ ticket: OperatorTicket }>("operator-ticket", (event) => {
+      clearTimeout(timeout);
+      finish(() => resolve(event.payload.ticket));
+    })
+      .then((stop) => {
+        if (settled) {
+          stop();
+          return;
+        }
+        unlisten = stop;
+        return invoke<void>("request_operator_ticket", { scopes: Array.from(scopes) });
+      })
+      .catch((error: unknown) => {
+        clearTimeout(timeout);
+        finish(() => reject(error instanceof Error ? error : new Error(String(error))));
+      });
+  });
 }
 
 /** How a chip is toned. Not a colour - the client owns what each looks like. */
@@ -127,10 +189,7 @@ export function writeLiveryOverChannel(patch: LiveryPatch): Promise<void> {
   return invoke<void>("livery_update_over_channel", { patch });
 }
 
-export function previewLivery(
-  creds: OperatorCreds,
-  mode: "dark" | "light",
-): Promise<LiveryPreview> {
+export function previewLivery(creds: OperatorCreds, mode: "dark" | "light"): Promise<LiveryPreview> {
   return invoke<LiveryPreview>("livery_preview", { ...creds, mode });
 }
 
@@ -144,17 +203,11 @@ export function uploadLiveryImage(
   return invoke<void>("livery_upload_image", { ...creds, which, bytes: Array.from(bytes) });
 }
 
-export function clearLiveryImage(
-  creds: OperatorCreds,
-  which: "banner" | "icon",
-): Promise<void> {
+export function clearLiveryImage(creds: OperatorCreds, which: "banner" | "icon"): Promise<void> {
   return invoke<void>("livery_clear_image", { ...creds, which });
 }
 
-export function liveryImage(
-  creds: OperatorCreds,
-  which: "banner" | "icon",
-): Promise<string | null> {
+export function liveryImage(creds: OperatorCreds, which: "banner" | "icon"): Promise<string | null> {
   return invoke<string | null>("livery_image_data_uri", { ...creds, which });
 }
 
@@ -233,11 +286,7 @@ export const CONTRAST_ACCENT = 3;
 
 function channels(hex: string): [number, number, number] {
   const digits = hex.slice(1);
-  return [0, 2, 4].map((at) => Number.parseInt(digits.slice(at, at + 2), 16)) as [
-    number,
-    number,
-    number,
-  ];
+  return [0, 2, 4].map((at) => Number.parseInt(digits.slice(at, at + 2), 16)) as [number, number, number];
 }
 
 function luminance(colour: readonly [number, number, number]): number {
@@ -250,9 +299,7 @@ function luminance(colour: readonly [number, number, number]): number {
 
 /** WCAG 2.1 contrast ratio, 1 to 21. */
 export function contrast(one: string, other: string): number {
-  const [lighter, darker] = [luminance(channels(one)), luminance(channels(other))].sort(
-    (a, b) => b - a,
-  );
+  const [lighter, darker] = [luminance(channels(one)), luminance(channels(other))].sort((a, b) => b - a);
   return (lighter + 0.05) / (darker + 0.05);
 }
 

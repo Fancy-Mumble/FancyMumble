@@ -67,6 +67,17 @@ export async function updateServer(id: string, patch: Partial<Omit<SavedServer, 
   }
 }
 
+/**
+ * Stamp an identity as just connected.
+ *
+ * Written on every successful connect, not only when the entry is created:
+ * quick connect offers servers most-recently-joined first, so the stamp has to
+ * follow use rather than creation.
+ */
+export async function markServerJoined(id: string, when: number = Date.now()): Promise<void> {
+  await updateServer(id, { last_joined: when });
+}
+
 // -- Password storage ----------------------------------------------
 
 /** Retrieve the stored password for a server, or null if none saved. */

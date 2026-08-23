@@ -11,14 +11,18 @@ import { OfficialBadge, isOfficialPlugin } from "../elements/OfficialBadge";
  * from the backend.
  */
 
-import { useEffect, useMemo, useState, useCallback, useRef, type ReactNode } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import type { ServerInfo, DebugStats, AudioSettings, PluginInfoRecord } from "@core/types";
-import { getPreferences, getSavedAudioSettings } from "@core/preferencesStorage";
+import { useState, useRef, type ReactNode } from "react";
+import type { PluginInfoRecord } from "@core/types";
 import { formatBandwidth, formatDuration } from "@core/utils/format";
-import { useAppStore } from "@core/store";
 import { maskSensitive } from "@core/utils/maskSensitive";
+import {
+  activationKind,
+  decodeFancyVersion,
+  useLatencyGraph,
+  useServerInfoModel,
+  LATENCY_GRAPH_H,
+  LATENCY_GRAPH_W,
+} from "@shared/serverinfo/model";
 import { SafeHtml } from "../elements/SafeHtml";
 import ActivityLog from "./ActivityLog";
 import { useTranslation } from "react-i18next";
@@ -87,132 +91,23 @@ function PluginInfoCard({ plugin }: Readonly<{ plugin: PluginInfoRecord }>) {
   );
 }
 
-/** Decode a Mumble v2-encoded version into "major.minor.patch". */
-function decodeFancyVersion(v: number): string {
-  // Encoding: (major << 48) | (minor << 32) | (patch << 16)
-  // JS bitwise ops are 32-bit, so use division for the upper bits.
-  const major = Math.trunc(v / 2 ** 48) & 0xffff;
-  const minor = Math.trunc(v / 2 ** 32) & 0xffff;
-  const patch = Math.trunc(v / 2 ** 16) & 0xffff;
-  return `${major}.${minor}.${patch}`;
-}
-
-// -- Latency graph ------------------------------------------------
-
-const LATENCY_WINDOW_SECS = 10;
-const GRAPH_W = 400;
-const GRAPH_H = 100;
-const PAD_L = 36;
-const PAD_R = 4;
-const PAD_T = 4;
-const PAD_B = 16;
-
-interface LatencyPoint {
-  time: number;
-  rtt: number;
-}
-
-interface CspViolationEntry {
-  readonly id: number;
-  readonly directive: string;
-  readonly blockedUri: string;
-  readonly source: string;
-  readonly disposition: string;
-}
-
-function latencyColor(rtt: number): string {
-  if (rtt < 50) return "#22c55e";
-  if (rtt < 120) return "#eab308";
-  return "#ef4444";
-}
-
-function drawGraph(buffer: LatencyPoint[], svgRef: React.RefObject<SVGSVGElement | null>) {
-  const svg = svgRef.current;
-  if (!svg) return;
-
-  const plotW = GRAPH_W - PAD_L - PAD_R;
-  const plotH = GRAPH_H - PAD_T - PAD_B;
-
-  const maxRtt = buffer.reduce((m, p) => Math.max(m, p.rtt), 0);
-  const yMax = Math.max(Math.ceil(maxRtt / 10) * 10, 20);
-
-  const now = buffer.length > 0 ? buffer[buffer.length - 1].time : performance.now();
-  const tMin = now - LATENCY_WINDOW_SECS * 1000;
-
-  let polyPoints = "";
-  for (const p of buffer) {
-    const x = PAD_L + ((p.time - tMin) / (LATENCY_WINDOW_SECS * 1000)) * plotW;
-    const y = PAD_T + plotH - (p.rtt / yMax) * plotH;
-    polyPoints += `${x},${y} `;
-  }
-
-  const gridSteps = 4;
-  let gridSvg = "";
-  for (let i = 0; i <= gridSteps; i++) {
-    const y = PAD_T + (i / gridSteps) * plotH;
-    const val = Math.round(yMax * (1 - i / gridSteps));
-    gridSvg += `<line x1="${PAD_L}" y1="${y}" x2="${GRAPH_W - PAD_R}" y2="${y}" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>`;
-    gridSvg += `<text x="${PAD_L - 4}" y="${y + 3}" text-anchor="end" fill="rgba(255,255,255,0.35)" font-size="8">${val}</text>`;
-  }
-  gridSvg += `<text x="${PAD_L - 4}" y="${GRAPH_H - 1}" text-anchor="end" fill="rgba(255,255,255,0.25)" font-size="7">ms</text>`;
-
-  const latest = buffer.length > 0 ? buffer[buffer.length - 1].rtt : 0;
-  const latestColor = latencyColor(latest);
-
-  svg.innerHTML =
-    gridSvg +
-    `<polyline points="${polyPoints}" fill="none" stroke="${latestColor}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>` +
-    (buffer.length > 0
-      ? `<text x="${GRAPH_W - PAD_R}" y="${PAD_T + 10}" text-anchor="end" fill="${latestColor}" font-size="10" font-weight="600">${latest.toFixed(0)} ms</text>`
-      : "");
-}
+const ACTIVATION_KEYS = {
+  ptt: "infoPanel.activationPtt",
+  vad: "infoPanel.activationVad",
+  continuous: "infoPanel.activationContinuous",
+} as const;
 
 function LatencyAccordion() {
-  const bufferRef = useRef<LatencyPoint[]>([]);
   const svgRef = useRef<SVGSVGElement>(null);
-  const rafId = useRef(0);
-
-  useEffect(() => {
-    invoke("start_latency_test").catch(() => {});
-    return () => {
-      invoke("stop_latency_test").catch(() => {});
-    };
-  }, []);
-
-  useEffect(() => {
-    const unlisten = listen<{ rtt_ms: number }>("ping-latency", (ev) => {
-      const buf = bufferRef.current;
-      buf.push({ time: performance.now(), rtt: ev.payload.rtt_ms });
-      const cutoff = performance.now() - LATENCY_WINDOW_SECS * 1000;
-      while (buf.length > 0 && buf[0].time < cutoff) buf.shift();
-
-      cancelAnimationFrame(rafId.current);
-      rafId.current = requestAnimationFrame(() => drawGraph(buf, svgRef));
-    });
-
-    return () => {
-      cancelAnimationFrame(rafId.current);
-      unlisten.then((f) => f());
-    };
-  }, []);
-
+  useLatencyGraph(svgRef);
   return (
     <svg
       ref={svgRef}
       className={styles.latencyGraph}
-      viewBox={`0 0 ${GRAPH_W} ${GRAPH_H}`}
+      viewBox={`0 0 ${LATENCY_GRAPH_W} ${LATENCY_GRAPH_H}`}
       preserveAspectRatio="none"
     />
   );
-}
-
-function resolveActivationLabel(
-  settings: { push_to_talk: boolean; noise_suppression?: boolean },
-  t: (key: string) => string,
-): string {
-  if (settings.push_to_talk) return t("infoPanel.activationPtt");
-  if (settings.noise_suppression) return t("infoPanel.activationVad");
-  return t("infoPanel.activationContinuous");
 }
 
 interface ServerInfoPanelProps {
@@ -220,100 +115,21 @@ interface ServerInfoPanelProps {
 }
 
 export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
-  const udpActive = useAppStore((s) => s.udpActive);
-  const capabilities = useAppStore((s) => s.fileServerCapabilities);
-  const streamerMode = useAppStore((s) => s.streamerMode);
-  const pluginInfos = useAppStore((s) => s.pluginInfos);
-  // The plugin registry is re-broadcast on every enable/disable, so it is the
-  // live source of "which plugins are currently loaded".  `pluginInfos` is only
-  // sent once on connect and goes stale when a plugin is disabled at runtime,
-  // so filter the advertised infos down to plugins still in the registry.
-  // (Fall back to all advertised infos when no registry was sent at all.)
-  const pluginRegistry = useAppStore((s) => s.pluginRegistry);
-  const livePlugins = useMemo(() => {
-    const all = [...pluginInfos.values()];
-    if (pluginRegistry.length === 0) return all;
-    const loaded = new Set(pluginRegistry.map((r) => r.pluginName));
-    return all.filter((p) => loaded.has(p.name));
-  }, [pluginInfos, pluginRegistry]);
-  const [info, setInfo] = useState<ServerInfo | null>(null);
-  const [devMode, setDevMode] = useState(false);
-  const [debugStats, setDebugStats] = useState<DebugStats | null>(null);
-  const [audioSettings, setAudioSettings] = useState<AudioSettings | null>(null);
-  const [welcomeText, setWelcomeText] = useState<string | null>(null);
-  const [cspViolations, setCspViolations] = useState<CspViolationEntry[]>([]);
-  const nextCspId = useRef(0);
+  const {
+    info,
+    welcomeText,
+    devMode,
+    debugStats,
+    audioSettings,
+    livePlugins,
+    cspViolations,
+    clearCspViolations,
+    refreshStats,
+    udpActive,
+    capabilities,
+    streamerMode,
+  } = useServerInfoModel();
   const { t } = useTranslation("server");
-
-  // Load server info and developer-mode preference on mount.
-  useEffect(() => {
-    invoke<ServerInfo>("get_server_info")
-      .then(setInfo)
-      .catch((e) => console.error("get_server_info error:", e));
-
-    invoke<string | null>("get_welcome_text")
-      .then(setWelcomeText)
-      .catch(() => {});
-
-    getPreferences()
-      .then((prefs) => {
-        if (prefs.userMode === "developer") {
-          setDevMode(true);
-        }
-      })
-      .catch(() => {});
-
-    // Load audio settings for the debug overview.
-    Promise.all([getSavedAudioSettings(), invoke<AudioSettings>("get_audio_settings")])
-      .then(([saved, backend]) => {
-        setAudioSettings(saved ?? backend);
-      })
-      .catch(() => {});
-  }, []);
-
-  // Fetch debug stats when developer mode is active, refresh periodically.
-  useEffect(() => {
-    if (!devMode) return;
-
-    const fetchStats = () => {
-      invoke<DebugStats>("get_debug_stats")
-        .then(setDebugStats)
-        .catch((e) => console.error("get_debug_stats error:", e));
-    };
-
-    fetchStats();
-    const interval = setInterval(fetchStats, 2000);
-    return () => clearInterval(interval);
-  }, [devMode]);
-
-  const handleRefreshStats = useCallback(() => {
-    invoke<DebugStats>("get_debug_stats")
-      .then(setDebugStats)
-      .catch((e) => console.error("get_debug_stats error:", e));
-  }, []);
-
-  // Capture CSP violations while in developer mode.
-  useEffect(() => {
-    if (!devMode) return;
-
-    const MAX_ENTRIES = 100;
-    const handler = (ev: SecurityPolicyViolationEvent) => {
-      setCspViolations((prev) => {
-        const entry: CspViolationEntry = {
-          id: nextCspId.current++,
-          directive: ev.violatedDirective,
-          blockedUri: ev.blockedURI,
-          source: ev.sourceFile ? `${ev.sourceFile}:${ev.lineNumber}` : "(inline)",
-          disposition: ev.disposition,
-        };
-        const next = [entry, ...prev];
-        return next.length > MAX_ENTRIES ? next.slice(0, MAX_ENTRIES) : next;
-      });
-    };
-
-    document.addEventListener("securitypolicyviolation", handler);
-    return () => document.removeEventListener("securitypolicyviolation", handler);
-  }, [devMode]);
 
   return (
     <aside className={styles.panel}>
@@ -444,7 +260,7 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
                 <button
                   type="button"
                   className={styles.refreshBtn}
-                  onClick={handleRefreshStats}
+                  onClick={refreshStats}
                   aria-label={t("infoPanel.refreshAriaLabel")}
                   title={t("infoPanel.refreshTitle")}
                 >
@@ -491,7 +307,7 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
                     />
                     <DebugRow
                       label={t("infoPanel.debug.activation")}
-                      value={resolveActivationLabel(audioSettings, t as (key: string) => string)}
+                      value={t(ACTIVATION_KEYS[activationKind(audioSettings)])}
                     />
                     <DebugRow
                       label={t("infoPanel.debug.gateCloseRatio")}
@@ -606,7 +422,7 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
                     <button
                       type="button"
                       className={styles.refreshBtn}
-                      onClick={() => setCspViolations([])}
+                      onClick={clearCspViolations}
                       title={t("infoPanel.cspClearTitle", { defaultValue: "Clear violations" })}
                     >
                       <CloseIcon width={12} height={12} />

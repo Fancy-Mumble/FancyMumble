@@ -11,8 +11,10 @@
     "baseUrl": ".",
     "paths": {
       "@core/*": ["src/core/*"],
+      "@shared/*": ["src/shared/*"],
       "@standard/*": ["src/ui/standard/*"],
       "@aurora/*": ["src/ui/aurora/*"],
+      "@nebula/*": ["src/ui/nebula/*"],
       "@ui/*": ["src/ui/*"]
     },
     "allowImportingTsExtensions": true,

@@ -12,9 +12,15 @@ export type BgFit = "cover" | "tile";
 export type ChannelViewerStyle = "classic" | "flat" | "modern";
 
 export interface PersonalizationData {
-  /** Original (un-blurred) background image as data-URL, or null if none. */
+  /**
+   * The background still: either a data-URL (legacy, and what Standard's own
+   * editor writes) or a `bgstore:` reference to a file in the backend's
+   * chat-backgrounds store. Resolve through
+   * `@core/features/settings/chatBackground` before rendering. For an
+   * animated background this is the clip's poster frame.
+   */
   chatBgOriginal: string | null;
-  /** Pre-blurred background image as data-URL, or null if blur is off / no image. */
+  /** The still with blur/dim baked in - data-URL or `bgstore:` ref, as above. */
   chatBgBlurred: string | null;
   /** Blur sigma value (0 = no blur). */
   chatBgBlurSigma: number;
@@ -24,6 +30,29 @@ export interface PersonalizationData {
   chatBgDim: number;
   /** How the background image fills the chat area ("cover" or "tile"). */
   chatBgFit: BgFit;
+  /**
+   * File name of an animated background in the backend's store, or null for a
+   * still (or no) background.
+   *
+   * Only the name lives here: the clip itself is far too big for a record that
+   * is read back over IPC on every cold start, so the bytes stay on disk and
+   * the webview reads them once over binary IPC. `chatBgOriginal` holds its
+   * poster frame, which is what the skins that cannot play video fall back to.
+   */
+  chatBgVideo: string | null;
+  /**
+   * File name of the pre-processed clip - `chatBgVideo` with blur and dim
+   * baked into its pixels by the Rust backend - or null while no bake exists.
+   * Valid only while the two `chatBgVideoBaked*` values match the live
+   * `chatBgBlurSigma`/`chatBgDim`; a slider moved after the bake leaves this
+   * stale, and renderers must fall back to the live CSS filter over the raw
+   * clip until the next bake lands.
+   */
+  chatBgVideoBaked: string | null;
+  /** The sigma the current bake was computed with. */
+  chatBgVideoBakedSigma: number;
+  /** The dim the current bake was computed with. */
+  chatBgVideoBakedDim: number;
   /** Message bubble visual style. */
   bubbleStyle: BubbleStyle;
   /** Font size preset (or custom px value stored as number). */
@@ -46,13 +75,17 @@ export interface PersonalizationData {
 const STORE_FILE = "personalization.json";
 const KEY = "data";
 
-const DEFAULTS: PersonalizationData = {
+export const PERSONALIZATION_DEFAULTS: PersonalizationData = {
   chatBgOriginal: null,
   chatBgBlurred: null,
   chatBgBlurSigma: 0,
   chatBgOpacity: 0.25,
   chatBgDim: 0.5,
   chatBgFit: "cover",
+  chatBgVideo: null,
+  chatBgVideoBaked: null,
+  chatBgVideoBakedSigma: 0,
+  chatBgVideoBakedDim: 0,
   bubbleStyle: "bubbles",
   fontSize: "medium",
   fontSizeCustomPx: 14,
@@ -78,7 +111,7 @@ export async function loadPersonalization(): Promise<PersonalizationData> {
   cachedLoad = (async () => {
     const store = await getStore();
     const data = await store.get<PersonalizationData>(KEY);
-    return data ? { ...DEFAULTS, ...data } : { ...DEFAULTS };
+    return data ? { ...PERSONALIZATION_DEFAULTS, ...data } : { ...PERSONALIZATION_DEFAULTS };
   })();
   try {
     return await cachedLoad;
@@ -88,9 +121,15 @@ export async function loadPersonalization(): Promise<PersonalizationData> {
   }
 }
 
+/** Fired after a successful save so live surfaces (chat backgrounds, previews)
+ *  can re-read without being remounted. */
+export const PERSONALIZATION_CHANGED_EVENT = "personalization-changed";
+
 /** Persist personalization data. */
 export async function savePersonalization(data: PersonalizationData): Promise<void> {
   const store = await getStore();
   await store.set(KEY, data);
   cachedLoad = Promise.resolve(data);
+  if (typeof window !== "undefined")
+    window.dispatchEvent(new CustomEvent(PERSONALIZATION_CHANGED_EVENT, { detail: data }));
 }

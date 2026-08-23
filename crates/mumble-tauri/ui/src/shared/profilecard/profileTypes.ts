@@ -67,7 +67,7 @@ export interface FancyProfile {
   avatarBorder?: string;
   /** Custom avatar border CSS (only used when avatarBorder is "custom"). */
   avatarBorderCustom?: string;
-  /** Custom user status text (shown below the name). */
+  /** Custom user status (shown below the name); inline formatting, one line. */
   status?: string;
   /** Pronouns, drawn on the identity line beside `contact`. */
   pronouns?: string;

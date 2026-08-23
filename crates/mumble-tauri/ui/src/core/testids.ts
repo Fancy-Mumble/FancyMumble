@@ -273,6 +273,8 @@ export const TID = {
   // -- Settings: Account (self-service registration) ------------------------
   /** Overview block showing name / user id / auth mode / 2FA state. */
   accountOverview: "account-overview",
+  /** The account's *existing* password, which every change here is proved by. */
+  accountCurrentPasswordInput: "account-current-password-input",
   accountPasswordInput: "account-password-input",
   accountPasswordConfirmInput: "account-password-confirm-input",
   /** Enables password auth / changes the password. */

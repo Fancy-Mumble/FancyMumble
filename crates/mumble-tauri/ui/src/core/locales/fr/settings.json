@@ -49,6 +49,7 @@
     "outputDevice": "Périphérique de sortie",
     "systemDefault": "Système par défaut",
     "deviceDefault": "(défaut)",
+    "deviceUnavailable": "{{name}} (indisponible - système par défaut utilisé)",
     "microphoneVolume": "Volume du microphone",
     "speakerVolume": "Volume des haut-parleurs",
     "activationMode": "Mode d'activation",
@@ -327,9 +328,12 @@
   },
   "personalize": {
     "panelTitle": "Personnaliser",
-    "uiDesign": "Design Aurora",
+    "uiDesign": "Design de l’interface",
     "beta": "Bêta",
-    "uiDesignHint": "Essayez Aurora, un design expérimental encore en bêta. L’interface Standard reste la valeur par défaut et peut être restaurée avec ce bouton.",
+    "uiDesignHint": "Standard, ou l’une des bêtas de design. Standard est la valeur par défaut et couvre le plus de fonctionnalités.",
+    "uiDesignStandard": "Standard",
+    "uiDesignAurora": "Aurora (bêta)",
+    "uiDesignNebula": "Nebula (bêta)",
     "uiDesignOverrideHint": "L’interface est actuellement forcée sur « {{design}} » par le paramètre d’URL de développement.",
     "theme": "Thème",
     "themeHint": "Choisissez le style visuel de toute l'application.",
@@ -481,6 +485,11 @@
       "authCert": "Connexion : certificat",
       "totpOn": "Authentification à deux facteurs : activée",
       "totpOff": "Authentification à deux facteurs : désactivée"
+    },
+    "confirm": {
+      "label": "Mot de passe actuel",
+      "hint": "Requis pour chaque modification ci-dessous. Une session déjà connectée est exactement ce qu'est aussi une session volée : redonner le mot de passe est ce qui empêche une session détournée d'emporter le compte.",
+      "missing": "Saisis ton mot de passe actuel pour modifier quoi que ce soit ici."
     },
     "password": {
       "title": "Connexion par mot de passe",
@@ -1030,7 +1039,55 @@
       "addQuestionBtn": "+ Ajouter une question",
       "savingBtn": "Enregistrement...",
       "saveBroadcastBtn": "Enregistrer et diffuser",
-      "promptPlaceholder": "Qu'est-ce qui vous amène ici ?"
+      "promptPlaceholder": "Qu'est-ce qui vous amène ici ?",
+      "revShort": "rév. {{n}}",
+      "startsIn": "Tout le monde commence dans",
+      "startsInPlaceholder": "La liste complète des canaux",
+      "untitledQuestion": "Question sans titre",
+      "answerCount_one": "{{count}} réponse",
+      "answerCount_other": "{{count}} réponses",
+      "summarySingle": "choix unique",
+      "summaryMulti": "sélection multiple",
+      "summaryRequired": "obligatoire",
+      "summaryOptional": "facultatif",
+      "advanced": "Avancé",
+      "mappingHint": "mène à un canal · groupes par recherche",
+      "mappingLabel": "Canaux et groupes pour {{answer}}",
+      "mappingPlaceholder": "canal ou groupe…",
+      "notePlaceholder": "Note lue par les nouveaux membres (facultatif)",
+      "questionsLeft": "{{n}} sur {{max}} restantes",
+      "templateIntro": "ou partez d'un modèle :",
+      "broadcastHint": "Les membres connectés voient les changements immédiatement",
+      "previewTitle": "APERÇU NOUVEAU MEMBRE",
+      "previewWelcome": "Bienvenue sur {{server}}",
+      "previewStep": "{{n}} sur {{m}}",
+      "previewMapping": "Réponse « {{answer}} » → rejoint {{targets}}",
+      "previewNoMapping": "Rien n'est encore associé : cette réponse ne place personne.",
+      "thisServer": "ce serveur",
+      "templates": {
+        "gaming": {
+          "chip": "Communauté de jeu",
+          "question": "À quoi jouez-vous ?",
+          "a1": "Jeux de tir",
+          "a2": "Jeux de rôle",
+          "a3": "Stratégie",
+          "a4": "Course"
+        },
+        "languages": {
+          "chip": "Salons par langue",
+          "question": "Quelle langue parlez-vous ?",
+          "a1": "English",
+          "a2": "Deutsch",
+          "a3": "Français",
+          "a4": "Español"
+        },
+        "private": {
+          "chip": "Espaces réservés",
+          "question": "Êtes-vous invité ou membre ?",
+          "a1": "Invité",
+          "a2": "Membre"
+        }
+      }
     },
     "modal": {
       "welcomeTitle": "Bienvenue !",

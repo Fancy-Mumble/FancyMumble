@@ -1,12 +1,13 @@
 import { ChevronDownIcon, HandIcon, MessageCircleIcon } from "../../icons";
 import React, { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, liveDocKey } from "@core/store";
 import { PLUGIN_NAME_CALENDAR, PLUGIN_NAME_LIVE_DOC } from "@core/constants/pluginData";
 import type { ChatMessage, TimeFormat, LiveDocDocLink } from "@core/types";
 import { getPreferences } from "@core/preferencesStorage";
 import { loadPersonalization, type PersonalizationData } from "../../personalizationStorage";
+import { useResolvedBackgroundSource } from "@core/features/settings/chatBackground";
 import ChatHeader from "./ChatHeader";
 import type { BroadcastInfo } from "./ChatHeader";
 import MobileCallControls from "./mobile/MobileCallControls";
@@ -47,6 +48,7 @@ import MentionPopover from "./mention/MentionPopover";
 import { useChatSend } from "./useChatSend";
 import type { GalleryQuality } from "@core/utils/media";
 import { useChatScroll } from "@core/features/chat/useChatScroll";
+import { attachmentToImageFile } from "@core/features/chat/attachmentFile";
 import { useMessageSelection } from "./message/useMessageSelection";
 import { useReadReceipts } from "@core/features/chat/readreceipt/useReadReceipts";
 import { useTypingIndicator } from "@core/features/chat/typing/useTypingIndicator";
@@ -212,6 +214,10 @@ export default function ChatView({
     chatBgOpacity: 0.25,
     chatBgDim: 0.5,
     chatBgFit: "cover",
+    chatBgVideo: null,
+    chatBgVideoBaked: null,
+    chatBgVideoBakedSigma: 0,
+    chatBgVideoBakedDim: 0,
     bubbleStyle: "bubbles",
     fontSize: "medium",
     fontSizeCustomPx: 14,
@@ -221,6 +227,13 @@ export default function ChatView({
     theme: "dark",
     alwaysShowMessageActions: false,
   });
+
+  // The record may hold the wallpaper as a data-URL or as a `bgstore:` ref to
+  // a file in the backend's store; either way this is a renderable src (a
+  // blob URL for refs), or null while it loads.
+  const chatBgSrc = useResolvedBackgroundSource(
+    personalization.chatBgBlurred ?? personalization.chatBgOriginal,
+  );
 
   useEffect(() => {
     getPreferences().then((prefs) => {
@@ -895,12 +908,7 @@ export default function ChatView({
     for (const att of items) {
       if (!att.isImage) continue;
       try {
-        let file = att.file;
-        if (!file && att.path) {
-          const res = await fetch(convertFileSrc(att.path));
-          const blob = await res.blob();
-          file = new File([blob], att.name, { type: blob.type || "image/png" });
-        }
+        const file = await attachmentToImageFile(att);
         if (file) files.push(file);
       } catch (e) {
         console.error("read live-doc image failed:", e);
@@ -949,12 +957,7 @@ export default function ChatView({
         const resolved: File[] = [];
         const spoilers: boolean[] = [];
         for (const att of images) {
-          let file = att.file;
-          if (!file && att.path) {
-            const res = await fetch(convertFileSrc(att.path));
-            const blob = await res.blob();
-            file = new File([blob], att.name, { type: blob.type || "image/png" });
-          }
+          const file = await attachmentToImageFile(att);
           if (file) {
             resolved.push(file);
             spoilers.push(att.spoiler ?? false);
@@ -1506,12 +1509,12 @@ export default function ChatView({
               personalization.bubbleStyle === "compact" ? styles.compactStyle : "",
               personalization.compactMode ? styles.compactLayout : "",
             ].join(" ")}
-            data-has-bg={personalization.chatBgOriginal ? "" : undefined}
+            data-has-bg={chatBgSrc ? "" : undefined}
             style={
               {
-                ...(personalization.chatBgOriginal
+                ...(chatBgSrc
                   ? {
-                      "--chat-bg-image": `url(${personalization.chatBgBlurred ?? personalization.chatBgOriginal})`,
+                      "--chat-bg-image": `url(${chatBgSrc})`,
                       "--chat-bg-opacity": String(personalization.chatBgOpacity),
                       "--chat-bg-size": personalization.chatBgFit === "tile" ? "auto" : "cover",
                       "--chat-bg-repeat": personalization.chatBgFit === "tile" ? "repeat" : "no-repeat",

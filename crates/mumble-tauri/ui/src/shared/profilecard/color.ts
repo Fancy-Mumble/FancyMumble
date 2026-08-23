@@ -308,3 +308,52 @@ export function withAlpha(color: string, alpha: number): string {
   }
   return value;
 }
+
+/** Take a colour apart into channels and an alpha; null for anything else. */
+function parseColor(color: string): { r: number; g: number; b: number; a: number } | null {
+  const value = color.trim();
+  if (value.startsWith("#")) {
+    const raw = value.slice(1);
+    const full =
+      raw.length === 3 || raw.length === 4
+        ? raw
+            .split("")
+            .map((digit) => digit + digit)
+            .join("")
+        : raw;
+    if (full.length < 6) return null;
+    return {
+      r: parseInt(full.slice(0, 2), 16),
+      g: parseInt(full.slice(2, 4), 16),
+      b: parseInt(full.slice(4, 6), 16),
+      a: full.length >= 8 ? parseInt(full.slice(6, 8), 16) / 255 : 1,
+    };
+  }
+  const functional = /^rgba?\(([^)]+)\)$/i.exec(value);
+  if (!functional) return null;
+  const parts = functional[1].split("/").flatMap((part) => part.split(/[\s,]+/)).filter(Boolean);
+  if (parts.length < 3) return null;
+  const [r, g, b, a] = parts.map(Number);
+  if ([r, g, b].some(Number.isNaN)) return null;
+  return { r, g, b, a: parts.length > 3 && !Number.isNaN(a) ? a : 1 };
+}
+
+/**
+ * Flatten a translucent colour onto an opaque one.
+ *
+ * A host's theme describes surfaces *inside* its window, so a raised surface is
+ * usually a wash of light at low alpha over the window's own colour. A card
+ * that floats has no window under it - it is over a photograph, a message list,
+ * another panel - so handed that wash directly it turns into a pane of glass
+ * and takes on whatever it happens to be covering. Compositing the wash onto
+ * the window colour here gives the card the shade the host intended, as a flat
+ * colour it can also draw a ring in.
+ */
+export function over(color: string, base: string): string {
+  const top = parseColor(color);
+  const bottom = parseColor(base);
+  if (!top || !bottom) return color;
+  const mix = (a: number, b: number) => Math.round(b + (a - b) * top.a);
+  const hex = (value: number) => clamp(value, 0, 255).toString(16).padStart(2, "0");
+  return `#${hex(mix(top.r, bottom.r))}${hex(mix(top.g, bottom.g))}${hex(mix(top.b, bottom.b))}`;
+}

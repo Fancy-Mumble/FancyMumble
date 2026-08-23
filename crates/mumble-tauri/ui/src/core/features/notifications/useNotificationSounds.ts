@@ -143,8 +143,25 @@ export function useNotificationSounds(settings: NotificationSoundSettings) {
       lastChannel = state.currentChannel;
       lastOwnSession = state.ownSession;
 
+      // A connect is not a burst of joins.  `ServerSync` emits
+      // `current-channel-changed` right after `server-connected`, and that
+      // listener is synchronous while the connected handler awaits its store
+      // reads - so `currentChannel` lands first (against an empty user list),
+      // the user list lands next, and `ownSession` only arrives at the end of
+      // the post-connect chain.  Until `ownSession` is known we cannot filter
+      // ourselves out, so the arriving list read as a server-wide join *and* a
+      // channel join: two sounds on every connect (the same sound twice on the
+      // defaults, which give both events "Pop"), even when alone on the server.
+      // Stay silent until we are identified, and clear the snapshots so the
+      // first identified tick re-seeds them.  `ownSession` gates the whole
+      // between-sessions window too: a disconnect resets the store to INITIAL.
+      const identified = state.ownSession !== null;
+      if (!identified) {
+        resetPerServerRefs();
+      }
+
       // Server-wide user join/leave (own session excluded so connecting doesn't trigger it)
-      if (usersChanged || ownChanged) {
+      if (identified && (usersChanged || ownChanged)) {
         const userCount = state.users.reduce((acc, u) => (u.session !== state.ownSession ? acc + 1 : acc), 0);
         const prev = prevUserCountRef.current;
         if (prev === null) {
@@ -161,7 +178,7 @@ export function useNotificationSounds(settings: NotificationSoundSettings) {
       // Channel-specific user join/leave
       const myChannel = state.currentChannel;
       const mySession = state.ownSession;
-      if (myChannel !== null && (usersChanged || channelChanged || ownChanged)) {
+      if (identified && myChannel !== null && (usersChanged || channelChanged || ownChanged)) {
         const channelUsers = new Set<number>();
         for (const u of state.users) {
           if (u.channel_id === myChannel && u.session !== mySession) {

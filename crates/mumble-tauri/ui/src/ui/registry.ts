@@ -14,10 +14,11 @@ export interface UiPackModule {
 export const UI_PACK_LOADERS: Record<UiDesignId, () => Promise<UiPackModule>> = {
   standard: () => import("@standard/index"),
   aurora: () => import("@aurora/index"),
+  nebula: () => import("@nebula/index"),
 };
 
 export function isUiDesignId(value: unknown): value is UiDesignId {
-  return value === "standard" || value === "aurora";
+  return value === "standard" || value === "aurora" || value === "nebula";
 }
 
 /** URL selection deliberately wins over persistence so development and E2E

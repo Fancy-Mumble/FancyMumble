@@ -104,6 +104,11 @@ export function fileToDataUrl(file: File): Promise<string> {
 export async function fitImage(file: File, maxBytes: number): Promise<string> {
   if (maxBytes < 5000) maxBytes = 131072; // guard against bogus limits
 
+  // An unreadable source would otherwise encode to a well-formed but payloadless
+  // `data:image/png;base64,` URL, slip under the size check below, and be sent
+  // as an empty image.
+  if (file.size === 0) throw new Error(`${file.name || "image"} is empty`);
+
   const dataUrl = await fileToDataUrl(file);
 
   // 1. Original fits -> return as-is.

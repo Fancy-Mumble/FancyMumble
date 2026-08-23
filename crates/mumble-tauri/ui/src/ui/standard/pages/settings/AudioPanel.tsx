@@ -223,6 +223,20 @@ export function AudioPanel({
   // out is to capture through the sound server, i.e. the system default.
   const canSuggestSystemDefault = busy && isLinux && settings.selected_device != null;
 
+  // A stored device that the current list does not offer - a mic that is
+  // unplugged, or a name saved before the device layer started naming
+  // things the way PipeWire does. The backend falls back to the system
+  // default in that case, so say so: a controlled <select> whose value
+  // matches no <option> renders blank, which reads as "nothing is
+  // configured" rather than "your choice is gone and this is what you
+  // are actually on". The entry is kept selectable so the setting
+  // survives a device that is only temporarily absent.
+  const staleOption = (selected: string | null, list: { name: string }[]) =>
+    selected !== null && list.length > 0 && !list.some((d) => d.name === selected) ? (
+      <option value={selected}>{t("audio.deviceUnavailable", { name: selected })}</option>
+    ) : null;
+
+
   return (
     <>
       <h2 className={styles.panelTitle}>{t("audio.panelTitle")}</h2>
@@ -302,6 +316,7 @@ export function AudioPanel({
               }
             >
               <option value="">{t("audio.systemDefault")}</option>
+              {staleOption(settings.selected_device, devices)}
               {devices.map((d, i) => (
                 <option key={`in-${i}-${d.name}`} value={d.name}>
                   {d.name}
@@ -332,6 +347,7 @@ export function AudioPanel({
               }
             >
               <option value="">{t("audio.systemDefault")}</option>
+              {staleOption(settings.selected_output_device, outputDevices)}
               {outputDevices.map((d, i) => (
                 <option key={`out-${i}-${d.name}`} value={d.name}>
                   {d.name}

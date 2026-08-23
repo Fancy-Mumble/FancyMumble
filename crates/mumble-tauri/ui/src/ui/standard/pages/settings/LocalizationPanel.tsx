@@ -46,7 +46,7 @@ const NUMBER_FORMAT_OPTIONS: NumberFormat[] = ["auto", "comma-period", "period-c
 
 const SAMPLE_NUMBER = 1234567.89;
 
-function previewTime(format: TimeFormat, locale: string, sample: Date): string {
+export function previewTime(format: TimeFormat, locale: string, sample: Date): string {
   if (format === "auto") {
     return new Intl.DateTimeFormat(locale, { timeStyle: "short" }).format(sample);
   }
@@ -57,7 +57,7 @@ function previewTime(format: TimeFormat, locale: string, sample: Date): string {
   }).format(sample);
 }
 
-function previewDate(format: DateFormat, locale: string, sample: Date): string {
+export function previewDate(format: DateFormat, locale: string, sample: Date): string {
   switch (format) {
     case "auto":
       return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(sample);
@@ -73,7 +73,7 @@ function previewDate(format: DateFormat, locale: string, sample: Date): string {
   }
 }
 
-function previewNumber(format: NumberFormat, locale: string): string {
+export function previewNumber(format: NumberFormat, locale: string): string {
   // The non-auto cases use a fixed locale whose convention matches the
   // chosen separator style, so the preview is correct regardless of the
   // current UI language.

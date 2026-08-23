@@ -1,4 +1,4 @@
-{
+﻿{
   "localization": {
     "title": "语言与格式",
     "tab": "语言与格式"
@@ -49,6 +49,7 @@
     "outputDevice": "输出设备",
     "systemDefault": "系统默认",
     "deviceDefault": "（默认）",
+    "deviceUnavailable": "{{name}}（不可用 - 使用系统默认）",
     "microphoneVolume": "麦克风音量",
     "speakerVolume": "扬声器音量",
     "activationMode": "激活方式",
@@ -327,9 +328,12 @@
   },
   "personalize": {
     "panelTitle": "个性化",
-    "uiDesign": "Aurora 设计",
+    "uiDesign": "界面设计",
     "beta": "测试版",
-    "uiDesignHint": "试用 Aurora，一个仍处于测试阶段的实验性设计。标准界面为默认界面，可通过此开关恢复。",
+    "uiDesignHint": "标准，或其中一个设计测试版。标准是默认选项，功能最完整。",
+    "uiDesignStandard": "标准",
+    "uiDesignAurora": "Aurora（测试版）",
+    "uiDesignNebula": "Nebula（测试版）",
     "uiDesignOverrideHint": "开发 URL 参数当前将界面强制设为“{{design}}”。",
     "theme": "主题",
     "themeHint": "选择整个应用的视觉风格。",
@@ -487,6 +491,11 @@
       "authCert": "登录方式：证书",
       "totpOn": "双重验证：已开启",
       "totpOff": "双重验证：已关闭"
+    },
+    "confirm": {
+      "label": "当前密码",
+      "hint": "下面的每项更改都需要它。已连接的会话与被盗的会话别无二致，再次验证密码可以阻止被劫持的会话夺走账号。",
+      "missing": "请输入当前密码后再更改此处的内容。"
     },
     "password": {
       "title": "密码登录",
@@ -1140,7 +1149,54 @@
       "addQuestionBtn": "+ 添加问题",
       "savingBtn": "保存中…",
       "saveBroadcastBtn": "保存并广播",
-      "promptPlaceholder": "你来这里是为了什么？"
+      "promptPlaceholder": "你来这里是为了什么？",
+      "revShort": "版本 {{n}}",
+      "startsIn": "所有人首先进入",
+      "startsInPlaceholder": "完整频道列表",
+      "untitledQuestion": "未命名问题",
+      "answerCount_other": "{{count}} 个答案",
+      "summarySingle": "单选",
+      "summaryMulti": "多选",
+      "summaryRequired": "必填",
+      "summaryOptional": "可选",
+      "advanced": "高级",
+      "mappingHint": "映射到频道 · 用户组可搜索",
+      "mappingLabel": "{{answer}} 对应的频道和用户组",
+      "mappingPlaceholder": "频道或用户组…",
+      "notePlaceholder": "给新成员看的说明（可选）",
+      "questionsLeft": "还可添加 {{n}}/{{max}}",
+      "templateIntro": "或从模板开始：",
+      "broadcastHint": "已连接的成员会立即看到更改",
+      "previewTitle": "新成员预览",
+      "previewWelcome": "欢迎来到 {{server}}",
+      "previewStep": "第 {{n}} / {{m}} 步",
+      "previewMapping": "答案“{{answer}}”→ 加入 {{targets}}",
+      "previewNoMapping": "尚未映射，这个答案不会把任何人放到任何地方。",
+      "thisServer": "该服务器",
+      "templates": {
+        "gaming": {
+          "chip": "游戏社区",
+          "question": "你玩什么？",
+          "a1": "射击",
+          "a2": "角色扮演",
+          "a3": "策略",
+          "a4": "竞速"
+        },
+        "languages": {
+          "chip": "语言房间",
+          "question": "你说哪种语言？",
+          "a1": "English",
+          "a2": "Deutsch",
+          "a3": "Français",
+          "a4": "Español"
+        },
+        "private": {
+          "chip": "仅限成员区域",
+          "question": "你是访客还是成员？",
+          "a1": "访客",
+          "a2": "成员"
+        }
+      }
     },
     "modal": {
       "welcomeTitle": "欢迎！",

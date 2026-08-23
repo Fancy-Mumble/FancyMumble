@@ -44,6 +44,7 @@ export function AccountPanel() {
   const { t } = useTranslation("settings");
   const tDynamic = t as unknown as DynamicT;
   const snapshot = useAccountStore((s) => s.snapshot);
+  const queryError = useAccountStore((s) => s.queryError);
   const pending = useAccountStore((s) => s.pending);
   const errorCode = useAccountStore((s) => s.errorCode);
   const errorAction = useAccountStore((s) => s.errorAction);
@@ -56,6 +57,7 @@ export function AccountPanel() {
   const send = useAccountStore((s) => s.send);
 
   // Form state
+  const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [newName, setNewName] = useState("");
@@ -86,6 +88,9 @@ export function AccountPanel() {
       setPasswordConfirm("");
     }
     if (lastSuccessAction === ACCOUNT_ACTION_IDS.rename) setNewName("");
+    // The proof is one-shot on purpose: leaving it in the field is leaving the
+    // account's password on screen for as long as the page stays open.
+    if (lastSuccessAction !== null) setCurrentPassword("");
     if (lastSuccessAction === ACCOUNT_ACTION_IDS.totp_verify) setTotpCode("");
     if (lastSuccessAction === ACCOUNT_ACTION_IDS.totp_disable) setTotpDisableCode("");
     if (lastSuccessAction === ACCOUNT_ACTION_IDS.unregister) {
@@ -116,7 +121,16 @@ export function AccountPanel() {
     return (
       <>
         <h2 className={styles.panelTitle}>{t("account.panelTitle")}</h2>
-        <p className={styles.fieldHint}>{t("account.loading")}</p>
+        {queryError ? (
+          <>
+            <p className={styles.error}>{errorText(tDynamic, queryError)}</p>
+            <button type="button" className={styles.ghostBtn} onClick={() => void query()}>
+              {tDynamic("common:retry")}
+            </button>
+          </>
+        ) : (
+          <p className={styles.fieldHint}>{t("account.loading")}</p>
+        )}
       </>
     );
   }
@@ -135,6 +149,13 @@ export function AccountPanel() {
 
   const passwordValid = password.length >= MIN_PASSWORD_LENGTH && password === passwordConfirm;
   const busy = pending !== null;
+  // An account with no password is reached by certificate, and the certificate
+  // is what the session already presented - the server asks for no more.
+  const unproved = (snapshot.has_password ?? false) && currentPassword.length === 0;
+  /** Every mutating control is off until the change has been proved. */
+  const blocked = busy || unproved;
+  const prove = (action: Parameters<typeof send>[0], value?: string) =>
+    void send(action, value, currentPassword);
 
   return (
     <>
@@ -155,6 +176,25 @@ export function AccountPanel() {
           {snapshot.totp_enabled ? t("account.overview.totpOn") : t("account.overview.totpOff")}
         </p>
       </section>
+
+      {/* -- Proof of the current password ----------------------------- */}
+      {(snapshot.has_password ?? false) && (
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>{t("account.confirm.label")}</h3>
+          <p className={styles.fieldHint}>{t("account.confirm.hint")}</p>
+          <TextField
+            id="account-current-password"
+            className={styles.field}
+            label={t("account.confirm.label")}
+            data-testid={TID.accountCurrentPasswordInput}
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            autoComplete="current-password"
+          />
+          {unproved && <p className={styles.fieldHint}>{t("account.confirm.missing")}</p>}
+        </section>
+      )}
 
       {/* -- Password authentication ----------------------------------- */}
       <section className={styles.section}>
@@ -202,8 +242,8 @@ export function AccountPanel() {
           type="button"
           data-testid={TID.accountPasswordSave}
           className={styles.applyBtn}
-          disabled={busy || !passwordValid}
-          onClick={() => void send("set_password", password)}
+          disabled={blocked || !passwordValid}
+          onClick={() => prove("set_password", password)}
         >
           {snapshot.has_password ? t("account.password.change") : t("account.password.enable")}
         </button>
@@ -220,8 +260,8 @@ export function AccountPanel() {
               type="button"
               data-testid={TID.accountPasswordClear}
               className={styles.ghostBtn}
-              disabled={busy || !snapshot.cert_matches_session}
-              onClick={() => void send("clear_password")}
+              disabled={blocked || !snapshot.cert_matches_session}
+              onClick={() => prove("clear_password")}
             >
               {t("account.password.disable")}
             </button>
@@ -249,8 +289,8 @@ export function AccountPanel() {
           type="button"
           data-testid={TID.accountRenameSave}
           className={styles.applyBtn}
-          disabled={busy || !newName.trim() || newName.trim() === snapshot.name}
-          onClick={() => void send("rename", newName.trim())}
+          disabled={blocked || !newName.trim() || newName.trim() === snapshot.name}
+          onClick={() => prove("rename", newName.trim())}
         >
           {t("account.rename.apply")}
         </button>
@@ -281,8 +321,8 @@ export function AccountPanel() {
           type="button"
           data-testid={TID.accountEmailSave}
           className={styles.applyBtn}
-          disabled={busy || email === null || email === (snapshot.email ?? "")}
-          onClick={() => void send("set_email", (email ?? "").trim())}
+          disabled={blocked || email === null || email === (snapshot.email ?? "")}
+          onClick={() => prove("set_email", (email ?? "").trim())}
         >
           {t("account.email.apply")}
         </button>
@@ -311,8 +351,8 @@ export function AccountPanel() {
               type="button"
               data-testid={TID.accountTotpDisable}
               className={styles.dangerBtn}
-              disabled={busy || totpDisableCode.length !== 6}
-              onClick={() => void send("totp_disable", totpDisableCode)}
+              disabled={blocked || totpDisableCode.length !== 6}
+              onClick={() => prove("totp_disable", totpDisableCode)}
             >
               {t("account.totp.disable")}
             </button>
@@ -379,8 +419,8 @@ export function AccountPanel() {
               type="button"
               data-testid={TID.accountTotpVerify}
               className={styles.applyBtn}
-              disabled={busy || totpCode.length !== 6}
-              onClick={() => void send("totp_verify", totpCode)}
+              disabled={blocked || totpCode.length !== 6}
+              onClick={() => prove("totp_verify", totpCode)}
             >
               {t("account.totp.verify")}
             </button>
@@ -393,8 +433,8 @@ export function AccountPanel() {
               type="button"
               data-testid={TID.accountTotpBegin}
               className={styles.applyBtn}
-              disabled={busy}
-              onClick={() => void send("totp_begin")}
+              disabled={blocked}
+              onClick={() => prove("totp_begin")}
             >
               {t("account.totp.begin")}
             </button>
@@ -442,8 +482,8 @@ export function AccountPanel() {
                 type="button"
                 data-testid={TID.accountUnregisterConfirm}
                 className={styles.dangerBtn}
-                disabled={busy || unregisterConfirm !== (snapshot.name ?? "")}
-                onClick={() => void send("unregister")}
+                disabled={blocked || unregisterConfirm !== (snapshot.name ?? "")}
+                onClick={() => prove("unregister")}
               >
                 {t("account.unregister.confirm")}
               </button>
