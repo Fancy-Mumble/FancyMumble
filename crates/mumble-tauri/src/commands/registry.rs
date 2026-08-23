@@ -28,6 +28,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::server::get_server_info,
         super::server::get_welcome_text,
         super::server::ping_server,
+        super::server::get_livery,
         super::public_servers::fetch_public_servers,
         super::public_servers::fetch_file_server_capabilities,
         // -- certificates ----------------------------------------------
