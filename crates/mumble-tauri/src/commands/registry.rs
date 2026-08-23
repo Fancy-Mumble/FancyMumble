@@ -38,6 +38,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::livery_admin::livery_image_data_uri,
         super::livery_admin::livery_check,
         super::livery_admin::livery_update_over_channel,
+        super::livery_admin::request_operator_ticket,
         super::public_servers::fetch_public_servers,
         super::public_servers::fetch_file_server_capabilities,
         // -- certificates ----------------------------------------------
@@ -165,6 +166,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::files::remove_custom_emote,
         super::files::write_translation_files,
         super::files::check_files_exist,
+        super::files::read_file_base64,
         // -- offload (message paging) ----------------------------------
         super::offload::offload_message,
         super::offload::load_offloaded_message,
@@ -227,6 +229,13 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         // -- images ----------------------------------------------------
         super::image::blur_image,
         super::image::process_background,
+        super::chat_background::pick_chat_background,
+        super::chat_background::read_chat_background,
+        super::chat_background::process_chat_background_image,
+        super::chat_background::extract_chat_background_poster,
+        super::chat_background::store_chat_background_poster,
+        super::chat_background::bake_chat_background_video,
+        super::chat_background::clear_chat_background,
         // -- popouts / overlays / window -------------------------------
         super::popout::open_image_popout,
         super::popout::take_popout_image,

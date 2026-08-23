@@ -14,6 +14,9 @@ pub struct SendFancyAccountSettingsUpdate {
     pub action: mumble_tcp::fancy_account_settings_update::Action,
     /// Action-specific payload (password, new name, email, TOTP code, ...).
     pub value: Option<String>,
+    /// The account's current password, re-typed. `None` on `QUERY`, which
+    /// changes nothing; the server refuses every other action without it.
+    pub current_password: Option<String>,
 }
 
 impl CommandAction for SendFancyAccountSettingsUpdate {
@@ -23,6 +26,7 @@ impl CommandAction for SendFancyAccountSettingsUpdate {
                 mumble_tcp::FancyAccountSettingsUpdate {
                     action: self.action as i32,
                     value: self.value.clone(),
+                    current_password: self.current_password.clone(),
                 },
             )],
             ..Default::default()

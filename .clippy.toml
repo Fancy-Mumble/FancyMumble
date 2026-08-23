@@ -11,7 +11,7 @@ allow-panic-in-tests = true
 # clippy's built-in defaults (OpenGL, WebGL, ...).
 doc-valid-idents = [
     "DirectShow", "MediaFoundation", "AVFoundation", "DroidCam", "OBS",
-    "PipeWire", "VideoProcessor", "GStreamer", "OpenH264", "WebRTC",
+    "PipeWire", "PulseAudio", "VideoProcessor", "GStreamer", "OpenH264", "WebRTC",
     "MF_SDK_VERSION", "MF_API_VERSION", "V4L2",
     "..",
 ]

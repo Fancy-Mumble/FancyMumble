@@ -59,6 +59,16 @@ macro_rules! fancy_message_support {
                 _ => None,
             }
         }
+
+        /// Every message declared here, with its policy, by variant name.
+        ///
+        /// Generated from the same table so the two cannot disagree. Only the
+        /// coverage test below reads it; it needs the *names*, because what it
+        /// checks is which of them `canon.rs` mentions.
+        #[cfg(test)]
+        const DECLARED: &[(&str, FallbackPolicy)] = &[
+            $((stringify!($variant), FallbackPolicy::$fallback),)*
+        ];
     };
 }
 
@@ -240,5 +250,125 @@ mod tests {
             let support = message_support(msg).unwrap();
             assert_eq!(support.fallback, FallbackPolicy::ServerOnly);
         }
+    }
+
+    /// Messages that a Fancy server must process and that the canon carries in
+    /// neither direction.
+    ///
+    /// Each of these is a dead surface on an epoch-1 connection: `to_canon`
+    /// gives the codec no framing for it, so [`crate::fancy_codec::NativeCodec`]
+    /// hands it to the legacy codec, which drops every `ServerOnly` message with
+    /// nothing but a `debug!` line. The feature above it does nothing and says
+    /// nothing - the account page sat on "loading" for exactly this reason,
+    /// until `FancyAccountSettingsUpdate` came off this list.
+    ///
+    /// **This list may only ever get shorter.** Adding to it is how a feature
+    /// ships broken and silent; the test below refuses a new entry by refusing
+    /// anything not already here.
+    const UNCARRIED: &[&str] = &[
+        // The persistent-chat key ladder past the parts the canon models: the
+        // challenge round trip, the epoch countersignature, and the fetch and
+        // delete verbs.
+        "PchatAck",
+        "PchatEpochCountersig",
+        "PchatKeyHoldersList",
+        "PchatKeyChallenge",
+        "PchatKeyChallengeResponse",
+        "PchatKeyChallengeResult",
+        "PchatDeleteMessages",
+        "PchatOfflineQueueDrain",
+        "PchatReactionFetchResponse",
+        "FancyCustomReactionsConfig",
+        // Pinned messages, whole.
+        "PchatPin",
+        "PchatPinDeliver",
+        "PchatPinFetchResponse",
+        // Onboarding, whole.
+        "FancyOnboardingConfig",
+        "FancyOnboardingConfigUpdate",
+        "FancyOnboardingResponse",
+        "FancyOnboardingResponseQuery",
+        "FancyOnboardingResponseDeliver",
+        // Plugins: the client-side registry and the whole admin surface.
+        "PluginMessage",
+        "PluginRegistry",
+        "FancyPluginAdminListRequest",
+        "FancyPluginAdminList",
+        "FancyPluginAdminSetEnabled",
+        "FancyPluginAdminInstall",
+        "FancyPluginAdminUninstall",
+        "FancyPluginAdminAck",
+        // Operator settings. `SERVER_CONFIG` carries livery on the same
+        // envelope, so this one is a body away rather than a service away.
+        "FancyServerSettings",
+        "FancyServerSettingsUpdate",
+        // The audit *tail*; queries and their answers are carried.
+        "FancyAuditEvent",
+        // The forum, whole.
+        "FancyForumPost",
+        "FancyForumFetch",
+        "FancyForumFetchResponse",
+        "FancyForumDelete",
+    ];
+
+    /// Read `canon.rs` and answer which variants it names in each direction.
+    ///
+    /// Source text rather than behaviour, because the alternative is
+    /// constructing one of every `ControlMessage` and calling `to_canon` on it,
+    /// which is the same list written twice - and the copy that rots is the one
+    /// nothing forces you to update.
+    fn canon_mentions(variant: &str) -> (bool, bool) {
+        const CANON: &str = include_str!("canon.rs");
+        let (out, rest) = CANON
+            .split_once("pub fn to_canon")
+            .expect("canon.rs declares to_canon");
+        let _ = out;
+        let (to_canon, after) = rest
+            .split_once("pub fn from_canon")
+            .expect("canon.rs declares from_canon");
+        let from_canon = after.split("#[cfg(test)]").next().unwrap_or(after);
+        let needle = format!("ControlMessage::{variant}(");
+        (to_canon.contains(&needle), from_canon.contains(&needle))
+    }
+
+    #[test]
+    fn no_new_fancy_feature_ships_silently_dropped() {
+        let mut uncovered: Vec<&str> = Vec::new();
+        for (variant, fallback) in DECLARED {
+            if *fallback != FallbackPolicy::ServerOnly {
+                continue;
+            }
+            let (sends, receives) = canon_mentions(variant);
+            if !sends && !receives {
+                uncovered.push(variant);
+            }
+        }
+        let new: Vec<&&str> = uncovered
+            .iter()
+            .filter(|variant| !UNCARRIED.contains(variant))
+            .collect();
+        assert!(
+            new.is_empty(),
+            "these server-processed messages have no canon form in either \
+             direction, so the codec drops them and the feature above them does \
+             nothing at all: {new:?}. Give each an arm in canon.rs."
+        );
+    }
+
+    #[test]
+    fn the_uncarried_list_does_not_outlive_what_is_on_it() {
+        // A name left here after its canon arm landed is a name that stops the
+        // test above from noticing the next regression in that service.
+        let stale: Vec<&&str> = UNCARRIED
+            .iter()
+            .filter(|variant| {
+                let (sends, receives) = canon_mentions(variant);
+                sends || receives
+            })
+            .collect();
+        assert!(
+            stale.is_empty(),
+            "these are carried by the canon now and must come off UNCARRIED: {stale:?}"
+        );
     }
 }

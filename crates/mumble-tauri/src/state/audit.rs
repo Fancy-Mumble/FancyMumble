@@ -54,6 +54,23 @@ impl AppState {
             .map_err(|e| format!("Failed to send the livery change: {e}"))
     }
 
+    /// Ask the server for a short-lived operator credential, scoped to
+    /// `scopes`. The answer arrives asynchronously as an `operator-ticket`
+    /// event; this resolves once the request is away, the same contract
+    /// [`Self::update_livery`] has.
+    pub async fn request_operator_ticket(&self, scopes: Vec<String>) -> Result<(), String> {
+        let handle = {
+            let session = self.inner.snapshot();
+            let state = session.lock().map_err(|e| e.to_string())?;
+            state.conn.client_handle.clone()
+        };
+        let handle = handle.ok_or("Not connected")?;
+        handle
+            .send(command::RequestOperatorTicket { scopes })
+            .await
+            .map_err(|e| format!("Failed to request an operator ticket: {e}"))
+    }
+
     /// Send an audit query / live-tail subscription / chain verification.
     pub async fn query_audit_log(&self, args: AuditQueryArgs) -> Result<(), String> {
         let handle = {

@@ -17,7 +17,7 @@
 //! its own frame size, so consumer semantics are unchanged.
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use mumble_protocol::audio::capture::AudioCapture;
@@ -55,6 +55,22 @@ struct StreamShared {
 #[derive(Default)]
 struct PumpControl {
     thread: Option<std::thread::JoinHandle<()>>,
+    /// Exit flag of the pump in `thread`. The pump must NOT key its exit
+    /// off `active`: a cold start increments `active` before it reaps the
+    /// outgoing pump, which would revive the very condition it is about
+    /// to wait on and hang the join forever.
+    stop: Option<Arc<AtomicBool>>,
+}
+
+/// Signal the pump thread to exit and reap it, so a subsequent cold start
+/// does not race the outgoing thread's shutdown.
+fn stop_pump(control: &mut PumpControl) {
+    if let Some(flag) = control.stop.take() {
+        flag.store(true, Ordering::SeqCst);
+    }
+    if let Some(thread) = control.thread.take() {
+        let _ = thread.join();
+    }
 }
 
 fn registry() -> &'static Mutex<HashMap<String, Arc<StreamShared>>> {
@@ -209,7 +225,16 @@ impl AudioCapture for SharedCaptureHandle {
             .map_err(|e| Error::InvalidState(e.to_string()))?;
         let prev = self.shared.active.fetch_add(1, Ordering::SeqCst);
         if prev == 0 {
-            // Cold start: reap a finished pump, then open the device.
+            // Cold start: reap the outgoing pump, then open the device.
+            // It is told to exit explicitly - the `active` count is back
+            // at 1 because of the increment above, so a pump waiting on
+            // `active == 0` would never leave and this join would never
+            // return (a deadlock on whichever thread called `start`, and
+            // `start_mic_test` / `start_voice_replay` are sync commands
+            // that run on the UI thread).
+            if let Some(flag) = control.stop.take() {
+                flag.store(true, Ordering::SeqCst);
+            }
             if let Some(old) = control.thread.take() {
                 let _ = old.join();
             }
@@ -226,13 +251,16 @@ impl AudioCapture for SharedCaptureHandle {
             }
             debug!("shared capture '{}': device opened", self.shared.key);
             let shared = Arc::clone(&self.shared);
+            let stop = Arc::new(AtomicBool::new(false));
+            let pump_stop = Arc::clone(&stop);
             let thread = std::thread::Builder::new()
                 .name("shared-capture-pump".into())
-                .spawn(move || pump(shared, underlying))
+                .spawn(move || pump(shared, underlying, pump_stop))
                 .map_err(|e| {
                     let _ = self.shared.active.fetch_sub(1, Ordering::SeqCst);
                     Error::InvalidState(format!("pump spawn: {e}"))
                 })?;
+            control.stop = Some(stop);
             control.thread = Some(thread);
         }
         drop(control);
@@ -248,18 +276,25 @@ impl AudioCapture for SharedCaptureHandle {
         if let Ok(mut buf) = self.inner.buf.lock() {
             buf.clear();
         }
-        let remaining = self.shared.active.fetch_sub(1, Ordering::SeqCst) - 1;
+        let remaining = self
+            .shared
+            .active
+            .fetch_sub(1, Ordering::SeqCst)
+            .saturating_sub(1);
         if remaining == 0 {
-            // Last consumer: the pump notices `active == 0`, stops the
-            // device (releasing the driver's client slot) and exits.
-            // Reap it so a subsequent cold start doesn't race the old
-            // thread's shutdown.
+            // Last consumer: tell the pump to exit, which stops the device
+            // and releases the driver's client slot. Reap it so a
+            // subsequent cold start doesn't race the old thread's shutdown.
             if let Ok(mut control) = self.shared.control.lock() {
-                if let Some(thread) = control.thread.take() {
-                    let _ = thread.join();
+                // Re-check under the lock. A new consumer can cold-start a
+                // fresh pump in the window between the decrement above and
+                // acquiring `control`; tearing down here would then kill a
+                // device that someone else has just opened.
+                if self.shared.active.load(Ordering::SeqCst) == 0 {
+                    stop_pump(&mut control);
+                    debug!("shared capture '{}': device released", self.shared.key);
                 }
             }
-            debug!("shared capture '{}': device released", self.shared.key);
         }
         Ok(())
     }
@@ -289,10 +324,11 @@ fn mark_subscribers_dead(shared: &StreamShared, reason: &str) {
 }
 
 /// Pump thread: pulls 10 ms frames from the real device and fans the
-/// samples out to every live subscriber until the last consumer stops.
-fn pump(shared: Arc<StreamShared>, mut underlying: Box<dyn AudioCapture>) {
+/// samples out to every live subscriber until `stop` is set - by the last
+/// consumer leaving, or by a cold start reaping this pump to replace it.
+fn pump(shared: Arc<StreamShared>, mut underlying: Box<dyn AudioCapture>, stop: Arc<AtomicBool>) {
     loop {
-        if shared.active.load(Ordering::SeqCst) == 0 {
+        if stop.load(Ordering::SeqCst) {
             break;
         }
         match underlying.read_frame() {
@@ -539,5 +575,72 @@ mod tests {
         a.stop().unwrap();
         b.stop().unwrap();
         assert_eq!(closes.load(Ordering::SeqCst), 1);
+    }
+
+    /// `drain_frames` for a concrete handle (the boxed variant takes `dyn`).
+    fn drain_frames_h(cap: &mut SharedCaptureHandle, want: usize, timeout: Duration) -> usize {
+        let deadline = Instant::now() + timeout;
+        let mut got = 0;
+        while got < want && Instant::now() < deadline {
+            match cap.read_frame() {
+                Ok(_) => got += 1,
+                Err(Error::NotEnoughSamples) => std::thread::sleep(Duration::from_millis(2)),
+                Err(e) => panic!("read_frame: {e}"),
+            }
+        }
+        got
+    }
+
+    /// A cold start must not join a pump that is about to keep running.
+    ///
+    /// `stop()` decrements `active` and only *then* takes `control` to
+    /// join the pump. A `start()` that slips into that window bumps
+    /// `active` back to 1 **before** joining, so the pump's `active == 0`
+    /// exit check never fires and the join never returns - deadlocking
+    /// whichever thread called `start()` (the UI thread, for the sync
+    /// `start_mic_test` command).
+    #[test]
+    fn cold_start_does_not_deadlock_on_a_revived_pump() {
+        let opens = Arc::new(AtomicUsize::new(0));
+        let closes = Arc::new(AtomicUsize::new(0));
+        let vol = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
+        let shared = Arc::new(StreamShared::new("test-revive-race".into()));
+
+        let mut a = SharedCaptureHandle::new(
+            Arc::clone(&shared),
+            480,
+            Arc::clone(&vol),
+            fake_factory(Arc::clone(&opens), Arc::clone(&closes)),
+        );
+        let mut b = SharedCaptureHandle::new(
+            Arc::clone(&shared),
+            480,
+            Arc::clone(&vol),
+            fake_factory(Arc::clone(&opens), Arc::clone(&closes)),
+        );
+
+        a.start().unwrap();
+        assert_eq!(drain_frames_h(&mut a, 1, Duration::from_secs(2)), 1);
+
+        // Reproduce the exact interleaving: `a.stop()` has decremented
+        // `active` to 0 but has not yet taken `control` to join, and
+        // `b.start()` runs first.
+        let _ = shared.active.fetch_sub(1, Ordering::SeqCst);
+        a.started = false;
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let t = std::thread::spawn(move || {
+            let r = b.start();
+            let _ = tx.send(());
+            (b, r)
+        });
+        let finished = rx.recv_timeout(Duration::from_secs(5)).is_ok();
+        assert!(
+            finished,
+            "start() deadlocked joining a pump that active==1 keeps alive"
+        );
+        let (mut b, r) = t.join().unwrap();
+        r.unwrap();
+        let _ = b.stop();
     }
 }

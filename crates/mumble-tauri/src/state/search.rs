@@ -2,7 +2,9 @@
 
 use fancy_utils::fuzzy;
 
-use super::types::{ChatMessage, PhotoEntry, SearchCategory, SearchFilter, SearchResult};
+use super::types::{
+    ChatMessage, MessageContext, PhotoEntry, SearchCategory, SearchFilter, SearchResult,
+};
 use super::AppState;
 
 /// Maximum number of results to return per category.
@@ -160,6 +162,7 @@ fn search_channels_fuzzy(state: &super::SharedState, query_lower: &str) -> Vec<S
                 subtitle: None,
                 id: Some(ch.id),
                 string_id: None,
+                message: None,
             })
         })
         .collect();
@@ -182,6 +185,7 @@ fn search_users_fuzzy(state: &super::SharedState, query_lower: &str) -> Vec<Sear
                 subtitle: ch_name,
                 id: Some(u.session),
                 string_id: None,
+                message: None,
             })
         })
         .collect();
@@ -331,6 +335,13 @@ fn collect_channel_message_results<'a>(
             subtitle: Some(format!("{} in #{ch_name}", msg.sender_name)),
             id: Some(ch_id),
             string_id: msg.message_id.clone(),
+            message: Some(MessageContext {
+                sender_session: msg.sender_session,
+                sender_name: msg.sender_name.clone(),
+                context: format!("in #{ch_name}"),
+                timestamp: msg.timestamp,
+                dm: false,
+            }),
         })
     })
     .collect()
@@ -352,6 +363,13 @@ fn collect_dm_message_results<'a>(
             subtitle: Some(format!("DM with {}", msg.sender_name)),
             id: msg.dm_session,
             string_id: msg.message_id.clone(),
+            message: Some(MessageContext {
+                sender_session: msg.sender_session,
+                sender_name: msg.sender_name.clone(),
+                context: format!("DM with {}", msg.sender_name),
+                timestamp: msg.timestamp,
+                dm: true,
+            }),
         })
     })
     .collect()

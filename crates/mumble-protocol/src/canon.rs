@@ -54,6 +54,9 @@ const AUDIT: u16 = 1012;
 /// Outer type for chat and its history - which is where scheduled messages
 /// live, because at the due time a scheduled message *is* a text message.
 const TEXT: u16 = 1005;
+/// Outer type for accounts: the caller's own registration, and the settings
+/// stored against it.
+const USERDATA: u16 = 1003;
 /// Outer type for runtime-mutable settings, which is where livery lives:
 /// `server-config` owns the document, so its envelope carries it.
 const SERVER_CONFIG: u16 = 1013;
@@ -190,6 +193,9 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
             // for live delivery, and the server could not tell which had been
             // asked for.
             return Some((PUSH, live_subscribe(&subscribe_push.muted_channels)));
+        }
+        ControlMessage::FancyAccountSettingsUpdate(update) => {
+            return account_update_to_canon(update).map(|payload| (USERDATA, payload));
         }
         ControlMessage::FancyAuditQuery(query) => {
             return Some((AUDIT, audit_query_to_canon(query)));
@@ -382,6 +388,17 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
                 .encode_to_vec(),
             ));
         }
+        ControlMessage::FancyOperatorTicketRequest(request) => {
+            return Some((
+                SERVER_CONFIG,
+                fancy::domain::ServerConfigEnvelope {
+                    body: Some(fancy::domain::server_config_envelope::Body::TicketRequest(
+                        request.clone(),
+                    )),
+                }
+                .encode_to_vec(),
+            ));
+        }
         ControlMessage::PchatFetch(fetch) => {
             let envelope = fancy::pchat::PchatEnvelope {
                 body: Some(fancy::pchat::pchat_envelope::Body::Fetch(
@@ -403,6 +420,81 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
         SOCIAL,
         fancy::social::SocialEnvelope { body: Some(body) }.encode_to_vec(),
     ))
+}
+
+/// One self-service account action, as the canon envelope that carries it.
+///
+/// The two enums do not line up, and neither is wrong. Epoch 0 names the two
+/// halves of enrolling a second factor separately (`TOTP_BEGIN`, then
+/// `TOTP_VERIFY`); the canon has one `ENABLE_TOTP` and reads the halves off
+/// whether a code came with it, which is also how the server implements it.
+/// `QUERY` is not an action at all on the canon - it is its own body, because
+/// asking is not a mutation and the surface that answers it needs no password.
+fn account_update_to_canon(update: &mumble_tcp::FancyAccountSettingsUpdate) -> Option<Vec<u8>> {
+    use fancy::domain::account_action::Kind;
+    use fancy::domain::userdata_envelope::Body;
+    use mumble_tcp::fancy_account_settings_update::Action;
+
+    let value = update.value.clone().unwrap_or_default();
+    let action = Action::try_from(update.action).ok()?;
+    let body = match action {
+        Action::Query => Body::AccountQuery(fancy::domain::AccountQuery {}),
+        _ => {
+            let (kind, totp) = match action {
+                // Handled above; listed so a new variant fails to compile here
+                // rather than silently becoming a password change.
+                Action::Query => return None,
+                Action::SetPassword => (Kind::SetPassword, String::new()),
+                Action::ClearPassword => (Kind::ClearPassword, String::new()),
+                Action::Rename => (Kind::Rename, String::new()),
+                Action::SetEmail => (Kind::SetEmail, String::new()),
+                Action::Unregister => (Kind::Unregister, String::new()),
+                // No code yet: this is the half that asks for the secret.
+                Action::TotpBegin => (Kind::EnableTotp, String::new()),
+                // The same verb, now carrying the proof.
+                Action::TotpVerify => (Kind::EnableTotp, value.clone()),
+                Action::TotpDisable => (Kind::DisableTotp, value.clone()),
+            };
+            Body::Action(fancy::domain::AccountAction {
+                kind: kind as i32,
+                current_password: update.current_password.clone().unwrap_or_default(),
+                // The TOTP verbs carry their argument in `totp`, not in
+                // `value`; sending it in both would have the server read a code
+                // as a new password.
+                value: if totp.is_empty() { value } else { String::new() },
+                totp,
+            })
+        }
+    };
+    Some(fancy::domain::UserdataEnvelope { body: Some(body) }.encode_to_vec())
+}
+
+/// The epoch-0 action an ack belongs to.
+///
+/// The inverse of the mapping above, and lossy in exactly one place: the canon
+/// answers both halves of an enrolment with `ENABLE_TOTP`. A secret comes back
+/// only from the first half, so its presence is what tells them apart - the
+/// same signal the client's own store already keys the enrolment on.
+fn account_ack_action(ack: &fancy::domain::AccountAck) -> u32 {
+    use fancy::domain::account_action::Kind;
+    use mumble_tcp::fancy_account_settings_update::Action;
+
+    let action = match Kind::try_from(ack.kind) {
+        Ok(Kind::SetPassword) => Action::SetPassword,
+        Ok(Kind::ClearPassword) => Action::ClearPassword,
+        Ok(Kind::SetEmail) => Action::SetEmail,
+        Ok(Kind::Rename) => Action::Rename,
+        Ok(Kind::DisableTotp) => Action::TotpDisable,
+        Ok(Kind::Unregister) => Action::Unregister,
+        Ok(Kind::EnableTotp) if !ack.totp_secret.is_empty() => Action::TotpBegin,
+        Ok(Kind::EnableTotp) => Action::TotpVerify,
+        // A refusal of something this client did not send - `to_canon` never
+        // produces `UNSPECIFIED`. Reported against `QUERY`, the one action that
+        // is always in flight when the page is open, so the user sees the
+        // server's sentence instead of nothing at all.
+        Ok(Kind::Unspecified) | Err(_) => Action::Query,
+    };
+    action as u32
 }
 
 /// One audit query, as the canon envelope that carries it.
@@ -757,11 +849,51 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 _ => None,
             })
         }
+        USERDATA => {
+            use fancy::domain::userdata_envelope::Body;
+
+            let envelope = fancy::domain::UserdataEnvelope::decode(payload)?;
+            Ok(match envelope.body {
+                Some(Body::Account(state)) => Some(ControlMessage::FancyAccountSettings(
+                    mumble_tcp::FancyAccountSettings {
+                        registered: Some(state.registered),
+                        user_id: Some(u32::try_from(state.id).unwrap_or(u32::MAX)),
+                        name: Some(state.name),
+                        email: Some(state.email),
+                        has_password: Some(state.has_password),
+                        totp_enabled: Some(state.totp_enabled),
+                        cert_hash: Some(hex(&state.cert_hash)),
+                        cert_matches_session: Some(state.cert_matches_session),
+                    },
+                )),
+                Some(Body::Ack(ack)) => Some(ControlMessage::FancyAccountAck(
+                    mumble_tcp::FancyAccountAck {
+                        action: account_ack_action(&ack),
+                        ok: ack.ok,
+                        // Epoch 0 promised a machine-readable code and the
+                        // canon carries a sentence. Passing the sentence
+                        // through is the honest translation: inventing a code
+                        // for it would be inventing one the catalogue does not
+                        // have, and the panel already falls back to showing
+                        // what it was given.
+                        error: (!ack.ok && !ack.detail.is_empty()).then(|| ack.detail.clone()),
+                        totp_secret: (!ack.totp_secret.is_empty()).then_some(ack.totp_secret),
+                        totp_uri: (!ack.totp_uri.is_empty()).then_some(ack.totp_uri),
+                    },
+                )),
+                // The stored client settings, which this client keeps locally,
+                // plus the client->server bodies.
+                _ => None,
+            })
+        }
         SERVER_CONFIG => {
             let envelope = fancy::domain::ServerConfigEnvelope::decode(payload)?;
             Ok(match envelope.body {
                 Some(fancy::domain::server_config_envelope::Body::Livery(doc)) => {
                     Some(ControlMessage::FancyServerLivery(doc))
+                }
+                Some(fancy::domain::server_config_envelope::Body::TicketReply(reply)) => {
+                    Some(ControlMessage::FancyOperatorTicketReply(reply))
                 }
                 // The settings half of this envelope has no `ControlMessage`
                 // yet; livery is the first thing on 1013 the client acts on.
@@ -1178,6 +1310,154 @@ mod tests {
         assert!(from_canon(SERVER_CONFIG, &payload).expect("decodes").is_none());
     }
 
+
+    /// The canon body one account action translates to.
+    fn account_body(
+        action: mumble_tcp::fancy_account_settings_update::Action,
+        value: Option<&str>,
+        password: Option<&str>,
+    ) -> fancy::domain::userdata_envelope::Body {
+        let (outer, payload) = to_canon(&ControlMessage::FancyAccountSettingsUpdate(
+            mumble_tcp::FancyAccountSettingsUpdate {
+                action: action as i32,
+                value: value.map(str::to_owned),
+                current_password: password.map(str::to_owned),
+            },
+        ))
+        .expect("the account surface has a canon form");
+        assert_eq!(outer, USERDATA);
+        fancy::domain::UserdataEnvelope::decode(payload.as_slice())
+            .expect("an envelope")
+            .body
+            .expect("a body")
+    }
+
+    #[test]
+    fn asking_about_your_own_account_reaches_the_server() {
+        // The whole bug: with no arm for this, `to_canon` answered `None`, the
+        // codec dropped a `ServerOnly` message, and the account page waited for
+        // an answer to a question that was never asked.
+        assert!(matches!(
+            account_body(
+                mumble_tcp::fancy_account_settings_update::Action::Query,
+                None,
+                None,
+            ),
+            fancy::domain::userdata_envelope::Body::AccountQuery(_)
+        ));
+    }
+
+    #[test]
+    fn a_totp_code_travels_as_a_code_and_not_as_a_new_password() {
+        // Both halves of an enrolment are one canon verb, told apart by whether
+        // a code came with it. Putting the code in `value` as well would have
+        // the server read it as the argument of whatever verb it decoded.
+        let fancy::domain::userdata_envelope::Body::Action(begin) = account_body(
+            mumble_tcp::fancy_account_settings_update::Action::TotpBegin,
+            None,
+            Some("correct horse"),
+        ) else {
+            panic!("expected an action");
+        };
+        assert_eq!(begin.kind, fancy::domain::account_action::Kind::EnableTotp as i32);
+        assert!(begin.totp.is_empty(), "the first half carries no code");
+        assert_eq!(begin.current_password, "correct horse");
+
+        let fancy::domain::userdata_envelope::Body::Action(verify) = account_body(
+            mumble_tcp::fancy_account_settings_update::Action::TotpVerify,
+            Some("123456"),
+            Some("correct horse"),
+        ) else {
+            panic!("expected an action");
+        };
+        assert_eq!(verify.kind, fancy::domain::account_action::Kind::EnableTotp as i32);
+        assert_eq!(verify.totp, "123456");
+        assert!(verify.value.is_empty(), "a code is not a password");
+    }
+
+    #[test]
+    fn an_enrolment_ack_is_told_from_its_confirmation_by_the_secret_on_it() {
+        // One canon verb answers both halves, and the panel keys its enrolment
+        // state on the epoch-0 action, so a confirmation reported as a fresh
+        // enrolment would show the user a secret they already scanned.
+        let with_secret = fancy::domain::UserdataEnvelope {
+            body: Some(fancy::domain::userdata_envelope::Body::Ack(
+                fancy::domain::AccountAck {
+                    kind: fancy::domain::account_action::Kind::EnableTotp as i32,
+                    ok: true,
+                    totp_secret: "JBSWY3DP".to_owned(),
+                    totp_uri: "otpauth://totp/x:ada?secret=JBSWY3DP".to_owned(),
+                    ..Default::default()
+                },
+            )),
+        }
+        .encode_to_vec();
+        let ControlMessage::FancyAccountAck(begun) = from_canon(USERDATA, &with_secret)
+            .expect("decodes")
+            .expect("an ack")
+        else {
+            panic!("expected an ack");
+        };
+        assert_eq!(
+            begun.action,
+            mumble_tcp::fancy_account_settings_update::Action::TotpBegin as u32
+        );
+        assert_eq!(begun.totp_uri.as_deref(), Some("otpauth://totp/x:ada?secret=JBSWY3DP"));
+
+        let confirmed = fancy::domain::UserdataEnvelope {
+            body: Some(fancy::domain::userdata_envelope::Body::Ack(
+                fancy::domain::AccountAck {
+                    kind: fancy::domain::account_action::Kind::EnableTotp as i32,
+                    ok: true,
+                    ..Default::default()
+                },
+            )),
+        }
+        .encode_to_vec();
+        let ControlMessage::FancyAccountAck(done) = from_canon(USERDATA, &confirmed)
+            .expect("decodes")
+            .expect("an ack")
+        else {
+            panic!("expected an ack");
+        };
+        assert_eq!(
+            done.action,
+            mumble_tcp::fancy_account_settings_update::Action::TotpVerify as u32
+        );
+        assert_eq!(done.totp_secret, None);
+    }
+
+    #[test]
+    fn the_account_snapshot_arrives_with_its_certificate_in_the_form_the_client_compares() {
+        // The canon carries the fingerprint as bytes and every comparison on
+        // this side is against lower-case hex.
+        let payload = fancy::domain::UserdataEnvelope {
+            body: Some(fancy::domain::userdata_envelope::Body::Account(
+                fancy::domain::AccountState {
+                    registered: true,
+                    id: 7,
+                    name: "ada".to_owned(),
+                    email: "ada@example.org".to_owned(),
+                    has_password: true,
+                    totp_enabled: false,
+                    cert_hash: vec![0xde, 0xad, 0xbe, 0xef],
+                    cert_matches_session: true,
+                },
+            )),
+        }
+        .encode_to_vec();
+        let ControlMessage::FancyAccountSettings(state) = from_canon(USERDATA, &payload)
+            .expect("decodes")
+            .expect("a snapshot")
+        else {
+            panic!("expected a snapshot");
+        };
+        assert_eq!(state.registered, Some(true));
+        assert_eq!(state.user_id, Some(7));
+        assert_eq!(state.name.as_deref(), Some("ada"));
+        assert_eq!(state.cert_hash.as_deref(), Some("deadbeef"));
+        assert_eq!(state.cert_matches_session, Some(true));
+    }
 
     #[test]
     fn a_livery_query_is_framed_on_the_service_that_owns_the_document() {

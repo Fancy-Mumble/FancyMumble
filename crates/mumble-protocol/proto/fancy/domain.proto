@@ -120,6 +120,8 @@ message UserdataEnvelope {
     Settings settings = 3;
     SettingsUpdate settings_update = 4;
     SettingsQuery settings_query = 5;
+    AccountQuery account_query = 6;
+    AccountState account = 7;
   }
 }
 
@@ -147,6 +149,9 @@ message AccountAction {
     ENABLE_TOTP = 4;
     DISABLE_TOTP = 5;
     UNREGISTER = 6;
+    // Back to certificate-only login. Separate from SET_PASSWORD with an empty
+    // value, which is a password every guess matches rather than none.
+    CLEAR_PASSWORD = 7;
   }
   Kind kind = 1;
   string current_password = 2;
@@ -166,6 +171,10 @@ message AccountAck {
   // comes back, so a client that loses this asks again and gets a new one
   // rather than a locked account.
   string totp_secret = 4;
+  // The same secret as an `otpauth://` URI, for clients that show a QR code.
+  // Sent beside `totp_secret` and under the same rule: only in answer to the
+  // first half, never again.
+  string totp_uri = 5;
 }
 
 // This account's stored client settings.
@@ -189,6 +198,37 @@ message SettingsUpdate {
 // to each other at the same time, and neither can tell which it received.
 message SettingsQuery {}
 
+// "Tell me about my own account."
+//
+// Answered with an `AccountState`. Like everything else on this envelope it
+// names no account: the answer is about whoever sent it.
+message AccountQuery {}
+
+// What the server holds about the caller's own account.
+//
+// Sent in answer to an `AccountQuery` and again after every action that changed
+// any of it, so a client never has to infer the new state from an ack it just
+// received. Nothing secret is on it - the password is a hash the server will
+// not part with, and a TOTP secret is only ever sent once, in the ack that
+// hands it out.
+message AccountState {
+  // False for a guest, and false again after a successful UNREGISTER. Every
+  // other field is meaningless while this is false.
+  bool registered = 1;
+  uint64 id = 2;
+  string name = 3;
+  string email = 4;
+  // Whether a password may be used to log in as this account. While set, a
+  // certificate alone no longer suffices.
+  bool has_password = 5;
+  bool totp_enabled = 6;
+  // The certificate bound to the account, empty where none is.
+  bytes cert_hash = 7;
+  // Whether the certificate on *this* connection is that one. Clearing the
+  // password is only allowed when it is, or the account locks its owner out.
+  bool cert_matches_session = 8;
+}
+
 // -- 1013 server-config -----------------------------------------------------
 
 message ServerConfigEnvelope {
@@ -199,7 +239,37 @@ message ServerConfigEnvelope {
     LiveryQuery livery_query = 4;
     LiveryDoc livery = 5;
     LiveryUpdate livery_update = 6;
+    OperatorTicketRequest ticket_request = 7;
+    OperatorTicketReply ticket_reply = 8;
   }
+}
+
+// "I already hold Write on the root channel; mint me a short-lived operator
+// credential so I can call the operator API for something the control
+// channel does not carry" -- starting with a livery image, and meant to
+// widen to whatever else this replaces from Ice's admin console (accounts,
+// ACLs, bans) as each is verified against its own permission.
+//
+// Scopes are named as `docs/OPERATOR-API.md` §2 spells them. The reply MAY
+// grant fewer than were asked for: each requested scope is checked against
+// the permission that already gates the equivalent control-channel action,
+// and the answer never grants more than that session already holds.
+message OperatorTicketRequest {
+  repeated string scopes = 1;
+}
+
+message OperatorTicketReply {
+  // Empty when nothing was granted; see `denied_reason`.
+  string token = 1;
+  repeated string granted_scopes = 2;
+  uint64 expires_at_ms = 3;
+  // The operator API's advertised address, empty when this deployment has it
+  // disabled, unreachable, or has not named one a client could use
+  // (`[services.operator-api] public_url`).
+  string base_url = 4;
+  // Set only when granted_scopes is empty, so a client can show *why* rather
+  // than a bare "nothing happened".
+  string denied_reason = 5;
 }
 
 // An admin changing the livery from a connected client.

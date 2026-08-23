@@ -21,6 +21,9 @@ pub(crate) async fn update_account_settings(
     state: tauri::State<'_, AppState>,
     action: String,
     value: Option<String>,
+    current_password: Option<String>,
 ) -> Result<(), String> {
-    state.update_account_settings(action, value).await
+    state
+        .update_account_settings(action, value, current_password)
+        .await
 }

@@ -229,6 +229,8 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
         FancyLiveryQuery(m) => m.encode_to_vec(),
         FancyServerLivery(m) => m.encode_to_vec(),
         FancyLiveryUpdate(m) => m.encode_to_vec(),
+        FancyOperatorTicketRequest(m) => m.encode_to_vec(),
+        FancyOperatorTicketReply(m) => m.encode_to_vec(),
         Authenticate(m) => m.encode_to_vec(),
         Ping(m) => m.encode_to_vec(),
         Reject(m) => m.encode_to_vec(),
@@ -356,6 +358,12 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
                 payload,
             )?)
         }
+        FancyOperatorTicketRequest => ControlMessage::FancyOperatorTicketRequest(
+            crate::proto::fancy::domain::OperatorTicketRequest::decode(payload)?,
+        ),
+        FancyOperatorTicketReply => ControlMessage::FancyOperatorTicketReply(
+            crate::proto::fancy::domain::OperatorTicketReply::decode(payload)?,
+        ),
         UdpTunnel => ControlMessage::UdpTunnel(payload.to_vec()),
         Authenticate => ControlMessage::Authenticate(mumble_tcp::Authenticate::decode(payload)?),
         Ping => ControlMessage::Ping(mumble_tcp::Ping::decode(payload)?),

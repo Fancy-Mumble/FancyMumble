@@ -44,19 +44,33 @@ pub fn outputs() -> Vec<NamedDevice> {
 }
 
 /// Resolve a display name from [`inputs`] back to its device.
+///
+/// A stored name that is no longer offered (device unplugged, or a card
+/// entry saved before we started routing through the sound server - see
+/// [`linux_alsa::prefer_sound_server`]) falls back to the system default
+/// rather than failing, so a stale setting cannot leave the user with no
+/// audio at all.
 pub fn find_input(name: &str) -> Option<cpal::Device> {
-    inputs()
-        .into_iter()
-        .find(|d| d.name == name)
-        .map(|d| d.device)
+    resolve(inputs(), name).or_else(|| {
+        tracing::warn!(device = name, "input device not offered; using system default");
+        cpal::default_host().default_input_device()
+    })
 }
 
 /// Resolve a display name from [`outputs`] back to its device.
+///
+/// Falls back to the system default like [`find_input`].
 pub fn find_output(name: &str) -> Option<cpal::Device> {
-    outputs()
-        .into_iter()
-        .find(|d| d.name == name)
-        .map(|d| d.device)
+    resolve(outputs(), name).or_else(|| {
+        tracing::warn!(device = name, "output device not offered; using system default");
+        cpal::default_host().default_output_device()
+    })
+}
+
+/// Take the device named `name` out of `list`, if present.
+fn resolve(mut list: Vec<NamedDevice>, name: &str) -> Option<cpal::Device> {
+    let i = list.iter().position(|d| d.name == name)?;
+    Some(list.swap_remove(i).device)
 }
 
 /// Resolve a display name to a rodio [`Input`](rodio::microphone::Input).
@@ -180,7 +194,8 @@ fn build(devices: Vec<cpal::Device>, default: Option<&cpal::Device>) -> Vec<Name
     // hosts keep cpal's names untouched - the Windows exclusive-mode path
     // (`fancy_audio_device`) resolves the very same strings by itself.
     #[cfg(target_os = "linux")]
-    let raw = linux_alsa::disambiguate(linux_alsa::collapse(raw));
+    let raw =
+        linux_alsa::prefer_sound_server(linux_alsa::disambiguate(linux_alsa::collapse(raw)));
 
     raw.into_iter()
         .map(|r| NamedDevice {
@@ -212,6 +227,57 @@ mod linux_alsa {
         "dsnoop",
         "dmix",
     ];
+
+    /// PCMs served by a sound server (PipeWire / PulseAudio) instead of
+    /// by a card directly. Opening one of these *shares* the hardware with
+    /// every other application; opening a card PCM (`plughw`, `front`,
+    /// `hw`, …) takes the card **exclusively**.
+    const SERVER_PCMS: [&str; 3] = ["pipewire", "pulse", "default"];
+
+    /// Whether `pcm_id` is a sound-server PCM rather than a card PCM.
+    pub(super) fn is_server_pcm(pcm_id: &str) -> bool {
+        SERVER_PCMS.contains(&pcm_id.split(':').next().unwrap_or(pcm_id))
+    }
+
+    /// Opt back in to raw card PCMs via `FANCY_MUMBLE_ALSA_EXCLUSIVE=1`,
+    /// for people who deliberately want exclusive low-latency access to an
+    /// interface and accept that it silences everything else.
+    fn exclusive_opt_in() -> bool {
+        std::env::var("FANCY_MUMBLE_ALSA_EXCLUSIVE").is_ok_and(|v| v == "1")
+    }
+
+    /// Drop card PCMs when a sound server is running.
+    ///
+    /// Under PipeWire/PulseAudio the server owns every card. Opening a card
+    /// PCM directly - which is what picking "Komplete Audio 1" used to do,
+    /// resolving to `plughw:CARD=K1,DEV=0` via [`PREFERENCE`] - takes the
+    /// device away from the server, which then cannot reopen it:
+    ///
+    /// ```text
+    /// spa.alsa: 'front:4': playback open failed: Device or resource busy
+    /// pw.node: (alsa_output.usb-…-Komplete_Audio_1…) suspended -> error
+    /// ```
+    ///
+    /// Every other application on the machine loses audio until we exit,
+    /// with no error on our side and none they can act on. (Chromium in
+    /// particular drives playback off the audio clock, so browser *video*
+    /// silently freezes mid-buffer.)
+    ///
+    /// So when a server PCM exists we offer only server PCMs and let the
+    /// server decide which sink they land on - routing between cards is
+    /// its job, not ours, and it can mix us with everyone else. Without a
+    /// server (bare ALSA) the card list is all there is, so it is kept.
+    pub(super) fn prefer_sound_server(raw: Vec<Raw>) -> Vec<Raw> {
+        let server_running = raw
+            .iter()
+            .any(|r| r.driver.as_deref().is_some_and(is_server_pcm));
+        if !server_running || exclusive_opt_in() {
+            return raw;
+        }
+        raw.into_iter()
+            .filter(|r| r.driver.as_deref().is_none_or(is_server_pcm))
+            .collect()
+    }
 
     /// Split an ALSA pcm id like `plughw:CARD=K1,DEV=0` into
     /// (prefix, card, dev). Non-card ids (`default`, `pipewire`, `pulse`)
@@ -395,6 +461,35 @@ mod linux_alsa {
                     crate::audio::devices::describe_open_failure(&d.name, &d.device, &e.to_string())
                 }
             }
+        }
+
+        /// A card PCM must never survive next to a sound-server PCM:
+        /// that is the pick that steals the hardware from PipeWire.
+        #[test]
+        fn sound_server_hides_card_pcms() {
+            assert!(super::is_server_pcm("pipewire"));
+            assert!(super::is_server_pcm("default"));
+            assert!(super::is_server_pcm("pulse"));
+            assert!(!super::is_server_pcm("plughw:CARD=K1,DEV=0"));
+            assert!(!super::is_server_pcm("front:CARD=K1,DEV=0"));
+            assert!(!super::is_server_pcm("hw:CARD=4,DEV=0"));
+        }
+
+        /// A preference stored before this change ("Komplete Audio 1,
+        /// USB Audio") no longer appears in the list; it must degrade to
+        /// the default rather than leaving the user with no audio.
+        #[test]
+        #[ignore = "requires audio hardware; run manually with --ignored --nocapture"]
+        fn stale_card_preference_falls_back() {
+            let stale = "Komplete Audio 1, USB Audio";
+            assert!(
+                !crate::audio::devices::outputs().iter().any(|d| d.name == stale),
+                "card PCM still offered next to a sound server"
+            );
+            assert!(
+                crate::audio::devices::find_output(stale).is_some(),
+                "stale name did not fall back to a device"
+            );
         }
 
         #[test]

@@ -55,6 +55,7 @@ pub(crate) mod commands;
 pub(crate) mod constants;
 pub(crate) mod e2e_stats;
 pub(crate) mod logging;
+pub(crate) mod media;
 pub mod platform;
 mod state;
 pub(crate) mod ui_mode;

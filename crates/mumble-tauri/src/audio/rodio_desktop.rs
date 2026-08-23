@@ -449,7 +449,7 @@ const REPRIME_AFTER: u32 = 300;
 /// rodio's background output thread calls `Iterator::next()` to pull
 /// samples. Mixing is done in chunks of [`MIX_CHUNK_SIZE`] to avoid
 /// locking the speaker buffers on every single sample.
-struct MumbleMixerSource {
+pub(super) struct MumbleMixerSource {
     buffers: SpeakerBuffers,
     speaker_volumes: SpeakerVolumes,
     volume: Arc<AtomicU32>,
@@ -493,7 +493,7 @@ struct MixerDiag {
 }
 
 impl MumbleMixerSource {
-    fn new(
+    pub(super) fn new(
         buffers: SpeakerBuffers,
         speaker_volumes: SpeakerVolumes,
         volume: Arc<AtomicU32>,

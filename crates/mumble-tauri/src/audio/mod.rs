@@ -13,6 +13,12 @@
 //! * **cpal** (legacy) - low-level callback-based API exposed as a
 //!   fallback via the advanced settings toggle.
 //!
+//! Linux takes a third path ahead of both when PipeWire is running: the
+//! device list comes from PipeWire's own registry and each node is opened
+//! directly, because neither backend above can name one. See
+//! [`pipewire`] for why that matters - through cpal's ALSA host a Linux
+//! user cannot choose a microphone at all.
+//!
 //! The [`AudioDeviceFactory`] trait abstracts over platform-specific
 //! device creation. [`PlatformAudioFactory`] dispatches to the
 //! currently-selected backend at runtime so callers never need `cfg`
@@ -32,6 +38,9 @@ mod desktop;
 
 #[cfg(not(target_os = "android"))]
 pub(crate) mod devices;
+
+#[cfg(target_os = "linux")]
+pub(crate) mod pipewire;
 
 #[cfg(not(target_os = "android"))]
 mod rodio_desktop;
@@ -165,8 +174,9 @@ impl AudioDeviceFactory for PlatformAudioFactory {
         //
         // The factory below runs at each cold start (first active
         // consumer) and picks the real backend then: the e2e virtual mic
-        // (wall-clock-paced synthetic device, arbitrary sample rate),
-        // rodio (default) or legacy cpal. It always captures 10 ms
+        // (wall-clock-paced synthetic device, arbitrary sample rate), the
+        // PipeWire node path on Linux, rodio (default) or legacy cpal. It
+        // always captures 10 ms
         // frames at neutral volume - the broker handle applies each
         // consumer's own volume and frame size.
         let device = device_name.map(str::to_owned);
@@ -189,6 +199,17 @@ impl AudioDeviceFactory for PlatformAudioFactory {
                     PUMP_FRAME,
                     neutral,
                     true,
+                )) as _);
+            }
+            // Linux: open the chosen PipeWire node directly. cpal's ALSA
+            // host cannot name one (see `pipewire.rs`), so this is the only
+            // path on which picking a microphone means anything.
+            #[cfg(target_os = "linux")]
+            if pipewire::available() {
+                return Ok(Box::new(pipewire::PwCapture::new(
+                    device.as_deref(),
+                    PUMP_FRAME,
+                    neutral,
                 )) as _);
             }
             if USE_RODIO_BACKEND.load(Ordering::Relaxed) {
@@ -215,6 +236,15 @@ impl AudioDeviceFactory for PlatformAudioFactory {
         buffers: SpeakerBuffers,
         speaker_volumes: SpeakerVolumes,
     ) -> std::result::Result<Box<dyn MixingPlayback>, String> {
+        #[cfg(target_os = "linux")]
+        if pipewire::available() {
+            return Ok(Box::new(pipewire::PwMixingPlayback::new(
+                device_name,
+                volume,
+                buffers,
+                speaker_volumes,
+            )) as _);
+        }
         if USE_RODIO_BACKEND.load(Ordering::Relaxed) {
             rodio_desktop::RodioAudioFactory::create_mixing_playback(
                 device_name,

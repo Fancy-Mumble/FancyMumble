@@ -11,6 +11,7 @@ pub(crate) mod admin;
 pub(crate) mod audio;
 pub(crate) mod certificates;
 pub(crate) mod channels;
+pub(crate) mod chat_background;
 pub(crate) mod connection;
 pub(crate) mod dm;
 pub(crate) mod draw_overlay;
