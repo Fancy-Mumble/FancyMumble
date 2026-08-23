@@ -1,0 +1,475 @@
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+  padding: 4px 2px 24px;
+}
+
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.intro {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary, #9aa6b8);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.groupTitle {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #fff);
+  border-bottom: 1px solid var(--color-border, #3a3c43);
+  padding-bottom: 6px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(160px, 210px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+}
+
+.label {
+  font-size: 0.85rem;
+  color: var(--color-text-primary, #fff);
+  padding-top: 7px;
+}
+
+.hint {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #9aa6b8);
+  line-height: 1.35;
+  margin-top: 3px;
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* The countdown beside a capped field: quiet until it matters. */
+.count {
+  align-self: flex-end;
+  font-size: 0.72rem;
+  color: var(--color-text-secondary, #9aa6b8);
+  font-variant-numeric: tabular-nums;
+}
+
+.countOver {
+  color: var(--color-danger, #e5534b);
+  font-weight: 600;
+}
+
+/* -- images -- */
+
+.assetRow {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.assetPreview {
+  width: 168px;
+  height: 62px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border, #3a3c43);
+  background: var(--color-bg-tertiary, #23252b);
+  object-fit: cover;
+  display: block;
+  flex: none;
+}
+
+.assetPreviewSquare {
+  width: 62px;
+  height: 62px;
+}
+
+.assetEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  color: var(--color-text-secondary, #9aa6b8);
+  text-align: center;
+  padding: 4px;
+}
+
+.assetActions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+/* -- tags -- */
+
+.tagList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tagRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) 110px minmax(0, 1.4fr) 32px;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 720px) {
+  .tagRow {
+    grid-template-columns: minmax(0, 1fr) 110px 32px;
+  }
+}
+
+/* -- palette -- */
+
+.swatchRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid var(--color-border, #3a3c43);
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  flex: none;
+}
+
+.clamped {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #9aa6b8);
+  line-height: 1.35;
+}
+
+.clampedSwatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border, #3a3c43);
+  flex: none;
+}
+
+/* -- the preview column -- */
+
+.preview {
+  position: sticky;
+  top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.previewHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.previewTitle {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #fff);
+}
+
+.modeSwitch {
+  margin-left: auto;
+  display: flex;
+  border-radius: 7px;
+  overflow: hidden;
+  border: 1px solid var(--color-border, #3a3c43);
+}
+
+.modeButton {
+  border: none;
+  background: none;
+  color: var(--color-text-secondary, #9aa6b8);
+  font-size: 0.72rem;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.modeButtonOn {
+  background: var(--color-accent, #34a8eb);
+  color: #fff;
+}
+
+/* The miniature connect screen. Its colours come from the livery being
+   edited, so it is deliberately not themed by the surrounding page. */
+.card {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--color-border, #3a3c43);
+  background: var(--livery-surface);
+  color: var(--livery-text);
+  font-size: 12px;
+}
+
+.cardBanner {
+  height: 78px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.cardBanner img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cardBannerName {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  opacity: 0.28;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90%;
+}
+
+.cardScrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 38%, var(--livery-surface) 100%);
+}
+
+.cardBody {
+  padding: 0 14px 14px;
+  margin-top: -20px;
+  position: relative;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.cardIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: 2px solid var(--livery-surface);
+  object-fit: cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  color: #fff;
+  overflow: hidden;
+}
+
+.cardIcon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cardName {
+  font-size: 14px;
+  font-weight: 700;
+  margin-top: 7px;
+  overflow-wrap: anywhere;
+}
+
+.cardTagline {
+  font-size: 10.5px;
+  opacity: 0.68;
+  margin-top: 2px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.cardChips {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 9px;
+}
+
+.cardChip {
+  font-size: 9px;
+  padding: 2.5px 8px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: rgb(255 255 255 / 8%);
+  opacity: 0.8;
+}
+
+.cardMotd {
+  margin-top: 10px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  text-align: left;
+  background: rgb(255 255 255 / 7%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  font-size: 9.5px;
+  line-height: 1.45;
+  opacity: 0.85;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  width: 100%;
+}
+
+.cardCta {
+  margin-top: 11px;
+  width: 100%;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--livery-accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+/* The address chip, drawn from page tokens rather than livery ones: a server
+   cannot restyle the one thing that says who you are connecting to. */
+.cardAddress {
+  margin-top: 9px;
+  font-size: 9px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--color-text-secondary, #9aa6b8);
+  background: var(--color-bg-tertiary, #23252b);
+  border: 1px solid var(--color-border, #3a3c43);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+
+.previewNote {
+  font-size: 0.72rem;
+  color: var(--color-text-secondary, #9aa6b8);
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* -- connection + status -- */
+
+.status {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border, #3a3c43);
+  background: var(--color-bg-tertiary, #23252b);
+  color: var(--color-text-secondary, #9aa6b8);
+  overflow-wrap: anywhere;
+}
+
+.statusError {
+  border-color: var(--color-danger, #e5534b);
+  color: var(--color-danger, #e5534b);
+}
+
+.statusOk {
+  border-color: var(--color-success, #3fc98d);
+  color: var(--color-success, #3fc98d);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* -- buttons -- */
+
+.btn {
+  border: 1px solid var(--color-border, #3a3c43);
+  background: var(--color-bg-tertiary, #23252b);
+  color: var(--color-text-primary, #fff);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--color-bg-hover, #2c2f36);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btnPrimary {
+  background: var(--color-accent, #34a8eb);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.btnDanger {
+  color: var(--color-danger, #e5534b);
+}
+
+.iconBtn {
+  border: none;
+  background: none;
+  color: var(--color-text-secondary, #9aa6b8);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.iconBtn:hover {
+  color: var(--color-danger, #e5534b);
+}

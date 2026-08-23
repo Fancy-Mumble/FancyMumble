@@ -12,6 +12,7 @@ import {
   StoreIcon,
   DatabaseIcon,
   SlidersIcon,
+  PaletteIcon,
   HistoryIcon,
 } from "../../icons";
 import { useAppStore } from "@core/store";
@@ -24,6 +25,7 @@ import { ServerPluginsTab } from "./ServerPluginsTab";
 import { MarketplaceTab } from "./MarketplaceTab";
 import { FileServerTab } from "./FileServerTab";
 import { ServerSettingsTab } from "./ServerSettingsTab";
+import { LiveryTab } from "./LiveryTab";
 import { AuditLogTab } from "./AuditLogTab";
 import OnboardingAdminPanel from "../../components/onboarding/OnboardingAdminPanel";
 import { isOnboardingSupported } from "@core/features/onboarding/onboardingStore";
@@ -79,6 +81,7 @@ type Tab =
   | "marketplace"
   | "fileServer"
   | "serverSettings"
+  | "livery"
   | "auditLog";
 
 export default function AdminPanel() {
@@ -135,6 +138,7 @@ export default function AdminPanel() {
   useEffect(() => {
     if (tab === "fileServer" && !canManageFileServer) setTab("users");
     if (tab === "serverSettings" && !canAdminPlugins) setTab("users");
+    if (tab === "livery" && !canAdminPlugins) setTab("users");
     if (tab === "auditLog" && !canViewAudit) setTab("users");
   }, [tab, canManageFileServer, canAdminPlugins, canViewAudit]);
   const tabs: TabDef<Tab>[] = [
@@ -196,6 +200,15 @@ export default function AdminPanel() {
           },
         ]
       : []),
+    ...(canAdminPlugins
+      ? [
+          {
+            id: "livery" as const,
+            label: t("adminTabs.livery", { defaultValue: "Livery" }),
+            icon: <PaletteIcon width={16} height={16} />,
+          },
+        ]
+      : []),
     ...(canViewAudit
       ? [
           {
@@ -231,6 +244,7 @@ export default function AdminPanel() {
         {tab === "marketplace" && <MarketplaceTab />}
         {tab === "fileServer" && <FileServerTab />}
         {tab === "serverSettings" && <ServerSettingsTab setFooter={setTabFooter} />}
+        {tab === "livery" && <LiveryTab />}
         {tab === "auditLog" && <AuditLogTab />}
       </div>
     </TabbedPage>

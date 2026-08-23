@@ -29,6 +29,14 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::server::get_welcome_text,
         super::server::ping_server,
         super::server::get_livery,
+        // -- livery admin (operator API proxy) -------------------------
+        super::livery_admin::livery_get,
+        super::livery_admin::livery_set,
+        super::livery_admin::livery_preview,
+        super::livery_admin::livery_upload_image,
+        super::livery_admin::livery_clear_image,
+        super::livery_admin::livery_image_data_uri,
+        super::livery_admin::livery_check,
         super::public_servers::fetch_public_servers,
         super::public_servers::fetch_file_server_capabilities,
         // -- certificates ----------------------------------------------
