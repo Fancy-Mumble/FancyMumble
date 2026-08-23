@@ -2896,6 +2896,14 @@ pub struct FancyAccountSettingsUpdate {
     /// Action-specific payload (see Action comments).
     #[prost(string, optional, tag = "2")]
     pub value: ::core::option::Option<::prost::alloc::string::String>,
+    /// The account's *current* password, re-typed by the user.
+    ///
+    /// Asked for on every action that changes something, because an already
+    /// authenticated session is exactly what a hijacked session also is: without
+    /// this the worst an attacker on a live session could do would be to take the
+    /// account, rather than to read it. Absent on QUERY, which changes nothing.
+    #[prost(string, optional, tag = "3")]
+    pub current_password: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Nested message and enum types in `FancyAccountSettingsUpdate`.
 pub mod fancy_account_settings_update {

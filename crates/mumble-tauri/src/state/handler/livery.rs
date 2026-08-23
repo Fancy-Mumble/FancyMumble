@@ -28,6 +28,7 @@ pub(crate) struct LiveryTag {
     /// `NEUTRAL`, `OK`, `WARN`, `BAD` or `ACCENT`. A name rather than a colour:
     /// the client owns what each tone looks like in the theme in force.
     pub tone: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub href: Option<String>,
 }
 
@@ -39,11 +40,13 @@ pub(crate) struct LiveryTag {
 /// six hex digits.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub(crate) struct LiveryPalette {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub accent: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub surface: Option<String>,
-    #[serde(rename = "auraFrom")]
+    #[serde(rename = "auraFrom", skip_serializing_if = "Option::is_none")]
     pub aura_from: Option<String>,
-    #[serde(rename = "auraTo")]
+    #[serde(rename = "auraTo", skip_serializing_if = "Option::is_none")]
     pub aura_to: Option<String>,
 }
 
@@ -60,22 +63,24 @@ pub(crate) struct LiverySnapshot {
     pub version: u64,
     /// Lowercase hex, the same value the UDP ping carries.
     pub digest: String,
-    #[serde(rename = "displayName")]
+    #[serde(rename = "displayName", skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tagline: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub motd: Option<String>,
     pub tags: Vec<LiveryTag>,
-    #[serde(rename = "rulesUrl")]
+    #[serde(rename = "rulesUrl", skip_serializing_if = "Option::is_none")]
     pub rules_url: Option<String>,
-    #[serde(rename = "bannerKey")]
+    #[serde(rename = "bannerKey", skip_serializing_if = "Option::is_none")]
     pub banner_key: Option<String>,
-    #[serde(rename = "iconKey")]
+    #[serde(rename = "iconKey", skip_serializing_if = "Option::is_none")]
     pub icon_key: Option<String>,
-    #[serde(rename = "bannerSrc")]
+    #[serde(rename = "bannerSrc", skip_serializing_if = "Option::is_none")]
     pub banner_src: Option<String>,
-    #[serde(rename = "iconSrc")]
+    #[serde(rename = "iconSrc", skip_serializing_if = "Option::is_none")]
     pub icon_src: Option<String>,
-    #[serde(rename = "bannerFocus")]
+    #[serde(rename = "bannerFocus", skip_serializing_if = "Option::is_none")]
     pub banner_focus: Option<LiveryFocus>,
     pub palette: LiveryPalettes,
 }
@@ -83,7 +88,9 @@ pub(crate) struct LiverySnapshot {
 /// One palette per mode, because the viewer picks light or dark, not the server.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub(crate) struct LiveryPalettes {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub dark: Option<LiveryPalette>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub light: Option<LiveryPalette>,
 }
 
@@ -265,5 +272,41 @@ mod tests {
         let snapshot = to_snapshot(&tagged, |_| None);
         assert_eq!(snapshot.tags[0].tone, "NEUTRAL");
         assert_eq!(snapshot.tags[0].label, "Rules");
+    }
+
+    /// The frontend types every unset field as absent (`href?: string`), never
+    /// as `| null`. A round-trip through the editor spreads a tag object
+    /// verbatim, so an `Option::None` that serialised as JSON `null` here would
+    /// come back on a save as an explicit `null` and fail the strict patch
+    /// parser (`"tags[].href must be a string"`) the moment an operator edited
+    /// any other field on that tag. The key has to be missing, not nulled.
+    #[test]
+    fn an_unset_tag_href_is_an_absent_key_not_a_null() {
+        let mut tagged = doc();
+        tagged.tags = vec![fancy::domain::livery_doc::Tag {
+            label: "Rules".to_owned(),
+            tone: 0,
+            href: String::new(),
+        }];
+        let json = serde_json::to_value(to_snapshot(&tagged, |_| None)).unwrap();
+        let tag = &json["tags"][0];
+        assert!(!tag.as_object().unwrap().contains_key("href"), "{tag}");
+    }
+
+    /// Same hazard as the tag href, for every other optional field the
+    /// snapshot carries: the operator page never round-trips a bare `null`
+    /// back to the strict patch parser.
+    #[test]
+    fn unset_optional_fields_are_absent_keys_throughout_the_snapshot() {
+        let json = serde_json::to_value(to_snapshot(&doc(), |_| None)).unwrap();
+        for absent in ["displayName", "motd", "rulesUrl", "bannerKey", "iconKey", "palette"] {
+            if absent == "palette" {
+                let palette = json["palette"].as_object().unwrap();
+                assert!(!palette.contains_key("dark"), "{palette:?}");
+                assert!(!palette.contains_key("light"), "{palette:?}");
+            } else {
+                assert!(!json.as_object().unwrap().contains_key(absent), "{absent}: {json}");
+            }
+        }
     }
 }

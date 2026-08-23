@@ -49,6 +49,7 @@ pub mod mumble_udp {
     clippy::unwrap_used,
     clippy::doc_markdown,
     clippy::large_enum_variant,
+    clippy::excessive_nesting,
     reason = "generated code produced by prost-build - not hand-written; \
               unused until the codec moves to the canon (M2c)"
 )]

@@ -2068,6 +2068,13 @@ message FancyAccountSettingsUpdate {
   required Action action = 1;
   // Action-specific payload (see Action comments).
   optional string value = 2;
+  // The account's *current* password, re-typed by the user.
+  //
+  // Asked for on every action that changes something, because an already
+  // authenticated session is exactly what a hijacked session also is: without
+  // this the worst an attacker on a live session could do would be to take the
+  // account, rather than to read it. Absent on QUERY, which changes nothing.
+  optional string current_password = 3;
 }
 
 // Server -> Client: result of a FancyAccountSettingsUpdate action.

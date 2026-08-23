@@ -141,7 +141,7 @@ pub struct SyncDelta {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UserdataEnvelope {
-    #[prost(oneof = "userdata_envelope::Body", tags = "1, 2, 3, 4, 5")]
+    #[prost(oneof = "userdata_envelope::Body", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub body: ::core::option::Option<userdata_envelope::Body>,
 }
 /// Nested message and enum types in `UserdataEnvelope`.
@@ -158,6 +158,10 @@ pub mod userdata_envelope {
         SettingsUpdate(super::SettingsUpdate),
         #[prost(message, tag = "5")]
         SettingsQuery(super::SettingsQuery),
+        #[prost(message, tag = "6")]
+        AccountQuery(super::AccountQuery),
+        #[prost(message, tag = "7")]
+        Account(super::AccountState),
     }
 }
 /// The account self-service surface: everything a user may change about their
@@ -210,6 +214,9 @@ pub mod account_action {
         EnableTotp = 4,
         DisableTotp = 5,
         Unregister = 6,
+        /// Back to certificate-only login. Separate from SET_PASSWORD with an empty
+        /// value, which is a password every guess matches rather than none.
+        ClearPassword = 7,
     }
     impl Kind {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -225,6 +232,7 @@ pub mod account_action {
                 Self::EnableTotp => "ENABLE_TOTP",
                 Self::DisableTotp => "DISABLE_TOTP",
                 Self::Unregister => "UNREGISTER",
+                Self::ClearPassword => "CLEAR_PASSWORD",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -237,6 +245,7 @@ pub mod account_action {
                 "ENABLE_TOTP" => Some(Self::EnableTotp),
                 "DISABLE_TOTP" => Some(Self::DisableTotp),
                 "UNREGISTER" => Some(Self::Unregister),
+                "CLEAR_PASSWORD" => Some(Self::ClearPassword),
                 _ => None,
             }
         }
@@ -257,6 +266,11 @@ pub struct AccountAck {
     /// rather than a locked account.
     #[prost(string, tag = "4")]
     pub totp_secret: ::prost::alloc::string::String,
+    /// The same secret as an `otpauth://` URI, for clients that show a QR code.
+    /// Sent beside `totp_secret` and under the same rule: only in answer to the
+    /// first half, never again.
+    #[prost(string, tag = "5")]
+    pub totp_uri: ::prost::alloc::string::String,
 }
 /// This account's stored client settings.
 ///
@@ -288,9 +302,48 @@ pub struct SettingsUpdate {
 /// to each other at the same time, and neither can tell which it received.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SettingsQuery {}
+/// "Tell me about my own account."
+///
+/// Answered with an `AccountState`. Like everything else on this envelope it
+/// names no account: the answer is about whoever sent it.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AccountQuery {}
+/// What the server holds about the caller's own account.
+///
+/// Sent in answer to an `AccountQuery` and again after every action that changed
+/// any of it, so a client never has to infer the new state from an ack it just
+/// received. Nothing secret is on it - the password is a hash the server will
+/// not part with, and a TOTP secret is only ever sent once, in the ack that
+/// hands it out.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AccountState {
+    /// False for a guest, and false again after a successful UNREGISTER. Every
+    /// other field is meaningless while this is false.
+    #[prost(bool, tag = "1")]
+    pub registered: bool,
+    #[prost(uint64, tag = "2")]
+    pub id: u64,
+    #[prost(string, tag = "3")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub email: ::prost::alloc::string::String,
+    /// Whether a password may be used to log in as this account. While set, a
+    /// certificate alone no longer suffices.
+    #[prost(bool, tag = "5")]
+    pub has_password: bool,
+    #[prost(bool, tag = "6")]
+    pub totp_enabled: bool,
+    /// The certificate bound to the account, empty where none is.
+    #[prost(bytes = "vec", tag = "7")]
+    pub cert_hash: ::prost::alloc::vec::Vec<u8>,
+    /// Whether the certificate on *this* connection is that one. Clearing the
+    /// password is only allowed when it is, or the account locks its owner out.
+    #[prost(bool, tag = "8")]
+    pub cert_matches_session: bool,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ServerConfigEnvelope {
-    #[prost(oneof = "server_config_envelope::Body", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "server_config_envelope::Body", tags = "1, 2, 3, 4, 5, 6, 7, 8")]
     pub body: ::core::option::Option<server_config_envelope::Body>,
 }
 /// Nested message and enum types in `ServerConfigEnvelope`.
@@ -309,7 +362,45 @@ pub mod server_config_envelope {
         Livery(super::LiveryDoc),
         #[prost(message, tag = "6")]
         LiveryUpdate(super::LiveryUpdate),
+        #[prost(message, tag = "7")]
+        TicketRequest(super::OperatorTicketRequest),
+        #[prost(message, tag = "8")]
+        TicketReply(super::OperatorTicketReply),
     }
+}
+/// "I already hold Write on the root channel; mint me a short-lived operator
+/// credential so I can call the operator API for something the control
+/// channel does not carry" -- starting with a livery image, and meant to
+/// widen to whatever else this replaces from Ice's admin console (accounts,
+/// ACLs, bans) as each is verified against its own permission.
+///
+/// Scopes are named as `docs/OPERATOR-API.md` §2 spells them. The reply MAY
+/// grant fewer than were asked for: each requested scope is checked against
+/// the permission that already gates the equivalent control-channel action,
+/// and the answer never grants more than that session already holds.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct OperatorTicketRequest {
+    #[prost(string, repeated, tag = "1")]
+    pub scopes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct OperatorTicketReply {
+    /// Empty when nothing was granted; see `denied_reason`.
+    #[prost(string, tag = "1")]
+    pub token: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "2")]
+    pub granted_scopes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(uint64, tag = "3")]
+    pub expires_at_ms: u64,
+    /// The operator API's advertised address, empty when this deployment has it
+    /// disabled, unreachable, or has not named one a client could use
+    /// (`\[services.operator-api\] public_url`).
+    #[prost(string, tag = "4")]
+    pub base_url: ::prost::alloc::string::String,
+    /// Set only when granted_scopes is empty, so a client can show *why* rather
+    /// than a bare "nothing happened".
+    #[prost(string, tag = "5")]
+    pub denied_reason: ::prost::alloc::string::String,
 }
 /// An admin changing the livery from a connected client.
 ///

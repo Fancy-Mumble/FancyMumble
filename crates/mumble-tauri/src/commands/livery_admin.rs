@@ -252,6 +252,23 @@ pub(crate) async fn livery_update_over_channel(
     state.update_livery(fields, values).await
 }
 
+/// Ask the server for a short-lived operator credential, so a connected admin
+/// can upload artwork without typing an operator API address and token.
+///
+/// No credential travels with this: the server authorises the request
+/// against the session it arrives on, granting each requested scope only
+/// where that session already holds the permission the equivalent
+/// control-channel action needs. Resolves once the request is away; the
+/// answer arrives asynchronously as an `operator-ticket` event, which may
+/// grant fewer scopes than were asked for, or none.
+#[tauri::command]
+pub(crate) async fn request_operator_ticket(
+    state: tauri::State<'_, AppState>,
+    scopes: Vec<String>,
+) -> Result<(), String> {
+    state.request_operator_ticket(scopes).await
+}
+
 /// Whether the operator API is reachable with this credential.
 ///
 /// `POST /v1/whoami` demands the literal `*` scope, so it is the wrong probe for

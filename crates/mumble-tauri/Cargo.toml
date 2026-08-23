@@ -99,6 +99,9 @@ tauri-plugin-dialog = "2"
 tauri-plugin-deep-link = "2"
 hound = "3.5"
 chrono = "0.4"
+mp4 = "0.14"
+openh264 = "0.8"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 # Desktop-only dependencies (cpal, global shortcuts, and Opus are not available on Android).
 [target.'cfg(not(target_os = "android"))'.dependencies]
@@ -194,6 +197,12 @@ webkit2gtk = { version = "2.0.1", features = ["v2_38"] }
 # Same version the notification plugin uses; see event_handler.rs for why
 # Linux notifications bypass the plugin.
 notify-rust = "4"
+# Direct ALSA access for the PipeWire device layer (`audio/pipewire.rs`).
+# cpal's ALSA host can only open the PCMs it finds in ALSA's hint list, and
+# the per-node PCM this needs - `pipewire:NODE=<name>` - is not one of them.
+# Already in the tree as a cpal dependency, so this adds no new system
+# requirement beyond the libasound headers cpal already needs.
+alsa = "0.11"
 
 [lints]
 workspace = true

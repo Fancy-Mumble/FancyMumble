@@ -18,6 +18,7 @@ mod link_preview;
 mod livery;
 pub(crate) use livery::LiverySnapshot;
 mod onboarding;
+mod operator_ticket;
 mod pchat;
 mod permission_denied;
 mod permission_query;
@@ -187,6 +188,7 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::FancyAuditEvent(m) => m.handle(ctx),
         ControlMessage::FancyAuditConfig(m) => m.handle(ctx),
         ControlMessage::FancyServerLivery(m) => m.handle(ctx),
+        ControlMessage::FancyOperatorTicketReply(m) => m.handle(ctx),
         ControlMessage::FancyPluginAdminList(m) => m.handle(ctx),
         ControlMessage::FancyPluginAdminAck(m) => m.handle(ctx),
         ControlMessage::PluginMessage(m) => m.handle(ctx),

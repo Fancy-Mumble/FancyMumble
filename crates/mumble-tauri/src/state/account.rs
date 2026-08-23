@@ -24,11 +24,14 @@ impl AppState {
     ///
     /// `action` is the `snake_case` name of a
     /// `FancyAccountSettingsUpdate.Action` variant; `value` carries the
-    /// action-specific payload (password, new name, email, TOTP code).
+    /// action-specific payload (password, new name, email, TOTP code), and
+    /// `current_password` the account's existing password, which the server
+    /// requires for every action that changes anything.
     pub async fn update_account_settings(
         &self,
         action: String,
         value: Option<String>,
+        current_password: Option<String>,
     ) -> Result<(), String> {
         let action = match action.as_str() {
             "query" => Action::Query,
@@ -51,7 +54,11 @@ impl AppState {
         let handle = handle.ok_or("Not connected")?;
 
         handle
-            .send(command::SendFancyAccountSettingsUpdate { action, value })
+            .send(command::SendFancyAccountSettingsUpdate {
+                action,
+                value,
+                current_password,
+            })
             .await
             .map_err(|e| format!("Failed to send account update: {e}"))?;
         Ok(())

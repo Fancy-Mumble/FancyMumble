@@ -22,11 +22,31 @@ pub(crate) async fn get_audio_devices() -> Vec<AudioDevice> {
 
 #[cfg(not(target_os = "android"))]
 fn enumerate_input_devices() -> Vec<AudioDevice> {
+    #[cfg(target_os = "linux")]
+    if audio::pipewire::available() {
+        return pipewire_devices(audio::pipewire::Kind::Source);
+    }
     audio::devices::inputs()
         .into_iter()
         .map(|d| AudioDevice {
             name: d.name,
             is_default: d.is_default,
+        })
+        .collect()
+}
+
+/// The PipeWire half of the graph as the picker's device list.
+///
+/// These are the nodes the desktop's own sound settings show, and unlike
+/// the ALSA hint list every entry names a distinct device that can
+/// actually be selected - see [`audio::pipewire`].
+#[cfg(target_os = "linux")]
+fn pipewire_devices(kind: audio::pipewire::Kind) -> Vec<AudioDevice> {
+    audio::pipewire::nodes(kind)
+        .into_iter()
+        .map(|n| AudioDevice {
+            name: n.name,
+            is_default: n.is_default,
         })
         .collect()
 }
@@ -52,6 +72,10 @@ pub(crate) async fn get_output_devices() -> Vec<AudioDevice> {
 
 #[cfg(not(target_os = "android"))]
 fn enumerate_output_devices() -> Vec<AudioDevice> {
+    #[cfg(target_os = "linux")]
+    if audio::pipewire::available() {
+        return pipewire_devices(audio::pipewire::Kind::Sink);
+    }
     audio::devices::outputs()
         .into_iter()
         .map(|d| AudioDevice {

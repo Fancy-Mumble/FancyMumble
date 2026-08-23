@@ -292,3 +292,24 @@ pub(crate) fn write_translation_files(
     }
     Ok(())
 }
+
+/// Read a local file and return its contents base64-encoded.
+///
+/// Used for files dropped onto the window, which reach the webview as a bare
+/// path. The webview cannot read that path itself: `convertFileSrc` turns it
+/// into an `asset://` URL, and on Linux the `WebKitGTK` backend registers that
+/// custom scheme as secure but never as CORS-enabled, so a `fetch()` against it
+/// yields an empty body rather than the file. Reading here and handing the
+/// bytes back over IPC is the same detour [`upload_bytes`] takes.
+#[tauri::command]
+pub(crate) async fn read_file_base64(path: String) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+
+    let bytes = tokio::fs::read(&path)
+        .await
+        .map_err(|e| format!("read {path}: {e}"))?;
+    if bytes.is_empty() {
+        return Err(format!("file is empty: {path}"));
+    }
+    Ok(STANDARD.encode(bytes))
+}

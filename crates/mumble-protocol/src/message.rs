@@ -212,6 +212,11 @@ pub enum TcpMessageType {
     FancyServerLivery = 173,
     /// Fancy Mumble: an admin changes the livery from a connected client.
     FancyLiveryUpdate = 174,
+    /// Fancy Mumble: a connected session asks for a short-lived operator
+    /// credential, carried on the same outer type 1013 as livery.
+    FancyOperatorTicketRequest = 175,
+    /// Fancy Mumble: the server's answer to a ticket request.
+    FancyOperatorTicketReply = 176,
     /// Fancy Mumble: generic plugin envelope (bidirectional).
     PluginMessage = 200,
     /// Fancy Mumble: server enumerates loaded plugins after `ServerSync`.
@@ -458,6 +463,14 @@ pub enum ControlMessage {
     /// session this frame arrives on. Artwork is not carried here: a banner is
     /// half a megabyte and the control channel is the wrong pipe for it.
     FancyLiveryUpdate(fancy::domain::LiveryUpdate),
+    /// Fancy: a connected session asks for a short-lived operator credential,
+    /// naming the scopes it wants - a livery image upload, today, and meant
+    /// to widen to whatever else this replaces from Ice's admin console.
+    FancyOperatorTicketRequest(fancy::domain::OperatorTicketRequest),
+    /// Fancy: the server's answer to a ticket request. `granted_scopes` may
+    /// be a subset of what was asked for, or empty; see `denied_reason` when
+    /// it is.
+    FancyOperatorTicketReply(fancy::domain::OperatorTicketReply),
     /// Fancy: generic plugin envelope (bidirectional).
     PluginMessage(mumble_tcp::PluginMessage),
     /// Fancy: server enumerates loaded plugins.
@@ -498,6 +511,7 @@ message_type_mapping! {
     PchatKeyHoldersList, PchatKeyChallenge, PchatKeyChallengeResponse,
     PchatKeyChallengeResult, PchatDeleteMessages, PchatOfflineQueueDrain,
     FancyLiveryQuery, FancyServerLivery, FancyLiveryUpdate,
+    FancyOperatorTicketRequest, FancyOperatorTicketReply,
     PchatReaction, PchatReactionDeliver, PchatReactionFetchResponse,
     WebRtcSignal, PchatSenderKeyDistribution,
     FancyPushRegister, FancyPushUpdate, FancyCustomReactionsConfig,

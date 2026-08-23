@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use mumble_protocol::message::ControlMessage;
 use mumble_protocol::persistent::PchatProtocol;
+use mumble_protocol::proto::fancy;
 use mumble_protocol::proto::mumble_tcp;
 
 use super::{dispatch, EventEmitter, HandleMessage, HandlerContext};
@@ -1870,6 +1871,50 @@ fn codec_version_opus_defaults_false() {
 
     let state = ctx.shared.lock().unwrap();
     assert!(!state.server.opus);
+}
+
+// -- OperatorTicketReply ---------------------------------------------
+
+#[test]
+fn a_granted_ticket_is_emitted_as_the_frontend_expects_it() {
+    let (ctx, emitter) = make_ctx();
+    fancy::domain::OperatorTicketReply {
+        token: "abc123".to_owned(),
+        granted_scopes: vec!["server-config:write".to_owned()],
+        expires_at_ms: 1_750_000_000_000,
+        base_url: "https://ops.example.org".to_owned(),
+        denied_reason: String::new(),
+    }
+    .handle(&ctx);
+
+    let events = emitter.events();
+    let (event, payload) = events.last().expect("one event");
+    assert_eq!(event, "operator-ticket");
+    assert_eq!(payload["ticket"]["token"], "abc123");
+    assert_eq!(payload["ticket"]["grantedScopes"][0], "server-config:write");
+    assert_eq!(payload["ticket"]["baseUrl"], "https://ops.example.org");
+    assert!(payload["ticket"].get("deniedReason").is_none());
+}
+
+#[test]
+fn a_denied_ticket_still_names_the_reason() {
+    let (ctx, emitter) = make_ctx();
+    fancy::domain::OperatorTicketReply {
+        denied_reason: "no requested scope is covered by a permission this session holds"
+            .to_owned(),
+        ..Default::default()
+    }
+    .handle(&ctx);
+
+    let events = emitter.events();
+    let (_, payload) = events.last().expect("one event");
+    assert_eq!(payload["ticket"]["token"], "");
+    assert!(
+        payload["ticket"]["deniedReason"]
+            .as_str()
+            .unwrap()
+            .contains("permission")
+    );
 }
 
 // -- Dispatch ------------------------------------------------------
