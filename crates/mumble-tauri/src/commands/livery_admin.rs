@@ -13,6 +13,8 @@
 
 use std::time::Duration;
 
+use crate::AppState;
+
 /// How long any one operator call may take.
 ///
 /// Longer than the file-server probe's five seconds because an image upload is
@@ -225,6 +227,29 @@ pub(crate) async fn livery_image_data_uri(
         .map_err(|error| format!("could not read the image: {error}"))?;
     let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
     Ok(Some(format!("data:{content_type};base64,{encoded}")))
+}
+
+
+/// Change the livery over the connection this client already has.
+///
+/// No credential: the server authorises against the session the frame arrives
+/// on, which the handshake established. `patch` is the same JSON shape the
+/// operator API takes, so the admin page has one document format rather than
+/// two, and only the keys present are written.
+///
+/// # Errors
+///
+/// A key no livery document has, or a value of the wrong shape. A refusal by
+/// the *server* — the caller lacking `Write` on the root channel — arrives
+/// asynchronously as a `PermissionDenied`, not here: this returns once the
+/// frame is away.
+#[tauri::command]
+pub(crate) async fn livery_update_over_channel(
+    state: tauri::State<'_, AppState>,
+    patch: serde_json::Value,
+) -> Result<(), String> {
+    let (fields, values) = super::livery_patch::parse(&patch)?;
+    state.update_livery(fields, values).await
 }
 
 /// Whether the operator API is reachable with this credential.

@@ -228,6 +228,7 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
         // upstream of this, like every other canon-only message.
         FancyLiveryQuery(m) => m.encode_to_vec(),
         FancyServerLivery(m) => m.encode_to_vec(),
+        FancyLiveryUpdate(m) => m.encode_to_vec(),
         Authenticate(m) => m.encode_to_vec(),
         Ping(m) => m.encode_to_vec(),
         Reject(m) => m.encode_to_vec(),
@@ -347,6 +348,11 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
         }
         FancyServerLivery => {
             ControlMessage::FancyServerLivery(crate::proto::fancy::domain::LiveryDoc::decode(
+                payload,
+            )?)
+        }
+        FancyLiveryUpdate => {
+            ControlMessage::FancyLiveryUpdate(crate::proto::fancy::domain::LiveryUpdate::decode(
                 payload,
             )?)
         }

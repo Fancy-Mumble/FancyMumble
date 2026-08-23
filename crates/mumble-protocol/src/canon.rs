@@ -371,6 +371,17 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
                 .encode_to_vec(),
             ));
         }
+        ControlMessage::FancyLiveryUpdate(update) => {
+            return Some((
+                SERVER_CONFIG,
+                fancy::domain::ServerConfigEnvelope {
+                    body: Some(fancy::domain::server_config_envelope::Body::LiveryUpdate(
+                        update.clone(),
+                    )),
+                }
+                .encode_to_vec(),
+            ));
+        }
         ControlMessage::PchatFetch(fetch) => {
             let envelope = fancy::pchat::PchatEnvelope {
                 body: Some(fancy::pchat::pchat_envelope::Body::Fetch(

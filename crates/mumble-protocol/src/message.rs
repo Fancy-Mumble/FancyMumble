@@ -210,6 +210,8 @@ pub enum TcpMessageType {
     FancyLiveryQuery = 172,
     /// Fancy Mumble: server sends what it looks like.
     FancyServerLivery = 173,
+    /// Fancy Mumble: an admin changes the livery from a connected client.
+    FancyLiveryUpdate = 174,
     /// Fancy Mumble: generic plugin envelope (bidirectional).
     PluginMessage = 200,
     /// Fancy Mumble: server enumerates loaded plugins after `ServerSync`.
@@ -450,6 +452,12 @@ pub enum ControlMessage {
     FancyLiveryQuery(fancy::domain::LiveryQuery),
     /// Fancy: server sends what it looks like - banner, mark, motto, palette.
     FancyServerLivery(fancy::domain::LiveryDoc),
+    /// Fancy: an admin changes the livery from a connected client.
+    ///
+    /// Authorised server-side by `Write` on the root channel, against the
+    /// session this frame arrives on. Artwork is not carried here: a banner is
+    /// half a megabyte and the control channel is the wrong pipe for it.
+    FancyLiveryUpdate(fancy::domain::LiveryUpdate),
     /// Fancy: generic plugin envelope (bidirectional).
     PluginMessage(mumble_tcp::PluginMessage),
     /// Fancy: server enumerates loaded plugins.
@@ -489,7 +497,7 @@ message_type_mapping! {
     PchatEpochCountersig, PchatKeyHolderReport, PchatKeyHoldersQuery,
     PchatKeyHoldersList, PchatKeyChallenge, PchatKeyChallengeResponse,
     PchatKeyChallengeResult, PchatDeleteMessages, PchatOfflineQueueDrain,
-    FancyLiveryQuery, FancyServerLivery,
+    FancyLiveryQuery, FancyServerLivery, FancyLiveryUpdate,
     PchatReaction, PchatReactionDeliver, PchatReactionFetchResponse,
     WebRtcSignal, PchatSenderKeyDistribution,
     FancyPushRegister, FancyPushUpdate, FancyCustomReactionsConfig,

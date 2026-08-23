@@ -198,7 +198,28 @@ message ServerConfigEnvelope {
     ConfigUpdate update = 3;
     LiveryQuery livery_query = 4;
     LiveryDoc livery = 5;
+    LiveryUpdate livery_update = 6;
   }
+}
+
+// An admin changing the livery from a connected client.
+//
+// The settings half of this envelope still refuses a client write, because
+// nothing has asked for one; livery is different because the person editing it
+// is looking at the connect screen they are editing. Authorised as murmur
+// authorises every other administrative write: `Write` on the root channel,
+// checked against the session the frame arrived on, which is an identity the
+// server established at the handshake and the client cannot assert.
+//
+// Artwork is deliberately not here. A banner is half a megabyte and the control
+// channel is the wrong pipe for it; images keep going through the operator API
+// until they move to the files plane.
+message LiveryUpdate {
+  // Which fields to write, by the names the operator API uses. Field-wise for
+  // the same reason: two admins editing different halves must not overwrite
+  // each other.
+  repeated string fields = 1;
+  LiveryDoc values = 2;
 }
 
 // "Send me this server's livery, and the artwork I do not already hold."

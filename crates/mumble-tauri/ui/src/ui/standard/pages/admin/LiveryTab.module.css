@@ -962,3 +962,22 @@
   gap: 8px;
   align-items: center;
 }
+
+/* Shown only when an image is being replaced, which is the one action the
+   connection cannot authorise on its own. */
+.credsPrompt {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--lv-card);
+  border: 1px solid var(--lv-ln2);
+}
+
+.credsLead {
+  font-size: 11px;
+  color: var(--lv-mut);
+  line-height: 1.45;
+}
