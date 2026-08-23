@@ -30,6 +30,14 @@ export type NumberFormat = "auto" | "comma-period" | "period-comma" | "space-com
 export interface UserPreferences {
   /** Complete UI implementation to load. */
   uiDesign: UiDesignId;
+  /**
+   * Where the operator API listens, for the livery admin tab.
+   *
+   * The address only. The token that goes with it is deliberately not stored:
+   * it has no expiry and no identity, so a copy in the preferences file
+   * outlives whoever typed it.
+   */
+  liveryOperatorUrl?: string;
   /** Simplified or full-featured UI mode. */
   userMode: UserMode;
   /** Whether the first-run setup has been completed. */
