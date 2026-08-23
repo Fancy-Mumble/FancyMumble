@@ -1,31 +1,34 @@
 /**
- * Livery admin tab: what this server says it looks like.
+ * Admin › Livery, transcribed from the "Fancy Mumble 2026 v2" mock.
  *
- * # Why it is shaped like this
+ * # What the design is doing
  *
- * The connect screen it edits is a *ladder*, not a switch. Most servers set a
- * few fields; very few set all of them. So every control here stands alone, the
- * form is never "incomplete", and the preview beside it shows exactly what the
- * current subset produces - including the unbranded case, which is a real
- * outcome rather than an empty state.
+ * The connect screen this edits is a ladder, not a switch: most servers set a
+ * few fields and very few set all of them. So the form is never "incomplete",
+ * every counter shows from the start rather than appearing as a warning, and
+ * the colour section sits behind a switch because banner-and-nothing-else is a
+ * common setup rather than a half-finished one.
  *
- * The preview is the point of the page. A palette is the one part of the
- * document whose stored value and rendered value can differ, because clients
- * enforce a contrast floor, and an operator who cannot see that their `#0b0b0b`
- * came back legible discovers it from a support thread instead. The server's
- * own `?mode=` preview is what fills in the clamp notes, so the number the
- * operator is shown is the number the client will use.
+ * The preview column is the point of the page. A palette is the one part of the
+ * document whose stored value and painted value can differ - clients enforce a
+ * contrast floor - so the card shows the *clamped* colour, and the notice under
+ * the palettes says what moved and that the stored value is untouched.
+ *
+ * The address under the server name in the preview is drawn on every server, in
+ * the viewer's own colours. It is in the design for the same reason it is in
+ * the protocol: `display_name` may stand next to the address and never instead
+ * of it, so the page demonstrates the rule it is editing under.
  *
  * # Transport
  *
- * Everything goes through Tauri proxy commands rather than `fetch`: the
- * operator API is a different origin and the bearer must not live in the page.
- * The same reasoning as the file-server dashboard next door.
+ * Calls go through Tauri proxy commands rather than `fetch`: the operator API
+ * is a different origin and the bearer must not live in the page. That is also
+ * why this opens with a credential gate the mock does not have; moving livery
+ * onto the client channel would remove it.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getPreferences, updatePreferences } from "@core/preferencesStorage";
-import { SelectInput, TextArea, TextInput } from "../../components/elements/TextInput";
 import {
   IMAGE_TYPES,
   LIMITS,
@@ -48,104 +51,73 @@ import {
 } from "./liveryAdmin";
 import styles from "./LiveryTab.module.css";
 
-/** A colour the preview falls back to when the operator has named none. */
-const FALLBACK = {
-  dark: { surface: "#141d33", accent: "#41b4f9", text: "#f1f5ff" },
-  light: { surface: "#fdfbf6", accent: "#1691dc", text: "#252a3c" },
-} as const;
-
 type Mode = "dark" | "light";
+type Slot = "accent" | "surface" | "aura";
 
 const EMPTY: LiveryDocument = { version: 0, digest: "" };
 
-/** A label, its hint, and the control it names. */
-function Row({
-  label,
-  hint,
-  children,
-}: {
-  readonly label: string;
-  readonly hint?: string;
-  readonly children: ReactNode;
-}) {
+/** What a client falls back to when the operator named nothing. */
+const STOCK = {
+  dark: { surface: "#151d38", accent: "#41b4f9", text: "#eef0fb" },
+  light: { surface: "#f6f4f0", accent: "#5c62d8", text: "#26282e" },
+} as const;
+
+const CHIP_CLASS: Record<LiveryTone, string> = {
+  NEUTRAL: "",
+  OK: styles.chipOk,
+  WARN: styles.chipWarn,
+  BAD: styles.chipBad,
+  ACCENT: styles.chipAccent,
+};
+
+const TONE_CLASS: Record<LiveryTone, string> = {
+  NEUTRAL: "",
+  OK: styles.toneOk,
+  WARN: styles.toneWarn,
+  BAD: styles.toneBad,
+  ACCENT: styles.toneAccent,
+};
+
+/** What a chip looks like inside the preview, which is not the app's theme. */
+const CHIP_PREVIEW: Record<LiveryTone, { background: string; border: string; color: string }> = {
+  NEUTRAL: { background: "rgba(255,255,255,.08)", border: "transparent", color: "inherit" },
+  OK: { background: "rgba(61,220,151,.14)", border: "rgba(61,220,151,.35)", color: "#3cd88e" },
+  WARN: { background: "rgba(236,186,85,.14)", border: "rgba(236,186,85,.35)", color: "#ecba55" },
+  BAD: { background: "rgba(245,126,126,.14)", border: "rgba(245,126,126,.35)", color: "#f57e7e" },
+  ACCENT: { background: "", border: "", color: "" },
+};
+
+function LinkIcon() {
   return (
-    <div className={styles.row}>
-      <div className={styles.label}>
-        {label}
-        {hint ? <span className={styles.hint}>{hint}</span> : null}
-      </div>
-      <div className={styles.control}>{children}</div>
-    </div>
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      aria-hidden
+    >
+      <path d="M6 8a3 3 0 0 0 4.2.2l2-2A3 3 0 0 0 8 2l-1 1M8 6a3 3 0 0 0-4.2-.2l-2 2A3 3 0 0 0 6 12l1-1" />
+    </svg>
   );
 }
 
-/** How much of a capped field is left. Silent until it is worth knowing. */
-function Count({ value, limit }: { readonly value: string; readonly limit: number }) {
-  // Counted in code points, as the server counts characters rather than bytes,
-  // so an operator writing in Japanese is not told they have used three times
-  // what they have.
-  const used = [...value].length;
-  if (used < limit * 0.75) return null;
-  return (
-    <span className={used > limit ? `${styles.count} ${styles.countOver}` : styles.count}>
-      {used} / {limit}
-    </span>
-  );
+/** Bytes as the mock writes them: "318 KiB". */
+function kib(bytes: number): string {
+  return `${Math.max(1, Math.round(bytes / 1024))} KiB`;
 }
 
-/** A `#rrggbb` field: a swatch, a text box, and what the clamp did to it. */
-function ColourField({
-  label,
-  value,
-  onChange,
-  clampedTo,
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly onChange: (next: string) => void;
-  readonly clampedTo?: string;
-}) {
-  const valid = value === "" || isHexColour(value);
-  return (
-    <Row label={label}>
-      <div className={styles.swatchRow}>
-        <input
-          type="color"
-          className={styles.swatch}
-          aria-label={`${label} colour`}
-          value={isHexColour(value) ? value : "#000000"}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        <TextInput
-          mono
-          size="small"
-          placeholder="unset"
-          aria-label={label}
-          invalid={!valid}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        {value !== "" && (
-          <button type="button" className={styles.iconBtn} onClick={() => onChange("")}>
-            ×
-          </button>
-        )}
-      </div>
-      {!valid && (
-        <span className={`${styles.hint} ${styles.countOver}`}>
-          Six hex digits, like #8a90ff. Anything else is refused.
-        </span>
-      )}
-      {clampedTo && (
-        // Information, not an error: the value was accepted and stored. What
-        // changed is what gets painted.
-        <span className={styles.clamped}>
-          <span className={styles.clampedSwatch} style={{ background: clampedTo }} />
-          Clients will lighten this to {clampedTo} so it stays legible on the surface behind it.
-        </span>
-      )}
-    </Row>
-  );
+/** A `data:` URI's decoded size, for the chip over the banner. */
+function dataUriBytes(uri: string): number {
+  const base64 = uri.slice(uri.indexOf(",") + 1);
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+  return Math.floor((base64.length * 3) / 4) - padding;
+}
+
+/** Characters, as the server counts them - not UTF-16 units. */
+function used(value: string | undefined): number {
+  return [...(value ?? "")].length;
 }
 
 export function LiveryTab() {
@@ -162,10 +134,9 @@ export function LiveryTab() {
   const [preview, setPreview] = useState<LiveryPreview | null>(null);
 
   const [mode, setMode] = useState<Mode>("dark");
+  const [open, setOpen] = useState<Slot | null>(null);
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState<{ text: string; kind: "ok" | "error" | "plain" } | null>(
-    null,
-  );
+  const [error, setError] = useState<string | null>(null);
 
   const bannerInput = useRef<HTMLInputElement>(null);
   const iconInput = useRef<HTMLInputElement>(null);
@@ -174,42 +145,43 @@ export function LiveryTab() {
   const patch = useMemo(() => diffLivery(saved, draft), [saved, draft]);
   const dirty = Object.keys(patch).length > 0;
 
-  // The address is remembered; the token is not. It is a credential with no
-  // expiry, and writing it to the preferences file would leave it there long
-  // after the person who typed it stopped being an operator.
+  // The address is remembered; the token is not. A static operator token has no
+  // expiry and no identity, so a copy in the preferences file outlives whoever
+  // typed it.
   useEffect(() => {
     void getPreferences()
       .then((prefs) => setBaseUrl(prefs.liveryOperatorUrl ?? ""))
       .catch(() => undefined);
   }, []);
 
-  const load = useCallback(
-    async (next: OperatorCreds) => {
-      setBusy(true);
-      try {
-        const document = await readLivery(next);
-        setSaved(document);
-        setDraft(document);
-        const [bannerSrc, iconSrc] = await Promise.all([
-          document.banner_key ? liveryImage(next, "banner") : Promise.resolve(null),
-          document.icon_key ? liveryImage(next, "icon") : Promise.resolve(null),
-        ]);
-        setBanner(bannerSrc);
-        setIcon(iconSrc);
-        setConnected(true);
-        setStatus(null);
-      } catch (reason) {
-        setConnected(false);
-        setStatus({ text: String(reason), kind: "error" });
-      } finally {
-        setBusy(false);
-      }
-    },
-    [],
-  );
+  const load = useCallback(async (next: OperatorCreds) => {
+    const document = await readLivery(next);
+    setSaved(document);
+    setDraft(document);
+    const [bannerSrc, iconSrc] = await Promise.all([
+      document.banner_key ? liveryImage(next, "banner") : Promise.resolve(null),
+      document.icon_key ? liveryImage(next, "icon") : Promise.resolve(null),
+    ]);
+    setBanner(bannerSrc);
+    setIcon(iconSrc);
+  }, []);
 
-  // Re-read the clamp whenever a colour or the mode changes, so what the page
-  // promises and what a client paints cannot drift apart while editing.
+  const run = async (work: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await work();
+    } catch (reason) {
+      // The operator API names the field and the rule it broke; that sentence
+      // is the only part an operator can act on, so it is shown verbatim.
+      setError(String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Re-read the clamp when the colours or the mode change, so what the page
+  // promises and what a client paints cannot drift while editing.
   useEffect(() => {
     if (!connected) return;
     let cancelled = false;
@@ -225,62 +197,16 @@ export function LiveryTab() {
     };
   }, [connected, creds, mode, saved]);
 
-  const connect = async () => {
-    setBusy(true);
-    try {
-      const message = await checkOperatorApi(creds);
+  const connect = () =>
+    run(async () => {
+      await checkOperatorApi(creds);
       await updatePreferences({ liveryOperatorUrl: baseUrl });
       await load(creds);
-      setStatus({ text: message, kind: "ok" });
-    } catch (reason) {
-      setConnected(false);
-      setStatus({ text: String(reason), kind: "error" });
-      setBusy(false);
-    }
-  };
-
-  const save = async () => {
-    setBusy(true);
-    try {
-      await writeLivery(creds, patch);
-      await load(creds);
-      setStatus({ text: "Saved. Connected clients repaint immediately.", kind: "ok" });
-    } catch (reason) {
-      // The operator API names the field and the rule it broke; showing that
-      // verbatim is the whole reason the proxy passes it through.
-      setStatus({ text: String(reason), kind: "error" });
-      setBusy(false);
-    }
-  };
-
-  const pickImage = async (which: "banner" | "icon", file: File | undefined) => {
-    if (!file) return;
-    setBusy(true);
-    try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      await uploadLiveryImage(creds, which, bytes);
-      await load(creds);
-      setStatus({ text: `${which === "banner" ? "Banner" : "Mark"} replaced.`, kind: "ok" });
-    } catch (reason) {
-      setStatus({ text: String(reason), kind: "error" });
-      setBusy(false);
-    }
-  };
-
-  const dropImage = async (which: "banner" | "icon") => {
-    setBusy(true);
-    try {
-      await clearLiveryImage(creds, which);
-      await load(creds);
-      setStatus({ text: `${which === "banner" ? "Banner" : "Mark"} removed.`, kind: "ok" });
-    } catch (reason) {
-      setStatus({ text: String(reason), kind: "error" });
-      setBusy(false);
-    }
-  };
+      setConnected(true);
+    });
 
   const palette: LiveryPalette = draft[mode] ?? {};
-  const setPalette = (field: keyof LiveryPalette, value: string) =>
+  const setColour = (field: keyof LiveryPalette, value: string) =>
     setDraft((current) => {
       const next = { ...(current[mode] ?? {}) };
       if (value === "") delete next[field];
@@ -290,445 +216,237 @@ export function LiveryTab() {
 
   const tags = draft.tags ?? [];
   const setTags = (next: LiveryTag[]) => setDraft((current) => ({ ...current, tags: next }));
+  const patchTag = (index: number, change: Partial<LiveryTag>) =>
+    setTags(tags.map((entry, at) => (at === index ? { ...entry, ...change } : entry)));
 
-  const clampedTo = (field: string) =>
-    preview?.clamped.includes(field) ? preview.palette?.[field as keyof LiveryPalette] : undefined;
+  const coloursOn = Boolean(
+    (draft.dark && Object.keys(draft.dark).length) ||
+      (draft.light && Object.keys(draft.light).length),
+  );
+  const clamped = preview?.clamped ?? [];
 
-  const shown = {
-    surface: isHexColour(palette.surface ?? "") ? palette.surface! : FALLBACK[mode].surface,
-    // The clamped value, not the stored one: this preview exists to show what
-    // will actually be painted.
-    accent:
-      preview?.palette?.accent && isHexColour(preview.palette.accent)
-        ? preview.palette.accent
-        : isHexColour(palette.accent ?? "")
-          ? palette.accent!
-          : FALLBACK[mode].accent,
-    text: FALLBACK[mode].text,
-  };
-
+  // The clamped accent, because the preview exists to show what is painted.
+  const shownAccent =
+    preview?.palette?.accent && isHexColour(preview.palette.accent)
+      ? preview.palette.accent
+      : isHexColour(palette.accent ?? "")
+        ? palette.accent!
+        : STOCK[mode].accent;
+  const shownSurface = isHexColour(palette.surface ?? "") ? palette.surface! : STOCK[mode].surface;
+  const auraFrom = isHexColour(palette.aura_from ?? "") ? palette.aura_from! : null;
+  const auraTo = isHexColour(palette.aura_to ?? "") ? palette.aura_to! : auraFrom;
   const name = draft.display_name?.trim() || "your.server";
+  const address = `mumble://${name}:64738`;
 
-  return (
-    <div className={styles.layout}>
-      <div className={styles.panel}>
-        <p className={styles.intro}>
-          {t(
-            "livery.intro",
-            "What this server looks like on the connect screen. Every field is optional and each one stands alone: a server that sets only a tagline gets exactly that. Changes reach connected clients immediately.",
-          )}
-        </p>
-
-        <section className={styles.group}>
-          <h3 className={styles.groupTitle}>{t("livery.connection", "Operator API")}</h3>
-          <Row
-            label={t("livery.address", "Address")}
-            hint={t("livery.addressHint", "Where the operator API listens. Remembered between sessions.")}
-          >
-            <TextInput
-              mono
+  if (!connected) {
+    return (
+      <div className={styles.page}>
+        <div className={`${styles.form} ${styles.gate}`}>
+          <h2 className={styles.title}>{t("livery.title", "Livery")}</h2>
+          <p className={styles.lede}>
+            {t(
+              "livery.gateLede",
+              "Livery is written through the operator API, which needs its address and a token holding the server-config scope.",
+            )}
+          </p>
+          <div>
+            <div className={styles.fieldHead}>
+              <span>{t("livery.address", "Operator API")}</span>
+            </div>
+            <input
+              className={styles.input}
               placeholder="http://127.0.0.1:8081"
               value={baseUrl}
               onChange={(event) => setBaseUrl(event.target.value)}
             />
-          </Row>
-          <Row
-            label={t("livery.token", "Token")}
-            hint={t(
-              "livery.tokenHint",
-              "Needs the server-config scope. Never stored — retype it each session.",
-            )}
-          >
-            <TextInput
+          </div>
+          <div>
+            <div className={styles.fieldHead}>
+              <span>{t("livery.token", "Token")}</span>
+            </div>
+            <input
+              className={styles.input}
               type="password"
-              mono
               autoComplete="off"
               value={token}
               onChange={(event) => setToken(event.target.value)}
             />
-          </Row>
-          <div className={styles.actions}>
+            <div className={styles.hint}>
+              {t("livery.tokenHint", "Not stored — retyped each session.")}
+            </div>
+          </div>
+          <div className={styles.gateActions}>
             <button
               type="button"
-              className={`${styles.btn} ${styles.btnPrimary}`}
+              className={styles.save}
               disabled={busy || !baseUrl || !token}
               onClick={() => void connect()}
             >
-              {connected ? t("livery.reload", "Reload") : t("livery.connect", "Connect")}
+              {busy ? t("livery.connecting", "Connecting…") : t("livery.connect", "Connect")}
             </button>
           </div>
-          {status && (
-            <div
-              className={`${styles.status} ${
-                status.kind === "error"
-                  ? styles.statusError
-                  : status.kind === "ok"
-                    ? styles.statusOk
-                    : ""
-              }`}
-              role={status.kind === "error" ? "alert" : "status"}
-            >
-              {status.text}
-            </div>
+          {error && <div className={styles.error}>{error}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.page}>
+      <div className={styles.form}>
+        <h2 className={styles.title}>{t("livery.title", "Livery")}</h2>
+        <p className={styles.lede}>
+          {t(
+            "livery.lede",
+            "How this server appears on the connect screen. Every field is optional — a tagline alone is a perfectly good livery.",
           )}
-        </section>
+        </p>
 
-        {connected && (
-          <>
-            <section className={styles.group}>
-              <h3 className={styles.groupTitle}>{t("livery.identity", "Identity")}</h3>
-              <Row
-                label={t("livery.displayName", "Display name")}
-                hint={t(
-                  "livery.displayNameHint",
-                  "Stands in for the host in headings. The address clients show beside it never changes.",
-                )}
+        <div className={styles.section}>{t("livery.identity", "Identity")}</div>
+        <div className={styles.fields}>
+          <div>
+            <div className={styles.fieldHead}>
+              <span>{t("livery.displayName", "Display name")}</span>
+              <span
+                className={
+                  used(draft.display_name) > LIMITS.displayName
+                    ? styles.fieldMetaOver
+                    : styles.fieldMeta
+                }
               >
-                <TextInput
-                  value={draft.display_name ?? ""}
-                  onChange={(event) =>
-                    setDraft((current) => ({ ...current, display_name: event.target.value }))
-                  }
-                />
-                <Count value={draft.display_name ?? ""} limit={LIMITS.displayName} />
-              </Row>
-              <Row label={t("livery.tagline", "Tagline")} hint={t("livery.taglineHint", "One line under the name.")}>
-                <TextInput
-                  value={draft.tagline ?? ""}
-                  onChange={(event) =>
-                    setDraft((current) => ({ ...current, tagline: event.target.value }))
-                  }
-                />
-                <Count value={draft.tagline ?? ""} limit={LIMITS.tagline} />
-              </Row>
-              <Row
-                label={t("livery.motd", "Message")}
-                hint={t("livery.motdHint", "Plain text. Markup is not supported and is shown as typed.")}
-              >
-                <TextArea
-                  rows={3}
-                  value={draft.motd ?? ""}
-                  onChange={(event) =>
-                    setDraft((current) => ({ ...current, motd: event.target.value }))
-                  }
-                />
-                <Count value={draft.motd ?? ""} limit={LIMITS.motd} />
-              </Row>
-              <Row
-                label={t("livery.rulesUrl", "Rules link")}
-                hint={t("livery.rulesUrlHint", "https:// only.")}
-              >
-                <TextInput
-                  mono
-                  placeholder="https://"
-                  value={draft.rules_url ?? ""}
-                  onChange={(event) =>
-                    setDraft((current) => ({ ...current, rules_url: event.target.value }))
-                  }
-                />
-              </Row>
-            </section>
-
-            <section className={styles.group}>
-              <h3 className={styles.groupTitle}>{t("livery.artwork", "Artwork")}</h3>
-              <Row
-                label={t("livery.banner", "Banner")}
-                hint={t("livery.bannerHint", "PNG, JPEG or WebP, up to 512 KiB. Saved immediately.")}
-              >
-                <div className={styles.assetRow}>
-                  {banner ? (
-                    <img className={styles.assetPreview} src={banner} alt="" />
-                  ) : (
-                    <div className={`${styles.assetPreview} ${styles.assetEmpty}`}>
-                      {t("livery.noBanner", "No banner")}
-                    </div>
-                  )}
-                  <div className={styles.assetActions}>
-                    <input
-                      ref={bannerInput}
-                      type="file"
-                      hidden
-                      accept={IMAGE_TYPES.join(",")}
-                      onChange={(event) => void pickImage("banner", event.target.files?.[0])}
-                    />
-                    <button
-                      type="button"
-                      className={styles.btn}
-                      disabled={busy}
-                      onClick={() => bannerInput.current?.click()}
-                    >
-                      {t("livery.choose", "Choose…")}
-                    </button>
-                    {draft.banner_key && (
-                      <button
-                        type="button"
-                        className={`${styles.btn} ${styles.btnDanger}`}
-                        disabled={busy}
-                        onClick={() => void dropImage("banner")}
-                      >
-                        {t("livery.remove", "Remove")}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </Row>
-
-              {draft.banner_key && (
-                <Row
-                  label={t("livery.focus", "Banner focus")}
-                  hint={t("livery.focusHint", "Where to anchor the image when it has to crop.")}
-                >
-                  <div className={styles.swatchRow}>
-                    {(["banner_focus_x", "banner_focus_y"] as const).map((axis) => (
-                      <label key={axis} className={styles.clamped}>
-                        {axis.endsWith("x") ? "X" : "Y"}
-                        <input
-                          type="range"
-                          min={0}
-                          max={100}
-                          value={draft[axis] ?? 50}
-                          onChange={(event) =>
-                            setDraft((current) => ({
-                              ...current,
-                              [axis]: Number(event.target.value),
-                            }))
-                          }
-                        />
-                        {draft[axis] ?? 50}%
-                      </label>
-                    ))}
-                  </div>
-                </Row>
-              )}
-
-              <Row
-                label={t("livery.icon", "Mark")}
-                hint={t("livery.iconHint", "Square. Up to 64 KiB. Saved immediately.")}
-              >
-                <div className={styles.assetRow}>
-                  {icon ? (
-                    <img
-                      className={`${styles.assetPreview} ${styles.assetPreviewSquare}`}
-                      src={icon}
-                      alt=""
-                    />
-                  ) : (
-                    <div
-                      className={`${styles.assetPreview} ${styles.assetPreviewSquare} ${styles.assetEmpty}`}
-                    >
-                      {t("livery.noIcon", "None")}
-                    </div>
-                  )}
-                  <div className={styles.assetActions}>
-                    <input
-                      ref={iconInput}
-                      type="file"
-                      hidden
-                      accept={IMAGE_TYPES.join(",")}
-                      onChange={(event) => void pickImage("icon", event.target.files?.[0])}
-                    />
-                    <button
-                      type="button"
-                      className={styles.btn}
-                      disabled={busy}
-                      onClick={() => iconInput.current?.click()}
-                    >
-                      {t("livery.choose", "Choose…")}
-                    </button>
-                    {draft.icon_key && (
-                      <button
-                        type="button"
-                        className={`${styles.btn} ${styles.btnDanger}`}
-                        disabled={busy}
-                        onClick={() => void dropImage("icon")}
-                      >
-                        {t("livery.remove", "Remove")}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </Row>
-            </section>
-
-            <section className={styles.group}>
-              <h3 className={styles.groupTitle}>
-                {t("livery.tags", "Chips")} ({tags.length}/{LIMITS.tags})
-              </h3>
-              <p className={styles.intro}>
-                {t(
-                  "livery.tagsIntro",
-                  "Shown beside the live user count. Toned rather than coloured, so they suit whichever theme the viewer picked.",
-                )}
-              </p>
-              <div className={styles.tagList}>
-                {tags.map((tag, index) => (
-                  // Keyed by index, which is safe because every input below is
-                  // controlled: removing a chip re-renders the ones after it
-                  // with their own values rather than leaving stale DOM state.
-                  <div className={styles.tagRow} key={index}>
-                    <TextInput
-                      size="small"
-                      placeholder={t("livery.tagLabel", "Label")}
-                      value={tag.label}
-                      onChange={(event) =>
-                        setTags(
-                          tags.map((entry, at) =>
-                            at === index ? { ...entry, label: event.target.value } : entry,
-                          ),
-                        )
-                      }
-                    />
-                    <SelectInput
-                      size="small"
-                      value={tag.tone}
-                      onChange={(event) =>
-                        setTags(
-                          tags.map((entry, at) =>
-                            at === index
-                              ? { ...entry, tone: event.target.value as LiveryTone }
-                              : entry,
-                          ),
-                        )
-                      }
-                    >
-                      {TONES.map((tone) => (
-                        <option key={tone} value={tone}>
-                          {tone.toLowerCase()}
-                        </option>
-                      ))}
-                    </SelectInput>
-                    <TextInput
-                      size="small"
-                      mono
-                      placeholder="https:// (optional)"
-                      value={tag.href ?? ""}
-                      onChange={(event) =>
-                        setTags(
-                          tags.map((entry, at) =>
-                            at === index ? { ...entry, href: event.target.value } : entry,
-                          ),
-                        )
-                      }
-                    />
-                    <button
-                      type="button"
-                      className={styles.iconBtn}
-                      aria-label={t("livery.removeTag", "Remove chip")}
-                      onClick={() => setTags(tags.filter((_, at) => at !== index))}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-              {tags.length < LIMITS.tags && (
-                <div className={styles.actions}>
-                  <button
-                    type="button"
-                    className={styles.btn}
-                    onClick={() => setTags([...tags, { label: "", tone: "NEUTRAL" }])}
-                  >
-                    {t("livery.addTag", "Add chip")}
-                  </button>
-                </div>
-              )}
-            </section>
-
-            <section className={styles.group}>
-              <h3 className={styles.groupTitle}>
-                {t("livery.colours", "Colours")} — {mode}
-              </h3>
-              <p className={styles.intro}>
-                {t(
-                  "livery.coloursIntro",
-                  "Set separately for each theme, because viewers choose light or dark, not the server. Anything left unset keeps the client's own colour.",
-                )}
-              </p>
-              <ColourField
-                label={t("livery.accent", "Accent")}
-                value={palette.accent ?? ""}
-                onChange={(next) => setPalette("accent", next)}
-                clampedTo={clampedTo("accent")}
-              />
-              <ColourField
-                label={t("livery.surface", "Surface")}
-                value={palette.surface ?? ""}
-                onChange={(next) => setPalette("surface", next)}
-              />
-              <ColourField
-                label={t("livery.auraFrom", "Glow from")}
-                value={palette.aura_from ?? ""}
-                onChange={(next) => setPalette("aura_from", next)}
-                clampedTo={clampedTo("aura_from")}
-              />
-              <ColourField
-                label={t("livery.auraTo", "Glow to")}
-                value={palette.aura_to ?? ""}
-                onChange={(next) => setPalette("aura_to", next)}
-                clampedTo={clampedTo("aura_to")}
-              />
-            </section>
-
-            <div className={styles.actions}>
-              <button
-                type="button"
-                className={`${styles.btn} ${styles.btnPrimary}`}
-                disabled={busy || !dirty}
-                onClick={() => void save()}
-              >
-                {dirty
-                  ? `${t("livery.save", "Save")} (${Object.keys(patch).length})`
-                  : t("livery.saved", "Saved")}
-              </button>
-              <button
-                type="button"
-                className={styles.btn}
-                disabled={busy || !dirty}
-                onClick={() => setDraft(saved)}
-              >
-                {t("livery.revert", "Revert")}
-              </button>
-              <span className={styles.spacer} />
-              <span className={styles.count}>
-                {t("livery.version", "version")} {saved.version}
+                {used(draft.display_name)}/{LIMITS.displayName}
               </span>
             </div>
-          </>
-        )}
-      </div>
-
-      {connected && (
-        <aside className={styles.preview}>
-          <div className={styles.previewHead}>
-            <span className={styles.previewTitle}>{t("livery.preview", "Connect screen")}</span>
-            <div className={styles.modeSwitch}>
-              {(["dark", "light"] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  className={
-                    mode === option ? `${styles.modeButton} ${styles.modeButtonOn}` : styles.modeButton
-                  }
-                  onClick={() => setMode(option)}
-                >
-                  {option}
-                </button>
-              ))}
+            <input
+              className={styles.input}
+              value={draft.display_name ?? ""}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, display_name: event.target.value }))
+              }
+            />
+            <div className={styles.hint}>
+              {t("livery.displayNameHint", "Shown next to")} {address}{" "}
+              {t("livery.displayNameHintTail", "— never instead of it.")}
             </div>
           </div>
 
-          <div
-            className={styles.card}
-            style={
-              {
-                "--livery-surface": shown.surface,
-                "--livery-accent": shown.accent,
-                "--livery-text": shown.text,
-              } as React.CSSProperties
-            }
-          >
-            <div className={styles.cardBanner}>
-              {banner ? (
+          <div>
+            <div className={styles.fieldHead}>
+              <span>{t("livery.tagline", "Tagline")}</span>
+              <span
+                className={
+                  used(draft.tagline) > LIMITS.tagline ? styles.fieldMetaOver : styles.fieldMeta
+                }
+              >
+                {used(draft.tagline)}/{LIMITS.tagline}
+              </span>
+            </div>
+            <input
+              className={styles.input}
+              value={draft.tagline ?? ""}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, tagline: event.target.value }))
+              }
+            />
+          </div>
+
+          <div>
+            <div className={styles.fieldHead}>
+              <span>{t("livery.motd", "Message of the day")}</span>
+              <span
+                className={used(draft.motd) > LIMITS.motd ? styles.fieldMetaOver : styles.fieldMeta}
+              >
+                {t("livery.plainText", "plain text")} · {used(draft.motd)}/{LIMITS.motd}
+              </span>
+            </div>
+            <textarea
+              className={styles.textarea}
+              rows={2}
+              value={draft.motd ?? ""}
+              onChange={(event) => setDraft((current) => ({ ...current, motd: event.target.value }))}
+            />
+          </div>
+        </div>
+
+        <div className={styles.sectionRow}>
+          <span className={styles.sectionTitle}>{t("livery.tags", "Tags")}</span>
+          <span className={styles.sectionCount}>
+            {tags.length} of {LIMITS.tags}
+          </span>
+        </div>
+        <div className={styles.tagList}>
+          {tags.map((tag, index) => (
+            // Keyed by index, which is safe because every input is controlled:
+            // removing a chip re-renders the ones after it with their own
+            // values rather than leaving stale DOM state behind.
+            <div className={styles.tagRow} key={index}>
+              <span className={`${styles.chip} ${CHIP_CLASS[tag.tone]}`}>
+                <input
+                  className={styles.chipInput}
+                  value={tag.label}
+                  placeholder={t("livery.tagLabel", "Label")}
+                  aria-label={t("livery.tagLabel", "Label")}
+                  maxLength={LIMITS.tagLabel}
+                  onChange={(event) => patchTag(index, { label: event.target.value })}
+                />
+              </span>
+              <span className={styles.tagHref}>
+                <LinkIcon />
+                <input
+                  className={styles.tagHrefInput}
+                  value={tag.href ?? ""}
+                  placeholder={t("livery.tagHref", "https:// (optional)")}
+                  aria-label={t("livery.tagHrefLabel", "Link")}
+                  onChange={(event) => patchTag(index, { href: event.target.value })}
+                />
+              </span>
+              <span className={styles.tones}>
+                {TONES.map((tone) => (
+                  <button
+                    key={tone}
+                    type="button"
+                    title={tone[0] + tone.slice(1).toLowerCase()}
+                    aria-label={tone}
+                    aria-pressed={tag.tone === tone}
+                    className={`${styles.tone} ${TONE_CLASS[tone]} ${
+                      tag.tone === tone ? styles.toneOn : ""
+                    }`}
+                    onClick={() => patchTag(index, { tone })}
+                  />
+                ))}
+              </span>
+              <button
+                type="button"
+                className={styles.tagRemove}
+                aria-label={t("livery.removeTag", "Remove tag")}
+                onClick={() => setTags(tags.filter((_, at) => at !== index))}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {tags.length < LIMITS.tags && (
+            <button
+              type="button"
+              className={styles.addTag}
+              onClick={() => setTags([...tags, { label: "", tone: "NEUTRAL" }])}
+            >
+              {t("livery.addTag", "+ Add tag")}
+            </button>
+          )}
+        </div>
+        <div className={styles.hint}>
+          {t(
+            "livery.tagsHint",
+            "Tags carry a tone, not a colour — they adapt to each viewer's theme.",
+          )}
+        </div>
+
+        <div className={styles.section}>{t("livery.artwork", "Artwork")}</div>
+        <div className={styles.assets}>
+          <div className={styles.bannerCard}>
+            {banner ? (
+              <div className={styles.bannerImage}>
                 <img
                   src={banner}
                   alt=""
@@ -736,51 +454,424 @@ export function LiveryTab() {
                     objectPosition: `${draft.banner_focus_x ?? 50}% ${draft.banner_focus_y ?? 50}%`,
                   }}
                 />
-              ) : (
-                <span className={styles.cardBannerName}>{name}</span>
+                <span className={styles.sizeChip}>{kib(dataUriBytes(banner))}</span>
+              </div>
+            ) : (
+              <div className={styles.bannerEmpty}>{t("livery.noBanner", "No banner")}</div>
+            )}
+            <div className={styles.assetBody}>
+              <div className={styles.assetHead}>
+                <span>{t("livery.banner", "Banner")}</span>
+                <span className={styles.assetSpec}>PNG · JPEG · WebP · ≤ 512 KiB</span>
+              </div>
+              {banner && (
+                <div className={styles.focusRow}>
+                  <span className={styles.focusLabel}>{t("livery.focusY", "Focus Y")}</span>
+                  <input
+                    className={styles.focusSlider}
+                    type="range"
+                    min={0}
+                    max={100}
+                    aria-label={t("livery.focusY", "Focus Y")}
+                    value={draft.banner_focus_y ?? 50}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        banner_focus_y: Number(event.target.value),
+                      }))
+                    }
+                  />
+                  <span className={styles.focusValue}>{draft.banner_focus_y ?? 50}</span>
+                </div>
               )}
-              <span className={styles.cardScrim} />
-            </div>
-            <div className={styles.cardBody}>
-              <div className={styles.cardIcon} style={{ background: shown.accent }}>
-                {icon ? <img src={icon} alt="" /> : name.slice(0, 1).toUpperCase()}
+              <div className={styles.assetActions}>
+                <input
+                  ref={bannerInput}
+                  type="file"
+                  hidden
+                  accept={IMAGE_TYPES.join(",")}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file)
+                      void run(async () => {
+                        await uploadLiveryImage(
+                          creds,
+                          "banner",
+                          new Uint8Array(await file.arrayBuffer()),
+                        );
+                        await load(creds);
+                      });
+                  }}
+                />
+                <button
+                  type="button"
+                  className={styles.assetBtn}
+                  disabled={busy}
+                  onClick={() => bannerInput.current?.click()}
+                >
+                  {t("livery.replace", "Replace")}
+                </button>
+                {draft.banner_key && (
+                  <button
+                    type="button"
+                    className={`${styles.assetBtn} ${styles.assetBtnGhost}`}
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        await clearLiveryImage(creds, "banner");
+                        await load(creds);
+                      })
+                    }
+                  >
+                    {t("livery.remove", "Remove")}
+                  </button>
+                )}
               </div>
-              <div className={styles.cardName}>{name}</div>
-              {draft.tagline && <div className={styles.cardTagline}>{draft.tagline}</div>}
-              <div className={styles.cardChips}>
-                <span className={styles.cardChip}>3/101 online</span>
-                <span className={styles.cardChip}>14 ms</span>
-                {tags
-                  .filter((tag) => tag.label.trim())
-                  .map((tag, index) => (
-                    <span
-                      className={styles.cardChip}
-                      key={index}
-                      style={tag.tone === "ACCENT" ? { color: shown.accent } : undefined}
-                    >
-                      {tag.label}
-                    </span>
-                  ))}
-              </div>
-              {draft.motd && <div className={styles.cardMotd}>{draft.motd}</div>}
-              <div className={styles.cardCta}>Connect</div>
-              <span className={styles.cardAddress}>mumble://your.server:64738</span>
             </div>
           </div>
 
+          <div className={styles.iconCard}>
+            {icon ? (
+              <img className={styles.iconImage} src={icon} alt="" />
+            ) : (
+              <span className={`${styles.iconImage} ${styles.iconEmpty}`}>
+                {name.slice(0, 1).toUpperCase()}
+              </span>
+            )}
+            <div className={styles.iconLabel}>{t("livery.icon", "Icon")}</div>
+            <div className={styles.iconSpec}>≤ 64 KiB</div>
+            <input
+              ref={iconInput}
+              type="file"
+              hidden
+              accept={IMAGE_TYPES.join(",")}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file)
+                  void run(async () => {
+                    await uploadLiveryImage(creds, "icon", new Uint8Array(await file.arrayBuffer()));
+                    await load(creds);
+                  });
+              }}
+            />
+            <button
+              type="button"
+              className={styles.assetBtn}
+              disabled={busy}
+              onClick={() => iconInput.current?.click()}
+            >
+              {t("livery.replace", "Replace")}
+            </button>
+            {draft.icon_key && (
+              <button
+                type="button"
+                className={`${styles.assetBtn} ${styles.assetBtnGhost}`}
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    await clearLiveryImage(creds, "icon");
+                    await load(creds);
+                  })
+                }
+              >
+                {t("livery.remove", "Remove")}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className={styles.sectionRow}>
+          <span className={styles.sectionTitle}>{t("livery.colours", "App colours")}</span>
+          <span className={styles.sectionNote}>
+            {t("livery.coloursNote", "optional — banner alone is a common setup")}
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={coloursOn}
+            aria-label={t("livery.colours", "App colours")}
+            className={`${styles.toggle} ${coloursOn ? styles.toggleOn : ""}`}
+            onClick={() =>
+              setDraft((current) =>
+                coloursOn
+                  ? { ...current, dark: {}, light: {} }
+                  : { ...current, dark: { accent: STOCK.dark.accent } },
+              )
+            }
+          >
+            <span className={styles.toggleKnob} />
+          </button>
+        </div>
+
+        {coloursOn && (
+          <>
+            <div className={styles.palettes}>
+              {(["dark", "light"] as const).map((which) => {
+                const entry = draft[which] ?? {};
+                const rows: {
+                  slot: Slot;
+                  label: string;
+                  value: string;
+                  swatch: string | null;
+                }[] = [
+                  {
+                    slot: "accent",
+                    label: t("livery.accent", "accent"),
+                    value: entry.accent ?? "",
+                    swatch: isHexColour(entry.accent ?? "") ? entry.accent! : null,
+                  },
+                  {
+                    slot: "surface",
+                    label: t("livery.surface", "surface"),
+                    value: entry.surface ?? "",
+                    swatch: isHexColour(entry.surface ?? "") ? entry.surface! : null,
+                  },
+                  {
+                    slot: "aura",
+                    label: t("livery.aura", "aura"),
+                    value:
+                      entry.aura_from && entry.aura_to
+                        ? `${entry.aura_from} → ${entry.aura_to}`
+                        : (entry.aura_from ?? ""),
+                    swatch: isHexColour(entry.aura_from ?? "")
+                      ? `linear-gradient(135deg,${entry.aura_from},${entry.aura_to ?? entry.aura_from})`
+                      : null,
+                  },
+                ];
+                return (
+                  <div className={styles.paletteCard} key={which}>
+                    <div className={styles.paletteTitle}>
+                      {which === "dark"
+                        ? t("livery.darkMode", "Dark mode")
+                        : t("livery.lightMode", "Light mode")}
+                    </div>
+                    <div className={styles.paletteRows}>
+                      {rows.map((row) => (
+                        <button
+                          type="button"
+                          className={styles.paletteRow}
+                          key={row.slot}
+                          onClick={() => {
+                            const same = open === row.slot && mode === which;
+                            setMode(which);
+                            setOpen(same ? null : row.slot);
+                          }}
+                        >
+                          <span
+                            className={`${styles.paletteSwatch} ${
+                              row.swatch
+                                ? row.slot === "surface"
+                                  ? styles.paletteSwatchSurface
+                                  : ""
+                                : styles.paletteSwatchUnset
+                            }`}
+                            style={row.swatch ? { background: row.swatch } : undefined}
+                          />
+                          {row.label}
+                          <span className={styles.paletteValue}>
+                            {row.value || t("livery.stock", "stock")}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {open && (
+              <div className={styles.editor}>
+                <div className={styles.editorHead}>
+                  {mode === "dark"
+                    ? t("livery.darkMode", "Dark mode")
+                    : t("livery.lightMode", "Light mode")}{" "}
+                  · {open}
+                  <button
+                    type="button"
+                    className={styles.tagRemove}
+                    style={{ marginLeft: "auto" }}
+                    aria-label={t("livery.close", "Close")}
+                    onClick={() => setOpen(null)}
+                  >
+                    ×
+                  </button>
+                </div>
+                {(open === "aura"
+                  ? (["aura_from", "aura_to"] as const)
+                  : ([open] as ("accent" | "surface")[])
+                ).map((field) => (
+                  <div className={styles.editorField} key={field}>
+                    <input
+                      type="color"
+                      className={styles.editorSwatch}
+                      aria-label={field}
+                      value={isHexColour(palette[field] ?? "") ? palette[field]! : "#000000"}
+                      onChange={(event) => setColour(field, event.target.value)}
+                    />
+                    <input
+                      className={styles.editorHex}
+                      placeholder={t("livery.stock", "stock")}
+                      aria-label={`${field} hex`}
+                      value={palette[field] ?? ""}
+                      onChange={(event) => setColour(field, event.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className={styles.tagRemove}
+                      aria-label={t("livery.clear", "Clear")}
+                      onClick={() => setColour(field, "")}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {clamped.length > 0 && preview?.palette?.accent && (
+              <div className={styles.notice}>
+                <span className={styles.noticeDot} />
+                <span>
+                  <span className={styles.noticeLead}>
+                    {t("livery.clampLead", "Kept, but lightened for readability:")}
+                  </span>{" "}
+                  {mode} {clamped.join(", ")} {t("livery.clampRenders", "renders as")}{" "}
+                  <span className={styles.noticePair}>
+                    <span
+                      className={styles.noticeSwatch}
+                      style={{ background: palette.accent ?? STOCK[mode].accent }}
+                    />
+                    →
+                    <span
+                      className={styles.noticeSwatch}
+                      style={{ background: preview.palette.accent }}
+                    />{" "}
+                    {preview.palette.accent}
+                  </span>{" "}
+                  {t("livery.clampTail", "so text stays legible. The stored value is unchanged.")}
+                </span>
+              </div>
+            )}
+          </>
+        )}
+
+        {error && <div className={styles.error}>{error}</div>}
+
+        <div className={styles.saveRow}>
+          <button
+            type="button"
+            className={styles.save}
+            disabled={busy || !dirty}
+            onClick={() =>
+              void run(async () => {
+                await writeLivery(creds, patch);
+                await load(creds);
+              })
+            }
+          >
+            {t("livery.save", "Save changes")}
+          </button>
+          <span className={styles.saveMeta}>
+            {t("livery.saveMeta", "Only filled fields are sent")} · {t("livery.version", "version")}{" "}
+            {saved.version} · {t("livery.digest", "digest")} {saved.digest || "—"} ·{" "}
+            <button type="button" onClick={() => setConnected(false)}>
+              {t("livery.disconnect", "change credentials")}
+            </button>
+          </span>
+        </div>
+      </div>
+
+      <aside className={styles.preview}>
+        <div className={styles.previewHead}>
+          <span className={styles.previewEyebrow}>
+            {t("livery.previewTitle", "CONNECT PREVIEW")}
+          </span>
+          <div className={styles.modeSwitch}>
+            {(["dark", "light"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={`${styles.modeTab} ${mode === option ? styles.modeTabOn : ""}`}
+                onClick={() => setMode(option)}
+              >
+                {option === "dark" ? t("livery.dark", "Dark") : t("livery.light", "Light")}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div
+          className={styles.card}
+          style={
+            {
+              "--pv-surface": shownSurface,
+              "--pv-text": STOCK[mode].text,
+              "--pv-ring": auraFrom ? `${auraFrom}99` : `${shownAccent}99`,
+              "--pv-cta": auraFrom ? `linear-gradient(90deg,${auraFrom},${auraTo})` : shownAccent,
+              "--pv-aura": auraFrom
+                ? `radial-gradient(300px 140px at 50% -4%,${auraFrom}40,transparent 60%)`
+                : "none",
+            } as React.CSSProperties
+          }
+        >
+          <div className={styles.cardBanner}>
+            {banner ? (
+              <img
+                src={banner}
+                alt=""
+                style={{
+                  objectPosition: `${draft.banner_focus_x ?? 50}% ${draft.banner_focus_y ?? 50}%`,
+                }}
+              />
+            ) : (
+              <span className={styles.cardBannerName}>{name}</span>
+            )}
+            <span className={styles.cardScrim} />
+          </div>
+          <div className={styles.cardBody}>
+            <span className={styles.cardIcon} style={{ background: shownAccent }}>
+              {icon ? <img src={icon} alt="" /> : name.slice(0, 1).toUpperCase()}
+            </span>
+            <div className={styles.cardName}>{name}</div>
+            <div className={styles.cardAddress}>{address}</div>
+            {draft.tagline && <div className={styles.cardTagline}>{draft.tagline}</div>}
+            {tags.some((tag) => tag.label.trim()) && (
+              <div className={styles.cardChips}>
+                {tags
+                  .filter((tag) => tag.label.trim())
+                  .map((tag, index) => {
+                    const tone = CHIP_PREVIEW[tag.tone];
+                    const accent = tag.tone === "ACCENT";
+                    return (
+                      <span
+                        className={styles.cardChip}
+                        key={index}
+                        style={{
+                          background: accent ? `${shownAccent}28` : tone.background,
+                          borderColor: accent ? `${shownAccent}66` : tone.border,
+                          color: accent ? shownAccent : tone.color,
+                        }}
+                      >
+                        {tag.label}
+                      </span>
+                    );
+                  })}
+              </div>
+            )}
+            {draft.motd && <div className={styles.cardMotd}>{draft.motd}</div>}
+            <div className={styles.cardCta}>{t("livery.connectAs", "Connect as")} ZewiWin</div>
+          </div>
+        </div>
+
+        {mode === "light" && !palette.surface && !palette.aura_from && (
           <p className={styles.previewNote}>
             {t(
-              "livery.previewNote",
-              "The address is drawn in the app's own colours on every server, so branding can never dress the part a person reads to decide whether to trust a connection.",
+              "livery.lightStock",
+              "Surface & aura not set for light — viewers get stock colours.",
             )}
           </p>
-          {preview && preview.clamped.length > 0 && (
-            <p className={styles.previewNote}>
-              {t("livery.clampNote", "Adjusted for legibility:")} {preview.clamped.join(", ")}.
-            </p>
-          )}
-        </aside>
-      )}
+        )}
+      </aside>
     </div>
   );
 }
