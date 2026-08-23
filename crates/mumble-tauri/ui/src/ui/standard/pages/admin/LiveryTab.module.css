@@ -1,133 +1,151 @@
-.layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 24px;
-  align-items: start;
-  padding: 4px 2px 24px;
+/*
+ * Transcribed from the "Fancy Mumble 2026 v2" mock, admin › Livery.
+ *
+ * The mock is written in the Nebula token language (--card, --ln, --mut, …).
+ * Those are mapped here onto the app's own theme variables where an equivalent
+ * exists, with the mock's literal values as the fallback, so the page matches
+ * the design on the dark theme it was drawn against without going blind on the
+ * light ones.
+ */
+.page {
+  --lv-card: var(--color-bg-secondary, rgb(120 172 255 / 10%));
+  --lv-card2: var(--color-bg-tertiary, rgb(130 178 255 / 17%));
+  --lv-ln: var(--color-border-subtle, rgb(135 180 255 / 7%));
+  --lv-ln2: var(--color-border, rgb(135 180 255 / 17%));
+  --lv-tx: var(--color-text-primary, #f1f5ff);
+  --lv-mut: var(--color-text-secondary, #9fb3dd);
+  --lv-dim: var(--color-text-tertiary, #65779f);
+  --lv-hov: var(--color-bg-hover, rgb(130 178 255 / 12%));
+  --lv-acc: var(--color-accent, #41b4f9);
+  --lv-accsoft: rgb(65 180 249 / 22%);
+  --lv-accln: rgb(65 180 249 / 52%);
+  --lv-ok: var(--color-success, #3cd88e);
+  --lv-bad: var(--color-danger, #f57e7e);
+  --lv-warn: var(--color-warning, #ecba55);
+
+  display: flex;
+  gap: 40px;
+  align-items: flex-start;
+  max-width: 1080px;
+  color: var(--lv-tx);
 }
 
-@media (max-width: 1100px) {
-  .layout {
-    grid-template-columns: minmax(0, 1fr);
+@media (max-width: 1000px) {
+  .page {
+    flex-direction: column;
+    gap: 24px;
   }
 }
 
-.panel {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+.form {
+  flex: 1;
   min-width: 0;
+  max-width: 600px;
 }
 
-.intro {
-  font-size: 0.85rem;
-  color: var(--color-text-secondary, #9aa6b8);
-  line-height: 1.45;
+.title {
+  font-size: 20px;
+  font-weight: 600;
   margin: 0;
 }
 
-.group {
+.lede {
+  font-size: 12px;
+  color: var(--lv-mut);
+  margin: 4px 0 0;
+  line-height: 1.5;
+}
+
+.section {
+  font-size: 12.5px;
+  font-weight: 600;
+  margin: 24px 0 8px;
+}
+
+/* A section header that carries a counter or a switch on the right. */
+.sectionRow {
+  display: flex;
+  align-items: center;
+  margin: 24px 0 8px;
+}
+
+.sectionTitle {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.sectionNote {
+  margin-left: 10px;
+  font-size: 10.5px;
+  color: var(--lv-dim);
+}
+
+.sectionCount {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--lv-dim);
+}
+
+/* -- fields -- */
+
+.fields {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
-.groupTitle {
-  margin: 0;
-  font-size: 0.95rem;
+.fieldHead {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--lv-mut);
+  margin-bottom: 6px;
+}
+
+.fieldMeta {
+  color: var(--lv-dim);
+}
+
+.fieldMetaOver {
+  color: var(--lv-bad);
   font-weight: 600;
-  color: var(--color-text-primary, #fff);
-  border-bottom: 1px solid var(--color-border, #3a3c43);
-  padding-bottom: 6px;
 }
 
-.row {
-  display: grid;
-  grid-template-columns: minmax(160px, 210px) 1fr;
-  gap: 16px;
-  align-items: start;
+.input,
+.textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 13px;
+  border-radius: 10px;
+  background: var(--lv-card);
+  border: 1px solid var(--lv-ln2);
+  color: var(--lv-tx);
+  font: inherit;
+  font-size: 12.5px;
 }
 
-@media (max-width: 720px) {
-  .row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
-  }
+.textarea {
+  padding: 10px 13px;
+  min-height: 56px;
+  line-height: 1.5;
+  resize: vertical;
 }
 
-.label {
-  font-size: 0.85rem;
-  color: var(--color-text-primary, #fff);
-  padding-top: 7px;
+.input:focus-visible,
+.textarea:focus-visible {
+  outline: 2px solid var(--lv-acc);
+  outline-offset: -1px;
+}
+
+.inputInvalid {
+  border-color: var(--lv-bad);
 }
 
 .hint {
-  display: block;
-  font-size: 0.75rem;
-  color: var(--color-text-secondary, #9aa6b8);
-  line-height: 1.35;
-  margin-top: 3px;
-}
-
-.control {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-/* The countdown beside a capped field: quiet until it matters. */
-.count {
-  align-self: flex-end;
-  font-size: 0.72rem;
-  color: var(--color-text-secondary, #9aa6b8);
-  font-variant-numeric: tabular-nums;
-}
-
-.countOver {
-  color: var(--color-danger, #e5534b);
-  font-weight: 600;
-}
-
-/* -- images -- */
-
-.assetRow {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.assetPreview {
-  width: 168px;
-  height: 62px;
-  border-radius: 8px;
-  border: 1px solid var(--color-border, #3a3c43);
-  background: var(--color-bg-tertiary, #23252b);
-  object-fit: cover;
-  display: block;
-  flex: none;
-}
-
-.assetPreviewSquare {
-  width: 62px;
-  height: 62px;
-}
-
-.assetEmpty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.72rem;
-  color: var(--color-text-secondary, #9aa6b8);
-  text-align: center;
-  padding: 4px;
-}
-
-.assetActions {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: flex-start;
+  font-size: 10.5px;
+  color: var(--lv-dim);
+  margin-top: 5px;
 }
 
 /* -- tags -- */
@@ -139,111 +157,662 @@
 }
 
 .tagRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) 110px minmax(0, 1.4fr) 32px;
-  gap: 8px;
+  display: flex;
   align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  background: var(--lv-card);
+  border: 1px solid var(--lv-ln);
 }
 
-@media (max-width: 720px) {
-  .tagRow {
-    grid-template-columns: minmax(0, 1fr) 110px 32px;
+/* The chip drawn in its own tone, so the row shows what it will look like. */
+.chip {
+  padding: 3px 11px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  background: var(--lv-card2);
+  color: var(--lv-mut);
+  min-width: 44px;
+  text-align: center;
+}
+
+.chipInput {
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  width: 9ch;
+  min-width: 44px;
+  padding: 0;
+}
+
+.chipInput:focus-visible {
+  outline: none;
+  text-decoration: underline;
+}
+
+.chipOk {
+  background: rgb(61 220 151 / 14%);
+  border-color: rgb(61 220 151 / 35%);
+  color: var(--lv-ok);
+}
+
+.chipWarn {
+  background: rgb(236 186 85 / 14%);
+  border-color: rgb(236 186 85 / 35%);
+  color: var(--lv-warn);
+}
+
+.chipBad {
+  background: rgb(245 126 126 / 14%);
+  border-color: rgb(245 126 126 / 35%);
+  color: var(--lv-bad);
+}
+
+.chipAccent {
+  background: var(--lv-accsoft);
+  border-color: var(--lv-accln);
+  color: var(--lv-tx);
+}
+
+.tagHref {
+  font-size: 10.5px;
+  color: var(--lv-dim);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tagHrefInput {
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 10.5px;
+  padding: 0;
+  min-width: 0;
+  flex: 1;
+}
+
+.tones {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+.tone {
+  width: 14px;
+  height: 14px;
+  border-radius: 5px;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: var(--lv-card2);
+}
+
+.toneOk {
+  background: rgb(61 220 151 / 35%);
+}
+
+.toneWarn {
+  background: rgb(236 186 85 / 35%);
+}
+
+.toneBad {
+  background: rgb(245 126 126 / 35%);
+}
+
+.toneAccent {
+  background: var(--lv-accsoft);
+}
+
+.toneOn {
+  box-shadow: 0 0 0 1.5px currentcolor;
+}
+
+.tagRemove {
+  border: none;
+  background: none;
+  color: var(--lv-dim);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+  flex: none;
+}
+
+.tagRemove:hover {
+  color: var(--lv-bad);
+}
+
+.addTag {
+  padding: 8px 12px;
+  border-radius: 11px;
+  border: 1.5px dashed var(--lv-ln2);
+  background: none;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--lv-dim);
+  cursor: pointer;
+  text-align: center;
+}
+
+.addTag:hover {
+  color: var(--lv-mut);
+}
+
+/* -- artwork -- */
+
+.assets {
+  display: flex;
+  gap: 12px;
+}
+
+@media (max-width: 620px) {
+  .assets {
+    flex-direction: column;
   }
 }
 
-/* -- palette -- */
+.bannerCard {
+  flex: 1.6;
+  border-radius: 12px;
+  background: var(--lv-card);
+  border: 1px solid var(--lv-ln);
+  overflow: hidden;
+  min-width: 0;
+}
 
-.swatchRow {
+.bannerImage {
+  height: 90px;
+  position: relative;
+}
+
+.bannerImage img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.bannerEmpty {
+  height: 90px;
   display: flex;
   align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--lv-dim);
+  background: var(--lv-card2);
+}
+
+.sizeChip {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgb(10 12 24 / 65%);
+  font-size: 9.5px;
+  color: #cfd6e6;
+}
+
+.assetBody {
+  padding: 9px 12px;
+}
+
+.assetHead {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--lv-mut);
   gap: 8px;
 }
 
-.swatch {
-  width: 30px;
-  height: 30px;
-  border-radius: 7px;
-  border: 1px solid var(--color-border, #3a3c43);
-  padding: 0;
+.assetSpec {
+  color: var(--lv-dim);
+}
+
+.focusRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.focusLabel {
+  font-size: 10.5px;
+  color: var(--lv-dim);
+  flex: none;
+}
+
+.focusValue {
+  font-size: 10.5px;
+  color: var(--lv-mut);
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  min-width: 2ch;
+  text-align: right;
+}
+
+.focusSlider {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--lv-acc);
+}
+
+.assetActions {
+  display: flex;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.assetBtn {
+  padding: 5px 11px;
+  border-radius: 8px;
+  background: var(--lv-card2);
+  border: none;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--lv-tx);
+  cursor: pointer;
+}
+
+.assetBtn:hover:not(:disabled) {
+  background: var(--lv-hov);
+}
+
+.assetBtnGhost {
   background: none;
+  color: var(--lv-mut);
+  font-weight: 400;
+}
+
+.assetBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.iconCard {
+  flex: 1;
+  border-radius: 12px;
+  background: var(--lv-card);
+  border: 1px solid var(--lv-ln);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.iconImage {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  object-fit: cover;
+  display: block;
+}
+
+.iconEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lv-card2);
+  color: var(--lv-dim);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.iconLabel {
+  font-size: 11px;
+  color: var(--lv-mut);
+}
+
+.iconSpec {
+  font-size: 10px;
+  color: var(--lv-dim);
+}
+
+/* -- colours -- */
+
+.toggle {
+  margin-left: auto;
+  width: 32px;
+  height: 18px;
+  border-radius: 10px;
+  border: none;
+  padding: 0;
+  background: var(--lv-card2);
+  position: relative;
   cursor: pointer;
   flex: none;
 }
 
-.clamped {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 0.75rem;
-  color: var(--color-text-secondary, #9aa6b8);
-  line-height: 1.35;
+.toggleOn {
+  background: var(--lv-acc);
 }
 
-.clampedSwatch {
+.toggleKnob {
+  position: absolute;
+  left: 2px;
+  top: 2px;
   width: 14px;
   height: 14px;
-  border-radius: 4px;
-  border: 1px solid var(--color-border, #3a3c43);
+  border-radius: 50%;
+  background: #fff;
+  transition: left 120ms ease;
+}
+
+.toggleOn .toggleKnob {
+  left: 16px;
+}
+
+.palettes {
+  display: flex;
+  gap: 12px;
+}
+
+@media (max-width: 620px) {
+  .palettes {
+    flex-direction: column;
+  }
+}
+
+.paletteCard {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--lv-card);
+  border: 1px solid var(--lv-ln);
+  min-width: 0;
+}
+
+.paletteTitle {
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 9px;
+}
+
+.paletteRows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--lv-mut);
+}
+
+.paletteRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.paletteRow:hover .paletteValue {
+  color: var(--lv-mut);
+}
+
+.paletteSwatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
   flex: none;
 }
 
-/* -- the preview column -- */
+.paletteSwatchUnset {
+  border: 1.5px dashed var(--lv-ln2);
+}
 
-.preview {
-  position: sticky;
-  top: 4px;
+.paletteSwatchSurface {
+  border: 1px solid var(--lv-ln2);
+}
+
+.paletteValue {
+  margin-left: auto;
+  color: var(--lv-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The colour editor a palette row opens. */
+.editor {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: var(--lv-card);
+  border: 1px solid var(--lv-ln2);
   display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+
+.editorHead {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  gap: 8px;
+}
+
+.editorField {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editorSwatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid var(--lv-ln2);
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  flex: none;
+}
+
+.editorHex {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--lv-card2);
+  border: 1px solid transparent;
+  color: var(--lv-tx);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+.editorHex:focus-visible {
+  outline: none;
+  border-color: var(--lv-acc);
+}
+
+/* -- the clamp notice -- */
+
+.notice {
+  display: flex;
+  align-items: flex-start;
   gap: 10px;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  background: var(--lv-accsoft);
+  border: 1px solid var(--lv-accln);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--lv-mut);
+}
+
+.noticeDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lv-acc);
+  flex: none;
+  margin-top: 6px;
+}
+
+.noticeLead {
+  color: var(--lv-tx);
+  font-weight: 500;
+}
+
+.noticePair {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: middle;
+}
+
+.noticeSwatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+  border: 1px solid var(--lv-ln2);
+}
+
+.error {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  background: rgb(245 126 126 / 12%);
+  border: 1px solid rgb(245 126 126 / 40%);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--lv-bad);
+  overflow-wrap: anywhere;
+}
+
+/* -- save -- */
+
+.saveRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+
+.save {
+  padding: 10px 22px;
+  border-radius: 11px;
+  background: var(--lv-acc);
+  border: none;
+  color: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgb(52 168 235 / 35%);
+}
+
+.save:disabled {
+  opacity: 0.45;
+  cursor: default;
+  box-shadow: none;
+}
+
+.saveMeta {
+  font-size: 10.5px;
+  color: var(--lv-dim);
+}
+
+.saveMeta button {
+  border: none;
+  background: none;
+  color: var(--lv-acc);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* -- preview column -- */
+
+.preview {
+  width: 320px;
+  flex: none;
+  position: sticky;
+  top: 0;
+}
+
+@media (max-width: 1000px) {
+  .preview {
+    width: 100%;
+    position: static;
+  }
 }
 
 .previewHead {
   display: flex;
   align-items: center;
-  gap: 8px;
+  margin-bottom: 10px;
 }
 
-.previewTitle {
-  font-size: 0.8rem;
+.previewEyebrow {
+  font-size: 10.5px;
   font-weight: 600;
-  color: var(--color-text-primary, #fff);
+  letter-spacing: 0.08em;
+  color: var(--lv-dim);
 }
 
 .modeSwitch {
   margin-left: auto;
-  display: flex;
-  border-radius: 7px;
-  overflow: hidden;
-  border: 1px solid var(--color-border, #3a3c43);
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--lv-card);
+  border: 1px solid var(--lv-ln);
 }
 
-.modeButton {
+.modeTab {
+  padding: 5px 14px;
+  border-radius: 7px;
   border: none;
   background: none;
-  color: var(--color-text-secondary, #9aa6b8);
-  font-size: 0.72rem;
-  padding: 4px 10px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--lv-mut);
   cursor: pointer;
 }
 
-.modeButtonOn {
-  background: var(--color-accent, #34a8eb);
-  color: #fff;
+.modeTabOn {
+  background: var(--lv-card2);
+  font-weight: 600;
+  color: var(--lv-tx);
 }
 
-/* The miniature connect screen. Its colours come from the livery being
-   edited, so it is deliberately not themed by the surrounding page. */
+/* The card is painted in the livery being edited, not in the app's theme. */
 .card {
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
-  border: 1px solid var(--color-border, #3a3c43);
-  background: var(--livery-surface);
-  color: var(--livery-text);
-  font-size: 12px;
+  border: 1px solid var(--lv-ln2);
+  background: var(--pv-aura), var(--pv-surface);
+  box-shadow: 0 30px 80px rgb(2 6 18 / 60%);
+  color: var(--pv-text);
 }
 
 .cardBanner {
-  height: 78px;
+  height: 100px;
   position: relative;
   display: flex;
   align-items: center;
@@ -259,44 +828,43 @@
 }
 
 .cardBannerName {
-  font-size: 20px;
+  font-size: 26px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  opacity: 0.28;
+  opacity: 0.22;
   user-select: none;
-  white-space: nowrap;
+  padding: 0 16px;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 90%;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .cardScrim {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, transparent 38%, var(--livery-surface) 100%);
+  background: linear-gradient(180deg, transparent 40%, var(--pv-surface) 100%);
 }
 
 .cardBody {
-  padding: 0 14px 14px;
-  margin-top: -20px;
-  position: relative;
+  padding: 0 16px 16px;
   text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  margin-top: -26px;
+  position: relative;
 }
 
 .cardIcon {
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
-  border: 2px solid var(--livery-surface);
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
   object-fit: cover;
-  display: flex;
+  border: 2px solid var(--pv-surface);
+  box-shadow: 0 0 0 1.5px var(--pv-ring);
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  font-size: 19px;
   font-weight: 700;
-  font-size: 15px;
   color: #fff;
   overflow: hidden;
 }
@@ -309,167 +877,88 @@
 }
 
 .cardName {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
-  margin-top: 7px;
+  margin-top: 6px;
   overflow-wrap: anywhere;
+}
+
+/* Drawn every time, in the viewer's own colours, on every server. */
+.cardAddress {
+  font-size: 9.5px;
+  opacity: 0.4;
+  font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 .cardTagline {
   font-size: 10.5px;
-  opacity: 0.68;
-  margin-top: 2px;
-  line-height: 1.35;
+  opacity: 0.65;
+  margin-top: 4px;
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
 .cardChips {
   display: flex;
-  gap: 4px;
   justify-content: center;
+  gap: 5px;
+  margin-top: 8px;
   flex-wrap: wrap;
-  margin-top: 9px;
 }
 
 .cardChip {
-  font-size: 9px;
-  padding: 2.5px 8px;
+  padding: 2px 9px;
   border-radius: 10px;
+  font-size: 9.5px;
   border: 1px solid transparent;
   background: rgb(255 255 255 / 8%);
-  opacity: 0.8;
 }
 
 .cardMotd {
-  margin-top: 10px;
-  padding: 7px 9px;
-  border-radius: 8px;
-  text-align: left;
-  background: rgb(255 255 255 / 7%);
-  border: 1px solid rgb(255 255 255 / 10%);
-  font-size: 9.5px;
-  line-height: 1.45;
+  margin-top: 9px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: rgb(255 255 255 / 6%);
+  font-size: 10px;
   opacity: 0.85;
+  line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  width: 100%;
+  text-align: left;
 }
 
 .cardCta {
-  margin-top: 11px;
-  width: 100%;
-  height: 28px;
-  border-radius: 8px;
-  background: var(--livery-accent);
-  color: #fff;
+  margin-top: 10px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--pv-cta);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
-}
-
-/* The address chip, drawn from page tokens rather than livery ones: a server
-   cannot restyle the one thing that says who you are connecting to. */
-.cardAddress {
-  margin-top: 9px;
-  font-size: 9px;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  color: var(--color-text-secondary, #9aa6b8);
-  background: var(--color-bg-tertiary, #23252b);
-  border: 1px solid var(--color-border, #3a3c43);
-  border-radius: 999px;
-  padding: 3px 9px;
+  color: #fff;
 }
 
 .previewNote {
-  font-size: 0.72rem;
-  color: var(--color-text-secondary, #9aa6b8);
-  line-height: 1.4;
-  margin: 0;
+  margin: 8px 0 0;
+  font-size: 10.5px;
+  color: var(--lv-dim);
+  line-height: 1.5;
+  text-align: center;
 }
 
-/* -- connection + status -- */
+/* -- the credential gate -- */
 
-.status {
-  font-size: 0.78rem;
-  line-height: 1.4;
-  padding: 9px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--color-border, #3a3c43);
-  background: var(--color-bg-tertiary, #23252b);
-  color: var(--color-text-secondary, #9aa6b8);
-  overflow-wrap: anywhere;
+.gate {
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.statusError {
-  border-color: var(--color-danger, #e5534b);
-  color: var(--color-danger, #e5534b);
-}
-
-.statusOk {
-  border-color: var(--color-success, #3fc98d);
-  color: var(--color-success, #3fc98d);
-}
-
-.actions {
+.gateActions {
   display: flex;
   gap: 8px;
   align-items: center;
-  flex-wrap: wrap;
-}
-
-.spacer {
-  flex: 1;
-}
-
-/* -- buttons -- */
-
-.btn {
-  border: 1px solid var(--color-border, #3a3c43);
-  background: var(--color-bg-tertiary, #23252b);
-  color: var(--color-text-primary, #fff);
-  border-radius: 8px;
-  padding: 6px 12px;
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-
-.btn:hover:not(:disabled) {
-  background: var(--color-bg-hover, #2c2f36);
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.btnPrimary {
-  background: var(--color-accent, #34a8eb);
-  border-color: transparent;
-  color: #fff;
-  font-weight: 600;
-}
-
-.btnPrimary:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-
-.btnDanger {
-  color: var(--color-danger, #e5534b);
-}
-
-.iconBtn {
-  border: none;
-  background: none;
-  color: var(--color-text-secondary, #9aa6b8);
-  cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
-  padding: 4px;
-  border-radius: 6px;
-}
-
-.iconBtn:hover {
-  color: var(--color-danger, #e5534b);
 }
