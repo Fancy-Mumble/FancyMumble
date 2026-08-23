@@ -290,7 +290,7 @@ pub struct SettingsUpdate {
 pub struct SettingsQuery {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ServerConfigEnvelope {
-    #[prost(oneof = "server_config_envelope::Body", tags = "1, 2, 3, 4, 5")]
+    #[prost(oneof = "server_config_envelope::Body", tags = "1, 2, 3, 4, 5, 6")]
     pub body: ::core::option::Option<server_config_envelope::Body>,
 }
 /// Nested message and enum types in `ServerConfigEnvelope`.
@@ -307,7 +307,31 @@ pub mod server_config_envelope {
         LiveryQuery(super::LiveryQuery),
         #[prost(message, tag = "5")]
         Livery(super::LiveryDoc),
+        #[prost(message, tag = "6")]
+        LiveryUpdate(super::LiveryUpdate),
     }
+}
+/// An admin changing the livery from a connected client.
+///
+/// The settings half of this envelope still refuses a client write, because
+/// nothing has asked for one; livery is different because the person editing it
+/// is looking at the connect screen they are editing. Authorised as murmur
+/// authorises every other administrative write: `Write` on the root channel,
+/// checked against the session the frame arrived on, which is an identity the
+/// server established at the handshake and the client cannot assert.
+///
+/// Artwork is deliberately not here. A banner is half a megabyte and the control
+/// channel is the wrong pipe for it; images keep going through the operator API
+/// until they move to the files plane.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LiveryUpdate {
+    /// Which fields to write, by the names the operator API uses. Field-wise for
+    /// the same reason: two admins editing different halves must not overwrite
+    /// each other.
+    #[prost(string, repeated, tag = "1")]
+    pub fields: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "2")]
+    pub values: ::core::option::Option<LiveryDoc>,
 }
 /// "Send me this server's livery, and the artwork I do not already hold."
 ///

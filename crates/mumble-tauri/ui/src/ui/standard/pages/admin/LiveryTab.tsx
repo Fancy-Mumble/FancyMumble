@@ -21,30 +21,36 @@
  *
  * # Transport
  *
- * Calls go through Tauri proxy commands rather than `fetch`: the operator API
- * is a different origin and the bearer must not live in the page. That is also
- * why this opens with a credential gate the mock does not have; moving livery
- * onto the client channel would remove it.
+ * Reading and saving go over the connection this client already has: the server
+ * authorises a livery write against the session the frame arrived on, `Write`
+ * on the root channel, so an admin who is connected already carries an identity
+ * the handshake established. No credential is typed for either.
+ *
+ * Artwork is the exception. A banner is up to half a megabyte and the control
+ * channel is the wrong pipe for it, so replacing an image still goes through
+ * the operator API and asks for its address and token at that moment - and only
+ * at that moment.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getPreferences, updatePreferences } from "@core/preferencesStorage";
+import { listen } from "@tauri-apps/api/event";
 import {
   IMAGE_TYPES,
   LIMITS,
   TONES,
   checkOperatorApi,
+  clampHex,
   clearLiveryImage,
+  currentLivery,
   diffLivery,
+  fromSnapshot,
   isHexColour,
-  liveryImage,
-  previewLivery,
-  readLivery,
   uploadLiveryImage,
-  writeLivery,
+  writeLiveryOverChannel,
   type LiveryDocument,
   type LiveryPalette,
-  type LiveryPreview,
+  type LiverySnapshot,
   type LiveryTag,
   type LiveryTone,
   type OperatorCreds,
@@ -123,15 +129,15 @@ function used(value: string | undefined): number {
 export function LiveryTab() {
   const { t } = useTranslation("settings");
 
+  // Only the artwork routes need these, and only when one is replaced.
   const [baseUrl, setBaseUrl] = useState("");
   const [token, setToken] = useState("");
-  const [connected, setConnected] = useState(false);
+  const [askingForCreds, setAskingForCreds] = useState<null | (() => void)>(null);
 
   const [saved, setSaved] = useState<LiveryDocument>(EMPTY);
   const [draft, setDraft] = useState<LiveryDocument>(EMPTY);
   const [banner, setBanner] = useState<string | null>(null);
   const [icon, setIcon] = useState<string | null>(null);
-  const [preview, setPreview] = useState<LiveryPreview | null>(null);
 
   const [mode, setMode] = useState<Mode>("dark");
   const [open, setOpen] = useState<Slot | null>(null);
@@ -154,17 +160,18 @@ export function LiveryTab() {
       .catch(() => undefined);
   }, []);
 
-  const load = useCallback(async (next: OperatorCreds) => {
-    const document = await readLivery(next);
+  /// Adopt what the connection reports, keeping any edit in progress.
+  const adopt = useCallback((snapshot: LiverySnapshot | null, keepDraft: boolean) => {
+    const document = fromSnapshot(snapshot);
     setSaved(document);
-    setDraft(document);
-    const [bannerSrc, iconSrc] = await Promise.all([
-      document.banner_key ? liveryImage(next, "banner") : Promise.resolve(null),
-      document.icon_key ? liveryImage(next, "icon") : Promise.resolve(null),
-    ]);
-    setBanner(bannerSrc);
-    setIcon(iconSrc);
+    if (!keepDraft) setDraft(document);
+    setBanner(snapshot?.bannerSrc ?? null);
+    setIcon(snapshot?.iconSrc ?? null);
   }, []);
+
+  const load = useCallback(async () => {
+    adopt(await currentLivery(), false);
+  }, [adopt]);
 
   const run = async (work: () => Promise<void>) => {
     setBusy(true);
@@ -180,30 +187,32 @@ export function LiveryTab() {
     }
   };
 
-  // Re-read the clamp when the colours or the mode change, so what the page
-  // promises and what a client paints cannot drift while editing.
+  // Read once, then follow the server's own push, which arrives whenever
+  // anybody changes the livery - including this page saving.
   useEffect(() => {
-    if (!connected) return;
+    void load().catch((reason) => setError(String(reason)));
+    if (!("__TAURI_INTERNALS__" in globalThis)) return;
     let cancelled = false;
-    void previewLivery(creds, mode)
-      .then((next) => {
-        if (!cancelled) setPreview(next);
+    let unlisten: (() => void) | null = null;
+    void listen<{ livery: LiverySnapshot | null }>("server-livery", (event) => {
+      if (!cancelled) adopt(event.payload.livery, false);
+    })
+      .then((stop) => {
+        if (cancelled) stop();
+        else unlisten = stop;
       })
-      .catch(() => {
-        if (!cancelled) setPreview(null);
-      });
+      .catch(() => undefined);
     return () => {
       cancelled = true;
+      unlisten?.();
     };
-  }, [connected, creds, mode, saved]);
+  }, [load, adopt]);
 
-  const connect = () =>
-    run(async () => {
-      await checkOperatorApi(creds);
-      await updatePreferences({ liveryOperatorUrl: baseUrl });
-      await load(creds);
-      setConnected(true);
-    });
+  /// Ask for the operator credential, then do the thing that needed it.
+  const withCreds = (work: () => void) => {
+    if (baseUrl && token) work();
+    else setAskingForCreds(() => work);
+  };
 
   const palette: LiveryPalette = draft[mode] ?? {};
   const setColour = (field: keyof LiveryPalette, value: string) =>
@@ -223,73 +232,18 @@ export function LiveryTab() {
     (draft.dark && Object.keys(draft.dark).length) ||
       (draft.light && Object.keys(draft.light).length),
   );
-  const clamped = preview?.clamped ?? [];
 
-  // The clamped accent, because the preview exists to show what is painted.
-  const shownAccent =
-    preview?.palette?.accent && isHexColour(preview.palette.accent)
-      ? preview.palette.accent
-      : isHexColour(palette.accent ?? "")
-        ? palette.accent!
-        : STOCK[mode].accent;
   const shownSurface = isHexColour(palette.surface ?? "") ? palette.surface! : STOCK[mode].surface;
+  const storedAccent = isHexColour(palette.accent ?? "") ? palette.accent! : STOCK[mode].accent;
+  // What a client will actually paint. Recomputed as the operator types, which
+  // the server's own preview route cannot do: it answers about the saved
+  // palette, so mid-edit it describes the colour they had before.
+  const shownAccent = clampHex(storedAccent, shownSurface);
+  const clamped = shownAccent === storedAccent ? [] : ["accent"];
   const auraFrom = isHexColour(palette.aura_from ?? "") ? palette.aura_from! : null;
   const auraTo = isHexColour(palette.aura_to ?? "") ? palette.aura_to! : auraFrom;
   const name = draft.display_name?.trim() || "your.server";
   const address = `mumble://${name}:64738`;
-
-  if (!connected) {
-    return (
-      <div className={styles.page}>
-        <div className={`${styles.form} ${styles.gate}`}>
-          <h2 className={styles.title}>{t("livery.title", "Livery")}</h2>
-          <p className={styles.lede}>
-            {t(
-              "livery.gateLede",
-              "Livery is written through the operator API, which needs its address and a token holding the server-config scope.",
-            )}
-          </p>
-          <div>
-            <div className={styles.fieldHead}>
-              <span>{t("livery.address", "Operator API")}</span>
-            </div>
-            <input
-              className={styles.input}
-              placeholder="http://127.0.0.1:8081"
-              value={baseUrl}
-              onChange={(event) => setBaseUrl(event.target.value)}
-            />
-          </div>
-          <div>
-            <div className={styles.fieldHead}>
-              <span>{t("livery.token", "Token")}</span>
-            </div>
-            <input
-              className={styles.input}
-              type="password"
-              autoComplete="off"
-              value={token}
-              onChange={(event) => setToken(event.target.value)}
-            />
-            <div className={styles.hint}>
-              {t("livery.tokenHint", "Not stored — retyped each session.")}
-            </div>
-          </div>
-          <div className={styles.gateActions}>
-            <button
-              type="button"
-              className={styles.save}
-              disabled={busy || !baseUrl || !token}
-              onClick={() => void connect()}
-            >
-              {busy ? t("livery.connecting", "Connecting…") : t("livery.connect", "Connect")}
-            </button>
-          </div>
-          {error && <div className={styles.error}>{error}</div>}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className={styles.page}>
@@ -443,6 +397,63 @@ export function LiveryTab() {
         </div>
 
         <div className={styles.section}>{t("livery.artwork", "Artwork")}</div>
+        {askingForCreds && (
+          // Only images need this. Everything else on the page is authorised by
+          // the connection itself, so the prompt appears where the exception
+          // is rather than in front of the whole page.
+          <div className={styles.credsPrompt}>
+            <div className={styles.credsLead}>
+              {t(
+                "livery.credsLead",
+                "Images are uploaded through the operator API, which needs its address and a token.",
+              )}
+            </div>
+            <input
+              className={styles.input}
+              placeholder="http://127.0.0.1:8081"
+              aria-label={t("livery.address", "Operator API")}
+              value={baseUrl}
+              onChange={(event) => setBaseUrl(event.target.value)}
+            />
+            <input
+              className={styles.input}
+              type="password"
+              autoComplete="off"
+              placeholder={t("livery.token", "Token")}
+              aria-label={t("livery.token", "Token")}
+              value={token}
+              onChange={(event) => setToken(event.target.value)}
+            />
+            <div className={styles.assetActions}>
+              <button
+                type="button"
+                className={styles.assetBtn}
+                disabled={busy || !baseUrl || !token}
+                onClick={() =>
+                  void run(async () => {
+                    await checkOperatorApi({ baseUrl, token });
+                    await updatePreferences({ liveryOperatorUrl: baseUrl });
+                    const next = askingForCreds;
+                    setAskingForCreds(null);
+                    next();
+                  })
+                }
+              >
+                {t("livery.use", "Use")}
+              </button>
+              <button
+                type="button"
+                className={`${styles.assetBtn} ${styles.assetBtnGhost}`}
+                onClick={() => setAskingForCreds(null)}
+              >
+                {t("livery.cancel", "Cancel")}
+              </button>
+            </div>
+            <div className={styles.hint}>
+              {t("livery.tokenHint", "Not stored — retyped each session.")}
+            </div>
+          </div>
+        )}
         <div className={styles.assets}>
           <div className={styles.bannerCard}>
             {banner ? (
@@ -499,7 +510,7 @@ export function LiveryTab() {
                           "banner",
                           new Uint8Array(await file.arrayBuffer()),
                         );
-                        await load(creds);
+                        await load();
                       });
                   }}
                 />
@@ -507,7 +518,7 @@ export function LiveryTab() {
                   type="button"
                   className={styles.assetBtn}
                   disabled={busy}
-                  onClick={() => bannerInput.current?.click()}
+                  onClick={() => withCreds(() => bannerInput.current?.click())}
                 >
                   {t("livery.replace", "Replace")}
                 </button>
@@ -517,10 +528,12 @@ export function LiveryTab() {
                     className={`${styles.assetBtn} ${styles.assetBtnGhost}`}
                     disabled={busy}
                     onClick={() =>
-                      void run(async () => {
-                        await clearLiveryImage(creds, "banner");
-                        await load(creds);
-                      })
+                      withCreds(() =>
+                        void run(async () => {
+                          await clearLiveryImage(creds, "banner");
+                          await load();
+                        }),
+                      )
                     }
                   >
                     {t("livery.remove", "Remove")}
@@ -550,7 +563,7 @@ export function LiveryTab() {
                 if (file)
                   void run(async () => {
                     await uploadLiveryImage(creds, "icon", new Uint8Array(await file.arrayBuffer()));
-                    await load(creds);
+                    await load();
                   });
               }}
             />
@@ -558,7 +571,7 @@ export function LiveryTab() {
               type="button"
               className={styles.assetBtn}
               disabled={busy}
-              onClick={() => iconInput.current?.click()}
+              onClick={() => withCreds(() => iconInput.current?.click())}
             >
               {t("livery.replace", "Replace")}
             </button>
@@ -568,10 +581,12 @@ export function LiveryTab() {
                 className={`${styles.assetBtn} ${styles.assetBtnGhost}`}
                 disabled={busy}
                 onClick={() =>
-                  void run(async () => {
-                    await clearLiveryImage(creds, "icon");
-                    await load(creds);
-                  })
+                  withCreds(() =>
+                    void run(async () => {
+                      await clearLiveryImage(creds, "icon");
+                      await load();
+                    }),
+                  )
                 }
               >
                 {t("livery.remove", "Remove")}
@@ -728,7 +743,7 @@ export function LiveryTab() {
               </div>
             )}
 
-            {clamped.length > 0 && preview?.palette?.accent && (
+            {clamped.length > 0 && (
               <div className={styles.notice}>
                 <span className={styles.noticeDot} />
                 <span>
@@ -737,16 +752,10 @@ export function LiveryTab() {
                   </span>{" "}
                   {mode} {clamped.join(", ")} {t("livery.clampRenders", "renders as")}{" "}
                   <span className={styles.noticePair}>
-                    <span
-                      className={styles.noticeSwatch}
-                      style={{ background: palette.accent ?? STOCK[mode].accent }}
-                    />
+                    <span className={styles.noticeSwatch} style={{ background: storedAccent }} />
                     →
-                    <span
-                      className={styles.noticeSwatch}
-                      style={{ background: preview.palette.accent }}
-                    />{" "}
-                    {preview.palette.accent}
+                    <span className={styles.noticeSwatch} style={{ background: shownAccent }} />{" "}
+                    {shownAccent}
                   </span>{" "}
                   {t("livery.clampTail", "so text stays legible. The stored value is unchanged.")}
                 </span>
@@ -764,8 +773,11 @@ export function LiveryTab() {
             disabled={busy || !dirty}
             onClick={() =>
               void run(async () => {
-                await writeLivery(creds, patch);
-                await load(creds);
+                await writeLiveryOverChannel(patch);
+                // The server pushes the new document to every client, this one
+                // included, so the reload arrives on its own. Adopting the
+                // draft now keeps the form from flickering back in the meantime.
+                setSaved(draft);
               })
             }
           >
@@ -773,10 +785,7 @@ export function LiveryTab() {
           </button>
           <span className={styles.saveMeta}>
             {t("livery.saveMeta", "Only filled fields are sent")} · {t("livery.version", "version")}{" "}
-            {saved.version} · {t("livery.digest", "digest")} {saved.digest || "—"} ·{" "}
-            <button type="button" onClick={() => setConnected(false)}>
-              {t("livery.disconnect", "change credentials")}
-            </button>
+            {saved.version} · {t("livery.digest", "digest")} {saved.digest || "—"}
           </span>
         </div>
       </div>

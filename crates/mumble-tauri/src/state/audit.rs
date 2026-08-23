@@ -32,6 +32,28 @@ impl AppState {
         guard.livery.clone()
     }
 
+    /// Change the livery over this connection.
+    ///
+    /// No credential travels with it: the server authorises against the session
+    /// the frame arrives on, and answers a caller without `Write` on the root
+    /// channel with a `PermissionDenied` rather than silence.
+    pub async fn update_livery(
+        &self,
+        fields: Vec<String>,
+        values: mumble_protocol::proto::fancy::domain::LiveryDoc,
+    ) -> Result<(), String> {
+        let handle = {
+            let session = self.inner.snapshot();
+            let state = session.lock().map_err(|e| e.to_string())?;
+            state.conn.client_handle.clone()
+        };
+        let handle = handle.ok_or("Not connected")?;
+        handle
+            .send(command::UpdateLivery { fields, values })
+            .await
+            .map_err(|e| format!("Failed to send the livery change: {e}"))
+    }
+
     /// Send an audit query / live-tail subscription / chain verification.
     pub async fn query_audit_log(&self, args: AuditQueryArgs) -> Result<(), String> {
         let handle = {

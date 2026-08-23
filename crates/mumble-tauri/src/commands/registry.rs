@@ -37,6 +37,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::livery_admin::livery_clear_image,
         super::livery_admin::livery_image_data_uri,
         super::livery_admin::livery_check,
+        super::livery_admin::livery_update_over_channel,
         super::public_servers::fetch_public_servers,
         super::public_servers::fetch_file_server_capabilities,
         // -- certificates ----------------------------------------------
