@@ -26,6 +26,16 @@ export function isDesktopPlatform(): boolean {
   return !isMobile;
 }
 
+/** Detect whether the app is running on an Apple platform, where modifier
+ *  shortcuts are written with ⌘ rather than Ctrl. */
+export function isApplePlatform(): boolean {
+  const agent = navigator.userAgent;
+  return /Mac|iPhone|iPad|iPod/i.test(agent);
+}
+
+/** Cached `isApplePlatform()` - the user-agent is stable per session. */
+export const isApple: boolean = isApplePlatform();
+
 /** Detect whether the app is running on Windows (for Windows-only settings
  *  such as WASAPI exclusive-mode input). */
 export function isWindowsPlatform(): boolean {

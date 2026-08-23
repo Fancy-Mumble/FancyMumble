@@ -49,6 +49,7 @@
     "outputDevice": "Ausgabegerät",
     "systemDefault": "Systemstandard",
     "deviceDefault": "(Standard)",
+    "deviceUnavailable": "{{name}} (nicht verfügbar - Systemstandard wird verwendet)",
     "microphoneVolume": "Mikrofonlautstärke",
     "speakerVolume": "Lautsprecherlautstärke",
     "activationMode": "Aktivierungsmodus",
@@ -327,9 +328,12 @@
   },
   "personalize": {
     "panelTitle": "Anpassen",
-    "uiDesign": "Aurora-Design",
+    "uiDesign": "Oberflächendesign",
     "beta": "Beta",
-    "uiDesignHint": "Aurora ausprobieren – ein experimentelles Design in der Beta-Phase. Die Standard-Oberfläche ist die Voreinstellung und kann mit diesem Schalter wiederhergestellt werden.",
+    "uiDesignHint": "Standard oder eines der Design-Betas. Standard ist die Voreinstellung und hat den größten Funktionsumfang.",
+    "uiDesignStandard": "Standard",
+    "uiDesignAurora": "Aurora (Beta)",
+    "uiDesignNebula": "Nebula (Beta)",
     "uiDesignOverrideHint": "Die Oberfläche wird derzeit durch den Entwicklungs-URL-Parameter auf '{{design}}' festgelegt.",
     "theme": "Design",
     "themeHint": "Wähle das Erscheinungsbild der ganzen App.",
@@ -481,6 +485,11 @@
       "authCert": "Anmeldung: Zertifikat",
       "totpOn": "Zwei-Faktor-Authentifizierung: an",
       "totpOff": "Zwei-Faktor-Authentifizierung: aus"
+    },
+    "confirm": {
+      "label": "Aktuelles Passwort",
+      "hint": "Für jede Änderung unten erforderlich. Eine bereits verbundene Sitzung ist genau das, was eine gestohlene auch ist - der erneute Nachweis des Passworts verhindert, dass eine übernommene Sitzung das Konto mitnimmt.",
+      "missing": "Gib dein aktuelles Passwort ein, um hier etwas zu ändern."
     },
     "password": {
       "title": "Passwort-Anmeldung",
@@ -1030,7 +1039,55 @@
       "addQuestionBtn": "+ Frage hinzufügen",
       "savingBtn": "Wird gespeichert...",
       "saveBroadcastBtn": "Speichern & senden",
-      "promptPlaceholder": "Was führt dich her?"
+      "promptPlaceholder": "Was führt dich her?",
+      "revShort": "Rev. {{n}}",
+      "startsIn": "Alle starten in",
+      "startsInPlaceholder": "Die vollständige Kanalliste",
+      "untitledQuestion": "Frage ohne Titel",
+      "answerCount_one": "{{count}} Antwort",
+      "answerCount_other": "{{count}} Antworten",
+      "summarySingle": "Einfachauswahl",
+      "summaryMulti": "Mehrfachauswahl",
+      "summaryRequired": "erforderlich",
+      "summaryOptional": "optional",
+      "advanced": "Erweitert",
+      "mappingHint": "führt in Kanal · Gruppen über Suche",
+      "mappingLabel": "Kanäle und Gruppen für {{answer}}",
+      "mappingPlaceholder": "Kanal oder Gruppe …",
+      "notePlaceholder": "Hinweis für neue Mitglieder (optional)",
+      "questionsLeft": "noch {{n}} von {{max}}",
+      "templateIntro": "oder mit einer Vorlage beginnen:",
+      "broadcastHint": "Verbundene Mitglieder sehen Änderungen sofort",
+      "previewTitle": "VORSCHAU FÜR NEUE",
+      "previewWelcome": "Willkommen auf {{server}}",
+      "previewStep": "{{n}} von {{m}}",
+      "previewMapping": "Antwort „{{answer}}“ → betritt {{targets}}",
+      "previewNoMapping": "Noch nichts zugeordnet - diese Antwort platziert niemanden.",
+      "thisServer": "diesem Server",
+      "templates": {
+        "gaming": {
+          "chip": "Gaming-Community",
+          "question": "Was spielst du?",
+          "a1": "Shooter",
+          "a2": "Rollenspiele",
+          "a3": "Strategie",
+          "a4": "Rennspiele"
+        },
+        "languages": {
+          "chip": "Sprachräume",
+          "question": "Welche Sprache sprichst du?",
+          "a1": "English",
+          "a2": "Deutsch",
+          "a3": "Français",
+          "a4": "Español"
+        },
+        "private": {
+          "chip": "Nur für Mitglieder",
+          "question": "Bist du Gast oder Mitglied?",
+          "a1": "Gast",
+          "a2": "Mitglied"
+        }
+      }
     },
     "modal": {
       "welcomeTitle": "Willkommen!",

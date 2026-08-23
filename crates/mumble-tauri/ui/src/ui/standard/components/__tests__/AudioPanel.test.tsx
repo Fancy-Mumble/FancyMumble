@@ -69,14 +69,23 @@ function makeSettings(overrides: Partial<AudioSettings> = {}): AudioSettings {
   };
 }
 
-function renderPanel(overrides: Partial<AudioSettings> = {}, isExpert = false) {
+interface DeviceLists {
+  devices?: { name: string; is_default: boolean }[];
+  outputDevices?: { name: string; is_default: boolean }[];
+}
+
+function renderPanel(
+  overrides: Partial<AudioSettings> = {},
+  isExpert = false,
+  lists: DeviceLists = {},
+) {
   const onChange = vi.fn();
   const onToggleAudioBackend = vi.fn();
   const settings = makeSettings(overrides);
   const result = render(
     <AudioPanel
-      devices={[]}
-      outputDevices={[]}
+      devices={lists.devices ?? []}
+      outputDevices={lists.outputDevices ?? []}
       settings={settings}
       onChange={onChange}
       isExpert={isExpert}
@@ -347,6 +356,44 @@ describe("Calibrate", () => {
 });
 
 // -- Shortcut event filtering (regression for double-fire bug) -----
+
+describe("Device selection", () => {
+  const mic = { name: "Komplete Audio 1 Analog Stereo", is_default: true };
+  const sink = { name: "GA102 Digital Stereo (HDMI)", is_default: false };
+
+  it("offers the enumerated devices", () => {
+    renderPanel({}, false, { devices: [mic] });
+    expect(screen.getByRole("option", { name: /Komplete Audio 1 Analog Stereo/ })).toBeTruthy();
+  });
+
+  it("marks a stored device the list no longer offers as unavailable", () => {
+    // A name saved before the device layer changed how it names things,
+    // or a mic that is currently unplugged. Without this the <select>
+    // renders blank and hides that the app fell back to the default.
+    renderPanel({ selected_device: "Komplete Audio 1, USB Audio" }, false, { devices: [mic] });
+    const stale = screen.getByRole("option", {
+      name: /Komplete Audio 1, USB Audio \(unavailable - using system default\)/,
+    }) as HTMLOptionElement;
+    expect(stale.selected).toBe(true);
+  });
+
+  it("does the same for a stored output device", () => {
+    renderPanel({ selected_output_device: "Old Sink" }, false, { outputDevices: [sink] });
+    expect(screen.getByRole("option", { name: /Old Sink \(unavailable/ })).toBeTruthy();
+  });
+
+  it("adds no unavailable entry once the stored device is offered again", () => {
+    renderPanel({ selected_device: mic.name }, false, { devices: [mic] });
+    expect(screen.queryByRole("option", { name: /unavailable/ })).toBeNull();
+  });
+
+  it("adds no unavailable entry while the device list is still empty", () => {
+    // An enumeration that has not returned yet must not be mistaken for
+    // "your device is gone".
+    renderPanel({ selected_device: mic.name }, false, { devices: [] });
+    expect(screen.queryByRole("option", { name: /unavailable/ })).toBeNull();
+  });
+});
 
 describe("Shortcut event filtering", () => {
   it("only invokes command on Pressed, not Released", async () => {

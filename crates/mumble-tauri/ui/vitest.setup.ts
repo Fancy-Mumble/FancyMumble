@@ -2,6 +2,9 @@
  * Global Vitest setup: provides a react-i18next mock that returns real English
  * strings from the locale files. This ensures component tests see the same
  * translated text users see, rather than bare translation keys.
+ *
+ * It also fills the one hole jsdom leaves that a mounted editor falls through -
+ * see below.
  */
 
 import { vi } from "vitest";
@@ -92,3 +95,31 @@ vi.mock("react-i18next", () => ({
   Trans: ({ children }: { children: unknown }) => children,
   initReactI18next: { type: "3rdParty", init: () => {} },
 }));
+
+
+/**
+ * The geometry jsdom leaves out, which a mounted editor falls through.
+ *
+ * jsdom lays nothing out, so it implements `getClientRects` on elements only
+ * and `elementFromPoint` not at all. ProseMirror asks for all three the moment
+ * an editor mounts and again on every edit - to place the caret, to scroll the
+ * selection into view - so without these every test that renders an editor
+ * dies on an uncaught exception instead of failing an assertion. Answering
+ * "nothing is anywhere" is both true of jsdom and a case ProseMirror already
+ * handles, being what a browser reports for an unrendered node.
+ */
+const NO_RECTS = Object.assign([], { item: () => null }) as unknown as DOMRectList;
+
+if (typeof document !== "undefined" && !document.elementFromPoint) {
+  Document.prototype.elementFromPoint = () => null;
+}
+if (typeof Range !== "undefined" && !Range.prototype.getClientRects) {
+  Range.prototype.getClientRects = () => NO_RECTS;
+  Range.prototype.getBoundingClientRect = () => new DOMRect();
+}
+if (typeof Text !== "undefined" && !("getClientRects" in Text.prototype)) {
+  Object.defineProperty(Text.prototype, "getClientRects", {
+    configurable: true,
+    value: () => NO_RECTS,
+  });
+}

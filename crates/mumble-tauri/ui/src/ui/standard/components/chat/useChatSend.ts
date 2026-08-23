@@ -1,8 +1,6 @@
 import { useState, useCallback, useEffect, useRef, type ClipboardEvent } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "@core/store";
-import type { AclData, AclGroup, ChatMessage } from "@core/types";
+import type { ChatMessage } from "@core/types";
 import type { ToastData } from "../elements/Toast";
 import { markdownToHtml } from "./markdown/MarkdownInput";
 import {
@@ -16,7 +14,7 @@ import {
 } from "@core/utils/media";
 import { galleryMarker, newGalleryId } from "@core/utils/gallery";
 import { applyMentionsToHtml, type MentionResolver } from "@core/utils/mentions";
-import { rootChannelId } from "@core/features/admin/rootChannel";
+import { useAclGroups } from "../../hooks/useAclGroups";
 
 interface UseChatSendOptions {
   pendingQuotes: ChatMessage[];
@@ -48,27 +46,14 @@ export function useChatSend({
   const selectedDmUser = useAppStore((s) => s.selectedDmUser);
   const sendDm = useAppStore((s) => s.sendDm);
   const users = useAppStore((s) => s.users);
-  const channels = useAppStore((s) => s.channels);
   const addPendingPlaceholder = useAppStore((s) => s.addPendingPlaceholder);
   const markPendingFailed = useAppStore((s) => s.markPendingFailed);
   const dismissPendingMessage = useAppStore((s) => s.dismissPendingMessage);
-  const rootId = (() => rootChannelId(channels))();
 
-  // Subscribe to root-channel ACL so the resolver can attach role colors.
-  const [roleGroups, setRoleGroups] = useState<readonly AclGroup[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    const unlisten = listen<AclData>("acl", (event) => {
-      if (!cancelled && event.payload.channel_id === rootId) {
-        setRoleGroups(event.payload.groups);
-      }
-    });
-    invoke("request_acl", { channelId: rootId }).catch(() => {});
-    return () => {
-      cancelled = true;
-      unlisten.then((f) => f());
-    };
-  }, [rootId]);
+  // Root-channel ACL, so the resolver can attach role colors. Shared with the
+  // rest of the app through `useAclGroups`: one cached fetch, and no request
+  // at all for users who cannot read an ACL anyway.
+  const roleGroups = useAclGroups();
 
   // Resolver used to convert <@SESSION> markers into named chips on send.
   const mentionResolver = useRef<MentionResolver>({

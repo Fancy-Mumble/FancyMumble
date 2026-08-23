@@ -49,6 +49,7 @@
     "outputDevice": "Output Device",
     "systemDefault": "System default",
     "deviceDefault": "(default)",
+    "deviceUnavailable": "{{name}} (unavailable - using system default)",
     "microphoneVolume": "Microphone Volume",
     "speakerVolume": "Speaker Volume",
     "activationMode": "Activation Mode",
@@ -327,9 +328,12 @@
   },
   "personalize": {
     "panelTitle": "Personalize",
-    "uiDesign": "Aurora design",
+    "uiDesign": "Interface design",
     "beta": "Beta",
-    "uiDesignHint": "Try Aurora, an experimental design still in beta. The Standard interface is the default and can be restored with this switch.",
+    "uiDesignHint": "Standard, or one of the design betas. Standard is the default and has the broadest feature coverage.",
+    "uiDesignStandard": "Standard",
+    "uiDesignAurora": "Aurora (beta)",
+    "uiDesignNebula": "Nebula (beta)",
     "uiDesignOverrideHint": "The interface is currently forced to '{{design}}' by the development URL override.",
     "theme": "Theme",
     "themeHint": "Choose the visual style for the entire app.",
@@ -482,6 +486,11 @@
       "totpOn": "Two-factor authentication: on",
       "totpOff": "Two-factor authentication: off"
     },
+    "confirm": {
+      "label": "Current password",
+      "hint": "Required for every change below. An already-connected session is exactly what a stolen one is too, so proving the password again is what keeps a hijacked session from taking the account.",
+      "missing": "Enter your current password to change anything here."
+    },
     "password": {
       "title": "Password sign-in",
       "hintEnabled": "Password sign-in is enabled. You must enter your password every time you connect under this name.",
@@ -549,6 +558,7 @@
       "totp_not_enabled": "2FA is not enabled.",
       "totp_wrong_code": "The code is not valid. Check your authenticator app and the device clock.",
       "totp_generation_failed": "The server could not generate a 2FA secret.",
+      "timeout": "The server did not respond. It may not support this yet, or the request was lost.",
       "unknown": "The operation failed: {{code}}"
     }
   },
@@ -1040,7 +1050,55 @@
       "addQuestionBtn": "+ Add question",
       "savingBtn": "Saving...",
       "saveBroadcastBtn": "Save & broadcast",
-      "promptPlaceholder": "What brings you here?"
+      "promptPlaceholder": "What brings you here?",
+      "revShort": "rev {{n}}",
+      "startsIn": "Everyone starts in",
+      "startsInPlaceholder": "The whole channel list",
+      "untitledQuestion": "Untitled question",
+      "answerCount_one": "{{count}} answer",
+      "answerCount_other": "{{count}} answers",
+      "summarySingle": "single choice",
+      "summaryMulti": "multi-select",
+      "summaryRequired": "required",
+      "summaryOptional": "optional",
+      "advanced": "Advanced",
+      "mappingHint": "maps to channel · groups via search",
+      "mappingLabel": "Channels and groups for {{answer}}",
+      "mappingPlaceholder": "channel or group…",
+      "notePlaceholder": "Add a note new members will read (optional)",
+      "questionsLeft": "{{n}} of {{max}} left",
+      "templateIntro": "or start from a template:",
+      "broadcastHint": "Connected members see changes immediately",
+      "previewTitle": "NEW MEMBER PREVIEW",
+      "previewWelcome": "Welcome to {{server}}",
+      "previewStep": "{{n}} of {{m}}",
+      "previewMapping": "Answer “{{answer}}” → joins {{targets}}",
+      "previewNoMapping": "Nothing is mapped yet, so this answer places nobody anywhere.",
+      "thisServer": "this server",
+      "templates": {
+        "gaming": {
+          "chip": "Gaming community",
+          "question": "What do you play?",
+          "a1": "Shooters",
+          "a2": "RPGs",
+          "a3": "Strategy",
+          "a4": "Racing"
+        },
+        "languages": {
+          "chip": "Language rooms",
+          "question": "Which language do you speak?",
+          "a1": "English",
+          "a2": "Deutsch",
+          "a3": "Français",
+          "a4": "Español"
+        },
+        "private": {
+          "chip": "Members-only areas",
+          "question": "Are you here as a guest or a member?",
+          "a1": "Guest",
+          "a2": "Member"
+        }
+      }
     },
     "modal": {
       "welcomeTitle": "Welcome!",

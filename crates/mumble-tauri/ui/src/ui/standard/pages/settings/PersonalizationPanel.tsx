@@ -21,6 +21,14 @@ import {
 } from "../../icons";
 import { THEMES, applyTheme } from "../../themes";
 import type { ThemeId } from "../../themes";
+import {
+  clearChatBackgroundStore,
+  isStoreRef,
+  processBackgroundImage,
+  storeRefName,
+  toStoreRef,
+  useResolvedBackgroundSource,
+} from "@core/features/settings/chatBackground";
 import { ImageEditor } from "./ImageEditor";
 import { SliderField, Toggle } from "./SharedControls";
 import { FONT_FAMILIES, applyFont } from "@core/utils/fonts";
@@ -29,6 +37,7 @@ import styles from "./SettingsPage.module.css";
 import panelStyles from "./PersonalizationPanel.module.css";
 import { registerSettings } from "@core/features/settings/settingsSearchRegistry";
 import { getSelectedUiDesign, getUiDesignOverride, setSelectedUiDesign } from "@ui/selection";
+import type { UiDesignId } from "@core/types";
 
 registerSettings("personalize")
   .add("personalize.uiDesign", ["aurora", "beta", "design beta", "interface", "design", "standard"])
@@ -110,29 +119,27 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
   const [editorImage, setEditorImage] = useState<string | null>(null);
   const [blurring, setBlurring] = useState(false);
 
-  // Interface design pack (Standard, or the Aurora design beta). A dev URL
-  // override (`?ui=`) pins the choice and disables the toggle.
+  // Interface design pack. There are now several, so this is a choice rather
+  // than a switch; a dev URL override (`?ui=`) pins it and disables the field.
   const uiDesignOverride = getUiDesignOverride();
-  const [auroraEnabled, setAuroraEnabled] = useState(
-    () => document.documentElement.dataset.uiDesign === "aurora",
+  const [uiDesign, setUiDesign] = useState<UiDesignId>(
+    () => (document.documentElement.dataset.uiDesign as UiDesignId | undefined) ?? "standard",
   );
   const [uiDesignBusy, setUiDesignBusy] = useState(false);
 
   useEffect(() => {
-    void getSelectedUiDesign()
-      .then((design) => setAuroraEnabled(design === "aurora"))
-      .catch(() => undefined);
+    void getSelectedUiDesign().then(setUiDesign).catch(() => undefined);
   }, []);
 
-  const handleUiDesignToggle = async () => {
-    if (uiDesignBusy || uiDesignOverride) return;
-    const next = !auroraEnabled;
-    setAuroraEnabled(next);
+  const handleUiDesignChange = async (next: UiDesignId) => {
+    if (uiDesignBusy || uiDesignOverride || next === uiDesign) return;
+    const previous = uiDesign;
+    setUiDesign(next);
     setUiDesignBusy(true);
     try {
-      await setSelectedUiDesign(next ? "aurora" : "standard");
+      await setSelectedUiDesign(next);
     } catch (error) {
-      setAuroraEnabled(!next);
+      setUiDesign(previous);
       console.error("failed to change UI design:", error);
     } finally {
       setUiDesignBusy(false);
@@ -159,6 +166,22 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
    *  `processGenRef` and set `setBlurring(true)`. */
   const runProcessing = useCallback(
     (original: string, sigma: number, dim: number, gen: number) => {
+      // A wallpaper picked through the store (Nebula's dialog) is a file the
+      // backend already has - it processes in place and hands back a new
+      // stored name, so the bytes never cross the webview.
+      if (isStoreRef(original)) {
+        processBackgroundImage(storeRefName(original), sigma, dim)
+          .then((processed) => {
+            if (processGenRef.current === gen) {
+              onChange({ chatBgBlurred: toStoreRef(processed) });
+            }
+          })
+          .catch((e) => console.error("Background processing failed:", e))
+          .finally(() => {
+            if (processGenRef.current === gen) setBlurring(false);
+          });
+        return;
+      }
       const imageBase64 = dataUrlToBase64(original);
       invoke<string>("process_background", { imageBase64, sigma, dim })
         .then((processed) => {
@@ -206,7 +229,15 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
   const handleEditorConfirm = useCallback(
     (dataUrl: string) => {
       setEditorImage(null);
-      onChange({ chatBgOriginal: dataUrl, chatBgBlurred: null });
+      // A freshly cropped still replaces whatever was there - including an
+      // animated wallpaper's stored files.
+      void clearChatBackgroundStore().catch(() => undefined);
+      onChange({
+        chatBgOriginal: dataUrl,
+        chatBgBlurred: null,
+        chatBgVideo: null,
+        chatBgVideoBaked: null,
+      });
 
       const needsProcessing = data.chatBgBlurSigma > 0 || data.chatBgDim > 0;
       if (needsProcessing) {
@@ -223,9 +254,12 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
     processGenRef.current++;
     if (processTimerRef.current) clearTimeout(processTimerRef.current);
     setBlurring(false);
+    void clearChatBackgroundStore().catch(() => undefined);
     onChange({
       chatBgOriginal: null,
       chatBgBlurred: null,
+      chatBgVideo: null,
+      chatBgVideoBaked: null,
       chatBgBlurSigma: 0,
     });
   }, [onChange]);
@@ -276,8 +310,10 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
     [data.chatBgOriginal, data.chatBgBlurSigma, onChange, scheduleProcessing],
   );
 
-  // The image to show in the preview (blurred if available, otherwise original)
-  const previewImage = data.chatBgBlurred ?? data.chatBgOriginal;
+  // The image to show in the preview (blurred if available, otherwise the
+  // original), resolved to a renderable src - the record may hold a data-URL
+  // or a `bgstore:` reference to a file in the backend's store.
+  const previewImage = useResolvedBackgroundSource(data.chatBgBlurred ?? data.chatBgOriginal);
 
   const handleThemeChange = useCallback(
     (id: ThemeId) => {
@@ -529,7 +565,7 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
       <section className={styles.section}>
         <div className={styles.fieldRow}>
           <div>
-            <label className={styles.fieldLabel}>
+            <label className={styles.fieldLabel} htmlFor="ui-design-select">
               {t("personalize.uiDesign")}
               <span className={styles.betaChip}>{t("personalize.beta")}</span>
             </label>
@@ -539,13 +575,18 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
                 : t("personalize.uiDesignHint")}
             </p>
           </div>
-          <Toggle
-            checked={auroraEnabled}
-            onChange={() => void handleUiDesignToggle()}
+          <select
+            id="ui-design-select"
+            className={styles.select}
+            data-testid="personalize-ui-design-select"
+            value={uiDesign}
             disabled={uiDesignBusy || uiDesignOverride !== null}
-            testId="personalize-aurora-design-toggle"
-            ariaLabel={t("personalize.uiDesign")}
-          />
+            onChange={(event) => void handleUiDesignChange(event.target.value as UiDesignId)}
+          >
+            <option value="standard">{t("personalize.uiDesignStandard")}</option>
+            <option value="aurora">{t("personalize.uiDesignAurora")}</option>
+            <option value="nebula">{t("personalize.uiDesignNebula")}</option>
+          </select>
         </div>
       </section>
 
