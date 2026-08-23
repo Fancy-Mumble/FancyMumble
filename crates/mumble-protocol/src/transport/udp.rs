@@ -465,6 +465,7 @@ mod tests {
             user_count: 10,
             max_user_count: 100,
             max_bandwidth_per_user: 72000,
+            livery_digest: Vec::new(),
         };
         let msg = UdpMessage::Ping(ping);
         let encoded = encode_udp_message(&msg);

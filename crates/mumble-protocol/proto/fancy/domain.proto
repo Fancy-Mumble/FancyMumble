@@ -196,6 +196,81 @@ message ServerConfigEnvelope {
     ConfigQuery query = 1;
     ConfigValues values = 2;
     ConfigUpdate update = 3;
+    LiveryQuery livery_query = 4;
+    LiveryDoc livery = 5;
+  }
+}
+
+// "Send me this server's livery, and the artwork I do not already hold."
+//
+// The wire shape of `serverconfig.Livery`, which is the mesh one and stays
+// there: the two planes never import each other's types, and this pairing is
+// the same one `ConfigValues` has with `Snapshot`.
+message LiveryQuery {
+  // Content keys the client already has cached. The reply carries only the art
+  // whose key is not named here, so an operator editing a motto costs a few
+  // hundred bytes rather than half a megabyte of banner the client already has.
+  repeated string have_keys = 1;
+}
+
+// What a server says it looks like. Every field is independently optional and
+// empty means "keep the client's", so a server that sent only a tagline gets
+// exactly that.
+message LiveryDoc {
+  uint64 version = 1;
+  // Truncated SHA-256 over the canonical form, the same value the UDP ping
+  // carries. Repeated here so a client that never saw the ping -- UDP blocked,
+  // or a first connection -- still has something to cache against.
+  bytes digest = 2;
+
+  string display_name = 10;
+  string tagline = 11;
+  // Plain text, rendered as plain text. There is no markup field, deliberately.
+  string motd = 12;
+  repeated Tag tags = 13;
+  string rules_url = 14;
+
+  string banner_key = 20;
+  string icon_key = 21;
+  uint32 banner_focus_x = 22;
+  uint32 banner_focus_y = 23;
+
+  Palette dark = 30;
+  Palette light = 31;
+
+  // The artwork the client asked for and did not already hold. Empty on a push,
+  // where the client compares keys and asks if it is missing one.
+  repeated Art art = 40;
+
+  // sRGB as "#rrggbb"; empty means the client keeps its own.
+  message Palette {
+    string accent = 1;
+    string surface = 2;
+    string aura_from = 3;
+    string aura_to = 4;
+  }
+
+  // Toned, not coloured: a per-tag hex would be a second unclamped colour
+  // channel and would clash with whichever theme the viewer picked.
+  message Tag {
+    string label = 1;
+    enum Tone {
+      NEUTRAL = 0;
+      OK = 1;
+      WARN = 2;
+      BAD = 3;
+      ACCENT = 4;
+    }
+    Tone tone = 2;
+    string href = 3;
+  }
+
+  // One image, by the content key that names it.
+  message Art {
+    string key = 1;
+    // Sniffed from the bytes by the server, never echoed from an upload header.
+    string content_type = 2;
+    bytes bytes = 3;
   }
 }
 

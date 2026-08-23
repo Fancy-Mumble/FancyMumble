@@ -290,7 +290,7 @@ pub struct SettingsUpdate {
 pub struct SettingsQuery {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ServerConfigEnvelope {
-    #[prost(oneof = "server_config_envelope::Body", tags = "1, 2, 3")]
+    #[prost(oneof = "server_config_envelope::Body", tags = "1, 2, 3, 4, 5")]
     pub body: ::core::option::Option<server_config_envelope::Body>,
 }
 /// Nested message and enum types in `ServerConfigEnvelope`.
@@ -303,6 +303,148 @@ pub mod server_config_envelope {
         Values(super::ConfigValues),
         #[prost(message, tag = "3")]
         Update(super::ConfigUpdate),
+        #[prost(message, tag = "4")]
+        LiveryQuery(super::LiveryQuery),
+        #[prost(message, tag = "5")]
+        Livery(super::LiveryDoc),
+    }
+}
+/// "Send me this server's livery, and the artwork I do not already hold."
+///
+/// The wire shape of `serverconfig.Livery`, which is the mesh one and stays
+/// there: the two planes never import each other's types, and this pairing is
+/// the same one `ConfigValues` has with `Snapshot`.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct LiveryQuery {
+    /// Content keys the client already has cached. The reply carries only the art
+    /// whose key is not named here, so an operator editing a motto costs a few
+    /// hundred bytes rather than half a megabyte of banner the client already has.
+    #[prost(string, repeated, tag = "1")]
+    pub have_keys: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+/// What a server says it looks like. Every field is independently optional and
+/// empty means "keep the client's", so a server that sent only a tagline gets
+/// exactly that.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LiveryDoc {
+    #[prost(uint64, tag = "1")]
+    pub version: u64,
+    /// Truncated SHA-256 over the canonical form, the same value the UDP ping
+    /// carries. Repeated here so a client that never saw the ping -- UDP blocked,
+    /// or a first connection -- still has something to cache against.
+    #[prost(bytes = "vec", tag = "2")]
+    pub digest: ::prost::alloc::vec::Vec<u8>,
+    #[prost(string, tag = "10")]
+    pub display_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "11")]
+    pub tagline: ::prost::alloc::string::String,
+    /// Plain text, rendered as plain text. There is no markup field, deliberately.
+    #[prost(string, tag = "12")]
+    pub motd: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "13")]
+    pub tags: ::prost::alloc::vec::Vec<livery_doc::Tag>,
+    #[prost(string, tag = "14")]
+    pub rules_url: ::prost::alloc::string::String,
+    #[prost(string, tag = "20")]
+    pub banner_key: ::prost::alloc::string::String,
+    #[prost(string, tag = "21")]
+    pub icon_key: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "22")]
+    pub banner_focus_x: u32,
+    #[prost(uint32, tag = "23")]
+    pub banner_focus_y: u32,
+    #[prost(message, optional, tag = "30")]
+    pub dark: ::core::option::Option<livery_doc::Palette>,
+    #[prost(message, optional, tag = "31")]
+    pub light: ::core::option::Option<livery_doc::Palette>,
+    /// The artwork the client asked for and did not already hold. Empty on a push,
+    /// where the client compares keys and asks if it is missing one.
+    #[prost(message, repeated, tag = "40")]
+    pub art: ::prost::alloc::vec::Vec<livery_doc::Art>,
+}
+/// Nested message and enum types in `LiveryDoc`.
+pub mod livery_doc {
+    /// sRGB as "#rrggbb"; empty means the client keeps its own.
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+    pub struct Palette {
+        #[prost(string, tag = "1")]
+        pub accent: ::prost::alloc::string::String,
+        #[prost(string, tag = "2")]
+        pub surface: ::prost::alloc::string::String,
+        #[prost(string, tag = "3")]
+        pub aura_from: ::prost::alloc::string::String,
+        #[prost(string, tag = "4")]
+        pub aura_to: ::prost::alloc::string::String,
+    }
+    /// Toned, not coloured: a per-tag hex would be a second unclamped colour
+    /// channel and would clash with whichever theme the viewer picked.
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+    pub struct Tag {
+        #[prost(string, tag = "1")]
+        pub label: ::prost::alloc::string::String,
+        #[prost(enumeration = "tag::Tone", tag = "2")]
+        pub tone: i32,
+        #[prost(string, tag = "3")]
+        pub href: ::prost::alloc::string::String,
+    }
+    /// Nested message and enum types in `Tag`.
+    pub mod tag {
+        #[derive(
+            Clone,
+            Copy,
+            Debug,
+            PartialEq,
+            Eq,
+            Hash,
+            PartialOrd,
+            Ord,
+            ::prost::Enumeration
+        )]
+        #[repr(i32)]
+        pub enum Tone {
+            Neutral = 0,
+            Ok = 1,
+            Warn = 2,
+            Bad = 3,
+            Accent = 4,
+        }
+        impl Tone {
+            /// String value of the enum field names used in the ProtoBuf definition.
+            ///
+            /// The values are not transformed in any way and thus are considered stable
+            /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+            pub fn as_str_name(&self) -> &'static str {
+                match self {
+                    Self::Neutral => "NEUTRAL",
+                    Self::Ok => "OK",
+                    Self::Warn => "WARN",
+                    Self::Bad => "BAD",
+                    Self::Accent => "ACCENT",
+                }
+            }
+            /// Creates an enum from field names used in the ProtoBuf definition.
+            pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+                match value {
+                    "NEUTRAL" => Some(Self::Neutral),
+                    "OK" => Some(Self::Ok),
+                    "WARN" => Some(Self::Warn),
+                    "BAD" => Some(Self::Bad),
+                    "ACCENT" => Some(Self::Accent),
+                    _ => None,
+                }
+            }
+        }
+    }
+    /// One image, by the content key that names it.
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+    pub struct Art {
+        #[prost(string, tag = "1")]
+        pub key: ::prost::alloc::string::String,
+        /// Sniffed from the bytes by the server, never echoed from an upload header.
+        #[prost(string, tag = "2")]
+        pub content_type: ::prost::alloc::string::String,
+        #[prost(bytes = "vec", tag = "3")]
+        pub bytes: ::prost::alloc::vec::Vec<u8>,
     }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]

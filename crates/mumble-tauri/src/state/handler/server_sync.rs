@@ -35,6 +35,7 @@ impl HandleMessage for mumble_tcp::ServerSync {
         ctx.request_channel_descriptions();
         ctx.request_channel_permissions();
         ctx.register_push_subscribe();
+        ctx.request_livery();
         ctx.init_pchat();
     }
 }
@@ -358,6 +359,43 @@ impl HandlerContext {
             {
                 Ok(()) => info!("push subscribe: registration sent to server"),
                 Err(e) => warn!("push subscribe: failed to send registration: {e}"),
+            }
+        });
+    }
+
+    /// Ask the server what it looks like.
+    ///
+    /// Sent after sync rather than during the handshake, because it is
+    /// presentation: nothing about connecting waits on it, and a server that
+    /// never answers leaves the client on its own colours.
+    ///
+    /// The keys already cached are named, so a reconnect to a server whose
+    /// banner has not changed carries the document and no artwork at all.
+    fn request_livery(&self) {
+        let (handle, is_fancy, have_keys) = {
+            let state = self.shared.lock().ok();
+            state
+                .map(|s| {
+                    (
+                        s.conn.client_handle.clone(),
+                        s.server.fancy_version.is_some(),
+                        s.livery_art.keys().cloned().collect::<Vec<_>>(),
+                    )
+                })
+                .unwrap_or_default()
+        };
+        if !is_fancy {
+            debug!("livery: skipped (non-fancy server)");
+            return;
+        }
+        let Some(handle) = handle else {
+            warn!("livery: no client handle");
+            return;
+        };
+        let _livery_task = tokio::spawn(async move {
+            match handle.send(command::RequestLivery { have_keys }).await {
+                Ok(()) => debug!("livery: requested"),
+                Err(e) => warn!("livery: failed to request: {e}"),
             }
         });
     }

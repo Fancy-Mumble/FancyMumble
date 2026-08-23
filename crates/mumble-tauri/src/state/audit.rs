@@ -22,6 +22,16 @@ impl AppState {
         guard.audit_config.clone()
     }
 
+    /// What the open server says it looks like, if it has said.
+    ///
+    /// Read on mount as well as pushed, so a reload or a late-mounting pack
+    /// paints branding it already has rather than waiting for the next change.
+    pub fn get_livery(&self) -> Option<crate::state::LiverySnapshot> {
+        let snapshot = self.inner.snapshot();
+        let guard = snapshot.lock().ok()?;
+        guard.livery.clone()
+    }
+
     /// Send an audit query / live-tail subscription / chain verification.
     pub async fn query_audit_log(&self, args: AuditQueryArgs) -> Result<(), String> {
         let handle = {

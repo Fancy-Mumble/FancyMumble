@@ -54,6 +54,9 @@ const AUDIT: u16 = 1012;
 /// Outer type for chat and its history - which is where scheduled messages
 /// live, because at the due time a scheduled message *is* a text message.
 const TEXT: u16 = 1005;
+/// Outer type for runtime-mutable settings, which is where livery lives:
+/// `server-config` owns the document, so its envelope carries it.
+const SERVER_CONFIG: u16 = 1013;
 
 /// The page size the server caps a query at, mirrored so the client can say
 /// `has_more` from the size of the page it got back.
@@ -356,6 +359,17 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
                 )),
             };
             return Some((PCHAT, envelope.encode_to_vec()));
+        }
+        ControlMessage::FancyLiveryQuery(query) => {
+            return Some((
+                SERVER_CONFIG,
+                fancy::domain::ServerConfigEnvelope {
+                    body: Some(fancy::domain::server_config_envelope::Body::LiveryQuery(
+                        query.clone(),
+                    )),
+                }
+                .encode_to_vec(),
+            ));
         }
         ControlMessage::PchatFetch(fetch) => {
             let envelope = fancy::pchat::PchatEnvelope {
@@ -732,6 +746,17 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 _ => None,
             })
         }
+        SERVER_CONFIG => {
+            let envelope = fancy::domain::ServerConfigEnvelope::decode(payload)?;
+            Ok(match envelope.body {
+                Some(fancy::domain::server_config_envelope::Body::Livery(doc)) => {
+                    Some(ControlMessage::FancyServerLivery(doc))
+                }
+                // The settings half of this envelope has no `ControlMessage`
+                // yet; livery is the first thing on 1013 the client acts on.
+                _ => None,
+            })
+        }
         TEXT => {
             use fancy::feature::text_envelope::Body as Text;
 
@@ -1101,6 +1126,67 @@ fn unhex(value: &str) -> Vec<u8> {
 mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
     use super::*;
+
+    #[test]
+    fn a_livery_document_comes_back_off_the_wire() {
+        // Without this arm the client sends and receives nothing, silently, and
+        // the symptom is a feature that looks implemented and does nothing.
+        let payload = fancy::domain::ServerConfigEnvelope {
+            body: Some(fancy::domain::server_config_envelope::Body::Livery(
+                fancy::domain::LiveryDoc {
+                    version: 3,
+                    digest: vec![1, 2, 3, 4, 5, 6, 7, 8],
+                    tagline: "cozy corner".to_owned(),
+                    ..Default::default()
+                },
+            )),
+        }
+        .encode_to_vec();
+
+        match from_canon(SERVER_CONFIG, &payload).expect("decodes") {
+            Some(ControlMessage::FancyServerLivery(doc)) => {
+                assert_eq!(doc.tagline, "cozy corner");
+                assert_eq!(doc.version, 3);
+                assert_eq!(doc.digest.len(), 8);
+            }
+            other => panic!("not a livery: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_settings_half_of_1013_is_still_ignored_rather_than_mistaken_for_livery() {
+        let payload = fancy::domain::ServerConfigEnvelope {
+            body: Some(fancy::domain::server_config_envelope::Body::Values(
+                fancy::domain::ConfigValues {
+                    settings: Vec::new(),
+                    version: 1,
+                },
+            )),
+        }
+        .encode_to_vec();
+        assert!(from_canon(SERVER_CONFIG, &payload).expect("decodes").is_none());
+    }
+
+
+    #[test]
+    fn a_livery_query_is_framed_on_the_service_that_owns_the_document() {
+        let (type_id, payload) = to_canon(&ControlMessage::FancyLiveryQuery(
+            fancy::domain::LiveryQuery {
+                have_keys: vec!["aa".to_owned()],
+            },
+        ))
+        .expect("livery has a canon form");
+        assert_eq!(type_id, SERVER_CONFIG);
+
+        let envelope =
+            fancy::domain::ServerConfigEnvelope::decode(payload.as_slice()).expect("an envelope");
+        match envelope.body {
+            Some(fancy::domain::server_config_envelope::Body::LiveryQuery(query)) => {
+                assert_eq!(query.have_keys, vec!["aa".to_owned()]);
+            }
+            other => panic!("not a livery query: {other:?}"),
+        }
+    }
 
     #[test]
     fn a_vote_arrives_with_the_channel_its_card_is_held_under() {

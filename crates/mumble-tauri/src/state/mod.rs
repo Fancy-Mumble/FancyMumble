@@ -31,6 +31,7 @@ pub use file_server::{
     UploadBytesRequest, UploadRequest, UploadResponse,
 };
 mod handler;
+pub(crate) use handler::LiverySnapshot;
 pub(crate) mod hash_names;
 pub(crate) mod local_cache;
 mod account;
@@ -235,6 +236,15 @@ pub(super) struct SharedState {
     /// Latest audit-plugin configuration snapshot (`None` until a
     /// `FancyAuditConfig` arrives; only audit admins receive it).
     pub audit_config: Option<AuditConfigSnapshot>,
+    /// What the open server says it looks like, or `None` for the great
+    /// majority that say nothing.
+    pub livery: Option<LiverySnapshot>,
+    /// Livery artwork as `data:` URIs, keyed by the content hash that names it.
+    ///
+    /// Separate from the document because it outlives it: a live change pushes
+    /// a document with no art at all, and the point of keying on a content hash
+    /// is that unchanged artwork is never sent twice.
+    pub livery_art: HashMap<String, String>,
     /// Cached snapshot of the most recent `PluginRegistry` the server
     /// has broadcast.  The protobuf message is delivered once after
     /// `ServerSync` and never resent, so we cache it here to let the

@@ -3,7 +3,7 @@
 //! [`TcpMessageType`] maps numeric wire IDs to their protobuf types.
 //! [`ControlMessage`] and [`UdpMessage`] carry fully decoded payloads.
 //! [`ServerMessage`] is the unified inbound type used by the work queue.
-use crate::proto::{mumble_tcp, mumble_udp};
+use crate::proto::{fancy, mumble_tcp, mumble_udp};
 
 /// Mumble TCP message type IDs as defined by the protocol.
 /// Each variant maps to a protobuf message with a fixed numeric ID
@@ -202,6 +202,14 @@ pub enum TcpMessageType {
     FancyAuditConfig = 170,
     /// Fancy Mumble: admin submits changed audit configuration.
     FancyAuditConfigUpdate = 171,
+    /// Fancy Mumble: client asks for the server's livery.
+    ///
+    /// Epoch-0 has no livery message and never will; these two ids are local
+    /// tags that never reach a wire. The canon carries both inside outer type
+    /// 1013, which is the service that owns the document.
+    FancyLiveryQuery = 172,
+    /// Fancy Mumble: server sends what it looks like.
+    FancyServerLivery = 173,
     /// Fancy Mumble: generic plugin envelope (bidirectional).
     PluginMessage = 200,
     /// Fancy Mumble: server enumerates loaded plugins after `ServerSync`.
@@ -433,6 +441,15 @@ pub enum ControlMessage {
     FancyAuditConfig(mumble_tcp::FancyAuditConfig),
     /// Fancy: admin submits changed audit configuration.
     FancyAuditConfigUpdate(mumble_tcp::FancyAuditConfigUpdate),
+    /// Fancy: client asks for the server's livery, naming the artwork it holds.
+    ///
+    /// Carries the canon type rather than a hand-written twin. Every other
+    /// variant here wraps an epoch-0 message because one exists; livery has no
+    /// epoch-0 form at all, so a second identical struct would be translation
+    /// between a shape and itself.
+    FancyLiveryQuery(fancy::domain::LiveryQuery),
+    /// Fancy: server sends what it looks like - banner, mark, motto, palette.
+    FancyServerLivery(fancy::domain::LiveryDoc),
     /// Fancy: generic plugin envelope (bidirectional).
     PluginMessage(mumble_tcp::PluginMessage),
     /// Fancy: server enumerates loaded plugins.
@@ -472,6 +489,7 @@ message_type_mapping! {
     PchatEpochCountersig, PchatKeyHolderReport, PchatKeyHoldersQuery,
     PchatKeyHoldersList, PchatKeyChallenge, PchatKeyChallengeResponse,
     PchatKeyChallengeResult, PchatDeleteMessages, PchatOfflineQueueDrain,
+    FancyLiveryQuery, FancyServerLivery,
     PchatReaction, PchatReactionDeliver, PchatReactionFetchResponse,
     WebRtcSignal, PchatSenderKeyDistribution,
     FancyPushRegister, FancyPushUpdate, FancyCustomReactionsConfig,

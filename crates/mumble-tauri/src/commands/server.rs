@@ -40,6 +40,14 @@ pub(crate) fn get_welcome_text(state: tauri::State<'_, AppState>) -> Option<Stri
     state.welcome_text()
 }
 
+/// What the open server says it looks like, or `None` when it has said nothing.
+#[tauri::command]
+pub(crate) fn get_livery(
+    state: tauri::State<'_, AppState>,
+) -> Option<crate::state::LiverySnapshot> {
+    state.get_livery()
+}
+
 /// Ping a Mumble server to measure latency and retrieve server info.
 ///
 /// Performs two concurrent probes:
@@ -107,6 +115,9 @@ fn format_version_legacy(v: u32) -> Option<String> {
 /// Returns `(user_count, max_user_count, server_version, livery_digest)`.
 /// Tries the protobuf format first; falls back to the legacy 12-byte
 /// format if the server doesn't respond to protobuf within the timeout.
+/// The protobuf UDP packet type for a ping, as `MumbleUDP` defines it.
+const PROTOBUF_PING: u8 = 0x01;
+
 type PingInfo = (Option<u32>, Option<u32>, Option<String>, Option<String>);
 
 async fn udp_ping_server_info(addr: &str) -> Result<PingInfo, ()> {
@@ -122,20 +133,27 @@ async fn udp_ping_server_info(addr: &str) -> Result<PingInfo, ()> {
         .unwrap_or_default()
         .as_millis() as u64;
 
-    // Try protobuf ping first (Mumble 1.5+ servers)
+    // Framed by the protocol crate rather than by hand.
+    //
+    // This built the packet itself and pushed `0x20`, which is the *legacy*
+    // header (type 1, target 0), not the protobuf marker `0x01`. Every 1.5+
+    // server answered nothing, the code fell through to the legacy probe below,
+    // and the ping "worked" -- so the bug was invisible for as long as the
+    // legacy reply carried everything anyone read. It does not carry the livery
+    // digest, and cannot: it is six fixed big-endian u32s.
     let ping = mumble_protocol::proto::mumble_udp::Ping {
         timestamp: ts,
         request_extended_information: true,
         ..Default::default()
     };
-    let mut buf = Vec::with_capacity(16);
-    buf.push(0x20); // UDP Ping type marker
-    ping.encode(&mut buf).map_err(|_| ())?;
+    let buf = mumble_protocol::transport::udp::encode_udp_message(
+        &mumble_protocol::message::UdpMessage::Ping(ping),
+    );
     let _sent = sock.send(&buf).await.map_err(|_| ())?;
 
     let mut recv_buf = [0u8; 128];
     if let Ok(Ok(n)) = timeout(Duration::from_secs(2), sock.recv(&mut recv_buf)).await {
-        if n > 1 && recv_buf[0] == 0x20 {
+        if n > 1 && recv_buf[0] == PROTOBUF_PING {
             // Protobuf response
             if let Ok(resp) = mumble_protocol::proto::mumble_udp::Ping::decode(&recv_buf[1..n]) {
                 if resp.user_count > 0 || resp.max_user_count > 0 || resp.server_version_v2 > 0 {
@@ -204,4 +222,31 @@ async fn udp_ping_server_info(addr: &str) -> Result<PingInfo, ()> {
     }
 
     Ok((None, None, None, None))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Drive the real probe against a running server.
+    ///
+    /// Ignored by default because it needs one. `STARLING_PING_ADDR=host:port
+    /// cargo test -p mumble-tauri -- --ignored livery_probe` runs it, and it is
+    /// how the marker-byte bug was caught: every assertion below passed against
+    /// the legacy fallback except the digest, which that format cannot carry.
+    #[tokio::test]
+    #[ignore = "needs a live server; set STARLING_PING_ADDR"]
+    async fn livery_probe_against_a_live_server() {
+        let Ok(addr) = std::env::var("STARLING_PING_ADDR") else {
+            panic!("set STARLING_PING_ADDR=host:port");
+        };
+        let (users, max_users, version, digest) = udp_ping_server_info(&addr)
+            .await
+            .expect("the server answered");
+
+        assert!(max_users.is_some(), "no extended information came back");
+        println!("users={users:?} max={max_users:?} version={version:?} digest={digest:?}");
+        let digest = digest.expect("a Fancy server always says, even if it says nothing");
+        assert_eq!(digest.len(), 16, "eight bytes as lowercase hex");
+    }
 }

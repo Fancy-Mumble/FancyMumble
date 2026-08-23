@@ -223,6 +223,11 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
     let type_id = msg.type_id();
     let payload = match msg {
         Version(m) => m.encode_to_vec(),
+        // Local tags with no epoch-0 wire form. `to_canon` frames both inside
+        // outer type 1013 before anything reaches here; a raw one is refused
+        // upstream of this, like every other canon-only message.
+        FancyLiveryQuery(m) => m.encode_to_vec(),
+        FancyServerLivery(m) => m.encode_to_vec(),
         Authenticate(m) => m.encode_to_vec(),
         Ping(m) => m.encode_to_vec(),
         Reject(m) => m.encode_to_vec(),
@@ -335,6 +340,16 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
 
     let msg = match msg_type {
         Version => ControlMessage::Version(mumble_tcp::Version::decode(payload)?),
+        FancyLiveryQuery => {
+            ControlMessage::FancyLiveryQuery(crate::proto::fancy::domain::LiveryQuery::decode(
+                payload,
+            )?)
+        }
+        FancyServerLivery => {
+            ControlMessage::FancyServerLivery(crate::proto::fancy::domain::LiveryDoc::decode(
+                payload,
+            )?)
+        }
         UdpTunnel => ControlMessage::UdpTunnel(payload.to_vec()),
         Authenticate => ControlMessage::Authenticate(mumble_tcp::Authenticate::decode(payload)?),
         Ping => ControlMessage::Ping(mumble_tcp::Ping::decode(payload)?),
