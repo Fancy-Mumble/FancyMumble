@@ -238,6 +238,12 @@ describe("AuroraApp", () => {
     expect(screen.queryByLabelText("Search channels")).toBeNull();
   });
 
+  // The design sheet is one very large page, and each platform switch re-renders
+  // all of it: ~2.4s of pure layout on an idle machine, which the default 5s
+  // budget only just covers and misses once the rest of the suite is competing
+  // for the CPU. The work is synchronous - there is nothing here to wait for -
+  // so the timeout is raised for this test rather than globally, where it would
+  // hide a genuine hang somewhere else.
   it("previews native title bars for each platform", () => {
     renderDesignSheet();
     expect(screen.getByLabelText("Windows window controls")).toBeTruthy();
@@ -247,5 +253,5 @@ describe("AuroraApp", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Linux" }));
     expect(screen.getByLabelText("Linux window controls")).toBeTruthy();
-  });
+  }, 20_000);
 });
