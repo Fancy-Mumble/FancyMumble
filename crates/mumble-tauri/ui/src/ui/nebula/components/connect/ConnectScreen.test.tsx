@@ -1,11 +1,13 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { alpha } from "@mui/material/styles";
+import { TID } from "@core/testids";
 import type { SavedServer } from "@core/types";
 import type { ServerLivery } from "../../livery";
 import { serverTint } from "../../selectors";
 import { withNebulaTheme } from "../../testTheme";
-import { ConnectScreen } from "./ConnectScreen";
+import { ADDRESS_CHIP, ConnectScreen } from "./ConnectScreen";
+import { contrast } from "../../livery";
 
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
 
@@ -137,5 +139,152 @@ describe("ConnectScreen", () => {
     } as never);
     renderConnect();
     await waitFor(() => expect(screen.getByText("offline")).toBeTruthy());
+  });
+});
+
+/**
+ * A page with no branding on it has several possible causes and, without this,
+ * exactly one appearance. The dot names which one.
+ */
+describe("ConnectScreen livery indicator", () => {
+  const online = {
+    online: true,
+    latency_ms: 20,
+    user_count: 4,
+    max_user_count: 101,
+    server_version: "1.6.0",
+  };
+
+  async function statusOf(): Promise<string | null> {
+    const dot = await screen.findByTestId(TID.connectLiveryStatus);
+    return dot.getAttribute("data-livery-status");
+  }
+
+  it("says the branding is live when it came from an open connection", async () => {
+    invokeMock.mockResolvedValue({ ...online, livery_digest: "aaaa" } as never);
+    renderConnect({ version: 1, digest: "aaaa", tagline: "live", tags: [], palette: {} });
+    await waitFor(async () => expect(await statusOf()).toBe("live"));
+  });
+
+  it("fetches branding this client has not held, without joining the server", async () => {
+    // A livery is readable the way the user count is - by asking. Nothing here
+    // waits for the user to connect first.
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "ping_server") return Promise.resolve({ ...online, livery_digest: "aaaa" });
+      if (command === "probe_livery") return new Promise(() => undefined); // still out
+      return Promise.resolve({});
+    });
+    renderConnect();
+    await waitFor(async () => expect(await statusOf()).toBe("fetching"));
+    expect(invokeMock).toHaveBeenCalledWith("probe_livery", { host: "localhost", port: 64738 });
+  });
+
+  it("draws what the fetch came back with instead of loading for ever", async () => {
+    // Regression: recording the attempt flips `resolved.fetch` false, which
+    // re-runs the fetching effect. When that effect cancelled itself on
+    // cleanup, the answer arrived to a listener that had already given up and
+    // the dot pulsed "loading" until the page was left.
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "ping_server") return Promise.resolve({ ...online, livery_digest: "aaaa" });
+      if (command === "probe_livery")
+        return Promise.resolve({
+          version: 3,
+          digest: "aaaa",
+          tagline: "fetched without joining",
+          tags: [],
+          palette: {},
+        });
+      return Promise.resolve({});
+    });
+    renderConnect();
+    await waitFor(() => expect(screen.getByText("fetched without joining")).toBeTruthy());
+    expect(await statusOf()).toBe("cached");
+  });
+
+  it("asks only once for the same document", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "ping_server") return Promise.resolve({ ...online, livery_digest: "aaaa" });
+      if (command === "probe_livery")
+        return Promise.resolve({ version: 3, digest: "aaaa", tags: [], palette: {} });
+      return Promise.resolve({});
+    });
+    // Calls accumulate across this file; only this render's are the subject.
+    invokeMock.mockClear();
+    renderConnect();
+    await waitFor(async () => expect(await statusOf()).toBe("cached"));
+    const asks = invokeMock.mock.calls.filter(([command]) => command === "probe_livery");
+    expect(asks).toHaveLength(1);
+  });
+
+  it("says so when the branding could not be fetched", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "ping_server") return Promise.resolve({ ...online, livery_digest: "aaaa" });
+      if (command === "probe_livery") return Promise.reject(new Error("refused"));
+      return Promise.resolve({});
+    });
+    renderConnect();
+    await waitFor(async () => expect(await statusOf()).toBe("failed"));
+  });
+
+  it("distinguishes a server with no branding from one that cannot say", async () => {
+    invokeMock.mockResolvedValue({ ...online, livery_digest: "" } as never);
+    const none = renderConnect();
+    await waitFor(async () => expect(await statusOf()).toBe("absent"));
+    none.unmount();
+
+    invokeMock.mockResolvedValue({ ...online, livery_digest: null } as never);
+    renderConnect();
+    await waitFor(async () => expect(await statusOf()).toBe("unverified"));
+  });
+
+  it("says so when the server could not be reached to ask", async () => {
+    invokeMock.mockResolvedValue({
+      online: false,
+      latency_ms: null,
+      user_count: null,
+      max_user_count: null,
+      server_version: null,
+    } as never);
+    renderConnect();
+    await waitFor(async () => expect(await statusOf()).toBe("unreachable"));
+  });
+});
+
+/**
+ * The address chip is the one thing on this page a server cannot restyle, and
+ * the reason the name above it can safely be the operator's chosen one. That
+ * guarantee is worth nothing if the chip itself is unreadable, and what sits
+ * behind it is a picture the server picked - so the floor has to hold against
+ * the worst banner rather than against the one in front of us.
+ */
+describe("the address chip stays readable over any banner", () => {
+  /** `over` seen through the chip's scrim, as the compositor would blend it. */
+  function throughScrim(over: readonly [number, number, number]): [number, number, number] {
+    const { scrim, scrimAlpha } = ADDRESS_CHIP;
+    return over.map((channel, at) =>
+      Math.round(scrim[at] * scrimAlpha + channel * (1 - scrimAlpha)),
+    ) as [number, number, number];
+  }
+
+  /** The chip's ink over that composite. */
+  function ink(ground: readonly [number, number, number]): [number, number, number] {
+    const { ink: colour, inkAlpha } = ADDRESS_CHIP;
+    return ground.map((channel, at) =>
+      Math.round(colour[at] * inkAlpha + channel * (1 - inkAlpha)),
+    ) as [number, number, number];
+  }
+
+  // WCAG 2.1 AA for body text. The chip is small, so this is the floor that
+  // applies - not the 3:1 one large text gets.
+  const FLOOR = 4.5;
+
+  it.each([
+    ["a white banner", [255, 255, 255]],
+    ["a black banner", [0, 0, 0]],
+    ["a bright bokeh banner", [214, 226, 240]],
+    ["a saturated banner", [255, 214, 0]],
+  ])("clears AA on %s", (_what, banner) => {
+    const ground = throughScrim(banner as [number, number, number]);
+    expect(contrast(ink(ground), ground)).toBeGreaterThanOrEqual(FLOOR);
   });
 });

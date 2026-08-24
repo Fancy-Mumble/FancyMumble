@@ -1,9 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CONTRAST_ACCENT,
+  IMAGE_BOUNDS,
+  LIMITS,
   clampHex,
   contrast,
   diffLivery,
+  fitLiveryImage,
   fromSnapshot,
   isHexColour,
   type LiveryDocument,
@@ -163,5 +166,133 @@ describe("fromSnapshot", () => {
     };
     const document = fromSnapshot(snapshot);
     expect(diffLivery(document, document)).toEqual({});
+  });
+});
+
+/**
+ * A stand-in for the webview's decoder and encoder.
+ *
+ * jsdom has neither, and the real ones would make the test about WebP's
+ * compression rather than about the ladder. `weight` models the one property
+ * the ladder actually depends on: bytes fall with area and with quality.
+ */
+function stubCodec(source: { width: number; height: number }, weight: number) {
+  const encoded: { width: number; height: number; quality: number }[] = [];
+  vi.stubGlobal("createImageBitmap", () =>
+    Promise.resolve({ ...source, close: () => undefined }),
+  );
+  vi.stubGlobal(
+    "OffscreenCanvas",
+    class {
+      constructor(
+        readonly width: number,
+        readonly height: number,
+      ) {}
+      getContext() {
+        return { drawImage: () => undefined };
+      }
+      convertToBlob({ quality }: { quality: number }) {
+        encoded.push({ width: this.width, height: this.height, quality });
+        const size = Math.round(this.width * this.height * quality * weight);
+        // Sized, not filled: the real encoder's output is megabytes at the top
+        // of the ladder, and the fitter is supposed to weigh an attempt without
+        // reading it.
+        const blob = {
+          size,
+          type: "image/webp",
+          arrayBuffer: () => Promise.resolve(new ArrayBuffer(size)),
+        };
+        return Promise.resolve(blob as unknown as Blob);
+      }
+    },
+  );
+  return encoded;
+}
+
+describe("fitLiveryImage", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("hands back artwork that already fits, byte for byte", async () => {
+    // An operator who prepared a banner gets the encoding they prepared: a
+    // re-compression of it would throw away a deliberate choice to save
+    // nothing.
+    stubCodec({ width: 1200, height: 400 }, 1);
+    const original = new Uint8Array(40_000).fill(7);
+    const fitted = await fitLiveryImage(new Blob([original], { type: "image/png" }), "banner");
+
+    expect(fitted.resized).toBe(false);
+    expect(fitted.bytes).toStrictEqual(original);
+    expect([fitted.width, fitted.height]).toEqual([1200, 400]);
+  });
+
+  it("scales a camera-sized picture into the box the banner is painted in", async () => {
+    // The case that produced "Failed to buffer the request body": 4032x3024
+    // off a phone is refused by the transport before the API can say a word
+    // about artwork.
+    const encoded = stubCodec({ width: 4032, height: 3024 }, 0.02);
+    const fitted = await fitLiveryImage(
+      new Blob([new Uint8Array(6 * 1024 * 1024)], { type: "image/jpeg" }),
+      "banner",
+    );
+
+    expect(fitted.resized).toBe(true);
+    expect(fitted.bytes.length).toBeLessThanOrEqual(LIMITS.bannerBytes);
+    expect(fitted.width).toBeLessThanOrEqual(IMAGE_BOUNDS.banner.width);
+    expect(fitted.height).toBeLessThanOrEqual(IMAGE_BOUNDS.banner.height);
+    // Aspect ratio is the picture's, not the box's - the connect screen crops
+    // with `object-fit`, and stretching here would bake the distortion in.
+    expect(fitted.width / fitted.height).toBeCloseTo(4032 / 3024, 2);
+    // The first encode is tried at the largest size that fits the box.
+    expect(encoded[0].quality).toBe(0.92);
+  });
+
+  it("drops quality before it drops pixels, and pixels only when it must", async () => {
+    // A picture that fits the box but not the cap: the ladder walks quality
+    // down at full size first, because a smaller image is the more visible
+    // loss.
+    const encoded = stubCodec({ width: 256, height: 256 }, 4);
+    const fitted = await fitLiveryImage(
+      new Blob([new Uint8Array(900_000), new Uint8Array(0)], { type: "image/png" }),
+      "icon",
+    );
+
+    expect(fitted.bytes.length).toBeLessThanOrEqual(LIMITS.iconBytes);
+    const sizes = encoded.map((step) => step.width);
+    expect(sizes[0]).toBe(256);
+    expect(sizes.at(-1)).toBeLessThan(256);
+    expect(fitted.width).toBe(sizes.at(-1));
+  });
+
+  it("stops shrinking rather than uploading a thumbnail", async () => {
+    // Nothing can make this fit. Sending the smallest attempt leaves the
+    // refusal to the server, which names the real number - and a 16-pixel
+    // banner nobody asked for would be the worse answer.
+    stubCodec({ width: 4000, height: 1000 }, 1000);
+    const fitted = await fitLiveryImage(
+      new Blob([new Uint8Array(9_000_000)], { type: "image/jpeg" }),
+      "banner",
+    );
+
+    expect(fitted.resized).toBe(true);
+    expect(Math.max(fitted.width, fitted.height)).toBeGreaterThan(48);
+  });
+
+  it("sends the original when the webview cannot decode it at all", async () => {
+    // Not being able to fit an image is not a reason to refuse to upload one.
+    vi.stubGlobal("createImageBitmap", () => Promise.reject(new Error("no decoder")));
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      class {
+        getContext() {
+          return null;
+        }
+      },
+    );
+    const original = new Uint8Array(3_000_000).fill(9);
+    const fitted = await fitLiveryImage(new Blob([original], { type: "image/jpeg" }), "banner");
+
+    expect(fitted.resized).toBe(false);
+    expect(fitted.bytes.length).toBe(original.length);
+    expect([fitted.width, fitted.height]).toEqual([0, 0]);
   });
 });

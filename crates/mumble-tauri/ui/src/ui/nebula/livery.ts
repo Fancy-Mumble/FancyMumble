@@ -56,6 +56,15 @@ export interface LiveryPalette {
 export interface ServerLivery {
   /** Bumped by the server on every accepted change; the memo key. */
   version: number;
+  /**
+   * Lowercase hex, the same eight bytes the UDP ping carries.
+   *
+   * What lets a document stored from a previous visit be checked against a
+   * server that has not been connected to yet - see `liveryCache`. Optional
+   * because a document built by hand in a test, or stored before the field
+   * existed, has none, and an unkeyed document is simply never cached.
+   */
+  digest?: string;
   displayName?: string;
   tagline?: string;
   motd?: string;

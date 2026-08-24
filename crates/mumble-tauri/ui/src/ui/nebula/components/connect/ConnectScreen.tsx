@@ -1,10 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Box, Button, CircularProgress, Switch, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import { getPreferences, updatePreferences } from "@core/preferencesStorage";
+import { TID } from "@core/testids";
 import type { SavedServer, ServerPingResult } from "@core/types";
 import type { ServerLivery } from "../../livery";
+import {
+  forgetCachedLivery,
+  readCachedLivery,
+  writeCachedLivery,
+  type CachedLivery,
+} from "../../liveryCache";
+import {
+  LIVERY_BUSY,
+  LIVERY_TITLE,
+  LIVERY_TONE,
+  resolveLivery,
+  type LiveryStatus,
+  type ProbeState,
+} from "../../liveryStatus";
 import { serverTint } from "../../selectors";
 import { UserAvatar, Stack } from "../primitives";
 import { SectionLabel, StatChip } from "../primitives";
@@ -18,6 +33,81 @@ const TAG_TONE = {
   BAD: "bad",
   ACCENT: "accent",
 } as const;
+
+/**
+ * Where this page's branding came from, as one dot on the address chip.
+ *
+ * Worth drawing because the three failure modes are otherwise indistinguishable
+ * from success: a server with no branding, a server whose branding this client
+ * has never fetched (a document only arrives over a connection, so a page for a
+ * server nobody has connected to cannot have one), and a server that cannot be
+ * reached to ask all render as the same unbranded page.
+ *
+ * It rides on the address chip deliberately. That chip is the one thing on this
+ * screen a livery cannot restyle - which is what makes it the honest place to
+ * report on the livery.
+ */
+/**
+ * The address chip's own ground and ink.
+ *
+ * Named and exported so the contrast floor they have to clear can be asserted
+ * against the worst banner a server could send, rather than eyeballed against
+ * the one that happened to be on screen. See `ConnectScreen.test.tsx`.
+ */
+export const ADDRESS_CHIP = {
+  /** Dark enough that even a white banner composites to a mid tone. */
+  scrim: [10, 14, 24] as const,
+  scrimAlpha: 0.66,
+  ink: [255, 255, 255] as const,
+  inkAlpha: 0.94,
+};
+
+/** Tones that read on the address chip's dark scrim, in either theme. */
+const DOT_COLOURS: Record<"ok" | "warn" | "bad" | "muted", string> = {
+  ok: "#3cd88e",
+  warn: "#ecba55",
+  bad: "#f57e7e",
+  // Legible rather than loud: the resting states say "nothing to do here".
+  muted: "#b9c6e2",
+};
+
+function LiveryDot({ status }: Readonly<{ status: LiveryStatus }>) {
+  const tone = LIVERY_TONE[status];
+  return (
+    <Box
+      component="span"
+      role="img"
+      aria-label={LIVERY_TITLE[status]}
+      data-testid={TID.connectLiveryStatus}
+      data-livery-status={status}
+      sx={() => {
+        // Fixed, not taken from the theme, for the same reason the chip around
+        // it carries its own ground: it sits on a dark scrim over server
+        // artwork, so the *viewer's* light or dark preference says nothing
+        // about what is behind it. The light-theme tones are chosen to read on
+        // a pale page and would all but vanish here.
+        const colour = DOT_COLOURS[tone];
+        return {
+          width: 6,
+          height: 6,
+          flex: "0 0 auto",
+          borderRadius: "50%",
+          background: colour,
+          // A halo on anything the user might want to act on, and none on the
+          // two resting states, so a glance separates them without reading.
+          boxShadow: tone === "muted" ? "none" : `0 0 0 2px ${alpha(colour, 0.24)}`,
+          "@media (forced-colors: active)": { background: "CanvasText", boxShadow: "none" },
+          animation: LIVERY_BUSY.has(status) ? "nebula-livery-probe 1.2s ease-in-out infinite" : undefined,
+          "@keyframes nebula-livery-probe": {
+            "0%, 100%": { opacity: 0.3 },
+            "50%": { opacity: 1 },
+          },
+          "@media (prefers-reduced-motion: reduce)": { animation: "none" },
+        };
+      }}
+    />
+  );
+}
 
 interface ConnectScreenProps {
   server: SavedServer | null;
@@ -48,7 +138,7 @@ interface ConnectScreenProps {
  */
 export function ConnectScreen({
   server,
-  livery = null,
+  livery: liveLivery = null,
   identities,
   connecting,
   error,
@@ -56,6 +146,12 @@ export function ConnectScreen({
   onAddIdentity,
 }: Readonly<ConnectScreenProps>) {
   const [ping, setPing] = useState<ServerPingResult | null>(null);
+  /** What this address said last, from disk or from the fetch below. */
+  const [cached, setCached] = useState<CachedLivery | null>(null);
+  /** Where the out-of-band livery fetch has got to, and for which digest. */
+  const [probe, setProbe] = useState<{ digest: string; state: ProbeState } | null>(null);
+  /** The address-and-digest this screen has already asked for. */
+  const requested = useRef<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   /** Saved-server id the client connects to at launch, or null for none. */
   const [autoConnectId, setAutoConnectId] = useState<string | null>(null);
@@ -87,6 +183,83 @@ export function ConnectScreen({
     };
   }, [server]);
 
+  // A livery document only ever arrives over a connection, so a page for a
+  // server nobody is connected to has nothing to show unless it remembers.
+  useEffect(() => {
+    setCached(null);
+    setProbe(null);
+    requested.current = null;
+    if (!server) return;
+    let active = true;
+    void readCachedLivery(server.host, server.port)
+      .then((entry) => {
+        if (active) setCached(entry);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [server]);
+
+  // What to draw, what to say about where it came from, and whether the
+  // document still has to be fetched.
+  const digest = ping?.livery_digest ?? null;
+  const resolved = resolveLivery({
+    live: liveLivery,
+    cached,
+    ping,
+    // A probe recorded against a different digest says nothing about this one:
+    // the operator changed the livery while this page was open.
+    probe: probe && probe.digest === digest ? probe.state : "idle",
+  });
+
+  // Fetch it the way the user count is fetched - by asking, without joining.
+  // `probe_livery` opens the control connection, sends one query and hangs up;
+  // it never authenticates, so nothing here creates a session on the server.
+  useEffect(() => {
+    if (!server || !resolved.fetch || !digest) return;
+    // Deduplicated on a token rather than cancelled by a cleanup, and the
+    // difference is load-bearing. `resolved.fetch` goes false the instant the
+    // line below records the attempt, which re-runs this effect; a cleanup
+    // that invalidated the request in flight would throw away the answer when
+    // it arrived and leave the page loading for ever. It did exactly that.
+    const token = `${server.host}:${server.port}:${digest}`;
+    if (requested.current === token) return;
+    requested.current = token;
+    setProbe({ digest, state: "running" });
+
+    // No `have_keys`: this holds no art of its own, and a copy the digest has
+    // already contradicted is not a safe thing to claim to hold.
+    void invoke<ServerLivery | null>("probe_livery", {
+      host: server.host,
+      port: server.port,
+    })
+      .then((answer) => {
+        // Superseded - the user moved to another server, or the operator
+        // changed the livery while this was out.
+        if (requested.current !== token) return;
+        if (!answer?.digest) {
+          setProbe({ digest, state: "failed" });
+          return;
+        }
+        setCached({ digest: answer.digest, livery: answer, savedAt: Date.now() });
+        setProbe({ digest, state: "idle" });
+        // Keep it, so the next visit paints before the probe even starts.
+        void writeCachedLivery(server.host, server.port, answer).catch(() => undefined);
+      })
+      .catch(() => {
+        if (requested.current === token) setProbe({ digest, state: "failed" });
+      });
+  }, [server, resolved.fetch, digest]);
+
+  // The server answered that it has no branding. Drop what we remember, or an
+  // operator's removal would never reach a client that had already seen it.
+  useEffect(() => {
+    if (!server || !resolved.forget) return;
+    void forgetCachedLivery(server.host, server.port).catch(() => undefined);
+    setCached(null);
+  }, [server, resolved.forget]);
+
   if (!server)
     return (
       <Stack sx={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 1 }}>
@@ -98,6 +271,10 @@ export function ConnectScreen({
     );
 
   const identity = identities.find((entry) => entry.id === selected) ?? server;
+  // Everything below draws whatever survived resolution - live from an open
+  // connection, remembered from a previous visit, or nothing at all. Which of
+  // those it was is the indicator's job to say, not this page's.
+  const livery = resolved.livery;
   // The server's own name wins over the address, and the operator's chosen name
   // over both. Safe to honour before authentication only because the address
   // chip below cannot be replaced: something unforgeable stays on the screen.
@@ -173,18 +350,47 @@ export function ConnectScreen({
         />
         <Box
           component="span"
-          sx={(theme) => ({
+          title={LIVERY_TITLE[resolved.status]}
+          sx={{
             position: "absolute",
             top: 14,
             right: 18,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "7px",
             px: "10px",
             py: "3px",
             borderRadius: radius("lg"),
-            background: theme.palette.nebula.card2,
             fontSize: 10,
-            color: theme.palette.nebula.muted,
-          })}
+            // Carries its own ground rather than a theme surface token, and
+            // that is the whole point: this chip lies on the banner, and the
+            // banner is a picture the *server* chose. A `card2` background
+            // assumes the page behind it, so over a bright photo the address
+            // went unreadable - on precisely the element that exists to stay
+            // readable no matter what the server sent.
+            //
+            // Dark in both themes for the same reason. The viewer's theme says
+            // nothing about the artwork underneath, so a light-mode chip would
+            // be the same gamble in the other direction.
+            background: `rgba(${ADDRESS_CHIP.scrim.join(",")},${ADDRESS_CHIP.scrimAlpha})`,
+            backdropFilter: "blur(7px)",
+            border: "1px solid rgba(255,255,255,.16)",
+            color: `rgba(${ADDRESS_CHIP.ink.join(",")},${ADDRESS_CHIP.inkAlpha})`,
+            // A busy photo defeats a flat scrim at small sizes; this is what
+            // holds the glyph edges apart from the bokeh behind them.
+            textShadow: "0 1px 2px rgba(0,0,0,.55)",
+            // Under a forced palette the user has already said what they need,
+            // and hand-picked colours are exactly what that setting overrides.
+            "@media (forced-colors: active)": {
+              background: "Canvas",
+              color: "CanvasText",
+              border: "1px solid CanvasText",
+              backdropFilter: "none",
+              textShadow: "none",
+            },
+          }}
         >
+          <LiveryDot status={resolved.status} />
           mumble://{server.host}:{server.port}
         </Box>
       </Box>
