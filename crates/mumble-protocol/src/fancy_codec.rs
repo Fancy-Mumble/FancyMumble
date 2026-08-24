@@ -179,7 +179,9 @@ impl FancyCodec for LegacyCodec {
         // not process it. This is the same set `extract_receiver_sessions`
         // would return no receivers for; asking the policy says so outright
         // rather than inferring it from an empty list.
-        if let Some(MessageSupport { fallback: FallbackPolicy::ServerOnly }) = message_support(&msg)
+        if let Some(MessageSupport {
+            fallback: FallbackPolicy::ServerOnly,
+        }) = message_support(&msg)
         {
             debug!(
                 type_id = msg.type_id(),
@@ -246,9 +248,7 @@ impl FancyCodec for LegacyCodec {
                 patch_sender_session(decoded, sender)
             }
             Err(e) => {
-                warn!(
-                    "failed to decode wrapped Fancy message (type {type_id}): {e}"
-                );
+                warn!("failed to decode wrapped Fancy message (type {type_id}): {e}");
                 msg
             }
         }
@@ -329,7 +329,10 @@ fn channel_members_except_self(state: &ServerState, own_session: u32) -> Vec<u32
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
-    #![allow(deprecated, reason = "tests exercise the legacy PluginDataTransmission wire fields")]
+    #![allow(
+        deprecated,
+        reason = "tests exercise the legacy PluginDataTransmission wire fields"
+    )]
 
     use super::*;
     use crate::proto::mumble_tcp;
@@ -603,14 +606,12 @@ mod tests {
             channel_id: Some(0),
         };
         let payload = prost::Message::encode_to_vec(&original);
-        let wrapped = ControlMessage::PluginDataTransmission(
-            mumble_tcp::PluginDataTransmission {
-                sender_session: Some(2),
-                receiver_sessions: vec![1],
-                data: Some(payload),
-                data_id: Some("fancy-native:131".into()),
-            },
-        );
+        let wrapped = ControlMessage::PluginDataTransmission(mumble_tcp::PluginDataTransmission {
+            sender_session: Some(2),
+            receiver_sessions: vec![1],
+            data: Some(payload),
+            data_id: Some("fancy-native:131".into()),
+        });
         let decoded = codec.decode(wrapped);
         let ControlMessage::FancyTypingIndicator(ti) = decoded else {
             panic!("expected FancyTypingIndicator, got {decoded:?}");
@@ -672,13 +673,12 @@ mod tests {
     fn legacy_codec_wraps_sender_key_distribution() {
         let codec = LegacyCodec;
         let state = state_with_users();
-        let skd = ControlMessage::PchatSenderKeyDistribution(
-            mumble_tcp::PchatSenderKeyDistribution {
+        let skd =
+            ControlMessage::PchatSenderKeyDistribution(mumble_tcp::PchatSenderKeyDistribution {
                 channel_id: Some(0),
                 sender_hash: None,
                 distribution: Some(vec![1, 2, 3]),
-            },
-        );
+            });
 
         let encoded = codec.encode(skd, &state).unwrap();
         let ControlMessage::PluginDataTransmission(pd) = &encoded else {
@@ -696,7 +696,10 @@ mod tests {
         let codec = LegacyCodec;
 
         // Standard message passes through.
-        let ping = ControlMessage::Ping(mumble_tcp::Ping { timestamp: Some(42), ..Default::default() });
+        let ping = ControlMessage::Ping(mumble_tcp::Ping {
+            timestamp: Some(42),
+            ..Default::default()
+        });
         assert!(matches!(codec.decode(ping), ControlMessage::Ping(_)));
 
         // Non-fancy PluginData passes through.
@@ -706,7 +709,10 @@ mod tests {
             data: Some(b"poll-json".to_vec()),
             data_id: Some("fancy-poll".into()),
         });
-        assert!(matches!(codec.decode(pd), ControlMessage::PluginDataTransmission(_)));
+        assert!(matches!(
+            codec.decode(pd),
+            ControlMessage::PluginDataTransmission(_)
+        ));
     }
 
     #[test]
@@ -722,14 +728,12 @@ mod tests {
         };
         let payload = prost::Message::encode_to_vec(&original);
 
-        let wrapped = ControlMessage::PluginDataTransmission(
-            mumble_tcp::PluginDataTransmission {
-                sender_session: Some(5),
-                receiver_sessions: vec![1],
-                data: Some(payload),
-                data_id: Some("fancy-native:120".into()),
-            },
-        );
+        let wrapped = ControlMessage::PluginDataTransmission(mumble_tcp::PluginDataTransmission {
+            sender_session: Some(5),
+            receiver_sessions: vec![1],
+            data: Some(payload),
+            data_id: Some("fancy-native:120".into()),
+        });
 
         let decoded = codec.decode(wrapped);
         let ControlMessage::WebRtcSignal(signal) = decoded else {
@@ -755,10 +759,7 @@ mod tests {
         });
 
         let encoded = codec.encode(original, &state).unwrap();
-        assert!(matches!(
-            encoded,
-            ControlMessage::PluginDataTransmission(_)
-        ));
+        assert!(matches!(encoded, ControlMessage::PluginDataTransmission(_)));
 
         let decoded = codec.decode(encoded);
         let ControlMessage::WebRtcSignal(signal) = decoded else {
@@ -767,10 +768,7 @@ mod tests {
 
         assert_eq!(signal.target_session, Some(2));
         assert_eq!(signal.signal_type, Some(2));
-        assert_eq!(
-            signal.payload.as_deref(),
-            Some(r#"{"sdp":"v=0..."}"#)
-        );
+        assert_eq!(signal.payload.as_deref(), Some(r#"{"sdp":"v=0..."}"#));
     }
 
     #[test]
@@ -778,13 +776,12 @@ mod tests {
         let codec = LegacyCodec;
         let state = state_with_users();
 
-        let original = ControlMessage::PchatSenderKeyDistribution(
-            mumble_tcp::PchatSenderKeyDistribution {
+        let original =
+            ControlMessage::PchatSenderKeyDistribution(mumble_tcp::PchatSenderKeyDistribution {
                 channel_id: Some(0),
                 sender_hash: Some("abc123".into()),
                 distribution: Some(vec![10, 20, 30]),
-            },
-        );
+            });
 
         let encoded = codec.encode(original, &state).unwrap();
         let decoded = codec.decode(encoded);
@@ -803,26 +800,28 @@ mod tests {
         let codec = LegacyCodec;
 
         // Invalid type ID string.
-        let msg = ControlMessage::PluginDataTransmission(
-            mumble_tcp::PluginDataTransmission {
-                sender_session: Some(2),
-                receiver_sessions: vec![1],
-                data: Some(vec![0, 1, 2]),
-                data_id: Some("fancy-native:not-a-number".into()),
-            },
-        );
-        assert!(matches!(codec.decode(msg), ControlMessage::PluginDataTransmission(_)));
+        let msg = ControlMessage::PluginDataTransmission(mumble_tcp::PluginDataTransmission {
+            sender_session: Some(2),
+            receiver_sessions: vec![1],
+            data: Some(vec![0, 1, 2]),
+            data_id: Some("fancy-native:not-a-number".into()),
+        });
+        assert!(matches!(
+            codec.decode(msg),
+            ControlMessage::PluginDataTransmission(_)
+        ));
 
         // Missing payload.
-        let msg = ControlMessage::PluginDataTransmission(
-            mumble_tcp::PluginDataTransmission {
-                sender_session: Some(2),
-                receiver_sessions: vec![1],
-                data: None,
-                data_id: Some("fancy-native:120".into()),
-            },
-        );
-        assert!(matches!(codec.decode(msg), ControlMessage::PluginDataTransmission(_)));
+        let msg = ControlMessage::PluginDataTransmission(mumble_tcp::PluginDataTransmission {
+            sender_session: Some(2),
+            receiver_sessions: vec![1],
+            data: None,
+            data_id: Some("fancy-native:120".into()),
+        });
+        assert!(matches!(
+            codec.decode(msg),
+            ControlMessage::PluginDataTransmission(_)
+        ));
     }
 
     // ---- NativeCodec fallback round-trip -----------------------------
@@ -832,12 +831,10 @@ mod tests {
         let codec = LegacyCodec;
         let state = state_with_users();
 
-        let original = ControlMessage::FancyTypingIndicator(
-            mumble_tcp::FancyTypingIndicator {
-                channel_id: Some(0),
-                actor: None,
-            },
-        );
+        let original = ControlMessage::FancyTypingIndicator(mumble_tcp::FancyTypingIndicator {
+            channel_id: Some(0),
+            actor: None,
+        });
 
         let encoded = codec.encode(original, &state).unwrap();
         let ControlMessage::PluginDataTransmission(mut pd) = encoded else {
@@ -853,7 +850,11 @@ mod tests {
             panic!("expected FancyTypingIndicator after round-trip, got {decoded:?}");
         };
         assert_eq!(ti.channel_id, Some(0));
-        assert_eq!(ti.actor, Some(1), "actor should be patched from sender_session");
+        assert_eq!(
+            ti.actor,
+            Some(1),
+            "actor should be patched from sender_session"
+        );
     }
 
     #[test]
@@ -864,14 +865,12 @@ mod tests {
             channel_id: Some(5),
         };
         let payload = prost::Message::encode_to_vec(&original);
-        let wrapped = ControlMessage::PluginDataTransmission(
-            mumble_tcp::PluginDataTransmission {
-                sender_session: Some(7),
-                receiver_sessions: vec![1],
-                data: Some(payload),
-                data_id: Some("fancy-native:131".into()),
-            },
-        );
+        let wrapped = ControlMessage::PluginDataTransmission(mumble_tcp::PluginDataTransmission {
+            sender_session: Some(7),
+            receiver_sessions: vec![1],
+            data: Some(payload),
+            data_id: Some("fancy-native:131".into()),
+        });
         let decoded = codec.decode(wrapped);
         let ControlMessage::FancyTypingIndicator(ti) = decoded else {
             panic!("expected FancyTypingIndicator, got {decoded:?}");
@@ -914,7 +913,11 @@ mod tests {
             panic!("expected FancyWatchSync after round-trip, got {decoded:?}");
         };
         assert_eq!(ws.session_id.as_deref(), Some("sess-roundtrip"));
-        assert_eq!(ws.actor, Some(1), "actor should be patched from sender_session");
+        assert_eq!(
+            ws.actor,
+            Some(1),
+            "actor should be patched from sender_session"
+        );
         assert!(matches!(ws.event, Some(Event::Start(_))));
     }
 

@@ -159,7 +159,9 @@ impl EncoderPreference {
         let text = raw.to_string_lossy();
         match Self::parse(&text) {
             Some(preference) => {
-                tracing::info!("screenshare: {ENCODER_ENV}={text}; ladder starts at {preference:?}");
+                tracing::info!(
+                    "screenshare: {ENCODER_ENV}={text}; ladder starts at {preference:?}"
+                );
                 preference
             }
             None => {
@@ -392,9 +394,10 @@ pub fn portal_probe_main() -> Result<(), String> {
             pipewire_stream::StreamFrame::Frame(f) => {
                 frames += 1;
                 dims = (f.width, f.height);
-                if let Some(path) = snapshot.as_ref().filter(|_| {
-                    !snapped && started.elapsed() >= std::time::Duration::from_secs(15)
-                }) {
+                if let Some(path) = snapshot
+                    .as_ref()
+                    .filter(|_| !snapped && started.elapsed() >= std::time::Duration::from_secs(15))
+                {
                     snapped = true;
                     match image::save_buffer(
                         path,
@@ -433,9 +436,18 @@ mod tests {
 
     #[test]
     fn each_tier_has_a_name() {
-        assert_eq!(EncoderPreference::parse("vaapi"), Some(EncoderPreference::Vaapi));
-        assert_eq!(EncoderPreference::parse("nvenc"), Some(EncoderPreference::Nvenc));
-        assert_eq!(EncoderPreference::parse("cpu"), Some(EncoderPreference::Cpu));
+        assert_eq!(
+            EncoderPreference::parse("vaapi"),
+            Some(EncoderPreference::Vaapi)
+        );
+        assert_eq!(
+            EncoderPreference::parse("nvenc"),
+            Some(EncoderPreference::Nvenc)
+        );
+        assert_eq!(
+            EncoderPreference::parse("cpu"),
+            Some(EncoderPreference::Cpu)
+        );
     }
 
     #[test]
@@ -443,11 +455,26 @@ mod tests {
         // Whitespace and case come free with pasting a value into a shell or
         // a CI variable; the aliases are the names these tiers go by outside
         // this module (the driver, the vendor, the codec).
-        assert_eq!(EncoderPreference::parse("  NVENC \n"), Some(EncoderPreference::Nvenc));
-        assert_eq!(EncoderPreference::parse("VA-API"), Some(EncoderPreference::Vaapi));
-        assert_eq!(EncoderPreference::parse("nvidia"), Some(EncoderPreference::Nvenc));
-        assert_eq!(EncoderPreference::parse("openh264"), Some(EncoderPreference::Cpu));
-        assert_eq!(EncoderPreference::parse("software"), Some(EncoderPreference::Cpu));
+        assert_eq!(
+            EncoderPreference::parse("  NVENC \n"),
+            Some(EncoderPreference::Nvenc)
+        );
+        assert_eq!(
+            EncoderPreference::parse("VA-API"),
+            Some(EncoderPreference::Vaapi)
+        );
+        assert_eq!(
+            EncoderPreference::parse("nvidia"),
+            Some(EncoderPreference::Nvenc)
+        );
+        assert_eq!(
+            EncoderPreference::parse("openh264"),
+            Some(EncoderPreference::Cpu)
+        );
+        assert_eq!(
+            EncoderPreference::parse("software"),
+            Some(EncoderPreference::Cpu)
+        );
     }
 
     #[test]

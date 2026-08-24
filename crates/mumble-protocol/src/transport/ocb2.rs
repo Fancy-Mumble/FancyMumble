@@ -106,9 +106,7 @@ impl Ocb2CryptState {
             )));
         }
         if client_nonce.len() != AES_BLOCK_SIZE || server_nonce.len() != AES_BLOCK_SIZE {
-            return Err(Error::InvalidState(
-                "OCB2 nonces must be 16 bytes".into(),
-            ));
+            return Err(Error::InvalidState("OCB2 nonces must be 16 bytes".into()));
         }
 
         self.raw_key.copy_from_slice(key);
@@ -177,7 +175,9 @@ impl CryptState for Ocb2CryptState {
         }
 
         if data.len() < 4 {
-            return Err(Error::InvalidState("UDP packet too short for OCB2 header".into()));
+            return Err(Error::InvalidState(
+                "UDP packet too short for OCB2 header".into(),
+            ));
         }
 
         let iv_byte = data[0];
@@ -342,7 +342,10 @@ fn ocb_encrypt(
     while remaining > AES_BLOCK_SIZE {
         s2(&mut delta);
 
-        #[allow(clippy::expect_used, reason = "slice length is guaranteed by while-loop guard")]
+        #[allow(
+            clippy::expect_used,
+            reason = "slice length is guaranteed by while-loop guard"
+        )]
         let plain_block: [u8; AES_BLOCK_SIZE] = plain[offset..offset + AES_BLOCK_SIZE]
             .try_into()
             .expect("slice is AES_BLOCK_SIZE");
@@ -412,7 +415,10 @@ fn ocb_decrypt(
     while remaining > AES_BLOCK_SIZE {
         s2(&mut delta);
 
-        #[allow(clippy::expect_used, reason = "slice length is guaranteed by while-loop guard")]
+        #[allow(
+            clippy::expect_used,
+            reason = "slice length is guaranteed by while-loop guard"
+        )]
         let cipher_block: [u8; AES_BLOCK_SIZE] = encrypted[offset..offset + AES_BLOCK_SIZE]
             .try_into()
             .expect("slice is AES_BLOCK_SIZE");
@@ -469,20 +475,18 @@ fn carry_iv_bytes(iv: &mut [u8]) {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, reason = "unwrap/expect acceptable in test code")]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "unwrap/expect acceptable in test code"
+)]
 mod tests {
     use super::*;
 
     #[test]
     fn roundtrip_single_block() {
         let mut state = Ocb2CryptState::new();
-        state
-            .set_key(
-                &[1u8; 16],
-                &[0u8; 16],
-                &[0u8; 16],
-            )
-            .unwrap();
+        state.set_key(&[1u8; 16], &[0u8; 16], &[0u8; 16]).unwrap();
 
         let plaintext = b"Hello, Mumble!!"; // 15 bytes (partial block)
 
@@ -498,9 +502,8 @@ mod tests {
         // Receiver's server_nonce = sender's client_nonce starting value
         receiver
             .set_key(
-                &[1u8; 16],
-                &[0u8; 16],  // receiver's encrypt (unused here)
-                &[0u8; 16],  // receiver's decrypt = sender's initial client_nonce
+                &[1u8; 16], &[0u8; 16], // receiver's encrypt (unused here)
+                &[0u8; 16], // receiver's decrypt = sender's initial client_nonce
             )
             .unwrap();
 
@@ -518,9 +521,7 @@ mod tests {
         let encrypted = state.encrypt(&plaintext).unwrap();
 
         let mut receiver = Ocb2CryptState::new();
-        receiver
-            .set_key(&[0xAB; 16], &[0; 16], &[0; 16])
-            .unwrap();
+        receiver.set_key(&[0xAB; 16], &[0; 16], &[0; 16]).unwrap();
 
         let decrypted = receiver.decrypt(&encrypted).unwrap();
         assert_eq!(decrypted, plaintext);
@@ -536,9 +537,7 @@ mod tests {
         let encrypted = state.encrypt(&plaintext).unwrap();
 
         let mut receiver = Ocb2CryptState::new();
-        receiver
-            .set_key(&[0xCD; 16], &[0; 16], &[0; 16])
-            .unwrap();
+        receiver.set_key(&[0xCD; 16], &[0; 16], &[0; 16]).unwrap();
 
         let decrypted = receiver.decrypt(&encrypted).unwrap();
         assert_eq!(decrypted, plaintext);
@@ -550,9 +549,7 @@ mod tests {
         sender.set_key(&[0x11; 16], &[0; 16], &[0; 16]).unwrap();
 
         let mut receiver = Ocb2CryptState::new();
-        receiver
-            .set_key(&[0x11; 16], &[0; 16], &[0; 16])
-            .unwrap();
+        receiver.set_key(&[0x11; 16], &[0; 16], &[0; 16]).unwrap();
 
         for i in 0..10u8 {
             let plain = vec![i; 20];
@@ -571,9 +568,7 @@ mod tests {
         sender.set_key(&[0x22; 16], &[0; 16], &[0; 16]).unwrap();
 
         let mut receiver = Ocb2CryptState::new();
-        receiver
-            .set_key(&[0x22; 16], &[0; 16], &[0; 16])
-            .unwrap();
+        receiver.set_key(&[0x22; 16], &[0; 16], &[0; 16]).unwrap();
 
         let plain = b"secret audio data";
         let mut enc = sender.encrypt(plain).unwrap();
@@ -645,9 +640,7 @@ mod tests {
         sender.set_key(&[0x33; 16], &[0; 16], &[0; 16]).unwrap();
 
         let mut receiver = Ocb2CryptState::new();
-        receiver
-            .set_key(&[0x33; 16], &[0; 16], &[0; 16])
-            .unwrap();
+        receiver.set_key(&[0x33; 16], &[0; 16], &[0; 16]).unwrap();
 
         let enc = sender.encrypt(b"").unwrap();
         assert_eq!(enc.len(), 4); // just the header
@@ -661,9 +654,7 @@ mod tests {
         sender.set_key(&[0x44; 16], &[0; 16], &[0; 16]).unwrap();
 
         let mut receiver = Ocb2CryptState::new();
-        receiver
-            .set_key(&[0x44; 16], &[0; 16], &[0; 16])
-            .unwrap();
+        receiver.set_key(&[0x44; 16], &[0; 16], &[0; 16]).unwrap();
 
         let plain = [0x55u8; 16]; // exactly one block
         let enc = sender.encrypt(&plain).unwrap();
@@ -680,9 +671,7 @@ mod tests {
         sender.set_key(&[0x55; 16], &nonce, &[0; 16]).unwrap();
 
         let mut receiver = Ocb2CryptState::new();
-        receiver
-            .set_key(&[0x55; 16], &[0; 16], &nonce)
-            .unwrap();
+        receiver.set_key(&[0x55; 16], &[0; 16], &nonce).unwrap();
 
         for i in 0..5u8 {
             let plain = vec![i; 10];
@@ -698,9 +687,7 @@ mod tests {
         sender.set_key(&[0x66; 16], &[0; 16], &[0; 16]).unwrap();
 
         let mut receiver = Ocb2CryptState::new();
-        receiver
-            .set_key(&[0x66; 16], &[0; 16], &[0; 16])
-            .unwrap();
+        receiver.set_key(&[0x66; 16], &[0; 16], &[0; 16]).unwrap();
 
         let plain = b"audio frame";
         let enc1 = sender.encrypt(plain).unwrap();

@@ -210,9 +210,10 @@ pub(crate) async fn livery_image_data_uri(
         return Ok(None);
     }
     if !response.status().is_success() {
-        return Err(body(response).await.err().unwrap_or_else(|| {
-            "the operator API answered with an unexpected success".to_owned()
-        }));
+        return Err(body(response)
+            .await
+            .err()
+            .unwrap_or_else(|| "the operator API answered with an unexpected success".to_owned()));
     }
 
     let content_type = response
@@ -228,7 +229,6 @@ pub(crate) async fn livery_image_data_uri(
     let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
     Ok(Some(format!("data:{content_type};base64,{encoded}")))
 }
-
 
 /// Change the livery over the connection this client already has.
 ///
@@ -292,7 +292,6 @@ pub(crate) async fn livery_check(base_url: String, token: String) -> Result<Stri
 mod tests {
     use super::*;
 
-
     /// Drive the real proxy commands against a running operator API.
     ///
     /// Ignored by default because it needs one:
@@ -306,7 +305,9 @@ mod tests {
             panic!("set LIVERY_API and LIVERY_TOKEN")
         };
 
-        let hello = livery_check(api.clone(), token.clone()).await.expect("reachable");
+        let hello = livery_check(api.clone(), token.clone())
+            .await
+            .expect("reachable");
         println!("check: {hello}");
 
         livery_set(
@@ -361,7 +362,11 @@ mod tests {
             .await
             .expect("read back")
             .expect("a banner is set now");
-        assert!(banner.starts_with("data:image/"), "not an image: {}", &banner[..24]);
+        assert!(
+            banner.starts_with("data:image/"),
+            "not an image: {}",
+            &banner[..24]
+        );
         println!("upload: {} bytes -> {}", png.len(), &banner[..24]);
 
         livery_clear_image(api.clone(), token.clone(), "banner".to_owned())
@@ -383,7 +388,10 @@ mod tests {
         assert!(base("localhost:8081").is_err());
         assert!(base("").is_err());
         assert_eq!(base("  https://x:8081/  ").unwrap(), "https://x:8081");
-        assert_eq!(base("http://127.0.0.1:8081").unwrap(), "http://127.0.0.1:8081");
+        assert_eq!(
+            base("http://127.0.0.1:8081").unwrap(),
+            "http://127.0.0.1:8081"
+        );
     }
 
     #[test]

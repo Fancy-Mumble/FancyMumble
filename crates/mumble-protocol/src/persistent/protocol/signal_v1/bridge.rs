@@ -75,11 +75,8 @@ type ExportStateFn = unsafe extern "C" fn(
     out_data: *mut *mut u8,
     out_len: *mut u32,
 ) -> i32;
-type ImportStateFn = unsafe extern "C" fn(
-    ctx: *mut SignalBridgeCtx,
-    data: *const u8,
-    data_len: u32,
-) -> i32;
+type ImportStateFn =
+    unsafe extern "C" fn(ctx: *mut SignalBridgeCtx, data: *const u8, data_len: u32) -> i32;
 type FreeBufFn = unsafe extern "C" fn(ptr: *mut u8, len: u32);
 type LastErrorFn = unsafe extern "C" fn(out_len: *mut u32) -> *const u8;
 
@@ -163,9 +160,7 @@ impl BridgeSymbols {
                 })?;
             let free_buf = *lib
                 .get::<FreeBufFn>(b"signal_bridge_free_buf\0")
-                .map_err(|e| {
-                    Error::Other(format!("missing symbol signal_bridge_free_buf: {e}"))
-                })?;
+                .map_err(|e| Error::Other(format!("missing symbol signal_bridge_free_buf: {e}")))?;
 
             // Optional: newer DLLs expose a last-error function for
             // detailed diagnostics.
@@ -229,9 +224,7 @@ impl SignalBridge {
 
         let ctx = unsafe { (syms.create)(c_addr.as_ptr()) };
         if ctx.is_null() {
-            return Err(Error::Other(
-                "signal_bridge_create returned null".into(),
-            ));
+            return Err(Error::Other("signal_bridge_create returned null".into()));
         }
 
         Ok(Self {
@@ -245,7 +238,10 @@ impl SignalBridge {
     /// Returns the serialized distribution message bytes that must be
     /// sent to all other channel members.
     pub fn create_distribution(&self, channel_id: u32) -> Result<Vec<u8>> {
-        let ctx = self.ctx.lock().map_err(|_| Error::Other("mutex poisoned".into()))?;
+        let ctx = self
+            .ctx
+            .lock()
+            .map_err(|_| Error::Other("mutex poisoned".into()))?;
         let mut out_ptr: *mut u8 = std::ptr::null_mut();
         let mut out_len: u32 = 0;
 
@@ -265,7 +261,10 @@ impl SignalBridge {
         channel_id: u32,
         distribution_bytes: &[u8],
     ) -> Result<()> {
-        let ctx = self.ctx.lock().map_err(|_| Error::Other("mutex poisoned".into()))?;
+        let ctx = self
+            .ctx
+            .lock()
+            .map_err(|_| Error::Other("mutex poisoned".into()))?;
         let c_sender = CString::new(sender_hash)
             .map_err(|_| Error::Other("sender_hash contains NUL byte".into()))?;
 
@@ -283,7 +282,10 @@ impl SignalBridge {
 
     /// Encrypt plaintext for a channel using our sender key.
     pub fn group_encrypt(&self, channel_id: u32, plaintext: &[u8]) -> Result<Vec<u8>> {
-        let ctx = self.ctx.lock().map_err(|_| Error::Other("mutex poisoned".into()))?;
+        let ctx = self
+            .ctx
+            .lock()
+            .map_err(|_| Error::Other("mutex poisoned".into()))?;
         let mut out_ptr: *mut u8 = std::ptr::null_mut();
         let mut out_len: u32 = 0;
 
@@ -308,7 +310,10 @@ impl SignalBridge {
         channel_id: u32,
         ciphertext: &[u8],
     ) -> Result<Vec<u8>> {
-        let ctx = self.ctx.lock().map_err(|_| Error::Other("mutex poisoned".into()))?;
+        let ctx = self
+            .ctx
+            .lock()
+            .map_err(|_| Error::Other("mutex poisoned".into()))?;
         let c_sender = CString::new(sender_hash)
             .map_err(|_| Error::Other("sender_hash contains NUL byte".into()))?;
         let mut out_ptr: *mut u8 = std::ptr::null_mut();
@@ -331,7 +336,10 @@ impl SignalBridge {
 
     /// Check if we have a sender key for a peer on a channel.
     pub fn has_key(&self, sender_hash: &str, channel_id: u32) -> Result<bool> {
-        let ctx = self.ctx.lock().map_err(|_| Error::Other("mutex poisoned".into()))?;
+        let ctx = self
+            .ctx
+            .lock()
+            .map_err(|_| Error::Other("mutex poisoned".into()))?;
         let c_sender = CString::new(sender_hash)
             .map_err(|_| Error::Other("sender_hash contains NUL byte".into()))?;
 
@@ -344,7 +352,10 @@ impl SignalBridge {
 
     /// Remove all sender key state for a channel.
     pub fn remove_channel(&self, channel_id: u32) -> Result<()> {
-        let ctx = self.ctx.lock().map_err(|_| Error::Other("mutex poisoned".into()))?;
+        let ctx = self
+            .ctx
+            .lock()
+            .map_err(|_| Error::Other("mutex poisoned".into()))?;
 
         let rc = unsafe { (self.syms.remove_channel)(*ctx, channel_id) };
         self.check_rc(rc, "remove_channel")
@@ -352,23 +363,26 @@ impl SignalBridge {
 
     /// Export internal state for persistence.
     pub fn export_state(&self) -> Result<Vec<u8>> {
-        let ctx = self.ctx.lock().map_err(|_| Error::Other("mutex poisoned".into()))?;
+        let ctx = self
+            .ctx
+            .lock()
+            .map_err(|_| Error::Other("mutex poisoned".into()))?;
         let mut out_ptr: *mut u8 = std::ptr::null_mut();
         let mut out_len: u32 = 0;
 
-        let rc =
-            unsafe { (self.syms.export_state)(*ctx, &mut out_ptr, &mut out_len) };
+        let rc = unsafe { (self.syms.export_state)(*ctx, &mut out_ptr, &mut out_len) };
         self.check_rc(rc, "export_state")?;
         Ok(self.take_buf(out_ptr, out_len))
     }
 
     /// Import previously exported state.
     pub fn import_state(&self, data: &[u8]) -> Result<()> {
-        let ctx = self.ctx.lock().map_err(|_| Error::Other("mutex poisoned".into()))?;
+        let ctx = self
+            .ctx
+            .lock()
+            .map_err(|_| Error::Other("mutex poisoned".into()))?;
 
-        let rc = unsafe {
-            (self.syms.import_state)(*ctx, data.as_ptr(), data.len() as u32)
-        };
+        let rc = unsafe { (self.syms.import_state)(*ctx, data.as_ptr(), data.len() as u32) };
         self.check_rc(rc, "import_state")
     }
 

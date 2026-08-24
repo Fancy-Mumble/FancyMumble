@@ -56,13 +56,7 @@ impl Encryptor for XChaChaEncryptor {
         let nonce = XNonce::from_slice(&nonce_bytes);
 
         let ciphertext = cipher
-            .encrypt(
-                nonce,
-                chacha20poly1305::aead::Payload {
-                    msg: &padded,
-                    aad,
-                },
-            )
+            .encrypt(nonce, chacha20poly1305::aead::Payload { msg: &padded, aad })
             .map_err(|e| Error::Other(format!("encryption failed: {e}")))?;
 
         // Version(1) + Nonce(24) + Ciphertext+Tag

@@ -1,4 +1,4 @@
-﻿//! Simple noise gate that silences audio below a threshold.
+//! Simple noise gate that silences audio below a threshold.
 //!
 //! In the outbound filter chain the noise gate should run **after**
 //! the AGC so that it evaluates the post-gain signal level. Without
@@ -11,8 +11,8 @@ use std::f32::consts::PI;
 
 use tracing::{debug, info};
 
-use crate::audio::sample::AudioFrame;
 use crate::audio::filter::AudioFilter;
+use crate::audio::sample::AudioFrame;
 use crate::error::Result;
 
 /// Gate states for hysteresis behaviour.
@@ -49,7 +49,7 @@ impl Default for NoiseGateConfig {
             close_threshold: 0.008,
             hold_frames: 10,
             attack_samples: 480,  // 10 ms @ 48 kHz
-            release_samples: 480,  // 10 ms @ 48 kHz
+            release_samples: 480, // 10 ms @ 48 kHz
         }
     }
 }

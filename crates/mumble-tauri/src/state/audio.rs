@@ -693,12 +693,18 @@ mod voice_pipeline {
                     .own_session
                     .and_then(|session| state.users.get(&session))
                     .is_some_and(|user| user.self_deaf);
-                (deafened, state.conn.client_handle.clone(), state.audio.voice_state)
+                (
+                    deafened,
+                    state.conn.client_handle.clone(),
+                    state.audio.voice_state,
+                )
             };
 
             let handle = handle.ok_or_else(|| "Not connected".to_string())?;
             handle
-                .send(command::SetSelfDeaf { deafened: !deafened })
+                .send(command::SetSelfDeaf {
+                    deafened: !deafened,
+                })
                 .await
                 .map_err(|e| format!("Failed to toggle deafen: {e}"))?;
 

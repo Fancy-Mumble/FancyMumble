@@ -62,9 +62,12 @@ pub(crate) async fn probe_livery(
     port: u16,
     have_keys: Option<Vec<String>>,
 ) -> Result<Option<LiverySnapshot>, String> {
-    tokio::time::timeout(PROBE_TIMEOUT, ask(host, port, have_keys.unwrap_or_default()))
-        .await
-        .map_err(|_| "the server did not answer in time".to_owned())?
+    tokio::time::timeout(
+        PROBE_TIMEOUT,
+        ask(host, port, have_keys.unwrap_or_default()),
+    )
+    .await
+    .map_err(|_| "the server did not answer in time".to_owned())?
 }
 
 async fn ask(
@@ -187,7 +190,10 @@ mod tests {
             .expect("the probe ran");
         println!("{answer:#?}");
         let doc = answer.expect("a document from an unauthenticated query");
-        assert!(!doc.digest.is_empty(), "a document always carries its digest");
+        assert!(
+            !doc.digest.is_empty(),
+            "a document always carries its digest"
+        );
     }
 
     #[test]

@@ -114,9 +114,7 @@ pub(crate) fn create_pipeline(
                 );
                 return Ok(Box::new(p));
             }
-            Err(e)
-                if source_id == 0 && sources::ensure_present(kind, source_id).is_err() =>
-            {
+            Err(e) if source_id == 0 && sources::ensure_present(kind, source_id).is_err() => {
                 // Advisory portal id (the compositor's dialog picks the real
                 // source): no OS handle exists for the CPU fallback to
                 // resolve, so falling through would bury this real failure

@@ -252,7 +252,10 @@ impl RpcRequest {
         Some(Self {
             cmd: value.get("cmd")?.as_str()?.to_owned(),
             nonce: value.get("nonce").cloned(),
-            args: value.get("args").cloned().unwrap_or(serde_json::Value::Null),
+            args: value
+                .get("args")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null),
             evt: value
                 .get("evt")
                 .and_then(serde_json::Value::as_str)

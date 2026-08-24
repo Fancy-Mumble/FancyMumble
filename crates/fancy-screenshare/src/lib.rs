@@ -22,11 +22,6 @@
 
 pub mod broadcast;
 mod camera;
-/// Native SFU stream viewer: required on Linux (distro WebKitGTK has no
-/// WebRTC), selectable on Windows (an advanced setting switches the webview
-/// between this Rust peer and its own `RTCPeerConnection` viewers).
-#[cfg(any(target_os = "linux", target_os = "windows"))]
-pub mod viewer;
 #[cfg(windows)]
 mod camera_directshow;
 pub mod encode;
@@ -38,6 +33,11 @@ mod gpu_windows_d3d12;
 mod linux;
 mod pipeline;
 pub mod sources;
+/// Native SFU stream viewer: required on Linux (distro WebKitGTK has no
+/// WebRTC), selectable on Windows (an advanced setting switches the webview
+/// between this Rust peer and its own `RTCPeerConnection` viewers).
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub mod viewer;
 
 pub use broadcast::{BroadcastSource, BroadcastState, ScreenBroadcaster, SignalSink};
 #[cfg(all(target_os = "linux", feature = "portal-probe"))]

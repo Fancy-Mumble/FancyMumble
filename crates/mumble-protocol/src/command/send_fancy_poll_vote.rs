@@ -19,15 +19,13 @@ pub struct SendFancyPollVote {
 impl CommandAction for SendFancyPollVote {
     fn execute(&self, _state: &ServerState) -> CommandOutput {
         CommandOutput {
-            tcp_messages: vec![ControlMessage::FancyPollVote(
-                mumble_tcp::FancyPollVote {
-                    channel_id: Some(self.channel_id),
-                    poll_id: Some(self.poll_id.clone()),
-                    selected: self.selected.clone(),
-                    voter_session: None,
-                    voter_name: None,
-                },
-            )],
+            tcp_messages: vec![ControlMessage::FancyPollVote(mumble_tcp::FancyPollVote {
+                channel_id: Some(self.channel_id),
+                poll_id: Some(self.poll_id.clone()),
+                selected: self.selected.clone(),
+                voter_session: None,
+                voter_name: None,
+            })],
             ..Default::default()
         }
     }

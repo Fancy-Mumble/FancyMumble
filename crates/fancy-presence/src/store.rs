@@ -76,7 +76,9 @@ impl PresenceStore {
             // which never carry one - otherwise every keepalive would wipe it
             // and re-emit a change.
             if entry.application_name.is_none() {
-                entry.application_name.clone_from(&existing.application_name);
+                entry
+                    .application_name
+                    .clone_from(&existing.application_name);
             }
             if *existing == entry {
                 return false;

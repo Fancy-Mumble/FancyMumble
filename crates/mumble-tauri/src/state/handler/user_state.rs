@@ -606,7 +606,10 @@ fn channel_needs_key(shared: &Arc<Mutex<SharedState>>, ch: u32) -> bool {
 /// ourselves if none arrived (skipping the wait when a key already exists).
 async fn derive_channel_key_if_needed(shared: &Arc<Mutex<SharedState>>, ch: u32) {
     if channel_has_key(shared, ch) {
-        tracing::debug!(channel_id = ch, "pchat: key already exists, skipping 2s wait");
+        tracing::debug!(
+            channel_id = ch,
+            "pchat: key already exists, skipping 2s wait"
+        );
     } else {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     }
@@ -627,7 +630,10 @@ async fn derive_channel_key_if_needed(shared: &Arc<Mutex<SharedState>>, ch: u32)
 /// Request recent history for the joined channel, arming a timeout that
 /// clears the loading indicator if no delivery arrives.
 async fn send_join_pchat_fetch(shared: &Arc<Mutex<SharedState>>, ch: u32) {
-    let handle = shared.lock().ok().and_then(|s| s.conn.client_handle.clone());
+    let handle = shared
+        .lock()
+        .ok()
+        .and_then(|s| s.conn.client_handle.clone());
     let fetch_sent = if let Some(handle) = handle {
         let fetch = mumble_tcp::PchatFetch {
             channel_id: Some(ch),

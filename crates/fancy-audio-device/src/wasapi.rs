@@ -31,25 +31,24 @@ use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use mumble_protocol::error::{Error, Result};
 use tracing::{debug, warn};
 
+use windows::core::Interface;
 use windows::core::{PCWSTR, PWSTR};
+use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
 use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0};
 use windows::Win32::Media::Audio::{
     eCapture, eConsole, AudioSessionStateActive, IAudioCaptureClient, IAudioClient,
-    IAudioSessionControl2, IAudioSessionManager2, IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator,
-    AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-    DEVICE_STATE_ACTIVE, WAVEFORMATEX, WAVE_FORMAT_PCM,
+    IAudioSessionControl2, IAudioSessionManager2, IMMDevice, IMMDeviceEnumerator,
+    MMDeviceEnumerator, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED,
+    AUDCLNT_STREAMFLAGS_EVENTCALLBACK, DEVICE_STATE_ACTIVE, WAVEFORMATEX, WAVE_FORMAT_PCM,
 };
-use windows::Win32::System::Threading::{
-    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
-    PROCESS_QUERY_LIMITED_INFORMATION,
-};
-use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
 use windows::Win32::System::Com::StructuredStorage::PropVariantClear;
-use windows::core::Interface;
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED, STGM_READ,
 };
 use windows::Win32::System::Threading::{CreateEventW, SetEvent, WaitForSingleObject};
+use windows::Win32::System::Threading::{
+    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+};
 
 /// `AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED`: exclusive event-driven init must
 /// retry with a period aligned to the driver's returned buffer size.
@@ -117,8 +116,12 @@ unsafe fn capture_device_users_inner() -> windows::core::Result<Vec<String>> {
 
     let mut names: Vec<String> = Vec::new();
     for i in 0..count {
-        let Ok(ctrl) = sessions.GetSession(i) else { continue };
-        let Ok(ctrl2) = ctrl.cast::<IAudioSessionControl2>() else { continue };
+        let Ok(ctrl) = sessions.GetSession(i) else {
+            continue;
+        };
+        let Ok(ctrl2) = ctrl.cast::<IAudioSessionControl2>() else {
+            continue;
+        };
         // Only sessions that are actively capturing.
         if ctrl.GetState().unwrap_or(AudioSessionStateActive) != AudioSessionStateActive {
             continue;
@@ -154,7 +157,10 @@ unsafe fn process_name(pid: u32) -> Option<String> {
     }
     let path = String::from_utf16_lossy(&buf[..len as usize]);
     let file = path.rsplit(['\\', '/']).next().unwrap_or(&path);
-    let stem = file.strip_suffix(".exe").or_else(|| file.strip_suffix(".EXE")).unwrap_or(file);
+    let stem = file
+        .strip_suffix(".exe")
+        .or_else(|| file.strip_suffix(".EXE"))
+        .unwrap_or(file);
     if stem.is_empty() {
         None
     } else {
@@ -223,7 +229,9 @@ impl AudioCapture for WasapiCapture {
     fn read_frame(&mut self) -> Result<AudioFrame> {
         if let Ok(dead) = self.dead.lock() {
             if let Some(reason) = dead.as_ref() {
-                return Err(Error::InvalidState(format!("wasapi capture lost: {reason}")));
+                return Err(Error::InvalidState(format!(
+                    "wasapi capture lost: {reason}"
+                )));
             }
         }
         let mut buf = self
@@ -383,7 +391,13 @@ fn capture_thread(
                         .map_err(|e| format!("GetBuffer: {e}"))?;
                 }
                 if frames > 0 && !data_ptr.is_null() {
-                    downmix_into(&mut mono, data_ptr, frames as usize, channels as usize, kind);
+                    downmix_into(
+                        &mut mono,
+                        data_ptr,
+                        frames as usize,
+                        channels as usize,
+                        kind,
+                    );
                 }
                 // SAFETY: paired with the successful GetBuffer above.
                 unsafe {
@@ -453,14 +467,17 @@ fn open_stream(
 ) -> std::result::Result<OpenResult, String> {
     // SAFETY: single COM calls with checked results throughout.
     unsafe {
-        let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)
-            .map_err(|e| format!("device enumerator: {e}"))?;
+        let enumerator: IMMDeviceEnumerator =
+            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)
+                .map_err(|e| format!("device enumerator: {e}"))?;
         let device = select_device(&enumerator, device_name)?;
 
         let mix_client: IAudioClient = device
             .Activate(CLSCTX_ALL, None)
             .map_err(|e| format!("Activate: {e}"))?;
-        let mix = mix_client.GetMixFormat().map_err(|e| format!("GetMixFormat: {e}"))?;
+        let mix = mix_client
+            .GetMixFormat()
+            .map_err(|e| format!("GetMixFormat: {e}"))?;
         let mix_rate = std::ptr::addr_of!((*mix).nSamplesPerSec).read_unaligned();
         let mix_channels = std::ptr::addr_of!((*mix).nChannels).read_unaligned();
         let mix_bits = std::ptr::addr_of!((*mix).wBitsPerSample).read_unaligned();
@@ -505,7 +522,15 @@ fn open_stream(
 
         let (event, capture) = arm_stream(&mix_client)?;
         debug!("wasapi capture: SHARED {mix_rate} Hz, {mix_channels} ch");
-        Ok((mix_client, capture, event, OpenMode::Shared, mix_rate, mix_channels, kind))
+        Ok((
+            mix_client,
+            capture,
+            event,
+            OpenMode::Shared,
+            mix_rate,
+            mix_channels,
+            kind,
+        ))
     }
 }
 
@@ -621,7 +646,11 @@ unsafe fn try_open_exclusive_format(
         ) {
             Ok(()) => {
                 let (event, capture) = arm_stream(&attempt).map_err(Fatal)?;
-                let kind = if bits == 16 { SampleKind::I16 } else { SampleKind::I32 };
+                let kind = if bits == 16 {
+                    SampleKind::I16
+                } else {
+                    SampleKind::I32
+                };
                 debug!("wasapi capture: EXCLUSIVE {rate} Hz, {ch} ch, {bits}-bit");
                 return Ok((attempt, capture, event, OpenMode::Exclusive, rate, ch, kind));
             }
@@ -671,8 +700,9 @@ unsafe fn arm_stream(
     client
         .SetEventHandle(event)
         .map_err(|e| format!("SetEventHandle: {e}"))?;
-    let capture: IAudioCaptureClient =
-        client.GetService().map_err(|e| format!("GetService: {e}"))?;
+    let capture: IAudioCaptureClient = client
+        .GetService()
+        .map_err(|e| format!("GetService: {e}"))?;
     client.Start().map_err(|e| format!("Start: {e}"))?;
     Ok((event, capture))
 }
@@ -718,7 +748,13 @@ unsafe fn friendly_name(dev: &IMMDevice) -> Option<String> {
 
 /// Downmix `frames` interleaved samples at `data` to mono f32 appended
 /// to `mono`.
-fn downmix_into(mono: &mut Vec<f32>, data: *const u8, frames: usize, channels: usize, kind: SampleKind) {
+fn downmix_into(
+    mono: &mut Vec<f32>,
+    data: *const u8,
+    frames: usize,
+    channels: usize,
+    kind: SampleKind,
+) {
     match kind {
         SampleKind::I16 => {
             // SAFETY: WASAPI guarantees frames*channels samples of the
@@ -775,6 +811,9 @@ mod tests {
         }
         cap.stop().expect("stop");
         println!("captured {frames} x 10 ms frames in <=3 s");
-        assert!(frames >= 100, "expected >=1 s of audio in 3 s, got {frames} frames");
+        assert!(
+            frames >= 100,
+            "expected >=1 s of audio in 3 s, got {frames} frames"
+        );
     }
 }

@@ -9,7 +9,7 @@
 //! misspelling can only be a typo — one whose symptom would otherwise be a
 //! screen that did not change.
 
-use mumble_protocol::proto::fancy::domain::{LiveryDoc, livery_doc};
+use mumble_protocol::proto::fancy::domain::{livery_doc, LiveryDoc};
 
 /// Read a patch into `(fields, values)`.
 ///
@@ -63,7 +63,9 @@ fn count(field: &str, value: &serde_json::Value) -> Result<u32, String> {
 }
 
 fn tags(value: &serde_json::Value) -> Result<Vec<livery_doc::Tag>, String> {
-    let entries = value.as_array().ok_or_else(|| "tags must be an array".to_owned())?;
+    let entries = value
+        .as_array()
+        .ok_or_else(|| "tags must be an array".to_owned())?;
     entries
         .iter()
         .map(|entry| {

@@ -104,9 +104,7 @@ pub(crate) async fn serve(
     connection.finish();
 }
 
-async fn read_handshake(
-    reader: &mut ReadHalf<Endpoint>,
-) -> Result<IpcFrame, &'static str> {
+async fn read_handshake(reader: &mut ReadHalf<Endpoint>) -> Result<IpcFrame, &'static str> {
     let frame = match tokio::time::timeout(HANDSHAKE_TIMEOUT, codec::read_frame(reader)).await {
         Err(_elapsed) => return Err("handshake timed out"),
         Ok(Err(_)) => return Err("connection closed during handshake"),
@@ -238,7 +236,10 @@ impl Connection {
         if self.upstream.take().is_some() {
             // Orphans the reader task's in-flight frames.
             self.upstream_generation += 1;
-            tracing::info!(id = self.id, "Discord went away; serving this client locally");
+            tracing::info!(
+                id = self.id,
+                "Discord went away; serving this client locally"
+            );
         }
     }
 

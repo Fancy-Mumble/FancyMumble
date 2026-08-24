@@ -14,7 +14,12 @@ pub(crate) async fn schedule_message(
     deliver_at: u64,
 ) -> Result<(), String> {
     state
-        .send_fancy_scheduled_message(channel_ids, tree_ids.unwrap_or_default(), message, deliver_at)
+        .send_fancy_scheduled_message(
+            channel_ids,
+            tree_ids.unwrap_or_default(),
+            message,
+            deliver_at,
+        )
         .await
 }
 

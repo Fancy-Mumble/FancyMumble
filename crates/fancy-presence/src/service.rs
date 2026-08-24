@@ -181,10 +181,7 @@ impl PresenceService {
                 Arc::clone(&inner),
                 shutdown.subscribe(),
             )),
-            tokio::spawn(watch_for_discord(
-                Arc::clone(&inner),
-                shutdown.subscribe(),
-            )),
+            tokio::spawn(watch_for_discord(Arc::clone(&inner), shutdown.subscribe())),
         ];
 
         Ok(Self {

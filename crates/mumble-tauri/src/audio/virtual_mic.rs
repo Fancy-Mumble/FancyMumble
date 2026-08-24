@@ -273,15 +273,14 @@ impl VirtualCapture {
         // `file:` is matched before anything is split on `:`, because a
         // Windows path contains one (`file:C:\...\speech.wav`) and splitting
         // first would cut it in half.
-        let (rate, source): (f64, Box<dyn SampleSource>) = if let Some(rest) =
-            spec.strip_prefix("file:")
-        {
-            let (path, rate) = split_file_spec(rest)?;
-            (rate, Box::new(FileSource::load(path)?))
-        } else {
-            let (rate, sine) = parse_sine(spec)?;
-            (rate, Box::new(sine))
-        };
+        let (rate, source): (f64, Box<dyn SampleSource>) =
+            if let Some(rest) = spec.strip_prefix("file:") {
+                let (path, rate) = split_file_spec(rest)?;
+                (rate, Box::new(FileSource::load(path)?))
+            } else {
+                let (rate, sine) = parse_sine(spec)?;
+                (rate, Box::new(sine))
+            };
 
         let resampler = StreamResampler::new(rate, 48_000.0).map_err(|e| e.to_string())?;
         tracing::warn!(
@@ -457,9 +456,7 @@ mod tests {
         // An amplitude, not a gain: values outside the sample range are a
         // typo, and clamping one would silently test the wrong level.
         assert!(VirtualCapture::from_spec("sine:48000:440+noise:9", 480, vol.clone()).is_err());
-        assert!(
-            VirtualCapture::from_spec("sine:48000:440+noise:abc", 480, vol.clone()).is_err()
-        );
+        assert!(VirtualCapture::from_spec("sine:48000:440+noise:abc", 480, vol.clone()).is_err());
         assert!(VirtualCapture::from_spec("sine:48000:440+noise:-1", 480, vol).is_err());
     }
 
@@ -497,7 +494,9 @@ mod tests {
         };
         let mut writer = hound::WavWriter::create(&path, spec).unwrap();
         for s in samples {
-            writer.write_sample((s * f32::from(i16::MAX)) as i16).unwrap();
+            writer
+                .write_sample((s * f32::from(i16::MAX)) as i16)
+                .unwrap();
         }
         writer.finalize().unwrap();
         path.to_string_lossy().into_owned()
@@ -555,15 +554,22 @@ mod tests {
         };
         let mut writer = hound::WavWriter::create(&path, spec).unwrap();
         for (l, r) in [(0.0_f32, 0.8_f32), (0.0, 0.4)] {
-            writer.write_sample((l * f32::from(i16::MAX)) as i16).unwrap();
-            writer.write_sample((r * f32::from(i16::MAX)) as i16).unwrap();
+            writer
+                .write_sample((l * f32::from(i16::MAX)) as i16)
+                .unwrap();
+            writer
+                .write_sample((r * f32::from(i16::MAX)) as i16)
+                .unwrap();
         }
         writer.finalize().unwrap();
 
         let mut source = FileSource::load(path.to_str().unwrap()).unwrap();
         let mut out = Vec::new();
         source.fill(&mut out, 2);
-        assert!(out[0] > 0.3, "a silent left channel must not silence the mic");
+        assert!(
+            out[0] > 0.3,
+            "a silent left channel must not silence the mic"
+        );
         assert!((out[0] - 0.4).abs() < 0.01 && (out[1] - 0.2).abs() < 0.01);
     }
 
@@ -588,8 +594,7 @@ mod tests {
                 .collect::<Vec<_>>(),
         );
         let vol = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
-        let mut cap =
-            VirtualCapture::from_spec(&format!("file:{path}:44100"), 480, vol).unwrap();
+        let mut cap = VirtualCapture::from_spec(&format!("file:{path}:44100"), 480, vol).unwrap();
         cap.start().unwrap();
         let t0 = Instant::now();
         let mut frames = 0u32;

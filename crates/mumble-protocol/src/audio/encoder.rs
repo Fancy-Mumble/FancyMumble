@@ -1,4 +1,4 @@
-﻿//! Audio encoder trait and real Opus implementation.
+//! Audio encoder trait and real Opus implementation.
 //!
 //! An [`AudioEncoder`] takes raw PCM [`AudioFrame`]s and produces
 //! compressed packets ready for network transmission. The trait is
@@ -172,12 +172,8 @@ impl OpusEncoder {
             }
         };
 
-        let mut inner = opus::Encoder::new(
-            format.sample_rate,
-            channels,
-            config.application.into(),
-        )
-        .map_err(|e| Error::OpusCodec(e.to_string()))?;
+        let mut inner = opus::Encoder::new(format.sample_rate, channels, config.application.into())
+            .map_err(|e| Error::OpusCodec(e.to_string()))?;
 
         Self::configure_encoder(&mut inner, &config)?;
 
@@ -191,10 +187,7 @@ impl OpusEncoder {
     }
 
     /// Apply all quality-relevant settings to an Opus encoder instance.
-    fn configure_encoder(
-        enc: &mut opus::Encoder,
-        config: &OpusEncoderConfig,
-    ) -> Result<()> {
+    fn configure_encoder(enc: &mut opus::Encoder, config: &OpusEncoderConfig) -> Result<()> {
         enc.set_bitrate(opus::Bitrate::Bits(config.bitrate))
             .map_err(|e| Error::OpusCodec(e.to_string()))?;
         enc.set_vbr(config.vbr)
@@ -263,9 +256,7 @@ mod tests {
     use crate::audio::sample::AudioFormat;
 
     fn silent_frame(format: AudioFormat, frame_size: usize) -> AudioFrame {
-        let bytes = frame_size
-            * format.channels as usize
-            * format.sample_format.byte_width();
+        let bytes = frame_size * format.channels as usize * format.sample_format.byte_width();
         AudioFrame {
             data: vec![0u8; bytes],
             format,
@@ -282,7 +273,10 @@ mod tests {
         let mut enc = OpusEncoder::new(config, fmt)?;
         let frame = silent_frame(fmt, frame_size);
         let packet = enc.encode(&frame)?;
-        assert!(!packet.data.is_empty(), "Opus should produce at least 1 byte");
+        assert!(
+            !packet.data.is_empty(),
+            "Opus should produce at least 1 byte"
+        );
         assert_eq!(packet.sequence, 0);
         Ok(())
     }
@@ -312,7 +306,10 @@ mod tests {
         // duration other than 10 ms.
         for (frame_size, expected_step) in [(480usize, 1u64), (960, 2), (1920, 4), (2880, 6)] {
             let fmt = AudioFormat::MONO_48KHZ_F32;
-            let config = OpusEncoderConfig { frame_size, ..OpusEncoderConfig::default() };
+            let config = OpusEncoderConfig {
+                frame_size,
+                ..OpusEncoderConfig::default()
+            };
             let mut enc = OpusEncoder::new(config, fmt)?;
             let frame = silent_frame(fmt, frame_size);
             let p0 = enc.encode(&frame)?;

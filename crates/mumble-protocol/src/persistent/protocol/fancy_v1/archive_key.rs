@@ -24,7 +24,10 @@ impl ArchiveKeyDeriver for HkdfArchiveKeyDeriver {
     fn derive_archive_key(&self, seed: &[u8; 32], channel_id: u32) -> [u8; 32] {
         let hkdf = Hkdf::<Sha256>::new(Some(HKDF_SALT_ARCHIVE_KEY), seed);
         let mut key = [0u8; 32];
-        #[allow(clippy::expect_used, reason = "HKDF-SHA256 expand with a 32-byte output can never fail")]
+        #[allow(
+            clippy::expect_used,
+            reason = "HKDF-SHA256 expand with a 32-byte output can never fail"
+        )]
         hkdf.expand(&channel_id.to_be_bytes(), &mut key)
             .expect("HKDF expand for archive key");
         key

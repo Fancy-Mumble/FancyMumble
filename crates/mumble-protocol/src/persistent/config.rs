@@ -141,7 +141,13 @@ mod tests {
     #[test]
     fn config_registry_remove() {
         let mut reg = ConfigRegistry::new();
-        reg.upsert(ChannelPersistConfig::from_channel_state(1, Some(1), None, None, vec![]));
+        reg.upsert(ChannelPersistConfig::from_channel_state(
+            1,
+            Some(1),
+            None,
+            None,
+            vec![],
+        ));
         assert!(reg.get_config(1).is_some());
         reg.remove(1);
         assert!(reg.get_config(1).is_none());
@@ -150,9 +156,27 @@ mod tests {
     #[test]
     fn persistent_channels_iterator() {
         let mut reg = ConfigRegistry::new();
-        reg.upsert(ChannelPersistConfig::from_channel_state(1, Some(0), None, None, vec![]));
-        reg.upsert(ChannelPersistConfig::from_channel_state(2, Some(2), None, None, vec![]));
-        reg.upsert(ChannelPersistConfig::from_channel_state(3, Some(4), None, None, vec![]));
+        reg.upsert(ChannelPersistConfig::from_channel_state(
+            1,
+            Some(0),
+            None,
+            None,
+            vec![],
+        ));
+        reg.upsert(ChannelPersistConfig::from_channel_state(
+            2,
+            Some(2),
+            None,
+            None,
+            vec![],
+        ));
+        reg.upsert(ChannelPersistConfig::from_channel_state(
+            3,
+            Some(4),
+            None,
+            None,
+            vec![],
+        ));
         let persistent: Vec<_> = reg.persistent_channels().collect();
         assert_eq!(persistent.len(), 2);
     }

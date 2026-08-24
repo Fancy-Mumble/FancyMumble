@@ -3,8 +3,8 @@
 //! Applies a linear gain factor to every sample. Useful both for user
 //! volume knobs and as a lightweight mixer building-block.
 
-use crate::audio::sample::AudioFrame;
 use crate::audio::filter::AudioFilter;
+use crate::audio::sample::AudioFrame;
 use crate::error::Result;
 
 /// Configurable software volume (linear gain).

@@ -203,9 +203,7 @@ impl UnixListener {
                 address: address.to_path_buf(),
                 mirrors: Vec::new(),
             }),
-            Err(e) if e.kind() == io::ErrorKind::AddrInUse => {
-                Self::rebind_if_stale(address).await
-            }
+            Err(e) if e.kind() == io::ErrorKind::AddrInUse => Self::rebind_if_stale(address).await,
             Err(e) => Err(e),
         }
     }

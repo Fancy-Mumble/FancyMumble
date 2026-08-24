@@ -17,7 +17,10 @@ pub trait SignedDataBuilder: Send + Sync {
     ) -> Vec<u8>;
 
     /// Build data signed in a key-exchange message.
-    #[allow(clippy::too_many_arguments, reason = "protocol message construction requires all fields to be present")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "protocol message construction requires all fields to be present"
+    )]
     fn build_key_exchange_signed_data(
         &self,
         algorithm_version: u8,
@@ -67,7 +70,10 @@ impl SignedDataBuilder for StandardSignedDataBuilder {
         data
     }
 
-    #[allow(clippy::too_many_arguments, reason = "protocol message construction requires all fields to be present")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "protocol message construction requires all fields to be present"
+    )]
     fn build_key_exchange_signed_data(
         &self,
         algorithm_version: u8,
@@ -144,7 +150,10 @@ pub fn build_countersig_data(
 /// Build the data signed in a key-exchange message (section 6.6).
 ///
 /// Convenience wrapper around [`StandardSignedDataBuilder`].
-#[allow(clippy::too_many_arguments, reason = "protocol message construction requires all fields to be present")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "protocol message construction requires all fields to be present"
+)]
 pub fn build_key_exchange_signed_data(
     algorithm_version: u8,
     channel_id: u32,

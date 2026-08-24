@@ -411,7 +411,9 @@ mod tests {
 
     #[test]
     fn dev_build_is_detected_by_cargo_target_path() {
-        assert!(is_dev_build("/home/u/src/client/target/release/mumble-tauri"));
+        assert!(is_dev_build(
+            "/home/u/src/client/target/release/mumble-tauri"
+        ));
         assert!(is_dev_build("/home/u/src/client/target/debug/mumble-tauri"));
         // Packaged installs, which must keep the plain entry.
         assert!(!is_dev_build("/usr/bin/mumble-tauri"));

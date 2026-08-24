@@ -53,7 +53,10 @@ impl std::fmt::Debug for CpalCapture {
 // SAFETY: On Windows / WASAPI the underlying COM objects use the MTA
 // model and are safe to send between threads.  The `!Send` marker in
 // cpal is a conservative cross-platform guard that does not apply here.
-#[allow(unsafe_code, reason = "WASAPI COM objects are MTA-safe; cpal's !Send is a conservative cross-platform guard")]
+#[allow(
+    unsafe_code,
+    reason = "WASAPI COM objects are MTA-safe; cpal's !Send is a conservative cross-platform guard"
+)]
 unsafe impl Send for CpalCapture {}
 
 impl CpalCapture {
@@ -62,7 +65,11 @@ impl CpalCapture {
     /// * `device_name` - choose a specific device, or `None` for default.
     /// * `frame_size` - samples per channel per frame (e.g. 960 for Mumble).
     /// * `volume` - shared atomic volume multiplier (`f32` bits as `u32`).
-    pub fn new(device_name: Option<&str>, frame_size: usize, volume: Arc<AtomicU32>) -> Result<Self> {
+    pub fn new(
+        device_name: Option<&str>,
+        frame_size: usize,
+        volume: Arc<AtomicU32>,
+    ) -> Result<Self> {
         let host = cpal::default_host();
 
         let device = if let Some(name) = device_name {

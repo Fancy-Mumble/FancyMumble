@@ -1,4 +1,4 @@
-﻿//! Outbound and inbound audio pipelines.
+//! Outbound and inbound audio pipelines.
 //!
 //! Each pipeline is a linear composition of the independently swappable
 //! stages defined elsewhere in the `audio` module:
@@ -249,7 +249,12 @@ impl InboundPipeline {
     /// boundary to smooth discontinuities.
     pub fn tick(&mut self, packet: &EncodedPacket) -> Result<()> {
         // Detect and conceal gaps in the sequence.
-        let gap = detect_sequence_gap(self.last_seq, self.seq_step, packet.sequence, &mut self.seq_step);
+        let gap = detect_sequence_gap(
+            self.last_seq,
+            self.seq_step,
+            packet.sequence,
+            &mut self.seq_step,
+        );
         for _ in 0..gap.unwrap_or(0) {
             let _ = self.tick_lost();
         }
@@ -378,8 +383,9 @@ impl OutboundPipelineBuilder {
     /// Returns an error if a capture source or encoder has not been set.
     pub fn build(self) -> Result<OutboundPipeline> {
         Ok(OutboundPipeline::new(
-            self.capture
-                .ok_or_else(|| crate::error::Error::InvalidState("capture source is required".into()))?,
+            self.capture.ok_or_else(|| {
+                crate::error::Error::InvalidState("capture source is required".into())
+            })?,
             self.filters,
             self.encoder
                 .ok_or_else(|| crate::error::Error::InvalidState("encoder is required".into()))?,
@@ -445,8 +451,9 @@ impl InboundPipelineBuilder {
             self.decoder
                 .ok_or_else(|| crate::error::Error::InvalidState("decoder is required".into()))?,
             self.filters,
-            self.playback
-                .ok_or_else(|| crate::error::Error::InvalidState("playback sink is required".into()))?,
+            self.playback.ok_or_else(|| {
+                crate::error::Error::InvalidState("playback sink is required".into())
+            })?,
         ))
     }
 }
@@ -512,7 +519,10 @@ mod tests {
         let mut pipeline = OutboundPipelineBuilder::new()
             .capture(Box::new(SilentCapture::new(fmt, 480)))
             .filter(Box::new(VolumeFilter::new(1.0)))
-            .encoder(Box::new(OpusEncoder::new(OpusEncoderConfig::default(), fmt)?))
+            .encoder(Box::new(OpusEncoder::new(
+                OpusEncoderConfig::default(),
+                fmt,
+            )?))
             .build()?;
 
         pipeline.start()?;
@@ -591,7 +601,10 @@ mod tests {
                 hold_frames: 5,
                 ..NoiseGateConfig::default()
             })))
-            .encoder(Box::new(OpusEncoder::new(OpusEncoderConfig::default(), fmt)?))
+            .encoder(Box::new(OpusEncoder::new(
+                OpusEncoderConfig::default(),
+                fmt,
+            )?))
             .build()?;
 
         pipeline.start()?;
@@ -622,7 +635,10 @@ mod tests {
                 hold_frames: 5,
                 ..NoiseGateConfig::default()
             })))
-            .encoder(Box::new(OpusEncoder::new(OpusEncoderConfig::default(), fmt)?))
+            .encoder(Box::new(OpusEncoder::new(
+                OpusEncoderConfig::default(),
+                fmt,
+            )?))
             .build()?;
 
         pipeline.start()?;
@@ -653,7 +669,10 @@ mod tests {
                 hold_frames: 5,
                 ..NoiseGateConfig::default()
             })))
-            .encoder(Box::new(OpusEncoder::new(OpusEncoderConfig::default(), fmt)?))
+            .encoder(Box::new(OpusEncoder::new(
+                OpusEncoderConfig::default(),
+                fmt,
+            )?))
             .build()?;
 
         pipeline.start()?;

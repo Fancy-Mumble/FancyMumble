@@ -114,7 +114,10 @@ pub(crate) fn hydrate_persisted_prefs(app: &tauri::AppHandle, state: &AppState) 
     // that started in between.
     #[cfg(not(target_os = "android"))]
     if bool_pref("enableRichPresence").unwrap_or(false) {
-        start_rich_presence(app.clone(), bool_pref("richPresenceArtwork").unwrap_or(true));
+        start_rich_presence(
+            app.clone(),
+            bool_pref("richPresenceArtwork").unwrap_or(true),
+        );
     }
 }
 

@@ -150,7 +150,11 @@ pub(crate) fn to_snapshot(
 ) -> LiverySnapshot {
     LiverySnapshot {
         version: doc.version,
-        digest: doc.digest.iter().map(|byte| format!("{byte:02x}")).collect(),
+        digest: doc
+            .digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect(),
         display_name: some_unless_empty(&doc.display_name),
         tagline: some_unless_empty(&doc.tagline),
         motd: some_unless_empty(&doc.motd),
@@ -342,13 +346,23 @@ mod tests {
     #[test]
     fn unset_optional_fields_are_absent_keys_throughout_the_snapshot() {
         let json = serde_json::to_value(to_snapshot(&doc(), |_| None)).unwrap();
-        for absent in ["displayName", "motd", "rulesUrl", "bannerKey", "iconKey", "palette"] {
+        for absent in [
+            "displayName",
+            "motd",
+            "rulesUrl",
+            "bannerKey",
+            "iconKey",
+            "palette",
+        ] {
             if absent == "palette" {
                 let palette = json["palette"].as_object().unwrap();
                 assert!(!palette.contains_key("dark"), "{palette:?}");
                 assert!(!palette.contains_key("light"), "{palette:?}");
             } else {
-                assert!(!json.as_object().unwrap().contains_key(absent), "{absent}: {json}");
+                assert!(
+                    !json.as_object().unwrap().contains_key(absent),
+                    "{absent}: {json}"
+                );
             }
         }
     }

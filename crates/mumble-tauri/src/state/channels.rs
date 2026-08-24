@@ -12,9 +12,13 @@ use super::AppState;
 ///
 /// Kept generic on purpose: a new settable channel trait becomes usable from the
 /// UI without touching this command surface.
-fn parse_channel_attributes(raw: &[i32]) -> Vec<mumble_protocol::proto::mumble_tcp::ChannelAttribute> {
+fn parse_channel_attributes(
+    raw: &[i32],
+) -> Vec<mumble_protocol::proto::mumble_tcp::ChannelAttribute> {
     raw.iter()
-        .filter_map(|&value| mumble_protocol::proto::mumble_tcp::ChannelAttribute::try_from(value).ok())
+        .filter_map(|&value| {
+            mumble_protocol::proto::mumble_tcp::ChannelAttribute::try_from(value).ok()
+        })
         .collect()
 }
 

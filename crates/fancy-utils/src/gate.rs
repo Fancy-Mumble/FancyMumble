@@ -177,7 +177,10 @@ mod tests {
     fn the_thresholds_match_the_servers_table() {
         // The same literals `starling-gate` uses. Duplicated on purpose and
         // pinned here, so drift fails a test rather than a handshake.
-        assert_eq!(Capability::NativeFancyMessages.since(), 0x0000_0002_000C_0000);
+        assert_eq!(
+            Capability::NativeFancyMessages.since(),
+            0x0000_0002_000C_0000
+        );
         assert_eq!(Capability::ModernVoiceCrypto.since(), 0x0000_0004_0000_0000);
     }
 }

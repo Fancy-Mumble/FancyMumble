@@ -336,7 +336,9 @@ fn denoise(input: &[f32], algorithm: NoiseSuppressionAlgorithm) -> Vec<f32> {
             sequence: 0,
             is_silent: false,
         };
-        filter.process(&mut frame).expect("the filter accepts a frame");
+        filter
+            .process(&mut frame)
+            .expect("the filter accepts a frame");
         out.extend_from_slice(frame.as_f32_samples());
     }
     out
@@ -347,7 +349,10 @@ fn denoise(input: &[f32], algorithm: NoiseSuppressionAlgorithm) -> Vec<f32> {
 /// Without this every metric below measures the backend's latency instead of
 /// its quality - see the module header.
 fn best_lag(reference: &[f32], estimate: &[f32]) -> usize {
-    let span = reference.len().min(estimate.len()).saturating_sub(MAX_DELAY);
+    let span = reference
+        .len()
+        .min(estimate.len())
+        .saturating_sub(MAX_DELAY);
     if span == 0 {
         return 0;
     }
@@ -362,7 +367,11 @@ fn best_lag(reference: &[f32], estimate: &[f32]) -> usize {
             dot += f64::from(reference[i]) * e;
             energy += e * e;
         }
-        let score = if energy > 0.0 { dot / energy.sqrt() } else { 0.0 };
+        let score = if energy > 0.0 {
+            dot / energy.sqrt()
+        } else {
+            0.0
+        };
         if score > best.1 {
             best = (lag, score);
         }
@@ -378,14 +387,20 @@ fn best_lag(reference: &[f32], estimate: &[f32]) -> usize {
 /// which is exactly how a naive noise-floor measurement is fooled.
 fn si_sdr(reference: &[f32], estimate: &[f32]) -> f32 {
     let lag = best_lag(reference, estimate);
-    let n = reference.len().min(estimate.len() - lag.min(estimate.len()));
+    let n = reference
+        .len()
+        .min(estimate.len() - lag.min(estimate.len()));
     if n == 0 {
         return f32::NEG_INFINITY;
     }
     let r = &reference[..n];
     let e = &estimate[lag..lag + n];
 
-    let dot: f64 = r.iter().zip(e).map(|(a, b)| f64::from(*a) * f64::from(*b)).sum();
+    let dot: f64 = r
+        .iter()
+        .zip(e)
+        .map(|(a, b)| f64::from(*a) * f64::from(*b))
+        .sum();
     let ref_energy: f64 = r.iter().map(|a| f64::from(*a) * f64::from(*a)).sum();
     if ref_energy <= 0.0 {
         return f32::NEG_INFINITY;

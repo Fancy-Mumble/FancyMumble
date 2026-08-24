@@ -13,7 +13,7 @@ pub struct SendPchatKeyHoldersQuery {
 impl CommandAction for SendPchatKeyHoldersQuery {
     fn execute(&self, _state: &ServerState) -> CommandOutput {
         CommandOutput {
-            tcp_messages: vec![ControlMessage::PchatKeyHoldersQuery(self.query)],            
+            tcp_messages: vec![ControlMessage::PchatKeyHoldersQuery(self.query)],
             ..Default::default()
         }
     }

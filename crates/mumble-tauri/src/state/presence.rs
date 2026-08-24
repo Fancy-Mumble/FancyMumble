@@ -14,9 +14,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use fancy_presence::assets::{self, ImageSource};
-use fancy_presence::{
-    BridgeState, PresenceConfig, PresenceEntry, PresenceEvent, PresenceService,
-};
+use fancy_presence::{BridgeState, PresenceConfig, PresenceEntry, PresenceEvent, PresenceService};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
@@ -138,10 +136,13 @@ impl PresenceManager {
         }
 
         let status = status_of(slot.as_ref());
-        emit(app, PresenceSnapshot {
-            status,
-            entries: self.views(slot.as_ref()),
-        });
+        emit(
+            app,
+            PresenceSnapshot {
+                status,
+                entries: self.views(slot.as_ref()),
+            },
+        );
         Ok(status)
     }
 
@@ -187,7 +188,11 @@ impl PresenceManager {
         let handle = tauri::async_runtime::spawn(async move {
             manager.run_pump(app, http, events).await;
         });
-        let mut pump = self.shared.pump.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut pump = self
+            .shared
+            .pump
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         if let Some(previous) = pump.replace(handle) {
             previous.abort();
         }
@@ -280,14 +285,15 @@ impl crate::state::AppState {
     ) -> Result<PresenceStatus, String> {
         let manager = self.presence.clone();
         let http = self.http_client.clone();
-        manager.set_enabled(app, http, enabled, resolve_artwork).await
+        manager
+            .set_enabled(app, http, enabled, resolve_artwork)
+            .await
     }
 
     /// The current listener status and advertised activities.
     pub(crate) async fn presence_snapshot(&self) -> PresenceSnapshot {
         self.presence.clone().snapshot().await
     }
-
 }
 
 fn status_of(service: Option<&PresenceService>) -> PresenceStatus {
@@ -346,10 +352,7 @@ fn image_url(
     }
 }
 
-async fn resolve_application(
-    http: &reqwest::Client,
-    application_id: &str,
-) -> ApplicationMetadata {
+async fn resolve_application(http: &reqwest::Client, application_id: &str) -> ApplicationMetadata {
     ApplicationMetadata {
         name: fetch_json(http, &assets::application_rpc_url(application_id))
             .await

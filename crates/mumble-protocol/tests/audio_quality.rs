@@ -1,4 +1,4 @@
-﻿//! Audio quality integration tests.
+//! Audio quality integration tests.
 //!
 //! These tests generate known signals (sine waves), push them through
 //! individual pipeline stages and the full encode->decode roundtrip,
@@ -26,8 +26,8 @@ use mumble_protocol::audio::decoder::{AudioDecoder, OpusDecoder};
 use mumble_protocol::audio::encoder::{
     AudioEncoder, OpusApplication, OpusEncoder, OpusEncoderConfig,
 };
-use mumble_protocol::audio::filter::automatic_gain::AutomaticGainControl;
 use mumble_protocol::audio::filter::automatic_gain::AgcConfig;
+use mumble_protocol::audio::filter::automatic_gain::AutomaticGainControl;
 use mumble_protocol::audio::filter::noise_gate::{NoiseGate, NoiseGateConfig};
 use mumble_protocol::audio::filter::AudioFilter;
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
@@ -433,11 +433,13 @@ fn agc_does_not_distort_steady_signal() {
     let mean_rms: f32 = steady_rms.iter().sum::<f32>() / steady_rms.len() as f32;
     let max_rms = steady_rms.iter().copied().fold(0.0f32, f32::max);
     let min_rms = steady_rms.iter().copied().fold(f32::MAX, f32::min);
-    let ratio = if min_rms > 1e-6 { max_rms / min_rms } else { f32::MAX };
+    let ratio = if min_rms > 1e-6 {
+        max_rms / min_rms
+    } else {
+        f32::MAX
+    };
 
-    println!(
-        "AGC level: mean={mean_rms:.4}, min={min_rms:.4}, max={max_rms:.4}, ratio={ratio:.2}"
-    );
+    println!("AGC level: mean={mean_rms:.4}, min={min_rms:.4}, max={max_rms:.4}, ratio={ratio:.2}");
     assert!(
         ratio < 1.5,
         "AGC level ratio {ratio:.2} too high (pumping) - mean={mean_rms:.4}"
@@ -491,11 +493,19 @@ fn agc_level_stability_across_volume_change() {
     // The important thing: there shouldn't be huge fluctuation within each segment.
     let quiet_max = quiet_settled.iter().copied().fold(0.0f32, f32::max);
     let quiet_min = quiet_settled.iter().copied().fold(f32::MAX, f32::min);
-    let quiet_ratio = if quiet_min > 1e-6 { quiet_max / quiet_min } else { f32::MAX };
+    let quiet_ratio = if quiet_min > 1e-6 {
+        quiet_max / quiet_min
+    } else {
+        f32::MAX
+    };
 
     let loud_max = loud_settled.iter().copied().fold(0.0f32, f32::max);
     let loud_min = loud_settled.iter().copied().fold(f32::MAX, f32::min);
-    let loud_ratio = if loud_min > 1e-6 { loud_max / loud_min } else { f32::MAX };
+    let loud_ratio = if loud_min > 1e-6 {
+        loud_max / loud_min
+    } else {
+        f32::MAX
+    };
 
     assert!(
         quiet_ratio < 1.5,
@@ -558,7 +568,9 @@ fn full_pipeline_quality() {
     // 1) Frequency should be preserved.
     let (dom_freq, _) = dominant_frequency(steady_samples);
     let freq_err = (dom_freq - freq).abs();
-    println!("Full pipeline: dominant freq = {dom_freq:.1} Hz (expected {freq} Hz, err {freq_err:.1})");
+    println!(
+        "Full pipeline: dominant freq = {dom_freq:.1} Hz (expected {freq} Hz, err {freq_err:.1})"
+    );
     assert!(freq_err < 15.0, "Frequency shifted too much: {dom_freq} Hz");
 
     // 2) THD+N should be acceptable.
@@ -574,7 +586,11 @@ fn full_pipeline_quality() {
     let mean_rms: f32 = steady_rms.iter().sum::<f32>() / steady_rms.len() as f32;
     let max_rms = steady_rms.iter().copied().fold(0.0f32, f32::max);
     let min_rms = steady_rms.iter().copied().fold(f32::MAX, f32::min);
-    let ratio = if min_rms > 1e-6 { max_rms / min_rms } else { f32::MAX };
+    let ratio = if min_rms > 1e-6 {
+        max_rms / min_rms
+    } else {
+        f32::MAX
+    };
     println!(
         "Full pipeline level: mean={mean_rms:.4}, min={min_rms:.4}, max={max_rms:.4}, ratio={ratio:.2}"
     );
@@ -796,10 +812,10 @@ fn opus_plc_produces_smooth_concealment() {
 /// detects gaps and invokes PLC.
 #[test]
 fn inbound_pipeline_gap_detection_invokes_plc() {
-    use mumble_protocol::audio::pipeline::InboundPipeline;
-    use mumble_protocol::audio::filter::FilterChain;
-    use mumble_protocol::audio::playback::NullPlayback;
     use mumble_protocol::audio::encoder::EncodedPacket;
+    use mumble_protocol::audio::filter::FilterChain;
+    use mumble_protocol::audio::pipeline::InboundPipeline;
+    use mumble_protocol::audio::playback::NullPlayback;
 
     let fmt = AudioFormat::MONO_48KHZ_F32;
     let config = OpusEncoderConfig::default();
@@ -838,7 +854,10 @@ fn inbound_pipeline_gap_detection_invokes_plc() {
 ///
 /// Returns `None` if the file does not exist or cannot be decoded.
 /// Handles stereo downmixing and resampling from 44.1 kHz.
-#[allow(dead_code, reason = "helper function available when sample files are present")]
+#[allow(
+    dead_code,
+    reason = "helper function available when sample files are present"
+)]
 fn decode_mp3_to_mono_48k(path: &str) -> Option<Vec<f32>> {
     use minimp3::{Decoder as Mp3Decoder, Error as Mp3Error};
     use std::fs::File;
@@ -1045,10 +1064,7 @@ fn run_mp3_roundtrip_analysis(path: &str) -> bool {
     } else {
         boundary_jumps.iter().sum::<f32>() / boundary_jumps.len() as f32
     };
-    let max_jump = boundary_jumps
-        .iter()
-        .copied()
-        .fold(0.0f32, f32::max);
+    let max_jump = boundary_jumps.iter().copied().fold(0.0f32, f32::max);
 
     // 3. RMS-envelope correlation (10 ms windows, 50% overlap)
     //
@@ -1079,8 +1095,7 @@ fn run_mp3_roundtrip_analysis(path: &str) -> bool {
     let env_len = in_env.len().min(out_env.len());
 
     let env_correlation = if env_len > 2 {
-        let mean_i: f64 =
-            in_env[..env_len].iter().map(|&v| v as f64).sum::<f64>() / env_len as f64;
+        let mean_i: f64 = in_env[..env_len].iter().map(|&v| v as f64).sum::<f64>() / env_len as f64;
         let mean_o: f64 =
             out_env[..env_len].iter().map(|&v| v as f64).sum::<f64>() / env_len as f64;
         let (mut cov, mut var_i, mut var_o) = (0.0f64, 0.0f64, 0.0f64);
@@ -1169,7 +1184,10 @@ fn mp3_roundtrip_boundary_analysis() {
         }
     }
 
-    println!("mp3_roundtrip_boundary_analysis: {tested}/{} file(s) passed", paths.len());
+    println!(
+        "mp3_roundtrip_boundary_analysis: {tested}/{} file(s) passed",
+        paths.len()
+    );
     assert!(tested > 0, "No MP3 files could be decoded");
 }
 
@@ -1216,11 +1234,8 @@ fn long_duration_frame_boundary_smoothness() {
 
     // Use a recording playback to capture pipeline output
     let (recording, output_buf) = RecordingPlayback::new(fmt);
-    let mut pipeline = InboundPipeline::new(
-        Box::new(decoder),
-        FilterChain::new(),
-        Box::new(recording),
-    );
+    let mut pipeline =
+        InboundPipeline::new(Box::new(decoder), FilterChain::new(), Box::new(recording));
     pipeline.start().unwrap();
 
     let frame_count = signal.len() / frame_size;
@@ -1256,24 +1271,18 @@ fn long_duration_frame_boundary_smoothness() {
 
         // Jump at frame boundary
         if boundary > 0 {
-            boundary_jumps
-                .push((output_samples[boundary] - output_samples[boundary - 1]).abs());
+            boundary_jumps.push((output_samples[boundary] - output_samples[boundary - 1]).abs());
         }
 
         // Jumps within the frame (for baseline comparison)
         let frame_end = ((i + 1) * frame_size).min(output_samples.len());
         for j in (boundary + 1)..frame_end {
-            non_boundary_jumps
-                .push((output_samples[j] - output_samples[j - 1]).abs());
+            non_boundary_jumps.push((output_samples[j] - output_samples[j - 1]).abs());
         }
     }
 
-    let mean_boundary =
-        boundary_jumps.iter().sum::<f32>() / boundary_jumps.len().max(1) as f32;
-    let max_boundary = boundary_jumps
-        .iter()
-        .copied()
-        .fold(0.0f32, f32::max);
+    let mean_boundary = boundary_jumps.iter().sum::<f32>() / boundary_jumps.len().max(1) as f32;
+    let max_boundary = boundary_jumps.iter().copied().fold(0.0f32, f32::max);
     let mean_internal =
         non_boundary_jumps.iter().sum::<f32>() / non_boundary_jumps.len().max(1) as f32;
     let ratio = if mean_internal > 1e-6 {
@@ -1318,10 +1327,7 @@ fn long_duration_frame_boundary_smoothness() {
         f64::INFINITY
     };
     println!("5 s roundtrip PSNR = {psnr:.1} dB");
-    assert!(
-        psnr > 10.0,
-        "PSNR {psnr:.1} dB too low (expected > 10 dB)"
-    );
+    assert!(psnr > 10.0, "PSNR {psnr:.1} dB too low (expected > 10 dB)");
 }
 
 /// Verify that the pipeline crossfade correction actually reduces
@@ -1396,7 +1402,9 @@ fn pipeline_crossfade_reduces_boundary_jumps() {
 
     // Measure boundary jumps for both
     let skip_frames = 10;
-    let measure_end = frame_count.min(raw_output.len() / frame_size).min(pipe_output.len() / frame_size);
+    let measure_end = frame_count
+        .min(raw_output.len() / frame_size)
+        .min(pipe_output.len() / frame_size);
 
     let boundary_jumps = |samples: &[f32]| -> (f32, f32) {
         let mut jumps = Vec::new();
@@ -1447,7 +1455,10 @@ fn pipeline_crossfade_reduces_boundary_jumps() {
 /// Handles mono/stereo, 16-bit/32-bit float, and resamples from other
 /// sample rates if necessary.  Returns `None` if file missing or
 /// unsupported.
-#[allow(dead_code, reason = "helper function available when sample WAV files are present")]
+#[allow(
+    dead_code,
+    reason = "helper function available when sample WAV files are present"
+)]
 fn decode_wav_to_mono_48k(path: &str) -> Option<Vec<f32>> {
     let reader = hound::WavReader::open(path).ok()?;
     let spec = reader.spec();
@@ -1636,13 +1647,11 @@ fn roundtrip_snr(samples: &[f32], config: &OpusEncoderConfig) -> (f32, usize) {
     let out = &out[delay..];
     let len = inp.len().min(out.len());
     let in_rms = rms(&inp[..len]);
-    let err_rms = rms(
-        &inp[..len]
-            .iter()
-            .zip(out[..len].iter())
-            .map(|(&a, &b)| a - b)
-            .collect::<Vec<f32>>(),
-    );
+    let err_rms = rms(&inp[..len]
+        .iter()
+        .zip(out[..len].iter())
+        .map(|(&a, &b)| a - b)
+        .collect::<Vec<f32>>());
     let snr = if err_rms > 0.0 {
         20.0 * (in_rms / err_rms).log10()
     } else {
@@ -1662,53 +1671,77 @@ fn wav_opus_config_diagnostic() {
     };
 
     println!("=== Opus Configuration Diagnostic ===");
-    println!("  Input: {path} ({} samples, {:.2}s)",
-             samples.len(), samples.len() as f32 / 48000.0);
+    println!(
+        "  Input: {path} ({} samples, {:.2}s)",
+        samples.len(),
+        samples.len() as f32 / 48000.0
+    );
     println!("  Input RMS: {:.4}", rms(&samples));
     println!();
 
     let configs: Vec<(&str, OpusEncoderConfig)> = vec![
-        ("User: 10ms/136k/Audio/FEC3%", OpusEncoderConfig {
-            frame_size: 480,
-            bitrate: 136_000,
-            ..OpusEncoderConfig::default()
-        }),
-        ("20ms/136k/Audio/FEC3%", OpusEncoderConfig {
-            frame_size: 960,
-            bitrate: 136_000,
-            ..OpusEncoderConfig::default()
-        }),
-        ("10ms/136k/Audio/noFEC", OpusEncoderConfig {
-            frame_size: 480,
-            bitrate: 136_000,
-            fec: false,
-            packet_loss_percent: 0,
-            ..OpusEncoderConfig::default()
-        }),
-        ("10ms/136k/Audio/complex10", OpusEncoderConfig {
-            frame_size: 480,
-            bitrate: 136_000,
-            complexity: 10,
-            ..OpusEncoderConfig::default()
-        }),
-        ("10ms/136k/VoIP mode (old)", OpusEncoderConfig {
-            frame_size: 480,
-            bitrate: 136_000,
-            application: OpusApplication::Voip,
-            ..OpusEncoderConfig::default()
-        }),
+        (
+            "User: 10ms/136k/Audio/FEC3%",
+            OpusEncoderConfig {
+                frame_size: 480,
+                bitrate: 136_000,
+                ..OpusEncoderConfig::default()
+            },
+        ),
+        (
+            "20ms/136k/Audio/FEC3%",
+            OpusEncoderConfig {
+                frame_size: 960,
+                bitrate: 136_000,
+                ..OpusEncoderConfig::default()
+            },
+        ),
+        (
+            "10ms/136k/Audio/noFEC",
+            OpusEncoderConfig {
+                frame_size: 480,
+                bitrate: 136_000,
+                fec: false,
+                packet_loss_percent: 0,
+                ..OpusEncoderConfig::default()
+            },
+        ),
+        (
+            "10ms/136k/Audio/complex10",
+            OpusEncoderConfig {
+                frame_size: 480,
+                bitrate: 136_000,
+                complexity: 10,
+                ..OpusEncoderConfig::default()
+            },
+        ),
+        (
+            "10ms/136k/VoIP mode (old)",
+            OpusEncoderConfig {
+                frame_size: 480,
+                bitrate: 136_000,
+                application: OpusApplication::Voip,
+                ..OpusEncoderConfig::default()
+            },
+        ),
         ("20ms/72k/Audio (default)", OpusEncoderConfig::default()),
-        ("10ms/64k/Audio", OpusEncoderConfig {
-            frame_size: 480,
-            bitrate: 64_000,
-            ..OpusEncoderConfig::default()
-        }),
-        ("10ms/136k/Audio/noPktLoss", OpusEncoderConfig {
-            frame_size: 480,
-            bitrate: 136_000,
-            packet_loss_percent: 0,
-            ..OpusEncoderConfig::default()
-        }),
+        (
+            "10ms/64k/Audio",
+            OpusEncoderConfig {
+                frame_size: 480,
+                bitrate: 64_000,
+                ..OpusEncoderConfig::default()
+            },
+        ),
+        (
+            "10ms/136k/Audio/noPktLoss",
+            OpusEncoderConfig {
+                frame_size: 480,
+                bitrate: 136_000,
+                packet_loss_percent: 0,
+                ..OpusEncoderConfig::default()
+            },
+        ),
     ];
 
     println!("  {:35} {:>8} {:>8}", "Config", "SNR(dB)", "Delay");
@@ -1821,7 +1854,11 @@ fn wav_reference_vs_pipeline_comparison() {
     let ref_snr = {
         let in_rms = rms(&ref_aligned_orig[..ref_len]);
         let err_rms = rms(&ref_error);
-        if err_rms > 0.0 { 20.0 * (in_rms / err_rms).log10() } else { f32::INFINITY }
+        if err_rms > 0.0 {
+            20.0 * (in_rms / err_rms).log10()
+        } else {
+            f32::INFINITY
+        }
     };
 
     // Align pipeline output to original
@@ -1840,11 +1877,17 @@ fn wav_reference_vs_pipeline_comparison() {
     let pipe_snr = {
         let in_rms = rms(&pipe_aligned_orig[..pipe_len]);
         let err_rms = rms(&pipe_error);
-        if err_rms > 0.0 { 20.0 * (in_rms / err_rms).log10() } else { f32::INFINITY }
+        if err_rms > 0.0 {
+            20.0 * (in_rms / err_rms).log10()
+        } else {
+            f32::INFINITY
+        }
     };
 
     // Compare pipeline output directly against reference output
-    let cross_len = ref_aligned_out.len().min(pipe_aligned_out.len())
+    let cross_len = ref_aligned_out
+        .len()
+        .min(pipe_aligned_out.len())
         .min(ref_aligned_orig.len());
     let ref_vs_pipe_error: Vec<f32> = ref_aligned_out[..cross_len]
         .iter()
@@ -1854,7 +1897,11 @@ fn wav_reference_vs_pipeline_comparison() {
     let ref_vs_pipe_snr = {
         let sig_rms = rms(&ref_aligned_out[..cross_len]);
         let err_rms = rms(&ref_vs_pipe_error);
-        if err_rms > 0.0 { 20.0 * (sig_rms / err_rms).log10() } else { f32::INFINITY }
+        if err_rms > 0.0 {
+            20.0 * (sig_rms / err_rms).log10()
+        } else {
+            f32::INFINITY
+        }
     };
 
     // Pop/roughness comparison
@@ -1865,18 +1912,33 @@ fn wav_reference_vs_pipeline_comparison() {
     let orig_roughness = energy_roughness(orig, 480);
 
     println!("=== Reference vs Pipeline Comparison ===");
-    println!("  Original:  RMS={:.4}, roughness={orig_roughness:.4}", rms(orig));
+    println!(
+        "  Original:  RMS={:.4}, roughness={orig_roughness:.4}",
+        rms(orig)
+    );
     println!();
-    println!("  {:20} {:>8} {:>6} {:>6} {:>8} {:>10}",
-             "", "SNR(dB)", "Delay", "Pops", "MaxDelta", "Roughness");
-    println!("  {:-<20} {:-^8} {:-^6} {:-^6} {:-^8} {:-^10}", "", "", "", "", "", "");
-    println!("  {:20} {:>7.1}  {:>5}  {:>5}  {:>7.4}  {:>9.4}",
-             "Reference (direct)", ref_snr, ref_delay, ref_pops, ref_max, ref_roughness);
-    println!("  {:20} {:>7.1}  {:>5}  {:>5}  {:>7.4}  {:>9.4}",
-             "Pipeline", pipe_snr, pipe_delay, pipe_pops, pipe_max, pipe_roughness);
+    println!(
+        "  {:20} {:>8} {:>6} {:>6} {:>8} {:>10}",
+        "", "SNR(dB)", "Delay", "Pops", "MaxDelta", "Roughness"
+    );
+    println!(
+        "  {:-<20} {:-^8} {:-^6} {:-^6} {:-^8} {:-^10}",
+        "", "", "", "", "", ""
+    );
+    println!(
+        "  {:20} {:>7.1}  {:>5}  {:>5}  {:>7.4}  {:>9.4}",
+        "Reference (direct)", ref_snr, ref_delay, ref_pops, ref_max, ref_roughness
+    );
+    println!(
+        "  {:20} {:>7.1}  {:>5}  {:>5}  {:>7.4}  {:>9.4}",
+        "Pipeline", pipe_snr, pipe_delay, pipe_pops, pipe_max, pipe_roughness
+    );
     println!();
     println!("  Ref vs Pipeline SNR: {ref_vs_pipe_snr:.1} dB (higher = more similar)");
-    println!("  SNR difference: {:.1} dB (pipeline - reference)", pipe_snr - ref_snr);
+    println!(
+        "  SNR difference: {:.1} dB (pipeline - reference)",
+        pipe_snr - ref_snr
+    );
 
     // Pipeline should not be significantly worse than reference
     assert!(
@@ -1890,10 +1952,7 @@ fn wav_reference_vs_pipeline_comparison() {
         ref_snr > 5.0,
         "Reference SNR {ref_snr:.1} dB is too low - Opus config problem, not pipeline"
     );
-    assert!(
-        pipe_snr > 5.0,
-        "Pipeline SNR {pipe_snr:.1} dB is too low"
-    );
+    assert!(pipe_snr > 5.0, "Pipeline SNR {pipe_snr:.1} dB is too low");
 }
 
 /// Full crackling analysis of a WAV voice sample through the Opus
@@ -1974,18 +2033,25 @@ fn wav_voice_crackling_detection() {
         .collect();
 
     println!("=== WAV Voice Crackling Analysis ({frame_count} frames, 10 ms) ===");
-    println!("  Alignment delay: {delay} samples ({:.2} ms)", delay as f32 / 48.0);
+    println!(
+        "  Alignment delay: {delay} samples ({:.2} ms)",
+        delay as f32 / 48.0
+    );
 
     // 1. Pop/click detection on error signal
     // If the codec introduces crackling, the error signal will have
     // sudden spikes that don't correspond to the original audio.
     let (pop_count, pop_rate, max_delta) = detect_pops(&error_signal, 480, 8.0);
-    println!("  Error signal pops: count={pop_count}, rate={pop_rate:.2}%, max_delta={max_delta:.4}");
+    println!(
+        "  Error signal pops: count={pop_count}, rate={pop_rate:.2}%, max_delta={max_delta:.4}"
+    );
 
     // 2. Pop detection on output signal directly
     // Crackling manifests as abnormal sample-to-sample jumps.
     let (out_pops, out_pop_rate, out_max_delta) = detect_pops(output, 480, 10.0);
-    println!("  Output pops: count={out_pops}, rate={out_pop_rate:.2}%, max_delta={out_max_delta:.4}");
+    println!(
+        "  Output pops: count={out_pops}, rate={out_pop_rate:.2}%, max_delta={out_max_delta:.4}"
+    );
 
     // 3. Energy roughness of error signal
     // Smooth codec errors (low roughness) = normal loss;
@@ -2009,9 +2075,7 @@ fn wav_voice_crackling_detection() {
             continue;
         }
 
-        boundary_jumps.push(
-            (output_samples[boundary] - output_samples[boundary - 1]).abs(),
-        );
+        boundary_jumps.push((output_samples[boundary] - output_samples[boundary - 1]).abs());
 
         // Sample internal jumps for comparison
         let frame_end = ((i + 1) * frame_size).min(output_samples.len());
@@ -2205,27 +2269,19 @@ fn wav_voice_full_pipeline_crackling() {
     println!("=== WAV Full Pipeline Crackling Comparison ===");
 
     // Compare raw vs pipeline pop rates
-    let raw_steady =
-        &raw_output[skip..raw_output.len().min(total)];
-    let pipe_steady =
-        &pipe_output[skip..pipe_output.len().min(total)];
+    let raw_steady = &raw_output[skip..raw_output.len().min(total)];
+    let pipe_steady = &pipe_output[skip..pipe_output.len().min(total)];
 
     let (raw_pops, raw_pop_rate, raw_max) = detect_pops(raw_steady, 480, 10.0);
     let (pipe_pops, pipe_pop_rate, pipe_max) = detect_pops(pipe_steady, 480, 10.0);
 
-    println!(
-        "  Raw decode:  pops={raw_pops}, rate={raw_pop_rate:.2}%, max_delta={raw_max:.4}"
-    );
-    println!(
-        "  Pipeline:    pops={pipe_pops}, rate={pipe_pop_rate:.2}%, max_delta={pipe_max:.4}"
-    );
+    println!("  Raw decode:  pops={raw_pops}, rate={raw_pop_rate:.2}%, max_delta={raw_max:.4}");
+    println!("  Pipeline:    pops={pipe_pops}, rate={pipe_pop_rate:.2}%, max_delta={pipe_max:.4}");
 
     // Compare energy roughness
     let raw_roughness = energy_roughness(raw_steady, 480);
     let pipe_roughness = energy_roughness(pipe_steady, 480);
-    println!(
-        "  Roughness:   raw={raw_roughness:.4}, pipeline={pipe_roughness:.4}"
-    );
+    println!("  Roughness:   raw={raw_roughness:.4}, pipeline={pipe_roughness:.4}");
 
     // Boundary analysis for both
     let skip_frames = 5;
@@ -2355,13 +2411,11 @@ fn wav_roundtrip_all_samples() {
         let aligned_in = &input_steady[..input_steady.len() - delay];
         let aligned_out = &out_steady[delay..];
         let comp_len = aligned_in.len().min(aligned_out.len());
-        let error_rms = rms(
-            &aligned_in[..comp_len]
-                .iter()
-                .zip(aligned_out[..comp_len].iter())
-                .map(|(&a, &b)| a - b)
-                .collect::<Vec<f32>>(),
-        );
+        let error_rms = rms(&aligned_in[..comp_len]
+            .iter()
+            .zip(aligned_out[..comp_len].iter())
+            .map(|(&a, &b)| a - b)
+            .collect::<Vec<f32>>());
         let in_rms = rms(&aligned_in[..comp_len]);
         let snr = if error_rms > 0.0 {
             20.0 * (in_rms / error_rms).log10()
@@ -2379,9 +2433,6 @@ fn wav_roundtrip_all_samples() {
             pop_rate < 5.0,
             "[{path_str}] pop rate {pop_rate:.2}% too high"
         );
-        assert!(
-            snr > 5.0,
-            "[{path_str}] SNR {snr:.1} dB too low"
-        );
+        assert!(snr > 5.0, "[{path_str}] SNR {snr:.1} dB too low");
     }
 }

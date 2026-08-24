@@ -48,7 +48,11 @@ impl HandleMessage for mumble_tcp::FancyScheduledMessageListResponse {
         ctx.emit(
             "fancy-scheduled-message-list",
             ScheduledMessageListPayload {
-                messages: self.messages.iter().map(ScheduledMessagePayload::from).collect(),
+                messages: self
+                    .messages
+                    .iter()
+                    .map(ScheduledMessagePayload::from)
+                    .collect(),
             },
         );
     }

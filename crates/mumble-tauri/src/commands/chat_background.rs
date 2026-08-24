@@ -125,7 +125,9 @@ fn stored_path(
     if !is_safe_name(file_name) {
         return Ok(None);
     }
-    let path = crate::e2e_data_dir(app)?.join(BACKGROUND_DIR).join(file_name);
+    let path = crate::e2e_data_dir(app)?
+        .join(BACKGROUND_DIR)
+        .join(file_name);
     Ok(path.is_file().then_some(path))
 }
 
@@ -191,7 +193,9 @@ pub(crate) async fn pick_chat_background(
     }
 
     if !IMAGE_EXTENSIONS.contains(&extension.as_str()) {
-        return Err(format!("\".{extension}\" is not a supported image or video format."));
+        return Err(format!(
+            "\".{extension}\" is not a supported image or video format."
+        ));
     }
     if size > MAX_IMAGE_BYTES {
         return Err(format!(
@@ -215,7 +219,10 @@ pub(crate) async fn pick_chat_background(
         // JPEG deliberately: a wallpaper is composited over an opaque wash and
         // never needs transparency, and JPEG keeps the store small.
         img.to_rgb8()
-            .write_to(&mut std::io::Cursor::new(&mut jpeg), image::ImageFormat::Jpeg)
+            .write_to(
+                &mut std::io::Cursor::new(&mut jpeg),
+                image::ImageFormat::Jpeg,
+            )
             .map_err(|e| format!("encode image: {e}"))?;
         clear_roles(&dir, &[])?;
         let file_name = format!("image-{}.jpg", uuid::Uuid::new_v4());
@@ -276,8 +283,7 @@ pub(crate) async fn process_chat_background_image(
         if dim > 0.0 {
             transforms.push(&dim_filter);
         }
-        let processed =
-            process_pipeline(&bytes, &transforms, true).map_err(|e| e.to_string())?;
+        let processed = process_pipeline(&bytes, &transforms, true).map_err(|e| e.to_string())?;
 
         clear_roles(&dir, &["processed-"])?;
         let out_name = format!("processed-{}.jpg", uuid::Uuid::new_v4());
@@ -309,8 +315,7 @@ pub(crate) async fn extract_chat_background_poster(
         };
         clear_roles(&dir, &["image-"])?;
         let out_name = format!("image-{}.jpg", uuid::Uuid::new_v4());
-        std::fs::write(dir.join(&out_name), &jpeg)
-            .map_err(|e| format!("store poster: {e}"))?;
+        std::fs::write(dir.join(&out_name), &jpeg).map_err(|e| format!("store poster: {e}"))?;
         Ok(Some(out_name))
     })
     .await

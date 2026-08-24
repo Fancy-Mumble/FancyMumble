@@ -24,6 +24,6 @@ pub use super::protocol::fancy_v1::{
     build_key_exchange_signed_data, derive_archive_key, derive_chain_key, derive_key_at_index,
     derive_message_key, epoch_fingerprint, uuid_to_bytes, AadBuilder, ArchiveKeyDeriver,
     ChainRatchet, CryptoSuite, Encryptor, Fingerprinter, HkdfArchiveKeyDeriver, HkdfChainRatchet,
-    HkdfSha256Deriver, KeyDeriver, Sha256Fingerprinter, SignedDataBuilder,
-    StandardAadBuilder, StandardSignedDataBuilder, XChaCha20Suite, XChaChaEncryptor,
+    HkdfSha256Deriver, KeyDeriver, Sha256Fingerprinter, SignedDataBuilder, StandardAadBuilder,
+    StandardSignedDataBuilder, XChaCha20Suite, XChaChaEncryptor,
 };

@@ -549,7 +549,10 @@ pub enum UdpMessage {
 
 /// Unified inbound message from either transport.
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant, reason = "Control variant must hold a full ControlMessage; boxing would add heap allocation on the hot audio path")]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "Control variant must hold a full ControlMessage; boxing would add heap allocation on the hot audio path"
+)]
 pub enum ServerMessage {
     /// Control-plane message received over TCP.
     Control(ControlMessage),

@@ -48,4 +48,3 @@ impl HandleMessage for fancy::domain::OperatorTicketReply {
         );
     }
 }
-

@@ -24,8 +24,8 @@ use crate::persistent::{KeyTrustLevel, PchatProtocol};
 // Re-export public items for external consumers.
 pub use identity::{CryptoIdentity, SeedIdentity};
 pub use types::{
-    ChannelKey, CustodianPinState, EncryptedPayload, EpochCandidate, EpochKey, PeerKeyRecord,
-    channel_key_fingerprint,
+    channel_key_fingerprint, ChannelKey, CustodianPinState, EncryptedPayload, EpochCandidate,
+    EpochKey, PeerKeyRecord,
 };
 
 use types::{ChannelKey as CK, ConsensusCollector, CustodianPinState as CPS, DEFAULT_MAX_REQUESTS};
@@ -104,10 +104,7 @@ impl KeyManager {
     ///
     /// Use this to swap the entire E2EE scheme (e.g. for testing
     /// or to plug in an alternative like Signal).
-    pub fn with_suite(
-        identity: Box<dyn CryptoIdentity>,
-        suite: Box<dyn CryptoSuite>,
-    ) -> Self {
+    pub fn with_suite(identity: Box<dyn CryptoIdentity>, suite: Box<dyn CryptoSuite>) -> Self {
         Self {
             identity,
             suite,
@@ -138,9 +135,7 @@ impl KeyManager {
     pub fn has_key(&self, channel_id: u32, protocol: PchatProtocol) -> bool {
         match protocol {
             PchatProtocol::FancyV1FullArchive => self.archive_keys.contains_key(&channel_id),
-            PchatProtocol::SignalV1 => {
-                self.signal_bridge.is_some()
-            }
+            PchatProtocol::SignalV1 => self.signal_bridge.is_some(),
             _ => false,
         }
     }
@@ -154,7 +149,9 @@ impl KeyManager {
 
     /// Get the originator cert hash for a channel (if set).
     pub fn get_channel_originator(&self, channel_id: u32) -> Option<&str> {
-        self.channel_originators.get(&channel_id).map(String::as_str)
+        self.channel_originators
+            .get(&channel_id)
+            .map(String::as_str)
     }
 
     /// Get the set of key holders for a channel.
@@ -214,9 +211,12 @@ impl KeyManager {
         use sha2::Sha256;
 
         let (key, _trust) = self.archive_keys.get(&channel_id)?;
-        #[allow(clippy::expect_used, reason = "HMAC-SHA256 accepts any key length; InvalidLength is unreachable")]
-        let mut mac = Hmac::<Sha256>::new_from_slice(&key.key)
-            .expect("HMAC-SHA256 accepts any key size");
+        #[allow(
+            clippy::expect_used,
+            reason = "HMAC-SHA256 accepts any key length; InvalidLength is unreachable"
+        )]
+        let mut mac =
+            Hmac::<Sha256>::new_from_slice(&key.key).expect("HMAC-SHA256 accepts any key size");
         mac.update(challenge);
         let result = mac.finalize();
         Some(result.into_bytes().into())
@@ -248,15 +248,8 @@ impl KeyManager {
     }
 
     /// Store an archive key for a channel.
-    pub fn store_archive_key(
-        &mut self,
-        channel_id: u32,
-        key: [u8; 32],
-        trust: KeyTrustLevel,
-    ) {
-        let _ = self
-            .archive_keys
-            .insert(channel_id, (CK { key }, trust));
+    pub fn store_archive_key(&mut self, channel_id: u32, key: [u8; 32], trust: KeyTrustLevel) {
+        let _ = self.archive_keys.insert(channel_id, (CK { key }, trust));
     }
 
     /// Set the originator cert hash for a channel.
@@ -267,7 +260,11 @@ impl KeyManager {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used, reason = "unwrap/expect acceptable in test code")]
+    #![allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        reason = "unwrap/expect acceptable in test code"
+    )]
     use super::identity::SeedIdentity;
     use super::KeyManager;
 
@@ -359,7 +356,10 @@ mod tests {
 
         let pa = km_a.compute_challenge_proof(5, challenge).unwrap();
         let pb = km_b.compute_challenge_proof(5, challenge).unwrap();
-        assert_eq!(pa, pb, "same key + same challenge must yield the same proof");
+        assert_eq!(
+            pa, pb,
+            "same key + same challenge must yield the same proof"
+        );
     }
 
     /// Regression: `compute_challenge_proof` must use HMAC-SHA256 keyed by the
@@ -381,8 +381,8 @@ mod tests {
         let proof = km.compute_challenge_proof(7, challenge).unwrap();
 
         // Compute the expected HMAC-SHA256 independently.
-        let mut mac = Hmac::<Sha256>::new_from_slice(&archive_key)
-            .expect("HMAC-SHA256 accepts any key size");
+        let mut mac =
+            Hmac::<Sha256>::new_from_slice(&archive_key).expect("HMAC-SHA256 accepts any key size");
         mac.update(challenge);
         let expected: [u8; 32] = mac.finalize().into_bytes().into();
 

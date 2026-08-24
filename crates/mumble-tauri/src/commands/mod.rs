@@ -9,6 +9,7 @@ pub(crate) mod registry;
 pub(crate) mod account;
 pub(crate) mod admin;
 pub(crate) mod audio;
+pub(crate) mod audit;
 pub(crate) mod certificates;
 pub(crate) mod channels;
 pub(crate) mod chat_background;
@@ -16,17 +17,16 @@ pub(crate) mod connection;
 pub(crate) mod dm;
 pub(crate) mod draw_overlay;
 pub(crate) mod files;
-pub(crate) mod livery_admin;
-pub(crate) mod livery_patch;
-pub(crate) mod livery_probe;
 pub(crate) mod forum;
 pub(crate) mod image;
 pub(crate) mod keyshare;
+pub(crate) mod livery_admin;
+pub(crate) mod livery_patch;
+pub(crate) mod livery_probe;
 pub(crate) mod messaging;
 pub(crate) mod offload;
 pub(crate) mod onboarding;
 pub(crate) mod plugin_admin;
-pub(crate) mod audit;
 pub(crate) mod plugin_info;
 pub(crate) mod popout;
 /// Discord Rich Presence: hosts the local Discord IPC endpoint so other
@@ -36,20 +36,20 @@ pub(crate) mod presence;
 pub(crate) mod profile;
 pub(crate) mod public_servers;
 pub(crate) mod realtime;
+pub(crate) mod scheduled_message;
 /// Screen-share BROADCASTING needs OS capture APIs unavailable on Android.
 /// Viewing does not live here: it is the webview viewer layer plus the
 /// platform-independent `send_webrtc_signal`, so Android watches streams
 /// without this module.
 #[cfg(not(target_os = "android"))]
 pub(crate) mod screenshare;
+pub(crate) mod server;
+pub(crate) mod server_settings;
+pub(crate) mod servers;
 /// Native stream viewer commands (Linux + opt-in Windows); loud stubs on
 /// every other platform, Android included, so a stray invoke fails with a
 /// message instead of "command not found".
 pub(crate) mod stream_view;
-pub(crate) mod scheduled_message;
-pub(crate) mod server;
-pub(crate) mod server_settings;
-pub(crate) mod servers;
 pub(crate) mod system;
 pub(crate) mod ui_mode;
 pub(crate) mod window;

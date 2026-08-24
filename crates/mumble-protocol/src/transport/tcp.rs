@@ -1,4 +1,4 @@
-﻿//! TLS-encrypted TCP transport for Mumble control messages.
+//! TLS-encrypted TCP transport for Mumble control messages.
 //!
 //! Mumble uses TLS 1.2+ for its TCP control channel. This module handles
 //! connecting, framing, and sending/receiving [`ControlMessage`]s.
@@ -82,13 +82,16 @@ impl TcpTransport {
         )?;
         let connector = TlsConnector::from(Arc::new(tls_config));
 
-        let server_name = match rustls::pki_types::ServerName::try_from(config.server_host.clone()) {
+        let server_name = match rustls::pki_types::ServerName::try_from(config.server_host.clone())
+        {
             Ok(name) => name,
             Err(_) => {
-                let ip: std::net::IpAddr = config
-                    .server_host
-                    .parse()
-                    .map_err(|e| Error::Other(format!("invalid server address '{}': {e}", config.server_host)))?;
+                let ip: std::net::IpAddr = config.server_host.parse().map_err(|e| {
+                    Error::Other(format!(
+                        "invalid server address '{}': {e}",
+                        config.server_host
+                    ))
+                })?;
                 rustls::pki_types::ServerName::IpAddress(ip.into())
             }
         };

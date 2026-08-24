@@ -287,10 +287,7 @@ impl StreamResampler {
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        clippy::unwrap_used,
-        reason = "unwrap is acceptable in test code"
-    )]
+    #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
     use super::*;
 
     /// Generate `n` samples of a sine at `freq` Hz sampled at `rate` Hz.
@@ -352,7 +349,9 @@ mod tests {
     fn output_length_matches_ratio_for_many_rates() {
         // 2 seconds of input at each rate; output must be 2 s at 48 kHz
         // within one filter length.
-        for &rate in &[8_000.0, 11_025.0, 16_000.0, 22_050.0, 44_100.0, 96_000.0, 176_400.0, 192_000.0] {
+        for &rate in &[
+            8_000.0, 11_025.0, 16_000.0, 22_050.0, 44_100.0, 96_000.0, 176_400.0, 192_000.0,
+        ] {
             let mut rs = StreamResampler::new(rate, 48_000.0).unwrap();
             let input = sine(440.0, rate, (rate * 2.0) as usize);
             let out = convert_chunked(&mut rs, &input);
@@ -393,7 +392,12 @@ mod tests {
 
     #[test]
     fn tone_frequency_preserved_up_and_down() {
-        for &(rate, tone) in &[(44_100.0, 1_000.0), (8_000.0, 700.0), (96_000.0, 3_000.0), (192_000.0, 440.0)] {
+        for &(rate, tone) in &[
+            (44_100.0, 1_000.0),
+            (8_000.0, 700.0),
+            (96_000.0, 3_000.0),
+            (192_000.0, 440.0),
+        ] {
             let mut rs = StreamResampler::new(rate, 48_000.0).unwrap();
             let input = sine(tone, rate, (rate * 2.0) as usize);
             let out = convert_chunked(&mut rs, &input);

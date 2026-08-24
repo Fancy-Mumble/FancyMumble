@@ -496,7 +496,11 @@ impl ScreenBroadcaster {
         let senders_pc = Arc::clone(pc);
         let listener_flags = flags.clone();
         let _detached = runtime.spawn(async move {
-            let paired = senders_pc.get_senders().await.into_iter().zip(listener_flags);
+            let paired = senders_pc
+                .get_senders()
+                .await
+                .into_iter()
+                .zip(listener_flags);
             for (sender, flag) in paired {
                 let _detached = tokio::spawn(watch_sender_keyframes(sender, flag));
             }

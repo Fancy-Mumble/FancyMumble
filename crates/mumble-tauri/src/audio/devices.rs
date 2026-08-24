@@ -52,7 +52,10 @@ pub fn outputs() -> Vec<NamedDevice> {
 /// audio at all.
 pub fn find_input(name: &str) -> Option<cpal::Device> {
     resolve(inputs(), name).or_else(|| {
-        tracing::warn!(device = name, "input device not offered; using system default");
+        tracing::warn!(
+            device = name,
+            "input device not offered; using system default"
+        );
         cpal::default_host().default_input_device()
     })
 }
@@ -62,7 +65,10 @@ pub fn find_input(name: &str) -> Option<cpal::Device> {
 /// Falls back to the system default like [`find_input`].
 pub fn find_output(name: &str) -> Option<cpal::Device> {
     resolve(outputs(), name).or_else(|| {
-        tracing::warn!(device = name, "output device not offered; using system default");
+        tracing::warn!(
+            device = name,
+            "output device not offered; using system default"
+        );
         cpal::default_host().default_output_device()
     })
 }
@@ -205,8 +211,7 @@ fn build(devices: Vec<cpal::Device>, default: Option<&cpal::Device>) -> Vec<Name
     // hosts keep cpal's names untouched - the Windows exclusive-mode path
     // (`fancy_audio_device`) resolves the very same strings by itself.
     #[cfg(target_os = "linux")]
-    let raw =
-        linux_alsa::prefer_sound_server(linux_alsa::disambiguate(linux_alsa::collapse(raw)));
+    let raw = linux_alsa::prefer_sound_server(linux_alsa::disambiguate(linux_alsa::collapse(raw)));
 
     raw.into_iter()
         .map(|r| NamedDevice {
@@ -494,7 +499,9 @@ mod linux_alsa {
         fn stale_card_preference_falls_back() {
             let stale = "Komplete Audio 1, USB Audio";
             assert!(
-                !crate::audio::devices::outputs().iter().any(|d| d.name == stale),
+                !crate::audio::devices::outputs()
+                    .iter()
+                    .any(|d| d.name == stale),
                 "card PCM still offered next to a sound server"
             );
             assert!(

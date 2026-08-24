@@ -13,7 +13,9 @@ pub struct SendPchatEpochCountersig {
 impl CommandAction for SendPchatEpochCountersig {
     fn execute(&self, _state: &ServerState) -> CommandOutput {
         CommandOutput {
-            tcp_messages: vec![ControlMessage::PchatEpochCountersig(self.countersig.clone())],
+            tcp_messages: vec![ControlMessage::PchatEpochCountersig(
+                self.countersig.clone(),
+            )],
             ..Default::default()
         }
     }

@@ -17,7 +17,10 @@ use crate::error::{Error, Result};
 use crate::message::{ControlMessage, ServerMessage, UdpMessage};
 
 /// A single item in the work queue.
-#[allow(clippy::large_enum_variant, reason = "ServerMessage variant must inline ControlMessage; boxing adds per-packet heap allocation on the hot audio path")]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "ServerMessage variant must inline ControlMessage; boxing adds per-packet heap allocation on the hot audio path"
+)]
 #[derive(Debug)]
 pub enum WorkItem {
     /// Inbound server message (from TCP or UDP).
@@ -42,26 +45,17 @@ pub struct WorkQueueSender {
 impl WorkQueueSender {
     /// Submit an inbound UDP message (audio / ping). Non-blocking.
     pub async fn send_udp(&self, msg: UdpMessage) -> Result<()> {
-        self.udp_tx
-            .send(msg)
-            .await
-            .map_err(|_| Error::QueueClosed)
+        self.udp_tx.send(msg).await.map_err(|_| Error::QueueClosed)
     }
 
     /// Submit an inbound TCP control message. Non-blocking.
     pub async fn send_tcp(&self, msg: ControlMessage) -> Result<()> {
-        self.tcp_tx
-            .send(msg)
-            .await
-            .map_err(|_| Error::QueueClosed)
+        self.tcp_tx.send(msg).await.map_err(|_| Error::QueueClosed)
     }
 
     /// Submit a user-initiated command.
     pub async fn send_command(&self, cmd: BoxedCommand) -> Result<()> {
-        self.cmd_tx
-            .send(cmd)
-            .await
-            .map_err(|_| Error::QueueClosed)
+        self.cmd_tx.send(cmd).await.map_err(|_| Error::QueueClosed)
     }
 
     /// Submit an outbound audio packet (bypasses command queue).
@@ -127,7 +121,11 @@ const AUDIO_OUT_CHANNEL_SIZE: usize = 128;
 /// The outbound audio receiver is returned independently so the event
 /// loop can poll it at the top level of its `select!`, preventing
 /// starvation by constant inbound UDP traffic.
-pub fn create() -> (WorkQueueSender, WorkQueueReceiver, mpsc::Receiver<UdpMessage>) {
+pub fn create() -> (
+    WorkQueueSender,
+    WorkQueueReceiver,
+    mpsc::Receiver<UdpMessage>,
+) {
     let (udp_tx, udp_rx) = mpsc::channel(UDP_CHANNEL_SIZE);
     let (tcp_tx, tcp_rx) = mpsc::channel(TCP_CHANNEL_SIZE);
     let (cmd_tx, cmd_rx) = mpsc::channel(CMD_CHANNEL_SIZE);

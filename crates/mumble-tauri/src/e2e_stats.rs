@@ -207,11 +207,9 @@ pub fn start_audio_dump() {
     }));
     let _ = std::thread::Builder::new()
         .name("e2e-audio-dump".into())
-        .spawn(|| {
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(1_000));
-                let _ = write_audio_dump();
-            }
+        .spawn(|| loop {
+            std::thread::sleep(std::time::Duration::from_millis(1_000));
+            let _ = write_audio_dump();
         });
 }
 

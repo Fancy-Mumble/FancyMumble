@@ -1909,12 +1909,10 @@ fn a_denied_ticket_still_names_the_reason() {
     let events = emitter.events();
     let (_, payload) = events.last().expect("one event");
     assert_eq!(payload["ticket"]["token"], "");
-    assert!(
-        payload["ticket"]["deniedReason"]
-            .as_str()
-            .unwrap()
-            .contains("permission")
-    );
+    assert!(payload["ticket"]["deniedReason"]
+        .as_str()
+        .unwrap()
+        .contains("permission"));
 }
 
 // -- Dispatch ------------------------------------------------------
@@ -2760,7 +2758,10 @@ mod livery_art {
         assert!(state.livery_art_asked.contains("beef"));
         // The document still arrives at the UI: the words and colours in it are
         // ready now, and the artwork lands as a second push.
-        assert_eq!(state.livery.as_ref().unwrap().banner_key.as_deref(), Some("beef"));
+        assert_eq!(
+            state.livery.as_ref().unwrap().banner_key.as_deref(),
+            Some("beef")
+        );
         assert!(state.livery.as_ref().unwrap().banner_src.is_none());
     }
 

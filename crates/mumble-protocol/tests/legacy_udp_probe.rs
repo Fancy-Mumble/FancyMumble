@@ -16,7 +16,6 @@
     unused_crate_dependencies,
     reason = "integration test: it links the whole crate's dependency set and uses a few"
 )]
-
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -192,7 +191,11 @@ impl Peer {
         .encode(&mut payload)
         .expect("encode audio");
 
-        println!("PROBE[{}]: speaking {} bytes through UDPTunnel", self.label, payload.len());
+        println!(
+            "PROBE[{}]: speaking {} bytes through UDPTunnel",
+            self.label,
+            payload.len()
+        );
         self.transport
             .send(&ControlMessage::UdpTunnel(payload))
             .await
@@ -206,12 +209,19 @@ impl Peer {
         let plain = match self.crypt.decrypt(&buffer[..len]) {
             Ok(plain) => plain,
             Err(e) => {
-                println!("PROBE[{}]: *** received {len} bytes that did NOT decrypt: {e} ***", self.label);
+                println!(
+                    "PROBE[{}]: *** received {len} bytes that did NOT decrypt: {e} ***",
+                    self.label
+                );
                 return None;
             }
         };
         if plain.first() != Some(&0) {
-            println!("PROBE[{}]: received a non-audio datagram (prefix {:?})", self.label, plain.first());
+            println!(
+                "PROBE[{}]: received a non-audio datagram (prefix {:?})",
+                self.label,
+                plain.first()
+            );
             return None;
         }
         mumble_udp::Audio::decode(&plain[1..]).ok()
@@ -224,7 +234,12 @@ async fn legacy_and_modern_peers_can_hear_each_other() {
         println!("PROBE: no server on {}; nothing to do", port());
         return;
     };
-    let modern = Peer::connect("modern", "probe-modern", Some(mumble_protocol::FANCY_VERSION)).await;
+    let modern = Peer::connect(
+        "modern",
+        "probe-modern",
+        Some(mumble_protocol::FANCY_VERSION),
+    )
+    .await;
     let Some(mut modern) = modern else {
         println!("PROBE: the modern peer could not connect");
         return;

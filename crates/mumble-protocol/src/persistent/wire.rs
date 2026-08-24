@@ -293,7 +293,9 @@ mod option_serde_bytes {
         }
     }
 
-    pub(super) fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Vec<u8>>, D::Error> {
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        d: D,
+    ) -> Result<Option<Vec<u8>>, D::Error> {
         let opt: Option<serde_bytes::ByteBuf> = Option::deserialize(d)?;
         Ok(opt.map(serde_bytes::ByteBuf::into_vec))
     }

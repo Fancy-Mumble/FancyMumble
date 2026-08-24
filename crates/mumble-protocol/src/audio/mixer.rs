@@ -193,10 +193,9 @@ impl AudioMixer {
             insert_silence(&self.buffers, session, silence_units, self.format);
         }
 
-        let speaker = self
-            .speakers
-            .get_mut(&session)
-            .ok_or_else(|| crate::error::Error::InvalidState("speaker removed during gap fill".into()))?;
+        let speaker = self.speakers.get_mut(&session).ok_or_else(|| {
+            crate::error::Error::InvalidState("speaker removed during gap fill".into())
+        })?;
         speaker.last_seq = Some(packet.sequence);
 
         // After a silence padding insertion, the buffer ends in 0.0 -
@@ -243,7 +242,10 @@ impl AudioMixer {
     ///
     /// Currently unused by [`feed`] - kept for the recording path and
     /// future jitter-buffer integration.
-    #[allow(dead_code, reason = "kept for future jitter-buffer integration and external callers")]
+    #[allow(
+        dead_code,
+        reason = "kept for future jitter-buffer integration and external callers"
+    )]
     fn feed_lost(&mut self, session: u32) -> Result<()> {
         let speaker = self
             .speakers
@@ -345,8 +347,7 @@ fn detect_certain_gap(expected: Option<u64>, incoming: u64) -> u64 {
 /// Maximum silence-padding insertion in 10 ms units.  Matches the
 /// per-speaker buffer cap so that a gap fill cannot displace real
 /// already-decoded audio waiting to be played.
-const MAX_SILENCE_FILL_UNITS: u64 =
-    (MAX_SPEAKER_BUFFER_SAMPLES as u64) / SAMPLES_PER_SEQ_UNIT;
+const MAX_SILENCE_FILL_UNITS: u64 = (MAX_SPEAKER_BUFFER_SAMPLES as u64) / SAMPLES_PER_SEQ_UNIT;
 
 /// Number of 10 ms sequence units the given decoded frame represents.
 fn frame_seq_units(frame: &crate::audio::sample::AudioFrame, format: AudioFormat) -> u64 {
@@ -366,12 +367,7 @@ fn frame_seq_units(frame: &crate::audio::sample::AudioFrame, format: AudioFormat
 /// caused 100 - 400 ms perceptible dropouts every time a moderate
 /// gap was detected, sustained underrun in the playback mixer, and
 /// repeated re-prime cycles in the rodio source.
-fn insert_silence(
-    buffers: &SpeakerBuffers,
-    session: u32,
-    units: u64,
-    format: AudioFormat,
-) {
+fn insert_silence(buffers: &SpeakerBuffers, session: u32, units: u64, format: AudioFormat) {
     let requested = (units as usize) * (SAMPLES_PER_SEQ_UNIT as usize) * format.channels as usize;
     if requested == 0 {
         return;
@@ -394,11 +390,7 @@ fn insert_silence(
     }
 }
 
-fn push_samples(
-    buffers: &SpeakerBuffers,
-    session: u32,
-    frame: &crate::audio::sample::AudioFrame,
-) {
+fn push_samples(buffers: &SpeakerBuffers, session: u32, frame: &crate::audio::sample::AudioFrame) {
     let samples = frame.as_f32_samples();
     notify_decoded(session, samples);
     if let Ok(mut bufs) = buffers.lock() {
@@ -565,7 +557,10 @@ mod tests {
         assert!(!silent, "a decoded frame is not concealment");
 
         let (len, silent) = ours(&rx, SESSION).expect("the concealment was not observed");
-        assert!(len > 0 && silent, "inserted silence must be observed as silence");
+        assert!(
+            len > 0 && silent,
+            "inserted silence must be observed as silence"
+        );
     }
 
     #[test]
@@ -683,8 +678,14 @@ mod tests {
         mixer.remove_inactive_speakers();
 
         let locked = bufs.lock().unwrap();
-        assert!(!locked.contains_key(&7), "drained orphan buffer must be pruned");
-        assert!(locked.contains_key(&8), "non-empty buffer must keep draining");
+        assert!(
+            !locked.contains_key(&7),
+            "drained orphan buffer must be pruned"
+        );
+        assert!(
+            locked.contains_key(&8),
+            "non-empty buffer must keep draining"
+        );
     }
 
     #[cfg(feature = "opus-codec")]
@@ -881,7 +882,8 @@ mod tests {
             assert!(
                 speaker.prev_last_sample.is_none(),
                 "iteration {i}: continuous decode must leave prev_last_sample = None, \
-                 found {:?}", speaker.prev_last_sample
+                 found {:?}",
+                speaker.prev_last_sample
             );
         }
     }
@@ -927,7 +929,10 @@ mod tests {
         // The buffer should contain padding samples from the silence
         // insertion plus the two real frames.
         let len = bufs.lock().unwrap()[&13].len();
-        assert!(len > 2 * 960, "expected silence + two frames worth of samples, got {len}");
+        assert!(
+            len > 2 * 960,
+            "expected silence + two frames worth of samples, got {len}"
+        );
     }
 
     #[test]
@@ -956,13 +961,15 @@ mod tests {
         // First sample must be exactly zero (fade starts at w=0).
         assert!(
             samples[0].abs() < 1e-6,
-            "first sample after cold-start fade must be 0, got {}", samples[0]
+            "first sample after cold-start fade must be 0, got {}",
+            samples[0]
         );
         // Sample at the 240-sample fade endpoint should be near 0.8
         // (cosine fade reaches w=1 at t=1).
         assert!(
             (samples[239] - 0.8).abs() < 0.05,
-            "sample at end of fade should be ~0.8, got {}", samples[239]
+            "sample at end of fade should be ~0.8, got {}",
+            samples[239]
         );
         // Samples after the fade must be untouched.
         for &s in &samples[240..480] {

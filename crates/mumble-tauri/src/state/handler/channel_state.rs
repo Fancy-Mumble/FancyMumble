@@ -152,7 +152,11 @@ fn apply_channel_state_fields(ch: &mut ChannelEntry, proto: &mumble_tcp::Channel
     // mirrored onto its own field, for the consumers that predate the mask.
     let to_mask = |values: &[i32]| {
         values.iter().fold(0u64, |mask, &attribute| {
-            if (0..64).contains(&attribute) { mask | (1u64 << attribute) } else { mask }
+            if (0..64).contains(&attribute) {
+                mask | (1u64 << attribute)
+            } else {
+                mask
+            }
         })
     };
     // `attribute_mask` makes the message authoritative for the attributes it

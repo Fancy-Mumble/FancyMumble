@@ -645,8 +645,10 @@ fn import_dmabuf_frame(
 /// Parse each pod and push one params update, logging (not failing) on
 /// rejection - negotiation glitches must degrade, never kill the stream.
 fn send_params(stream: &pw::stream::StreamRef, pods: &[&[u8]], what: &str) {
-    let parsed: Option<Vec<&pw::spa::pod::Pod>> =
-        pods.iter().map(|b| pw::spa::pod::Pod::from_bytes(b)).collect();
+    let parsed: Option<Vec<&pw::spa::pod::Pod>> = pods
+        .iter()
+        .map(|b| pw::spa::pod::Pod::from_bytes(b))
+        .collect();
     let Some(mut parsed) = parsed else {
         tracing::warn!("screenshare: {what}: pod rejected");
         return;
@@ -698,7 +700,9 @@ fn negotiate_dmabuf_step(
 fn modifier_prop(param: &pw::spa::pod::Pod) -> Option<(u64, bool)> {
     use pw::spa::pod::{deserialize::PodDeserializer, ChoiceValue, Value};
     let (_, value) = PodDeserializer::deserialize_from::<Value>(param.as_bytes()).ok()?;
-    let Value::Object(obj) = value else { return None };
+    let Value::Object(obj) = value else {
+        return None;
+    };
     let key = pw::spa::param::format::FormatProperties::VideoModifier.as_raw();
     let prop = obj.properties.iter().find(|p| p.key == key)?;
     #[allow(

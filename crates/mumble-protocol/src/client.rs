@@ -1,4 +1,4 @@
-﻿//! Client orchestrator - the async event loop that ties everything together.
+//! Client orchestrator - the async event loop that ties everything together.
 //!
 //! Spawns independent tasks for TCP reading, UDP reading, and a periodic
 //! ping timer, all feeding into the priority work queue. The main loop
@@ -41,7 +41,11 @@ pub struct MumbleVersion {
 impl MumbleVersion {
     /// Create a new version from major/minor/patch components.
     pub const fn new(major: u16, minor: u16, patch: u16) -> Self {
-        Self { major, minor, patch }
+        Self {
+            major,
+            minor,
+            patch,
+        }
     }
 
     /// Legacy v1 encoding: `(major << 16) | (minor << 8) | patch`.
@@ -122,9 +126,7 @@ impl ClientHandle {
     /// full.
     pub fn send_audio(&self, msg: UdpMessage) -> Result<()> {
         self.audio_out_tx.try_send(msg).map_err(|e| match e {
-            mpsc::error::TrySendError::Full(_) => {
-                Error::InvalidState("audio channel full".into())
-            }
+            mpsc::error::TrySendError::Full(_) => Error::InvalidState("audio channel full".into()),
             mpsc::error::TrySendError::Closed(_) => Error::QueueClosed,
         })
     }
@@ -191,7 +193,10 @@ pub async fn run<H: EventHandler>(
     //    which slowed the visible reconnect cadence and contradicted the
     //    caller's backoff schedule.  Fail fast and let the caller decide.
     let mut tcp = TcpTransport::connect(&config.tcp).await?;
-    info!("TCP connected to {}:{}", config.tcp.server_host, config.tcp.server_port);
+    info!(
+        "TCP connected to {}:{}",
+        config.tcp.server_host, config.tcp.server_port
+    );
 
     // 2. Send the Version message FIRST - before anything else touches the
     //    stream.  The server requires version >= 1.4 for channel listen.
@@ -263,7 +268,10 @@ impl Drop for TaskGuard {
     }
 }
 
-#[allow(clippy::too_many_arguments, reason = "protocol event loop requires all transport handles")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "protocol event loop requires all transport handles"
+)]
 async fn event_loop<H: EventHandler>(
     mut handler: H,
     tcp_reader: crate::transport::tcp::TcpReader,
@@ -292,8 +300,10 @@ async fn event_loop<H: EventHandler>(
         state.decrypt_stats.clone(),
         ping_interval,
     )));
-    let _cmd_forwarder_task =
-        TaskGuard(tokio::spawn(cmd_forwarder_loop(ext_cmd_rx, wq_sender.clone())));
+    let _cmd_forwarder_task = TaskGuard(tokio::spawn(cmd_forwarder_loop(
+        ext_cmd_rx,
+        wq_sender.clone(),
+    )));
 
     let mut codec: Box<dyn FancyCodec> = Box::new(fancy_codec::LegacyCodec);
     let mut udp_sender: Option<UdpSender> = None;
@@ -448,11 +458,7 @@ async fn ping_loop(
             udp_ping_avg: Some(stats_snapshot.udp_ping_avg),
             udp_ping_var: Some(stats_snapshot.udp_ping_var),
         };
-        if outbound_tx
-            .send(ControlMessage::Ping(ping))
-            .await
-            .is_err()
-        {
+        if outbound_tx.send(ControlMessage::Ping(ping)).await.is_err() {
             break;
         }
     }
@@ -537,10 +543,7 @@ impl<H: EventHandler> EventLoopCtx<'_, H> {
                     match crate::transport::audio_codec::decode_tunnel_audio(data) {
                         Ok(audio) => self.handler.on_udp_message(&UdpMessage::Audio(audio)),
                         Err(e) => {
-                            warn!(
-                                "UdpTunnel audio decode failed ({} bytes): {e}",
-                                data.len()
-                            );
+                            warn!("UdpTunnel audio decode failed ({} bytes): {e}", data.len());
                         }
                     }
                 } else {
@@ -624,10 +627,8 @@ impl<H: EventHandler> EventLoopCtx<'_, H> {
     async fn send_udp_ping(&mut self) {
         let protobuf_audio = self.state.connection.supports_protobuf_audio();
         if let Some(sender) = &mut self.udp_sender {
-            let payload = crate::transport::udp::encode_udp_message_for(
-                &udp_ping_message(),
-                protobuf_audio,
-            );
+            let payload =
+                crate::transport::udp::encode_udp_message_for(&udp_ping_message(), protobuf_audio);
             if let Err(e) = sender.send_raw(&payload).await {
                 warn!("UDP ping send failed: {e}");
             }
@@ -711,10 +712,7 @@ fn handle_control_message<H: EventHandler>(
         }
         ControlMessage::ServerSync(sync) => {
             state.apply_server_sync(sync);
-            info!(
-                session = state.own_session(),
-                "server sync complete"
-            );
+            info!(session = state.own_session(), "server sync complete");
             handler.on_connected();
         }
         ControlMessage::UserState(us) => state.apply_user_state(us),
@@ -749,10 +747,7 @@ impl UdpSender {
     /// Encrypt and send a pre-encoded UDP payload.
     async fn send_raw(&mut self, payload: &[u8]) -> Result<()> {
         let encrypted = self.crypt.encrypt(payload)?;
-        let _n = self.socket
-            .send(&encrypted)
-            .await
-            .map_err(Error::Io)?;
+        let _n = self.socket.send(&encrypted).await.map_err(Error::Io)?;
         Ok(())
     }
 
@@ -813,8 +808,7 @@ fn send_one_audio_packet(
     };
 
     if !sent_udp {
-        let tunnel_data =
-            crate::transport::audio_codec::encode_tunnel_audio(audio, protobuf_audio);
+        let tunnel_data = crate::transport::audio_codec::encode_tunnel_audio(audio, protobuf_audio);
         let tunnel = ControlMessage::UdpTunnel(tunnel_data);
         if outbound_tx.try_send(tunnel).is_err() {
             warn!("TCP tunnel channel full, dropping audio packet");
@@ -837,7 +831,10 @@ struct StoredCrypto {
 }
 
 /// Handle a `CryptSetup` message: extract keys and start the UDP transport.
-#[allow(clippy::too_many_arguments, reason = "mirrors handle_control_message pattern; grouping would add indirection")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "mirrors handle_control_message pattern; grouping would add indirection"
+)]
 async fn handle_crypt_setup<H: EventHandler>(
     cs: &mumble_tcp::CryptSetup,
     server_fancy_version: Option<u64>,
@@ -908,7 +905,10 @@ async fn handle_crypt_setup<H: EventHandler>(
 }
 
 /// Handle a runtime `force_tcp` toggle from the UI.
-#[allow(clippy::too_many_arguments, reason = "mirrors handle_crypt_setup pattern")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "mirrors handle_crypt_setup pattern"
+)]
 async fn handle_force_tcp_change<H: EventHandler>(
     force_tcp: bool,
     stored_crypto: &Option<StoredCrypto>,
@@ -955,7 +955,10 @@ async fn handle_force_tcp_change<H: EventHandler>(
 }
 
 /// Initialize the encrypted UDP transport and spawn the reader task.
-#[allow(clippy::too_many_arguments, reason = "groups all transport handles needed to set up UDP")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "groups all transport handles needed to set up UDP"
+)]
 async fn start_udp<H: EventHandler>(
     key: &[u8],
     client_nonce: &[u8],
@@ -971,7 +974,6 @@ async fn start_udp<H: EventHandler>(
     handler: &mut H,
     protobuf_audio: bool,
 ) {
-
     // Which cipher this is was decided when the server announced its version;
     // this only builds what that decided. Two states, not one shared: the
     // sender and the reader run on different tasks, and for the modern cipher
@@ -994,13 +996,14 @@ async fn start_udp<H: EventHandler>(
     let cipher_name = encrypt_crypt.name();
 
     // Connect UDP socket
-    let transport = match UdpTransport::connect(udp_config, crate::transport::udp::PlaintextCryptState).await {
-        Ok(t) => t,
-        Err(e) => {
-            warn!("failed to connect UDP socket: {e}");
-            return;
-        }
-    };
+    let transport =
+        match UdpTransport::connect(udp_config, crate::transport::udp::PlaintextCryptState).await {
+            Ok(t) => t,
+            Err(e) => {
+                warn!("failed to connect UDP socket: {e}");
+                return;
+            }
+        };
 
     let socket = transport.socket_arc();
 
@@ -1041,10 +1044,8 @@ async fn start_udp<H: EventHandler>(
     // public UDP endpoint (NAT traversal).  Without this the server
     // has no address to forward audio to.
     if let Some(sender) = udp_sender.as_mut() {
-        let payload = crate::transport::udp::encode_udp_message_for(
-            &udp_ping_message(),
-            protobuf_audio,
-        );
+        let payload =
+            crate::transport::udp::encode_udp_message_for(&udp_ping_message(), protobuf_audio);
         if let Err(e) = sender.send_raw(&payload).await {
             warn!("failed to send initial UDP ping: {e}");
         } else {
@@ -1157,9 +1158,7 @@ async fn udp_reader_loop(
                 {
                     // Empty CryptSetup -> server replies with a partial
                     // CryptSetup carrying its current encrypt IV.
-                    let resync_msg = ControlMessage::CryptSetup(
-                        mumble_tcp::CryptSetup::default(),
-                    );
+                    let resync_msg = ControlMessage::CryptSetup(mumble_tcp::CryptSetup::default());
                     match outbound_tx.try_send(resync_msg) {
                         Ok(()) => {
                             info!(

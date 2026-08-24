@@ -29,8 +29,8 @@
 
 use std::sync::Arc;
 
-use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
 use realfft::num_complex::Complex32;
+use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
 
 use super::params::{algorithm_param_specs, read_param, DenoiserParams};
 use super::{DenoiserBackend, NoiseSuppressionAlgorithm};
@@ -162,8 +162,8 @@ impl SpectralSubtractionBackend {
         let mut frame_power = [0.0_f32; NUM_BINS];
         for (i, bin) in spectrum.iter().enumerate() {
             frame_power[i] = bin.norm_sqr().max(1e-12);
-            self.smoothed_power[i] = POWER_SMOOTHING * self.smoothed_power[i]
-                + (1.0 - POWER_SMOOTHING) * frame_power[i];
+            self.smoothed_power[i] =
+                POWER_SMOOTHING * self.smoothed_power[i] + (1.0 - POWER_SMOOTHING) * frame_power[i];
         }
         self.min_history[self.history_idx] = self.smoothed_power;
         self.history_idx = (self.history_idx + 1) % MIN_STAT_HISTORY;
@@ -184,8 +184,7 @@ impl SpectralSubtractionBackend {
         for bin in 0..NUM_BINS {
             let posteriori = (frame_power[bin] / noise_psd[bin] - 1.0).max(0.0);
             let prev_sq = self.prev_clean_mag[bin] * self.prev_clean_mag[bin];
-            let dd_estimate = DD_ALPHA * (prev_sq / noise_psd[bin])
-                + (1.0 - DD_ALPHA) * posteriori;
+            let dd_estimate = DD_ALPHA * (prev_sq / noise_psd[bin]) + (1.0 - DD_ALPHA) * posteriori;
             self.apriori_snr[bin] = dd_estimate.max(1e-3);
 
             let gain = self.apriori_snr[bin] / (self.apriori_snr[bin] + 1.0);
