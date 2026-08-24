@@ -29,6 +29,8 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::server::get_welcome_text,
         super::server::ping_server,
         super::server::get_livery,
+        // Asks a server what it looks like without joining it.
+        super::livery_probe::probe_livery,
         // -- livery admin (operator API proxy) -------------------------
         super::livery_admin::livery_get,
         super::livery_admin::livery_set,

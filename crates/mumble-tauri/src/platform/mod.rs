@@ -150,3 +150,18 @@ pub fn setup(handle: tauri::AppHandle) {
 pub fn teardown() {
     <Active as PlatformHooks>::teardown();
 }
+
+/// Strips the system-drawn corner rounding, border and shadow from an
+/// undecorated, transparent window.
+///
+/// Our frameless windows paint and clip their own outer corner, which is
+/// rounder than the one the compositor assumes.  Where the compositor keeps
+/// drawing a frame at *its* radius the leftovers show up outside ours; see
+/// the Windows implementation for the detail.  A no-op everywhere else: no
+/// other platform decorates a window we told it not to decorate.
+pub fn strip_system_chrome(win: &tauri::WebviewWindow) {
+    #[cfg(target_os = "windows")]
+    windows::strip_system_chrome(win);
+    #[cfg(not(target_os = "windows"))]
+    let _ = win;
+}

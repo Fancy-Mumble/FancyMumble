@@ -16,7 +16,7 @@ mod draw_stroke;
 mod forum;
 mod link_preview;
 mod livery;
-pub(crate) use livery::LiverySnapshot;
+pub(crate) use livery::{data_uri, to_snapshot, LiverySnapshot};
 mod onboarding;
 mod operator_ticket;
 mod pchat;

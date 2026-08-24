@@ -31,7 +31,7 @@ pub use file_server::{
     UploadBytesRequest, UploadRequest, UploadResponse,
 };
 mod handler;
-pub(crate) use handler::LiverySnapshot;
+pub(crate) use handler::{data_uri, to_snapshot, LiverySnapshot};
 pub(crate) mod hash_names;
 pub(crate) mod local_cache;
 mod account;
@@ -245,6 +245,12 @@ pub(super) struct SharedState {
     /// a document with no art at all, and the point of keying on a content hash
     /// is that unchanged artwork is never sent twice.
     pub livery_art: HashMap<String, String>,
+    /// Art keys a fetch has already been sent for, so a document naming one the
+    /// server cannot produce is asked about once rather than in a loop.
+    ///
+    /// Keyed on the content hash like the cache itself, so re-uploading a
+    /// picture that failed to arrive is a new key and gets a new attempt.
+    pub livery_art_asked: HashSet<String>,
     /// Cached snapshot of the most recent `PluginRegistry` the server
     /// has broadcast.  The protobuf message is delivered once after
     /// `ServerSync` and never resent, so we cache it here to let the

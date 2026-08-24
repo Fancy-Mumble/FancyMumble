@@ -18,6 +18,7 @@ pub(crate) mod draw_overlay;
 pub(crate) mod files;
 pub(crate) mod livery_admin;
 pub(crate) mod livery_patch;
+pub(crate) mod livery_probe;
 pub(crate) mod forum;
 pub(crate) mod image;
 pub(crate) mod keyshare;

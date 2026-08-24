@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Box, Button, TextField, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { useAccountStore } from "@core/features/settings/accountStore";
 import { ACCOUNT_ACTION_IDS, type AccountAck, type AccountSettingsEvent } from "@core/types";
 import { TID } from "@core/testids";
+import { QrCode } from "@ui/QrCode";
 import { Stack } from "../primitives";
-import { Banner, GroupRule, GroupTitle, PageTitle, SettingsCard, TextRow } from "./controls";
+import { Banner, Field, GroupRule, GroupTitle, PageTitle, SettingsCard, TextRow } from "./controls";
+import { radius } from "../../tokens";
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -17,6 +19,16 @@ const MIN_PASSWORD_LENGTH = 8;
  * plain function type, and these keys are only known at runtime anyway.
  */
 type DynamicT = (key: string, options?: Record<string, unknown>) => string;
+
+/**
+ * How far down the enrolment fallbacks the user has asked to go.
+ *
+ * The QR code is the whole happy path. The `otpauth://` link is for a phone
+ * that cannot see this screen, and the bare base32 key is for an app that
+ * takes neither - each is a step *worse* than the one before, so each is
+ * shown only on request, behind the previous.
+ */
+type TotpFallback = "qr" | "link" | "secret";
 
 function errorText(t: DynamicT, code: string): string {
   return t(`account.errors.${code}`, { defaultValue: "" }) || t("account.errors.unknown", { code });
@@ -56,6 +68,7 @@ export function AccountSettings() {
   const [unregisterConfirm, setUnregisterConfirm] = useState("");
   const [showUnregister, setShowUnregister] = useState(false);
   const [copied, setCopied] = useState<"secret" | "uri" | null>(null);
+  const [totpFallback, setTotpFallback] = useState<TotpFallback>("qr");
 
   useEffect(() => {
     void load();
@@ -81,6 +94,7 @@ export function AccountSettings() {
     // The proof is one-shot on purpose: leaving it in the field is leaving the
     // account's password on screen for as long as the page stays open.
     if (lastSuccessAction !== null) setCurrentPassword("");
+    if (lastSuccessAction === ACCOUNT_ACTION_IDS.totp_begin) setTotpFallback("qr");
     if (lastSuccessAction === ACCOUNT_ACTION_IDS.totp_verify) setTotpCode("");
     if (lastSuccessAction === ACCOUNT_ACTION_IDS.totp_disable) setTotpDisableCode("");
     if (lastSuccessAction === ACCOUNT_ACTION_IDS.unregister) {
@@ -256,32 +270,34 @@ export function AccountSettings() {
       <GroupRule />
 
       <GroupTitle hint={t("account.rename.hint")}>{t("account.rename.title")}</GroupTitle>
-      <TextField
-        fullWidth
-        size="small"
-        value={newName}
-        placeholder={snapshot.name ?? ""}
-        onChange={(event) => setNewName(event.target.value)}
-        slotProps={{
-          htmlInput: {
-            "aria-label": t("account.rename.title"),
-            "data-testid": TID.accountRenameInput,
-            autoCapitalize: "off",
-            autoCorrect: "off",
-            spellCheck: false,
-          },
-        }}
-      />
-      <Button
-        variant="contained"
-        size="small"
-        sx={{ mt: "8px" }}
-        data-testid={TID.accountRenameSave}
-        disabled={blocked || !newName.trim() || newName.trim() === snapshot.name}
-        onClick={() => prove("rename", newName.trim())}
-      >
-        {t("account.rename.apply")}
-      </Button>
+      <Stack direction="row" gap={0.75}>
+        <TextField
+          size="small"
+          sx={{ flex: 1 }}
+          value={newName}
+          placeholder={snapshot.name ?? ""}
+          onChange={(event) => setNewName(event.target.value)}
+          slotProps={{
+            htmlInput: {
+              "aria-label": t("account.rename.title"),
+              "data-testid": TID.accountRenameInput,
+              autoCapitalize: "off",
+              autoCorrect: "off",
+              spellCheck: false,
+            },
+          }}
+        />
+        <Button
+          variant="contained"
+          size="small"
+          sx={{ flex: "none" }}
+          data-testid={TID.accountRenameSave}
+          disabled={blocked || !newName.trim() || newName.trim() === snapshot.name}
+          onClick={() => prove("rename", newName.trim())}
+        >
+          {t("account.rename.apply")}
+        </Button>
+      </Stack>
       {feedbackFor("rename")}
 
       <GroupRule />
@@ -290,36 +306,37 @@ export function AccountSettings() {
       <Banner tone="warn" title={t("account.email.warning")}>
         {t("account.email.warningPara")}
       </Banner>
-      <TextField
-        fullWidth
-        size="small"
-        type="email"
-        sx={{ mt: "12px" }}
-        value={email ?? snapshot.email ?? ""}
-        placeholder={t("account.email.placeholder")}
-        onChange={(event) => setEmail(event.target.value)}
-        slotProps={{
-          htmlInput: {
-            "aria-label": t("account.email.title"),
-            "data-testid": TID.accountEmailInput,
-            autoCapitalize: "off",
-            autoCorrect: "off",
-            spellCheck: false,
-          },
-        }}
-      />
-      <Button
-        variant="contained"
-        size="small"
-        sx={{ mt: "8px" }}
-        data-testid={TID.accountEmailSave}
-        // `null` means untouched: the field shows the server's value, and
-        // re-sending it would be a write that changes nothing.
-        disabled={blocked || email === null || email === (snapshot.email ?? "")}
-        onClick={() => prove("set_email", (email ?? "").trim())}
-      >
-        {t("account.email.apply")}
-      </Button>
+      <Stack direction="row" gap={0.75} sx={{ mt: "12px" }}>
+        <TextField
+          size="small"
+          type="email"
+          sx={{ flex: 1 }}
+          value={email ?? snapshot.email ?? ""}
+          placeholder={t("account.email.placeholder")}
+          onChange={(event) => setEmail(event.target.value)}
+          slotProps={{
+            htmlInput: {
+              "aria-label": t("account.email.title"),
+              "data-testid": TID.accountEmailInput,
+              autoCapitalize: "off",
+              autoCorrect: "off",
+              spellCheck: false,
+            },
+          }}
+        />
+        <Button
+          variant="contained"
+          size="small"
+          sx={{ flex: "none" }}
+          data-testid={TID.accountEmailSave}
+          // `null` means untouched: the field shows the server's value, and
+          // re-sending it would be a write that changes nothing.
+          disabled={blocked || email === null || email === (snapshot.email ?? "")}
+          onClick={() => prove("set_email", (email ?? "").trim())}
+        >
+          {t("account.email.apply")}
+        </Button>
+      </Stack>
       {feedbackFor("set_email")}
 
       <GroupRule />
@@ -351,42 +368,86 @@ export function AccountSettings() {
         </>
       ) : totpEnroll ? (
         <>
-          <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted, mb: "10px" })}>
-            {t("account.totp.enrollHint")}
+          <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted, mb: "12px" })}>
+            {totpEnroll.uri ? t("account.totp.enrollHint") : t("account.totp.secretHint")}
           </Typography>
-          <CopyField
-            label={t("account.totp.secretLabel")}
-            hint={t("account.totp.secretHint")}
-            value={totpEnroll.secret}
-            testId={TID.accountTotpSecret}
-            copyLabel={copied === "secret" ? t("account.copied") : t("account.copy")}
-            onCopy={() => copy("secret", totpEnroll.secret)}
-          />
-          {totpEnroll.uri && (
-            <CopyField
-              label={t("account.totp.uriLabel")}
-              value={totpEnroll.uri}
-              copyLabel={copied === "uri" ? t("account.copied") : t("account.copy")}
-              onCopy={() => copy("uri", totpEnroll.uri)}
+          <SettingsCard>
+            {totpEnroll.uri ? (
+              <Box sx={{ display: "flex", justifyContent: "center", mb: "16px" }}>
+                <Box sx={{ p: "10px", background: "#ffffff", borderRadius: radius("lg"), lineHeight: 0 }}>
+                  <QrCode value={totpEnroll.uri} label={t("account.totp.qrLabel")} testId={TID.accountTotpQr} />
+                </Box>
+              </Box>
+            ) : (
+              // A server that sends no provisioning URI leaves nothing to scan;
+              // the key is the only way in and takes the front seat.
+              <CopyField
+                label={t("account.totp.secretLabel")}
+                value={totpEnroll.secret}
+                testId={TID.accountTotpSecret}
+                copyLabel={copied === "secret" ? t("account.copied") : t("account.copy")}
+                onCopy={() => copy("secret", totpEnroll.secret)}
+              />
+            )}
+            <TotpCodeField
+              label={t("account.totp.codeLabel")}
+              testId={TID.accountTotpCodeInput}
+              value={totpCode}
+              onChange={setTotpCode}
+              sx={{ mb: 0 }}
+              action={
+                <Button
+                  variant="contained"
+                  size="small"
+                  sx={{ flex: "none" }}
+                  data-testid={TID.accountTotpVerify}
+                  disabled={blocked || totpCode.length !== 6}
+                  onClick={() => prove("totp_verify", totpCode)}
+                >
+                  {t("account.totp.verify")}
+                </Button>
+              }
             />
-          )}
-          <TotpCodeField
-            label={t("account.totp.codeLabel")}
-            testId={TID.accountTotpCodeInput}
-            value={totpCode}
-            onChange={setTotpCode}
-          />
-          <Button
-            variant="contained"
-            size="small"
-            sx={{ mt: "8px" }}
-            data-testid={TID.accountTotpVerify}
-            disabled={blocked || totpCode.length !== 6}
-            onClick={() => prove("totp_verify", totpCode)}
-          >
-            {t("account.totp.verify")}
-          </Button>
-          {feedbackFor("totp_verify")}
+            {feedbackFor("totp_verify")}
+            {totpEnroll.uri && (
+              <Box sx={(theme) => ({ mt: "14px", pt: "12px", borderTop: `1px solid ${theme.palette.nebula.line}` })}>
+                {totpFallback === "qr" ? (
+                  <DisclosureLink testId={TID.accountTotpCantScan} onClick={() => setTotpFallback("link")}>
+                    {t("account.totp.cantScan")}
+                  </DisclosureLink>
+                ) : (
+                  <>
+                    <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted, mb: "10px" })}>
+                      {t("account.totp.linkHint")}
+                    </Typography>
+                    <CopyField
+                      label={t("account.totp.uriLabel")}
+                      value={totpEnroll.uri}
+                      testId={TID.accountTotpUri}
+                      copyLabel={copied === "uri" ? t("account.copied") : t("account.copy")}
+                      onCopy={() => copy("uri", totpEnroll.uri)}
+                      sx={{ mb: totpFallback === "link" ? "10px" : "12px" }}
+                    />
+                    {totpFallback === "link" ? (
+                      <DisclosureLink testId={TID.accountTotpRevealSecret} onClick={() => setTotpFallback("secret")}>
+                        {t("account.totp.revealSecret")}
+                      </DisclosureLink>
+                    ) : (
+                      <CopyField
+                        label={t("account.totp.secretLabel")}
+                        hint={t("account.totp.secretHint")}
+                        value={totpEnroll.secret}
+                        testId={TID.accountTotpSecret}
+                        copyLabel={copied === "secret" ? t("account.copied") : t("account.copy")}
+                        onCopy={() => copy("secret", totpEnroll.secret)}
+                        sx={{ mb: 0 }}
+                      />
+                    )}
+                  </>
+                )}
+              </Box>
+            )}
+          </SettingsCard>
         </>
       ) : (
         <>
@@ -476,24 +537,74 @@ export function AccountSettings() {
   );
 }
 
-/** A six-digit authenticator code. Non-digits are dropped as they are typed. */
+/**
+ * A six-digit authenticator code. Non-digits are dropped as they are typed.
+ *
+ * `action` is the button that consumes the code; given one, it sits at the
+ * end of the same row, so typing and confirming read as a single gesture.
+ */
 function TotpCodeField({
   label,
   value,
   testId,
   onChange,
-}: Readonly<{ label: string; value: string; testId: string; onChange: (value: string) => void }>) {
+  action,
+  sx,
+}: Readonly<{
+  label: string;
+  value: string;
+  testId: string;
+  onChange: (value: string) => void;
+  action?: ReactNode;
+  sx?: object;
+}>) {
   return (
-    <TextField
+    <Field label={label} sx={{ mb: "12px", ...sx }}>
+      <Stack direction="row" gap={0.75}>
+        <TextField
+          size="small"
+          sx={{ flex: 1 }}
+          value={value}
+          placeholder="123456"
+          onChange={(event) => onChange(event.target.value.replace(/\D/g, ""))}
+          slotProps={{
+            htmlInput: { inputMode: "numeric", maxLength: 6, "data-testid": testId, "aria-label": label },
+          }}
+        />
+        {action}
+      </Stack>
+    </Field>
+  );
+}
+
+/**
+ * A quiet text link that opens the next fallback. Styled as an afterthought on
+ * purpose: nobody who can scan the code should be drawn to it.
+ */
+function DisclosureLink({
+  testId,
+  onClick,
+  children,
+}: Readonly<{ testId: string; onClick: () => void; children: string }>) {
+  return (
+    <Button
+      variant="text"
       size="small"
-      label={label}
-      value={value}
-      placeholder="123456"
-      onChange={(event) => onChange(event.target.value.replace(/\D/g, ""))}
-      slotProps={{
-        htmlInput: { inputMode: "numeric", maxLength: 6, "data-testid": testId, "aria-label": label },
-      }}
-    />
+      data-testid={testId}
+      onClick={onClick}
+      sx={(theme) => ({
+        p: 0,
+        minWidth: 0,
+        fontSize: 11.5,
+        fontWeight: 500,
+        textTransform: "none",
+        textDecoration: "underline",
+        color: theme.palette.nebula.muted,
+        "&:hover": { background: "none", textDecoration: "underline" },
+      })}
+    >
+      {children}
+    </Button>
   );
 }
 
@@ -505,6 +616,7 @@ function CopyField({
   testId,
   copyLabel,
   onCopy,
+  sx,
 }: Readonly<{
   label: string;
   hint?: string;
@@ -512,10 +624,10 @@ function CopyField({
   testId?: string;
   copyLabel: string;
   onCopy: () => void;
+  sx?: object;
 }>) {
   return (
-    <Box sx={{ mb: "12px" }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 600, mb: "6px" }}>{label}</Typography>
+    <Field label={label} sx={{ mb: "12px", ...sx }}>
       <Stack direction="row" gap={0.75}>
         <TextField
           size="small"
@@ -526,15 +638,15 @@ function CopyField({
           onFocus={(event) => (event.target as HTMLInputElement).select()}
           slotProps={{ htmlInput: { readOnly: true, "data-testid": testId, "aria-label": label } }}
         />
-        <Button size="small" variant="outlined" onClick={onCopy}>
+        <Button size="small" variant="outlined" sx={{ flex: "none" }} onClick={onCopy}>
           {copyLabel}
         </Button>
       </Stack>
       {hint && (
-        <Typography sx={(theme) => ({ mt: "5px", fontSize: 11, color: theme.palette.nebula.muted })}>
+        <Typography sx={(theme) => ({ mt: "6px", fontSize: 11, color: theme.palette.nebula.muted })}>
           {hint}
         </Typography>
       )}
-    </Box>
+    </Field>
   );
 }

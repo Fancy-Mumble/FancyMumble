@@ -55,16 +55,15 @@ export function hslToHex(hsl: HSL): string {
   return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
-function relativeLuminance(hex: string): number {
-  const raw = hex.replace("#", "");
+/** sRGB relative luminance of any colour `parseColor` can take apart; null otherwise. */
+function relativeLuminance(color: string): number | null {
+  const parsed = parseColor(color);
+  if (!parsed) return null;
   const toLinear = (c: number) => {
     const srgb = c / 255;
     return srgb <= 0.03928 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
   };
-  const r = toLinear(parseInt(raw.substring(0, 2), 16));
-  const g = toLinear(parseInt(raw.substring(2, 4), 16));
-  const b = toLinear(parseInt(raw.substring(4, 6), 16));
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return 0.2126 * toLinear(parsed.r) + 0.7152 * toLinear(parsed.g) + 0.0722 * toLinear(parsed.b);
 }
 
 /**
@@ -151,23 +150,7 @@ function apcaLightness(bgY: number, txtY: number): number {
  * takes the worst-case (minimum |Lc|) for each, and picks the winner.
  */
 export function textColorForGradient(userColors: string[]): string {
-  if (userColors.length === 0) return "#ffffff";
-
-  const WHITE_Y = 1.0;
-  const BLACK_Y = 0.012;
-
-  let worstWhiteLc = Infinity;
-  let worstBlackLc = Infinity;
-
-  for (const c of userColors) {
-    const bgY = relativeLuminance(c);
-    const lcWhite = Math.abs(apcaLightness(bgY, WHITE_Y));
-    const lcBlack = Math.abs(apcaLightness(bgY, BLACK_Y));
-    if (lcWhite < worstWhiteLc) worstWhiteLc = lcWhite;
-    if (lcBlack < worstBlackLc) worstBlackLc = lcBlack;
-  }
-
-  return worstWhiteLc >= worstBlackLc ? "#ffffff" : "#111111";
+  return inkForStops(userColors).ink;
 }
 
 export function hexToRgba(hex: string, alpha: number): string {
@@ -188,25 +171,34 @@ const MAX_GRADIENT_STOPS = 3;
  */
 export function buildGradient(userColors: string[], angle = 135, alpha = 1): string {
   if (userColors.length === 0) return "var(--color-glass)";
-  const stops = userColors.slice(0, MAX_GRADIENT_STOPS);
-  const toStop = (c: string) => (alpha < 1 ? hexToRgba(c, alpha) : c);
-  if (stops.length === 1) {
-    const hsl = hexToHsl(stops[0]);
-    const companion = hslToHex({
-      h: hsl.h,
-      s: clamp(hsl.s - 5, 10, 90),
-      l: clamp(hsl.l + (hsl.l > 50 ? -12 : 12), 10, 85),
-    });
-    return `linear-gradient(${angle}deg, ${toStop(stops[0])}, ${toStop(companion)})`;
-  }
-  if (stops.length === 2) {
-    return `linear-gradient(${angle}deg, ${stops.map(toStop).join(", ")})`;
-  }
+  const stops = gradientStops(userColors);
+  const toStop = (c: string) => (alpha < 1 ? withAlpha(c, alpha) : c);
   return `linear-gradient(${angle}deg, ${stops.map(toStop).join(", ")})`;
+}
+
+/**
+ * The stops a gradient is drawn through: the first three picks, or a single
+ * pick and a companion a shade off it so one colour still reads as a rake.
+ */
+function gradientStops(userColors: string[]): string[] {
+  const stops = userColors.slice(0, MAX_GRADIENT_STOPS);
+  if (stops.length !== 1) return stops;
+  const hsl = hexToHsl(stops[0]);
+  const companion = hslToHex({
+    h: hsl.h,
+    s: clamp(hsl.s - 5, 10, 90),
+    l: clamp(hsl.l + (hsl.l > 50 ? -12 : 12), 10, 85),
+  });
+  return [stops[0], companion];
 }
 
 export interface ThemePalette {
   gradient: string;
+  /**
+   * The gradient's stops, each pushed just far enough that `textColor` reads
+   * on it. Hosts that rake the card at their own angle build from these.
+   */
+  stops: string[];
   borderColor: string;
   accentColor?: string;
   textColor: string;
@@ -218,18 +210,24 @@ export interface ThemePalette {
  * - Colours 1-3 form the background gradient.
  * - Colour 4 becomes the border accent (falls back to computed).
  * - Colour 5 becomes a general accent (status highlights, etc.).
- * - Text colour is always contrast-aware against the gradient colours.
+ * - Text colour is always contrast-aware against the gradient colours - and
+ *   where no ink could read on a pick (a white beside a black, a saturated
+ *   mid-tone), the pick is deepened or lifted by the least amount that lets
+ *   the text through, so no combination can leave the card unreadable.
  */
 export function resolveThemePalette(userColors: string[], glass = false): ThemePalette {
   const alpha = glass ? 0.55 : 1;
   const gradientColors = userColors.slice(0, MAX_GRADIENT_STOPS);
   const extras = userColors.slice(MAX_GRADIENT_STOPS);
+  const textColor = textColorForGradient(gradientColors);
+  const stops = readableStops(gradientStops(userColors), textColor);
 
   return {
-    gradient: buildGradient(userColors, 135, alpha),
+    gradient: buildGradient(stops, 135, alpha),
+    stops,
     borderColor: extras[0] ?? borderColorFromPalette(gradientColors),
     accentColor: extras[1],
-    textColor: textColorForGradient(gradientColors),
+    textColor,
   };
 }
 
@@ -300,7 +298,11 @@ export function withAlpha(color: string, alpha: number): string {
   if (functional) {
     // Both legacy (comma) and modern (space + slash) syntaxes appear in the
     // theme tokens, so normalise on the parts before any existing alpha.
-    const parts = functional[2].split("/")[0].split(/[\s,]+/).filter(Boolean).slice(0, 3);
+    const parts = functional[2]
+      .split("/")[0]
+      .split(/[\s,]+/)
+      .filter(Boolean)
+      .slice(0, 3);
     if (parts.length === 3) {
       const fn = functional[1].toLowerCase().replace(/a$/, "");
       return `${fn}a(${parts.join(", ")}, ${alpha})`;
@@ -331,7 +333,10 @@ function parseColor(color: string): { r: number; g: number; b: number; a: number
   }
   const functional = /^rgba?\(([^)]+)\)$/i.exec(value);
   if (!functional) return null;
-  const parts = functional[1].split("/").flatMap((part) => part.split(/[\s,]+/)).filter(Boolean);
+  const parts = functional[1]
+    .split("/")
+    .flatMap((part) => part.split(/[\s,]+/))
+    .filter(Boolean);
   if (parts.length < 3) return null;
   const [r, g, b, a] = parts.map(Number);
   if ([r, g, b].some(Number.isNaN)) return null;
@@ -356,4 +361,160 @@ export function over(color: string, base: string): string {
   const mix = (a: number, b: number) => Math.round(b + (a - b) * top.a);
   const hex = (value: number) => clamp(value, 0, 255).toString(16).padStart(2, "0");
   return `#${hex(mix(top.r, bottom.r))}${hex(mix(top.g, bottom.g))}${hex(mix(top.b, bottom.b))}`;
+}
+
+// --- Readability ----------------------------------------------------
+
+/**
+ * The APCA Lc each kind of mark on a card is held to.
+ *
+ * Body text wants 60. The muted rung is captions and labels, and 45 is the
+ * floor for text that has to be read rather than merely noticed; the dim rung
+ * is the last one, and 30 is the model's floor for anything that is text at
+ * all. Accents are glyphs and short bold labels, and 45 is where a coloured
+ * chip stops disappearing into a card of a neighbouring hue. These only ever
+ * raise a colour: the host themes' own ramps clear them as drawn.
+ */
+export const READABLE_LC = { text: 60, muted: 45, dim: 30, accent: 45 } as const;
+
+const LIGHT_INK = "#ffffff";
+const DARK_INK = "#111111";
+const WHITE = "#ffffff";
+const BLACK = "#000000";
+
+/** Perceived contrast of `fg` on `bg` as an unsigned APCA Lc; 0 if either cannot be parsed. */
+export function contrastLc(bg: string, fg: string): number {
+  const bgY = relativeLuminance(bg);
+  const fgY = relativeLuminance(fg);
+  if (bgY == null || fgY == null) return 0;
+  return Math.abs(apcaLightness(bgY, fgY));
+}
+
+function parseable(stops: string[]): string[] {
+  return stops.filter((stop) => relativeLuminance(stop) != null);
+}
+
+/** The contrast `fg` gets on the worst of `stops`. */
+function worstLc(stops: string[], fg: string): number {
+  return stops.reduce((worst, stop) => Math.min(worst, contrastLc(stop, fg)), Infinity);
+}
+
+/** `color` pulled toward `toward` by `t` in [0, 1], keeping `color`'s own alpha. */
+function mix(color: string, toward: string, t: number): string {
+  const mixed = over(withAlpha(toward, t), color);
+  const alpha = parseColor(color)?.a ?? 1;
+  return alpha < 1 ? withAlpha(mixed, alpha) : mixed;
+}
+
+/** The least `t` in [0, 1], in 2% steps, at which `ok` holds; 1 if never. */
+function leastMix(ok: (t: number) => boolean): number {
+  const STEPS = 50;
+  for (let step = 0; step < STEPS; step += 1) if (ok(step / STEPS)) return step / STEPS;
+  return 1;
+}
+
+/** Whether `ink` is a light colour, and so wants its surroundings dark. */
+function isLight(ink: string): boolean {
+  return (relativeLuminance(ink) ?? 1) > 0.18;
+}
+
+/**
+ * Which of the two inks reads best across all of `stops`, and the contrast it
+ * gets on the worst of them.
+ *
+ * APCA rather than WCAG 2.x because of polarity: light text on a saturated or
+ * dark mid-tone is more legible than dark text at the same luminance gap, and
+ * the WCAG ratio picks dark text on pure red and blue where it plainly should
+ * not. White wins a tie.
+ */
+export function inkForStops(stops: string[]): { ink: string; lc: number } {
+  const usable = parseable(stops);
+  const light = worstLc(usable, LIGHT_INK);
+  const dark = worstLc(usable, DARK_INK);
+  return light >= dark ? { ink: LIGHT_INK, lc: light } : { ink: DARK_INK, lc: dark };
+}
+
+/**
+ * Every stop deepened (under a light ink) or lifted (under a dark one) by the
+ * least amount that lets `ink` reach `minLc` on it.
+ *
+ * A stop that already reads is returned as the very string it came in as, so
+ * a palette that was fine is painted exactly as its owner picked it.
+ */
+export function readableStops(stops: string[], ink: string, minLc: number = READABLE_LC.text): string[] {
+  const veil = isLight(ink) ? BLACK : WHITE;
+  return stops.map((stop) => {
+    if (relativeLuminance(stop) == null) return stop;
+    const t = leastMix((mixed) => contrastLc(mix(stop, veil, mixed), ink) >= minLc);
+    return t === 0 ? stop : mix(stop, veil, t);
+  });
+}
+
+/**
+ * `color` pulled toward `ink` until it reads on every stop.
+ *
+ * This is what a role colour, a badge tone or a chosen accent goes through
+ * before it is drawn on the card: a teal on a green card comes out a deep
+ * teal, or a pale one on a dark card - still recognisably the colour it was,
+ * no longer lost in the surface. The bar is never set above what the ink
+ * itself manages on these stops, so a surface that cannot give `minLc` to
+ * anything gets the colour pulled nearly as far as the ink, and no further.
+ */
+export function readableOn(
+  color: string,
+  stops: string[],
+  ink: string,
+  minLc: number = READABLE_LC.accent,
+): string {
+  const usable = parseable(stops);
+  if (usable.length === 0 || relativeLuminance(color) == null) return color;
+  // A step under what the ink itself gets here: reaching the ink's own
+  // contrast would take the colour all the way to the ink.
+  const target = Math.min(minLc, worstLc(usable, ink) - 5);
+  const t = leastMix((mixed) => worstLc(usable, mix(color, ink, mixed)) >= target);
+  return t === 0 ? color : mix(color, ink, t);
+}
+
+/**
+ * The alpha `ink` can be faded to, no lower than `floor`, while still reaching
+ * `minLc` on every stop - the muted and dim rungs of a card's text ramp.
+ */
+export function readableAlpha(ink: string, stops: string[], minLc: number, floor: number): number {
+  const usable = parseable(stops);
+  if (usable.length === 0) return floor;
+  const reads = (alpha: number) =>
+    usable.every((stop) => contrastLc(stop, over(withAlpha(ink, alpha), stop)) >= minLc);
+  for (let alpha = floor; alpha < 1; alpha = Math.round((alpha + 0.02) * 100) / 100) {
+    if (reads(alpha)) return alpha;
+  }
+  return 1;
+}
+
+/**
+ * The alpha of a black scrim, no lower than `floor`, under which white text
+ * reaches `minLc` on every stop - the wash behind the banner's controls.
+ */
+export function scrimAlpha(stops: string[], minLc: number, floor: number): number {
+  const usable = parseable(stops);
+  if (usable.length === 0) return floor;
+  for (let alpha = floor; alpha < 1; alpha = Math.round((alpha + 0.02) * 100) / 100) {
+    if (usable.every((stop) => contrastLc(mix(stop, BLACK, alpha), WHITE) >= minLc)) return alpha;
+  }
+  return 1;
+}
+
+const CSS_COLOR = /#[0-9a-f]{3,8}\b|rgba?\([^)]*\)/gi;
+
+/**
+ * Every colour that can be picked out of a CSS value - a flat colour, or the
+ * stops of a hand-written gradient - in the order it appears.
+ */
+export function colorsIn(css: string): string[] {
+  return parseable(css.match(CSS_COLOR) ?? []);
+}
+
+/** `css` with each colour `colorsIn` would find replaced through `swap`, in the same order. */
+export function mapColorsIn(css: string, swap: (color: string, index: number) => string): string {
+  let index = 0;
+  return css.replace(CSS_COLOR, (color) => (relativeLuminance(color) == null ? color : swap(color, index++)));
 }
