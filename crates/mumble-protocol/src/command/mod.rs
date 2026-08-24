@@ -1,4 +1,4 @@
-﻿//! Self-describing commands using the Command pattern.
+//! Self-describing commands using the Command pattern.
 //!
 //! Each command lives in its own file, carries its own data, and knows
 //! how to produce the protocol output it needs. Adding a new command
@@ -16,56 +16,54 @@ mod permission_query;
 mod register_user;
 mod remove_user_avatar;
 mod request_acl;
-mod request_blob;
 mod request_ban_list;
+mod request_blob;
+mod request_fancy_onboarding_response;
+mod request_link_preview;
+mod request_livery;
+mod request_operator_ticket;
 mod request_user_list;
 mod request_user_stats;
-mod update_user_list;
 mod reset_user_comment;
 mod send_acl;
 mod send_audio;
 mod send_ban_list;
-mod send_ping;
-mod send_plugin_data;
-mod send_plugin_message;
-mod send_fancy_forum;
-mod send_fancy_poll;
-mod send_fancy_poll_vote;
-mod send_fancy_scheduled_message;
-mod send_text_message;
-mod send_webrtc_signal;
-mod send_pchat_ack;
-mod send_pchat_message;
-mod send_pchat_delete_messages;
-mod send_pchat_fetch;
-mod send_pchat_key_announce;
-mod send_pchat_key_exchange;
-mod send_pchat_epoch_countersig;
-mod send_pchat_key_challenge_response;
-mod send_pchat_key_holder_report;
-mod send_pchat_key_holders_query;
-mod send_pchat_reaction;
-mod send_pchat_pin;
-mod send_pchat_sender_key_distribution;
-mod send_fancy_push_register;
-mod send_fancy_push_update;
-mod request_livery;
-mod request_operator_ticket;
-mod update_livery;
-mod send_fancy_subscribe_push;
-mod send_read_receipt;
-mod send_typing_indicator;
 mod send_draw_stroke;
-mod send_watch_sync;
+mod send_fancy_account_settings_update;
+mod send_fancy_audit_config_update;
+mod send_fancy_audit_query;
+mod send_fancy_forum;
 mod send_fancy_onboarding_config_update;
 mod send_fancy_onboarding_response;
 mod send_fancy_plugin_admin;
-mod send_fancy_audit_config_update;
-mod send_fancy_audit_query;
+mod send_fancy_poll;
+mod send_fancy_poll_vote;
+mod send_fancy_push_register;
+mod send_fancy_push_update;
+mod send_fancy_scheduled_message;
 mod send_fancy_server_settings_update;
-mod send_fancy_account_settings_update;
-mod request_fancy_onboarding_response;
-mod request_link_preview;
+mod send_fancy_subscribe_push;
+mod send_pchat_ack;
+mod send_pchat_delete_messages;
+mod send_pchat_epoch_countersig;
+mod send_pchat_fetch;
+mod send_pchat_key_announce;
+mod send_pchat_key_challenge_response;
+mod send_pchat_key_exchange;
+mod send_pchat_key_holder_report;
+mod send_pchat_key_holders_query;
+mod send_pchat_message;
+mod send_pchat_pin;
+mod send_pchat_reaction;
+mod send_pchat_sender_key_distribution;
+mod send_ping;
+mod send_plugin_data;
+mod send_plugin_message;
+mod send_read_receipt;
+mod send_text_message;
+mod send_typing_indicator;
+mod send_watch_sync;
+mod send_webrtc_signal;
 mod set_channel_state;
 mod set_comment;
 mod set_priority_speaker;
@@ -75,6 +73,8 @@ mod set_texture;
 mod set_user_deaf;
 mod set_user_mute;
 mod set_voice_target;
+mod update_livery;
+mod update_user_list;
 
 // Re-export the core trait, output type, and boxed alias.
 pub use self::core::{BoxedCommand, CommandAction, CommandOutput};
@@ -92,62 +92,63 @@ pub use permission_query::PermissionQuery;
 pub use register_user::RegisterUser;
 pub use remove_user_avatar::RemoveUserAvatar;
 pub use request_acl::RequestAcl;
-pub use request_blob::RequestBlob;
 pub use request_ban_list::RequestBanList;
+pub use request_blob::RequestBlob;
+pub use request_fancy_onboarding_response::RequestFancyOnboardingResponse;
+pub use request_link_preview::RequestLinkPreview;
+pub use request_livery::RequestLivery;
+pub use request_operator_ticket::RequestOperatorTicket;
 pub use request_user_list::RequestUserList;
 pub use request_user_stats::RequestUserStats;
-pub use update_user_list::{UpdateUserList, UserListEntry};
 pub use reset_user_comment::ResetUserComment;
 pub use send_acl::SendAcl;
 pub use send_audio::SendAudio;
 pub use send_ban_list::SendBanList;
-pub use send_ping::SendPing;
-#[allow(deprecated, reason = "re-exporting the bricked type so callers get the deprecation error")]
-pub use send_plugin_data::SendPluginData;
-pub use send_plugin_message::SendPluginMessage;
+pub use send_draw_stroke::SendDrawStroke;
+pub use send_fancy_account_settings_update::SendFancyAccountSettingsUpdate;
+pub use send_fancy_audit_config_update::SendFancyAuditConfigUpdate;
+pub use send_fancy_audit_query::SendFancyAuditQuery;
 pub use send_fancy_forum::{SendFancyForumDelete, SendFancyForumFetch, SendFancyForumPost};
+pub use send_fancy_onboarding_config_update::SendFancyOnboardingConfigUpdate;
+pub use send_fancy_onboarding_response::SendFancyOnboardingResponse;
+pub use send_fancy_plugin_admin::{
+    RequestFancyPluginAdminList, SendFancyPluginAdminInstall, SendFancyPluginAdminSetEnabled,
+    SendFancyPluginAdminUninstall,
+};
 pub use send_fancy_poll::SendFancyPoll;
 pub use send_fancy_poll_vote::SendFancyPollVote;
+pub use send_fancy_push_register::SendFancyPushRegister;
+pub use send_fancy_push_update::SendFancyPushUpdate;
 pub use send_fancy_scheduled_message::{
     RequestFancyScheduledMessages, SendFancyScheduledMessage, SendFancyScheduledMessageCancel,
 };
-pub use send_text_message::SendTextMessage;
-pub use send_webrtc_signal::SendWebRtcSignal;
+pub use send_fancy_server_settings_update::SendFancyServerSettingsUpdate;
+pub use send_fancy_subscribe_push::SendFancySubscribePush;
 pub use send_pchat_ack::SendPchatAck;
-pub use send_pchat_message::SendPchatMessage;
 pub use send_pchat_delete_messages::SendPchatDeleteMessages;
+pub use send_pchat_epoch_countersig::SendPchatEpochCountersig;
 pub use send_pchat_fetch::SendPchatFetch;
 pub use send_pchat_key_announce::SendPchatKeyAnnounce;
-pub use send_pchat_key_exchange::SendPchatKeyExchange;
-pub use send_pchat_epoch_countersig::SendPchatEpochCountersig;
 pub use send_pchat_key_challenge_response::SendPchatKeyChallengeResponse;
+pub use send_pchat_key_exchange::SendPchatKeyExchange;
 pub use send_pchat_key_holder_report::SendPchatKeyHolderReport;
 pub use send_pchat_key_holders_query::SendPchatKeyHoldersQuery;
-pub use send_pchat_reaction::SendPchatReaction;
+pub use send_pchat_message::SendPchatMessage;
 pub use send_pchat_pin::SendPchatPin;
+pub use send_pchat_reaction::SendPchatReaction;
 pub use send_pchat_sender_key_distribution::SendPchatSenderKeyDistribution;
-pub use send_fancy_push_register::SendFancyPushRegister;
-pub use send_fancy_push_update::SendFancyPushUpdate;
-pub use request_livery::RequestLivery;
-pub use request_operator_ticket::RequestOperatorTicket;
-pub use update_livery::UpdateLivery;
-pub use send_fancy_subscribe_push::SendFancySubscribePush;
+pub use send_ping::SendPing;
+#[allow(
+    deprecated,
+    reason = "re-exporting the bricked type so callers get the deprecation error"
+)]
+pub use send_plugin_data::SendPluginData;
+pub use send_plugin_message::SendPluginMessage;
 pub use send_read_receipt::SendReadReceipt;
+pub use send_text_message::SendTextMessage;
 pub use send_typing_indicator::SendTypingIndicator;
-pub use send_draw_stroke::SendDrawStroke;
 pub use send_watch_sync::SendWatchSync;
-pub use send_fancy_onboarding_config_update::SendFancyOnboardingConfigUpdate;
-pub use send_fancy_audit_config_update::SendFancyAuditConfigUpdate;
-pub use send_fancy_audit_query::SendFancyAuditQuery;
-pub use send_fancy_server_settings_update::SendFancyServerSettingsUpdate;
-pub use send_fancy_account_settings_update::SendFancyAccountSettingsUpdate;
-pub use send_fancy_onboarding_response::SendFancyOnboardingResponse;
-pub use send_fancy_plugin_admin::{
-    RequestFancyPluginAdminList, SendFancyPluginAdminInstall,
-    SendFancyPluginAdminSetEnabled, SendFancyPluginAdminUninstall,
-};
-pub use request_fancy_onboarding_response::RequestFancyOnboardingResponse;
-pub use request_link_preview::RequestLinkPreview;
+pub use send_webrtc_signal::SendWebRtcSignal;
 pub use set_channel_state::SetChannelState;
 pub use set_comment::SetComment;
 pub use set_priority_speaker::SetPrioritySpeaker;
@@ -157,6 +158,8 @@ pub use set_texture::SetTexture;
 pub use set_user_deaf::SetUserDeaf;
 pub use set_user_mute::SetUserMute;
 pub use set_voice_target::{SetVoiceTarget, VoiceTargetEntry};
+pub use update_livery::UpdateLivery;
+pub use update_user_list::{UpdateUserList, UserListEntry};
 
 mod core {
     use std::fmt::Debug;
@@ -246,7 +249,10 @@ mod tests {
 
     #[test]
     fn join_channel_uses_session_id() {
-        let cmd = JoinChannel { channel_id: 3, password: None };
+        let cmd = JoinChannel {
+            channel_id: 3,
+            password: None,
+        };
         let state = state_with_session(42);
         let output = cmd.execute(&state);
 
@@ -556,12 +562,10 @@ mod tests {
     #[test]
     fn send_onboarding_response_leaves_user_hash_to_server() {
         let cmd = SendFancyOnboardingResponse {
-            selections: vec![
-                mumble_tcp::fancy_onboarding_response::Selection {
-                    question_id: Some("q1".into()),
-                    answer_ids: vec!["a1".into()],
-                },
-            ],
+            selections: vec![mumble_tcp::fancy_onboarding_response::Selection {
+                question_id: Some("q1".into()),
+                answer_ids: vec!["a1".into()],
+            }],
             config_revision: Some(7),
         };
         let output = cmd.execute(&ServerState::new());

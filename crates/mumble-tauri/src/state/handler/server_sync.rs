@@ -768,7 +768,10 @@ async fn fetch_channel_history(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: 
     // joined". Skipping the request is the guarantee; nothing downstream
     // re-checks it once fetched.
     if mode == PchatProtocol::SignalV1 {
-        debug!(channel_id = ch, "pchat: skipping fetch for SignalV1 (no history by design)");
+        debug!(
+            channel_id = ch,
+            "pchat: skipping fetch for SignalV1 (no history by design)"
+        );
         pchat::emit_history_loading(shared, ch, false);
         return;
     }

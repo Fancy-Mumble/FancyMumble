@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
-
 /// Unified pchat protocol indicator for a channel.
 ///
 /// Each value identifies both the E2EE protocol implementation and
@@ -15,7 +14,10 @@ use std::sync::{Arc, Mutex};
 /// protobuf enum. Lives in core (no feature gate) so all consumers
 /// can use it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-#[cfg_attr(feature = "persistent-chat", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "persistent-chat",
+    derive(serde::Serialize, serde::Deserialize)
+)]
 pub enum PchatProtocol {
     /// No persistence.  Standard volatile Mumble chat.
     #[default]
@@ -91,7 +93,6 @@ impl fmt::Display for PchatProtocol {
 // Re-export version utilities from fancy-utils so existing
 // `mumble_protocol::state::fancy_version_*` paths keep working.
 pub use fancy_utils::version::{fancy_version_decode, fancy_version_encode, fancy_version_string};
-
 
 /// Snapshot of a connected user.
 #[derive(Debug, Clone)]
@@ -215,7 +216,11 @@ pub struct Channel {
 /// Discriminants above 63 cannot be represented and are dropped; the enum is
 /// nowhere near that bound, and widening the mask is a local change here.
 fn attribute_bit(attribute: i32) -> u64 {
-    if (0..64).contains(&attribute) { 1u64 << attribute } else { 0 }
+    if (0..64).contains(&attribute) {
+        1u64 << attribute
+    } else {
+        0
+    }
 }
 
 impl Channel {
@@ -338,8 +343,14 @@ impl ServerState {
         let _ = state.deaf.inspect(|&v| user.deaf = v);
         let _ = state.self_mute.inspect(|&v| user.self_mute = v);
         let _ = state.self_deaf.inspect(|&v| user.self_deaf = v);
-        let _ = state.comment.as_ref().inspect(|v| user.comment.clone_from(v));
-        let _ = state.texture.as_ref().inspect(|v| user.texture.clone_from(v));
+        let _ = state
+            .comment
+            .as_ref()
+            .inspect(|v| user.comment.clone_from(v));
+        let _ = state
+            .texture
+            .as_ref()
+            .inspect(|v| user.texture.clone_from(v));
         let _ = state.hash.as_ref().inspect(|v| user.hash.clone_from(v));
         let _ = state.user_id.inspect(|&v| user.user_id = Some(v));
     }
@@ -375,13 +386,24 @@ impl ServerState {
 
         let _ = state.parent.inspect(|&v| channel.parent_id = Some(v));
         let _ = state.name.as_ref().inspect(|v| channel.name.clone_from(v));
-        let _ = state.description.as_ref().inspect(|v| channel.description.clone_from(v));
-        let _ = state.description_hash.as_ref().inspect(|v| channel.description_hash = Some((*v).clone()));
+        let _ = state
+            .description
+            .as_ref()
+            .inspect(|v| channel.description.clone_from(v));
+        let _ = state
+            .description_hash
+            .as_ref()
+            .inspect(|v| channel.description_hash = Some((*v).clone()));
         let _ = state.position.inspect(|&v| channel.position = v);
-        #[allow(deprecated, reason = "legacy wire fields are still sent by current servers; no non-deprecated alternative yet")]
+        #[allow(
+            deprecated,
+            reason = "legacy wire fields are still sent by current servers; no non-deprecated alternative yet"
+        )]
         {
             let _ = state.temporary.inspect(|&v| channel.temporary = v);
-            let _ = state.is_enter_restricted.inspect(|&v| channel.is_enter_restricted = v);
+            let _ = state
+                .is_enter_restricted
+                .inspect(|&v| channel.is_enter_restricted = v);
             let _ = state.can_enter.inspect(|&v| channel.can_enter = v);
         }
         let _ = state.max_users.inspect(|&v| channel.max_users = v);
@@ -394,16 +416,28 @@ impl ServerState {
         // still replaces the whole thing (the full channel listing), while an
         // empty one leaves traits alone so partial updates - a rename, say -
         // never clear them.
-        let asserted = state.attribute_mask.iter().fold(0u64, |mask, &attribute| mask | attribute_bit(attribute));
-        let present = state.attributes.iter().fold(0u64, |mask, &attribute| mask | attribute_bit(attribute));
+        let asserted = state
+            .attribute_mask
+            .iter()
+            .fold(0u64, |mask, &attribute| mask | attribute_bit(attribute));
+        let present = state
+            .attributes
+            .iter()
+            .fold(0u64, |mask, &attribute| mask | attribute_bit(attribute));
         if asserted != 0 {
             channel.attributes = (channel.attributes & !asserted) | (present & asserted);
         } else if present != 0 {
             channel.attributes = present;
         }
-        let _ = state.pchat_protocol.inspect(|&v| channel.pchat_protocol = Some(PchatProtocol::from_proto(v)));
-        let _ = state.pchat_max_history.inspect(|&v| channel.pchat_max_history = Some(v));
-        let _ = state.pchat_retention_days.inspect(|&v| channel.pchat_retention_days = Some(v));
+        let _ = state
+            .pchat_protocol
+            .inspect(|&v| channel.pchat_protocol = Some(PchatProtocol::from_proto(v)));
+        let _ = state
+            .pchat_max_history
+            .inspect(|&v| channel.pchat_max_history = Some(v));
+        let _ = state
+            .pchat_retention_days
+            .inspect(|&v| channel.pchat_retention_days = Some(v));
     }
 
     /// Apply a `PermissionQuery` response from the server.
@@ -489,7 +523,11 @@ mod tests {
 
     /// Builds a `ChannelState` for channel 7 carrying `attributes`.
     fn channel_state_with_attributes(attributes: Vec<i32>) -> mumble_tcp::ChannelState {
-        mumble_tcp::ChannelState { channel_id: Some(7), attributes, ..Default::default() }
+        mumble_tcp::ChannelState {
+            channel_id: Some(7),
+            attributes,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -509,24 +547,34 @@ mod tests {
         // which is the point of carrying the set generically.
         assert_eq!(
             channel.attributes,
-            (1 << mumble_tcp::ChannelAttribute::Detached as u64) | (1 << mumble_tcp::ChannelAttribute::Structural as u64)
+            (1 << mumble_tcp::ChannelAttribute::Detached as u64)
+                | (1 << mumble_tcp::ChannelAttribute::Structural as u64)
         );
     }
 
     #[test]
     fn a_later_attribute_set_replaces_the_previous_one() {
         let mut state = ServerState::new();
-        state.apply_channel_state(&channel_state_with_attributes(vec![mumble_tcp::ChannelAttribute::Structural as i32]));
+        state.apply_channel_state(&channel_state_with_attributes(vec![
+            mumble_tcp::ChannelAttribute::Structural as i32,
+        ]));
         assert!(state.channels[&7].structural());
 
-        state.apply_channel_state(&channel_state_with_attributes(vec![mumble_tcp::ChannelAttribute::Hidden as i32]));
-        assert!(!state.channels[&7].structural(), "a new set is authoritative");
+        state.apply_channel_state(&channel_state_with_attributes(vec![
+            mumble_tcp::ChannelAttribute::Hidden as i32,
+        ]));
+        assert!(
+            !state.channels[&7].structural(),
+            "a new set is authoritative"
+        );
     }
 
     #[test]
     fn a_mask_clears_an_attribute_even_when_the_resulting_set_is_empty() {
         let mut state = ServerState::new();
-        state.apply_channel_state(&channel_state_with_attributes(vec![mumble_tcp::ChannelAttribute::Structural as i32]));
+        state.apply_channel_state(&channel_state_with_attributes(vec![
+            mumble_tcp::ChannelAttribute::Structural as i32,
+        ]));
         assert!(state.channels[&7].structural());
 
         // Turning the trait off leaves nothing to list, so only the mask can say
@@ -554,14 +602,22 @@ mod tests {
             attribute_mask: vec![mumble_tcp::ChannelAttribute::Structural as i32],
             ..Default::default()
         });
-        assert!(!state.channels[&7].structural(), "the masked attribute is cleared");
-        assert!(state.channels[&7].detached(), "an unmasked attribute survives");
+        assert!(
+            !state.channels[&7].structural(),
+            "the masked attribute is cleared"
+        );
+        assert!(
+            state.channels[&7].detached(),
+            "an unmasked attribute survives"
+        );
     }
 
     #[test]
     fn an_update_without_attributes_leaves_traits_untouched() {
         let mut state = ServerState::new();
-        state.apply_channel_state(&channel_state_with_attributes(vec![mumble_tcp::ChannelAttribute::Structural as i32]));
+        state.apply_channel_state(&channel_state_with_attributes(vec![
+            mumble_tcp::ChannelAttribute::Structural as i32,
+        ]));
 
         // A partial update (rename only) must not clear known traits.
         state.apply_channel_state(&mumble_tcp::ChannelState {
@@ -748,7 +804,10 @@ mod tests {
         };
         state.apply_channel_state(&create);
 
-        #[allow(deprecated, reason = "test exercises the legacy `temporary` wire field")]
+        #[allow(
+            deprecated,
+            reason = "test exercises the legacy `temporary` wire field"
+        )]
         let update = mumble_tcp::ChannelState {
             channel_id: Some(1),
             description: Some("Welcome!".into()),
@@ -850,7 +909,10 @@ mod tests {
     fn signal_v1_protocol_roundtrip() {
         let proto_val = PchatProtocol::SignalV1.to_proto();
         assert_eq!(proto_val, 4);
-        assert_eq!(PchatProtocol::from_proto(proto_val), PchatProtocol::SignalV1);
+        assert_eq!(
+            PchatProtocol::from_proto(proto_val),
+            PchatProtocol::SignalV1
+        );
     }
 
     #[test]

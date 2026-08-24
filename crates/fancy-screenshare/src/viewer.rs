@@ -200,7 +200,10 @@ pub struct StreamViewer {
 impl std::fmt::Debug for StreamViewer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("StreamViewer")
-            .field("awaiting_answer", &self.awaiting_answer.load(Ordering::SeqCst))
+            .field(
+                "awaiting_answer",
+                &self.awaiting_answer.load(Ordering::SeqCst),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -493,7 +496,11 @@ impl StreamViewer {
                 send_encodings: vec![],
             })
         };
-        for kind in [RTPCodecType::Video, RTPCodecType::Video, RTPCodecType::Audio] {
+        for kind in [
+            RTPCodecType::Video,
+            RTPCodecType::Video,
+            RTPCodecType::Audio,
+        ] {
             let _transceiver = pc
                 .add_transceiver_from_kind(kind, recvonly())
                 .await
@@ -510,10 +517,7 @@ impl StreamViewer {
             let ssrcs = Arc::clone(&track_ssrcs);
             let pc_weak = Weak::clone(&pc_weak);
             Box::pin(async move {
-                let mid = transceiver
-                    .mid()
-                    .map(|m| m.to_string())
-                    .unwrap_or_default();
+                let mid = transceiver.mid().map(|m| m.to_string()).unwrap_or_default();
                 if track.kind() != RTPCodecType::Video {
                     // No broadcast carries audio today; drain defensively so
                     // an SFU that does send some never backs the session up.
@@ -936,8 +940,7 @@ fn decode_loop(
 
         let (out_w, out_h, out_rgb) = downscale_rgb(&mut resizer, &rgb, w, h);
         let mut jpeg = Vec::new();
-        let encoder =
-            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, JPEG_QUALITY);
+        let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, JPEG_QUALITY);
         if let Err(e) = image::ImageEncoder::write_image(
             encoder,
             &out_rgb,

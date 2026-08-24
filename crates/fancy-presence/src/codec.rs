@@ -143,7 +143,10 @@ pub async fn read_frame<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<IpcF
 ///
 /// Flushing matters: client libraries block waiting for the handshake
 /// response, and a buffered transport would deadlock them.
-pub async fn write_frame<W: AsyncWrite + Unpin>(writer: &mut W, frame: &IpcFrame) -> io::Result<()> {
+pub async fn write_frame<W: AsyncWrite + Unpin>(
+    writer: &mut W,
+    frame: &IpcFrame,
+) -> io::Result<()> {
     writer.write_all(&frame.encode()).await?;
     writer.flush().await
 }
@@ -195,7 +198,9 @@ mod tests {
         wire.extend_from_slice(&1_u32.to_le_bytes());
         wire.extend_from_slice(&(MAX_PAYLOAD_LEN as u32 + 1).to_le_bytes());
 
-        let err = read_frame(&mut wire.as_slice()).await.expect_err("oversized");
+        let err = read_frame(&mut wire.as_slice())
+            .await
+            .expect_err("oversized");
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }
 
@@ -205,7 +210,9 @@ mod tests {
         wire.extend_from_slice(&9_u32.to_le_bytes());
         wire.extend_from_slice(&0_u32.to_le_bytes());
 
-        let err = read_frame(&mut wire.as_slice()).await.expect_err("bad opcode");
+        let err = read_frame(&mut wire.as_slice())
+            .await
+            .expect_err("bad opcode");
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }
 

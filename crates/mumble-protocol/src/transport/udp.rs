@@ -1,4 +1,4 @@
-﻿//! UDP transport for low-latency Mumble audio and ping messages.
+//! UDP transport for low-latency Mumble audio and ping messages.
 //!
 //! Mumble encrypts UDP packets using OCB2-AES128. The encryption keys are
 //! exchanged over the TCP control channel via [`CryptSetup`] messages.
@@ -93,16 +93,12 @@ impl<C: CryptState> UdpTransport<C> {
     /// Bind a local UDP socket and associate it with the server address.
     pub async fn connect(config: &UdpConfig, crypt: C) -> Result<Self> {
         // Use tokio DNS resolution so hostnames like "magical.rocks" work.
-        let server_addr: SocketAddr = tokio::net::lookup_host(format!(
-            "{}:{}",
-            config.server_host, config.server_port
-        ))
-        .await
-        .map_err(|e| Error::InvalidState(format!("DNS lookup failed: {e}")))?
-        .next()
-        .ok_or_else(|| {
-            Error::InvalidState("DNS lookup returned no addresses".into())
-        })?;
+        let server_addr: SocketAddr =
+            tokio::net::lookup_host(format!("{}:{}", config.server_host, config.server_port))
+                .await
+                .map_err(|e| Error::InvalidState(format!("DNS lookup failed: {e}")))?
+                .next()
+                .ok_or_else(|| Error::InvalidState("DNS lookup returned no addresses".into()))?;
 
         let bind_addr: SocketAddr = if server_addr.is_ipv6() {
             SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0)
@@ -385,7 +381,7 @@ mod tests {
         let mut buf = Vec::new();
         buf.push(0x80u8); // (4 << 5) | 0
         MumbleVarint::write(&mut buf, 42); // sender_session
-        MumbleVarint::write(&mut buf, 7);  // frame_number
+        MumbleVarint::write(&mut buf, 7); // frame_number
         let opus = vec![0xAB, 0xCD];
         MumbleVarint::write(&mut buf, opus.len() as u64);
         buf.extend_from_slice(&opus);

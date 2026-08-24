@@ -461,7 +461,11 @@ fn account_update_to_canon(update: &mumble_tcp::FancyAccountSettingsUpdate) -> O
                 // The TOTP verbs carry their argument in `totp`, not in
                 // `value`; sending it in both would have the server read a code
                 // as a new password.
-                value: if totp.is_empty() { value } else { String::new() },
+                value: if totp.is_empty() {
+                    value
+                } else {
+                    String::new()
+                },
                 totp,
             })
         }
@@ -700,13 +704,13 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 )),
                 Some(Social::Poll(poll)) => {
                     Some(ControlMessage::FancyPoll(mumble_tcp::FancyPoll {
-                    channel_id: Some(poll.channel),
-                    poll_id: Some(poll.poll_id),
-                    question: Some(poll.question),
-                    options: poll.options,
-                    multiple: Some(poll.multiple),
-                    creator_session: session(poll.creator),
-                    ..Default::default()
+                        channel_id: Some(poll.channel),
+                        poll_id: Some(poll.poll_id),
+                        question: Some(poll.question),
+                        options: poll.options,
+                        multiple: Some(poll.multiple),
+                        creator_session: session(poll.creator),
+                        ..Default::default()
                     }))
                 }
                 Some(Social::Vote(vote)) => {
@@ -744,7 +748,7 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 // update it is a confirmation of.
                 Some(fancy::feature::push_envelope::Body::Subscribe(subscribe)) => Some(
                     ControlMessage::FancySubscribePush(mumble_tcp::FancySubscribePush {
-                            muted_channels: subscribe.muted,
+                        muted_channels: subscribe.muted,
                     }),
                 ),
                 Some(fancy::feature::push_envelope::Body::LiveSubscribe(subscribe)) => Some(
@@ -760,11 +764,9 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 return Ok(None);
             };
             Ok(match envelope.body {
-                Some(fancy::feature::link_preview_envelope::Body::Preview(preview)) => {
-                    Some(ControlMessage::FancyLinkPreviewResponse(preview_response(
-                        &preview,
-                    )))
-                }
+                Some(fancy::feature::link_preview_envelope::Body::Preview(preview)) => Some(
+                    ControlMessage::FancyLinkPreviewResponse(preview_response(&preview)),
+                ),
                 // A refusal becomes an answer with no embeds.
                 //
                 // `FancyLinkPreviewResponse` has no error field - epoch 0 never
@@ -907,13 +909,11 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 return Ok(None);
             };
             Ok(match envelope.body {
-                Some(Text::List(list)) => Some(
-                    ControlMessage::FancyScheduledMessageListResponse(
-                        mumble_tcp::FancyScheduledMessageListResponse {
-                            messages: list.messages.iter().map(scheduled_deliver).collect(),
-                        },
-                    ),
-                ),
+                Some(Text::List(list)) => Some(ControlMessage::FancyScheduledMessageListResponse(
+                    mumble_tcp::FancyScheduledMessageListResponse {
+                        messages: list.messages.iter().map(scheduled_deliver).collect(),
+                    },
+                )),
                 Some(Text::Ack(ack)) => Some(ControlMessage::FancyScheduledMessageAck(
                     mumble_tcp::FancyScheduledMessageAck {
                         // Empty on a refusal that never stored anything, and an
@@ -934,9 +934,9 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 return Ok(None);
             };
             Ok(match envelope.body {
-                Some(fancy::pchat::pchat_envelope::Body::Message(message)) => Some(
-                    ControlMessage::PchatMessageDeliver(pchat_deliver(&message)),
-                ),
+                Some(fancy::pchat::pchat_envelope::Body::Message(message)) => {
+                    Some(ControlMessage::PchatMessageDeliver(pchat_deliver(&message)))
+                }
                 Some(fancy::pchat::pchat_envelope::Body::FetchResponse(response)) => Some(
                     ControlMessage::PchatFetchResponse(mumble_tcp::PchatFetchResponse {
                         channel_id: Some(response.channel),
@@ -1142,8 +1142,7 @@ fn scheduled_deliver(message: &fancy::feature::Scheduled) -> mumble_tcp::FancySc
         deliver_at: Some(message.deliver_at_ms),
         creator_session: session(message.creator),
         creator_hash: (!message.creator_cert.is_empty()).then(|| hex(&message.creator_cert)),
-        creator_name: (!message.creator_name.is_empty())
-            .then(|| message.creator_name.clone()),
+        creator_name: (!message.creator_name.is_empty()).then(|| message.creator_name.clone()),
         created_at: Some(message.created_at_ms),
         status: Some(message.status),
     }
@@ -1176,9 +1175,7 @@ fn emoji_to_canon(emoji: Option<&mumble_tcp::pchat_reaction::Emoji>) -> Option<f
 /// and nothing stores one yet (`PROTOCOL-MIGRATION.md` M2b). Putting a remote
 /// URL in `Media.url` would send every viewer to fetch it, which is the network
 /// probe that server-side previews exist to prevent.
-fn preview_response(
-    preview: &fancy::feature::Preview,
-) -> mumble_tcp::FancyLinkPreviewResponse {
+fn preview_response(preview: &fancy::feature::Preview) -> mumble_tcp::FancyLinkPreviewResponse {
     mumble_tcp::FancyLinkPreviewResponse {
         request_id: Some(preview.request_id.clone()),
         embeds: vec![mumble_tcp::fancy_link_preview_response::Embed {
@@ -1306,9 +1303,10 @@ mod tests {
             )),
         }
         .encode_to_vec();
-        assert!(from_canon(SERVER_CONFIG, &payload).expect("decodes").is_none());
+        assert!(from_canon(SERVER_CONFIG, &payload)
+            .expect("decodes")
+            .is_none());
     }
-
 
     /// The canon body one account action translates to.
     fn account_body(
@@ -1358,7 +1356,10 @@ mod tests {
         ) else {
             panic!("expected an action");
         };
-        assert_eq!(begin.kind, fancy::domain::account_action::Kind::EnableTotp as i32);
+        assert_eq!(
+            begin.kind,
+            fancy::domain::account_action::Kind::EnableTotp as i32
+        );
         assert!(begin.totp.is_empty(), "the first half carries no code");
         assert_eq!(begin.current_password, "correct horse");
 
@@ -1369,7 +1370,10 @@ mod tests {
         ) else {
             panic!("expected an action");
         };
-        assert_eq!(verify.kind, fancy::domain::account_action::Kind::EnableTotp as i32);
+        assert_eq!(
+            verify.kind,
+            fancy::domain::account_action::Kind::EnableTotp as i32
+        );
         assert_eq!(verify.totp, "123456");
         assert!(verify.value.is_empty(), "a code is not a password");
     }
@@ -1401,7 +1405,10 @@ mod tests {
             begun.action,
             mumble_tcp::fancy_account_settings_update::Action::TotpBegin as u32
         );
-        assert_eq!(begun.totp_uri.as_deref(), Some("otpauth://totp/x:ada?secret=JBSWY3DP"));
+        assert_eq!(
+            begun.totp_uri.as_deref(),
+            Some("otpauth://totp/x:ada?secret=JBSWY3DP")
+        );
 
         let confirmed = fancy::domain::UserdataEnvelope {
             body: Some(fancy::domain::userdata_envelope::Body::Ack(
@@ -1578,7 +1585,11 @@ mod tests {
         };
         assert_eq!(receipt.channel, 4);
         assert_eq!(receipt.message_id, "m-9");
-        assert_eq!(receipt.actor_cert, Vec::<u8>::new(), "identity is the server's to write");
+        assert_eq!(
+            receipt.actor_cert,
+            Vec::<u8>::new(),
+            "identity is the server's to write"
+        );
 
         // What the server relays back, stamped, becomes the aggregated shape
         // the read-receipt store merges - one reader per relay, keyed by the
@@ -1670,7 +1681,10 @@ mod tests {
         assert_eq!(message.envelope.as_deref(), Some(b"sealed".as_slice()));
         assert_eq!(message.epoch, Some(3));
         assert_eq!(message.chain_index, Some(9));
-        assert_eq!(message.epoch_fingerprint.as_deref(), Some([1, 2, 3, 4, 5, 6, 7, 8].as_slice()));
+        assert_eq!(
+            message.epoch_fingerprint.as_deref(),
+            Some([1, 2, 3, 4, 5, 6, 7, 8].as_slice())
+        );
         assert_eq!(message.protocol, Some(4));
     }
 
@@ -1700,7 +1714,10 @@ mod tests {
         assert_eq!(request.request_id, "r-1");
         assert_eq!(
             request.urls,
-            vec!["https://example.com/a".to_owned(), "https://example.org/b".to_owned()],
+            vec![
+                "https://example.com/a".to_owned(),
+                "https://example.org/b".to_owned()
+            ],
             "a message with two links must ask about both"
         );
     }
@@ -2016,7 +2033,10 @@ mod tests {
         assert_eq!(schedule.trees, vec![7]);
         assert_eq!(schedule.body, "stand-up in five");
         assert_eq!(schedule.deliver_at_ms, 1_723_200_000_000);
-        assert!(schedule.schedule_id.is_empty(), "the id is the server's to assign");
+        assert!(
+            schedule.schedule_id.is_empty(),
+            "the id is the server's to assign"
+        );
     }
 
     #[test]
@@ -2060,11 +2080,10 @@ mod tests {
 
     #[test]
     fn a_cancel_names_its_schedule_and_a_refusal_arrives_with_the_reason() {
-        let sent = ControlMessage::FancyScheduledMessageCancel(
-            mumble_tcp::FancyScheduledMessageCancel {
+        let sent =
+            ControlMessage::FancyScheduledMessageCancel(mumble_tcp::FancyScheduledMessageCancel {
                 schedule_id: Some("s-1".to_owned()),
-            },
-        );
+            });
         let (outer, payload) = to_canon(&sent).expect("a cancel has a canon home");
         assert_eq!(outer, TEXT);
         let envelope = fancy::feature::TextEnvelope::decode(payload.as_slice())
@@ -2218,13 +2237,11 @@ mod tests {
         // The verb has to survive: the table shows it, and a row that says
         // "audit.ban" without "issued" has lost what happened.
         assert_eq!(entry.reason.as_deref(), Some("issued"));
-        assert!(
-            entry
-                .detail_json
-                .as_deref()
-                .unwrap_or_default()
-                .contains("spam")
-        );
+        assert!(entry
+            .detail_json
+            .as_deref()
+            .unwrap_or_default()
+            .contains("spam"));
     }
 
     #[test]
@@ -2235,7 +2252,11 @@ mod tests {
                     fancy::feature::VerifyResult {
                         intact,
                         checked,
-                        broken_at: if intact { String::new() } else { "0192-x".to_owned() },
+                        broken_at: if intact {
+                            String::new()
+                        } else {
+                            "0192-x".to_owned()
+                        },
                         query_id: "v-2".to_owned(),
                     },
                 )),
@@ -2276,13 +2297,11 @@ mod tests {
         // Starling has no SQL sandbox; offering the editor would be offering a
         // mode every use of which is refused.
         assert_eq!(config.advanced_sql_available, Some(false));
-        assert!(
-            config
-                .settings
-                .iter()
-                .any(|s| s.key.as_deref() == Some("audit.retention_days")
-                    && s.value.as_deref() == Some("30"))
-        );
+        assert!(config
+            .settings
+            .iter()
+            .any(|s| s.key.as_deref() == Some("audit.retention_days")
+                && s.value.as_deref() == Some("30")));
     }
 
     #[test]
@@ -2300,4 +2319,3 @@ mod tests {
         assert_eq!(css_colour(0xff00_0000), "#000000");
     }
 }
-

@@ -180,8 +180,7 @@ mod tests {
 
     #[test]
     fn every_slot_has_a_distinct_address() {
-        let addresses: std::collections::HashSet<_> =
-            (0..SLOT_COUNT).map(slot_address).collect();
+        let addresses: std::collections::HashSet<_> = (0..SLOT_COUNT).map(slot_address).collect();
         assert_eq!(addresses.len(), usize::from(SLOT_COUNT));
     }
 

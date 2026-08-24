@@ -35,7 +35,10 @@ impl HandleMessage for mumble_tcp::FancyAccountSettings {
             state.account_settings = Some(snapshot.clone());
         }
 
-        ctx.emit("account-settings", AccountSettingsPayload { settings: snapshot });
+        ctx.emit(
+            "account-settings",
+            AccountSettingsPayload { settings: snapshot },
+        );
     }
 }
 

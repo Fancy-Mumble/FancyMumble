@@ -99,30 +99,21 @@ pub trait E2EEProtocol: Send + Sync {
     // ---- Key announcement -------------------------------------------
 
     /// Build a key announcement message advertising our public keys.
-    fn build_key_announce(
-        &self,
-        cert_hash: &str,
-        timestamp: u64,
-    ) -> Result<wire::PchatKeyAnnounce>;
+    fn build_key_announce(&self, cert_hash: &str, timestamp: u64)
+        -> Result<wire::PchatKeyAnnounce>;
 
     /// Validate and record a peer's key announcement.
     ///
     /// Returns the peer's cert hash on success, or an error if
     /// validation fails (bad signature, anti-rollback, etc.).
-    fn record_peer_key_announce(
-        &mut self,
-        announce: &wire::PchatKeyAnnounce,
-    ) -> Result<String>;
+    fn record_peer_key_announce(&mut self, announce: &wire::PchatKeyAnnounce) -> Result<String>;
 
     // ---- Key exchange -----------------------------------------------
 
     /// Build a key exchange message to distribute a key to a recipient.
     ///
     /// The caller provides the raw key material and recipient info.
-    fn distribute_key(
-        &self,
-        params: &DistributeKeyParams<'_>,
-    ) -> Result<wire::PchatKeyExchange>;
+    fn distribute_key(&self, params: &DistributeKeyParams<'_>) -> Result<wire::PchatKeyExchange>;
 
     /// Validate and decrypt a received key exchange message.
     ///
@@ -187,10 +178,7 @@ pub trait E2EEProtocol: Send + Sync {
     fn compute_consensus_threshold(&self, observed_members: u32) -> u32;
 
     /// Verify a key custodian countersignature.
-    fn verify_countersignature(
-        &self,
-        params: &VerifyCountersigParams<'_>,
-    ) -> Result<bool>;
+    fn verify_countersignature(&self, params: &VerifyCountersigParams<'_>) -> Result<bool>;
 
     /// Build a countersignature for an epoch transition.
     fn build_countersignature(
@@ -206,11 +194,8 @@ pub trait E2EEProtocol: Send + Sync {
     // ---- Challenge-response (key possession proof) -------------------
 
     /// Compute HMAC proof of archive key possession.
-    fn compute_challenge_proof(
-        &self,
-        archive_key: &[u8; 32],
-        challenge: &[u8],
-    ) -> Result<[u8; 32]>;
+    fn compute_challenge_proof(&self, archive_key: &[u8; 32], challenge: &[u8])
+        -> Result<[u8; 32]>;
 }
 
 // ---- Protocol output types ------------------------------------------

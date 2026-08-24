@@ -55,14 +55,8 @@ pub struct Span {
 /// difference: the web parser lets inline formatting span newlines, a
 /// per-line highlighter cannot - formatting is closed at the line end.
 pub fn line_spans(line: &str, in_fence: bool) -> (Vec<Span>, bool) {
-    if in_fence {
-        if line.trim_end().starts_with("```") {
-            return (vec![Span { start: 0, len: line.len(), flags: flags::FENCE_MARKER }], false);
-        }
-        return (vec![Span { start: 0, len: line.len(), flags: flags::CODE }], true);
-    }
-    if line.starts_with("```") {
-        return (vec![Span { start: 0, len: line.len(), flags: flags::FENCE_MARKER }], true);
+    if let Some(fenced) = fenced_line(line, in_fence) {
+        return fenced;
     }
 
     let b = line.as_bytes();
@@ -70,98 +64,121 @@ pub fn line_spans(line: &str, in_fence: bool) -> (Vec<Span>, bool) {
     let mut plain_start = 0usize;
     let mut i = 0usize;
 
-    let flush_plain = |spans: &mut Vec<Span>, from: usize, to: usize| {
-        push_url_spans(spans, line, from, to);
-    };
-
     while i < b.len() {
-        // <@SESSION> user mention
-        if b[i] == b'<' && i + 1 < b.len() && b[i + 1] == b'@' {
-            let mut j = i + 2;
-            while j < b.len() && b[j].is_ascii_digit() {
-                j += 1;
-            }
-            if j > i + 2 && j < b.len() && b[j] == b'>' {
-                flush_plain(&mut spans, plain_start, i);
-                spans.push(Span { start: i, len: j + 1 - i, flags: flags::MENTION });
-                i = j + 1;
-                plain_start = i;
-                continue;
-            }
+        if let Some(span) = inline_span_at(b, i) {
+            // Whatever preceded the delimiter is plain text, and plain text is
+            // still scanned for bare URLs - so it is flushed before the span
+            // that ended it is pushed, or the two would come out reversed.
+            push_url_spans(&mut spans, line, plain_start, i);
+            i = span.start + span.len;
+            plain_start = i;
+            spans.push(span);
+            continue;
         }
-
-        // `inline code`
-        if b[i] == b'`' {
-            if let Some(end) = find_byte(b, b'`', i + 1) {
-                flush_plain(&mut spans, plain_start, i);
-                spans.push(Span { start: i, len: end + 1 - i, flags: flags::CODE });
-                i = end + 1;
-                plain_start = i;
-                continue;
-            }
-        }
-
-        // **bold**
-        if b[i] == b'*' && i + 1 < b.len() && b[i + 1] == b'*' {
-            if let Some(end) = find_sub(b, b"**", i + 2) {
-                flush_plain(&mut spans, plain_start, i);
-                spans.push(Span { start: i, len: end + 2 - i, flags: flags::BOLD });
-                i = end + 2;
-                plain_start = i;
-                continue;
-            }
-        }
-
-        // ||spoiler||
-        if b[i] == b'|' && i + 1 < b.len() && b[i + 1] == b'|' {
-            if let Some(end) = find_sub(b, b"||", i + 2) {
-                flush_plain(&mut spans, plain_start, i);
-                spans.push(Span { start: i, len: end + 2 - i, flags: flags::SPOILER });
-                i = end + 2;
-                plain_start = i;
-                continue;
-            }
-        }
-
-        // *italic* (single star)
-        if b[i] == b'*' && (i + 1 >= b.len() || b[i + 1] != b'*') {
-            if let Some(end) = find_byte(b, b'*', i + 1) {
-                if end + 1 >= b.len() || b[end + 1] != b'*' {
-                    flush_plain(&mut spans, plain_start, i);
-                    spans.push(Span { start: i, len: end + 1 - i, flags: flags::ITALIC });
-                    i = end + 1;
-                    plain_start = i;
-                    continue;
-                }
-            }
-        }
-
-        // __underline__
-        if b[i] == b'_' && i + 1 < b.len() && b[i + 1] == b'_' {
-            if let Some(end) = find_sub(b, b"__", i + 2) {
-                flush_plain(&mut spans, plain_start, i);
-                spans.push(Span { start: i, len: end + 2 - i, flags: flags::UNDERLINE });
-                i = end + 2;
-                plain_start = i;
-                continue;
-            }
-        }
-
-        // ~~strikethrough~~
-        if b[i] == b'~' && i + 1 < b.len() && b[i + 1] == b'~' {
-            if let Some(end) = find_sub(b, b"~~", i + 2) {
-                flush_plain(&mut spans, plain_start, i);
-                spans.push(Span { start: i, len: end + 2 - i, flags: flags::STRIKE });
-                i = end + 2;
-                plain_start = i;
-                continue;
-            }
-        }
-
         i += 1;
     }
-    flush_plain(&mut spans, plain_start, b.len());
+    push_url_spans(&mut spans, line, plain_start, b.len());
     (spans, false)
+}
+
+/// The fenced-code cases, which own the whole line and carry state to the next.
+///
+/// Returns `None` when this line is ordinary text, in which case the caller
+/// scans it for inline markup.
+fn fenced_line(line: &str, in_fence: bool) -> Option<(Vec<Span>, bool)> {
+    if in_fence {
+        // A closing fence is still a marker; anything else inside is code.
+        let flags = if line.trim_end().starts_with("```") {
+            flags::FENCE_MARKER
+        } else {
+            flags::CODE
+        };
+        let still_open = flags == flags::CODE;
+        return Some((
+            vec![Span {
+                start: 0,
+                len: line.len(),
+                flags,
+            }],
+            still_open,
+        ));
+    }
+    if line.starts_with("```") {
+        return Some((
+            vec![Span {
+                start: 0,
+                len: line.len(),
+                flags: flags::FENCE_MARKER,
+            }],
+            true,
+        ));
+    }
+    None
+}
+
+/// The inline rule matching at `i`, if any.
+///
+/// Order matters only where two rules share a first byte: `**` is tried before
+/// `*` so bold wins over italic. The rest key on distinct bytes.
+fn inline_span_at(b: &[u8], i: usize) -> Option<Span> {
+    // <@SESSION> user mention
+    if b[i] == b'<' && i + 1 < b.len() && b[i + 1] == b'@' {
+        let mut j = i + 2;
+        while j < b.len() && b[j].is_ascii_digit() {
+            j += 1;
+        }
+        if j > i + 2 && j < b.len() && b[j] == b'>' {
+            return Some(Span {
+                start: i,
+                len: j + 1 - i,
+                flags: flags::MENTION,
+            });
+        }
+    }
+
+    // `inline code`
+    if b[i] == b'`' {
+        if let Some(end) = find_byte(b, b'`', i + 1) {
+            return Some(Span {
+                start: i,
+                len: end + 1 - i,
+                flags: flags::CODE,
+            });
+        }
+    }
+
+    // The paired two-byte delimiters, each closed by the same two bytes.
+    for (delim, flag) in [
+        (b"**", flags::BOLD),
+        (b"||", flags::SPOILER),
+        (b"__", flags::UNDERLINE),
+        (b"~~", flags::STRIKE),
+    ] {
+        if b[i] == delim[0] && i + 1 < b.len() && b[i + 1] == delim[1] {
+            if let Some(end) = find_sub(b, delim, i + 2) {
+                return Some(Span {
+                    start: i,
+                    len: end + 2 - i,
+                    flags: flag,
+                });
+            }
+        }
+    }
+
+    // *italic*, a single star - and its closer must not be a `**` either.
+    if b[i] == b'*' && (i + 1 >= b.len() || b[i + 1] != b'*') {
+        if let Some(end) = find_byte(b, b'*', i + 1) {
+            if end + 1 >= b.len() || b[end + 1] != b'*' {
+                return Some(Span {
+                    start: i,
+                    len: end + 1 - i,
+                    flags: flags::ITALIC,
+                });
+            }
+        }
+    }
+
+    None
 }
 
 /// Scan `line[from..to]` for bare URLs and push a LINK span per hit.
@@ -171,7 +188,11 @@ fn push_url_spans(spans: &mut Vec<Span>, line: &str, from: usize, to: usize) {
         match url_at(line, i, to) {
             Some(end) => {
                 let trimmed = trim_trailing_punctuation(&line[i..end]);
-                spans.push(Span { start: i, len: trimmed.len(), flags: flags::LINK });
+                spans.push(Span {
+                    start: i,
+                    len: trimmed.len(),
+                    flags: flags::LINK,
+                });
                 i += end - i;
             }
             None => i += 1,
@@ -204,7 +225,10 @@ fn url_at(text: &str, i: usize, limit: usize) -> Option<usize> {
 /// front-end's `trimTrailingPunctuation`).
 fn trim_trailing_punctuation(url: &str) -> &str {
     let mut out = url.trim_end_matches(|c| {
-        matches!(c, '.' | ',' | ';' | ':' | '!' | '?' | '\'' | '\u{201d}' | '\u{2019}' | '\u{2026}')
+        matches!(
+            c,
+            '.' | ',' | ';' | ':' | '!' | '?' | '\'' | '\u{201d}' | '\u{2019}' | '\u{2026}'
+        )
     });
     while let Some(last) = out.chars().next_back() {
         let opens = |c| out.chars().filter(|&x| x == c).count();
@@ -290,7 +314,9 @@ fn extract_fences(text: &str, stash: &mut Vec<String>) -> String {
             if k < b.len() && b[k] == b'\n' {
                 if let Some(close) = find_sub(b, b"```", k + 1) {
                     let lang = &text[i + 3..k];
-                    let body = text[k + 1..close].strip_suffix('\n').unwrap_or(&text[k + 1..close]);
+                    let body = text[k + 1..close]
+                        .strip_suffix('\n')
+                        .unwrap_or(&text[k + 1..close]);
                     stash.push(fence_html(lang, body));
                     out.push_str(&format!("\u{0}FENCE{}\u{0}", stash.len() - 1));
                     i = close + 3;
@@ -442,9 +468,8 @@ fn replace_italic(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut i = 0usize;
     while i < b.len() {
-        let opener = b[i] == b'*'
-            && (i == 0 || b[i - 1] != b'*')
-            && (i + 1 >= b.len() || b[i + 1] != b'*');
+        let opener =
+            b[i] == b'*' && (i == 0 || b[i - 1] != b'*') && (i + 1 >= b.len() || b[i + 1] != b'*');
         if opener {
             // Find a closing single star with a non-empty inner on this line.
             let mut j = i + 2;
@@ -510,7 +535,9 @@ pub fn html_to_markdown(html: &str) -> String {
     text = replace_span_class(&text, "spoiler", "||", "||", false);
     text = strip_comments(&text);
     text = crate::html::strip_html_tags(&text);
-    text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+    text.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
 }
 
 /// `<br>`, `<br/>`, `<br />` (any case) -> newline.
@@ -782,7 +809,10 @@ fn push_next_char(out: &mut String, text: &str, i: &mut usize) {
 }
 
 fn find_byte(b: &[u8], needle: u8, from: usize) -> Option<usize> {
-    b.iter().skip(from).position(|&x| x == needle).map(|p| p + from)
+    b.iter()
+        .skip(from)
+        .position(|&x| x == needle)
+        .map(|p| p + from)
 }
 
 fn find_sub(b: &[u8], needle: &[u8], from: usize) -> Option<usize> {
@@ -980,7 +1010,10 @@ mod tests {
 
     #[test]
     fn html_comments_stripped() {
-        assert_eq!(html_to_markdown("<!-- FANCY_QUOTE:abc123 -->hello"), "hello");
+        assert_eq!(
+            html_to_markdown("<!-- FANCY_QUOTE:abc123 -->hello"),
+            "hello"
+        );
     }
 
     #[test]
@@ -1001,7 +1034,11 @@ mod tests {
     #[test]
     fn round_trip_inline_styles() {
         for md in ["**b**", "*i*", "__u__", "~~s~~", "`c`", "||sp||", "a\nb"] {
-            assert_eq!(html_to_markdown(&markdown_to_html(md)), md, "round trip of {md}");
+            assert_eq!(
+                html_to_markdown(&markdown_to_html(md)),
+                md,
+                "round trip of {md}"
+            );
         }
     }
 

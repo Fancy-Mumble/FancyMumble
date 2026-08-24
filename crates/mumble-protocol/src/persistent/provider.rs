@@ -125,11 +125,7 @@ impl MessageProvider for VolatileMessageProvider {
 /// concerns can be composed independently.
 pub trait PersistentProviderBackend: Send + Sync {
     /// Get cached messages for a channel.
-    fn cached_messages(
-        &self,
-        channel_id: u32,
-        range: &MessageRange,
-    ) -> Result<Vec<StoredMessage>>;
+    fn cached_messages(&self, channel_id: u32, range: &MessageRange) -> Result<Vec<StoredMessage>>;
 
     /// Store a message into the local cache.
     fn cache_message(&mut self, channel_id: u32, message: StoredMessage) -> Result<()>;
@@ -179,11 +175,7 @@ impl InMemoryPersistentBackend {
 }
 
 impl PersistentProviderBackend for InMemoryPersistentBackend {
-    fn cached_messages(
-        &self,
-        channel_id: u32,
-        range: &MessageRange,
-    ) -> Result<Vec<StoredMessage>> {
+    fn cached_messages(&self, channel_id: u32, range: &MessageRange) -> Result<Vec<StoredMessage>> {
         let Some(msgs) = self.cache.get(&channel_id) else {
             return Ok(Vec::new());
         };
@@ -300,10 +292,7 @@ pub struct CompositeMessageProvider {
 
 impl CompositeMessageProvider {
     /// Create a new composite provider with the given volatile and persistent sub-providers.
-    pub fn new(
-        volatile: VolatileMessageProvider,
-        persistent: PersistentMessageProvider,
-    ) -> Self {
+    pub fn new(volatile: VolatileMessageProvider, persistent: PersistentMessageProvider) -> Self {
         Self {
             volatile,
             persistent,
@@ -342,18 +331,14 @@ impl std::fmt::Debug for CompositeMessageProvider {
 impl MessageProvider for CompositeMessageProvider {
     fn get_messages(&self, channel_id: u32, range: &MessageRange) -> Result<Vec<StoredMessage>> {
         match self.effective_mode(channel_id) {
-            PchatProtocol::FancyV1FullArchive => {
-                self.persistent.get_messages(channel_id, range)
-            }
+            PchatProtocol::FancyV1FullArchive => self.persistent.get_messages(channel_id, range),
             _ => self.volatile.get_messages(channel_id, range),
         }
     }
 
     fn store_message(&mut self, channel_id: u32, message: StoredMessage) -> Result<()> {
         match self.effective_mode(channel_id) {
-            PchatProtocol::FancyV1FullArchive => {
-                self.persistent.store_message(channel_id, message)
-            }
+            PchatProtocol::FancyV1FullArchive => self.persistent.store_message(channel_id, message),
             _ => self.volatile.store_message(channel_id, message),
         }
     }
@@ -379,9 +364,7 @@ impl MessageProvider for CompositeMessageProvider {
 
     fn has_more(&self, channel_id: u32) -> bool {
         match self.effective_mode(channel_id) {
-            PchatProtocol::FancyV1FullArchive => {
-                self.persistent.has_more(channel_id)
-            }
+            PchatProtocol::FancyV1FullArchive => self.persistent.has_more(channel_id),
             _ => self.volatile.has_more(channel_id),
         }
     }
@@ -450,8 +433,7 @@ mod tests {
     #[test]
     fn volatile_store_and_retrieve() {
         let mut vp = VolatileMessageProvider::new();
-        vp.store_message(1, make_message("a", 1, "alice"))
-            .unwrap();
+        vp.store_message(1, make_message("a", 1, "alice")).unwrap();
         vp.store_message(1, make_message("b", 1, "bob")).unwrap();
 
         let msgs = vp.get_messages(1, &MessageRange::Latest(10)).unwrap();
@@ -482,8 +464,7 @@ mod tests {
     #[test]
     fn volatile_replace_message() {
         let mut vp = VolatileMessageProvider::new();
-        vp.store_message(1, make_message("a", 1, "alice"))
-            .unwrap();
+        vp.store_message(1, make_message("a", 1, "alice")).unwrap();
 
         let replacement = StoredMessage {
             body: "replaced".into(),
@@ -500,8 +481,7 @@ mod tests {
     #[test]
     fn volatile_replace_wrong_sender_fails() {
         let mut vp = VolatileMessageProvider::new();
-        vp.store_message(1, make_message("a", 1, "alice"))
-            .unwrap();
+        vp.store_message(1, make_message("a", 1, "alice")).unwrap();
 
         let replacement = make_message("a-new", 1, "bob");
         let result = vp.replace_message(1, "a", replacement).unwrap();
@@ -523,12 +503,17 @@ mod tests {
     #[test]
     fn volatile_clear_channel() {
         let mut vp = VolatileMessageProvider::new();
-        vp.store_message(1, make_message("a", 1, "alice"))
-            .unwrap();
+        vp.store_message(1, make_message("a", 1, "alice")).unwrap();
         vp.store_message(2, make_message("b", 2, "bob")).unwrap();
         vp.clear_channel(1);
-        assert!(vp.get_messages(1, &MessageRange::Latest(10)).unwrap().is_empty());
-        assert_eq!(vp.get_messages(2, &MessageRange::Latest(10)).unwrap().len(), 1);
+        assert!(vp
+            .get_messages(1, &MessageRange::Latest(10))
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            vp.get_messages(2, &MessageRange::Latest(10)).unwrap().len(),
+            1
+        );
     }
 
     // ---- MessageRange application -----------------------------------
@@ -578,8 +563,7 @@ mod tests {
     #[test]
     fn range_before_unknown_cursor() {
         let mut vp = VolatileMessageProvider::new();
-        vp.store_message(1, make_message("a", 1, "alice"))
-            .unwrap();
+        vp.store_message(1, make_message("a", 1, "alice")).unwrap();
         let msgs = vp
             .get_messages(
                 1,
@@ -628,13 +612,19 @@ mod tests {
             .store_message(1, make_message("a", 1, "alice"))
             .unwrap();
 
-        let msgs = composite.get_messages(1, &MessageRange::Latest(10)).unwrap();
+        let msgs = composite
+            .get_messages(1, &MessageRange::Latest(10))
+            .unwrap();
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].message_id, "a");
 
         // Verify it went into volatile, not persistent
         assert_eq!(
-            composite.volatile().get_messages(1, &MessageRange::Latest(10)).unwrap().len(),
+            composite
+                .volatile()
+                .get_messages(1, &MessageRange::Latest(10))
+                .unwrap()
+                .len(),
             1
         );
     }
@@ -653,7 +643,9 @@ mod tests {
             .store_message(1, make_message("a", 1, "alice"))
             .unwrap();
 
-        let msgs = composite.get_messages(1, &MessageRange::Latest(10)).unwrap();
+        let msgs = composite
+            .get_messages(1, &MessageRange::Latest(10))
+            .unwrap();
         assert_eq!(msgs.len(), 1);
 
         // Verify volatile is empty

@@ -25,7 +25,6 @@
     unused_crate_dependencies,
     reason = "integration test: it links the whole crate's dependency set and uses a few"
 )]
-
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -48,9 +47,17 @@ fn fixtures() -> Vec<(String, String)> {
     for line in text.lines() {
         let line = line.trim();
         if let Some(rest) = line.strip_prefix("\"name\":") {
-            name = rest.trim().trim_end_matches(',').trim_matches('"').to_owned();
+            name = rest
+                .trim()
+                .trim_end_matches(',')
+                .trim_matches('"')
+                .to_owned();
         } else if let Some(rest) = line.strip_prefix("\"hex\":") {
-            let hex = rest.trim().trim_end_matches(',').trim_matches('"').to_owned();
+            let hex = rest
+                .trim()
+                .trim_end_matches(',')
+                .trim_matches('"')
+                .to_owned();
             out.push((std::mem::take(&mut name), hex));
         }
     }

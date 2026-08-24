@@ -94,7 +94,9 @@ fn try_drain_speakers_checked(
     mono_needed: usize,
 ) -> Option<(bool, usize, usize)> {
     const PRE_BUFFER_SAMPLES: usize = 4800;
-    let Ok(mut bufs) = buffers.lock() else { return None };
+    let Ok(mut bufs) = buffers.lock() else {
+        return None;
+    };
     if !primed_cb.load(Ordering::Relaxed) {
         let max_available = bufs.values().map(VecDeque::len).max().unwrap_or(0);
         if max_available < PRE_BUFFER_SAMPLES {
@@ -153,7 +155,11 @@ fn resample_linear(
     }
     let frac = (src_pos - idx as f64) as f32;
     let s0 = mixed_buf[idx];
-    let s1 = if idx + 1 < valid_count { mixed_buf[idx + 1] } else { s0 };
+    let s1 = if idx + 1 < valid_count {
+        mixed_buf[idx + 1]
+    } else {
+        s0
+    };
     Some(s0 + (s1 - s0) * frac)
 }
 
@@ -195,7 +201,10 @@ impl std::fmt::Debug for CpalMixingPlayback {
 }
 
 // SAFETY: See CpalCapture.
-#[allow(unsafe_code, reason = "WASAPI COM objects are MTA-safe; cpal's !Send is a conservative cross-platform guard")]
+#[allow(
+    unsafe_code,
+    reason = "WASAPI COM objects are MTA-safe; cpal's !Send is a conservative cross-platform guard"
+)]
 unsafe impl Send for CpalMixingPlayback {}
 
 impl CpalMixingPlayback {
@@ -254,9 +263,16 @@ impl CallbackDiag {
                 "audio diag: cb={}, none={}, underrun={}, partial={}, \
                  src_needed={}, valid={}, out_frames={}, ratio={:.4}, \
                  peak={:.4}, buf={}",
-                self.callbacks, self.none, self.underrun, self.partial,
-                src_needed, valid_count, out_frames, src_ratio,
-                self.peak, self.buf_depth,
+                self.callbacks,
+                self.none,
+                self.underrun,
+                self.partial,
+                src_needed,
+                valid_count,
+                out_frames,
+                src_ratio,
+                self.peak,
+                self.buf_depth,
             );
         }
     }
@@ -282,7 +298,9 @@ impl MixingPlayback for CpalMixingPlayback {
 
         warn!(
             "cpal output device: rate={} Hz, channels={}, format={:?}",
-            device_rate, device_channels, default_config.sample_format()
+            device_rate,
+            device_channels,
+            default_config.sample_format()
         );
 
         let stream_config = cpal::StreamConfig {
@@ -299,7 +317,14 @@ impl MixingPlayback for CpalMixingPlayback {
         let primed = Arc::new(AtomicBool::new(false));
         let primed_cb = primed;
 
-        let mut diag = CallbackDiag { callbacks: 0, underrun: 0, partial: 0, none: 0, peak: 0.0, buf_depth: 0 };
+        let mut diag = CallbackDiag {
+            callbacks: 0,
+            underrun: 0,
+            partial: 0,
+            none: 0,
+            peak: 0.0,
+            buf_depth: 0,
+        };
         let mut pb_state = PlaybackState {
             last_sample: 0.0,
             in_underrun: false,
@@ -356,7 +381,8 @@ impl MixingPlayback for CpalMixingPlayback {
                     diag.log_if_due(src_needed, valid_count, out_frames, src_ratio);
 
                     for (i, frame) in data.chunks_exact_mut(out_channels).enumerate() {
-                        let sample_opt = resample_linear(&mixed_buf, valid_count, drained, i, src_ratio);
+                        let sample_opt =
+                            resample_linear(&mixed_buf, valid_count, drained, i, src_ratio);
                         if let Some(s) = &sample_opt {
                             diag.peak = diag.peak.max(s.abs());
                         }
@@ -387,7 +413,11 @@ impl MixingPlayback for CpalMixingPlayback {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, unused_results, reason = "acceptable in test code")]
+    #![allow(
+        clippy::unwrap_used,
+        unused_results,
+        reason = "acceptable in test code"
+    )]
     use super::*;
 
     #[test]
@@ -420,7 +450,11 @@ mod tests {
         let buf = vec![0.0, 0.25, 0.5, 0.75, 1.0];
         for i in 0..5 {
             let s = resample_linear(&buf, 5, true, i, 1.0).unwrap();
-            assert!((s - buf[i]).abs() < 1e-6, "index {i}: expected {}, got {s}", buf[i]);
+            assert!(
+                (s - buf[i]).abs() < 1e-6,
+                "index {i}: expected {}, got {s}",
+                buf[i]
+            );
         }
     }
 }

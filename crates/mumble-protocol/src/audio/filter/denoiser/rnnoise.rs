@@ -55,10 +55,7 @@ impl DenoiserBackend for RnnoiseBackend {
                 continue;
             }
 
-            for (dst, (&dry, &wet)) in chunk
-                .iter_mut()
-                .zip(in_buf.iter().zip(out_buf.iter()))
-            {
+            for (dst, (&dry, &wet)) in chunk.iter_mut().zip(in_buf.iter().zip(out_buf.iter())) {
                 let dry_norm = dry * SCALE_DOWN;
                 let wet_norm = wet * SCALE_DOWN;
                 *dst = (1.0 - attenuation) * dry_norm + attenuation * wet_norm;

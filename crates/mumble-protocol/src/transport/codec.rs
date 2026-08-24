@@ -1,4 +1,4 @@
-﻿//! Mumble TCP packet framing: encode and decode the `[type:u16][length:u32][payload]` wire format.
+//! Mumble TCP packet framing: encode and decode the `[type:u16][length:u32][payload]` wire format.
 
 use bytes::{Buf, BufMut, BytesMut};
 use prost::Message;
@@ -155,9 +155,8 @@ pub fn decode_with(buf: &mut BytesMut, framing: &mut Framing) -> Result<Option<C
     // already arrived, which reorders a stream whose ordering is the one thing
     // the gateway guarantees.
     if msg_type == COMPRESSED_BATCH {
-        let expanded = zstd::stream::decode_all(payload.as_ref()).map_err(|_| {
-            Error::InvalidState("undecodable compressed batch".to_owned())
-        })?;
+        let expanded = zstd::stream::decode_all(payload.as_ref())
+            .map_err(|_| Error::InvalidState("undecodable compressed batch".to_owned()))?;
         if expanded.len() > MAX_BATCH_BYTES {
             return Err(Error::InvalidState(format!(
                 "compressed batch expands to {} bytes",
@@ -195,7 +194,11 @@ pub fn decode_with(buf: &mut BytesMut, framing: &mut Framing) -> Result<Option<C
             // A service this build does not translate, or an arm added by a
             // newer peer. The frame is consumed and skipped rather than fatal;
             // `recv` loops, so `None` just reads on.
-            debug!(msg_type, len = payload.len(), "skipping unknown service message");
+            debug!(
+                msg_type,
+                len = payload.len(),
+                "skipping unknown service message"
+            );
         }
         return Ok(decoded);
     }
@@ -343,21 +346,15 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
 
     let msg = match msg_type {
         Version => ControlMessage::Version(mumble_tcp::Version::decode(payload)?),
-        FancyLiveryQuery => {
-            ControlMessage::FancyLiveryQuery(crate::proto::fancy::domain::LiveryQuery::decode(
-                payload,
-            )?)
-        }
-        FancyServerLivery => {
-            ControlMessage::FancyServerLivery(crate::proto::fancy::domain::LiveryDoc::decode(
-                payload,
-            )?)
-        }
-        FancyLiveryUpdate => {
-            ControlMessage::FancyLiveryUpdate(crate::proto::fancy::domain::LiveryUpdate::decode(
-                payload,
-            )?)
-        }
+        FancyLiveryQuery => ControlMessage::FancyLiveryQuery(
+            crate::proto::fancy::domain::LiveryQuery::decode(payload)?,
+        ),
+        FancyServerLivery => ControlMessage::FancyServerLivery(
+            crate::proto::fancy::domain::LiveryDoc::decode(payload)?,
+        ),
+        FancyLiveryUpdate => ControlMessage::FancyLiveryUpdate(
+            crate::proto::fancy::domain::LiveryUpdate::decode(payload)?,
+        ),
         FancyOperatorTicketRequest => ControlMessage::FancyOperatorTicketRequest(
             crate::proto::fancy::domain::OperatorTicketRequest::decode(payload)?,
         ),
@@ -375,91 +372,221 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
         UserState => ControlMessage::UserState(mumble_tcp::UserState::decode(payload)?),
         BanList => ControlMessage::BanList(mumble_tcp::BanList::decode(payload)?),
         TextMessage => ControlMessage::TextMessage(mumble_tcp::TextMessage::decode(payload)?),
-        PermissionDenied => ControlMessage::PermissionDenied(mumble_tcp::PermissionDenied::decode(payload)?),
+        PermissionDenied => {
+            ControlMessage::PermissionDenied(mumble_tcp::PermissionDenied::decode(payload)?)
+        }
         Acl => ControlMessage::Acl(mumble_tcp::Acl::decode(payload)?),
         QueryUsers => ControlMessage::QueryUsers(mumble_tcp::QueryUsers::decode(payload)?),
         CryptSetup => ControlMessage::CryptSetup(mumble_tcp::CryptSetup::decode(payload)?),
-        ContextActionModify => ControlMessage::ContextActionModify(mumble_tcp::ContextActionModify::decode(payload)?),
+        ContextActionModify => {
+            ControlMessage::ContextActionModify(mumble_tcp::ContextActionModify::decode(payload)?)
+        }
         ContextAction => ControlMessage::ContextAction(mumble_tcp::ContextAction::decode(payload)?),
         UserList => ControlMessage::UserList(mumble_tcp::UserList::decode(payload)?),
         VoiceTarget => ControlMessage::VoiceTarget(mumble_tcp::VoiceTarget::decode(payload)?),
-        PermissionQuery => ControlMessage::PermissionQuery(mumble_tcp::PermissionQuery::decode(payload)?),
+        PermissionQuery => {
+            ControlMessage::PermissionQuery(mumble_tcp::PermissionQuery::decode(payload)?)
+        }
         CodecVersion => ControlMessage::CodecVersion(mumble_tcp::CodecVersion::decode(payload)?),
         UserStats => ControlMessage::UserStats(mumble_tcp::UserStats::decode(payload)?),
         RequestBlob => ControlMessage::RequestBlob(mumble_tcp::RequestBlob::decode(payload)?),
         ServerConfig => ControlMessage::ServerConfig(mumble_tcp::ServerConfig::decode(payload)?),
         SuggestConfig => ControlMessage::SuggestConfig(mumble_tcp::SuggestConfig::decode(payload)?),
-        PluginDataTransmission => ControlMessage::PluginDataTransmission(mumble_tcp::PluginDataTransmission::decode(payload)?),
+        PluginDataTransmission => ControlMessage::PluginDataTransmission(
+            mumble_tcp::PluginDataTransmission::decode(payload)?,
+        ),
         PchatMessage => ControlMessage::PchatMessage(mumble_tcp::PchatMessage::decode(payload)?),
         PchatFetch => ControlMessage::PchatFetch(mumble_tcp::PchatFetch::decode(payload)?),
-        PchatFetchResponse => ControlMessage::PchatFetchResponse(mumble_tcp::PchatFetchResponse::decode(payload)?),
-        PchatMessageDeliver => ControlMessage::PchatMessageDeliver(mumble_tcp::PchatMessageDeliver::decode(payload)?),
-        PchatKeyAnnounce => ControlMessage::PchatKeyAnnounce(mumble_tcp::PchatKeyAnnounce::decode(payload)?),
-        PchatKeyExchange => ControlMessage::PchatKeyExchange(mumble_tcp::PchatKeyExchange::decode(payload)?),
-        PchatKeyRequest => ControlMessage::PchatKeyRequest(mumble_tcp::PchatKeyRequest::decode(payload)?),
+        PchatFetchResponse => {
+            ControlMessage::PchatFetchResponse(mumble_tcp::PchatFetchResponse::decode(payload)?)
+        }
+        PchatMessageDeliver => {
+            ControlMessage::PchatMessageDeliver(mumble_tcp::PchatMessageDeliver::decode(payload)?)
+        }
+        PchatKeyAnnounce => {
+            ControlMessage::PchatKeyAnnounce(mumble_tcp::PchatKeyAnnounce::decode(payload)?)
+        }
+        PchatKeyExchange => {
+            ControlMessage::PchatKeyExchange(mumble_tcp::PchatKeyExchange::decode(payload)?)
+        }
+        PchatKeyRequest => {
+            ControlMessage::PchatKeyRequest(mumble_tcp::PchatKeyRequest::decode(payload)?)
+        }
         PchatAck => ControlMessage::PchatAck(mumble_tcp::PchatAck::decode(payload)?),
-        PchatEpochCountersig => ControlMessage::PchatEpochCountersig(mumble_tcp::PchatEpochCountersig::decode(payload)?),
-        PchatKeyHolderReport => ControlMessage::PchatKeyHolderReport(mumble_tcp::PchatKeyHolderReport::decode(payload)?),
-        PchatKeyHoldersQuery => ControlMessage::PchatKeyHoldersQuery(mumble_tcp::PchatKeyHoldersQuery::decode(payload)?),
-        PchatKeyHoldersList => ControlMessage::PchatKeyHoldersList(mumble_tcp::PchatKeyHoldersList::decode(payload)?),
-        PchatKeyChallenge => ControlMessage::PchatKeyChallenge(mumble_tcp::PchatKeyChallenge::decode(payload)?),
-        PchatKeyChallengeResponse => ControlMessage::PchatKeyChallengeResponse(mumble_tcp::PchatKeyChallengeResponse::decode(payload)?),
-        PchatKeyChallengeResult => ControlMessage::PchatKeyChallengeResult(mumble_tcp::PchatKeyChallengeResult::decode(payload)?),
-        PchatDeleteMessages => ControlMessage::PchatDeleteMessages(mumble_tcp::PchatDeleteMessages::decode(payload)?),
-        PchatOfflineQueueDrain => ControlMessage::PchatOfflineQueueDrain(mumble_tcp::PchatOfflineQueueDrain::decode(payload)?),
+        PchatEpochCountersig => {
+            ControlMessage::PchatEpochCountersig(mumble_tcp::PchatEpochCountersig::decode(payload)?)
+        }
+        PchatKeyHolderReport => {
+            ControlMessage::PchatKeyHolderReport(mumble_tcp::PchatKeyHolderReport::decode(payload)?)
+        }
+        PchatKeyHoldersQuery => {
+            ControlMessage::PchatKeyHoldersQuery(mumble_tcp::PchatKeyHoldersQuery::decode(payload)?)
+        }
+        PchatKeyHoldersList => {
+            ControlMessage::PchatKeyHoldersList(mumble_tcp::PchatKeyHoldersList::decode(payload)?)
+        }
+        PchatKeyChallenge => {
+            ControlMessage::PchatKeyChallenge(mumble_tcp::PchatKeyChallenge::decode(payload)?)
+        }
+        PchatKeyChallengeResponse => ControlMessage::PchatKeyChallengeResponse(
+            mumble_tcp::PchatKeyChallengeResponse::decode(payload)?,
+        ),
+        PchatKeyChallengeResult => ControlMessage::PchatKeyChallengeResult(
+            mumble_tcp::PchatKeyChallengeResult::decode(payload)?,
+        ),
+        PchatDeleteMessages => {
+            ControlMessage::PchatDeleteMessages(mumble_tcp::PchatDeleteMessages::decode(payload)?)
+        }
+        PchatOfflineQueueDrain => ControlMessage::PchatOfflineQueueDrain(
+            mumble_tcp::PchatOfflineQueueDrain::decode(payload)?,
+        ),
         PchatReaction => ControlMessage::PchatReaction(mumble_tcp::PchatReaction::decode(payload)?),
-        PchatReactionDeliver => ControlMessage::PchatReactionDeliver(mumble_tcp::PchatReactionDeliver::decode(payload)?),
-        PchatReactionFetchResponse => ControlMessage::PchatReactionFetchResponse(mumble_tcp::PchatReactionFetchResponse::decode(payload)?),
+        PchatReactionDeliver => {
+            ControlMessage::PchatReactionDeliver(mumble_tcp::PchatReactionDeliver::decode(payload)?)
+        }
+        PchatReactionFetchResponse => ControlMessage::PchatReactionFetchResponse(
+            mumble_tcp::PchatReactionFetchResponse::decode(payload)?,
+        ),
         WebRtcSignal => ControlMessage::WebRtcSignal(mumble_tcp::WebRtcSignal::decode(payload)?),
-        PchatSenderKeyDistribution => ControlMessage::PchatSenderKeyDistribution(mumble_tcp::PchatSenderKeyDistribution::decode(payload)?),
-        FancyPushRegister => ControlMessage::FancyPushRegister(mumble_tcp::FancyPushRegister::decode(payload)?),
-        FancyPushUpdate => ControlMessage::FancyPushUpdate(mumble_tcp::FancyPushUpdate::decode(payload)?),
-        FancyCustomReactionsConfig => ControlMessage::FancyCustomReactionsConfig(mumble_tcp::FancyCustomReactionsConfig::decode(payload)?),
-        FancySubscribePush => ControlMessage::FancySubscribePush(mumble_tcp::FancySubscribePush::decode(payload)?),
-        FancyReadReceipt => ControlMessage::FancyReadReceipt(mumble_tcp::FancyReadReceipt::decode(payload)?),
-        FancyReadReceiptDeliver => ControlMessage::FancyReadReceiptDeliver(mumble_tcp::FancyReadReceiptDeliver::decode(payload)?),
+        PchatSenderKeyDistribution => ControlMessage::PchatSenderKeyDistribution(
+            mumble_tcp::PchatSenderKeyDistribution::decode(payload)?,
+        ),
+        FancyPushRegister => {
+            ControlMessage::FancyPushRegister(mumble_tcp::FancyPushRegister::decode(payload)?)
+        }
+        FancyPushUpdate => {
+            ControlMessage::FancyPushUpdate(mumble_tcp::FancyPushUpdate::decode(payload)?)
+        }
+        FancyCustomReactionsConfig => ControlMessage::FancyCustomReactionsConfig(
+            mumble_tcp::FancyCustomReactionsConfig::decode(payload)?,
+        ),
+        FancySubscribePush => {
+            ControlMessage::FancySubscribePush(mumble_tcp::FancySubscribePush::decode(payload)?)
+        }
+        FancyReadReceipt => {
+            ControlMessage::FancyReadReceipt(mumble_tcp::FancyReadReceipt::decode(payload)?)
+        }
+        FancyReadReceiptDeliver => ControlMessage::FancyReadReceiptDeliver(
+            mumble_tcp::FancyReadReceiptDeliver::decode(payload)?,
+        ),
         PchatPin => ControlMessage::PchatPin(mumble_tcp::PchatPin::decode(payload)?),
-        PchatPinDeliver => ControlMessage::PchatPinDeliver(mumble_tcp::PchatPinDeliver::decode(payload)?),
-        PchatPinFetchResponse => ControlMessage::PchatPinFetchResponse(mumble_tcp::PchatPinFetchResponse::decode(payload)?),
-        FancyTypingIndicator => ControlMessage::FancyTypingIndicator(mumble_tcp::FancyTypingIndicator::decode(payload)?),
-        FancyLinkPreviewRequest => ControlMessage::FancyLinkPreviewRequest(mumble_tcp::FancyLinkPreviewRequest::decode(payload)?),
-        FancyLinkPreviewResponse => ControlMessage::FancyLinkPreviewResponse(mumble_tcp::FancyLinkPreviewResponse::decode(payload)?),
-        FancyWatchSync => ControlMessage::FancyWatchSync(mumble_tcp::FancyWatchSync::decode(payload)?),
-        FancyDrawStroke => ControlMessage::FancyDrawStroke(mumble_tcp::FancyDrawStroke::decode(payload)?),
-        FancyOnboardingConfig => ControlMessage::FancyOnboardingConfig(mumble_tcp::FancyOnboardingConfig::decode(payload)?),
-        FancyOnboardingConfigUpdate => ControlMessage::FancyOnboardingConfigUpdate(mumble_tcp::FancyOnboardingConfigUpdate::decode(payload)?),
-        FancyOnboardingResponse => ControlMessage::FancyOnboardingResponse(mumble_tcp::FancyOnboardingResponse::decode(payload)?),
-        FancyOnboardingResponseQuery => ControlMessage::FancyOnboardingResponseQuery(mumble_tcp::FancyOnboardingResponseQuery::decode(payload)?),
-        FancyOnboardingResponseDeliver => ControlMessage::FancyOnboardingResponseDeliver(mumble_tcp::FancyOnboardingResponseDeliver::decode(payload)?),
+        PchatPinDeliver => {
+            ControlMessage::PchatPinDeliver(mumble_tcp::PchatPinDeliver::decode(payload)?)
+        }
+        PchatPinFetchResponse => ControlMessage::PchatPinFetchResponse(
+            mumble_tcp::PchatPinFetchResponse::decode(payload)?,
+        ),
+        FancyTypingIndicator => {
+            ControlMessage::FancyTypingIndicator(mumble_tcp::FancyTypingIndicator::decode(payload)?)
+        }
+        FancyLinkPreviewRequest => ControlMessage::FancyLinkPreviewRequest(
+            mumble_tcp::FancyLinkPreviewRequest::decode(payload)?,
+        ),
+        FancyLinkPreviewResponse => ControlMessage::FancyLinkPreviewResponse(
+            mumble_tcp::FancyLinkPreviewResponse::decode(payload)?,
+        ),
+        FancyWatchSync => {
+            ControlMessage::FancyWatchSync(mumble_tcp::FancyWatchSync::decode(payload)?)
+        }
+        FancyDrawStroke => {
+            ControlMessage::FancyDrawStroke(mumble_tcp::FancyDrawStroke::decode(payload)?)
+        }
+        FancyOnboardingConfig => ControlMessage::FancyOnboardingConfig(
+            mumble_tcp::FancyOnboardingConfig::decode(payload)?,
+        ),
+        FancyOnboardingConfigUpdate => ControlMessage::FancyOnboardingConfigUpdate(
+            mumble_tcp::FancyOnboardingConfigUpdate::decode(payload)?,
+        ),
+        FancyOnboardingResponse => ControlMessage::FancyOnboardingResponse(
+            mumble_tcp::FancyOnboardingResponse::decode(payload)?,
+        ),
+        FancyOnboardingResponseQuery => ControlMessage::FancyOnboardingResponseQuery(
+            mumble_tcp::FancyOnboardingResponseQuery::decode(payload)?,
+        ),
+        FancyOnboardingResponseDeliver => ControlMessage::FancyOnboardingResponseDeliver(
+            mumble_tcp::FancyOnboardingResponseDeliver::decode(payload)?,
+        ),
         FancyPoll => ControlMessage::FancyPoll(mumble_tcp::FancyPoll::decode(payload)?),
         FancyPollVote => ControlMessage::FancyPollVote(mumble_tcp::FancyPollVote::decode(payload)?),
-        FancyPluginAdminListRequest => ControlMessage::FancyPluginAdminListRequest(mumble_tcp::FancyPluginAdminListRequest::decode(payload)?),
-        FancyPluginAdminList => ControlMessage::FancyPluginAdminList(mumble_tcp::FancyPluginAdminList::decode(payload)?),
-        FancyPluginAdminSetEnabled => ControlMessage::FancyPluginAdminSetEnabled(mumble_tcp::FancyPluginAdminSetEnabled::decode(payload)?),
-        FancyPluginAdminInstall => ControlMessage::FancyPluginAdminInstall(mumble_tcp::FancyPluginAdminInstall::decode(payload)?),
-        FancyPluginAdminUninstall => ControlMessage::FancyPluginAdminUninstall(mumble_tcp::FancyPluginAdminUninstall::decode(payload)?),
-        FancyPluginAdminAck => ControlMessage::FancyPluginAdminAck(mumble_tcp::FancyPluginAdminAck::decode(payload)?),
-        FancyServerSettings => ControlMessage::FancyServerSettings(mumble_tcp::FancyServerSettings::decode(payload)?),
-        FancyServerSettingsUpdate => ControlMessage::FancyServerSettingsUpdate(mumble_tcp::FancyServerSettingsUpdate::decode(payload)?),
-        FancyAccountSettings => ControlMessage::FancyAccountSettings(mumble_tcp::FancyAccountSettings::decode(payload)?),
-        FancyAccountSettingsUpdate => ControlMessage::FancyAccountSettingsUpdate(mumble_tcp::FancyAccountSettingsUpdate::decode(payload)?),
-        FancyAccountAck => ControlMessage::FancyAccountAck(mumble_tcp::FancyAccountAck::decode(payload)?),
-        FancyForumPost => ControlMessage::FancyForumPost(mumble_tcp::FancyForumPost::decode(payload)?),
-        FancyForumFetch => ControlMessage::FancyForumFetch(mumble_tcp::FancyForumFetch::decode(payload)?),
-        FancyForumFetchResponse => ControlMessage::FancyForumFetchResponse(mumble_tcp::FancyForumFetchResponse::decode(payload)?),
-        FancyForumDelete => ControlMessage::FancyForumDelete(mumble_tcp::FancyForumDelete::decode(payload)?),
-        FancyScheduledMessage => ControlMessage::FancyScheduledMessage(mumble_tcp::FancyScheduledMessage::decode(payload)?),
-        FancyScheduledMessageList => ControlMessage::FancyScheduledMessageList(mumble_tcp::FancyScheduledMessageList::decode(payload)?),
-        FancyScheduledMessageListResponse => ControlMessage::FancyScheduledMessageListResponse(mumble_tcp::FancyScheduledMessageListResponse::decode(payload)?),
-        FancyScheduledMessageCancel => ControlMessage::FancyScheduledMessageCancel(mumble_tcp::FancyScheduledMessageCancel::decode(payload)?),
-        FancyScheduledMessageAck => ControlMessage::FancyScheduledMessageAck(mumble_tcp::FancyScheduledMessageAck::decode(payload)?),
-        FancyAuditQuery => ControlMessage::FancyAuditQuery(mumble_tcp::FancyAuditQuery::decode(payload)?),
-        FancyAuditResponse => ControlMessage::FancyAuditResponse(mumble_tcp::FancyAuditResponse::decode(payload)?),
-        FancyAuditEvent => ControlMessage::FancyAuditEvent(mumble_tcp::FancyAuditEvent::decode(payload)?),
-        FancyAuditConfig => ControlMessage::FancyAuditConfig(mumble_tcp::FancyAuditConfig::decode(payload)?),
-        FancyAuditConfigUpdate => ControlMessage::FancyAuditConfigUpdate(mumble_tcp::FancyAuditConfigUpdate::decode(payload)?),
+        FancyPluginAdminListRequest => ControlMessage::FancyPluginAdminListRequest(
+            mumble_tcp::FancyPluginAdminListRequest::decode(payload)?,
+        ),
+        FancyPluginAdminList => {
+            ControlMessage::FancyPluginAdminList(mumble_tcp::FancyPluginAdminList::decode(payload)?)
+        }
+        FancyPluginAdminSetEnabled => ControlMessage::FancyPluginAdminSetEnabled(
+            mumble_tcp::FancyPluginAdminSetEnabled::decode(payload)?,
+        ),
+        FancyPluginAdminInstall => ControlMessage::FancyPluginAdminInstall(
+            mumble_tcp::FancyPluginAdminInstall::decode(payload)?,
+        ),
+        FancyPluginAdminUninstall => ControlMessage::FancyPluginAdminUninstall(
+            mumble_tcp::FancyPluginAdminUninstall::decode(payload)?,
+        ),
+        FancyPluginAdminAck => {
+            ControlMessage::FancyPluginAdminAck(mumble_tcp::FancyPluginAdminAck::decode(payload)?)
+        }
+        FancyServerSettings => {
+            ControlMessage::FancyServerSettings(mumble_tcp::FancyServerSettings::decode(payload)?)
+        }
+        FancyServerSettingsUpdate => ControlMessage::FancyServerSettingsUpdate(
+            mumble_tcp::FancyServerSettingsUpdate::decode(payload)?,
+        ),
+        FancyAccountSettings => {
+            ControlMessage::FancyAccountSettings(mumble_tcp::FancyAccountSettings::decode(payload)?)
+        }
+        FancyAccountSettingsUpdate => ControlMessage::FancyAccountSettingsUpdate(
+            mumble_tcp::FancyAccountSettingsUpdate::decode(payload)?,
+        ),
+        FancyAccountAck => {
+            ControlMessage::FancyAccountAck(mumble_tcp::FancyAccountAck::decode(payload)?)
+        }
+        FancyForumPost => {
+            ControlMessage::FancyForumPost(mumble_tcp::FancyForumPost::decode(payload)?)
+        }
+        FancyForumFetch => {
+            ControlMessage::FancyForumFetch(mumble_tcp::FancyForumFetch::decode(payload)?)
+        }
+        FancyForumFetchResponse => ControlMessage::FancyForumFetchResponse(
+            mumble_tcp::FancyForumFetchResponse::decode(payload)?,
+        ),
+        FancyForumDelete => {
+            ControlMessage::FancyForumDelete(mumble_tcp::FancyForumDelete::decode(payload)?)
+        }
+        FancyScheduledMessage => ControlMessage::FancyScheduledMessage(
+            mumble_tcp::FancyScheduledMessage::decode(payload)?,
+        ),
+        FancyScheduledMessageList => ControlMessage::FancyScheduledMessageList(
+            mumble_tcp::FancyScheduledMessageList::decode(payload)?,
+        ),
+        FancyScheduledMessageListResponse => ControlMessage::FancyScheduledMessageListResponse(
+            mumble_tcp::FancyScheduledMessageListResponse::decode(payload)?,
+        ),
+        FancyScheduledMessageCancel => ControlMessage::FancyScheduledMessageCancel(
+            mumble_tcp::FancyScheduledMessageCancel::decode(payload)?,
+        ),
+        FancyScheduledMessageAck => ControlMessage::FancyScheduledMessageAck(
+            mumble_tcp::FancyScheduledMessageAck::decode(payload)?,
+        ),
+        FancyAuditQuery => {
+            ControlMessage::FancyAuditQuery(mumble_tcp::FancyAuditQuery::decode(payload)?)
+        }
+        FancyAuditResponse => {
+            ControlMessage::FancyAuditResponse(mumble_tcp::FancyAuditResponse::decode(payload)?)
+        }
+        FancyAuditEvent => {
+            ControlMessage::FancyAuditEvent(mumble_tcp::FancyAuditEvent::decode(payload)?)
+        }
+        FancyAuditConfig => {
+            ControlMessage::FancyAuditConfig(mumble_tcp::FancyAuditConfig::decode(payload)?)
+        }
+        FancyAuditConfigUpdate => ControlMessage::FancyAuditConfigUpdate(
+            mumble_tcp::FancyAuditConfigUpdate::decode(payload)?,
+        ),
         PluginMessage => ControlMessage::PluginMessage(mumble_tcp::PluginMessage::decode(payload)?),
-        PluginRegistry => ControlMessage::PluginRegistry(mumble_tcp::PluginRegistry::decode(payload)?),
+        PluginRegistry => {
+            ControlMessage::PluginRegistry(mumble_tcp::PluginRegistry::decode(payload)?)
+        }
     };
     Ok(msg)
 }
@@ -467,7 +594,10 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
-    #![allow(deprecated, reason = "tests exercise the legacy PluginDataTransmission wire fields")]
+    #![allow(
+        deprecated,
+        reason = "tests exercise the legacy PluginDataTransmission wire fields"
+    )]
     use super::*;
 
     /// Build a sequenced frame exactly as the gateway's `codec::header` does:
@@ -557,7 +687,10 @@ mod tests {
             .expect("decodes")
             .expect("complete");
         assert!(matches!(decoded, ControlMessage::Ping(_)));
-        assert_eq!(framing.last_seq, 900, "the number is what a resume asks from");
+        assert_eq!(
+            framing.last_seq, 900,
+            "the number is what a resume asks from"
+        );
         assert!(!framing.gap);
         assert!(buf.is_empty(), "the whole frame was consumed");
     }
@@ -697,10 +830,8 @@ mod tests {
         let msg = ControlMessage::Ping(ping);
         let encoded = encode(&msg)?;
         let mut buf = BytesMut::from(&encoded[..]);
-        let decoded = decode(&mut buf)?
-            .ok_or(Error::InvalidState(
-                "expected complete frame".into(),
-            ))?;
+        let decoded =
+            decode(&mut buf)?.ok_or(Error::InvalidState("expected complete frame".into()))?;
 
         match decoded {
             ControlMessage::Ping(p) => assert_eq!(p.timestamp, Some(42)),
@@ -884,7 +1015,7 @@ mod tests {
         let mut buf = BytesMut::new();
         buf.put_u16(3); // Ping type
         buf.put_u32(100); // payload_len = 100
-        // No payload bytes
+                          // No payload bytes
         assert!(decode(&mut buf)?.is_none());
         Ok(())
     }
@@ -941,8 +1072,7 @@ mod tests {
         assert_eq!(encoded[1], 3);
 
         // Next 4 bytes = payload length
-        let payload_len =
-            u32::from_be_bytes([encoded[2], encoded[3], encoded[4], encoded[5]]);
+        let payload_len = u32::from_be_bytes([encoded[2], encoded[3], encoded[4], encoded[5]]);
         assert_eq!(payload_len as usize, encoded.len() - HEADER_SIZE);
         Ok(())
     }
@@ -1053,7 +1183,10 @@ mod tests {
         let encoded = encode(&msg)?;
 
         let type_id = u16::from_be_bytes([encoded[0], encoded[1]]);
-        assert_eq!(type_id, 1015, "FancyTypingIndicator is framed under the social service (1015)");
+        assert_eq!(
+            type_id, 1015,
+            "FancyTypingIndicator is framed under the social service (1015)"
+        );
 
         let mut buf = BytesMut::from(&encoded[..]);
         let decoded = decode(&mut buf)?.unwrap();

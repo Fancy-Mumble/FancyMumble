@@ -134,7 +134,10 @@ mod tests {
             PchatProtocol::FancyV1FullArchive,
             PchatProtocol::SignalV1,
         ] {
-            assert_eq!(PchatProtocol::from_wire_str(protocol.as_wire_str()), protocol);
+            assert_eq!(
+                PchatProtocol::from_wire_str(protocol.as_wire_str()),
+                protocol
+            );
         }
     }
 
@@ -158,7 +161,10 @@ mod tests {
     #[test]
     fn protocol_version_is_correct() {
         assert_eq!(PchatProtocol::None.protocol_version(), None);
-        assert_eq!(PchatProtocol::FancyV1FullArchive.protocol_version(), Some(1));
+        assert_eq!(
+            PchatProtocol::FancyV1FullArchive.protocol_version(),
+            Some(1)
+        );
         assert_eq!(PchatProtocol::SignalV1.protocol_version(), Some(2));
     }
 }

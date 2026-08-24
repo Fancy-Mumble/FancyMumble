@@ -213,7 +213,9 @@ impl NativeViewerSink {
                 return;
             };
             let due = !batch.buf.is_empty()
-                && batch.started.is_some_and(|s| s.elapsed() >= BATCH_FLUSH_AGE);
+                && batch
+                    .started
+                    .is_some_and(|s| s.elapsed() >= BATCH_FLUSH_AGE);
             if !due {
                 return;
             }
@@ -300,7 +302,11 @@ impl ViewerSink for NativeViewerSink {
             ViewerState::Failed(m) => ("failed", Some(m)),
             ViewerState::Stopped => ("stopped", None),
         };
-        tracing::info!(session = self.session, state = name, "stream-view: state change");
+        tracing::info!(
+            session = self.session,
+            state = name,
+            "stream-view: state change"
+        );
         if let Err(e) = self.app.emit(
             "native-stream-view-state",
             ViewerStateEvent {
@@ -345,7 +351,10 @@ pub(crate) fn try_intercept_viewer_answer(
     if !viewer.awaiting_answer() || !payload.contains("a=sendonly") {
         return false;
     }
-    tracing::debug!(session = sender, "stream-view: SDP answer claimed by native viewer");
+    tracing::debug!(
+        session = sender,
+        "stream-view: SDP answer claimed by native viewer"
+    );
     viewer.accept_answer(payload.to_owned());
     true
 }
@@ -437,7 +446,9 @@ pub(crate) async fn native_stream_view_stats(
             let map = viewers().lock().map_err(|_| "viewer registry poisoned")?;
             map.get(&session).and_then(StreamViewer::stats_probe)
         };
-        Ok(probe.as_ref().and_then(fancy_screenshare::viewer::ViewerStatsProbe::collect))
+        Ok(probe
+            .as_ref()
+            .and_then(fancy_screenshare::viewer::ViewerStatsProbe::collect))
     })
     .await
     .map_err(|e| e.to_string())?

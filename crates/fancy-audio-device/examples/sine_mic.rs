@@ -39,7 +39,13 @@ struct Args {
 }
 
 fn parse_args() -> Args {
-    let mut args = Args { list: false, device: None, verify: None, freq: 440.0, amp: 0.4 };
+    let mut args = Args {
+        list: false,
+        device: None,
+        verify: None,
+        freq: 440.0,
+        amp: 0.4,
+    };
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -58,7 +64,9 @@ fn parse_args() -> Args {
 }
 
 fn device_name(d: &cpal::Device) -> String {
-    d.description().map(|x| x.name().to_string()).unwrap_or_else(|_| "<unnamed>".into())
+    d.description()
+        .map(|x| x.name().to_string())
+        .unwrap_or_else(|_| "<unnamed>".into())
 }
 
 fn main() -> Result<(), String> {
@@ -92,9 +100,13 @@ fn play(host: &cpal::Host, pattern: Option<&str>, freq: f64, amp: f32) -> Result
             .map_err(|e| format!("enumerate outputs: {e}"))?
             .find(|d| device_name(d).to_lowercase().contains(&p.to_lowercase()))
             .ok_or_else(|| format!("no output device matching '{p}' (try --list)"))?,
-        None => host.default_output_device().ok_or("no default output device")?,
+        None => host
+            .default_output_device()
+            .ok_or("no default output device")?,
     };
-    let cfg = device.default_output_config().map_err(|e| format!("output config: {e}"))?;
+    let cfg = device
+        .default_output_config()
+        .map_err(|e| format!("output config: {e}"))?;
     let rate = cfg.sample_rate();
     let channels = cfg.channels() as usize;
     println!(
@@ -128,7 +140,9 @@ fn play(host: &cpal::Host, pattern: Option<&str>, freq: f64, amp: f32) -> Result
             None,
         )
         .map_err(|e| format!("build output stream: {e}"))?;
-    stream.play().map_err(|e| format!("start output stream: {e}"))?;
+    stream
+        .play()
+        .map_err(|e| format!("start output stream: {e}"))?;
 
     // Park forever; Ctrl+C exits.
     loop {
@@ -141,12 +155,21 @@ fn verify(host: &cpal::Host, pattern: &str, freq: f64) -> Result<(), String> {
     let device = host
         .input_devices()
         .map_err(|e| format!("enumerate inputs: {e}"))?
-        .find(|d| device_name(d).to_lowercase().contains(&pattern.to_lowercase()))
+        .find(|d| {
+            device_name(d)
+                .to_lowercase()
+                .contains(&pattern.to_lowercase())
+        })
         .ok_or_else(|| format!("no input device matching '{pattern}' (try --list)"))?;
-    let cfg = device.default_input_config().map_err(|e| format!("input config: {e}"))?;
+    let cfg = device
+        .default_input_config()
+        .map_err(|e| format!("input config: {e}"))?;
     let rate = cfg.sample_rate();
     let channels = cfg.channels() as usize;
-    println!("recording 1 s from '{}' at {rate} Hz...", device_name(&device));
+    println!(
+        "recording 1 s from '{}' at {rate} Hz...",
+        device_name(&device)
+    );
 
     let stream_config = cpal::StreamConfig {
         channels: cfg.channels(),
@@ -177,19 +200,27 @@ fn verify(host: &cpal::Host, pattern: &str, freq: f64) -> Result<(), String> {
             None,
         )
         .map_err(|e| format!("build input stream (is another app holding the device?): {e}"))?;
-    stream.play().map_err(|e| format!("start input stream: {e}"))?;
+    stream
+        .play()
+        .map_err(|e| format!("start input stream: {e}"))?;
     std::thread::sleep(std::time::Duration::from_millis(1100));
     drop(stream);
 
     let buf = samples.lock().map_err(|e| format!("samples lock: {e}"))?;
     let n = buf.len();
     if n < rate as usize / 4 {
-        return Err(format!("captured only {n} samples in 1 s - device delivered almost nothing"));
+        return Err(format!(
+            "captured only {n} samples in 1 s - device delivered almost nothing"
+        ));
     }
     let (ratio, rms) = tone_ratio(&buf, freq, f64::from(rate));
     println!(
         "captured {n} samples: RMS {rms:.4}, Goertzel({freq} Hz) ratio {ratio:.3} {}",
-        if ratio > 0.5 { "- TONE PRESENT" } else { "- tone NOT detected" },
+        if ratio > 0.5 {
+            "- TONE PRESENT"
+        } else {
+            "- tone NOT detected"
+        },
     );
     Ok(())
 }

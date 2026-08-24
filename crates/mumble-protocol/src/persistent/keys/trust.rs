@@ -62,7 +62,10 @@ impl KeyManager {
     // ---- Countersignature verification ------------------------------
 
     /// Verify an epoch countersignature (standalone or inline).
-    #[allow(clippy::too_many_arguments, reason = "countersignature verification requires all cryptographic parameters")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "countersignature verification requires all cryptographic parameters"
+    )]
     pub fn verify_countersignature(
         &mut self,
         channel_id: u32,
@@ -103,7 +106,10 @@ impl KeyManager {
         Ok(KeyTrustLevel::Verified)
     }
 
-    #[allow(clippy::too_many_arguments, reason = "internal verification helper requires all cryptographic parameters")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "internal verification helper requires all cryptographic parameters"
+    )]
     pub(super) fn verify_countersignature_internal(
         &self,
         channel_id: u32,
@@ -128,9 +134,10 @@ impl KeyManager {
         }
 
         // Verify Ed25519 signature
-        let peer = self.peer_keys.get(signer_hash).ok_or_else(|| {
-            Error::InvalidState(format!("unknown countersigner: {signer_hash}"))
-        })?;
+        let peer = self
+            .peer_keys
+            .get(signer_hash)
+            .ok_or_else(|| Error::InvalidState(format!("unknown countersigner: {signer_hash}")))?;
 
         let data = build_countersig_data(
             channel_id,
@@ -282,7 +289,9 @@ mod tests {
     #[test]
     fn trust_level_query() {
         let mut km = make_key_manager();
-        assert!(km.trust_level(1, PchatProtocol::FancyV1FullArchive).is_none());
+        assert!(km
+            .trust_level(1, PchatProtocol::FancyV1FullArchive)
+            .is_none());
 
         km.store_archive_key(1, [0; 32], KeyTrustLevel::Unverified);
         assert_eq!(

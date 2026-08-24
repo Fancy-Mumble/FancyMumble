@@ -8,7 +8,7 @@ use crate::error::{Error, Result};
 use crate::persistent::encryption;
 use crate::persistent::wire::PchatKeyAnnounce;
 
-use super::types::{ALGORITHM_VERSION, PeerKeyRecord};
+use super::types::{PeerKeyRecord, ALGORITHM_VERSION};
 use super::KeyManager;
 
 impl KeyManager {

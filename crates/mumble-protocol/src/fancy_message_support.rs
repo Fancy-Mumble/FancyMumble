@@ -181,7 +181,6 @@ mod tests {
     use super::*;
     use crate::proto::mumble_tcp;
 
-
     #[test]
     fn returns_none_for_standard_messages() {
         let msg = ControlMessage::Ping(mumble_tcp::Ping::default());
@@ -190,18 +189,14 @@ mod tests {
 
     #[test]
     fn typing_indicator_is_plugin_data_fallback() {
-        let msg = ControlMessage::FancyTypingIndicator(
-            mumble_tcp::FancyTypingIndicator::default(),
-        );
+        let msg = ControlMessage::FancyTypingIndicator(mumble_tcp::FancyTypingIndicator::default());
         let support = message_support(&msg).unwrap();
         assert_eq!(support.fallback, FallbackPolicy::PluginData);
     }
 
     #[test]
     fn pchat_message_is_server_only() {
-        let msg = ControlMessage::PchatMessage(
-            mumble_tcp::PchatMessage::default(),
-        );
+        let msg = ControlMessage::PchatMessage(mumble_tcp::PchatMessage::default());
         let support = message_support(&msg).unwrap();
         assert_eq!(support.fallback, FallbackPolicy::ServerOnly);
     }
@@ -218,9 +213,7 @@ mod tests {
 
     #[test]
     fn draw_stroke_is_server_only() {
-        let msg = ControlMessage::FancyDrawStroke(
-            mumble_tcp::FancyDrawStroke::default(),
-        );
+        let msg = ControlMessage::FancyDrawStroke(mumble_tcp::FancyDrawStroke::default());
         let support = message_support(&msg).unwrap();
         assert_eq!(support.fallback, FallbackPolicy::ServerOnly);
     }
@@ -230,15 +223,11 @@ mod tests {
         // Relaying these client-to-client would be meaningless: the answers
         // are stored and the flow is served by the server itself.
         let cases: [ControlMessage; 5] = [
-            ControlMessage::FancyOnboardingConfig(
-                mumble_tcp::FancyOnboardingConfig::default(),
-            ),
+            ControlMessage::FancyOnboardingConfig(mumble_tcp::FancyOnboardingConfig::default()),
             ControlMessage::FancyOnboardingConfigUpdate(
                 mumble_tcp::FancyOnboardingConfigUpdate::default(),
             ),
-            ControlMessage::FancyOnboardingResponse(
-                mumble_tcp::FancyOnboardingResponse::default(),
-            ),
+            ControlMessage::FancyOnboardingResponse(mumble_tcp::FancyOnboardingResponse::default()),
             ControlMessage::FancyOnboardingResponseQuery(
                 mumble_tcp::FancyOnboardingResponseQuery::default(),
             ),

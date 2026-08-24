@@ -178,11 +178,7 @@ fn record(sink: &Arc<Mutex<Vec<Value>>>, frame: &IpcFrame) {
 }
 
 /// Connect to a slot and complete the handshake, returning the READY frame.
-async fn connect_client(
-    dir: &Path,
-    slot: u8,
-    client_id: &str,
-) -> (transport::Endpoint, Value) {
+async fn connect_client(dir: &Path, slot: u8, client_id: &str) -> (transport::Endpoint, Value) {
     let mut endpoint = transport::connect(&dir.join(format!("discord-ipc-{slot}")))
         .await
         .expect("client connect");
@@ -256,11 +252,7 @@ async fn records_activity_from_a_client_when_discord_is_absent() {
     assert_eq!(entry.pid, Some(4321));
     assert_eq!(entry.activity.details.as_deref(), Some("Testing"));
     assert_eq!(
-        entry
-            .activity
-            .timestamps
-            .as_ref()
-            .and_then(|t| t.start),
+        entry.activity.timestamps.as_ref().and_then(|t| t.start),
         Some(1_700_000_000_000),
         "second-precision timestamps should be promoted to millis"
     );
@@ -476,7 +468,11 @@ async fn stands_aside_when_discord_already_holds_slot_zero() {
         .await
         .expect("service start");
 
-    assert_eq!(service.slot(), 1, "must not displace the occupant of slot 0");
+    assert_eq!(
+        service.slot(),
+        1,
+        "must not displace the occupant of slot 0"
+    );
     await_bridge_state(&service, BridgeState::Blocked).await;
     assert!(
         transport::connect(&discord_path).await.is_ok(),

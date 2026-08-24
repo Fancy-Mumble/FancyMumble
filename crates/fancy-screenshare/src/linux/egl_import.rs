@@ -76,13 +76,8 @@ type FnCreateContext =
     unsafe extern "C" fn(EglDisplay, EglConfig, EglContext, *const EglInt) -> EglContext;
 type FnMakeCurrent =
     unsafe extern "C" fn(EglDisplay, *mut c_void, *mut c_void, EglContext) -> EglBoolean;
-type FnCreateImage = unsafe extern "C" fn(
-    EglDisplay,
-    EglContext,
-    u32,
-    *mut c_void,
-    *const EglInt,
-) -> EglImage;
+type FnCreateImage =
+    unsafe extern "C" fn(EglDisplay, EglContext, u32, *mut c_void, *const EglInt) -> EglImage;
 type FnDestroyImage = unsafe extern "C" fn(EglDisplay, EglImage) -> EglBoolean;
 type FnGetError = unsafe extern "C" fn() -> EglInt;
 
@@ -94,8 +89,7 @@ type FnBindFramebuffer = unsafe extern "C" fn(GlEnum, GlUint);
 type FnFramebufferTexture2D = unsafe extern "C" fn(GlEnum, GlEnum, GlEnum, GlUint, GlInt);
 type FnCheckFramebufferStatus = unsafe extern "C" fn(GlEnum) -> GlEnum;
 type FnPixelStorei = unsafe extern "C" fn(GlEnum, GlInt);
-type FnReadPixels =
-    unsafe extern "C" fn(GlInt, GlInt, GlInt, GlInt, GlEnum, GlEnum, *mut c_void);
+type FnReadPixels = unsafe extern "C" fn(GlInt, GlInt, GlInt, GlInt, GlEnum, GlEnum, *mut c_void);
 type FnGlGetError = unsafe extern "C" fn() -> GlEnum;
 
 /// One dmabuf plane's import parameters, straight from the spa buffer.
@@ -173,15 +167,23 @@ impl DmabufImporter {
                 config = std::ptr::null_mut();
             }
             let ctx_attribs = [EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE];
-            let context =
-                create_context(rt.display, config, std::ptr::null_mut(), ctx_attribs.as_ptr());
+            let context = create_context(
+                rt.display,
+                config,
+                std::ptr::null_mut(),
+                ctx_attribs.as_ptr(),
+            );
             if context.is_null() {
                 return Err(format!("eglCreateContext: 0x{:x}", egl_get_error()));
             }
             // Surfaceless current (EGL_KHR_surfaceless_context); rendering
             // happens into our own FBO.
-            if make_current(rt.display, std::ptr::null_mut(), std::ptr::null_mut(), context)
-                != EGL_TRUE
+            if make_current(
+                rt.display,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                context,
+            ) != EGL_TRUE
             {
                 return Err(format!("eglMakeCurrent: 0x{:x}", egl_get_error()));
             }

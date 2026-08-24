@@ -253,7 +253,10 @@ impl AppState {
     ) -> Result<(), String> {
         let handle = self.client_handle()?;
         handle
-            .send(command::SendFancyForumDelete { channel_id, post_id })
+            .send(command::SendFancyForumDelete {
+                channel_id,
+                post_id,
+            })
             .await
             .map_err(|e| format!("Failed to send FancyForumDelete: {e}"))
     }

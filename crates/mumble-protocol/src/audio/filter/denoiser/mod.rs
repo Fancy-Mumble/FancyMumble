@@ -51,9 +51,7 @@ use self::spectral_subtraction::SpectralSubtractionBackend;
 /// Stored in `AudioSettings` and serialised with
 /// `#[serde(rename_all = "snake_case")]` so the on-the-wire form is
 /// `"none"`, `"rnnoise"`, `"spectral_subtraction"`.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NoiseSuppressionAlgorithm {
     /// Disable spectral noise suppression (the noise gate may still run).
@@ -104,7 +102,11 @@ impl NoiseSuppressionAlgorithm {
     /// Variants that actually do something in the current build.
     #[must_use]
     pub fn available() -> Vec<Self> {
-        Self::ALL.iter().copied().filter(|a| a.is_available()).collect()
+        Self::ALL
+            .iter()
+            .copied()
+            .filter(|a| a.is_available())
+            .collect()
     }
 
     /// Human-readable label for UI display.
@@ -215,7 +217,8 @@ impl AudioFilter for SpectralDenoiser {
             return Ok(());
         }
         let attenuation = self.config.attenuation.clamp(0.0, 1.0);
-        self.backend.process(frame.as_f32_samples_mut(), attenuation);
+        self.backend
+            .process(frame.as_f32_samples_mut(), attenuation);
         Ok(())
     }
 
@@ -279,7 +282,10 @@ impl DenoiserBackend for PassthroughBackend {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test code: panicking on serde failure is intended")]
+#[allow(
+    clippy::unwrap_used,
+    reason = "test code: panicking on serde failure is intended"
+)]
 mod tests {
     use super::*;
     use crate::audio::sample::AudioFormat;
@@ -364,15 +370,20 @@ mod tests {
         let cases = [
             (NoiseSuppressionAlgorithm::None, "\"none\""),
             (NoiseSuppressionAlgorithm::Rnnoise, "\"rnnoise\""),
-            (NoiseSuppressionAlgorithm::DeepFilterNet, "\"deepfilternet\""),
+            (
+                NoiseSuppressionAlgorithm::DeepFilterNet,
+                "\"deepfilternet\"",
+            ),
             (NoiseSuppressionAlgorithm::OmlsaImcra, "\"omlsa_imcra\""),
-            (NoiseSuppressionAlgorithm::SpectralSubtraction, "\"spectral_subtraction\""),
+            (
+                NoiseSuppressionAlgorithm::SpectralSubtraction,
+                "\"spectral_subtraction\"",
+            ),
         ];
         for (variant, expected) in cases {
             let json = serde_json::to_string(&variant).unwrap();
             assert_eq!(json, expected, "wire tag for {variant:?}");
-            let round: NoiseSuppressionAlgorithm =
-                serde_json::from_str(expected).unwrap();
+            let round: NoiseSuppressionAlgorithm = serde_json::from_str(expected).unwrap();
             assert_eq!(round, variant);
         }
     }
@@ -388,7 +399,10 @@ mod tests {
         let mut frame = make_frame(&samples);
         denoiser.process(&mut frame)?;
         for (a, b) in frame.as_f32_samples().iter().zip(samples.iter()) {
-            assert!((a - b).abs() < 1e-6, "None algorithm must not modify samples");
+            assert!(
+                (a - b).abs() < 1e-6,
+                "None algorithm must not modify samples"
+            );
         }
         Ok(())
     }

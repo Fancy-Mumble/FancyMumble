@@ -32,11 +32,11 @@ pub use file_server::{
 };
 mod handler;
 pub(crate) use handler::{data_uri, to_snapshot, LiverySnapshot};
+mod account;
+mod audit;
 pub(crate) mod hash_names;
 pub(crate) mod local_cache;
-mod account;
 mod messaging;
-mod audit;
 pub mod offload;
 mod offload_ops;
 mod onboarding;

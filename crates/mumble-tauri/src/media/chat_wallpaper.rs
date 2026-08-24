@@ -85,7 +85,11 @@ fn split_annexb(stream: &[u8]) -> Vec<&[u8]> {
     let mut i = 0usize;
     while i + 2 < stream.len() {
         if stream[i] == 0 && stream[i + 1] == 0 && stream[i + 2] == 1 {
-            let code_start = if i > 0 && stream[i - 1] == 0 { i - 1 } else { i };
+            let code_start = if i > 0 && stream[i - 1] == 0 {
+                i - 1
+            } else {
+                i
+            };
             if let Some(s) = start {
                 nals.push(&stream[s..code_start]);
             }
@@ -306,7 +310,11 @@ fn rgb_to_i420(rgb: &[u8], w: usize, h: usize) -> Vec<u8> {
     for row in 0..h {
         for col in 0..w {
             let p = (row * w + col) * 3;
-            let (r, g, b) = (f32::from(rgb[p]), f32::from(rgb[p + 1]), f32::from(rgb[p + 2]));
+            let (r, g, b) = (
+                f32::from(rgb[p]),
+                f32::from(rgb[p + 1]),
+                f32::from(rgb[p + 2]),
+            );
             y_plane[row * w + col] =
                 (16.0 + 0.257 * r + 0.504 * g + 0.098 * b).clamp(0.0, 255.0) as u8;
         }
@@ -395,7 +403,9 @@ fn open_video_track<R: std::io::Read + Seek>(
         .stsd
         .avc1
         .as_ref()
-        .map_or(4, |avc1| usize::from(avc1.avcc.length_size_minus_one & 0x3) + 1);
+        .map_or(4, |avc1| {
+            usize::from(avc1.avcc.length_size_minus_one & 0x3) + 1
+        });
 
     let timescale = track.timescale();
     let duration_secs = track.duration().as_secs_f64();
@@ -451,7 +461,11 @@ fn decode_frames<R: std::io::Read + Seek>(
         if sample.bytes.is_empty() {
             continue;
         }
-        cts.push(sample.start_time.saturating_add_signed(i64::from(sample.rendering_offset)));
+        cts.push(
+            sample
+                .start_time
+                .saturating_add_signed(i64::from(sample.rendering_offset)),
+        );
 
         annexb.clear();
         avcc_sample_to_annexb(&sample.bytes, track.nal_length_size, &mut annexb)?;
@@ -495,9 +509,12 @@ fn decode_frames<R: std::io::Read + Seek>(
 /// on a black frame, which would make a poor still.
 pub(crate) fn extract_poster(input: &Path) -> Result<Vec<u8>, String> {
     let file = std::fs::File::open(input).map_err(|e| format!("open video: {e}"))?;
-    let size = file.metadata().map_err(|e| format!("stat video: {e}"))?.len();
-    let mut reader =
-        mp4::Mp4Reader::read_header(BufReader::new(file), size).map_err(|e| format!("read MP4: {e}"))?;
+    let size = file
+        .metadata()
+        .map_err(|e| format!("stat video: {e}"))?
+        .len();
+    let mut reader = mp4::Mp4Reader::read_header(BufReader::new(file), size)
+        .map_err(|e| format!("read MP4: {e}"))?;
     let mut track = open_video_track(&mut reader)?;
 
     // ~0.1s at the estimated frame rate, but never past the clip.
@@ -525,7 +542,10 @@ pub(crate) fn extract_poster(input: &Path) -> Result<Vec<u8>, String> {
     }
     let mut jpeg = Vec::new();
     poster
-        .write_to(&mut std::io::Cursor::new(&mut jpeg), image::ImageFormat::Jpeg)
+        .write_to(
+            &mut std::io::Cursor::new(&mut jpeg),
+            image::ImageFormat::Jpeg,
+        )
         .map_err(|e| format!("encode poster: {e}"))?;
     Ok(jpeg)
 }
@@ -543,9 +563,12 @@ pub(crate) fn bake_video(
     let dim = dim.clamp(0.0, 1.0);
 
     let file = std::fs::File::open(input).map_err(|e| format!("open video: {e}"))?;
-    let size = file.metadata().map_err(|e| format!("stat video: {e}"))?.len();
-    let mut reader =
-        mp4::Mp4Reader::read_header(BufReader::new(file), size).map_err(|e| format!("read MP4: {e}"))?;
+    let size = file
+        .metadata()
+        .map_err(|e| format!("stat video: {e}"))?
+        .len();
+    let mut reader = mp4::Mp4Reader::read_header(BufReader::new(file), size)
+        .map_err(|e| format!("read MP4: {e}"))?;
     let mut track = open_video_track(&mut reader)?;
     let total = track.sample_count;
     let timescale = track.timescale.max(1);
@@ -873,16 +896,14 @@ mod tests {
     fn first_frame_brightness(path: &Path) -> f64 {
         let file = std::fs::File::open(path).expect("open");
         let size = file.metadata().expect("stat").len();
-        let mut reader =
-            mp4::Mp4Reader::read_header(BufReader::new(file), size).expect("header");
+        let mut reader = mp4::Mp4Reader::read_header(BufReader::new(file), size).expect("header");
         let mut track = open_video_track(&mut reader).expect("track");
         let mut brightness = None;
         let _ = decode_frames(&mut reader, &mut track, |_, frame| {
             let (w, h) = frame.dimensions();
             let mut rgb = vec![0u8; w * h * 3];
             frame.write_rgb8(&mut rgb);
-            brightness =
-                Some(rgb.iter().map(|&b| f64::from(b)).sum::<f64>() / rgb.len() as f64);
+            brightness = Some(rgb.iter().map(|&b| f64::from(b)).sum::<f64>() / rgb.len() as f64);
             Ok(false)
         })
         .expect("decode");
@@ -905,8 +926,7 @@ mod tests {
         // The output is a decodable H.264 MP4 with the same frame count.
         let file = std::fs::File::open(&output).expect("open baked");
         let size = file.metadata().expect("stat").len();
-        let mut reader =
-            mp4::Mp4Reader::read_header(BufReader::new(file), size).expect("header");
+        let mut reader = mp4::Mp4Reader::read_header(BufReader::new(file), size).expect("header");
         let mut track = open_video_track(&mut reader).expect("baked has an H.264 track");
         assert_eq!(track.sample_count, 20);
 
@@ -943,8 +963,7 @@ mod tests {
 
         let file = std::fs::File::open(&output).expect("open baked");
         let size = file.metadata().expect("stat").len();
-        let mut reader =
-            mp4::Mp4Reader::read_header(BufReader::new(file), size).expect("header");
+        let mut reader = mp4::Mp4Reader::read_header(BufReader::new(file), size).expect("header");
         let mut track = open_video_track(&mut reader).expect("track");
         let _ = decode_frames(&mut reader, &mut track, |_, frame| {
             assert_eq!(frame.dimensions(), (960, 540));

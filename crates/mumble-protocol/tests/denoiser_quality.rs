@@ -125,8 +125,7 @@ fn decode_sample() -> Option<Vec<f32>> {
                         .data
                         .chunks(channels)
                         .map(|c| {
-                            c.iter().map(|&s| f32::from(s) / 32768.0).sum::<f32>()
-                                / channels as f32
+                            c.iter().map(|&s| f32::from(s) / 32768.0).sum::<f32>() / channels as f32
                         })
                         .collect()
                 };
@@ -201,7 +200,9 @@ fn denoise(input: &[f32], algorithm: NoiseSuppressionAlgorithm) -> Vec<f32> {
             sequence: 0,
             is_silent: false,
         };
-        filter.process(&mut frame).expect("the filter accepts a frame");
+        filter
+            .process(&mut frame)
+            .expect("the filter accepts a frame");
         out.extend_from_slice(frame.as_f32_samples());
     }
     out

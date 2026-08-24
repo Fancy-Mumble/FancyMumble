@@ -39,7 +39,10 @@ fn main() -> Result<()> {
 
     prost_build::Config::new()
         .out_dir("src/proto")
-        .compile_protos(&["proto/Mumble.proto", "proto/MumbleUDP.proto"], &["proto/"])?;
+        .compile_protos(
+            &["proto/Mumble.proto", "proto/MumbleUDP.proto"],
+            &["proto/"],
+        )?;
 
     // Two passes, for the reason Starling's build script hits as well: the
     // generated modules are `include!`d flat rather than nested, so without

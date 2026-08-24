@@ -809,7 +809,13 @@ mod tests {
             .or_default()
             .push(half("m-1", PLACEHOLDER_BODY, true));
 
-        insert_or_replace_message(&mut state, 4, "m-1", None, half("m-1", "the real body", false));
+        insert_or_replace_message(
+            &mut state,
+            4,
+            "m-1",
+            None,
+            half("m-1", "the real body", false),
+        );
 
         assert_eq!(
             bodies(&state),
@@ -831,7 +837,13 @@ mod tests {
             .or_default()
             .push(half("m-1", "the real body", false));
 
-        insert_or_replace_message(&mut state, 4, "m-1", None, half("m-1", PLACEHOLDER_BODY, true));
+        insert_or_replace_message(
+            &mut state,
+            4,
+            "m-1",
+            None,
+            half("m-1", PLACEHOLDER_BODY, true),
+        );
 
         assert_eq!(bodies(&state), vec!["the real body".to_owned()]);
     }
@@ -847,7 +859,13 @@ mod tests {
         pinned.pinned_at = Some(99);
         state.msgs.by_channel.entry(4).or_default().push(pinned);
 
-        insert_or_replace_message(&mut state, 4, "m-1", None, half("m-1", "the real body", false));
+        insert_or_replace_message(
+            &mut state,
+            4,
+            "m-1",
+            None,
+            half("m-1", "the real body", false),
+        );
 
         let msgs = state.msgs.by_channel.get(&4).unwrap();
         assert_eq!(msgs[0].body, "the real body");
@@ -868,7 +886,13 @@ mod tests {
             .or_default()
             .push(half("m-1", "the real body", false));
 
-        insert_or_replace_message(&mut state, 4, "m-1", None, half("m-1", "the real body", false));
+        insert_or_replace_message(
+            &mut state,
+            4,
+            "m-1",
+            None,
+            half("m-1", "the real body", false),
+        );
 
         assert_eq!(bodies(&state).len(), 1);
     }

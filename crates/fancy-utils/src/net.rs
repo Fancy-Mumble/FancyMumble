@@ -12,14 +12,8 @@ pub fn format_ip_address(bytes: &[u8]) -> String {
         4 => format!("{}.{}.{}.{}", bytes[0], bytes[1], bytes[2], bytes[3]),
         16 => {
             // IPv4-mapped IPv6 (::ffff:x.x.x.x)
-            if bytes[..10].iter().all(|&b| b == 0)
-                && bytes[10] == 0xff
-                && bytes[11] == 0xff
-            {
-                return format!(
-                    "{}.{}.{}.{}",
-                    bytes[12], bytes[13], bytes[14], bytes[15]
-                );
+            if bytes[..10].iter().all(|&b| b == 0) && bytes[10] == 0xff && bytes[11] == 0xff {
+                return format!("{}.{}.{}.{}", bytes[12], bytes[13], bytes[14], bytes[15]);
             }
             // Full IPv6
             let segments: Vec<String> = bytes
@@ -38,7 +32,9 @@ pub fn format_ip_address(bytes: &[u8]) -> String {
 /// IPv4 addresses are stored as IPv4-mapped IPv6 (16 bytes:
 /// `::ffff:x.x.x.x`).  IPv6 addresses are stored as 16 raw bytes.
 pub fn parse_ip_to_bytes(addr: &str) -> Result<Vec<u8>, String> {
-    let ip: IpAddr = addr.parse().map_err(|e| format!("Invalid IP address: {e}"))?;
+    let ip: IpAddr = addr
+        .parse()
+        .map_err(|e| format!("Invalid IP address: {e}"))?;
     match ip {
         IpAddr::V4(v4) => {
             // Mumble stores IPv4 as IPv4-mapped IPv6 (16 bytes).

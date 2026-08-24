@@ -1,4 +1,4 @@
-﻿//! Common audio sample types shared across the entire pipeline.
+//! Common audio sample types shared across the entire pipeline.
 //!
 //! Every pipeline stage speaks in terms of [`AudioFrame`] - a time-stamped
 //! buffer of PCM samples with associated format metadata. This keeps all
@@ -127,14 +127,20 @@ impl AudioFrame {
 
 // -- Minimal safe byte-casting (avoids adding a `bytemuck` dep) -----
 
-#[allow(unsafe_code, reason = "safe byte-reinterpretation guarded by length and alignment assertions")]
+#[allow(
+    unsafe_code,
+    reason = "safe byte-reinterpretation guarded by length and alignment assertions"
+)]
 fn bytemuck_cast_slice<T: Copy>(bytes: &[u8]) -> &[T] {
     let len = bytes.len() / size_of::<T>();
     assert_eq!(bytes.len() % size_of::<T>(), 0);
     unsafe { std::slice::from_raw_parts(bytes.as_ptr() as *const T, len) }
 }
 
-#[allow(unsafe_code, reason = "safe byte-reinterpretation guarded by length and alignment assertions")]
+#[allow(
+    unsafe_code,
+    reason = "safe byte-reinterpretation guarded by length and alignment assertions"
+)]
 fn bytemuck_cast_slice_mut<T: Copy>(bytes: &mut [u8]) -> &mut [T] {
     let len = bytes.len() / size_of::<T>();
     assert_eq!(bytes.len() % size_of::<T>(), 0);

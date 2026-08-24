@@ -43,7 +43,9 @@ impl Imcra {
 
     pub(super) fn reset(&mut self) {
         self.smoothed.iter_mut().for_each(|s| *s = 1e-8);
-        self.subwindow_min.iter_mut().for_each(|s| *s = f32::INFINITY);
+        self.subwindow_min
+            .iter_mut()
+            .for_each(|s| *s = f32::INFINITY);
         for sw in &mut self.subwindow_history {
             sw.iter_mut().for_each(|s| *s = 1e-8);
         }
@@ -91,7 +93,9 @@ impl Imcra {
             self.subwindow_history[self.history_idx].copy_from_slice(&self.subwindow_min);
             self.history_idx = (self.history_idx + 1) % NUM_SUBWINDOWS;
             self.subwindow_counter = 0;
-            self.subwindow_min.iter_mut().for_each(|s| *s = f32::INFINITY);
+            self.subwindow_min
+                .iter_mut()
+                .for_each(|s| *s = f32::INFINITY);
         }
 
         let mut s_min = vec![f32::INFINITY; self.num_bins];
@@ -142,10 +146,7 @@ mod tests {
             tracker.update(&frame);
         }
         for &v in tracker.noise_psd() {
-            assert!(
-                (v - 0.04).abs() < 0.01,
-                "expected noise PSD ~0.04, got {v}"
-            );
+            assert!((v - 0.04).abs() < 0.01, "expected noise PSD ~0.04, got {v}");
         }
     }
 

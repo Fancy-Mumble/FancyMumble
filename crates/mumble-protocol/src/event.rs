@@ -10,7 +10,10 @@ use crate::transport::ocb2::PacketStats;
 ///
 /// All methods have default no-op implementations so you only need
 /// to override the ones you care about.
-#[allow(unused_variables, reason = "default no-op implementations intentionally ignore all parameters")]
+#[allow(
+    unused_variables,
+    reason = "default no-op implementations intentionally ignore all parameters"
+)]
 pub trait EventHandler: Send + 'static {
     /// Called for every inbound TCP control message.
     fn on_control_message(&mut self, msg: &ControlMessage) {}

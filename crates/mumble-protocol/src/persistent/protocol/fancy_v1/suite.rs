@@ -121,7 +121,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::expect_used, reason = "test code - panicking on failure is acceptable")]
+    #[allow(
+        clippy::expect_used,
+        reason = "test code - panicking on failure is acceptable"
+    )]
     fn xchacha20_suite_components_are_accessible() {
         let suite = XChaCha20Suite;
         // Verify all accessors return valid trait objects

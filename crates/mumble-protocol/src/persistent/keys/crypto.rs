@@ -29,7 +29,10 @@ impl KeyManager {
                     .get(&channel_id)
                     .ok_or_else(|| Error::InvalidState("no archive key for channel".into()))?;
 
-                let ciphertext = self.suite.encryptor().encrypt(&channel_key.key, plaintext, &aad)?;
+                let ciphertext =
+                    self.suite
+                        .encryptor()
+                        .encrypt(&channel_key.key, plaintext, &aad)?;
                 let fp = channel_key.fingerprint();
 
                 Ok(EncryptedPayload {
@@ -79,7 +82,8 @@ impl KeyManager {
                     .get(&channel_id)
                     .ok_or_else(|| Error::InvalidState("no archive key for channel".into()))?;
 
-                self.suite.encryptor()
+                self.suite
+                    .encryptor()
                     .decrypt(&channel_key.key, &payload.ciphertext, &aad)
             }
             _ => Err(Error::InvalidState(format!(
@@ -128,11 +132,23 @@ mod tests {
         let msg_id = uuid::Uuid::new_v4().to_string();
         let plaintext = b"Hello, world!";
         let payload = km
-            .encrypt(PchatProtocol::FancyV1FullArchive, 1, &msg_id, 1000, plaintext)
+            .encrypt(
+                PchatProtocol::FancyV1FullArchive,
+                1,
+                &msg_id,
+                1000,
+                plaintext,
+            )
             .unwrap();
 
         let decrypted = km
-            .decrypt(PchatProtocol::FancyV1FullArchive, 1, &msg_id, 1000, &payload)
+            .decrypt(
+                PchatProtocol::FancyV1FullArchive,
+                1,
+                &msg_id,
+                1000,
+                &payload,
+            )
             .unwrap();
         assert_eq!(decrypted, plaintext);
     }

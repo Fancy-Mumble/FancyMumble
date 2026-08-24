@@ -43,8 +43,7 @@ pub(crate) const DRM_FOURCC_ARGB8888: u32 = 0x3432_5241;
 
 type FnGetProcAddress = unsafe extern "C" fn(*const c_char) -> *mut c_void;
 type FnQueryDevices = unsafe extern "C" fn(EglInt, *mut EglDevice, *mut EglInt) -> EglBoolean;
-type FnGetPlatformDisplay =
-    unsafe extern "C" fn(u32, *mut c_void, *const EglInt) -> EglDisplay;
+type FnGetPlatformDisplay = unsafe extern "C" fn(u32, *mut c_void, *const EglInt) -> EglDisplay;
 type FnInitialize = unsafe extern "C" fn(EglDisplay, *mut EglInt, *mut EglInt) -> EglBoolean;
 type FnQueryString = unsafe extern "C" fn(EglDisplay, EglInt) -> *const c_char;
 type FnQueryDmaBufFormats =
@@ -124,8 +123,7 @@ fn query_all(fourccs: &[u32]) -> Option<EglRuntime> {
         .ok()?;
 
     // SAFETY: standard EGL entry point with the declared C signature.
-    let get_proc: FnGetProcAddress =
-        *unsafe { lib.get(b"eglGetProcAddress\0") }.ok()?;
+    let get_proc: FnGetProcAddress = *unsafe { lib.get(b"eglGetProcAddress\0") }.ok()?;
     let proc_addr = |name: &[u8]| -> Option<*mut c_void> {
         // SAFETY: `name` is a NUL-terminated literal below.
         let p = unsafe { get_proc(name.as_ptr().cast()) };
@@ -140,8 +138,7 @@ fn query_all(fourccs: &[u32]) -> Option<EglRuntime> {
         }};
     }
     let query_devices = load!(b"eglQueryDevicesEXT\0", FnQueryDevices);
-    let get_platform_display =
-        load!(b"eglGetPlatformDisplayEXT\0", FnGetPlatformDisplay);
+    let get_platform_display = load!(b"eglGetPlatformDisplayEXT\0", FnGetPlatformDisplay);
     let initialize = load!(b"eglInitialize\0", FnInitialize);
     let query_string = load!(b"eglQueryString\0", FnQueryString);
     let query_formats = load!(b"eglQueryDmaBufFormatsEXT\0", FnQueryDmaBufFormats);
@@ -170,8 +167,7 @@ fn query_all(fourccs: &[u32]) -> Option<EglRuntime> {
 
     let mut count: EglInt = 0;
     // SAFETY: count query per EGL_EXT_device_enumeration.
-    if unsafe { query_devices(0, std::ptr::null_mut(), &raw mut count) } != EGL_TRUE || count <= 0
-    {
+    if unsafe { query_devices(0, std::ptr::null_mut(), &raw mut count) } != EGL_TRUE || count <= 0 {
         return None;
     }
     let mut devices: Vec<EglDevice> = vec![std::ptr::null_mut(); count as usize];
@@ -183,9 +179,8 @@ fn query_all(fourccs: &[u32]) -> Option<EglRuntime> {
 
     devices.into_iter().find_map(|device| {
         // SAFETY: platform-display lookup for an enumerated device.
-        let display = unsafe {
-            get_platform_display(EGL_PLATFORM_DEVICE_EXT, device, std::ptr::null())
-        };
+        let display =
+            unsafe { get_platform_display(EGL_PLATFORM_DEVICE_EXT, device, std::ptr::null()) };
         if display.is_null() {
             return None;
         }
@@ -224,9 +219,8 @@ fn wayland_display_runtime(
     std::mem::forget(wl);
 
     // SAFETY: platform-display lookup on a live wl_display.
-    let display = unsafe {
-        get_platform_display(EGL_PLATFORM_WAYLAND_KHR, wl_display, std::ptr::null())
-    };
+    let display =
+        unsafe { get_platform_display(EGL_PLATFORM_WAYLAND_KHR, wl_display, std::ptr::null()) };
     if display.is_null() {
         return None;
     }
@@ -254,8 +248,7 @@ fn display_modifiers(
     fourccs: &[u32],
 ) -> Option<Vec<(u32, Vec<u64>)>> {
     // SAFETY: eglInitialize on a valid display; version outputs unused.
-    if unsafe { (fns.initialize)(display, std::ptr::null_mut(), std::ptr::null_mut()) }
-        != EGL_TRUE
+    if unsafe { (fns.initialize)(display, std::ptr::null_mut(), std::ptr::null_mut()) } != EGL_TRUE
     {
         return None;
     }

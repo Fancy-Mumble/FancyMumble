@@ -94,9 +94,7 @@ impl LowPassFilter {
     /// Process a single sample through the biquad.
     #[inline]
     fn tick(&mut self, x: f32) -> f32 {
-        let y = self.coeffs.b0 * x
-            + self.coeffs.b1 * self.x1
-            + self.coeffs.b2 * self.x2
+        let y = self.coeffs.b0 * x + self.coeffs.b1 * self.x1 + self.coeffs.b2 * self.x2
             - self.coeffs.a1 * self.y1
             - self.coeffs.a2 * self.y2;
 

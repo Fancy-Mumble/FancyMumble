@@ -7,17 +7,18 @@ use ed25519_dalek::Verifier;
 use x25519_dalek::PublicKey as X25519PublicKey;
 
 use crate::error::{Error, Result};
-use crate::persistent::encryption::{
-    self, build_key_exchange_signed_data, epoch_fingerprint,
-};
+use crate::persistent::encryption::{self, build_key_exchange_signed_data, epoch_fingerprint};
 use crate::persistent::wire::{PchatKeyExchange, PchatKeyRequest};
 use crate::persistent::PchatProtocol;
 
-use super::types::{ALGORITHM_VERSION, KEY_EXCHANGE_FRESHNESS_MS, ChannelKey, ConsensusCollector};
+use super::types::{ChannelKey, ConsensusCollector, ALGORITHM_VERSION, KEY_EXCHANGE_FRESHNESS_MS};
 use super::KeyManager;
 use crate::persistent::KeyTrustLevel;
 
-fn validate_timestamp_freshness(request_timestamp: Option<u64>, exchange_timestamp: u64) -> Result<()> {
+fn validate_timestamp_freshness(
+    request_timestamp: Option<u64>,
+    exchange_timestamp: u64,
+) -> Result<()> {
     if let Some(req_ts) = request_timestamp {
         if exchange_timestamp < req_ts {
             return Err(Error::InvalidState(
@@ -90,9 +91,7 @@ impl KeyManager {
 
         let computed_fp = epoch_fingerprint(&key_bytes);
         if exchange.epoch_fingerprint.len() != 8 || computed_fp != exchange.epoch_fingerprint[..8] {
-            return Err(Error::InvalidState(
-                "epoch_fingerprint mismatch".into(),
-            ));
+            return Err(Error::InvalidState("epoch_fingerprint mismatch".into()));
         }
 
         let protocol = PchatProtocol::from_wire_str(&exchange.protocol);
@@ -108,13 +107,16 @@ impl KeyManager {
             .ok_or_else(|| Error::InvalidState("unknown sender".into()))?;
 
         let shared_secret = self.identity.dh_agree(&peer.dh_public);
-        let decrypt_key = self
-            .suite.key_deriver()
-            .derive(&shared_secret, encryption::HKDF_SALT_IDENTITY, b"key-wrap")?;
+        let decrypt_key = self.suite.key_deriver().derive(
+            &shared_secret,
+            encryption::HKDF_SALT_IDENTITY,
+            b"key-wrap",
+        )?;
 
-        let decrypted_key_bytes = self
-            .suite.encryptor()
-            .decrypt(&decrypt_key, &exchange.encrypted_key, &[])?;
+        let decrypted_key_bytes =
+            self.suite
+                .encryptor()
+                .decrypt(&decrypt_key, &exchange.encrypted_key, &[])?;
 
         if decrypted_key_bytes.len() != 32 {
             return Err(Error::InvalidState(format!(
@@ -138,15 +140,15 @@ impl KeyManager {
         match protocol {
             PchatProtocol::FancyV1FullArchive => {
                 if let Some(ref request_id) = exchange.request_id {
-                    let collector =
-                        self.pending_consensus
-                            .entry(request_id.clone())
-                            .or_insert_with(|| ConsensusCollector {
-                                window_start: Instant::now(),
-                                responses: HashMap::new(),
-                                request_timestamp: request_timestamp.unwrap_or(0),
-                                observed_members: 0,
-                            });
+                    let collector = self
+                        .pending_consensus
+                        .entry(request_id.clone())
+                        .or_insert_with(|| ConsensusCollector {
+                            window_start: Instant::now(),
+                            responses: HashMap::new(),
+                            request_timestamp: request_timestamp.unwrap_or(0),
+                            observed_members: 0,
+                        });
                     let _ = collector
                         .responses
                         .insert(exchange.sender_hash.clone(), key_bytes.to_vec());
@@ -168,10 +170,7 @@ impl KeyManager {
         if let (Some(ref countersig), Some(ref countersigner)) =
             (&exchange.countersignature, &exchange.countersigner_hash)
         {
-            let parent_fp = exchange
-                .parent_fingerprint
-                .as_deref()
-                .unwrap_or(&[0u8; 8]);
+            let parent_fp = exchange.parent_fingerprint.as_deref().unwrap_or(&[0u8; 8]);
             let _ = self.verify_countersignature_internal(
                 exchange.channel_id,
                 exchange.epoch,
@@ -188,7 +187,10 @@ impl KeyManager {
     // ---- Key distribution -------------------------------------------
 
     /// Generate a key-exchange payload for distributing a key to a new member.
-    #[allow(clippy::too_many_arguments, reason = "key distribution requires all cryptographic parameters")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "key distribution requires all cryptographic parameters"
+    )]
     pub fn distribute_key(
         &self,
         channel_id: u32,
@@ -216,9 +218,11 @@ impl KeyManager {
 
         // Encrypt the key to the recipient's X25519 public key via DH
         let shared_secret = self.identity.dh_agree(recipient_public);
-        let wrap_key = self
-            .suite.key_deriver()
-            .derive(&shared_secret, encryption::HKDF_SALT_IDENTITY, b"key-wrap")?;
+        let wrap_key = self.suite.key_deriver().derive(
+            &shared_secret,
+            encryption::HKDF_SALT_IDENTITY,
+            b"key-wrap",
+        )?;
         let encrypted_key = self.suite.encryptor().encrypt(&wrap_key, &key_bytes, &[])?;
 
         // Compute fingerprints

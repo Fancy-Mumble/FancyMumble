@@ -1,4 +1,4 @@
-﻿//! Legacy Mumble audio packet codec.
+//! Legacy Mumble audio packet codec.
 //!
 //! Before protocol v2 (Mumble 1.5), audio packets use a compact
 //! binary encoding - both over raw UDP and inside `UDPTunnel`.
@@ -39,7 +39,9 @@ impl TryFrom<u8> for AudioType {
         match value {
             0 => Ok(Self::Protobuf),
             4 => Ok(Self::Opus),
-            other => Err(Error::InvalidState(format!("unsupported audio type {other}"  ))),
+            other => Err(Error::InvalidState(format!(
+                "unsupported audio type {other}"
+            ))),
         }
     }
 }
@@ -81,9 +83,7 @@ impl MumbleVarint {
             if buf.len() < 3 {
                 return Err(Error::InvalidState("varint: truncated 3-byte".into()));
             }
-            let val = ((first as u64 & 0x1F) << 16)
-                | (buf[1] as u64) << 8
-                | buf[2] as u64;
+            let val = ((first as u64 & 0x1F) << 16) | (buf[1] as u64) << 8 | buf[2] as u64;
             return Ok((val, 3));
         }
 
@@ -222,7 +222,7 @@ impl AudioPacketCodec for LegacyAudioCodec {
     }
 
     fn decode(data: &[u8]) -> Result<mumble_udp::Audio> {
-                if data.is_empty() {
+        if data.is_empty() {
             return Err(Error::InvalidState("empty audio packet".into()));
         }
 
@@ -368,12 +368,27 @@ mod tests {
 
     #[test]
     fn varint_roundtrip_values() {
-        for &val in &[0u64, 1, 0x7F, 0x80, 0x3FFF, 0x4000, 0x1F_FFFF, 0x0FFF_FFFF, 0xFFFF_FFFF, 0x1_0000_0000u64] {
+        for &val in &[
+            0u64,
+            1,
+            0x7F,
+            0x80,
+            0x3FFF,
+            0x4000,
+            0x1F_FFFF,
+            0x0FFF_FFFF,
+            0xFFFF_FFFF,
+            0x1_0000_0000u64,
+        ] {
             let mut buf = Vec::new();
             MumbleVarint::write(&mut buf, val);
             let (decoded, n) = MumbleVarint::read(&buf).unwrap();
             assert_eq!(decoded, val, "varint roundtrip failed for {val}");
-            assert_eq!(n, buf.len(), "varint consumed wrong number of bytes for {val}");
+            assert_eq!(
+                n,
+                buf.len(),
+                "varint consumed wrong number of bytes for {val}"
+            );
         }
     }
 
@@ -382,7 +397,7 @@ mod tests {
         // Build a server-format packet (with session id) and verify decode.
         let mut buf = Vec::new();
         buf.push((AudioType::Opus as u8) << 5); // header: Opus, target 0
-        MumbleVarint::write(&mut buf, 7);  // session = 7
+        MumbleVarint::write(&mut buf, 7); // session = 7
         MumbleVarint::write(&mut buf, 42); // sequence = 42
         let opus = vec![0xDE, 0xAD, 0xBE, 0xEF];
         MumbleVarint::write(&mut buf, opus.len() as u64);
@@ -400,8 +415,8 @@ mod tests {
         // Build a packet as the server would send it (with session id).
         let mut buf = Vec::new();
         buf.push((AudioType::Opus as u8) << 5); // header: Opus, target 0
-        MumbleVarint::write(&mut buf, 5);   // session = 5
-        MumbleVarint::write(&mut buf, 10);  // sequence = 10
+        MumbleVarint::write(&mut buf, 5); // session = 5
+        MumbleVarint::write(&mut buf, 10); // sequence = 10
         let opus = vec![1, 2, 3];
         MumbleVarint::write(&mut buf, opus.len() as u64); // length (no terminator)
         buf.extend_from_slice(&opus);
@@ -418,8 +433,8 @@ mod tests {
         // Build a server-format packet (with session id) that has the terminator bit set.
         let mut buf = Vec::new();
         buf.push((AudioType::Opus as u8) << 5); // header: Opus, target 0
-        MumbleVarint::write(&mut buf, 0);  // session = 0
-        MumbleVarint::write(&mut buf, 1);  // sequence = 1
+        MumbleVarint::write(&mut buf, 0); // session = 0
+        MumbleVarint::write(&mut buf, 1); // sequence = 1
         let opus = vec![0xFF];
         let len_term = opus.len() as u64 | 0x2000; // set terminator bit
         MumbleVarint::write(&mut buf, len_term);
@@ -435,8 +450,8 @@ mod tests {
         // Craft a legacy packet - not valid protobuf.
         let mut buf = Vec::new();
         buf.push((AudioType::Opus as u8) << 5);
-        MumbleVarint::write(&mut buf, 7);   // session
-        MumbleVarint::write(&mut buf, 99);  // sequence
+        MumbleVarint::write(&mut buf, 7); // session
+        MumbleVarint::write(&mut buf, 99); // sequence
         let opus = vec![0xAA, 0xBB];
         MumbleVarint::write(&mut buf, opus.len() as u64);
         buf.extend_from_slice(&opus);

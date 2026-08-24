@@ -134,9 +134,8 @@ pub fn available() -> bool {
 fn alsa_plugin_present() -> bool {
     static PRESENT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *PRESENT.get_or_init(|| {
-        alsa::device_name::HintIter::new_str(None, "pcm").is_ok_and(|mut hints| {
-            hints.any(|h| h.name.as_deref() == Some("pipewire"))
-        })
+        alsa::device_name::HintIter::new_str(None, "pcm")
+            .is_ok_and(|mut hints| hints.any(|h| h.name.as_deref() == Some("pipewire")))
     })
 }
 
@@ -206,7 +205,10 @@ pub fn resolve(kind: Kind, name: Option<&str>) -> Option<String> {
         if let Some(n) = list.iter().find(|n| n.name == name) {
             return Some(n.node.clone());
         }
-        warn!(device = name, "PipeWire node not offered; using the default");
+        warn!(
+            device = name,
+            "PipeWire node not offered; using the default"
+        );
     }
     // `None` here is not an error: with no node named, PipeWire's ALSA
     // plugin follows the default itself, which is what the caller wants.
@@ -490,7 +492,11 @@ impl super::MixingPlayback for PwMixingPlayback {
                         *slot = source.next().unwrap_or(0.0);
                     }
                     let Ok(io) = pcm.io_f32() else { break };
-                    if io.writei(&buf).err().is_some_and(|e| !recover_playback(&pcm, e)) {
+                    if io
+                        .writei(&buf)
+                        .err()
+                        .is_some_and(|e| !recover_playback(&pcm, e))
+                    {
                         break;
                     }
                 }
@@ -566,7 +572,10 @@ mod tests {
                 match cap.read_frame() {
                     Ok(f) => {
                         frames += 1;
-                        peak = f.as_f32_samples().iter().fold(peak, |acc, s| acc.max(s.abs()));
+                        peak = f
+                            .as_f32_samples()
+                            .iter()
+                            .fold(peak, |acc, s| acc.max(s.abs()));
                     }
                     Err(e) => {
                         err = Some(e.to_string());
@@ -575,7 +584,10 @@ mod tests {
                 }
             }
             let _ = cap.stop();
-            println!("{:45} | frames={frames:4} peak={peak:.6} err={err:?}", n.name);
+            println!(
+                "{:45} | frames={frames:4} peak={peak:.6} err={err:?}",
+                n.name
+            );
         }
     }
 
@@ -668,7 +680,10 @@ mod tests {
             let seg = &samples[8_000..24_000];
             let total: f32 = seg.iter().map(|s| s * s).sum::<f32>().max(1e-12);
             for f in [330.0, 440.0, 660.0] {
-                println!("  {f:5} Hz ratio={:.4}", goertzel(seg, f) / seg.len() as f32 / total);
+                println!(
+                    "  {f:5} Hz ratio={:.4}",
+                    goertzel(seg, f) / seg.len() as f32 / total
+                );
             }
         }
     }

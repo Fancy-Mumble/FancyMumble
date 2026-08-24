@@ -114,4 +114,3 @@ mod tests {
         assert!((cfg.post_filter_beta - 0.03).abs() < f32::EPSILON);
     }
 }
-

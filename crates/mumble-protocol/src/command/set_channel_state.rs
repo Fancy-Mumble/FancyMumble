@@ -60,7 +60,10 @@ pub struct SetChannelState {
 
 impl CommandAction for SetChannelState {
     fn execute(&self, _state: &ServerState) -> CommandOutput {
-        #[allow(deprecated, reason = "the legacy `temporary` wire field must still be sent for server compatibility")]
+        #[allow(
+            deprecated,
+            reason = "the legacy `temporary` wire field must still be sent for server compatibility"
+        )]
         let msg = mumble_tcp::ChannelState {
             channel_id: self.channel_id,
             parent: self.parent,
