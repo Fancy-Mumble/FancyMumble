@@ -277,45 +277,163 @@ second set of numbers to keep honest.
 
 ### Absent
 
+Kept honest by reading the code, not by memory: entries here have been false
+before, because a feature landed and its line was never struck.
+
 **Composing**
 
-- Attachments: no file picker, no drag-and-drop, no upload. Received file
-  attachments render as their raw marker rather than a card.
 - Rich text: the composer is plain text plus GIFs, not the TipTap editor. No
   markdown toolbar, no code blocks, no tables.
-- No mention autocomplete or slash-command suggestions while typing. Mention
-  markup is still applied on send, so `<@session>` markers resolve correctly.
-- No emoji picker in the composer. (Reactions have one.)
 - No custom server emotes.
-- No scheduled messages, calendar/meeting composer, or LiveDoc.
+- No poll creator. Polls that arrive are rendered and can be voted on.
+- No drag-and-drop onto the composer, and no pasted-image tray: a file is
+  attached through the picker.
+- No scheduled messages, calendar/meeting composer, or LiveDoc. Note that the
+  runtime already runs `useCalendarReminders`, so calendar reminders fire with
+  no calendar to open them in.
 
 **Reading**
 
-- No history loading: only messages already in memory are shown, so persistent
-  chat scrollback stops at whatever the session has fetched.
-- No image lightbox - clicking an image does nothing.
-- No poll rendering. Poll messages appear in the list as their raw body, and
-  there is no poll creator.
-- No read receipts.
-- The unread divider is implemented but never fed, so it never appears.
-- No per-message translation, quoting, or editing. Copy, pin and delete are
-  present; multi-select and bulk delete are not.
+- No render windowing. Every in-memory message of the open conversation is
+  mounted, where Standard mounts a tail-anchored slice (`chatWindowing`,
+  `useChatScroll`). Fetching older history works; holding thousands of rows in
+  the DOM is the part that does not scale.
+- No per-message translation, and no multi-select or bulk delete. Copy, reply,
+  edit, pin and delete are present.
 
 **Channels and users**
 
-- No channel creation, editing, reordering, or purging from the sidebar. All of
-  it lives in the admin surface.
-- No public server directory.
+- No drag-and-drop: channels cannot be reordered by dragging and users cannot
+  be dragged between channels. Reordering is the channel editor's `position`
+  field.
 - No blocking, ignoring or user notes. Existing relations are still honoured
   when filtering messages; they just cannot be edited here.
 
+**Screen sharing**
+
+- The strip starts, stops, watches, configures quality and shows statistics.
+  There is no focused single-stream view and no annotation overlay, and the
+  stream popout window exists but nothing here opens it.
+
 **Elsewhere**
 
-- Only one in-app shortcut (Ctrl/Cmd+K focuses channel search). Standard's
-  quick switcher, channel stepping and panel toggles are absent. Global
-  shortcuts and push-to-talk are unaffected - the backend owns those.
 - No watch-together host controls. An active session's card renders; starting
   one does not.
+- No first-run onboarding wizard, friends page, shared-files panel or
+  rich-presence panel.
 - No mobile layout. Nebula assumes a desktop window.
-- Mini mode draws a small card inside a full-size window, so its transparent
-  margin still captures clicks. It needs to resize the window to the card.
+
+## What a message is
+
+A chat body is HTML, but not every body is text: some are a marker standing in
+for an object the server broadcast separately. `messageContent` in
+`selectors.ts` decides which, and `MessageRow` draws the card - Standard's, in
+both cases, because a poll and a file card are self-contained widgets rather
+than layout. Rendering a marker as HTML prints its neighbours and drops the
+object, which is what happened here until a poll showed up as bare question
+text and an attachment as nothing at all.
+
+Editing runs the composer's encoding backwards. `composerHtml` and
+`editableText` are one round trip and live together for that reason: an edit
+that re-encoded text differently from the way it was first sent would rewrite
+the message every time it was saved. The editor is on the row rather than in
+the composer, which may be holding an unsent draft.
+
+Several things are about the *conversation* rather than about what is on
+screen - the read watermark, where reading stopped, the lightbox gallery - so
+`NebulaClientApp` keeps `conversationMessages` apart from the searched list.
+Deriving them from the filtered list would let typing in the search box move
+this client's read receipt.
+
+## Encryption state
+
+Persistent chat is end-to-end encrypted, and its trust decisions are the user's
+to make: which key belongs to whom, who may be handed one, what to do when two
+keys claim the same person. Nebula does not re-draw those flows - it mounts
+Standard's `usePersistentChat`, puts its banners directly under the channel
+header and its dialogs at the window root, and honours `sendBlocked` so a
+revoked key disables the composer instead of letting sends fail quietly.
+
+This was missing while the row's delete button already called
+`deletePchatMessages`: the pack acted on encrypted history while showing none
+of the state that says whether it is trustworthy. A design may draw a warning
+differently. It may not decline to draw it.
+
+
+## Where history comes from
+
+Persistent-chat scrollback is paged, and the thing that asks for the next page
+is a sentinel inside `PersistenceBanner`. That is why `MessageList` takes a
+`header` slot rather than the shell drawing the banner above it: an
+intersection observer watching an element in fixed chrome is permanently
+intersecting, and would page the whole archive in as fast as the server could
+answer. The banner belongs at the top of the scroller, where scrolling up to it
+means the reader has actually reached the end of what is loaded.
+
+A page landing above the reader must not move what they are reading, while a
+message arriving below should follow them down if they are at the bottom.
+`MessageList` tells the two apart by the id of the first message: it only
+changes when something was prepended, and the scroll offset is then corrected
+by the height the list grew by.
+
+What Nebula still does not do is *window* the render. Standard mounts a
+tail-anchored slice of the conversation; Nebula mounts all of it.
+
+## The composer
+
+The pill is Nebula's. The three things that can open over it while typing - the
+mention list, the slash-command list, the emoji grid - are pickers, so all
+three are Standard's, and the trigger detection under them (`parseMentionTrigger`,
+`extractSlashQuery`, `parseSlashLine`) is core's. What is left here is the
+arithmetic of a plain textarea: the draft is a string and the caret an offset
+into it, so inserting a pick is a splice plus a `setSelectionRange`, scheduled
+after the commit because the value React is about to render is not in the
+element yet.
+
+An open list owns the arrow keys and Enter. Only when nothing is open does
+Enter mean send - otherwise choosing someone from the mention list would send
+the half-typed name instead of completing it.
+
+Uploading is not a design decision, so it is not one Nebula makes: pick, ask
+how it may be shared, stream, announce. That order lives in
+`core/features/chat/useFileUpload`, and what the pack owns is where the
+progress row sits. The attach button is rendered only when the file server has
+said both that it is there and that this user may share - a button that opens a
+picker and then fails on upload wastes the choice the user just made. Standard
+still has its own copy of this lifecycle inside `ChatView`; moving it onto the
+shared hook is worth doing and has not been done.
+
+
+## Chunks
+
+The client is what loads at launch. Settings and administration are not the
+client - they are two surfaces reached by a deliberate click - and neither is
+any single page inside them. So the pack is split three ways:
+
+1. `NebulaClientApp` and everything the window always shows.
+2. `SettingsScreen` and `AdminScreen`, each its own chunk.
+3. Every settings page and every administration page, one chunk each.
+
+That took the eagerly-loaded pack from **792 kB to 170 kB** (gzip 234 kB to
+52 kB). Opening Settings now fetches a 6 kB shell plus the one page asked for -
+Voice is 14 kB, Privacy 3 kB - where before, showing a connect screen had
+already paid for the ACL editor, the audit log and the marketplace.
+
+The rule that keeps it that way: **`components/index.ts` must not re-export a
+screen.** A barrel is imported whole, so one `import { TitleBar } from
+"./components"` would pull every settings page back into the client's graph and
+silently undo the split. `SettingsScreen` and `AdminScreen` are therefore
+imported from their own modules, and the barrels say so where the export used
+to be.
+
+Boundaries are placed where a pane is, not around each component: one
+`Suspense` in `NebulaClientApp` covers both screens - they share a pane and
+never show together - and one inside each screen covers whichever page is
+chosen. The fallback holds the pane's shape rather than drawing a spinner; a
+local chunk resolves in a frame or two, and a spinner that brief reads as a
+flicker.
+
+What is *not* split is anything the window shows at rest. The composer's
+pickers, the profile card and the message row are all on screen in the first
+second of a session, so deferring them would only add a round trip to the thing
+the user is already looking at.

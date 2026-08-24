@@ -4,6 +4,11 @@ import type { ChannelEntry } from "@core/types";
 import { isStructuralChannel } from "@core/utils/channelAttributes";
 import { PERM_WRITE } from "@core/utils/permissions";
 import {
+  canCreateChannel,
+  canDeleteChannel,
+  canOnlyCreateTemp,
+} from "@standard/components/sidebar/channel/ChannelEditorDialog";
+import {
   BellIcon,
   BellOffIcon,
   CheckIcon,
@@ -11,7 +16,9 @@ import {
   HashIcon,
   Link2Icon,
   LockIcon,
+  PlusIcon,
   RadioIcon,
+  TrashIcon,
 } from "@ui/icons";
 import { radius } from "../../tokens";
 
@@ -23,6 +30,9 @@ interface ChannelMenuProps {
   hideEmpty: boolean;
   onToggleHideEmpty: () => void;
   onEdit: (channel: ChannelEntry) => void;
+  /** Make a channel under this one. `tempOnly` when that is all they may make. */
+  onCreate: (parent: ChannelEntry, tempOnly: boolean) => void;
+  onDelete: (channel: ChannelEntry) => void;
   onEditPermissions: (channel: ChannelEntry) => void;
   onClose: () => void;
 }
@@ -49,6 +59,8 @@ export function ChannelMenu({
   hideEmpty,
   onToggleHideEmpty,
   onEdit,
+  onCreate,
+  onDelete,
   onEditPermissions,
   onClose,
 }: Readonly<ChannelMenuProps>) {
@@ -59,6 +71,14 @@ export function ChannelMenu({
   // failing.
   const structural = isStructuralChannel(channel);
   const administrable = channel.permissions == null || (channel.permissions & PERM_WRITE) !== 0;
+  // Creating and deleting are separate grants from editing, and each is read
+  // off this channel rather than off "somewhere": MakeChannel here is what
+  // decides whether a sub-channel can be made here, and offering it on the
+  // strength of a permission held elsewhere would promise what the server
+  // then refuses.
+  const creatable = canCreateChannel(channel);
+  const tempOnly = canOnlyCreateTemp(channel);
+  const deletable = canDeleteChannel(channel);
   const run = (action: () => void) => () => {
     action();
     onClose();
@@ -144,6 +164,26 @@ export function ChannelMenu({
             </MenuItem>,
           ]
         : null}
+
+      {creatable && (
+        <MenuItem
+          onClick={run(() => onCreate(channel, tempOnly))}
+          sx={(theme) => ({ color: theme.palette.nebula.muted })}
+        >
+          <PlusIcon width={13} height={13} />
+          {tempOnly ? "New temporary channel here" : "New channel here"}
+        </MenuItem>
+      )}
+
+      {deletable && (
+        <MenuItem
+          onClick={run(() => onDelete(channel))}
+          sx={(theme) => ({ color: theme.palette.nebula.bad })}
+        >
+          <TrashIcon width={13} height={13} />
+          Delete channel
+        </MenuItem>
+      )}
     </Menu>
   );
 }

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, CssBaseline, Dialog, DialogContent, Typography } from "@mui/material";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Box, Button, CssBaseline, Dialog, DialogContent, Typography } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -10,12 +10,21 @@ import { getSavedServers, getServerPassword, markServerJoined, updateServer } fr
 import { getUserRelations, userRelationIdentity, type UserRelation } from "@core/userRelationsStorage";
 import { PERM_WRITE } from "@core/utils/permissions";
 import { applyMentionsToHtml, type MentionResolver } from "@core/utils/mentions";
-import type { AudioSettings, ChannelEntry, SavedServer, UserEntry } from "@core/types";
+import type { AudioSettings, ChannelEntry, ChatMessage, SavedServer, UserEntry } from "@core/types";
 import ChannelEditorDialog from "@standard/components/sidebar/channel/ChannelEditorDialog";
 import DownloadsPanel from "@standard/components/chat/download/DownloadsPanel";
 import TypingIndicator from "@standard/components/chat/typing/TypingIndicator";
 import PinnedMessagesPanel from "@standard/components/chat/pinned/PinnedMessagesPanel";
 import PublicServerList from "@standard/components/server/PublicServerList";
+import { Lightbox, type LightboxHandle } from "@standard/components/elements/Lightbox";
+import { usePersistentChat } from "@standard/components/security/PersistentChatOverlays";
+import { usePolls } from "@standard/components/chat/poll/usePolls";
+import { useReadReceipts } from "@core/features/chat/readreceipt/useReadReceipts";
+import { useFileUpload, type FileShareChoice } from "@core/features/chat/useFileUpload";
+import FileShareDialog from "@standard/components/chat/file/FileShareDialog";
+import UploadProgressItem from "@standard/components/chat/upload/UploadProgressItem";
+import QuotePreviewStrip from "@standard/components/chat/quote/QuotePreviewStrip";
+import type { MessageScope } from "@core/messageOffload";
 import {
   ChannelList,
   ChannelMenu,
@@ -39,7 +48,6 @@ import {
   ServerList,
   SettingsNav,
   useSettingsNavContext,
-  SettingsScreen,
   SidebarShell,
   TitleBar,
   UserMenu,
@@ -48,18 +56,34 @@ import {
 } from "./components";
 import type { SettingsPageId } from "./components";
 import {
-  AdminScreen,
   useAdminCapabilities,
   useAdminNavEntries,
   type AdminPageId,
 } from "./components/admin";
+/**
+ * The two surfaces the client is not, loaded when they are asked for.
+ *
+ * Settings is twelve pages and administration is fourteen, and together they
+ * were about 5.7s of the client's ~9.4s cold import - carried by every mount,
+ * including one that only ever shows a connect screen. Neither is reachable
+ * without a deliberate click, so neither belongs in the graph until it happens.
+ */
+const SettingsScreen = lazy(() =>
+  import("./components/settings/SettingsScreen").then((m) => ({ default: m.SettingsScreen })),
+);
+const AdminScreen = lazy(() =>
+  import("./components/admin/AdminScreen").then((m) => ({ default: m.AdminScreen })),
+);
+
 import { AddServerDialog } from "./components/connect/AddServerDialog";
 import { ScreenShareStrip } from "./components/chat/ScreenShareStrip";
 import {
+  useFirstUnreadId,
   useHideEmptyChannels,
   useHoverTarget,
   useMemberPanel,
   useMiniMode,
+  useMiniWindow,
   useProfileAnchor,
   useScreenRouting,
   useUserMenu,
@@ -81,7 +105,7 @@ import { shortcutLabel, useNebulaShortcuts } from "./shortcuts";
 import { useLeaveServer } from "./useLeaveServer";
 import { useNebulaEventBridge } from "./useNebulaEventBridge";
 import { useNebulaTheme } from "./useNebulaAppearance";
-import { useServerLivery } from "./useServerLivery";
+import { useServerLiveries } from "./useServerLivery";
 import { radius } from "./tokens";
 
 /** Pinned messages have no "unseen" concept in Nebula's chrome. */
@@ -97,15 +121,17 @@ const EMPTY_IDS: ReadonlySet<string> = new Set();
  * settings surface, which owns the flows there is no second version of.
  */
 export default function NebulaClientApp() {
-  // What the open server says it looks like, or null for the great majority
-  // that say nothing. Feeds the theme and the connect screen from one place, so
-  // the two can never disagree about which server's colours are showing.
-  const livery = useServerLivery();
-  const theme = useNebulaTheme(livery);
-
   const status = useAppStore((state) => state.status);
   const sessions = useAppStore((state) => state.sessions);
   const activeServerId = useAppStore((state) => state.activeServerId);
+
+  // What each open server says it looks like, keyed by session. Read here once
+  // and routed twice, because the two consumers ask about different servers:
+  // the window wears the colours of the tab in front of the user, while the
+  // connect screen draws whichever server the sidebar has selected - often one
+  // that is not open, and so has said nothing at all.
+  const liveries = useServerLiveries();
+  const theme = useNebulaTheme(liveries[activeServerId ?? ""] ?? null);
   const channels = useAppStore((state) => state.channels);
   const users = useAppStore((state) => state.users);
   const selectedChannel = useAppStore((state) => state.selectedChannel);
@@ -157,6 +183,7 @@ export default function NebulaClientApp() {
   // gated on voice being live rather than on being in a channel - connected
   // users are always in one.
   const { mini, setMini } = useMiniMode(voiceState !== "inactive");
+  const miniCardRef = useMiniWindow(mini);
   const leave = useLeaveServer();
 
   const [savedServers, setSavedServers] = useState<SavedServer[] | null>(null);
@@ -171,7 +198,19 @@ export default function NebulaClientApp() {
   const [channelMenu, setChannelMenu] = useState<{ channel: ChannelEntry; x: number; y: number } | null>(
     null,
   );
-  const [editingChannel, setEditingChannel] = useState<ChannelEntry | null>(null);
+  /**
+   * The channel editor, in whichever of its two jobs is open.
+   *
+   * Editing and creating are one dialog - Standard's, which switches on being
+   * handed a channel or not - so they are one piece of state rather than two
+   * that could both be set.
+   */
+  const [channelDialog, setChannelDialog] = useState<
+    | { mode: "edit"; channel: ChannelEntry }
+    | { mode: "create"; parentId: number; tempOnly: boolean }
+    | null
+  >(null);
+  const [deletingChannel, setDeletingChannel] = useState<ChannelEntry | null>(null);
 
   const reloadServers = useCallback(() => {
     void getSavedServers()
@@ -264,8 +303,16 @@ export default function NebulaClientApp() {
     onToggleDevOverlay: openDevtools,
   });
 
-  const visibleMessages = useMemo(() => {
-    const needle = search.chatQuery.trim().toLocaleLowerCase();
+  /**
+   * The whole conversation, minus the people this user has muted out of it.
+   *
+   * Kept apart from the searched list below because several things are about
+   * the conversation rather than about what is on screen: the read watermark,
+   * where reading stopped, and the lightbox's gallery. Deriving those from the
+   * filtered list would let typing in the search box move this client's read
+   * receipt and drop images out of the gallery.
+   */
+  const conversationMessages = useMemo(() => {
     const pool = activeDmUser
       ? dmMessages
       : [...messages, ...pollMessages].filter(
@@ -276,10 +323,17 @@ export default function NebulaClientApp() {
         ? `hash:${message.sender_hash}`
         : `name:${message.sender_name.toLocaleLowerCase()}`;
       if (relations[key]?.ignored) return false;
-      if (activeDmUser && relations[userRelationIdentity(activeDmUser)]?.blocked) return false;
-      return !needle || plainText(message.body).toLocaleLowerCase().includes(needle);
+      return !(activeDmUser && relations[userRelationIdentity(activeDmUser)]?.blocked);
     });
-  }, [activeDmUser, dmMessages, messages, pollMessages, relations, search.chatQuery, selectedChannel]);
+  }, [activeDmUser, dmMessages, messages, pollMessages, relations, selectedChannel]);
+
+  const visibleMessages = useMemo(() => {
+    const needle = search.chatQuery.trim().toLocaleLowerCase();
+    if (!needle) return conversationMessages;
+    return conversationMessages.filter((message) =>
+      plainText(message.body).toLocaleLowerCase().includes(needle),
+    );
+  }, [conversationMessages, search.chatQuery]);
 
   const conversations = useMemo(
     () =>
@@ -314,6 +368,12 @@ export default function NebulaClientApp() {
   const selectedGroup =
     serverGroups.find((group) => group.key === selectedServerKey) ?? serverGroups[0] ?? null;
   const identities = selectedGroup?.identities ?? [];
+  // Only an open connection carries branding. A saved address the user is
+  // merely looking at has sent nothing, and lending it the open server's livery
+  // is what put one server's banner on every server's page.
+  const selectedLivery = selectedGroup?.sessionId
+    ? (liveries[selectedGroup.sessionId] ?? null)
+    : null;
 
   const toggleFavorite = useCallback(
     (group: ServerGroup) => {
@@ -340,6 +400,118 @@ export default function NebulaClientApp() {
       );
   }, [memberPanel.query, memberPanel.scope, selectedChannel, talkingSessions, users]);
 
+  // Every id in the conversation, in order: the read-receipt watermark is a
+  // position in this list rather than a per-message flag, so a row cannot work
+  // out on its own whether anyone has read past it.
+  const conversationMessageIds = useMemo(
+    () => conversationMessages.map((message) => message.message_id).filter((id): id is string => !!id),
+    [conversationMessages],
+  );
+
+  const { handlePollVote } = usePolls();
+
+  // Sends this client's own watermark and asks for everyone else's. Without
+  // it Nebula would show other people's receipts and never return one, which
+  // reads to them as "nobody is here".
+  useReadReceipts(activeDmUser ? null : selectedChannel, conversationMessageIds.at(-1));
+
+  const firstUnreadId = useFirstUnreadId(
+    conversationMessages,
+    `${selectedChannel}:${selectedDmUser}`,
+    activeDmUser
+      ? (dmUnreadCounts[activeDmUser.session] ?? 0)
+      : selectedChannel === null
+        ? 0
+        : (unreadCounts[selectedChannel] ?? 0),
+  );
+
+  // The encryption state of the open channel: whether it persists, whose keys
+  // are trusted, who is waiting for one. Standard owns these flows; what
+  // Nebula decides is where the banners sit and that a revoked key disables
+  // the composer rather than letting a send fail silently.
+  const persistent = usePersistentChat(
+    activeDmUser ? null : selectedChannel,
+    activeChannel?.name ?? "",
+  );
+
+  /**
+   * The banners that belong to the conversation rather than to the window.
+   *
+   * They are drawn at the top of the scroller, above the oldest message,
+   * because one of them - the persistence banner - carries the sentinel that
+   * asks for the next page of history when it scrolls into view. Placed in
+   * fixed chrome it would be permanently visible and would page the whole
+   * archive in as fast as the server could answer.
+   */
+  const chatBanners = (
+    <>
+      {persistent.banner}
+      {persistent.signalBridgeErrorBanner}
+      {persistent.disputeBanner}
+      {persistent.revokedBanner}
+    </>
+  );
+
+  // --- attaching a file -------------------------------------------------
+  const fileServerConfig = useAppStore((state) => state.fileServerConfig);
+  const uploads = useFileUpload({
+    channelId: selectedChannel,
+    dmSession: activeDmUser?.session ?? null,
+  });
+  const [shareTarget, setShareTarget] = useState<{ filePath: string; filename: string } | null>(null);
+
+  /**
+   * Pick a file to attach, if this server will take one.
+   *
+   * The button is only rendered when the file server has said both that it is
+   * there and that this user may share - an attach button that opens a picker
+   * and then fails on upload wastes the choice the user just made.
+   */
+  const canAttach = !!fileServerConfig?.canShareFiles && (!!activeChannel || !!activeDmUser);
+  const pickAttachment = useCallback(async () => {
+    if (selectedChannel === null || uploads.isUploading()) return;
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const picked = await open({ multiple: false, directory: false });
+      if (typeof picked !== "string") return;
+      const filename = picked.replaceAll("\\", "/").split("/").pop() ?? "file";
+      setShareTarget({ filePath: picked, filename });
+    } catch (e) {
+      console.error("file picker failed:", e);
+    }
+  }, [selectedChannel, uploads]);
+
+  // --- replying ---------------------------------------------------------
+  const [pendingQuotes, setPendingQuotes] = useState<ChatMessage[]>([]);
+  const [jumpTo, setJumpTo] = useState<{ messageId: string; nonce: number } | null>(null);
+
+  const quoteMessage = useCallback((message: ChatMessage) => {
+    if (!message.message_id) return;
+    // Quoting the same message twice would send the marker twice and draw two
+    // identical blocks on top of the reply.
+    setPendingQuotes((prev) =>
+      prev.some((quote) => quote.message_id === message.message_id) ? prev : [...prev, message],
+    );
+  }, []);
+
+  const jumpToMessage = useCallback((messageId: string) => {
+    setJumpTo((prev) => ({ messageId, nonce: (prev?.nonce ?? 0) + 1 }));
+  }, []);
+
+  // Quotes belong to the conversation they were taken from; carrying them into
+  // the next one would attach a reply to a message nobody there can see.
+  useEffect(() => {
+    setPendingQuotes([]);
+    setJumpTo(null);
+  }, [selectedChannel, selectedDmUser]);
+
+  const lightboxRef = useRef<LightboxHandle>(null);
+  const currentScope = useCallback((): MessageScope | null => {
+    if (selectedDmUser !== null) return { scope: "dm", scopeId: String(selectedDmUser) };
+    if (selectedChannel !== null) return { scope: "channel", scopeId: String(selectedChannel) };
+    return null;
+  }, [selectedChannel, selectedDmUser]);
+
   const mentionResolver: MentionResolver = {
     resolveSession: (session) => {
       const user = users.find((candidate) => candidate.session === session);
@@ -348,8 +520,13 @@ export default function NebulaClientApp() {
   };
 
   const send = async (html: string) => {
-    const body = applyMentionsToHtml(html.trim(), mentionResolver);
+    const markers = pendingQuotes
+      .filter((quote) => quote.message_id)
+      .map((quote) => `<!-- FANCY_QUOTE:${quote.message_id} -->`)
+      .join("");
+    const body = markers + applyMentionsToHtml(html.trim(), mentionResolver);
     if (!body.trim()) return;
+    setPendingQuotes([]);
     if (selectedDmUser !== null) await useAppStore.getState().sendDm(selectedDmUser, body);
     else if (selectedChannel !== null) await useAppStore.getState().sendMessage(selectedChannel, body);
   };
@@ -435,6 +612,7 @@ export default function NebulaClientApp() {
             leave.request(activeSession);
           }}
           onContextMenuUser={userMenu.open}
+          cardRef={miniCardRef}
         />
         <UserMenu target={userMenu.target} onClose={userMenu.close} />
       </ThemeProvider>
@@ -622,24 +800,29 @@ export default function NebulaClientApp() {
             >
               {screen !== "connect" && screen !== "settings" && <ChatBackdrop />}
               {screen === "settings" ? (
-                adminPage !== null ? (
-                  <AdminScreen
-                    page={adminPage}
-                    capabilities={adminCapabilities}
-                    onNavigate={setAdminPage}
-                    marketplacePluginId={marketplacePluginId}
-                    aclChannelId={aclChannelId}
-                  />
-                ) : (
-                  <SettingsScreen
-                    page={settingsPage}
-                    onEditIdentityProfile={() => setSettingsPage("profile")}
-                  />
-                )
+                // One boundary for both: they occupy the same pane and never
+                // show together, so a fallback that covered only one of them
+                // would blank a pane the other was about to fill.
+                <Suspense fallback={<ScreenLoading />}>
+                  {adminPage !== null ? (
+                    <AdminScreen
+                      page={adminPage}
+                      capabilities={adminCapabilities}
+                      onNavigate={setAdminPage}
+                      marketplacePluginId={marketplacePluginId}
+                      aclChannelId={aclChannelId}
+                    />
+                  ) : (
+                    <SettingsScreen
+                      page={settingsPage}
+                      onEditIdentityProfile={() => setSettingsPage("profile")}
+                    />
+                  )}
+                </Suspense>
               ) : screen === "connect" ? (
                 <ConnectScreen
                   server={selectedGroup?.identities[0] ?? null}
-                  livery={livery}
+                  livery={selectedLivery}
                   identities={identities}
                   connecting={connecting}
                   error={error}
@@ -691,6 +874,15 @@ export default function NebulaClientApp() {
                     onPickerClosed={() => setSurface(null)}
                   />
 
+                  {/* A key-share request is about a person who just walked in,
+                      not about the history below, so it is pinned here rather
+                      than filed at the top of the conversation. */}
+                  {persistent.keyShareBanner && (
+                    <Stack gap={0.75} sx={{ px: "26px", pt: "10px" }}>
+                      {persistent.keyShareBanner}
+                    </Stack>
+                  )}
+
                   {search.chatOpen && (
                     <Box sx={{ px: "26px", pt: "12px" }}>
                       <SearchBox
@@ -707,22 +899,33 @@ export default function NebulaClientApp() {
                       <Typography sx={{ fontSize: 12.5 }}>{bootstrapStage}</Typography>
                     </Stack>
                   ) : visibleMessages.length === 0 ? (
-                    <Stack sx={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 0.5 }}>
-                      <Typography sx={{ fontWeight: 600, fontSize: 14 }}>
-                        {activeDmUser
-                          ? `Start a conversation with ${activeDmUser.name}`
-                          : activeChannel
-                            ? `This is the start of #${activeChannel.name}`
-                            : "Nothing selected"}
-                      </Typography>
-                      <Typography sx={(muiTheme) => ({ fontSize: 12, color: muiTheme.palette.nebula.muted })}>
-                        Messages and shared moments will appear here.
-                      </Typography>
+                    // The banners still belong here: a channel whose history has
+                    // not been fetched yet is empty, and its sentinel is the
+                    // thing that would fetch it.
+                    <Stack sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+                      <Box sx={{ px: "26px", pt: "12px" }}>{chatBanners}</Box>
+                      <Stack sx={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 0.5 }}>
+                        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>
+                          {activeDmUser
+                            ? `Start a conversation with ${activeDmUser.name}`
+                            : activeChannel
+                              ? `This is the start of #${activeChannel.name}`
+                              : "Nothing selected"}
+                        </Typography>
+                        <Typography
+                          sx={(muiTheme) => ({ fontSize: 12, color: muiTheme.palette.nebula.muted })}
+                        >
+                          Messages and shared moments will appear here.
+                        </Typography>
+                      </Stack>
                     </Stack>
                   ) : (
                     <MessageList
                       messages={visibleMessages}
                       users={users}
+                      firstUnreadId={firstUnreadId}
+                      header={chatBanners}
+                      jumpTo={jumpTo}
                       renderMessage={(message, avatar, grouped) => (
                         <MessageRow
                           message={message}
@@ -732,9 +935,41 @@ export default function NebulaClientApp() {
                           onHoverProfile={hovered.hover}
                           onLeaveProfile={hovered.clear}
                           onContextMenuProfile={openUserMenuFor}
+                          onVote={handlePollVote}
+                          onOpenImage={(src) => lightboxRef.current?.open(src)}
+                          allMessageIds={conversationMessageIds}
+                          onQuote={quoteMessage}
+                          onJumpTo={jumpToMessage}
                         />
                       )}
                     />
+                  )}
+
+                  {/* Uploads in flight sit at the foot of the conversation
+                      rather than inside it: the message they will become does
+                      not exist yet, so there is no row for them to be part of. */}
+                  {uploads.placeholders.length > 0 && (
+                    <Stack gap={0.5} sx={{ px: "34px", pt: "8px" }}>
+                      {uploads.placeholders.map((placeholder) => (
+                        <UploadProgressItem
+                          key={placeholder.id}
+                          placeholder={placeholder}
+                          onDismiss={uploads.dismiss}
+                          onCancel={uploads.cancel}
+                        />
+                      ))}
+                    </Stack>
+                  )}
+
+                  {pendingQuotes.length > 0 && (
+                    <Box sx={{ px: "34px", pt: "8px" }}>
+                      <QuotePreviewStrip
+                        quotes={pendingQuotes}
+                        onRemove={(id) =>
+                          setPendingQuotes((prev) => prev.filter((quote) => quote.message_id !== id))
+                        }
+                      />
+                    </Box>
                   )}
 
                   {selectedChannel !== null && !activeDmUser && (
@@ -745,8 +980,9 @@ export default function NebulaClientApp() {
 
                   <Composer
                     target={activeDmUser ? `@${activeDmUser.name}` : `#${activeChannel?.name ?? "channel"}`}
-                    disabled={!activeChannel && !activeDmUser}
+                    disabled={(!activeChannel && !activeDmUser) || persistent.sendBlocked}
                     onSend={send}
+                    onAttach={canAttach ? () => void pickAttachment() : undefined}
                   />
                 </>
               )}
@@ -870,7 +1106,11 @@ export default function NebulaClientApp() {
             notificationsMuted={!!channelMenu && mutedPushChannels.has(channelMenu.channel.id)}
             hideEmpty={hideEmpty}
             onToggleHideEmpty={toggleHideEmpty}
-            onEdit={setEditingChannel}
+            onEdit={(channel) => setChannelDialog({ mode: "edit", channel })}
+            onCreate={(parent, tempOnly) =>
+              setChannelDialog({ mode: "create", parentId: parent.id, tempOnly })
+            }
+            onDelete={setDeletingChannel}
             onEditPermissions={(channel) => {
               // The permission editor is channel-scoped, so it is handed the
               // channel to open on rather than left on whatever was selected.
@@ -881,13 +1121,47 @@ export default function NebulaClientApp() {
             onClose={() => setChannelMenu(null)}
           />
 
-          {editingChannel && (
+          {channelDialog && (
             <ChannelEditorDialog
-              channel={editingChannel}
-              parentId={editingChannel.parent_id ?? 0}
-              onClose={() => setEditingChannel(null)}
+              channel={channelDialog.mode === "edit" ? channelDialog.channel : null}
+              parentId={
+                channelDialog.mode === "edit"
+                  ? (channelDialog.channel.parent_id ?? 0)
+                  : channelDialog.parentId
+              }
+              tempOnly={channelDialog.mode === "create" && channelDialog.tempOnly}
+              onClose={() => setChannelDialog(null)}
             />
           )}
+
+          {/* Deleting a channel takes its messages with it and cannot be undone,
+              so it asks - and the dialog holds its own copy of the target,
+              because dismissing the menu to show it must not take the subject
+              with it. */}
+          <Dialog open={!!deletingChannel} onClose={() => setDeletingChannel(null)} maxWidth="xs">
+            <DialogContent>
+              <Typography sx={{ fontWeight: 600, fontSize: 14, mb: 0.5 }}>
+                Delete #{deletingChannel?.name}?
+              </Typography>
+              <Typography sx={(muiTheme) => ({ fontSize: 12, color: muiTheme.palette.nebula.muted })}>
+                Its sub-channels and stored messages go with it. This cannot be undone.
+              </Typography>
+              <Stack direction="row" gap={1} sx={{ justifyContent: "flex-end", mt: 2 }}>
+                <Button onClick={() => setDeletingChannel(null)}>Cancel</Button>
+                <Button
+                  variant="contained"
+                  color="error"
+                  onClick={() => {
+                    const id = deletingChannel?.id;
+                    setDeletingChannel(null);
+                    if (id != null) void useAppStore.getState().deleteChannel(id);
+                  }}
+                >
+                  Delete
+                </Button>
+              </Stack>
+            </DialogContent>
+          </Dialog>
 
           <LeaveServerDialog
             session={leave.pending}
@@ -897,6 +1171,35 @@ export default function NebulaClientApp() {
             onConfirm={() => void leave.confirm()}
             onCancel={leave.cancel}
           />
+
+          {/* Key verification and the custodian prompt: modal decisions about
+              the open channel's encryption, mounted once at the root so they
+              outlive the row or banner that asked for them. */}
+          {persistent.dialogs}
+
+          <Lightbox
+            ref={lightboxRef}
+            allMessages={[...conversationMessages]}
+            selectedChannel={selectedChannel}
+            selectedDmUser={selectedDmUser}
+            currentScope={currentScope}
+          />
+
+          {/* How the picked file may be shared - public link, password, or
+              this channel only - asked before a byte leaves the machine. */}
+          {shareTarget && (
+            <FileShareDialog
+              open
+              filename={shareTarget.filename}
+              canSharePublic={fileServerConfig?.canShareFilesPublic ?? false}
+              onSubmit={(choice: FileShareChoice) => {
+                const target = shareTarget;
+                setShareTarget(null);
+                if (target) void uploads.upload(target.filePath, target.filename, choice);
+              }}
+              onCancel={() => setShareTarget(null)}
+            />
+          )}
 
           <ConnectionOverlays />
           <NebulaRuntime
@@ -910,6 +1213,18 @@ export default function NebulaClientApp() {
       </Box>
     </ThemeProvider>
   );
+}
+
+/**
+ * What fills the pane while a lazily-loaded screen arrives.
+ *
+ * Deliberately quiet: the chunk is local and resolves in a frame or two, and a
+ * spinner that appears and vanishes that fast reads as a flicker rather than as
+ * progress. What it must do is hold the pane's shape, so the sidebar beside it
+ * does not jump.
+ */
+function ScreenLoading() {
+  return <Box sx={{ flex: 1, minHeight: 0 }} aria-busy="true" />;
 }
 
 /** Flip between push to talk and voice activation without opening settings. */

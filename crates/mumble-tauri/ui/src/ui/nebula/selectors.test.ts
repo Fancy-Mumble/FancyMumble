@@ -3,6 +3,9 @@ import { hexToHsl } from "@core/utils/colorUtils";
 import type { ChannelEntry, ConnectionStatus, SearchResult, UserEntry } from "@core/types";
 import {
   channelOccupants,
+  composerHtml,
+  editableText,
+  messageContent,
   groupMessagesByDay,
   groupSavedServers,
   listDirectConversations,
@@ -585,5 +588,50 @@ describe("globalSearchRows", () => {
     expect(rows.filter((row) => row.kind === "channel")).toHaveLength(6);
     expect(rows.some((row) => row.kind === "person")).toBe(true);
     expect(rows.some((row) => row.kind === "server")).toBe(true);
+  });
+});
+
+describe("messageContent", () => {
+  it("reads a plain body as text", () => {
+    expect(messageContent("<p>hello</p>")).toEqual({ kind: "text", quoteIds: [], html: "<p>hello</p>" });
+  });
+
+  it("lifts a poll marker out and keeps its id", () => {
+    const content = messageContent("<!-- FANCY_POLL:abc-123 -->");
+    expect(content).toEqual({ kind: "poll", pollId: "abc-123", quoteIds: [], html: "" });
+  });
+
+  it("lifts a file marker out and keeps the caption above it", () => {
+    const content = messageContent("look at this <!-- FANCY_FILE:QUJD -->");
+    expect(content).toEqual({ kind: "file", payload: "QUJD", quoteIds: [], html: "look at this" });
+  });
+
+  it("prefers a poll over a file when a body somehow carries both", () => {
+    expect(messageContent("<!-- FANCY_FILE:QUJD --><!-- FANCY_POLL:p1 -->").kind).toBe("poll");
+  });
+
+  it("collects every quote marker and leaves the reply behind", () => {
+    const content = messageContent("<!-- FANCY_QUOTE:m1 --><!-- FANCY_QUOTE:m2 -->agreed");
+    expect(content).toEqual({ kind: "text", quoteIds: ["m1", "m2"], html: "agreed" });
+  });
+
+  it("reads a quoted attachment as both", () => {
+    const content = messageContent("<!-- FANCY_QUOTE:m1 -->here <!-- FANCY_FILE:QUJD -->");
+    expect(content).toEqual({ kind: "file", payload: "QUJD", quoteIds: ["m1"], html: "here" });
+  });
+});
+
+describe("composerHtml and editableText", () => {
+  it("round-trips typed text through the wire format", () => {
+    const typed = "a < b & c\nsecond line";
+    expect(editableText(composerHtml(typed))).toBe(typed);
+  });
+
+  it("does not double-unescape an entity the author typed", () => {
+    expect(editableText(composerHtml("&amp;lt;"))).toBe("&amp;lt;");
+  });
+
+  it("turns every break variant back into a newline", () => {
+    expect(editableText("one<br>two<br />three")).toBe("one\ntwo\nthree");
   });
 });

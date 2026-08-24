@@ -60,6 +60,40 @@ export function useSearchState(resetKey: unknown) {
   return { channelQuery, setChannelQuery, chatOpen, setChatOpen, chatQuery, setChatQuery };
 }
 
+/**
+ * The message the "NEW" rule is drawn above, or null when everything is read.
+ *
+ * The rule marks where reading stopped *when the conversation was opened*, so
+ * the count is snapshotted on arrival rather than tracked live: a divider fed
+ * from the current unread count walks down the list as messages are read and
+ * ends up under the newest message, which is precisely where it means nothing.
+ *
+ * Nebula drew this rule already - `MessageList` has rendered `UnreadRule` since
+ * the pack landed - but nothing ever passed it an id, so it could not appear.
+ */
+export function useFirstUnreadId(
+  messages: readonly { message_id?: string | null }[],
+  conversationKey: unknown,
+  unreadCount: number,
+): string | null {
+  const [pending, setPending] = useState(0);
+
+  // Read the count through a ref: this must sample the unread total at the
+  // moment the conversation changes, and depending on the count itself would
+  // re-snapshot on every arriving message instead.
+  const unreadRef = useRef(unreadCount);
+  unreadRef.current = unreadCount;
+  useEffect(() => {
+    setPending(unreadRef.current);
+  }, [conversationKey]);
+
+  if (pending <= 0 || messages.length === 0) return null;
+  // A conversation opened for the first time is unread all the way down, so
+  // the rule clamps to the top rather than disappearing on the one occasion
+  // every message behind it is new.
+  return messages[Math.max(0, messages.length - pending)]?.message_id ?? null;
+}
+
 /** The optional right-hand roster and its own filter. */
 export function useMemberPanel() {
   const [open, setOpen] = useState(false);
@@ -241,4 +275,66 @@ export function useMiniMode(inVoice: boolean) {
     if (!inVoice) setMini(false);
   }, [inVoice]);
   return { mini: mini && inVoice, setMini };
+}
+
+/**
+ * Shrink the window onto the mini card, and give it back afterwards.
+ *
+ * Mini mode used to draw a small card inside a full-size window. The window
+ * stays where it was, so the empty space around the card still belongs to the
+ * client and still swallows every click aimed at whatever is behind it - the
+ * thing the user went to mini mode in order to keep using.
+ *
+ * The card's height depends on how many people are in the call, so it is
+ * measured rather than assumed, and re-measured when someone joins or leaves.
+ * The size to go back to is read once on the way in: reading it later would
+ * pick up the mini size and make the change permanent.
+ */
+export function useMiniWindow(active: boolean): React.RefObject<HTMLDivElement | null> {
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    let restore: (() => void) | undefined;
+    let observer: ResizeObserver | undefined;
+
+    void (async () => {
+      try {
+        const [{ getCurrentWindow }, { LogicalSize }] = await Promise.all([
+          import("@tauri-apps/api/window"),
+          import("@tauri-apps/api/dpi"),
+        ]);
+        const shell = getCurrentWindow();
+        const previous = await shell.innerSize();
+        if (cancelled) return;
+
+        const fit = () => {
+          const node = cardRef.current;
+          if (!node) return;
+          const box = node.getBoundingClientRect();
+          if (box.width < 1 || box.height < 1) return;
+          void shell.setSize(new LogicalSize(Math.ceil(box.width), Math.ceil(box.height)));
+        };
+
+        observer = new ResizeObserver(fit);
+        if (cardRef.current) observer.observe(cardRef.current);
+        fit();
+
+        restore = () => {
+          void shell.setSize(previous);
+        };
+      } catch {
+        /* no shell to resize - a browser dev session or a test */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      observer?.disconnect();
+      restore?.();
+    };
+  }, [active]);
+
+  return cardRef;
 }

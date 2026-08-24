@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChannelEntry } from "@core/types";
-import { PERM_WRITE } from "@core/utils/permissions";
+import { PERM_MAKE_CHANNEL, PERM_MAKE_TEMP_CHANNEL, PERM_WRITE } from "@core/utils/permissions";
 import { ChannelAttribute } from "@core/utils/channelAttributes";
 import { withNebulaTheme } from "../../testTheme";
 import { ChannelMenu } from "./ChannelMenu";
@@ -31,6 +31,8 @@ function open(props: Partial<React.ComponentProps<typeof ChannelMenu>> = {}) {
   const handlers = {
     onToggleHideEmpty: vi.fn(),
     onEdit: vi.fn(),
+    onCreate: vi.fn(),
+    onDelete: vi.fn(),
     onEditPermissions: vi.fn(),
     onClose: vi.fn(),
   };
@@ -132,7 +134,51 @@ function open_props() {
     hideEmpty: false,
     onToggleHideEmpty: vi.fn(),
     onEdit: vi.fn(),
+    onCreate: vi.fn(),
+    onDelete: vi.fn(),
     onEditPermissions: vi.fn(),
     onClose: vi.fn(),
   };
 }
+
+describe("ChannelMenu administration", () => {
+  it("offers creating a sub-channel only where MakeChannel was granted", () => {
+    open({ target: { channel: channel({ permissions: PERM_WRITE }), x: 0, y: 0 } });
+    expect(screen.queryByText("New channel here")).toBeNull();
+
+    cleanup();
+    open({
+      target: { channel: channel({ permissions: PERM_WRITE | PERM_MAKE_CHANNEL }), x: 0, y: 0 },
+    });
+    expect(screen.getByText("New channel here")).toBeTruthy();
+  });
+
+  it("says temporary when that is all the server allows", () => {
+    open({
+      target: { channel: channel({ permissions: PERM_MAKE_TEMP_CHANNEL }), x: 0, y: 0 },
+    });
+    expect(screen.getByText("New temporary channel here")).toBeTruthy();
+  });
+
+  it("passes the parent and the temp-only answer to the caller", () => {
+    const handlers = open({
+      target: { channel: channel({ id: 9, permissions: PERM_MAKE_TEMP_CHANNEL }), x: 0, y: 0 },
+    });
+    fireEvent.click(screen.getByText("New temporary channel here"));
+    expect(handlers.onCreate).toHaveBeenCalledWith(expect.objectContaining({ id: 9 }), true);
+  });
+
+  it("never offers to delete the root channel", () => {
+    open({ target: { channel: channel({ id: 0, permissions: PERM_WRITE }), x: 0, y: 0 } });
+    expect(screen.queryByText("Delete channel")).toBeNull();
+  });
+
+  it("asks the caller to delete rather than deleting itself", () => {
+    const handlers = open({
+      target: { channel: channel({ id: 4, permissions: PERM_WRITE }), x: 0, y: 0 },
+    });
+    fireEvent.click(screen.getByText("Delete channel"));
+    expect(handlers.onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: 4 }));
+    expect(actions.selectChannel).not.toHaveBeenCalled();
+  });
+});

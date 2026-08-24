@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { Stack } from "../primitives";
 import { Box, Divider, Typography } from "@mui/material";
 import { useUserAvatars } from "@core/lazyBlobs";
@@ -12,6 +12,21 @@ interface MessageListProps {
   users: readonly UserEntry[];
   /** Message id the unread divider is drawn above, if any. */
   firstUnreadId?: string | null;
+  /**
+   * Drawn above the oldest message, inside the scroller.
+   *
+   * This is where the persistence banner goes, and it has to be *inside*:
+   * the banner carries the pagination sentinel, and an observer watching an
+   * element that is permanently on screen fires the moment there is more
+   * history and keeps firing until there is none.
+   */
+  header?: React.ReactNode;
+  /**
+   * Message to bring into view, and a nonce so asking twice for the same one
+   * still scrolls. Following a quote to a message you are already looking at
+   * has to flash it again, or the click reads as broken.
+   */
+  jumpTo?: { messageId: string; nonce: number } | null;
   renderMessage: (message: ChatMessage, avatar: string | null, grouped: boolean) => React.ReactNode;
 }
 
@@ -32,9 +47,19 @@ function isGrouped(message: ChatMessage, previous: ChatMessage | undefined): boo
  * It sticks to the bottom while the reader is already there and leaves the
  * scroll position alone otherwise, so history loading never yanks the view.
  */
-export function MessageList({ messages, users, firstUnreadId, renderMessage }: Readonly<MessageListProps>) {
+export function MessageList({
+  messages,
+  users,
+  firstUnreadId,
+  header,
+  jumpTo,
+  renderMessage,
+}: Readonly<MessageListProps>) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedToBottom = useRef(true);
+  /** Scroll height before the last render, for the prepend correction below. */
+  const previousHeight = useRef(0);
+  const previousFirstId = useRef<string | null>(null);
 
   // One batched avatar fetch for the whole list; the texture size comes from
   // the live user entry, which is the only place that knows it.
@@ -51,10 +76,44 @@ export function MessageList({ messages, users, firstUnreadId, renderMessage }: R
   const avatars = useUserAvatars(senders);
   const sections = useMemo(() => groupMessagesByDay(messages), [messages]);
 
-  useEffect(() => {
+  // Reading position is held across three different kinds of change, and they
+  // want opposite things: an arriving message should follow the reader down if
+  // they are at the bottom, while a page of history landing *above* them must
+  // not move the text they are in the middle of reading. Telling them apart is
+  // what the first id is for - it only changes when something was prepended.
+  useLayoutEffect(() => {
     const node = scrollRef.current;
-    if (node && pinnedToBottom.current) node.scrollTop = node.scrollHeight;
+    if (!node) return;
+
+    const firstId = messages[0]?.message_id ?? null;
+    const prepended = previousFirstId.current !== null && firstId !== previousFirstId.current;
+    previousFirstId.current = firstId;
+
+    if (pinnedToBottom.current) node.scrollTop = node.scrollHeight;
+    else if (prepended) node.scrollTop += node.scrollHeight - previousHeight.current;
+
+    previousHeight.current = node.scrollHeight;
   }, [messages]);
+
+  // Jumping is deliberately not a scroll-into-view on every render: the row
+  // is found by id at the moment it is asked for, and a message that is not
+  // mounted (an older one still unfetched) simply does not move the view
+  // rather than scrolling to the nearest wrong place.
+  useLayoutEffect(() => {
+    if (!jumpTo) return;
+    // Scanned rather than matched with a selector: a message id is an opaque
+    // string from the server, and building a selector out of one means
+    // escaping it correctly for every id a server might mint.
+    const rows = scrollRef.current?.querySelectorAll("[data-message-id]") ?? [];
+    const node = [...rows].find((row) => (row as HTMLElement).dataset.messageId === jumpTo.messageId);
+    if (!node) return;
+    pinnedToBottom.current = false;
+    node.scrollIntoView({ block: "center", behavior: "smooth" });
+    node.animate?.(
+      [{ background: "transparent" }, { background: "rgba(120,150,255,.18)" }, { background: "transparent" }],
+      { duration: 1200 },
+    );
+  }, [jumpTo]);
 
   return (
     <Box
@@ -75,6 +134,7 @@ export function MessageList({ messages, users, firstUnreadId, renderMessage }: R
         gap: "19px",
       }}
     >
+      {header}
       {sections.map((section) => (
         <Stack key={section.key} gap="19px">
           <Box sx={{ display: "flex", justifyContent: "center" }}>
@@ -93,7 +153,11 @@ export function MessageList({ messages, users, firstUnreadId, renderMessage }: R
             </Typography>
           </Box>
           {section.messages.map((message, index) => (
-            <Stack key={message.message_id ?? `${message.timestamp}-${index}`} gap="19px">
+            <Stack
+              key={message.message_id ?? `${message.timestamp}-${index}`}
+              data-message-id={message.message_id ?? undefined}
+              gap="19px"
+            >
               {firstUnreadId && message.message_id === firstUnreadId && <UnreadRule />}
               {renderMessage(
                 message,
