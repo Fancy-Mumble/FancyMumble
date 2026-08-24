@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
-import { Box, Button, Typography } from "@mui/material";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Box, Button, Dialog, DialogContent, Typography } from "@mui/material";
 import { useAppStore } from "@core/store";
 import { TID } from "@core/testids";
 import { useRemoteStreams, useScreenShare } from "@standard/components/chat/stream/useScreenShare";
@@ -9,8 +9,15 @@ import {
   activeStreamViewerStrategy,
   StreamViewerStrategyId,
 } from "@standard/components/chat/stream/viewerStrategy";
+import { getTrackContentMap } from "@standard/components/chat/stream/trackContent";
 import { UserAvatar, Stack } from "../primitives";
+import { SettingsIcon } from "@ui/icons";
 import { radius } from "../../tokens";
+
+// Both are heavy and neither is on screen at rest: the stats panel pulls in
+// a chart and the config menu the whole encoder settings model.
+const StreamStatsPanel = lazy(() => import("@standard/components/chat/stream/StreamStatsPanel"));
+const StreamConfigMenu = lazy(() => import("@standard/components/chat/stream/StreamConfigMenu"));
 
 /** Whether the active strategy paints onto a canvas (the native Rust viewer -
  *  mandatory on Linux, where WebKitGTK has no WebRTC) instead of binding a
@@ -62,6 +69,27 @@ export function ScreenShareStrip({ pickerRequested, onPickerClosed }: Readonly<S
 
   const live = broadcasters.length > 0 || share.isBroadcasting;
 
+  const [statsFor, setStatsFor] = useState<number | null>(null);
+  const [qualityOpen, setQualityOpen] = useState(false);
+
+  // Stats are read per session, and the session in question is whoever is on
+  // screen: the person being watched, or - when broadcasting - this client's
+  // own outbound stream.
+  const statsSession = share.watchingSession ?? (share.isBroadcasting ? ownSession : null);
+  const statsSampler = useMemo(
+    () => (statsFor === null ? null : activeStreamViewerStrategy().createStatsSampler(statsFor)),
+    [statsFor],
+  );
+
+  // Nothing to show stats for any more - stop offering a panel about a stream
+  // that has ended rather than leaving it frozen on its last numbers.
+  useEffect(() => {
+    if (statsFor !== null && statsSession === null) setStatsFor(null);
+  }, [statsFor, statsSession]);
+  useEffect(() => {
+    if (qualityOpen && !share.isBroadcasting) setQualityOpen(false);
+  }, [qualityOpen, share.isBroadcasting]);
+
   return (
     <>
       {share.pickerOpen && (
@@ -101,6 +129,27 @@ export function ScreenShareStrip({ pickerRequested, onPickerClosed }: Readonly<S
           </Button>
         </Stack>
       )}
+
+      {/* Resolution, frame rate and what is captured, changed on the live
+          share rather than only when it is started. */}
+      <Dialog open={qualityOpen} onClose={() => setQualityOpen(false)} maxWidth="xs" fullWidth>
+        <DialogContent sx={{ p: 1.5 }}>
+          <Suspense fallback={null}>
+            <StreamConfigMenu
+              settings={share.settings}
+              onStop={() => {
+                setQualityOpen(false);
+                share.stopSharing();
+              }}
+              onChangeSource={() => {
+                setQualityOpen(false);
+                share.startSharing();
+              }}
+              onSetSettings={share.changeSettings}
+            />
+          </Suspense>
+        </DialogContent>
+      </Dialog>
 
       {live && (
         <Box
@@ -183,7 +232,36 @@ export function ScreenShareStrip({ pickerRequested, onPickerClosed }: Readonly<S
                 Stop watching
               </Button>
             )}
+            {share.isBroadcasting && (
+              <Button
+                size="small"
+                startIcon={<SettingsIcon width={13} height={13} />}
+                onClick={() => setQualityOpen(true)}
+                sx={{ color: "#dfe1e6" }}
+              >
+                Quality
+              </Button>
+            )}
+            {statsSession !== null && (
+              <Button
+                size="small"
+                onClick={() => setStatsFor((open) => (open === null ? statsSession : null))}
+                sx={{ color: "#dfe1e6" }}
+              >
+                {statsFor === null ? "Stats" : "Hide stats"}
+              </Button>
+            )}
           </Stack>
+
+          {statsFor !== null && statsSampler && (
+            <Suspense fallback={null}>
+              <StreamStatsPanel
+                sampler={statsSampler}
+                contentByMid={getTrackContentMap(statsFor)}
+                onClose={() => setStatsFor(null)}
+              />
+            </Suspense>
+          )}
         </Box>
       )}
     </>

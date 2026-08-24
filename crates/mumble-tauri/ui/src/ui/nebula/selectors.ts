@@ -327,6 +327,85 @@ export function plainText(body: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/**
+ * What a message body actually is.
+ *
+ * A chat body is HTML, but some bodies are a marker standing in for a richer
+ * object the server broadcast separately - a poll, or a file on the file
+ * server. Rendering those as HTML prints the marker comment's neighbours and
+ * silently drops the object, which is what Nebula did before: a poll arrived
+ * as its bare question text and an attachment as nothing at all. Classifying
+ * here keeps the decision out of the row and testable on its own.
+ *
+ * `html` is always what is left once the marker is lifted out, so a caption
+ * sent alongside a file still renders above its card.
+ */
+export type MessageContent = {
+  /** Ids of the messages this one is replying to, oldest marker first. */
+  quoteIds: string[];
+  html: string;
+} & (
+  | { kind: "text" }
+  | { kind: "poll"; pollId: string }
+  | { kind: "file"; payload: string }
+);
+
+const POLL_MARKER = /<!-- FANCY_POLL:(.+?) -->/;
+const FILE_MARKER = /<!-- FANCY_FILE:([A-Za-z0-9+/=]+) -->/;
+const QUOTE_MARKER = /<!-- FANCY_QUOTE:(.+?) -->/g;
+
+export function messageContent(body: string): MessageContent {
+  // Quotes come off first and are orthogonal to the rest: a reply can carry a
+  // poll or a file as easily as it can carry text, and leaving the markers in
+  // would make every quoted message look like a plain one with comment
+  // rubbish in it.
+  const quoteIds = [...body.matchAll(QUOTE_MARKER)].map((match) => match[1]);
+  const rest = quoteIds.length > 0 ? body.replaceAll(QUOTE_MARKER, "").trim() : body;
+
+  const poll = POLL_MARKER.exec(rest);
+  if (poll) {
+    return { kind: "poll", pollId: poll[1], quoteIds, html: rest.replace(POLL_MARKER, "").trim() };
+  }
+
+  const file = FILE_MARKER.exec(rest);
+  if (file) {
+    return { kind: "file", payload: file[1], quoteIds, html: rest.replace(FILE_MARKER, "").trim() };
+  }
+
+  return { kind: "text", quoteIds, html: rest };
+}
+
+/**
+ * What the composer puts on the wire for a line of typed text.
+ *
+ * Nebula's composer sends plain text, so the body it builds is escaped
+ * rather than parsed. This lives beside `editableText` because the two are
+ * one round trip: an edit that re-encoded text differently from the way it
+ * was first sent would rewrite the message on every save.
+ */
+export function composerHtml(text: string): string {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\n", "<br>");
+}
+
+/**
+ * A message body turned back into what its author typed.
+ *
+ * The composer sends escaped text with `<br>` for line breaks, so editing
+ * has to run that transformation backwards rather than showing raw markup:
+ * the inverse of `escapeHtml(text).replaceAll("\n", "<br>")`. Entities are
+ * unescaped by the parser rather than by hand, so `&amp;lt;` survives a
+ * round trip that a naive replace would corrupt.
+ */
+export function editableText(body: string): string {
+  const withBreaks = body.replace(/<br\s*\/?>/gi, "\n");
+  if (typeof DOMParser === "undefined") return withBreaks;
+  return new DOMParser().parseFromString(withBreaks, "text/html").body.textContent ?? "";
+}
+
 /** `18:06` in the user's locale, matching the mock's message stamps. */
 export function formatTime(timestamp: number | null | undefined): string {
   if (!timestamp) return "";

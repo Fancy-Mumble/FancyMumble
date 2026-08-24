@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Box, Switch, TextField, Typography, useTheme } from "@mui/material";
 import { getPreferences, updatePreferences } from "@core/preferencesStorage";
 import {
@@ -18,6 +18,22 @@ import { Field, GroupTitle, PageTitle, PillGroup, SegmentedGroup } from "./contr
 import { ExpandableRow } from "./ExpandableRow";
 import { ProfilePreview } from "./ProfilePreview";
 import { radius } from "../../tokens";
+
+// The cropper carries a canvas and a drag model, and it is only on screen
+// for the few seconds after a file is picked. Loading it with the page made
+// every visit to Profile pay for a modal most visits never open.
+const ImageEditor = lazy(() =>
+  import("@standard/pages/settings/ImageEditor").then((module) => ({ default: module.ImageEditor })),
+);
+
+type CropKind = "avatar" | "banner" | "sticker";
+
+/** What each picked image is cropped and squeezed down to before it is sent. */
+const CROP_SIZES: Record<CropKind, { width: number; height: number; maxBytes: number }> = {
+  avatar: { width: 128, height: 128, maxBytes: 100_000 },
+  banner: { width: 400, height: 150, maxBytes: 80_000 },
+  sticker: { width: 96, height: 96, maxBytes: 40_000 },
+};
 
 type Row = "colours" | "frame" | "sticker" | "nameplate" | "name" | "effect" | null;
 
@@ -99,6 +115,21 @@ export function ProfileSettings() {
     };
   }, []);
 
+  /**
+   * A picked file goes to the cropper, not straight into the profile.
+   *
+   * An avatar is a circle and a banner is a wide strip, and a photograph is
+   * neither: sending the raw file made the server carry a full-resolution
+   * image to be squashed differently by every surface that drew it. The
+   * editor is Standard's - a crop frame is a picker, and there is nothing
+   * about this one that Nebula would draw differently.
+   *
+   * Declared above the loading guard: a hook after an early return is not run
+   * on the render that takes it, and React counts hooks rather than naming
+   * them.
+   */
+  const [cropping, setCropping] = useState<{ src: string; kind: CropKind } | null>(null);
+
   if (!data) return null;
   const profile = data.profile;
 
@@ -114,16 +145,15 @@ export function ProfileSettings() {
   };
   const nameStyle = profile.nameStyle ?? {};
   const colours = profile.themeColors ?? [];
-  const patchColours = (next: string[]) =>
-    patchProfile({ themeColors: next.length > 0 ? next : undefined });
+  const patchColours = (next: string[]) => patchProfile({ themeColors: next.length > 0 ? next : undefined });
 
   // Images arrive as data URLs, which is exactly what the profile format
   // stores - no upload, no temp file, and it round-trips through the same
   // serializer the Standard editor uses.
-  const readImage = (file: File | undefined, apply: (dataUrl: string) => void) => {
+  const readImage = (file: File | undefined, kind: CropKind) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => typeof reader.result === "string" && apply(reader.result);
+    reader.onload = () => typeof reader.result === "string" && setCropping({ src: reader.result, kind });
     reader.readAsDataURL(file);
   };
 
@@ -211,9 +241,10 @@ export function ProfileSettings() {
                 type="file"
                 accept="image/*"
                 hidden
-                onChange={(event) =>
-                  readImage(event.target.files?.[0], (url) => patchData({ avatarDataUrl: url }))
-                }
+                onChange={(event) => {
+                  readImage(event.target.files?.[0], "avatar");
+                  event.target.value = "";
+                }}
               />
             </Stack>
           </Field>
@@ -250,11 +281,10 @@ export function ProfileSettings() {
                 type="file"
                 accept="image/*"
                 hidden
-                onChange={(event) =>
-                  readImage(event.target.files?.[0], (url) =>
-                    patchProfile({ banner: { ...profile.banner, image: url } }),
-                  )
-                }
+                onChange={(event) => {
+                  readImage(event.target.files?.[0], "banner");
+                  event.target.value = "";
+                }}
               />
             </Stack>
           </Field>
@@ -289,8 +319,8 @@ export function ProfileSettings() {
           }
         >
           <Typography sx={{ fontSize: 11.5, mb: "10px", color: "text.secondary" }}>
-            The first three colours rake down the card, the fourth becomes its border and the fifth
-            its accent — the send button, the volume bar and every link on it.
+            The first three colours rake down the card, the fourth becomes its border and the fifth its accent
+            — the send button, the volume bar and every link on it.
           </Typography>
           <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center">
             {colours.map((colour, index) => (
@@ -298,9 +328,7 @@ export function ProfileSettings() {
                 <ColourWell
                   label={`Card colour ${index + 1}`}
                   value={colour}
-                  onChange={(next) =>
-                    patchColours(colours.map((entry, at) => (at === index ? next : entry)))
-                  }
+                  onChange={(next) => patchColours(colours.map((entry, at) => (at === index ? next : entry)))}
                 />
                 <TextButton
                   label={`Remove card colour ${index + 1}`}
@@ -458,11 +486,10 @@ export function ProfileSettings() {
               type="file"
               accept="image/*"
               hidden
-              onChange={(event) =>
-                readImage(event.target.files?.[0], (url) =>
-                  patchProfile({ decorationImage: url, decoration: "custom" }),
-                )
-              }
+              onChange={(event) => {
+                readImage(event.target.files?.[0], "sticker");
+                event.target.value = "";
+              }}
             />
           </Stack>
         </ExpandableRow>
@@ -707,6 +734,26 @@ export function ProfileSettings() {
         bio={data.bio}
         tokens={tokens}
       />
+
+      {cropping && (
+        <Suspense fallback={null}>
+          <ImageEditor
+            src={cropping.src}
+            cropShape={cropping.kind === "banner" ? "rect" : "circle"}
+            targetWidth={CROP_SIZES[cropping.kind].width}
+            targetHeight={CROP_SIZES[cropping.kind].height}
+            maxBytes={CROP_SIZES[cropping.kind].maxBytes}
+            onConfirm={(dataUrl) => {
+              const kind = cropping.kind;
+              setCropping(null);
+              if (kind === "avatar") patchData({ avatarDataUrl: dataUrl });
+              else if (kind === "banner") patchProfile({ banner: { ...profile.banner, image: dataUrl } });
+              else patchProfile({ decorationImage: dataUrl, decoration: "custom" });
+            }}
+            onCancel={() => setCropping(null)}
+          />
+        </Suspense>
+      )}
     </Stack>
   );
 }

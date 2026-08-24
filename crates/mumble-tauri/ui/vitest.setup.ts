@@ -123,3 +123,14 @@ if (typeof Text !== "undefined" && !("getClientRects" in Text.prototype)) {
     value: () => NO_RECTS,
   });
 }
+
+/**
+ * jsdom lays nothing out, so it has no notion of scrolling an element into
+ * view and does not implement the method at all. Any list that keeps its
+ * active row visible - the mention popup, the slash menu, jump-to-message -
+ * therefore dies on an uncaught TypeError instead of failing an assertion.
+ * A no-op is what a browser does for an element that is already in view.
+ */
+if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}

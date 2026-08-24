@@ -1,19 +1,37 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { Box } from "@mui/material";
-import { AclAdmin } from "./AclAdmin";
-import { AuditAdmin } from "./AuditAdmin";
-import { BansAdmin } from "./BansAdmin";
-import { EmotesAdmin } from "./EmotesAdmin";
-import { FileServerAdmin } from "./FileServerAdmin";
-import { LiveryAdmin } from "./LiveryAdmin";
-import { MarketplaceAdmin } from "./MarketplaceAdmin";
-import { MarketplacePluginPage } from "./MarketplacePluginPage";
-import { OnboardingAdmin } from "./OnboardingAdmin";
-import { RolesAdmin } from "./RolesAdmin";
-import { ServerPluginsAdmin } from "./ServerPluginsAdmin";
-import { ServerSettingsAdmin } from "./ServerSettingsAdmin";
-import { UsersAdmin } from "./UsersAdmin";
 import { ADMIN_PAGES, type AdminCapabilities, type AdminPageId } from "./capabilities";
+
+/**
+ * One chunk per page.
+ *
+ * These are the heaviest screens in the client - the ACL editor, the audit
+ * log with its query parser and chart, the marketplace - and an operator
+ * opening one of them has no use for the other twelve. Imported together
+ * they were a single 186 kB download that every visit to administration
+ * paid in full, whichever page it was for.
+ */
+const AclAdmin = lazy(() => import("./AclAdmin").then((m) => ({ default: m.AclAdmin })));
+const AuditAdmin = lazy(() => import("./AuditAdmin").then((m) => ({ default: m.AuditAdmin })));
+const BansAdmin = lazy(() => import("./BansAdmin").then((m) => ({ default: m.BansAdmin })));
+const EmotesAdmin = lazy(() => import("./EmotesAdmin").then((m) => ({ default: m.EmotesAdmin })));
+const FileServerAdmin = lazy(() => import("./FileServerAdmin").then((m) => ({ default: m.FileServerAdmin })));
+const LiveryAdmin = lazy(() => import("./LiveryAdmin").then((m) => ({ default: m.LiveryAdmin })));
+const MarketplaceAdmin = lazy(() =>
+  import("./MarketplaceAdmin").then((m) => ({ default: m.MarketplaceAdmin })),
+);
+const MarketplacePluginPage = lazy(() =>
+  import("./MarketplacePluginPage").then((m) => ({ default: m.MarketplacePluginPage })),
+);
+const OnboardingAdmin = lazy(() => import("./OnboardingAdmin").then((m) => ({ default: m.OnboardingAdmin })));
+const RolesAdmin = lazy(() => import("./RolesAdmin").then((m) => ({ default: m.RolesAdmin })));
+const ServerPluginsAdmin = lazy(() =>
+  import("./ServerPluginsAdmin").then((m) => ({ default: m.ServerPluginsAdmin })),
+);
+const ServerSettingsAdmin = lazy(() =>
+  import("./ServerSettingsAdmin").then((m) => ({ default: m.ServerSettingsAdmin })),
+);
+const UsersAdmin = lazy(() => import("./UsersAdmin").then((m) => ({ default: m.UsersAdmin })));
 
 /**
  * The administration content area.
@@ -108,6 +126,8 @@ export function AdminScreen({
   }
 
   return (
-    <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", px: "52px", py: "38px" }}>{content}</Box>
+    <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", px: "52px", py: "38px" }}>
+      <Suspense fallback={null}>{content}</Suspense>
+    </Box>
   );
 }

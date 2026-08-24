@@ -25,7 +25,11 @@ export {
   type NavEntry,
   type SettingsNavContext,
 } from "./settings/SettingsNav";
-export { SettingsScreen } from "./settings/SettingsScreen";
+// `SettingsScreen` and `AdminScreen` are deliberately NOT re-exported here.
+// A barrel is imported whole: one `import { TitleBar } from "./components"`
+// would pull every settings page - and through them the administration
+// console - into the graph of a window that is showing a connect screen.
+// Both are loaded from their own modules, lazily, by `NebulaClientApp`.
 export { ProfileCard } from "./user/ProfileCard";
 export { UserMenu, type UserMenuTarget } from "./user/UserMenu";
 export { NebulaRuntime } from "./runtime/NebulaRuntime";

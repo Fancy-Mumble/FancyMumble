@@ -18,6 +18,8 @@ interface MiniModeProps {
   onLeave: () => void;
   /** Right-click on someone in the call - the same menu the full window opens. */
   onContextMenuUser?: (user: UserEntry, event: React.MouseEvent) => void;
+  /** Measured so the window can be shrunk onto the card. */
+  cardRef?: React.Ref<HTMLDivElement>;
 }
 
 /**
@@ -35,12 +37,16 @@ export function MiniMode({
   onExpand,
   onLeave,
   onContextMenuUser,
+  cardRef,
 }: Readonly<MiniModeProps>) {
   const micLive = useAppStore(selectMicLive);
   const deafened = useAppStore(selectSelfDeafened);
 
   return (
-    <NebulaSurface sx={{ width: 320, m: "80px auto", borderRadius: radius("xl") }}>
+    // No margin: the window is resized onto this card, so any space around it
+    // would be client area with nothing in it, sitting over whatever the user
+    // went to mini mode to keep watching.
+    <NebulaSurface ref={cardRef} sx={{ width: 320, borderRadius: radius("xl") }}>
       <Stack
         direction="row"
         alignItems="center"
