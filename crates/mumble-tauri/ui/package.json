@@ -68,6 +68,7 @@
     "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.0.0",
     "three": "^0.180.0",
+    "uqr": "^0.1.3",
     "y-protocols": "^1.0.6",
     "y-websocket": "^2.0.4",
     "yjs": "^13.6.20",

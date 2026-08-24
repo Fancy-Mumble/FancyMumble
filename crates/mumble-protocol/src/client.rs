@@ -149,7 +149,7 @@ impl ClientHandle {
 /// `fancy_protocol` being wrong is what made an epoch-1 server send us payloads
 /// we then misparsed in silence - see the field comment below and M2h in
 /// Starling's `docs/PROTOCOL-REDESIGN.md`.
-pub(crate) fn version_announcement(ver: MumbleVersion) -> mumble_tcp::Version {
+pub fn version_announcement(ver: MumbleVersion) -> mumble_tcp::Version {
     mumble_tcp::Version {
         version_v1: Some(ver.encode_v1()),
         version_v2: Some(ver.encode_v2()),

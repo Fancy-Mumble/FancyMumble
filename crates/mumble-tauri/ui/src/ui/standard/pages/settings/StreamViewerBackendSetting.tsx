@@ -23,7 +23,6 @@ import "../../components/chat/stream/useScreenShare";
 import "../../components/chat/stream/nativeStreamView";
 import {
   getStreamViewerStrategyPreference,
-  parseStreamViewerStrategyId,
   selectableStreamViewerStrategyIds,
   setStreamViewerStrategyPreference,
   STRATEGY_AUTO,
@@ -31,6 +30,8 @@ import {
   type StreamViewerStrategyPreference,
 } from "../../components/chat/stream/viewerStrategy";
 import { registerSettings } from "@core/features/settings/settingsSearchRegistry";
+import { GlobeIcon, MonitorIcon, SparklesIcon } from "../../icons";
+import { RadioCardGroup, type RadioCardOption } from "../../components/elements/RadioCardGroup";
 import styles from "./SettingsPage.module.css";
 
 /** Whether this platform/build offers more than one viewer family. */
@@ -50,12 +51,16 @@ if (backendSelectable) {
   ]);
 }
 
-/** Choices in display order, with their i18n label keys. */
+/** Choices in display order, with their i18n key stems. */
 const OPTIONS = [
-  { value: STRATEGY_AUTO, labelKey: "advanced.streamBackendAuto" },
-  { value: StreamViewerStrategyId.Webview, labelKey: "advanced.streamBackendWebview" },
-  { value: StreamViewerStrategyId.Native, labelKey: "advanced.streamBackendNative" },
-] as const satisfies readonly { value: StreamViewerStrategyPreference; labelKey: string }[];
+  { value: STRATEGY_AUTO, key: "Auto", Icon: SparklesIcon },
+  { value: StreamViewerStrategyId.Webview, key: "Webview", Icon: GlobeIcon },
+  { value: StreamViewerStrategyId.Native, key: "Native", Icon: MonitorIcon },
+] as const satisfies readonly {
+  value: StreamViewerStrategyPreference;
+  key: string;
+  Icon: typeof SparklesIcon;
+}[];
 
 export function StreamViewerBackendSetting() {
   const [preference, setPreference] = useState<StreamViewerStrategyPreference>(
@@ -65,13 +70,18 @@ export function StreamViewerBackendSetting() {
   // reliably applies on the next page load - surface that once dirty.
   const [changed, setChanged] = useState(false);
   const { t } = useTranslation("settings");
+  const tStr = t as (key: string) => string;
 
   if (!backendSelectable) return null;
 
-  const handleChange = (value: string) => {
-    // The DOM hands back a raw string; the strategy layer's parser is the
-    // one place that may turn it into an enum member.
-    const next: StreamViewerStrategyPreference = parseStreamViewerStrategyId(value) ?? STRATEGY_AUTO;
+  const options: RadioCardOption<StreamViewerStrategyPreference>[] = OPTIONS.map(({ value, key, Icon }) => ({
+    value,
+    label: tStr(`advanced.streamBackend${key}`),
+    description: tStr(`advanced.streamBackend${key}Desc`),
+    Icon,
+  }));
+
+  const handleChange = (next: StreamViewerStrategyPreference) => {
     setStreamViewerStrategyPreference(next);
     setPreference(next);
     setChanged(true);
@@ -81,13 +91,12 @@ export function StreamViewerBackendSetting() {
     <section className={styles.section}>
       <h3 className={styles.sectionTitle}>{t("advanced.streamBackend")}</h3>
       <p className={styles.fieldHint}>{t("advanced.streamBackendHint")}</p>
-      <select className={styles.select} value={preference} onChange={(e) => handleChange(e.target.value)}>
-        {OPTIONS.map(({ value, labelKey }) => (
-          <option key={value} value={value}>
-            {t(labelKey)}
-          </option>
-        ))}
-      </select>
+      <RadioCardGroup
+        name="stream_viewer_backend"
+        options={options}
+        value={preference}
+        onChange={handleChange}
+      />
       {changed && (
         <>
           <p className={styles.fieldHint} style={{ marginTop: "0.75rem" }}>

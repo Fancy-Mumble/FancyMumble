@@ -484,6 +484,82 @@
   gap: 10px;
 }
 
+/* --- 2FA enrolment ---------------------------------------------- */
+
+/* One card for the whole step: code on top, then the input and the button at
+   full width, then (behind a rule) the ways in for people who cannot scan. */
+.enrolCard {
+  padding: 16px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+}
+
+/* A text input and the button that applies it, on one line: the input takes
+   the room, the button keeps its natural width. */
+.actionRow {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.actionRow > .field {
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
+}
+
+.actionRow .applyBtn {
+  width: auto;
+  flex: none;
+  white-space: nowrap;
+}
+
+.qrCenter {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+/* White frame around the QR code: a camera needs the quiet zone on a light
+   ground, whatever the theme paints behind it. */
+.qrFrame {
+  padding: 10px;
+  line-height: 0;
+  background: #ffffff;
+  border-radius: var(--radius-sm);
+}
+
+.enrolFooter {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-glass-border);
+}
+
+/* The "can't scan?" ladder: deliberately quiet, so nobody who can scan the
+   code is drawn to a worse way in. */
+.linkBtn {
+  display: block;
+  margin-top: 8px;
+  padding: 0;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.enrolFooter > .linkBtn:first-child {
+  margin-top: 0;
+}
+
+.linkBtn:hover {
+  color: var(--color-text-secondary);
+}
+
 .ghostBtn {
   padding: 10px 18px;
   font-size: 14px;

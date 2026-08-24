@@ -149,6 +149,9 @@ pub fn run() {
                 // have just shown it after restoring saved geometry.
                 if let Some(win) = app.get_webview_window(updater::MAIN_WINDOW_LABEL) {
                     let _ = win.hide();
+                    // Done while hidden so the first frame the user sees is
+                    // already free of the compositor's own corner.
+                    platform::strip_system_chrome(&win);
                 }
                 updater::init(app.handle());
             }

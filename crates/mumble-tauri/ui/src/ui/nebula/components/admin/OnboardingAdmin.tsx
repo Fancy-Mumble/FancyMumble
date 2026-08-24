@@ -965,9 +965,10 @@ function MemberPreview({
   mappingsOf: (answer: OnboardingAnswer) => Mapping[];
   t: TFn;
 }>) {
-  const livery = useServerLivery();
   const sessions = useAppStore((state) => state.sessions);
   const activeServerId = useAppStore((state) => state.activeServerId);
+  // The tab this page is administering, never whichever server pushed last.
+  const livery = useServerLivery(activeServerId);
   const active = sessions.find((session) => session.id === activeServerId);
   const serverName = livery?.displayName || active?.label || active?.host || t("onboarding.admin.thisServer");
   const first = question?.answers[0] ?? null;

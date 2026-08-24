@@ -64,7 +64,8 @@ describe("resolveProfilePaint", () => {
     const withImage = paint({ banner: { image: "data:image/png;base64,AA" }, themeColors: ["#2b2420", "#211c24"] });
     expect(withImage.banner.backgroundImage).toBe("url(data:image/png;base64,AA)");
     expect(withImage.bannerScrim.background).toContain("transparent 45%");
-    expect(withImage.bannerChrome).toBe("rgba(0,0,0,.35)");
+    // A photograph is not read for colour, so its chrome is simply dark enough.
+    expect(withImage.bannerChrome).toBe("rgba(0,0,0,.45)");
     expect(paint(null).bannerScrim.background).toContain("radial-gradient");
   });
 

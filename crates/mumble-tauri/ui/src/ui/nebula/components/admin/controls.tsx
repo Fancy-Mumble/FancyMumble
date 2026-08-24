@@ -10,22 +10,29 @@ import { radius } from "../../tokens";
  * The ACL editor, the audit viewer and the file-server dashboard are tables
  * whose columns carry the meaning, and squeezing them into a 640px measure
  * turns every row into three wrapped lines.
+ *
+ * `maxWidth` is for the pages in between: a form beside a preview is neither a
+ * single reading column nor a table, and it needs the title and the toolbar
+ * bounded with the content, so the save button stays over the column it saves
+ * rather than drifting to the far edge of a wide window.
  */
 export function AdminPage({
   title,
   hint,
   toolbar,
   wide,
+  maxWidth,
   children,
 }: Readonly<{
   title: string;
   hint?: string;
   toolbar?: ReactNode;
   wide?: boolean;
+  maxWidth?: number;
   children: ReactNode;
 }>) {
   return (
-    <Box sx={{ maxWidth: wide ? "none" : 760 }}>
+    <Box sx={{ maxWidth: maxWidth ?? (wide ? "none" : 760) }}>
       <Stack
         direction="row"
         alignItems="flex-start"

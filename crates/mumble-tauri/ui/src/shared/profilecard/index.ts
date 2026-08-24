@@ -50,7 +50,21 @@ export {
 } from "./placement";
 export { userTint, hueFromKey, type UserTint } from "./tint";
 export { parseComment, serializeProfile } from "./profileFormat";
-export { buildGradient, over, resolveThemePalette, textColorForBg, withAlpha } from "./color";
+export {
+  READABLE_LC,
+  buildGradient,
+  colorsIn,
+  contrastLc,
+  inkForStops,
+  over,
+  readableAlpha,
+  readableOn,
+  readableStops,
+  resolveThemePalette,
+  textColorForBg,
+  textColorForGradient,
+  withAlpha,
+} from "./color";
 export type { FancyProfile, ProfileSections } from "./profileTypes";
 export { AVATAR_BORDERS, DECORATIONS, EFFECTS, FONTS, NAMEPLATES } from "./catalog";
 export {

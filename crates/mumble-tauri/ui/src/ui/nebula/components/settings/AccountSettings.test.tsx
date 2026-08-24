@@ -20,7 +20,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 import { useAccountStore } from "@core/features/settings/accountStore";
-import type { AccountSettings as Snapshot } from "@core/types";
+import { ACCOUNT_ACTION_IDS, type AccountSettings as Snapshot } from "@core/types";
 import { withNebulaTheme } from "../../testTheme";
 import { AccountSettings } from "./AccountSettings";
 
@@ -153,5 +153,47 @@ describe("AccountSettings", () => {
     fireEvent.change(screen.getByLabelText("New password"), { target: { value: "hunter2hunter2" } });
     fireEvent.change(screen.getByLabelText("Repeat password"), { target: { value: "hunter2hunter2" } });
     expect(screen.getByRole("button", { name: /enable password/i })).toHaveProperty("disabled", false);
+  });
+  describe("2FA enrolment", () => {
+    const SECRET = "JBSWY3DPEHPK3PXP";
+    const URI = `otpauth://totp/Fancy:ada?secret=${SECRET}&issuer=Fancy`;
+
+    async function enrol(uri: string | null = URI) {
+      await renderPage();
+      act(() =>
+        useAccountStore.getState().handleAck({
+          action: ACCOUNT_ACTION_IDS.totp_begin,
+          ok: true,
+          totp_secret: SECRET,
+          totp_uri: uri,
+        }),
+      );
+      await screen.findByLabelText("6-digit code");
+    }
+
+    it("shows a QR code and keeps the secret off the screen", async () => {
+      await enrol();
+      expect(screen.getByRole("img", { name: /authenticator/i })).toBeTruthy();
+      // Neither the key nor the link is anywhere a glance - or a screenshot -
+      // would pick it up; scanning is the whole path.
+      expect(screen.queryByDisplayValue(SECRET)).toBeNull();
+      expect(screen.queryByDisplayValue(URI)).toBeNull();
+    });
+
+    it("hands out the setup link, then the bare key, one request at a time", async () => {
+      await enrol();
+      fireEvent.click(screen.getByRole("button", { name: /can't scan/i }));
+      expect(screen.getByDisplayValue(URI)).toBeTruthy();
+      expect(screen.queryByDisplayValue(SECRET)).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: /by hand/i }));
+      expect(screen.getByDisplayValue(SECRET)).toBeTruthy();
+    });
+
+    it("falls back to the bare key when the server sends nothing to scan", async () => {
+      await enrol(null);
+      expect(screen.queryByRole("img", { name: /authenticator/i })).toBeNull();
+      expect(screen.getByDisplayValue(SECRET)).toBeTruthy();
+    });
   });
 });

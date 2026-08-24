@@ -30,6 +30,9 @@ export const TID = {
   connectAndSave: "connect-and-save",
   /** Final wizard action: connect without saving. */
   quickConnect: "quick-connect",
+  /** The dot on the address chip reporting where this page's livery came from.
+   *  Its `data-livery-status` carries the exact state. */
+  connectLiveryStatus: "connect-livery-status",
 
   // -- Saved-server list ----------------------------------------------------
   /** One card per saved server; carries `data-server-id`. */
@@ -287,6 +290,14 @@ export const TID = {
   accountEmailSave: "account-email-save",
   /** Starts TOTP enrolment (server replies with the shared secret). */
   accountTotpBegin: "account-totp-begin",
+  /** The QR code of the otpauth:// URI - the happy path of enrolment. */
+  accountTotpQr: "account-totp-qr",
+  /** "Can't scan?" - reveals the otpauth:// setup link as the first fallback. */
+  accountTotpCantScan: "account-totp-cant-scan",
+  /** Read-only input holding the otpauth:// setup link (behind "can't scan"). */
+  accountTotpUri: "account-totp-uri",
+  /** Reveals the bare base32 secret, the last resort behind the setup link. */
+  accountTotpRevealSecret: "account-totp-reveal-secret",
   /** Read-only input holding the base32 TOTP secret during enrolment. */
   accountTotpSecret: "account-totp-secret",
   /** 6-digit code input during enrolment. */

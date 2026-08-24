@@ -2732,3 +2732,76 @@ fn check_emit_under_lock(path: &std::path::Path, contents: &str, violations: &mu
         }
     }
 }
+
+// -- livery pushes -------------------------------------------------
+
+/// A server pushing a livery change sends the document without the artwork:
+/// most edits change a word, and sending both images every time is what the
+/// content keys exist to avoid. The client's half of that bargain is asking
+/// for a key it does not hold - without it, an operator replacing the banner
+/// repaints every connected client with no banner until it reconnects.
+mod livery_art {
+    use super::*;
+
+    fn doc(banner_key: &str) -> fancy::domain::LiveryDoc {
+        fancy::domain::LiveryDoc {
+            version: 3,
+            banner_key: banner_key.to_owned(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_pushed_key_the_client_does_not_hold_is_asked_for() {
+        let (ctx, _emitter) = make_ctx();
+        doc("beef").handle(&ctx);
+
+        let state = ctx.shared.lock().unwrap();
+        assert!(state.livery_art_asked.contains("beef"));
+        // The document still arrives at the UI: the words and colours in it are
+        // ready now, and the artwork lands as a second push.
+        assert_eq!(state.livery.as_ref().unwrap().banner_key.as_deref(), Some("beef"));
+        assert!(state.livery.as_ref().unwrap().banner_src.is_none());
+    }
+
+    #[test]
+    fn art_that_arrives_is_cached_and_not_asked_for_again() {
+        let (ctx, _emitter) = make_ctx();
+        let mut with_art = doc("beef");
+        with_art.art = vec![fancy::domain::livery_doc::Art {
+            key: "beef".to_owned(),
+            content_type: "image/webp".to_owned(),
+            bytes: vec![1, 2, 3],
+        }];
+        with_art.handle(&ctx);
+
+        let state = ctx.shared.lock().unwrap();
+        assert!(state.livery_art_asked.is_empty());
+        assert!(state.livery.as_ref().unwrap().banner_src.is_some());
+    }
+
+    #[test]
+    fn a_key_the_server_never_produces_is_asked_about_once() {
+        // A second ask on every reply would be a loop between two machines,
+        // which is the failure mode worth a set rather than a flag.
+        let (ctx, _emitter) = make_ctx();
+        doc("beef").handle(&ctx);
+        doc("beef").handle(&ctx);
+
+        let state = ctx.shared.lock().unwrap();
+        assert_eq!(state.livery_art_asked.len(), 1);
+    }
+
+    #[test]
+    fn replacing_the_picture_asks_again_because_the_key_is_new() {
+        let (ctx, _emitter) = make_ctx();
+        doc("beef").handle(&ctx);
+        doc("cafe").handle(&ctx);
+
+        let state = ctx.shared.lock().unwrap();
+        // The old key is gone with the document that named it, so nothing
+        // accumulates for the life of the session.
+        assert!(!state.livery_art_asked.contains("beef"));
+        assert!(state.livery_art_asked.contains("cafe"));
+    }
+}

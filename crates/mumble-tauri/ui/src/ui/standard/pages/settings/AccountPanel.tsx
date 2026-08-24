@@ -16,6 +16,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useAccountStore } from "@core/features/settings/accountStore";
 import { ACCOUNT_ACTION_IDS, type AccountAck, type AccountSettingsEvent } from "@core/types";
 import { TID } from "@core/testids";
+import { QrCode } from "@ui/QrCode";
 import styles from "./SettingsPage.module.css";
 import { registerSettings } from "@core/features/settings/settingsSearchRegistry";
 import { TextField } from "../../components/elements/TextField";
@@ -67,6 +68,9 @@ export function AccountPanel() {
   const [unregisterConfirm, setUnregisterConfirm] = useState("");
   const [showUnregister, setShowUnregister] = useState(false);
   const [copied, setCopied] = useState<"secret" | "uri" | null>(null);
+  // The QR code is the happy path; the otpauth:// link and then the bare key
+  // are each one step worse and each shown only on request, behind the last.
+  const [totpFallback, setTotpFallback] = useState<"qr" | "link" | "secret">("qr");
 
   useEffect(() => {
     void load();
@@ -91,6 +95,7 @@ export function AccountPanel() {
     // The proof is one-shot on purpose: leaving it in the field is leaving the
     // account's password on screen for as long as the page stays open.
     if (lastSuccessAction !== null) setCurrentPassword("");
+    if (lastSuccessAction === ACCOUNT_ACTION_IDS.totp_begin) setTotpFallback("qr");
     if (lastSuccessAction === ACCOUNT_ACTION_IDS.totp_verify) setTotpCode("");
     if (lastSuccessAction === ACCOUNT_ACTION_IDS.totp_disable) setTotpDisableCode("");
     if (lastSuccessAction === ACCOUNT_ACTION_IDS.unregister) {
@@ -274,26 +279,28 @@ export function AccountPanel() {
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>{t("account.rename.title")}</h3>
         <p className={styles.fieldHint}>{t("account.rename.hint")}</p>
-        <TextField
-          className={styles.field}
-          data-testid={TID.accountRenameInput}
-          inputClassName={styles.input}
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder={snapshot.name ?? ""}
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-        />
-        <button
-          type="button"
-          data-testid={TID.accountRenameSave}
-          className={styles.applyBtn}
-          disabled={blocked || !newName.trim() || newName.trim() === snapshot.name}
-          onClick={() => prove("rename", newName.trim())}
-        >
-          {t("account.rename.apply")}
-        </button>
+        <div className={styles.actionRow}>
+          <TextField
+            className={styles.field}
+            data-testid={TID.accountRenameInput}
+            inputClassName={styles.input}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder={snapshot.name ?? ""}
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <button
+            type="button"
+            data-testid={TID.accountRenameSave}
+            className={styles.applyBtn}
+            disabled={blocked || !newName.trim() || newName.trim() === snapshot.name}
+            onClick={() => prove("rename", newName.trim())}
+          >
+            {t("account.rename.apply")}
+          </button>
+        </div>
         {feedbackFor("rename")}
       </section>
 
@@ -305,27 +312,29 @@ export function AccountPanel() {
           <span>{t("account.email.warning")}</span>
           <p>{t("account.email.warningPara")}</p>
         </div>
-        <TextField
-          className={styles.field}
-          data-testid={TID.accountEmailInput}
-          inputClassName={styles.input}
-          type="email"
-          value={email ?? snapshot.email ?? ""}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder={t("account.email.placeholder")}
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-        />
-        <button
-          type="button"
-          data-testid={TID.accountEmailSave}
-          className={styles.applyBtn}
-          disabled={blocked || email === null || email === (snapshot.email ?? "")}
-          onClick={() => prove("set_email", (email ?? "").trim())}
-        >
-          {t("account.email.apply")}
-        </button>
+        <div className={styles.actionRow}>
+          <TextField
+            className={styles.field}
+            data-testid={TID.accountEmailInput}
+            inputClassName={styles.input}
+            type="email"
+            value={email ?? snapshot.email ?? ""}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={t("account.email.placeholder")}
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <button
+            type="button"
+            data-testid={TID.accountEmailSave}
+            className={styles.applyBtn}
+            disabled={blocked || email === null || email === (snapshot.email ?? "")}
+            onClick={() => prove("set_email", (email ?? "").trim())}
+          >
+            {t("account.email.apply")}
+          </button>
+        </div>
         {feedbackFor("set_email")}
       </section>
 
@@ -360,71 +369,108 @@ export function AccountPanel() {
           </>
         ) : totpEnroll ? (
           <>
-            <p className={styles.fieldHint}>{t("account.totp.enrollHint")}</p>
-            <div className={styles.field}>
-              <label className={styles.fieldLabel}>{t("account.totp.secretLabel")}</label>
-              <div className={styles.fieldRow}>
-                <input
-                  data-testid={TID.accountTotpSecret}
-                  className={styles.input}
-                  type="text"
-                  readOnly
-                  value={totpEnroll.secret}
-                  onFocus={(e) => e.target.select()}
+            <p className={styles.fieldHint}>
+              {totpEnroll.uri ? t("account.totp.enrollHint") : t("account.totp.secretHint")}
+            </p>
+            <div className={styles.enrolCard}>
+              {totpEnroll.uri ? (
+                <div className={styles.qrCenter}>
+                  <div className={styles.qrFrame}>
+                    <QrCode value={totpEnroll.uri} label={t("account.totp.qrLabel")} testId={TID.accountTotpQr} />
+                  </div>
+                </div>
+              ) : (
+                // A server that sends no provisioning URI leaves nothing to
+                // scan; the key is the only way in and takes the front seat.
+                <TotpSecretField
+                  secret={totpEnroll.secret}
+                  copied={copied === "secret"}
+                  onCopy={() => copy("secret", totpEnroll.secret)}
                 />
-                <button
-                  type="button"
-                  className={styles.ghostBtn}
-                  onClick={() => copy("secret", totpEnroll.secret)}
-                >
-                  {copied === "secret" ? t("account.copied") : t("account.copy")}
-                </button>
-              </div>
-              <p className={styles.fieldHint}>{t("account.totp.secretHint")}</p>
-            </div>
-            {totpEnroll.uri && (
+              )}
               <div className={styles.field}>
-                <label className={styles.fieldLabel}>{t("account.totp.uriLabel")}</label>
-                <div className={styles.fieldRow}>
+                <label className={styles.fieldLabel} htmlFor="account-totp-code">
+                  {t("account.totp.codeLabel")}
+                </label>
+                <div className={styles.actionRow}>
                   <input
+                    id="account-totp-code"
+                    data-testid={TID.accountTotpCodeInput}
                     className={styles.input}
                     type="text"
-                    readOnly
-                    value={totpEnroll.uri}
-                    onFocus={(e) => e.target.select()}
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={totpCode}
+                    onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
+                    placeholder="123456"
                   />
                   <button
                     type="button"
-                    className={styles.ghostBtn}
-                    onClick={() => copy("uri", totpEnroll.uri)}
+                    data-testid={TID.accountTotpVerify}
+                    className={styles.applyBtn}
+                    disabled={blocked || totpCode.length !== 6}
+                    onClick={() => prove("totp_verify", totpCode)}
                   >
-                    {copied === "uri" ? t("account.copied") : t("account.copy")}
+                    {t("account.totp.verify")}
                   </button>
                 </div>
               </div>
-            )}
-            <TextField
-              className={styles.field}
-              label={t("account.totp.codeLabel")}
-              id="account-totp-code"
-              data-testid={TID.accountTotpCodeInput}
-              inputClassName={styles.input}
-              inputMode="numeric"
-              maxLength={6}
-              value={totpCode}
-              onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
-              placeholder="123456"
-            />
-            <button
-              type="button"
-              data-testid={TID.accountTotpVerify}
-              className={styles.applyBtn}
-              disabled={blocked || totpCode.length !== 6}
-              onClick={() => prove("totp_verify", totpCode)}
-            >
-              {t("account.totp.verify")}
-            </button>
-            {feedbackFor("totp_verify")}
+              {feedbackFor("totp_verify")}
+              {totpEnroll.uri && (
+                <div className={styles.enrolFooter}>
+                  {totpFallback === "qr" ? (
+                    <button
+                      type="button"
+                      className={styles.linkBtn}
+                      data-testid={TID.accountTotpCantScan}
+                      onClick={() => setTotpFallback("link")}
+                    >
+                      {t("account.totp.cantScan")}
+                    </button>
+                  ) : (
+                    <>
+                      <p className={styles.fieldHint}>{t("account.totp.linkHint")}</p>
+                      <div className={styles.field}>
+                        <label className={styles.fieldLabel}>{t("account.totp.uriLabel")}</label>
+                        <div className={styles.fieldRow}>
+                          <input
+                            data-testid={TID.accountTotpUri}
+                            className={styles.input}
+                            type="text"
+                            readOnly
+                            value={totpEnroll.uri}
+                            onFocus={(e) => e.target.select()}
+                          />
+                          <button
+                            type="button"
+                            className={styles.ghostBtn}
+                            onClick={() => copy("uri", totpEnroll.uri)}
+                          >
+                            {copied === "uri" ? t("account.copied") : t("account.copy")}
+                          </button>
+                        </div>
+                      </div>
+                      {totpFallback === "link" ? (
+                        <button
+                          type="button"
+                          className={styles.linkBtn}
+                          data-testid={TID.accountTotpRevealSecret}
+                          onClick={() => setTotpFallback("secret")}
+                        >
+                          {t("account.totp.revealSecret")}
+                        </button>
+                      ) : (
+                        <TotpSecretField
+                          secret={totpEnroll.secret}
+                          copied={copied === "secret"}
+                          onCopy={() => copy("secret", totpEnroll.secret)}
+                        />
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </>
         ) : (
           <>
@@ -507,3 +553,32 @@ export function AccountPanel() {
 }
 
 export default AccountPanel;
+
+/** The bare base32 key, read-only, for an authenticator that takes nothing else. */
+function TotpSecretField({
+  secret,
+  copied,
+  onCopy,
+}: Readonly<{ secret: string; copied: boolean; onCopy: () => void }>) {
+  const { t } = useTranslation("settings");
+  return (
+    <div className={styles.field}>
+      <label className={styles.fieldLabel}>{t("account.totp.secretLabel")}</label>
+      <div className={styles.fieldRow}>
+        <input
+          data-testid={TID.accountTotpSecret}
+          className={styles.input}
+          type="text"
+          readOnly
+          value={secret}
+          onFocus={(e) => e.target.select()}
+        />
+        <button type="button" className={styles.ghostBtn} onClick={onCopy}>
+          {copied ? t("account.copied") : t("account.copy")}
+        </button>
+      </div>
+      <p className={styles.fieldHint}>{t("account.totp.secretHint")}</p>
+    </div>
+  );
+}
+

@@ -39,7 +39,7 @@ import { placeBesideAnchor, type AnchorRect, type PlacementOptions } from "./pla
 import { RichText, isRichTextEmpty } from "./richText";
 import { userTint } from "./tint";
 import type { ProfileCardTokens } from "./tokens";
-import { withAlpha } from "./color";
+import { textColorForBg, withAlpha } from "./color";
 
 /** A button the host hangs off the card: local mute, edit profile, whatever. */
 export interface CardAction {
@@ -411,7 +411,7 @@ export function ProfileCard({
                   borderRadius: 20,
                   fontSize: 10.5,
                   fontWeight: 600,
-                  color: role.color ?? ink.text,
+                  color: role.color ? ink.readable(role.color) : ink.text,
                   background: role.color ? withAlpha(role.color, 0.18) : ink.fill,
                   border: `1px solid ${role.color ? withAlpha(role.color, 0.4) : ink.line}`,
                 }}
@@ -744,7 +744,7 @@ function Verified({ tone }: Readonly<{ tone: string }>) {
         alignItems: "center",
         justifyContent: "center",
         background: tone,
-        color: "#fff",
+        color: textColorForBg(tone),
         flex: "none",
       }}
     >
@@ -764,7 +764,7 @@ function Glyph({ glyph, size }: Readonly<{ glyph: BadgeGlyph; size: number }>) {
 }
 
 function BadgeChip({ badge, ink }: Readonly<{ badge: ProfileBadge; ink: ProfileInk }>) {
-  const tone = badge.tone ?? ink.accent;
+  const tone = badge.tone ? ink.readable(badge.tone) : ink.accent;
   return (
     <span
       title={badge.label}
@@ -858,7 +858,7 @@ function Thread({ ink }: Readonly<{ ink: ProfileInk }>) {
 }
 
 function ShelfNode({ badge, ink }: Readonly<{ badge: ProfileBadge; ink: ProfileInk }>) {
-  const tone = badge.tone ?? ink.muted;
+  const tone = badge.tone ? ink.readable(badge.tone) : ink.muted;
   const diamond = badge.shape === "diamond";
   return (
     <span
