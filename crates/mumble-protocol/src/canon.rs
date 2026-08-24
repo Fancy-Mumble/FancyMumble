@@ -1189,7 +1189,6 @@ fn preview_response(
             r#type: Some("link".to_owned()),
             ..Default::default()
         }],
-        ..Default::default()
     }
 }
 

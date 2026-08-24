@@ -126,6 +126,10 @@ pub fn describe_open_failure(name: &str, device: &cpal::Device, err: &str) -> St
 
 /// Holders recorded by the last [`describe_open_failure`] that found the
 /// device busy; consumed (cleared) by the capture-error reporter.
+///
+/// Linux-only, like the probe that fills it: elsewhere cpal reports the busy
+/// state directly and nothing ever writes here.
+#[cfg(target_os = "linux")]
 pub fn take_busy_holders() -> Vec<String> {
     busy_slot()
         .lock()
@@ -133,12 +137,14 @@ pub fn take_busy_holders() -> Vec<String> {
         .unwrap_or_default()
 }
 
+#[cfg(target_os = "linux")]
 fn remember_busy_holders(holders: Vec<String>) {
     if let Ok(mut s) = busy_slot().lock() {
         *s = holders;
     }
 }
 
+#[cfg(target_os = "linux")]
 fn busy_slot() -> &'static std::sync::Mutex<Vec<String>> {
     static SLOT: std::sync::OnceLock<std::sync::Mutex<Vec<String>>> = std::sync::OnceLock::new();
     SLOT.get_or_init(|| std::sync::Mutex::new(Vec::new()))
@@ -162,6 +168,10 @@ fn is_null_device(d: &cpal::Device) -> bool {
 
 struct Raw {
     name: String,
+    /// The ALSA/PipeWire PCM behind this device. Read only by `linux_alsa`,
+    /// which is where the plugin-variant collapsing lives, so it is not
+    /// carried on platforms that have no such thing to inspect.
+    #[cfg(target_os = "linux")]
     driver: Option<String>,
     device: cpal::Device,
     is_default: bool,
@@ -182,6 +192,7 @@ fn build(devices: Vec<cpal::Device>, default: Option<&cpal::Device>) -> Vec<Name
             };
             Some(Raw {
                 name,
+                #[cfg(target_os = "linux")]
                 driver: driver(&device),
                 device,
                 is_default,

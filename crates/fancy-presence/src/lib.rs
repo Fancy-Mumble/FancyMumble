@@ -74,6 +74,15 @@ pub mod slots;
 pub mod store;
 pub mod transport;
 
+// Every use of `tempfile` is inside a test that is itself `cfg(not(windows))` -
+// the ones that bind real sockets - so on Windows this crate links the
+// dev-dependency without ever naming it, and `unused_crate_dependencies` (a
+// workspace lint, denied in CI) fires on a target that builds there.
+#[cfg(all(test, windows))]
+mod _dev_deps {
+    use tempfile as _;
+}
+
 pub use protocol::{Activity, Assets, Button, Party, Timestamps};
 pub use service::{BridgeState, PresenceConfig, PresenceEvent, PresenceService};
 pub use store::{ConnectionId, PresenceEntry, PresenceStore};

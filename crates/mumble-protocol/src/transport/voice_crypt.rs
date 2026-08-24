@@ -13,9 +13,9 @@
 //! So this end does not re-derive the decision from the server's version. It
 //! reads the decision it was handed, from the shape of the material: OCB2 takes
 //! a 16-byte AES key, `XChaCha20-Poly1305` a 32-byte master secret. The material
-//! *is* the announcement, which is why there is no cipher identifier on the wire
-//! - an identifier would be a second source of truth about a decision already
-//! made, and could disagree with the bytes beside it.
+//! *is* the announcement, which is why there is no cipher identifier on the
+//! wire - an identifier would be a second source of truth about a decision
+//! already made, and could disagree with the bytes beside it.
 //!
 //! ## Why not the server's announced version
 //!

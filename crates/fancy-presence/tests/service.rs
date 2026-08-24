@@ -7,6 +7,19 @@
 //! serialise on [`TEST_LOCK`] because that environment variable and the slot
 //! numbers under it are process-wide.
 
+// This whole file is `cfg(unix)`, so on Windows it compiles to nothing and
+// every crate the test binary links is, truthfully, unnamed. The lint has no
+// way to see that and fires on a target CI does build (the matrix is ubuntu +
+// windows). Scoped to the platform where the file is empty rather than allowed
+// outright: on unix the `use ... as _` lines below still have to earn their
+// place.
+#![cfg_attr(
+    not(unix),
+    allow(
+        unused_crate_dependencies,
+        reason = "this file is cfg(unix); off it there is no code to name them"
+    )
+)]
 #![cfg(unix)]
 #![allow(
     clippy::expect_used,

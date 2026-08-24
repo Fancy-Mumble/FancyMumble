@@ -30,9 +30,10 @@ pub struct Version {
     ///                a service-owned envelope.
     ///
     /// A peer speaks exactly one epoch. When the other side does not know it,
-    /// the Fancy extensions are off and the connection degrades to plain Mumble
-    /// - plus anything relayable through PluginDataTransmission, which works
-    /// through any Mumble server and is therefore epoch-independent.
+    /// the Fancy extensions are off and the connection degrades to plain
+    /// Mumble - plus anything relayable through PluginDataTransmission, which
+    /// works through any Mumble server and is therefore epoch-independent.
+    ///
     /// 1000, not the next free number: Fancy fields start at 1000 so upstream can
     /// keep growing into 1-999 (see the same note in Starling's copy). And it
     /// must be *this* number in every copy of this file - it is read before any

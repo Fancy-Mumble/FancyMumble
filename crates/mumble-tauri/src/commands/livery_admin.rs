@@ -301,9 +301,9 @@ mod tests {
     #[tokio::test]
     #[ignore = "needs a live operator API; set LIVERY_API and LIVERY_TOKEN"]
     async fn livery_admin_round_trip() {
-        let (api, token) = match (std::env::var("LIVERY_API"), std::env::var("LIVERY_TOKEN")) {
-            (Ok(api), Ok(token)) => (api, token),
-            _ => panic!("set LIVERY_API and LIVERY_TOKEN"),
+        let (Ok(api), Ok(token)) = (std::env::var("LIVERY_API"), std::env::var("LIVERY_TOKEN"))
+        else {
+            panic!("set LIVERY_API and LIVERY_TOKEN")
         };
 
         let hello = livery_check(api.clone(), token.clone()).await.expect("reachable");
