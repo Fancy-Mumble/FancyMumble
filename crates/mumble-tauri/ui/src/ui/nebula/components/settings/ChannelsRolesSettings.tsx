@@ -43,10 +43,7 @@ export function ChannelsRolesSettings() {
     return map;
   }, [channels]);
 
-  const visibleChannels = useMemo(
-    () => [...computeVisibleChannels(config, response)],
-    [config, response],
-  );
+  const visibleChannels = useMemo(() => [...computeVisibleChannels(config, response)], [config, response]);
   const roleLabels = useMemo(() => computeRoleLabels(config, response), [config, response]);
 
   const heading = t("onboarding.channelsAndRoles.heading");

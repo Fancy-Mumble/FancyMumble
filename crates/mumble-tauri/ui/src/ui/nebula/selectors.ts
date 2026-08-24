@@ -9,13 +9,7 @@
  */
 import { hslToHex } from "@core/utils/colorUtils";
 import { hueFromKey } from "@shared/profilecard/tint";
-import type {
-  ChannelEntry,
-  ConnectionStatus,
-  SavedServer,
-  SearchResult,
-  UserEntry,
-} from "@core/types";
+import type { ChannelEntry, ConnectionStatus, SavedServer, SearchResult, UserEntry } from "@core/types";
 import {
   PERM_BAN,
   PERM_KICK,
@@ -344,11 +338,7 @@ export type MessageContent = {
   /** Ids of the messages this one is replying to, oldest marker first. */
   quoteIds: string[];
   html: string;
-} & (
-  | { kind: "text" }
-  | { kind: "poll"; pollId: string }
-  | { kind: "file"; payload: string }
-);
+} & ({ kind: "text" } | { kind: "poll"; pollId: string } | { kind: "file"; payload: string });
 
 const POLL_MARKER = /<!-- FANCY_POLL:(.+?) -->/;
 const FILE_MARKER = /<!-- FANCY_FILE:([A-Za-z0-9+/=]+) -->/;
@@ -921,9 +911,7 @@ function localRows(input: GlobalSearchInput): GlobalSearchRow[] {
   // The name is what the reader thinks they are typing, so it is scored first;
   // the detail line only carries the match for a server found by its address.
   const score = (target: QuickSwitchTarget) =>
-    substringScore(needle, target.label) ??
-    substringScore(needle, `${target.label} ${target.detail}`) ??
-    0;
+    substringScore(needle, target.label) ?? substringScore(needle, `${target.label} ${target.detail}`) ?? 0;
 
   // Unlimited deliberately: `quickSwitchTargets` truncates the combined list,
   // so its own cap would spend every slot on channels and leave a busy server

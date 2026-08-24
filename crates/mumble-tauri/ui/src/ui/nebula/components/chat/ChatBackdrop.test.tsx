@@ -27,14 +27,11 @@ vi.mock("@core/features/settings/chatBackground", () => ({
       : value.startsWith("bgstore:")
         ? (store.get(value.slice("bgstore:".length)) ?? null)
         : value,
-  useStoredBackgroundUrl: (name: string | null) =>
-    name === null ? null : (store.get(name) ?? null),
+  useStoredBackgroundUrl: (name: string | null) => (name === null ? null : (store.get(name) ?? null)),
 }));
 
 const { ChatBackdrop } = await import("./ChatBackdrop");
-const { PERSONALIZATION_DEFAULTS, savePersonalization } = await import(
-  "@standard/personalizationStorage"
-);
+const { PERSONALIZATION_DEFAULTS, savePersonalization } = await import("@standard/personalizationStorage");
 
 /** Seed a record and mount the backdrop over it. */
 async function mount(overrides: Record<string, unknown>) {
@@ -139,9 +136,7 @@ describe("Nebula animated chat background", () => {
       chatBgOriginal: "bgstore:image-poster.jpg",
     });
 
-    await waitFor(() =>
-      expect(query<HTMLImageElement>("img")?.getAttribute("src")).toBe("blob:poster"),
-    );
+    await waitFor(() => expect(query<HTMLImageElement>("img")?.getAttribute("src")).toBe("blob:poster"));
     expect(query("video")).toBeNull();
   });
 
@@ -160,9 +155,7 @@ describe("Nebula animated chat background", () => {
       chatBgOriginal: "bgstore:image-poster.jpg",
     });
 
-    await waitFor(() =>
-      expect(query<HTMLImageElement>("img")?.getAttribute("src")).toBe("blob:poster"),
-    );
+    await waitFor(() => expect(query<HTMLImageElement>("img")?.getAttribute("src")).toBe("blob:poster"));
     expect(query("video")).toBeNull();
   });
 });

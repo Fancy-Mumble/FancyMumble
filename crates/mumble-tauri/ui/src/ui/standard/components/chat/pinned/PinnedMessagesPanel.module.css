@@ -159,7 +159,9 @@
   font-size: 11px;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s, background 0.15s;
+  transition:
+    opacity 0.15s,
+    background 0.15s;
 }
 
 .unpinBtn:hover {

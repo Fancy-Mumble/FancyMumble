@@ -13,9 +13,7 @@ import type { FancyProfile, ProfileSections } from "./profileTypes";
 
 /** What is drawn inside a badge chip or on a shelf node. */
 export type BadgeGlyph =
-  | { kind: "icon"; name: BadgeGlyphName }
-  | { kind: "text"; text: string }
-  | { kind: "image"; src: string };
+  { kind: "icon"; name: BadgeGlyphName } | { kind: "text"; text: string } | { kind: "image"; src: string };
 
 /**
  * Where a badge came from.

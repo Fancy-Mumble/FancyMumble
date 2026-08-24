@@ -93,11 +93,7 @@ export async function readCachedLivery(host: string, port: number): Promise<Cach
  * nothing a later ping could check it against, and an entry that can never be
  * validated would either be drawn on faith or never drawn at all.
  */
-export async function writeCachedLivery(
-  host: string,
-  port: number,
-  livery: ServerLivery,
-): Promise<void> {
+export async function writeCachedLivery(host: string, port: number, livery: ServerLivery): Promise<void> {
   if (!inWebview() || !livery.digest) return;
   const entry: CachedLivery = { digest: livery.digest, livery, savedAt: Date.now() };
   if (JSON.stringify(entry).length > MAX_ENTRY_CHARS) return;

@@ -25,7 +25,9 @@
   opacity: 0;
   pointer-events: none;
   border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-  transition: width 0.15s, opacity 0.15s;
+  transition:
+    width 0.15s,
+    opacity 0.15s;
 }
 
 .reorderWrapper:hover .dragHandle {

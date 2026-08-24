@@ -216,9 +216,7 @@ export function GlobalSearch({
           return (
             <Box key={row.key}>
               {heading && (
-                <SectionLabel
-                  sx={(theme) => ({ p: "6px 10px 4px", color: theme.palette.nebula.dim })}
-                >
+                <SectionLabel sx={(theme) => ({ p: "6px 10px 4px", color: theme.palette.nebula.dim })}>
                   {heading}
                 </SectionLabel>
               )}
@@ -301,10 +299,7 @@ function SearchRow({ row, query, active, index, onActivate, onRun }: Readonly<Se
         >
           <Highlighted text={row.title} query={matchesInSubtitle ? "" : query} />
           {row.context && (
-            <Box
-              component="span"
-              sx={(theme) => ({ fontWeight: 400, color: theme.palette.nebula.dim })}
-            >
+            <Box component="span" sx={(theme) => ({ fontWeight: 400, color: theme.palette.nebula.dim })}>
               {" "}
               {row.context}
             </Box>

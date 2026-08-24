@@ -15,7 +15,10 @@
   border: 1px solid var(--color-glass-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
 }
 
 .bulkBtn:hover:not(:disabled) {
@@ -62,7 +65,10 @@
   background: var(--color-glass-border);
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .previewBtn:hover:not(:disabled) {

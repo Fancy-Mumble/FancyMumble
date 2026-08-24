@@ -138,9 +138,7 @@ export default function RichPresencePanel() {
                 <Artwork entry={entry} />
                 <div className={styles.body}>
                   <span className={styles.appName}>{entry.displayName}</span>
-                  {entry.activity.details && (
-                    <span className={styles.details}>{entry.activity.details}</span>
-                  )}
+                  {entry.activity.details && <span className={styles.details}>{entry.activity.details}</span>}
                   {entry.activity.state && <span className={styles.state}>{entry.activity.state}</span>}
                   {(party ?? timer) && (
                     <span className={styles.meta}>{[party, timer].filter(Boolean).join(" · ")}</span>

@@ -6,9 +6,7 @@ import { RichTextField } from "./RichTextField";
 function field(props: Partial<React.ComponentProps<typeof RichTextField>> = {}) {
   const onChange = vi.fn();
   const view = render(
-    withNebulaTheme(
-      <RichTextField ariaLabel="About you" value="" onChange={onChange} {...props} />,
-    ),
+    withNebulaTheme(<RichTextField ariaLabel="About you" value="" onChange={onChange} {...props} />),
   );
   return { onChange, view, box: screen.getByLabelText(props.ariaLabel ?? "About you") };
 }
@@ -30,7 +28,6 @@ describe("RichTextField", () => {
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     expect(onChange.mock.calls.at(-1)?.[0]).toBe("<p><strong>bass</strong></p>");
   });
-
 
   it("carries only the tools it was given", () => {
     field({ tools: ["bold", "image"] });

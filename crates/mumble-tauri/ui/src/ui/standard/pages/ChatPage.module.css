@@ -182,7 +182,10 @@
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 4px 16px var(--color-accent-glow);
-  transition: opacity 0.2s, transform 0.1s, box-shadow 0.2s;
+  transition:
+    opacity 0.2s,
+    transform 0.1s,
+    box-shadow 0.2s;
 }
 
 .reconnectBtn:disabled {
@@ -224,7 +227,9 @@
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
 }
 
 .menuToggle:hover {

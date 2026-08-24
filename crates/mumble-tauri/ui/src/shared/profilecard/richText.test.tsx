@@ -23,13 +23,8 @@ describe("parseRichText", () => {
   });
 
   it("folds the tags other clients write onto the same marks", () => {
-    const nodes = parseRichText("<b>a</b><i>b</i><del>c</del><font color=\"red\">d</font>");
-    expect(nodes.map((node) => node.kind === "element" && node.tag)).toEqual([
-      "strong",
-      "em",
-      "s",
-      "span",
-    ]);
+    const nodes = parseRichText('<b>a</b><i>b</i><del>c</del><font color="red">d</font>');
+    expect(nodes.map((node) => node.kind === "element" && node.tag)).toEqual(["strong", "em", "s", "span"]);
     expect(nodes.at(-1)).toMatchObject({ color: "red" });
   });
 
@@ -45,7 +40,7 @@ describe("parseRichText", () => {
   });
 
   it("flattens a status onto one line and takes no pictures", () => {
-    const nodes = parseRichText("<p>one</p><p>two</p><img src=\"data:image/png;base64,AA\">", true);
+    const nodes = parseRichText('<p>one</p><p>two</p><img src="data:image/png;base64,AA">', true);
     expect(nodes.every((node) => node.kind !== "image")).toBe(true);
     expect(richTextToPlain("<p>one</p><p>two</p>")).toBe("one two");
   });
@@ -113,7 +108,11 @@ describe("RichText", () => {
 
   it("takes a colour only when the whole value is one", () => {
     const { container } = render(
-      <RichText html={'<span style="color:url(javascript:steal());background:red">a</span><span style="color:#0f0">b</span>'} />,
+      <RichText
+        html={
+          '<span style="color:url(javascript:steal());background:red">a</span><span style="color:#0f0">b</span>'
+        }
+      />,
     );
     const spans = container.querySelectorAll("span");
     expect(spans[0].getAttribute("style")).toBeNull();

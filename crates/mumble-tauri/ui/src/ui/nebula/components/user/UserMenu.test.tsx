@@ -2,12 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@core/store";
 import type { ChannelEntry, UserEntry } from "@core/types";
-import {
-  PERM_DELETE_MESSAGE,
-  PERM_MOVE,
-  PERM_MUTE_DEAFEN,
-  PERM_REGISTER,
-} from "@core/utils/permissions";
+import { PERM_DELETE_MESSAGE, PERM_MOVE, PERM_MUTE_DEAFEN, PERM_REGISTER } from "@core/utils/permissions";
 import { withNebulaTheme } from "../../testTheme";
 import { UserMenu } from "./UserMenu";
 
@@ -38,7 +33,15 @@ const TARGET: UserEntry = {
 } as UserEntry;
 
 const channel = (id: number, name: string, permissions: number | null): ChannelEntry =>
-  ({ id, name, parent_id: 0, position: 0, user_count: 1, permissions, attributes: 0 }) as unknown as ChannelEntry;
+  ({
+    id,
+    name,
+    parent_id: 0,
+    position: 0,
+    user_count: 1,
+    permissions,
+    attributes: 0,
+  }) as unknown as ChannelEntry;
 
 function open(
   user: Partial<UserEntry> = {},
@@ -221,10 +224,7 @@ describe("UserMenu", () => {
     fireEvent.change(slider, { target: { value: "40" } });
     fireEvent.keyDown(slider, { key: "ArrowRight" });
     fireEvent.keyUp(slider, { key: "ArrowRight" });
-    expect(invokeMock).toHaveBeenCalledWith(
-      "set_user_volume",
-      expect.objectContaining({ session: 7 }),
-    );
+    expect(invokeMock).toHaveBeenCalledWith("set_user_volume", expect.objectContaining({ session: 7 }));
   });
 
   it("drops Message when the host has nowhere to open a conversation", () => {

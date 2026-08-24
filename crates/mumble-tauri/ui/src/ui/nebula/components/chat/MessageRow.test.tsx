@@ -22,9 +22,7 @@ function message(partial: Partial<ChatMessage> = {}): ChatMessage {
 
 function draw(msg: ChatMessage, props: Partial<Parameters<typeof MessageRow>[0]> = {}) {
   return render(
-    withNebulaTheme(
-      <MessageRow message={msg} grouped={false} onOpenProfile={() => {}} {...props} />,
-    ),
+    withNebulaTheme(<MessageRow message={msg} grouped={false} onOpenProfile={() => {}} {...props} />),
   );
 }
 

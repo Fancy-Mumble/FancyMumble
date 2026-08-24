@@ -48,7 +48,9 @@
   z-index: 10;
   -webkit-app-region: no-drag;
   app-region: no-drag;
-  transition: background-color 120ms, color 120ms;
+  transition:
+    background-color 120ms,
+    color 120ms;
 }
 
 .closeBtn:hover:not(:disabled) {
@@ -160,8 +162,12 @@
 }
 
 @keyframes slide {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(285%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(285%);
+  }
 }
 
 .progressLabel {
@@ -202,7 +208,9 @@
   text-underline-offset: 3px;
   -webkit-app-region: no-drag;
   app-region: no-drag;
-  transition: color 120ms, text-decoration-color 120ms;
+  transition:
+    color 120ms,
+    text-decoration-color 120ms;
 }
 
 .skipLink:hover {
@@ -223,7 +231,9 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 120ms, transform 80ms;
+  transition:
+    background-color 120ms,
+    transform 80ms;
 }
 
 .btn:disabled {

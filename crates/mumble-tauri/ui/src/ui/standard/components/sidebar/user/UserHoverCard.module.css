@@ -12,7 +12,9 @@
   text-align: left;
   max-width: 100%;
 }
-.trigger:hover .name { text-decoration: underline; }
+.trigger:hover .name {
+  text-decoration: underline;
+}
 
 .default {
   display: inline-flex;

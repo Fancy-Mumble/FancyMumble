@@ -117,9 +117,7 @@ function PluginCard({ row }: Readonly<{ row: PluginRow }>) {
             {isOfficialPlugin(row.entry.pluginName) && <OfficialBadge />}
           </Stack>
           {info.description && (
-            <Typography
-              sx={(theme) => ({ mt: "4px", fontSize: 11.5, color: theme.palette.nebula.muted })}
-            >
+            <Typography sx={(theme) => ({ mt: "4px", fontSize: 11.5, color: theme.palette.nebula.muted })}>
               {info.description}
             </Typography>
           )}
@@ -205,11 +203,7 @@ function PluginCard({ row }: Readonly<{ row: PluginRow }>) {
               >
                 {t("plugins.allowForServer")}
               </Button>
-              <Menu
-                anchorEl={allowAnchor}
-                open={allowAnchor !== null}
-                onClose={() => setAllowAnchor(null)}
-              >
+              <Menu anchorEl={allowAnchor} open={allowAnchor !== null} onClose={() => setAllowAnchor(null)}>
                 {ALLOW_SCOPES.map(({ scope, labelKey, hintKey }) => (
                   <MenuItem key={labelKey} onClick={() => allow(scope)} sx={{ display: "block" }}>
                     <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{t(labelKey)}</Typography>

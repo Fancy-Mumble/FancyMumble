@@ -270,7 +270,9 @@ export function ServerSettingsAdmin() {
       toolbar={
         <>
           {!error && savedAt > 0 && changed.length === 0 && (
-            <Typography sx={(theme) => ({ alignSelf: "center", fontSize: 11, color: theme.palette.nebula.ok })}>
+            <Typography
+              sx={(theme) => ({ alignSelf: "center", fontSize: 11, color: theme.palette.nebula.ok })}
+            >
               {t("serverSettings.saved", { defaultValue: "Saved" })}
             </Typography>
           )}

@@ -88,10 +88,4 @@ export async function migrateProfilesToIdentities(identities: string[]): Promise
 // The cosmetic catalogues live in the shared profile-card package, which the
 // channel viewer also paints from. Re-exported here so existing importers -
 // and the Standard settings editor - keep one import path.
-export {
-  AVATAR_BORDERS,
-  DECORATIONS,
-  EFFECTS,
-  FONTS,
-  NAMEPLATES,
-} from "@shared/profilecard/catalog";
+export { AVATAR_BORDERS, DECORATIONS, EFFECTS, FONTS, NAMEPLATES } from "@shared/profilecard/catalog";

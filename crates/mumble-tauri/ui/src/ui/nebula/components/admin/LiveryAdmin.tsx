@@ -229,18 +229,15 @@ export function LiveryAdmin() {
     if (!("__TAURI_INTERNALS__" in globalThis)) return;
     let cancelled = false;
     let unlisten: (() => void) | null = null;
-    void listen<{ livery: LiverySnapshot | null; serverId?: string | null }>(
-      "server-livery",
-      (event) => {
-        if (cancelled) return;
-        // Only the server this page administers. Every session pushes on the
-        // one event name, so an unfiltered listener lets a background server's
-        // document overwrite the editor the operator is typing into.
-        const from = event.payload.serverId ?? null;
-        if (from && from !== useAppStore.getState().activeServerId) return;
-        adopt(event.payload.livery, false);
-      },
-    )
+    void listen<{ livery: LiverySnapshot | null; serverId?: string | null }>("server-livery", (event) => {
+      if (cancelled) return;
+      // Only the server this page administers. Every session pushes on the
+      // one event name, so an unfiltered listener lets a background server's
+      // document overwrite the editor the operator is typing into.
+      const from = event.payload.serverId ?? null;
+      if (from && from !== useAppStore.getState().activeServerId) return;
+      adopt(event.payload.livery, false);
+    })
       .then((stop) => {
         if (cancelled) stop();
         else unlisten = stop;

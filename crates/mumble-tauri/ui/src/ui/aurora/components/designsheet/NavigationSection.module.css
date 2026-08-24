@@ -3,7 +3,9 @@
 .menuDemo kbd {
   margin-left: auto;
   color: #707887;
-  font: 8px ui-monospace, monospace;
+  font:
+    8px ui-monospace,
+    monospace;
 }
 
 .workspaceDemo {
@@ -106,7 +108,7 @@
   justify-content: space-between;
   padding: 0 6px 6px;
   color: #646c79;
-  letter-spacing: .07em;
+  letter-spacing: 0.07em;
   font-size: var(--type-caption);
 }
 

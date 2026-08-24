@@ -21,7 +21,10 @@
   border: 1px solid var(--color-glass-border);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s,
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    box-shadow 0.2s,
     transform 0.1s;
   position: relative;
 }
@@ -94,8 +97,13 @@
 }
 
 @keyframes pingPulse {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* --- Text block ------------------------------------------------- */
@@ -174,7 +182,9 @@
   justify-content: center;
   cursor: pointer;
   font-size: 10px;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
 }
 
 .deleteBtn:hover {
@@ -194,7 +204,9 @@
   justify-content: center;
   cursor: pointer;
   font-size: 11px;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
 }
 
 .editBtn:hover {
@@ -244,7 +256,9 @@
   justify-content: center;
   cursor: pointer;
   font-size: 11px;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
   line-height: 1;
 }
 
@@ -300,7 +314,9 @@
   font-size: 13px;
   font-family: inherit;
   outline: none;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
   box-sizing: border-box;
 }
 
@@ -439,6 +455,10 @@
 }
 
 @keyframes slide {
-  0%   { left: -40%; }
-  100% { left: 100%; }
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 100%;
+  }
 }

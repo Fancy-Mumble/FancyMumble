@@ -81,9 +81,7 @@ export function VoiceSettings() {
   // The backend is asked which denoisers this build actually carries:
   // DeepFilterNet is an optional feature, and a pill that selects an absent
   // algorithm would silently leave the previous one running.
-  const [availableAlgorithms, setAvailableAlgorithms] = useState<NoiseSuppressionAlgorithm[] | null>(
-    null,
-  );
+  const [availableAlgorithms, setAvailableAlgorithms] = useState<NoiseSuppressionAlgorithm[] | null>(null);
   // `null` while unknown, so the Expert switch is not drawn in the wrong
   // position for a frame before the backend answers.
   const [useRodio, setUseRodio] = useState<boolean | null>(null);
@@ -192,9 +190,7 @@ export function VoiceSettings() {
                 : "You are neither transmitting nor receiving while voice is off."
             }
             onClick={() =>
-              void (running
-                ? useAppStore.getState().disableVoice()
-                : useAppStore.getState().enableVoice())
+              void (running ? useAppStore.getState().disableVoice() : useAppStore.getState().enableVoice())
             }
           >
             {running ? "Turn voice off" : "Turn voice on"}

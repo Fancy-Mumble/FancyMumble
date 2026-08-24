@@ -548,9 +548,7 @@ describe("globalSearchRows", () => {
       ...input,
       channels: [channel({ id: 1, name: "latest testing protocols" })],
       query: "test",
-      results: [
-        { ...messageResult({ sender_name: "enot", sender_session: 8 }), title: "test", score: 0 },
-      ],
+      results: [{ ...messageResult({ sender_name: "enot", sender_session: 8 }), title: "test", score: 0 }],
     });
     expect(rows[0]).toMatchObject({ kind: "message", subtitle: "test" });
     expect(rows.some((row) => row.kind === "channel")).toBe(true);
@@ -559,10 +557,7 @@ describe("globalSearchRows", () => {
   it("ranks inside a group by the match as well", () => {
     const rows = globalSearchRows({
       ...input,
-      channels: [
-        channel({ id: 1, name: "Gaming and other pastimes" }),
-        channel({ id: 2, name: "Gaming" }),
-      ],
+      channels: [channel({ id: 1, name: "Gaming and other pastimes" }), channel({ id: 2, name: "Gaming" })],
       query: "Gaming",
     });
     expect(rows.filter((row) => row.kind === "channel").map((row) => row.title)).toEqual([

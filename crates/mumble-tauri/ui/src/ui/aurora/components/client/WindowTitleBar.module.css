@@ -41,7 +41,7 @@
 }
 
 .barActions button:disabled {
-  opacity: .5;
+  opacity: 0.5;
   cursor: default;
 }
 
@@ -149,7 +149,7 @@
   height: 12px;
   padding: 0;
   color: rgb(0 0 0 / 55%);
-  border: .5px solid rgb(0 0 0 / 18%);
+  border: 0.5px solid rgb(0 0 0 / 18%);
   border-radius: 50%;
 }
 

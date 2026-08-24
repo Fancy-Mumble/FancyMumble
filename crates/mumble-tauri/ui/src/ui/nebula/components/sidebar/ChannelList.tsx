@@ -3,14 +3,7 @@ import { Box, Tooltip, Typography } from "@mui/material";
 import type { ChannelEntry, UserEntry } from "@core/types";
 import { LockIcon, VolumeIcon } from "@ui/icons";
 import { groupOccupants, type OrderedChannel } from "../../selectors";
-import {
-  PriorityBadge,
-  StatusDot,
-  TalkingBars,
-  UserAvatar,
-  VoiceStateBadges,
-  Stack,
-} from "../primitives";
+import { PriorityBadge, StatusDot, TalkingBars, UserAvatar, VoiceStateBadges, Stack } from "../primitives";
 import { radius } from "../../tokens";
 
 interface ChannelListProps {
@@ -58,10 +51,7 @@ export function ChannelList({
   onLeaveUser,
   onContextMenuUser,
 }: Readonly<ChannelListProps>) {
-  const occupantsByChannel = useMemo(
-    () => groupOccupants(users, talkingSessions),
-    [users, talkingSessions],
-  );
+  const occupantsByChannel = useMemo(() => groupOccupants(users, talkingSessions), [users, talkingSessions]);
 
   return (
     <Box

@@ -38,7 +38,14 @@ describe("ProfileSettings", () => {
     await renderPage();
     for (const label of ["Display name", "Pronouns", "Contact", "Status", "About you"])
       expect(screen.getByLabelText(label)).toBeTruthy();
-    for (const row of ["Card colours", "Avatar frame", "Sticker", "Nameplate", "Name style", "Profile effect"])
+    for (const row of [
+      "Card colours",
+      "Avatar frame",
+      "Sticker",
+      "Nameplate",
+      "Name style",
+      "Profile effect",
+    ])
       expect(screen.getByText(row)).toBeTruthy();
   });
 

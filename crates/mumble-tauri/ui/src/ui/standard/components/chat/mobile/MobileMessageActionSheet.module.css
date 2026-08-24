@@ -57,7 +57,9 @@
   font-size: 22px;
   line-height: 1;
   color: var(--color-text-secondary);
-  transition: background 0.12s, transform 0.12s;
+  transition:
+    background 0.12s,
+    transform 0.12s;
 }
 
 .reactionBtn:active {

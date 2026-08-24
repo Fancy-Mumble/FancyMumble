@@ -59,12 +59,7 @@ const USER: UserEntry = {
   hash: "abc",
 };
 
-function renderCard(
-  profile: FancyProfile | null,
-  bio = "have a nice day",
-  pinned = true,
-  onClose = vi.fn(),
-) {
+function renderCard(profile: FancyProfile | null, bio = "have a nice day", pinned = true, onClose = vi.fn()) {
   useAppStore.setState({
     channels: [{ id: 1, parent_id: 0, name: "Gaming", user_count: 2, position: 0 } as never],
   });

@@ -13,8 +13,14 @@
 }
 
 @keyframes slideDown {
-  from { transform: translateY(-8px); opacity: 0; }
-  to   { transform: translateY(0);    opacity: 1; }
+  from {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .header {
@@ -61,7 +67,9 @@
   color: var(--color-text-secondary);
   cursor: pointer;
   padding: 4px 8px;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .clearBtn:hover {
@@ -213,7 +221,9 @@
   background: transparent;
   color: var(--color-text-primary);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .actionBtn:hover {

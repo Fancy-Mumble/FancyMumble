@@ -38,7 +38,9 @@
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
 }
 
 .collapseBtn:hover {
@@ -60,7 +62,9 @@
   gap: 8px;
   flex: 1;
   font: inherit;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
   min-width: 0;
 }
 
@@ -103,7 +107,9 @@
   color: var(--color-text-muted);
   cursor: pointer;
   padding: 0;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
 }
 
 .searchBarClose:hover {
@@ -206,7 +212,9 @@
   color: var(--color-text-muted);
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .sectionHeaderAction:hover {
@@ -518,8 +526,13 @@
 }
 
 @keyframes voicePulse {
-  0%, 100% { box-shadow: 0 0 0 0 var(--color-online-glow); }
-  50% { box-shadow: 0 0 0 4px transparent; }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--color-online-glow);
+  }
+  50% {
+    box-shadow: 0 0 0 4px transparent;
+  }
 }
 
 .voiceLabel {
@@ -790,7 +803,9 @@
   justify-content: center;
   flex-shrink: 0;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
   padding: 0;
 }
 
@@ -902,7 +917,9 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
 
 .modalUserSelected .modalCheckbox {
@@ -956,7 +973,9 @@
   color: var(--color-text-muted);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
-  transition: color 0.15s, border-color 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .tab:hover {
@@ -1071,7 +1090,6 @@
     animation: none;
   }
 }
-
 
 .modalActions {
   display: flex;

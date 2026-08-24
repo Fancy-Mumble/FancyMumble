@@ -116,9 +116,7 @@ function buildFromTemplate(template: Template, t: TFn): OnboardingQuestion {
 }
 
 /** One thing an answer places the user into: a channel here, or an ACL group. */
-type Mapping =
-  | { kind: "channel"; id: number; label: string }
-  | { kind: "group"; id: string; label: string };
+type Mapping = { kind: "channel"; id: number; label: string } | { kind: "group"; id: string; label: string };
 
 const groupMapping = (name: string): Mapping => ({ kind: "group", id: `g:${name}`, label: name });
 
@@ -474,7 +472,9 @@ function Step({
           {marker}
         </Box>
         {!last && (
-          <Box sx={(theme) => ({ width: "1.5px", flex: 1, my: "4px", background: theme.palette.nebula.line2 })} />
+          <Box
+            sx={(theme) => ({ width: "1.5px", flex: 1, my: "4px", background: theme.palette.nebula.line2 })}
+          />
         )}
       </Stack>
       <Box sx={{ flex: 1, minWidth: 0, pb: last ? 0 : "18px" }}>{children}</Box>
@@ -515,8 +515,7 @@ function CollapsedQuestion({
         {question.text || t("onboarding.admin.untitledQuestion")}
       </Typography>
       <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })} noWrap>
-        {t("onboarding.admin.answerCount", { count: question.answers.length })} ·{" "}
-        {summaryOf(question, t)}
+        {t("onboarding.admin.answerCount", { count: question.answers.length })} · {summaryOf(question, t)}
       </Typography>
       <Box sx={(theme) => ({ ml: "auto", flex: "none", display: "flex", color: theme.palette.nebula.dim })}>
         <ChevronDownIcon width={12} height={12} />
@@ -616,9 +615,7 @@ function QuestionCard({
             mappings={mappingsOf(answer)}
             onChange={(patch) => onChangeAnswer(answer.id, patch)}
             onChangeMapping={(picked) => onChangeMapping(answer.id, picked)}
-            onDelete={() =>
-              onChange({ answers: question.answers.filter((entry) => entry.id !== answer.id) })
-            }
+            onDelete={() => onChange({ answers: question.answers.filter((entry) => entry.id !== answer.id) })}
           />
         ))}
 
@@ -730,9 +727,7 @@ function CompactSwitch({
         onChange={onChange}
         slotProps={{ input: { "aria-label": label } }}
       />
-      <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted })}>
-        {label}
-      </Typography>
+      <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted })}>{label}</Typography>
     </Stack>
   );
 }
@@ -896,9 +891,7 @@ function MappingPicker({
         typeof option === "string" ? option : `${option.kind === "channel" ? "# " : ""}${option.label}`
       }
       onChange={(_, picked) =>
-        onChange(
-          picked.map((entry) => (typeof entry === "string" ? groupMapping(entry.trim()) : entry)),
-        )
+        onChange(picked.map((entry) => (typeof entry === "string" ? groupMapping(entry.trim()) : entry)))
       }
       renderValue={(selected, getItemProps) =>
         selected.map((option, index) => {

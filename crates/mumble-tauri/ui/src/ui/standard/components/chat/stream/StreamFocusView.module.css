@@ -183,7 +183,9 @@
   overflow: hidden;
   flex: none;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.65);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .pipPanel:hover {
@@ -224,7 +226,9 @@
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .layoutBtn:hover,
@@ -248,8 +252,14 @@
 }
 
 @keyframes pickerFadeIn {
-  from { opacity: 0; transform: translateY(-4px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0) scale(1);       }
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .layoutPickerTitle {
@@ -279,7 +289,10 @@
   background: var(--color-glass);
   color: var(--color-text-muted, rgba(255, 255, 255, 0.4));
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    color 0.12s;
 }
 
 .layoutOption:hover {
@@ -383,7 +396,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, border 0.15s;
+  transition:
+    background 0.15s,
+    border 0.15s;
   border: 2px solid transparent;
 }
 
@@ -421,8 +436,6 @@
   cursor: grabbing;
 }
 
-
-
 .drawer {
   flex-shrink: 0;
   background: rgba(0, 0, 0, 0.72);
@@ -448,7 +461,9 @@
   color: var(--color-text-secondary);
   cursor: pointer;
   font-size: 12px;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
   padding: 0 16px;
 }
 
@@ -481,9 +496,16 @@
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
 
-.drawerStrip::-webkit-scrollbar        { height: 4px; }
-.drawerStrip::-webkit-scrollbar-track  { background: transparent; }
-.drawerStrip::-webkit-scrollbar-thumb  { background: rgba(255, 255, 255, 0.2); border-radius: 2px; }
+.drawerStrip::-webkit-scrollbar {
+  height: 4px;
+}
+.drawerStrip::-webkit-scrollbar-track {
+  background: transparent;
+}
+.drawerStrip::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
 
 /* Individual thumbnail card */
 .drawerThumb {
@@ -498,7 +520,9 @@
   overflow: hidden;
   cursor: pointer;
   padding: 0;
-  transition: border-color 0.15s, transform 0.15s;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
 }
 
 .drawerThumb:hover {

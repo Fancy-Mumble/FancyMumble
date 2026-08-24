@@ -26,30 +26,26 @@ vi.mock("@core/serverStorage", () => ({
 // renders (everything else in these modules stays real).
 vi.mock("@core/preferencesStorage", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@core/preferencesStorage")>()),
-  getPreferences: vi
-    .fn()
-    .mockResolvedValue({
-      userMode: "normal",
-      hasCompletedSetup: true,
-      defaultUsername: "",
-      timeFormat: "auto",
-      convertToLocalTime: true,
-    }),
+  getPreferences: vi.fn().mockResolvedValue({
+    userMode: "normal",
+    hasCompletedSetup: true,
+    defaultUsername: "",
+    timeFormat: "auto",
+    convertToLocalTime: true,
+  }),
   updatePreferences: vi.fn().mockImplementation((patch: unknown) => Promise.resolve(patch)),
 }));
 
 vi.mock("@ui/standard/personalizationStorage", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@ui/standard/personalizationStorage")>()),
-  loadPersonalization: vi
-    .fn()
-    .mockResolvedValue({
-      theme: "dark",
-      fontFamily: "inter",
-      fontSize: "medium",
-      fontSizeCustomPx: 16,
-      compactMode: false,
-      alwaysShowMessageActions: false,
-    }),
+  loadPersonalization: vi.fn().mockResolvedValue({
+    theme: "dark",
+    fontFamily: "inter",
+    fontSize: "medium",
+    fontSizeCustomPx: 16,
+    compactMode: false,
+    alwaysShowMessageActions: false,
+  }),
   savePersonalization: vi.fn().mockResolvedValue(undefined),
 }));
 

@@ -106,7 +106,9 @@
 
 .commandPalette kbd {
   color: #737b88;
-  font: 8px ui-monospace, monospace;
+  font:
+    8px ui-monospace,
+    monospace;
   border: 1px solid var(--line);
   border-radius: 5px;
   padding: 3px 5px;

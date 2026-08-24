@@ -40,8 +40,16 @@ body {
   display: flex;
   flex-direction: column;
   background:
-    radial-gradient(600px circle at calc(100% + 100px) -200px, var(--color-bg-app-glow-accent), transparent 70%),
-    radial-gradient(500px circle at -100px calc(100% + 150px), var(--color-bg-app-glow-purple), transparent 70%),
+    radial-gradient(
+      600px circle at calc(100% + 100px) -200px,
+      var(--color-bg-app-glow-accent),
+      transparent 70%
+    ),
+    radial-gradient(
+      500px circle at -100px calc(100% + 150px),
+      var(--color-bg-app-glow-purple),
+      transparent 70%
+    ),
     var(--color-bg-app-gradient);
   overflow: hidden;
   /* Promote .app to its own GPU-composited layer.  Android Chromium
@@ -119,7 +127,19 @@ button {
  * `:where()` contributes zero, leaving this at a plain element's (0,0,1) so any
  * single class still wins, as a baseline must.
  */
-input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="submit"], [type="button"], [type="image"], [type="reset"])),
+input:where(
+  :not(
+    [type="checkbox"],
+    [type="radio"],
+    [type="range"],
+    [type="file"],
+    [type="color"],
+    [type="submit"],
+    [type="button"],
+    [type="image"],
+    [type="reset"]
+  )
+),
 textarea,
 select {
   padding: 8px 12px;
@@ -130,14 +150,38 @@ select {
   line-height: 1.4;
 }
 
-input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="submit"], [type="button"], [type="image"], [type="reset"]))::placeholder,
+input:where(
+    :not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="range"],
+      [type="file"],
+      [type="color"],
+      [type="submit"],
+      [type="button"],
+      [type="image"],
+      [type="reset"]
+    )
+  )::placeholder,
 textarea::placeholder {
   color: var(--color-text-muted);
 }
 
 /* One focus idiom app-wide: an outline can't reflow layout and survives
    forced-colours modes, unlike swapping a border colour. */
-input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="submit"], [type="button"], [type="image"], [type="reset"])):focus-visible,
+input:where(
+    :not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="range"],
+      [type="file"],
+      [type="color"],
+      [type="submit"],
+      [type="button"],
+      [type="image"],
+      [type="reset"]
+    )
+  ):focus-visible,
 textarea:focus-visible,
 select:focus-visible {
   outline: 2px solid var(--color-accent);
@@ -168,7 +212,9 @@ a {
   padding: 0 3px;
   cursor: pointer;
   user-select: none;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .spoiler:hover {

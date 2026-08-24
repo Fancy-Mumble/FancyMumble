@@ -420,7 +420,9 @@ function AuditViewer({
           startIcon={<SearchIcon width={13} height={13} />}
           onClick={() => void run()}
         >
-          {loading ? t("audit.searching", { defaultValue: "Searching…" }) : t("audit.search", { defaultValue: "Search" })}
+          {loading
+            ? t("audit.searching", { defaultValue: "Searching…" })
+            : t("audit.search", { defaultValue: "Search" })}
         </Button>
         <Button
           size="small"
@@ -447,9 +449,7 @@ function AuditViewer({
           variant="outlined"
           disabled={entries.length === 0}
           startIcon={<DownloadIcon width={13} height={13} />}
-          onClick={() =>
-            download("audit-log.json", "application/json", JSON.stringify(entries, null, 2))
-          }
+          onClick={() => download("audit-log.json", "application/json", JSON.stringify(entries, null, 2))}
         >
           JSON
         </Button>
@@ -603,7 +603,10 @@ function AuditDashboard({
             responsive: true,
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
-            scales: { x: { ticks: { ...tick, precision: 0 }, grid }, y: { ticks: tick, grid: { display: false } } },
+            scales: {
+              x: { ticks: { ...tick, precision: 0 }, grid },
+              y: { ticks: tick, grid: { display: false } },
+            },
           },
         },
       },
@@ -697,10 +700,10 @@ function AuditBadge({ value, kind }: Readonly<{ value: string; kind: "severity" 
         const { nebula } = theme.palette;
         const colour =
           kind === "severity"
-            ? { critical: nebula.bad, warning: nebula.warn, notice: nebula.ok, info: nebula.accent }[
+            ? ({ critical: nebula.bad, warning: nebula.warn, notice: nebula.ok, info: nebula.accent }[
                 value
-              ] ?? nebula.accent
-            : { client: nebula.accent, plugin: nebula.warn }[value] ?? nebula.muted;
+              ] ?? nebula.accent)
+            : ({ client: nebula.accent, plugin: nebula.warn }[value] ?? nebula.muted);
         return {
           px: "7px",
           py: "2px",
@@ -933,8 +936,7 @@ function AuditResults({
                 onClick={() => onSelect(entry)}
                 sx={(theme) => ({
                   cursor: "pointer",
-                  background:
-                    selected?.id === entry.id ? theme.palette.nebula.accentSoft : "transparent",
+                  background: selected?.id === entry.id ? theme.palette.nebula.accentSoft : "transparent",
                   "&:hover": {
                     background:
                       selected?.id === entry.id
@@ -956,9 +958,7 @@ function AuditResults({
                   {entry.targetName ?? (entry.targetUserId != null ? `#${entry.targetUserId}` : "-")}
                 </Cell>
                 <Cell>
-                  {entry.channelId != null
-                    ? (channelName(entry.channelId) ?? `#${entry.channelId}`)
-                    : "-"}
+                  {entry.channelId != null ? (channelName(entry.channelId) ?? `#${entry.channelId}`) : "-"}
                 </Cell>
                 <Cell sx={{ maxWidth: 220 }}>{entry.reason || noReason}</Cell>
               </Box>
@@ -1118,11 +1118,7 @@ function AuditFilterRail({
           }
           onClick={onToggle}
         >
-          {open ? (
-            <ChevronRightIcon width={14} height={14} />
-          ) : (
-            <ChevronLeftIcon width={14} height={14} />
-          )}
+          {open ? <ChevronRightIcon width={14} height={14} /> : <ChevronLeftIcon width={14} height={14} />}
         </IconButton>
       </Stack>
 

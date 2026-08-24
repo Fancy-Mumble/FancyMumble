@@ -37,8 +37,12 @@
       var(--ld-tick-minor, rgba(255, 255, 255, 0.18)) 0 1px,
       transparent 1px var(--ld-minor, 12px)
     );
-  background-size: 100% 11px, 100% 6px;
-  background-position: var(--ld-pad-x, 84px) bottom, var(--ld-pad-x, 84px) bottom;
+  background-size:
+    100% 11px,
+    100% 6px;
+  background-position:
+    var(--ld-pad-x, 84px) bottom,
+    var(--ld-pad-x, 84px) bottom;
   background-repeat: repeat-x;
 }
 
@@ -66,8 +70,12 @@
       var(--ld-tick-minor, rgba(255, 255, 255, 0.18)) 0 1px,
       transparent 1px var(--ld-minor, 12px)
     );
-  background-size: 11px 100%, 6px 100%;
-  background-position: right var(--ld-pad-y, 72px), right var(--ld-pad-y, 72px);
+  background-size:
+    11px 100%,
+    6px 100%;
+  background-position:
+    right var(--ld-pad-y, 72px),
+    right var(--ld-pad-y, 72px);
   background-repeat: repeat-y;
 }
 
@@ -78,9 +86,9 @@
   pointer-events: none;
   background: linear-gradient(
     90deg,
-    var(--ld-margin-band, rgba(0, 0, 0, 0.30)) 0 var(--ld-pad-x, 84px),
+    var(--ld-margin-band, rgba(0, 0, 0, 0.3)) 0 var(--ld-pad-x, 84px),
     transparent var(--ld-pad-x, 84px) calc(100% - var(--ld-pad-x, 84px)),
-    var(--ld-margin-band, rgba(0, 0, 0, 0.30)) calc(100% - var(--ld-pad-x, 84px)) 100%
+    var(--ld-margin-band, rgba(0, 0, 0, 0.3)) calc(100% - var(--ld-pad-x, 84px)) 100%
   );
 }
 
@@ -90,9 +98,9 @@
   pointer-events: none;
   background: linear-gradient(
     180deg,
-    var(--ld-margin-band, rgba(0, 0, 0, 0.30)) 0 var(--ld-pad-y, 72px),
+    var(--ld-margin-band, rgba(0, 0, 0, 0.3)) 0 var(--ld-pad-y, 72px),
     transparent var(--ld-pad-y, 72px) calc(100% - var(--ld-pad-y, 72px)),
-    var(--ld-margin-band, rgba(0, 0, 0, 0.30)) calc(100% - var(--ld-pad-y, 72px)) 100%
+    var(--ld-margin-band, rgba(0, 0, 0, 0.3)) calc(100% - var(--ld-pad-y, 72px)) 100%
   );
 }
 

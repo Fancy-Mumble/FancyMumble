@@ -111,6 +111,6 @@
 .poll button i {
   position: absolute;
   inset: 0 auto 0 0;
-  opacity: .12;
+  opacity: 0.12;
   background: var(--iris);
 }

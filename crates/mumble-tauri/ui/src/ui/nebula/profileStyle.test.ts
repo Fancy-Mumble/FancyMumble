@@ -38,9 +38,7 @@ describe("resolveProfilePaint", () => {
 
   it("rakes the assigned colour across the banner and fills the avatar with it", () => {
     const { banner, avatarFill } = paint(null);
-    expect(banner.background).toBe(
-      `linear-gradient(150deg,${TINT.from} 0%,${TINT.mid} 55%,${TINT.to} 100%)`,
-    );
+    expect(banner.background).toBe(`linear-gradient(150deg,${TINT.from} 0%,${TINT.mid} 55%,${TINT.to} 100%)`);
     expect(avatarFill).toBe(TINT.mid);
   });
 
@@ -61,7 +59,10 @@ describe("resolveProfilePaint", () => {
   });
 
   it("fades a photographed banner into the card instead of glossing it", () => {
-    const withImage = paint({ banner: { image: "data:image/png;base64,AA" }, themeColors: ["#2b2420", "#211c24"] });
+    const withImage = paint({
+      banner: { image: "data:image/png;base64,AA" },
+      themeColors: ["#2b2420", "#211c24"],
+    });
     expect(withImage.banner.backgroundImage).toBe("url(data:image/png;base64,AA)");
     expect(withImage.bannerScrim.background).toContain("transparent 45%");
     // A photograph is not read for colour, so its chrome is simply dark enough.

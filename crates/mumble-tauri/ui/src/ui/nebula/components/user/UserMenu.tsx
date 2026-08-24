@@ -182,8 +182,8 @@ function UserMenuSurface({ target, onClose, onMessage, onConfirm, onNote }: Read
   const applyVolume = (next: number) => {
     setVolume(next);
     if (user.hash) useAppStore.getState().setUserVolume(user.hash, next);
-    void invoke("set_user_volume", { session: user.session, volume: next / 100 }).catch(
-      (error: unknown) => console.error("set_user_volume failed:", error),
+    void invoke("set_user_volume", { session: user.session, volume: next / 100 }).catch((error: unknown) =>
+      console.error("set_user_volume failed:", error),
     );
   };
 
@@ -260,11 +260,7 @@ function UserMenuSurface({ target, onClose, onMessage, onConfirm, onNote }: Read
               </MenuItem>
             ) : null,
 
-            <MenuItem
-              key="friend"
-              data-testid={TID.userMenuFriendToggle}
-              onClick={() => void toggleFriend()}
-            >
+            <MenuItem key="friend" data-testid={TID.userMenuFriendToggle} onClick={() => void toggleFriend()}>
               <Glyph>
                 {friend ? <UserXIcon width={13} height={13} /> : <UserPlusIcon width={13} height={13} />}
               </Glyph>

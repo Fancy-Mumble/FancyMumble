@@ -59,8 +59,7 @@ export function placeBesideAnchor(
   // against the edge it overhangs least.
   let side: "left" | "right";
   if (options.prefer === "left") side = roomLeft >= needed || roomLeft >= roomRight ? "left" : "right";
-  else if (options.prefer === "right")
-    side = roomRight >= needed || roomRight >= roomLeft ? "right" : "left";
+  else if (options.prefer === "right") side = roomRight >= needed || roomRight >= roomLeft ? "right" : "left";
   else side = roomRight >= needed || roomRight >= roomLeft ? "right" : "left";
 
   const rawLeft = side === "right" ? anchor.right + gap : anchor.left - gap - size.width;

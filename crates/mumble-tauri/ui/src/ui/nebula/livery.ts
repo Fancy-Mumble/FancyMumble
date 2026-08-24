@@ -87,11 +87,7 @@ export function parseHex(value: string | undefined): [number, number, number] | 
   const match = /^#([0-9a-f]{6})$/i.exec(value.trim());
   if (!match) return null;
   const digits = match[1];
-  return [0, 2, 4].map((at) => Number.parseInt(digits.slice(at, at + 2), 16)) as [
-    number,
-    number,
-    number,
-  ];
+  return [0, 2, 4].map((at) => Number.parseInt(digits.slice(at, at + 2), 16)) as [number, number, number];
 }
 
 function toHex(colour: readonly [number, number, number]): string {
@@ -125,7 +121,7 @@ function toHsl(colour: readonly [number, number, number]): [number, number, numb
   if (delta === 0) return [0, 0, lightness];
   const saturation = delta / (1 - Math.abs(2 * lightness - 1));
   let hue: number;
-  if (max === red) hue = (((green - blue) / delta) % 6 + 6) % 6;
+  if (max === red) hue = ((((green - blue) / delta) % 6) + 6) % 6;
   else if (max === green) hue = (blue - red) / delta + 2;
   else hue = (red - green) / delta + 4;
   return [hue * 60, saturation, lightness];

@@ -21,7 +21,13 @@
 }
 
 .swatch.empty {
-  background: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.08) 4px, transparent 4px, transparent 8px);
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.08) 4px,
+    transparent 4px,
+    transparent 8px
+  );
 }
 
 .input {

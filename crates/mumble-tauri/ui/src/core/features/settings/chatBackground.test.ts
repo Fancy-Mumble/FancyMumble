@@ -58,9 +58,7 @@ describe("storedBackgroundUrl", () => {
 describe("resolveBackgroundSource", () => {
   it("passes data-URLs through untouched and resolves refs", async () => {
     invoke.mockResolvedValue(new ArrayBuffer(8));
-    expect(await resolveBackgroundSource("data:image/jpeg;base64,x")).toBe(
-      "data:image/jpeg;base64,x",
-    );
+    expect(await resolveBackgroundSource("data:image/jpeg;base64,x")).toBe("data:image/jpeg;base64,x");
     expect(await resolveBackgroundSource(null)).toBeNull();
     expect(await resolveBackgroundSource("bgstore:image-a.jpg")).toBe("blob:test-1");
   });

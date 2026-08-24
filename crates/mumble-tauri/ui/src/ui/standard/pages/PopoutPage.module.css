@@ -4,7 +4,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(53, 53, 53, 1.0);
+  background: rgba(53, 53, 53, 1);
   cursor: default;
   user-select: none;
   -webkit-user-select: none;
@@ -76,7 +76,9 @@
   backdrop-filter: blur(18px) saturate(180%);
   opacity: 0;
   transform: translateY(8px);
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
   pointer-events: none;
   user-select: none;
   -webkit-user-select: none;
@@ -188,4 +190,3 @@
 .menuItem:hover {
   background: rgba(255, 255, 255, 0.08);
 }
-

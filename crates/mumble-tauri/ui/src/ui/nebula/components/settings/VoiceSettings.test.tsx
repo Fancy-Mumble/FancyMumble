@@ -150,9 +150,7 @@ describe("VoiceSettings", () => {
     expect(screen.getByText("Calibration needed")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Calibrate" }));
-    await waitFor(() =>
-      expect(invokeMock.mock.calls.some(([cmd]) => cmd === "start_mic_test")).toBe(true),
-    );
+    await waitFor(() => expect(invokeMock.mock.calls.some(([cmd]) => cmd === "start_mic_test")).toBe(true));
   });
 
   it("drops the gate entirely for the modes that do not have one", async () => {

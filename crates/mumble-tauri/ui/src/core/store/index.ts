@@ -308,7 +308,14 @@ export function liveDocKey(appServerId: import("../types").ServerId | null, chan
 // --- Store shape --------------------------------------------------
 
 export interface AppState
-  extends PersistentChatSlice, DmSlice, VoiceSlice, NotificationsSlice, DownloadsSlice, PresenceSlice, ScheduledSlice {
+  extends
+    PersistentChatSlice,
+    DmSlice,
+    VoiceSlice,
+    NotificationsSlice,
+    DownloadsSlice,
+    PresenceSlice,
+    ScheduledSlice {
   // Reactive state
   status: ConnectionStatus;
   channels: ChannelEntry[];
@@ -3268,20 +3275,17 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
       serverId?: string | null;
       fancy_version: number | null;
       fancy_protocol?: number | null;
-    }>(
-      TauriEvent.ServerVersion,
-      (event) => {
-        const { activeServerId } = useAppStore.getState();
-        const eventServerId = event.payload.serverId ?? null;
-        if (eventServerId !== null && eventServerId !== activeServerId) {
-          return;
-        }
-        useAppStore.setState({
-          serverFancyVersion: event.payload.fancy_version,
-          serverFancyProtocol: event.payload.fancy_protocol ?? null,
-        });
-      },
-    ),
+    }>(TauriEvent.ServerVersion, (event) => {
+      const { activeServerId } = useAppStore.getState();
+      const eventServerId = event.payload.serverId ?? null;
+      if (eventServerId !== null && eventServerId !== activeServerId) {
+        return;
+      }
+      useAppStore.setState({
+        serverFancyVersion: event.payload.fancy_version,
+        serverFancyProtocol: event.payload.fancy_protocol ?? null,
+      });
+    }),
 
     // Server config received (limits, allow_html, etc.).
     await listen(TauriEvent.ServerConfig, async () => {

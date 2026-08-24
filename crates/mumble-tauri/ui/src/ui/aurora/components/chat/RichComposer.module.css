@@ -14,15 +14,17 @@
   align-items: flex-end;
   gap: 4px;
   padding: 5px 6px 5px 5px;
-  border: 1px solid rgba(255, 255, 255, .075);
+  border: 1px solid rgba(255, 255, 255, 0.075);
   border-radius: 14px;
-  background: rgba(255, 255, 255, .045);
-  transition: border-color .16s ease, background-color .16s ease;
+  background: rgba(255, 255, 255, 0.045);
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease;
 }
 
 .composerBar:focus-within {
-  border-color: rgba(101, 184, 237, .4);
-  background: rgba(255, 255, 255, .06);
+  border-color: rgba(101, 184, 237, 0.4);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .composerInput {
@@ -44,7 +46,7 @@
 
 .composerLead:hover,
 .composerActions button:hover {
-  background: rgba(255, 255, 255, .07);
+  background: rgba(255, 255, 255, 0.07);
   color: #e3e9ef;
 }
 
@@ -59,7 +61,7 @@
   min-width: 34px;
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: .04em;
+  letter-spacing: 0.04em;
 }
 
 .composerSend {
@@ -74,12 +76,12 @@
 }
 
 .composerSend:disabled {
-  background: rgba(255, 255, 255, .06);
+  background: rgba(255, 255, 255, 0.06);
   color: #6d7987;
 }
 
 .composerToolActive {
-  background: rgba(101, 184, 237, .16);
+  background: rgba(101, 184, 237, 0.16);
   color: #cfe8fb;
 }
 
@@ -88,9 +90,9 @@
   align-items: center;
   gap: 2px;
   padding: 4px 6px;
-  border: 1px solid rgba(255, 255, 255, .07);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 11px;
-  background: rgba(255, 255, 255, .03);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .composerFormatBar button {
@@ -103,16 +105,16 @@
 }
 
 .composerFormatBar button:hover {
-  background: rgba(255, 255, 255, .07);
+  background: rgba(255, 255, 255, 0.07);
   color: #e3e9ef;
 }
 
 /* Sits above the bar, so showing it never nudges the input. */
 .composerError {
   padding: 7px 11px;
-  border: 1px solid rgba(239, 100, 100, .18);
+  border: 1px solid rgba(239, 100, 100, 0.18);
   border-radius: 10px;
-  background: rgba(239, 100, 100, .08);
+  background: rgba(239, 100, 100, 0.08);
   color: #ef8888;
   font-size: 10px;
 }
@@ -124,8 +126,8 @@
   flex-wrap: wrap;
   gap: 3px;
   overflow: auto;
-  border-bottom: 1px solid rgba(255, 255, 255, .065);
-  background: rgba(8, 11, 15, .22);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.065);
+  background: rgba(8, 11, 15, 0.22);
 }
 
 .composerPicker button {

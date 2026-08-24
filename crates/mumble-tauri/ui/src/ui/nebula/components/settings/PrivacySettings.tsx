@@ -45,9 +45,7 @@ export function PrivacySettings() {
         <Banner
           tone={prefs.enableDualPath ? "danger" : "warn"}
           title={
-            prefs.enableDualPath
-              ? t("privacy.dualPathWarningActive")
-              : t("privacy.dualPathWarningMuted")
+            prefs.enableDualPath ? t("privacy.dualPathWarningActive") : t("privacy.dualPathWarningMuted")
           }
         >
           {t("privacy.dualPathWarningActivePara")}

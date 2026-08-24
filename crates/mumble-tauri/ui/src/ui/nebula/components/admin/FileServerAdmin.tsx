@@ -6,12 +6,7 @@ import { confirm as askConfirm, message } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@core/store";
 import { formatBytes } from "@core/utils/format";
 import { fuzzyMatchAny } from "@core/utils/fuzzy";
-import type {
-  AdminFileEntry,
-  DocumentSummary,
-  FileServerStorageStats,
-  UserEntry,
-} from "@core/types";
+import type { AdminFileEntry, DocumentSummary, FileServerStorageStats, UserEntry } from "@core/types";
 import {
   adminDeleteDocument,
   adminDeleteFile,
@@ -69,9 +64,7 @@ function StatCard({ label, value, sub }: Readonly<{ label: string; value: string
   return (
     <SettingsCard sx={{ flex: "1 1 130px", p: "12px 14px" }}>
       <Typography sx={{ fontSize: 17, fontWeight: 600 }}>{value}</Typography>
-      <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.muted })}>
-        {label}
-      </Typography>
+      <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.muted })}>{label}</Typography>
       {sub && (
         <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })}>{sub}</Typography>
       )}
@@ -95,9 +88,7 @@ export function FileServerAdmin() {
   const channels = useAppStore((state) => state.channels);
   const users = useAppStore((state) => state.users);
   const setFileServerAdminOpen = useAppStore((state) => state.setFileServerAdminOpen);
-  const creds: AdminCreds | null = config
-    ? { baseUrl: config.baseUrl, sessionJwt: config.sessionJwt }
-    : null;
+  const creds: AdminCreds | null = config ? { baseUrl: config.baseUrl, sessionJwt: config.sessionJwt } : null;
 
   const connectedByHash = useMemo(() => {
     const map = new Map<string, UserEntry>();
@@ -320,8 +311,7 @@ export function FileServerAdmin() {
     if (!creds) return;
     const ok = await askConfirm(
       t("fileServer.docs.deleteConfirm", {
-        defaultValue:
-          'Delete document "{{name}}"? This removes all its revisions and cannot be undone.',
+        defaultValue: 'Delete document "{{name}}"? This removes all its revisions and cannot be undone.',
         name: doc.name,
       }),
       { title: t("fileServer.docs.delete", { defaultValue: "Delete document" }), kind: "warning" },
@@ -411,9 +401,7 @@ export function FileServerAdmin() {
             : {
                 key,
                 dir:
-                  key === "name" || key === "type" || key === "owner" || key === "expires"
-                    ? "asc"
-                    : "desc",
+                  key === "name" || key === "type" || key === "owner" || key === "expires" ? "asc" : "desc",
               },
         )
       }

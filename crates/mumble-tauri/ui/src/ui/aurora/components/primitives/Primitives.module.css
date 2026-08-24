@@ -1,22 +1,22 @@
 .button {
-    min-height: 36px;
-    padding: 0 13px;
-    border: 1px solid transparent;
-    border-radius: 9px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    color: #dbe2ea;
-    font: inherit;
-    font-size: 11px;
-    font-weight: 700;
-    cursor: pointer
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #dbe2ea;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .button:disabled {
-    opacity: .42;
-    cursor: default
+  opacity: 0.42;
+  cursor: default;
 }
 
 /* Variants are selected by the `data-variant` attribute the Button primitive
@@ -25,184 +25,184 @@
  * `.button` - callers that pass their own class keep overriding these exactly
  * as they did when the variants were plain classes. */
 .button:where([data-variant="primary"]) {
-    background: #65b8ed;
-    color: #102535
+  background: #65b8ed;
+  color: #102535;
 }
 
 .button:where([data-variant="secondary"]) {
-    border-color: rgba(255, 255, 255, .075);
-    background: rgba(255, 255, 255, .05)
+  border-color: rgba(255, 255, 255, 0.075);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .button:where([data-variant="danger"]) {
-    background: rgba(224, 78, 78, .13);
-    border-color: rgba(224, 78, 78, .28);
-    color: #f08d8d
+  background: rgba(224, 78, 78, 0.13);
+  border-color: rgba(224, 78, 78, 0.28);
+  color: #f08d8d;
 }
 
 .button:where([data-variant="danger"]):hover:not(:disabled) {
-    background: rgba(224, 78, 78, .2);
-    color: #f7a5a5
+  background: rgba(224, 78, 78, 0.2);
+  color: #f7a5a5;
 }
 
 .button:where([data-variant="ghost"]) {
-    border-color: rgba(255, 255, 255, .075);
-    background: transparent;
-    color: #9ba7b5
+  border-color: rgba(255, 255, 255, 0.075);
+  background: transparent;
+  color: #9ba7b5;
 }
 
 .button:where([data-variant="bare"]) {
-    min-height: 0;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: inherit
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
 }
 
 .buttonIcon {
-    display: grid;
-    place-items: center
+  display: grid;
+  place-items: center;
 }
 
 .buttonIcon svg {
-    width: 16px
+  width: 16px;
 }
 
 .buttonLabel {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .iconButton {
-    width: 34px;
-    height: 34px;
-    border-radius: 9px
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
 }
 
 .iconButton:hover {
-    background: rgba(255, 255, 255, .06)
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .iconButton .buttonLabel {
-    display: grid;
-    place-items: center
+  display: grid;
+  place-items: center;
 }
 
 .iconButton svg {
-    width: 16px
+  width: 16px;
 }
 
 .field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    color: #aeb7c3;
-    font-size: 10px;
-    font-weight: 700
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #aeb7c3;
+  font-size: 10px;
+  font-weight: 700;
 }
 
-.field>span {
-    display: flex;
-    align-items: baseline;
-    gap: 5px
+.field > span {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
 }
 
 .field small {
-    color: #687483;
-    font-weight: 400
+  color: #687483;
+  font-weight: 400;
 }
 
 .field input {
-    width: 100%;
-    height: 42px;
-    padding: 0 12px;
-    border: 1px solid rgba(255, 255, 255, .09);
-    border-radius: 10px;
-    outline: 0;
-    background: rgba(6, 9, 13, .4);
-    color: #edf1f7;
-    font: inherit
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  outline: 0;
+  background: rgba(6, 9, 13, 0.4);
+  color: #edf1f7;
+  font: inherit;
 }
 
 .field input:focus {
-    border-color: rgba(101, 184, 237, .5);
-    box-shadow: 0 0 0 3px rgba(101, 184, 237, .08)
+  border-color: rgba(101, 184, 237, 0.5);
+  box-shadow: 0 0 0 3px rgba(101, 184, 237, 0.08);
 }
 
-.field input[aria-invalid=true] {
-    border-color: rgba(239, 100, 100, .45)
+.field input[aria-invalid="true"] {
+  border-color: rgba(239, 100, 100, 0.45);
 }
 
 .field em {
-    color: #f29494;
-    font-size: 9px;
-    font-style: normal
+  color: #f29494;
+  font-size: 9px;
+  font-style: normal;
 }
 
 .select {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    color: #aeb7c3;
-    font-size: 10px;
-    font-weight: 700
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #aeb7c3;
+  font-size: 10px;
+  font-weight: 700;
 }
 
-.select>span {
-    display: flex;
-    align-items: baseline;
-    gap: 5px
+.select > span {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
 }
 
 .select small {
-    color: #687483;
-    font-weight: 400
+  color: #687483;
+  font-weight: 400;
 }
 
 .select select {
-    width: 100%;
-    height: 42px;
-    padding: 0 34px 0 12px;
-    border: 1px solid rgba(255, 255, 255, .09);
-    border-radius: 10px;
-    outline: 0;
-    background: rgba(6, 9, 13, .4);
-    color: #edf1f7;
-    font: inherit
+  width: 100%;
+  height: 42px;
+  padding: 0 34px 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  outline: 0;
+  background: rgba(6, 9, 13, 0.4);
+  color: #edf1f7;
+  font: inherit;
 }
 
 .select select:focus {
-    border-color: rgba(101, 184, 237, .5);
-    box-shadow: 0 0 0 3px rgba(101, 184, 237, .08)
+  border-color: rgba(101, 184, 237, 0.5);
+  box-shadow: 0 0 0 3px rgba(101, 184, 237, 0.08);
 }
 
 .switch,
 .switchOn {
-    flex: 0 0 auto;
-    width: 36px;
-    height: 21px;
-    padding: 3px;
-    border-radius: 12px;
-    background: #303944;
-    transition: .18s
+  flex: 0 0 auto;
+  width: 36px;
+  height: 21px;
+  padding: 3px;
+  border-radius: 12px;
+  background: #303944;
+  transition: 0.18s;
 }
 
 .switch b,
 .switchOn b {
-    display: block;
-    width: 15px;
-    height: 15px;
-    border-radius: 50%;
-    background: #8d98a6;
-    transition: .18s
+  display: block;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #8d98a6;
+  transition: 0.18s;
 }
 
 .switchOn {
-    background: rgba(101, 184, 237, .35)
+  background: rgba(101, 184, 237, 0.35);
 }
 
 .switchOn b {
-    transform: translateX(15px);
-    background: #7bc4f1
+  transform: translateX(15px);
+  background: #7bc4f1;
 }

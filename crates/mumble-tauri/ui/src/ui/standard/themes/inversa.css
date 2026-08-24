@@ -6,26 +6,26 @@
 
 [data-theme="inversa"] {
   /* -- Background ------------------------------------------------ */
-  --color-bg-primary: #F5F5F5;
-  --color-bg-secondary: #EBEBEB;
+  --color-bg-primary: #f5f5f5;
+  --color-bg-secondary: #ebebeb;
   --color-bg-elevated: #ffffff;
   --color-surface: #ffffff;
-  --color-bg-deepest: #DEDEDE;
-  --color-bg-media: #EBEBEB;
-  --color-bg-app-gradient: #F5F5F5;
+  --color-bg-deepest: #dedede;
+  --color-bg-media: #ebebeb;
+  --color-bg-app-gradient: #f5f5f5;
   --color-bg-app-glow-accent: rgba(162, 166, 51, 0);
   --color-bg-app-glow-purple: rgba(84, 89, 40, 0);
 
   /* -- Text ------------------------------------------------------ */
-  --color-text-primary: #1A2611;
-  --color-text-secondary: rgba(26, 38, 17, 0.70);
+  --color-text-primary: #1a2611;
+  --color-text-secondary: rgba(26, 38, 17, 0.7);
   --color-text-muted: rgba(26, 38, 17, 0.48);
-  --color-text-on-accent: #1A2611;
-  --color-text-button: rgba(26, 38, 17, 0.80);
-  --color-text-placeholder: #8A8C3F;
+  --color-text-on-accent: #1a2611;
+  --color-text-button: rgba(26, 38, 17, 0.8);
+  --color-text-placeholder: #8a8c3f;
 
   /* -- Accent (yellow-green) ------------------------------------- */
-  --color-accent: #A2A633;
+  --color-accent: #a2a633;
   --color-accent-hover: #8e9228;
   --color-accent-glow: rgba(162, 166, 51, 0.55);
   --color-accent-soft: rgba(162, 166, 51, 0.08);
@@ -38,7 +38,7 @@
   --color-accent-selection: rgba(162, 166, 51, 0.32);
   --color-accent-border-strong: rgba(162, 166, 51, 0.78);
   --color-accent-gradient-end: rgba(162, 166, 51, 0.48);
-  --color-accent-bright: #A2A633;
+  --color-accent-bright: #a2a633;
 
   /* -- Purple (olive as complement) ------------------------------ */
   --color-purple: #545928;
@@ -48,9 +48,9 @@
   --color-glass-subtle: rgba(26, 38, 17, 0.06);
   --color-glass-hover: rgba(26, 38, 17, 0.09);
   --color-glass-medium: rgba(26, 38, 17, 0.12);
-  --color-glass-active: rgba(162, 166, 51, 0.20);
+  --color-glass-active: rgba(162, 166, 51, 0.2);
   --color-glass-strong: rgba(26, 38, 17, 0.16);
-  --color-glass-heavy: rgba(26, 38, 17, 0.20);
+  --color-glass-heavy: rgba(26, 38, 17, 0.2);
   --color-glass-border: rgba(26, 38, 17, 0.14);
   --color-glass-border-hover: rgba(26, 38, 17, 0.26);
 
@@ -60,55 +60,55 @@
   --color-danger-light: #e74c3c;
   --color-danger-muted: #922b21;
   --color-danger-soft: rgba(192, 57, 43, 0.06);
-  --color-danger-subtle: rgba(192, 57, 43, 0.10);
+  --color-danger-subtle: rgba(192, 57, 43, 0.1);
   --color-danger-bg: rgba(192, 57, 43, 0.14);
   --color-danger-medium: rgba(192, 57, 43, 0.18);
   --color-danger-strong: rgba(192, 57, 43, 0.24);
   --color-danger-border: rgba(192, 57, 43, 0.34);
-  --color-danger-border-strong: rgba(192, 57, 43, 0.50);
+  --color-danger-border-strong: rgba(192, 57, 43, 0.5);
   --color-danger-alt-light: rgba(169, 50, 38, 0.14);
   --color-danger-alt-glow: rgba(169, 50, 38, 0.42);
   --color-danger-alt-soft: rgba(169, 50, 38, 0.06);
-  --color-danger-alt-subtle: rgba(169, 50, 38, 0.10);
+  --color-danger-alt-subtle: rgba(169, 50, 38, 0.1);
   --color-danger-alt-border: rgba(169, 50, 38, 0.28);
   --color-danger-alt-strong: rgba(169, 50, 38, 0.36);
-  --color-danger-alt-border-strong: rgba(169, 50, 38, 0.50);
+  --color-danger-alt-border-strong: rgba(169, 50, 38, 0.5);
 
   /* -- Success / Online (olive-green from palette) ---------------- */
   --color-online: #545928;
-  --color-online-bright: #8A8C3F;
+  --color-online-bright: #8a8c3f;
   --color-online-subtle: rgba(84, 89, 40, 0.08);
   --color-online-bg: rgba(84, 89, 40, 0.12);
   --color-online-medium: rgba(84, 89, 40, 0.18);
-  --color-online-glow: rgba(84, 89, 40, 0.50);
+  --color-online-glow: rgba(84, 89, 40, 0.5);
   --color-success-gradient-start: rgba(84, 89, 40, 0.14);
   --color-success-gradient-end: rgba(84, 89, 40, 0.14);
 
   /* -- Warning (muted olive #8A8C3F) ----------------------------- */
-  --color-warning: #8A8C3F;
-  --color-warning-bright: #A2A633;
-  --color-warning-amber: #8A8C3F;
+  --color-warning: #8a8c3f;
+  --color-warning-bright: #a2a633;
+  --color-warning-amber: #8a8c3f;
   --color-warning-text: #545928;
   --color-warning-soft: rgba(138, 140, 63, 0.08);
   --color-warning-subtle: rgba(138, 140, 63, 0.12);
-  --color-warning-amber-subtle: rgba(138, 140, 63, 0.10);
+  --color-warning-amber-subtle: rgba(138, 140, 63, 0.1);
   --color-warning-amber-glow: rgba(138, 140, 63, 0.45);
   --color-warning-bright-bg: rgba(162, 166, 51, 0.14);
   --color-warning-bright-medium: rgba(162, 166, 51, 0.22);
   --color-warning-bright-border: rgba(162, 166, 51, 0.45);
 
   /* -- Link (steel blue from palette) ---------------------------- */
-  --color-link: #93AEBF;
+  --color-link: #93aebf;
 
   /* -- Picker palette (reactions / emoji picker) ----------- */
-  --color-picker-accent: #A2A633;
-  --color-picker-dark: #F5F5F5;
+  --color-picker-accent: #a2a633;
+  --color-picker-dark: #f5f5f5;
   --color-picker-bg: #ffffff;
-  --color-picker-border: #D0D0D0;
-  --color-picker-hover: #EBEBEB;
-  --color-picker-muted: #8A8C3F;
-  --color-picker-text: #1A2611;
-  --color-picker-active: #D0D3C0;
+  --color-picker-border: #d0d0d0;
+  --color-picker-hover: #ebebeb;
+  --color-picker-muted: #8a8c3f;
+  --color-picker-text: #1a2611;
+  --color-picker-active: #d0d3c0;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.07);
@@ -119,28 +119,28 @@
   --color-overlay-darkest: rgba(0, 0, 0, 0.64);
 
   /* -- Surfaces (bars, panels, toasts) --------------------------- */
-  --color-surface-titlebar: #F5F5F5;
-  --color-surface-action-bar: #EBEBEB;
+  --color-surface-titlebar: #f5f5f5;
+  --color-surface-action-bar: #ebebeb;
   --color-surface-toast: #ffffff;
-  --color-surface-streaming: #F5F5F5;
+  --color-surface-streaming: #f5f5f5;
 
   /* -- Badge / specialty colors ---------------------------------- */
-  --color-badge-fancy: #A2A633;
+  --color-badge-fancy: #a2a633;
   --color-badge-signal: #545928;
-  --color-badge-server: #93AEBF;
+  --color-badge-server: #93aebf;
 
   /* -- Search result type icons ---------------------------------- */
   --color-search-user: #545928;
   --color-search-user-bg: rgba(84, 89, 40, 0.14);
-  --color-search-group: #8A8C3F;
+  --color-search-group: #8a8c3f;
   --color-search-group-bg: rgba(138, 140, 63, 0.14);
-  --color-search-message: #A2A633;
-  --color-search-message-bg: rgba(162, 166, 51, 0.20);
+  --color-search-message: #a2a633;
+  --color-search-message-bg: rgba(162, 166, 51, 0.2);
 
   /* -- Own bubble (sent messages) -------------------------------- */
   --color-own-bubble-start: rgba(162, 166, 51, 0.35);
   --color-own-bubble-end: rgba(162, 166, 51, 0.35);
-  --color-own-bubble-text: #1A2611;
+  --color-own-bubble-text: #1a2611;
   --color-own-bubble-time: rgba(26, 38, 17, 0.58);
 
   /* -- Quote ----------------------------------------------------- */

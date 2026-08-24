@@ -7,11 +7,7 @@ import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useAppStore } from "@core/store";
 import { getPreferences } from "@core/preferencesStorage";
-import {
-  PROD_MARKETPLACE_BASE,
-  bannerGradient,
-  resolveMarketplaceImage,
-} from "@core/utils/marketplaceMedia";
+import { PROD_MARKETPLACE_BASE, bannerGradient, resolveMarketplaceImage } from "@core/utils/marketplaceMedia";
 import { SafeHtml } from "@standard/components/elements/SafeHtml";
 import { ArrowLeftIcon, CheckIcon, DownloadIcon, GlobeIcon, StarIcon } from "@ui/icons";
 import { NEBULA_MONO, radius } from "../../tokens";
@@ -414,9 +410,7 @@ export function MarketplacePluginPage({
           )}
 
           {plugin.description && (
-            <Typography sx={{ mt: "16px", fontSize: 12.5, lineHeight: 1.6 }}>
-              {plugin.description}
-            </Typography>
+            <Typography sx={{ mt: "16px", fontSize: 12.5, lineHeight: 1.6 }}>{plugin.description}</Typography>
           )}
 
           {gallery.length > 0 && (
@@ -479,7 +473,9 @@ export function MarketplacePluginPage({
                         />
                       ))}
                     </Stack>
-                    <Typography sx={(theme) => ({ mt: "3px", fontSize: 10.5, color: theme.palette.nebula.dim })}>
+                    <Typography
+                      sx={(theme) => ({ mt: "3px", fontSize: 10.5, color: theme.palette.nebula.dim })}
+                    >
                       {t("marketplace.ratingsCount", { count: ratingTotal })}
                     </Typography>
                   </Box>
@@ -489,7 +485,13 @@ export function MarketplacePluginPage({
                         const count = histogram[stars - 1] ?? 0;
                         const pct = ratingTotal > 0 ? (count / ratingTotal) * 100 : 0;
                         return (
-                          <Stack key={stars} direction="row" alignItems="center" gap={0.75} sx={{ py: "2px" }}>
+                          <Stack
+                            key={stars}
+                            direction="row"
+                            alignItems="center"
+                            gap={0.75}
+                            sx={{ py: "2px" }}
+                          >
                             <Typography sx={{ width: 22, fontSize: 10.5 }}>{stars}★</Typography>
                             <Box
                               sx={(theme) => ({

@@ -29,7 +29,9 @@
   background: rgba(0, 0, 0, 0.45);
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .closeBtn:hover {
@@ -111,7 +113,10 @@
   background: var(--color-glass);
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .editBtn:hover {
@@ -244,7 +249,9 @@
   font: inherit;
   font-size: 13px;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .cancelBtn:hover {
@@ -262,7 +269,9 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .saveBtn:hover {
@@ -433,13 +442,15 @@
   padding: 6px 14px;
   border: 1px solid rgba(239, 68, 68, 0.35);
   border-radius: 6px;
-  background: linear-gradient(135deg, var(--color-danger-strong), rgba(220, 38, 38, 0.10));
+  background: linear-gradient(135deg, var(--color-danger-strong), rgba(220, 38, 38, 0.1));
   color: var(--color-danger);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .dangerBtn:hover {

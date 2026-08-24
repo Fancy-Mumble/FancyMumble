@@ -49,7 +49,9 @@
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
 }
 
 .filterTab:hover {

@@ -10,12 +10,7 @@ import { useTranslation } from "react-i18next";
 
 import { useState, useCallback, useMemo, useSyncExternalStore } from "react";
 import type { PollPayload } from "@core/features/chat/poll/model";
-import {
-  getLocalVote,
-  getVotes,
-  pollsRevision,
-  subscribeToPolls,
-} from "@core/features/chat/poll/model";
+import { getLocalVote, getVotes, pollsRevision, subscribeToPolls } from "@core/features/chat/poll/model";
 export {
   getLocalVote,
   getPoll,

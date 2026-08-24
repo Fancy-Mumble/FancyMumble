@@ -99,7 +99,9 @@
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
 }
 
 .toolBtn:hover:not(:disabled) {
@@ -307,7 +309,9 @@
   background: transparent;
   cursor: pointer;
   padding: 0;
-  transition: background 0.08s, border-color 0.08s;
+  transition:
+    background 0.08s,
+    border-color 0.08s;
 }
 
 .tablePickerCell:hover,
@@ -387,10 +391,16 @@
   background: var(--color-surface, #1e2128);
   border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
   border-radius: var(--radius-md, 8px);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.30), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  box-shadow:
+    0 6px 24px rgba(0, 0, 0, 0.3),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset;
   padding: var(--ld-pad-y, 72px) var(--ld-pad-x, 84px);
   cursor: text;
-  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 /* White-paper preview mode: override the dark surface so the document
@@ -761,7 +771,9 @@
   border-radius: var(--radius-sm, 4px);
   color: var(--color-text-primary, #f5f6f8);
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
 }
 
 .tableControlBtn:hover {
@@ -982,8 +994,7 @@
   height: 320px;
   /* A subtle checker-ish backdrop so transparent models stay visible. */
   background:
-    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.06), transparent 70%),
-    var(--color-bg, #14161b);
+    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.06), transparent 70%), var(--color-bg, #14161b);
   touch-action: none;
 }
 

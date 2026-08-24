@@ -1,6 +1,5 @@
 ﻿/* Sunflowers replaced by Clarimol. This file is intentionally empty. */
 
-
 [data-theme="sunflowers"] {
   /* -- Background ------------------------------------------------ */
   --color-bg-primary: #fffbf0;
@@ -46,7 +45,7 @@
   --color-glass-hover: rgba(0, 0, 0, 0.06);
   --color-glass-medium: rgba(0, 0, 0, 0.08);
   --color-glass-active: rgba(242, 135, 5, 0.08);
-  --color-glass-strong: rgba(0, 0, 0, 0.10);
+  --color-glass-strong: rgba(0, 0, 0, 0.1);
   --color-glass-heavy: rgba(0, 0, 0, 0.12);
   --color-glass-border: rgba(0, 0, 0, 0.08);
   --color-glass-border-hover: rgba(0, 0, 0, 0.14);
@@ -59,17 +58,17 @@
   --color-danger-soft: rgba(242, 92, 5, 0.04);
   --color-danger-subtle: rgba(242, 92, 5, 0.06);
   --color-danger-bg: rgba(242, 92, 5, 0.08);
-  --color-danger-medium: rgba(242, 92, 5, 0.10);
+  --color-danger-medium: rgba(242, 92, 5, 0.1);
   --color-danger-strong: rgba(242, 92, 5, 0.14);
-  --color-danger-border: rgba(242, 92, 5, 0.20);
+  --color-danger-border: rgba(242, 92, 5, 0.2);
   --color-danger-border-strong: rgba(242, 92, 5, 0.28);
-  --color-danger-alt-light: rgba(204, 69, 0, 0.10);
+  --color-danger-alt-light: rgba(204, 69, 0, 0.1);
   --color-danger-alt-glow: rgba(204, 69, 0, 0.28);
   --color-danger-alt-soft: rgba(204, 69, 0, 0.04);
   --color-danger-alt-subtle: rgba(204, 69, 0, 0.06);
   --color-danger-alt-border: rgba(204, 69, 0, 0.18);
   --color-danger-alt-strong: rgba(204, 69, 0, 0.22);
-  --color-danger-alt-border-strong: rgba(204, 69, 0, 0.30);
+  --color-danger-alt-border-strong: rgba(204, 69, 0, 0.3);
 
   /* -- Success / Online (olive green) ---------------------------- */
   --color-online: #5a6b02;
@@ -77,8 +76,8 @@
   --color-online-subtle: rgba(86, 89, 2, 0.06);
   --color-online-bg: rgba(86, 89, 2, 0.08);
   --color-online-medium: rgba(86, 89, 2, 0.12);
-  --color-online-glow: rgba(86, 89, 2, 0.30);
-  --color-success-gradient-start: rgba(86, 89, 2, 0.10);
+  --color-online-glow: rgba(86, 89, 2, 0.3);
+  --color-success-gradient-start: rgba(86, 89, 2, 0.1);
   --color-success-gradient-end: rgba(86, 89, 2, 0.04);
 
   /* -- Warning (golden yellow) ----------------------------------- */
@@ -111,7 +110,7 @@
   --color-overlay-light: rgba(0, 0, 0, 0.08);
   --color-overlay-medium: rgba(0, 0, 0, 0.14);
   --color-overlay-heavy: rgba(0, 0, 0, 0.28);
-  --color-overlay-strong: rgba(0, 0, 0, 0.20);
+  --color-overlay-strong: rgba(0, 0, 0, 0.2);
   --color-overlay-dark: rgba(0, 0, 0, 0.48);
   --color-overlay-darkest: rgba(0, 0, 0, 0.62);
 
@@ -128,15 +127,15 @@
 
   /* -- Search result type icons ---------------------------------- */
   --color-search-user: #5a6b02;
-  --color-search-user-bg: rgba(86, 89, 2, 0.10);
+  --color-search-user-bg: rgba(86, 89, 2, 0.1);
   --color-search-group: #4b83a6;
-  --color-search-group-bg: rgba(75, 131, 166, 0.10);
+  --color-search-group-bg: rgba(75, 131, 166, 0.1);
   --color-search-message: #d97204;
-  --color-search-message-bg: rgba(217, 114, 4, 0.10);
+  --color-search-message-bg: rgba(217, 114, 4, 0.1);
 
   /* -- Own bubble (sent messages) -------------------------------- */
   --color-own-bubble-start: rgba(242, 135, 5, 0.18);
-  --color-own-bubble-end: rgba(242, 135, 5, 0.10);
+  --color-own-bubble-end: rgba(242, 135, 5, 0.1);
   --color-own-bubble-text: #2a1f05;
   --color-own-bubble-time: rgba(42, 31, 5, 0.52);
 

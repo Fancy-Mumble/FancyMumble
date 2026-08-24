@@ -82,10 +82,7 @@ export function useServerLiveries(): ServerLiveries {
       // considers active - it skips the stamp only before a session is
       // registered - and falling back to it is how the store routes every
       // other server-scoped event.
-      file(
-        event.payload.serverId ?? useAppStore.getState().activeServerId,
-        event.payload.livery ?? null,
-      );
+      file(event.payload.serverId ?? useAppStore.getState().activeServerId, event.payload.livery ?? null);
     })
       .then((stop) => {
         if (cancelled) stop();

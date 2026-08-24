@@ -136,14 +136,50 @@
   touch-action: none;
 }
 
-.handleNW { top: -6px; left: -6px; cursor: nwse-resize; }
-.handleN  { top: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
-.handleNE { top: -6px; right: -6px; cursor: nesw-resize; }
-.handleE  { top: 50%; right: -6px; transform: translateY(-50%); cursor: ew-resize; }
-.handleSE { bottom: -6px; right: -6px; cursor: nwse-resize; }
-.handleS  { bottom: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
-.handleSW { bottom: -6px; left: -6px; cursor: nesw-resize; }
-.handleW  { top: 50%; left: -6px; transform: translateY(-50%); cursor: ew-resize; }
+.handleNW {
+  top: -6px;
+  left: -6px;
+  cursor: nwse-resize;
+}
+.handleN {
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+.handleNE {
+  top: -6px;
+  right: -6px;
+  cursor: nesw-resize;
+}
+.handleE {
+  top: 50%;
+  right: -6px;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+}
+.handleSE {
+  bottom: -6px;
+  right: -6px;
+  cursor: nwse-resize;
+}
+.handleS {
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+.handleSW {
+  bottom: -6px;
+  left: -6px;
+  cursor: nesw-resize;
+}
+.handleW {
+  top: 50%;
+  left: -6px;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+}
 
 /* ---------- Rotate handle ---------- */
 
@@ -168,7 +204,9 @@
   user-select: none;
 }
 
-.rotateHandle:active { cursor: grabbing; }
+.rotateHandle:active {
+  cursor: grabbing;
+}
 
 /* ---------- Wrap-mode floating toolbar ---------- */
 

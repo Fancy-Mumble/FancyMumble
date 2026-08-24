@@ -1,131 +1,131 @@
 .screen {
-    flex: 1;
-    min-width: 0;
-    display: grid;
-    place-items: center;
-    padding: 40px 28px;
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  padding: 40px 28px;
 }
 
 .card {
-    width: min(420px, 100%);
-    padding: 40px 36px 32px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    border: 1px solid rgba(255, 255, 255, .07);
-    border-radius: 22px;
-    background: rgba(22, 27, 35, .97);
-    box-shadow: 0 28px 80px rgba(0, 0, 0, .4);
-    text-align: center;
+  width: min(420px, 100%);
+  padding: 40px 36px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 22px;
+  background: rgba(22, 27, 35, 0.97);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.4);
+  text-align: center;
 }
 
 .indicator {
-    width: 60px;
-    height: 60px;
-    display: grid;
-    place-items: center;
-    border-radius: 50%;
-    background: rgba(239, 100, 100, .1);
-    color: #ef8888;
+  width: 60px;
+  height: 60px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(239, 100, 100, 0.1);
+  color: #ef8888;
 }
 
 .indicator svg {
-    width: 26px;
-    height: 26px;
+  width: 26px;
+  height: 26px;
 }
 
 .indicatorPending {
-    background: rgba(101, 184, 237, .1);
-    color: #65b8ed;
+  background: rgba(101, 184, 237, 0.1);
+  color: #65b8ed;
 }
 
 .spinner {
-    width: 24px;
-    height: 24px;
-    border: 2px solid rgba(101, 184, 237, .22);
-    border-top-color: #65b8ed;
-    border-radius: 50%;
-    animation: sessionStatusSpin .8s linear infinite;
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(101, 184, 237, 0.22);
+  border-top-color: #65b8ed;
+  border-radius: 50%;
+  animation: sessionStatusSpin 0.8s linear infinite;
 }
 
 @keyframes sessionStatusSpin {
-    to {
-        transform: rotate(360deg);
-    }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .spinner {
-        animation-duration: 2.4s;
-    }
+  .spinner {
+    animation-duration: 2.4s;
+  }
 }
 
 .title {
-    margin: 22px 0 0;
-    color: #eef2f7;
-    font-size: 19px;
-    font-weight: 650;
-    letter-spacing: -.01em;
+  margin: 22px 0 0;
+  color: #eef2f7;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 .server {
-    margin: 7px 0 0;
-    color: #7d8998;
-    font-size: 12px;
+  margin: 7px 0 0;
+  color: #7d8998;
+  font-size: 12px;
 }
 
 .reason {
-    width: 100%;
-    margin: 24px 0 0;
-    padding: 13px 15px;
-    border-radius: 12px;
-    background: rgba(239, 100, 100, .07);
-    color: #eb9292;
-    font-size: 12px;
-    line-height: 1.55;
+  width: 100%;
+  margin: 24px 0 0;
+  padding: 13px 15px;
+  border-radius: 12px;
+  background: rgba(239, 100, 100, 0.07);
+  color: #eb9292;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .reasonPending {
-    background: rgba(255, 255, 255, .04);
-    color: #93a0ae;
+  background: rgba(255, 255, 255, 0.04);
+  color: #93a0ae;
 }
 
 .actions {
-    width: 100%;
-    margin-top: 26px;
-    display: flex;
-    flex-direction: column;
-    gap: 9px;
+  width: 100%;
+  margin-top: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
 }
 
 .actionRow {
-    display: flex;
-    gap: 9px;
+  display: flex;
+  gap: 9px;
 }
 
-.actionRow>button {
-    flex: 1;
-    min-height: 42px;
+.actionRow > button {
+  flex: 1;
+  min-height: 42px;
 }
 
 /* Scoped past the `.bare` primitive, which has equal specificity. */
 .actions .tertiary {
-    margin-top: 3px;
-    min-height: 34px;
-    color: #7d8998;
-    font-size: 11px;
+  margin-top: 3px;
+  min-height: 34px;
+  color: #7d8998;
+  font-size: 11px;
 }
 
 .actions .tertiary:hover {
-    color: #c3ccd6;
+  color: #c3ccd6;
 }
 
 @media (max-width: 720px) {
-    .screen {
-        padding: 22px 16px;
-    }
+  .screen {
+    padding: 22px 16px;
+  }
 
-    .card {
-        padding: 32px 22px 26px;
-    }
+  .card {
+    padding: 32px 22px 26px;
+  }
 }

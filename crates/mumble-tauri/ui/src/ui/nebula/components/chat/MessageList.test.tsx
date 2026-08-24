@@ -41,9 +41,7 @@ describe("MessageList", () => {
     // watching an element in fixed chrome is permanently intersecting.
     expect(scroller.contains(banner)).toBe(true);
     // Before the first message, so it reads as the top of the history.
-    expect(banner.compareDocumentPosition(screen.getByText("a"))).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
+    expect(banner.compareDocumentPosition(screen.getByText("a"))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it("marks each row with its id so a quote can be followed to it", () => {

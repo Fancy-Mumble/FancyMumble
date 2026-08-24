@@ -147,7 +147,7 @@
   height: 16px;
   border-radius: 50%;
   background: #c3c8d0;
-  transition: .18s;
+  transition: 0.18s;
 }
 
 .switchOn i {
@@ -156,7 +156,7 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  transition: .18s;
+  transition: 0.18s;
   left: 20px;
   background: #13150f;
 }

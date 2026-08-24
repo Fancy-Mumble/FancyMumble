@@ -12,7 +12,9 @@
   border-radius: 6px;
   border: 2px solid var(--color-glass-border);
   cursor: pointer;
-  transition: transform 0.15s, border-color 0.15s;
+  transition:
+    transform 0.15s,
+    border-color 0.15s;
 }
 
 .swatch:hover {

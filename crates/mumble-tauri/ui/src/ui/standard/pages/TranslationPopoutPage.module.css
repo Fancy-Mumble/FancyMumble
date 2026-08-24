@@ -340,7 +340,9 @@
   color: inherit;
   border-radius: 6px;
   padding: 8px;
-  font: 13px ui-monospace, monospace;
+  font:
+    13px ui-monospace,
+    monospace;
   resize: vertical;
   box-sizing: border-box;
 }

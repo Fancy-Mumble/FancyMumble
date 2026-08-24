@@ -1,12 +1,7 @@
 import { useState } from "react";
 import { Box, Switch, Typography } from "@mui/material";
 import type { FancyProfile } from "@core/types";
-import {
-  ProfileCard,
-  PencilGlyph,
-  type ProfileCardModel,
-  type ProfileCardTokens,
-} from "@shared/profilecard";
+import { ProfileCard, PencilGlyph, type ProfileCardModel, type ProfileCardTokens } from "@shared/profilecard";
 import { Stack } from "../primitives";
 
 /**
@@ -26,18 +21,60 @@ const FOOTNOTE = "Banner · Frame · Nameplate · Sticker · Badges · Colours �
  */
 const EXAMPLE: Pick<ProfileCardModel, "badges" | "shelves" | "roles" | "activity" | "stats"> = {
   badges: [
-    { id: "x1", label: "Example badge", glyph: { kind: "icon", name: "star" }, tone: "#ecba55", source: "server" },
-    { id: "x2", label: "Example badge", glyph: { kind: "icon", name: "mic" }, tone: "#41b4f9", source: "server" },
-    { id: "x3", label: "Example badge", glyph: { kind: "icon", name: "sparkle" }, tone: "#a855f7", source: "server" },
-    { id: "x4", label: "Example badge", glyph: { kind: "icon", name: "check" }, tone: "#3cd88e", source: "server" },
+    {
+      id: "x1",
+      label: "Example badge",
+      glyph: { kind: "icon", name: "star" },
+      tone: "#ecba55",
+      source: "server",
+    },
+    {
+      id: "x2",
+      label: "Example badge",
+      glyph: { kind: "icon", name: "mic" },
+      tone: "#41b4f9",
+      source: "server",
+    },
+    {
+      id: "x3",
+      label: "Example badge",
+      glyph: { kind: "icon", name: "sparkle" },
+      tone: "#a855f7",
+      source: "server",
+    },
+    {
+      id: "x4",
+      label: "Example badge",
+      glyph: { kind: "icon", name: "check" },
+      tone: "#3cd88e",
+      source: "server",
+    },
   ],
   shelves: [
     {
       id: "common",
       badges: [
-        { id: "s1", label: "Example", glyph: { kind: "icon", name: "circle" }, source: "server", shape: "dot" },
-        { id: "s2", label: "Example", glyph: { kind: "icon", name: "diamond" }, source: "server", shape: "diamond" },
-        { id: "s3", label: "Example", glyph: { kind: "icon", name: "diamond" }, source: "server", shape: "diamond" },
+        {
+          id: "s1",
+          label: "Example",
+          glyph: { kind: "icon", name: "circle" },
+          source: "server",
+          shape: "dot",
+        },
+        {
+          id: "s2",
+          label: "Example",
+          glyph: { kind: "icon", name: "diamond" },
+          source: "server",
+          shape: "diamond",
+        },
+        {
+          id: "s3",
+          label: "Example",
+          glyph: { kind: "icon", name: "diamond" },
+          source: "server",
+          shape: "diamond",
+        },
       ],
       overflow: 0,
     },
@@ -45,7 +82,13 @@ const EXAMPLE: Pick<ProfileCardModel, "badges" | "shelves" | "roles" | "activity
       id: "special",
       label: "Special",
       badges: [
-        { id: "s4", label: "Example", glyph: { kind: "icon", name: "circle" }, tone: "#d9a441", source: "server" },
+        {
+          id: "s4",
+          label: "Example",
+          glyph: { kind: "icon", name: "circle" },
+          tone: "#d9a441",
+          source: "server",
+        },
       ],
       overflow: 21,
     },

@@ -17,13 +17,7 @@ import { pointAnchor, type AnchorRect } from "@shared/profilecard";
 export type Screen = "chat" | "messages" | "connect" | "settings";
 
 /** Full-window surfaces that cover the shell while open. */
-export type Surface =
-  | "downloads"
-  | "pinned"
-  | "server-info"
-  | "screen-share"
-  | "public-servers"
-  | null;
+export type Surface = "downloads" | "pinned" | "server-info" | "screen-share" | "public-servers" | null;
 
 export function useScreenRouting() {
   const [screen, setScreen] = useState<Screen>("chat");

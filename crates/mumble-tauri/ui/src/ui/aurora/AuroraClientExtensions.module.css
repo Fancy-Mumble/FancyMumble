@@ -9,10 +9,10 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  border: 1px solid rgba(255, 255, 255, .1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
-  background: rgba(23, 29, 37, .94);
-  box-shadow: 0 16px 50px rgba(0, 0, 0, .35);
+  background: rgba(23, 29, 37, 0.94);
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(20px);
 }
 
@@ -62,7 +62,7 @@
   margin-top: 18px;
 }
 
-@media(max-width:620px) {
+@media (max-width: 620px) {
   .messageSelectionBar {
     right: 8px;
     bottom: 68px;
@@ -85,7 +85,7 @@
   padding: 8px 14px;
   display: flex;
   gap: 5px;
-  border-bottom: 1px solid rgba(255, 255, 255, .07);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .serverTabs button {
@@ -103,7 +103,7 @@
   z-index: 2;
   margin: -14px -14px 12px;
   padding: 14px 14px 12px;
-  background: rgba(20, 25, 33, .97);
+  background: rgba(20, 25, 33, 0.97);
 }
 
 /* The connection form is the same content regardless of which saved servers are
@@ -143,7 +143,7 @@
   display: grid;
   place-items: center;
   border-radius: 16px;
-  background: rgba(101, 184, 237, .1);
+  background: rgba(101, 184, 237, 0.1);
   color: #76bfe9;
 }
 
@@ -184,7 +184,7 @@
 .sortField select {
   height: 39px;
   padding: 0 9px;
-  border: 1px solid rgba(255, 255, 255, .09);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 9px;
   background: #151b23;
   color: #edf1f7;
@@ -206,10 +206,10 @@
   align-items: center;
   gap: 10px;
   border-radius: 11px;
-  background: rgba(255, 255, 255, .028);
+  background: rgba(255, 255, 255, 0.028);
 }
 
-.publicServer>div {
+.publicServer > div {
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -223,7 +223,8 @@
   font-size: 12px;
 }
 
-.publicServer small, .userCapacity {
+.publicServer small,
+.userCapacity {
   color: #7f8b99;
   font-size: 10px;
 }
@@ -232,7 +233,8 @@
   font-size: 21px;
 }
 
-.onlinePing, .unknownPing {
+.onlinePing,
+.unknownPing {
   font-size: 10px;
 }
 
@@ -254,12 +256,12 @@
 .directoryError {
   padding: 12px;
   border-radius: 9px;
-  background: rgba(239, 100, 100, .08);
+  background: rgba(239, 100, 100, 0.08);
   color: #ef8888;
   font-size: 11px;
 }
 
-@media(max-width:720px) {
+@media (max-width: 720px) {
   .directoryToolbar {
     grid-template-columns: 1fr;
   }
@@ -272,7 +274,7 @@
     display: none;
   }
 
-  .publicServer>button {
+  .publicServer > button {
     grid-column: 2/-1;
   }
 
@@ -287,7 +289,7 @@
   padding-left: calc(var(--channel-depth) * 15px);
 }
 
-.channelTreeRow>button:first-child {
+.channelTreeRow > button:first-child {
   flex: 0 0 24px;
   width: 24px;
   height: 32px;
@@ -295,7 +297,7 @@
   color: #6f7c8b;
 }
 
-.channelTreeRow>button:last-child {
+.channelTreeRow > button:last-child {
   min-width: 0;
   flex: 1;
 }
@@ -321,7 +323,8 @@
   gap: 12px;
 }
 
-.channelDescription, .selectField {
+.channelDescription,
+.selectField {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -330,21 +333,23 @@
   font-weight: 650;
 }
 
-.channelDescription textarea, .selectField select {
+.channelDescription textarea,
+.selectField select {
   padding: 10px;
-  border: 1px solid rgba(255, 255, 255, .09);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 9px;
   outline: 0;
-  background: rgba(5, 8, 12, .36);
+  background: rgba(5, 8, 12, 0.36);
   color: #edf1f7;
   font: inherit;
   font-weight: 400;
   resize: vertical;
 }
 
-.channelDescription textarea:focus, .selectField select:focus {
-  border-color: rgba(101, 184, 237, .5);
-  box-shadow: 0 0 0 3px rgba(101, 184, 237, .08);
+.channelDescription textarea:focus,
+.selectField select:focus {
+  border-color: rgba(101, 184, 237, 0.5);
+  box-shadow: 0 0 0 3px rgba(101, 184, 237, 0.08);
 }
 
 .selectField select {
@@ -373,7 +378,7 @@
 .formError {
   padding: 10px;
   border-radius: 8px;
-  background: rgba(239, 100, 100, .08);
+  background: rgba(239, 100, 100, 0.08);
   color: #ef8888;
   font-size: 11px;
 }
@@ -391,22 +396,22 @@
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  border-top: 1px solid rgba(255, 255, 255, .07);
-  background: rgba(20, 25, 33, .94);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(20, 25, 33, 0.94);
   backdrop-filter: blur(14px);
 }
 
-.channelEditorActions>span {
+.channelEditorActions > span {
   margin-right: auto;
   color: #ef8888;
   font-size: 11px;
 }
 
-.channelEditorActions>button:first-child {
+.channelEditorActions > button:first-child {
   margin-right: auto;
 }
 
-@media(max-width:620px) {
+@media (max-width: 620px) {
   .channelEditorGrid {
     grid-template-columns: 1fr;
   }
@@ -415,7 +420,7 @@
     flex-wrap: wrap;
   }
 
-  .channelEditorActions>span {
+  .channelEditorActions > span {
     width: 100%;
   }
 }
@@ -431,14 +436,14 @@
   gap: 15px;
 }
 
-.challengeForm>p {
+.challengeForm > p {
   margin: 0;
   color: #a6b0bc;
   font-size: 12px;
   line-height: 1.55;
 }
 
-.challengeForm>p strong {
+.challengeForm > p strong {
   color: #e9edf2;
 }
 
@@ -454,7 +459,7 @@
   accent-color: #65b8ed;
 }
 
-.challengeForm>footer {
+.challengeForm > footer {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -472,11 +477,11 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid rgba(255, 255, 255, .1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
-  background: rgba(23, 29, 37, .94);
+  background: rgba(23, 29, 37, 0.94);
   backdrop-filter: blur(18px);
-  box-shadow: 0 14px 38px rgba(0, 0, 0, .3);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.3);
   color: #e9edf2;
 }
 
@@ -485,11 +490,11 @@
   height: 9px;
   border-radius: 50%;
   background: #efb66e;
-  box-shadow: 0 0 0 5px rgba(239, 182, 110, .1);
+  box-shadow: 0 0 0 5px rgba(239, 182, 110, 0.1);
   animation: reconnectPulse 1.6s ease-in-out infinite;
 }
 
-.reconnectBanner>div {
+.reconnectBanner > div {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -511,13 +516,13 @@
 }
 
 @keyframes reconnectPulse {
-    50% {
-        opacity: .45;
-        transform: scale(.8)
-    }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
 }
 
-@media(max-width:520px) {
+@media (max-width: 520px) {
   .reconnectBanner {
     left: 10px;
     right: 10px;
@@ -525,14 +530,10 @@
     transform: none;
   }
 
-  .reconnectBanner>button:last-child {
+  .reconnectBanner > button:last-child {
     display: none;
   }
 }
-
-
-
-
 
 .userCardScrollable {
   overflow-y: auto;
@@ -541,7 +542,7 @@
 .userActions {
   margin-top: 18px;
   padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, .07);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
   text-align: left;
 }
 
@@ -583,7 +584,7 @@
   font-size: 9px;
 }
 
-.userActions>label {
+.userActions > label {
   margin-top: 9px;
 }
 
@@ -606,7 +607,7 @@
 .moveUser select {
   height: 34px;
   padding: 0 7px;
-  border: 1px solid rgba(255, 255, 255, .09);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 8px;
   background: #151b23;
   color: #dfe5ec;
@@ -623,7 +624,7 @@
   flex-wrap: wrap;
   gap: 6px;
   border-radius: 8px;
-  background: rgba(239, 100, 100, .06);
+  background: rgba(239, 100, 100, 0.06);
 }
 
 .confirmAction span {
@@ -641,7 +642,7 @@
   margin: 8px 0 0 !important;
   padding: 7px;
   border-radius: 7px;
-  background: rgba(255, 255, 255, .035);
+  background: rgba(255, 255, 255, 0.035);
   color: #9ba8b5 !important;
   font-size: 9px !important;
 }
@@ -662,7 +663,7 @@
 
 .audioSettings {
   margin-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, .07);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .audioSetting {
@@ -671,10 +672,10 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, .06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.audioSetting>span {
+.audioSetting > span {
   min-width: 0;
   flex: 1;
   display: flex;
@@ -691,18 +692,20 @@
   font-size: 10px;
 }
 
-.audioSetting select, .audioSetting>input {
+.audioSetting select,
+.audioSetting > input {
   width: min(250px, 42%);
   height: 36px;
   padding: 0 9px;
-  border: 1px solid rgba(255, 255, 255, .09);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 8px;
   background: #151b23;
   color: #dce3ea;
   font-size: 10px;
 }
 
-.audioToggle, .audioToggleOn {
+.audioToggle,
+.audioToggleOn {
   width: 38px !important;
   min-width: 38px !important;
   height: 22px !important;
@@ -712,17 +715,18 @@
   background: #303944 !important;
 }
 
-.audioToggle i, .audioToggleOn i {
+.audioToggle i,
+.audioToggleOn i {
   display: block;
   width: 16px;
   height: 16px;
   border-radius: 50%;
   background: #8c98a6;
-  transition: transform .18s;
+  transition: transform 0.18s;
 }
 
 .audioToggleOn {
-  background: rgba(101, 184, 237, .35) !important;
+  background: rgba(101, 184, 237, 0.35) !important;
 }
 
 .audioToggleOn i {
@@ -757,7 +761,7 @@
   gap: 12px;
 }
 
-.micTest>div {
+.micTest > div {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -778,7 +782,7 @@
   margin-top: 5px;
   overflow: hidden;
   border-radius: 4px;
-  background: rgba(255, 255, 255, .06);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .micTest i b {
@@ -786,7 +790,7 @@
   display: block;
   border-radius: inherit;
   background: #70d1a4;
-  transition: width .08s linear;
+  transition: width 0.08s linear;
 }
 
 .audioStatus {
@@ -796,13 +800,15 @@
   font-size: 9px;
 }
 
-@media(max-width:620px) {
+@media (max-width: 620px) {
   .audioSetting {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .audioSetting select, .audioSetting>input, .audioSlider {
+  .audioSetting select,
+  .audioSetting > input,
+  .audioSlider {
     width: 100%;
   }
 }
@@ -817,7 +823,9 @@
   font-size: 9px;
 }
 
-.typingStatus i, .typingStatus i:before, .typingStatus i:after {
+.typingStatus i,
+.typingStatus i:before,
+.typingStatus i:after {
   width: 3px;
   height: 3px;
   border-radius: 50%;
@@ -829,7 +837,8 @@
   position: relative;
 }
 
-.typingStatus i:before, .typingStatus i:after {
+.typingStatus i:before,
+.typingStatus i:after {
   content: "";
   position: absolute;
   top: 0;
@@ -837,12 +846,12 @@
 
 .typingStatus i:before {
   left: 5px;
-  animation-delay: .15s;
+  animation-delay: 0.15s;
 }
 
 .typingStatus i:after {
   left: 10px;
-  animation-delay: .3s;
+  animation-delay: 0.3s;
 }
 
 .typingStatus span {
@@ -850,10 +859,10 @@
 }
 
 @keyframes typingDot {
-    50% {
-        opacity: .3;
-        transform: translateY(-2px)
-    }
+  50% {
+    opacity: 0.3;
+    transform: translateY(-2px);
+  }
 }
 
 .pinnedSurface {
@@ -872,7 +881,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  border-bottom: 1px solid rgba(255, 255, 255, .06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .chatSearch label {
@@ -896,21 +905,21 @@
   margin: 8px 18px;
   padding: 9px;
   border-radius: 8px;
-  background: rgba(239, 100, 100, .07);
+  background: rgba(239, 100, 100, 0.07);
   color: #e79898;
   font-size: 10px;
 }
 
 .memberTools {
   padding: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, .06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .memberTools label {
   margin: 0 0 6px !important;
 }
 
-.memberTools>div {
+.memberTools > div {
   display: flex;
   gap: 3px;
 }
@@ -929,7 +938,7 @@
   gap: 10px;
 }
 
-.pollCreator>footer {
+.pollCreator > footer {
   display: flex;
   justify-content: flex-end;
   gap: 7px;
@@ -951,58 +960,59 @@
   max-width: 500px;
   margin-top: 7px;
   padding: 13px;
-  border: 1px solid rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 11px;
-  background: rgba(255, 255, 255, .025);
+  background: rgba(255, 255, 255, 0.025);
 }
 
-.pollCard>strong, .pollCard>small {
+.pollCard > strong,
+.pollCard > small {
   display: block;
 }
 
-.pollCard>strong {
+.pollCard > strong {
   font-size: 13px;
 }
 
-.pollCard>small {
+.pollCard > small {
   margin: 3px 0 10px;
   color: #788594;
   font-size: 9px;
 }
 
-.pollCard>button {
+.pollCard > button {
   width: 100%;
   height: 34px;
   margin-top: 5px;
   display: flex;
   gap: 8px;
   justify-content: flex-start;
-  border: 1px solid rgba(255, 255, 255, .06);
-  background: rgba(255, 255, 255, .025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.025);
 }
 
-.pollCard>button i {
+.pollCard > button i {
   width: 16px;
   height: 16px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, .15);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 50%;
   font-size: 9px;
 }
 
-.pollCard>button span {
+.pollCard > button span {
   flex: 1;
   text-align: left;
 }
 
-.pollCard>button b {
+.pollCard > button b {
   color: #7d8997;
 }
 
 .pollCard .pollSelected {
-  border-color: rgba(101, 184, 237, .3);
-  background: rgba(101, 184, 237, .07);
+  border-color: rgba(101, 184, 237, 0.3);
+  background: rgba(101, 184, 237, 0.07);
 }
 
 .pollCard .pollSelected i {
@@ -1011,7 +1021,7 @@
   color: #102535;
 }
 
-.pollCard>footer {
+.pollCard > footer {
   margin-top: 10px;
   display: flex;
   align-items: center;
@@ -1019,13 +1029,13 @@
   gap: 8px;
 }
 
-.pollCard>footer span {
+.pollCard > footer span {
   margin-right: auto;
   color: #788594;
   font-size: 9px;
 }
 
-.pollCard>footer button {
+.pollCard > footer button {
   height: 29px;
 }
 
@@ -1039,8 +1049,8 @@
   flex-direction: column;
   gap: 2px;
   overflow-y: auto;
-  border-bottom: 1px solid rgba(255, 255, 255, .065);
-  background: rgba(8, 11, 15, .22);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.065);
+  background: rgba(8, 11, 15, 0.22);
 }
 
 .suggestionRow {
@@ -1076,14 +1086,14 @@
   flex: 0 0 auto;
   padding: 2px 6px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, .05);
+  background: rgba(255, 255, 255, 0.05);
   color: #8995a4;
   font-size: 9px;
   font-style: normal;
 }
 
 .suggestionRowActive {
-  background: rgba(101, 184, 237, .12) !important;
+  background: rgba(101, 184, 237, 0.12) !important;
 }
 
 .suggestionRowActive strong {

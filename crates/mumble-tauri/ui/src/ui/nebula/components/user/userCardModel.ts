@@ -101,9 +101,7 @@ export function useUserCardModel(user: UserEntry, tokens: ProfileCardTokens): Pr
 
   const activity = useMemo<CardActivity | null>(() => {
     if (presence) {
-      const detail = [presence.activity.details, presence.activity.state]
-        .filter(Boolean)
-        .join(" · ");
+      const detail = [presence.activity.details, presence.activity.state].filter(Boolean).join(" · ");
       const started = presence.activity.timestamps?.start;
       const elapsed = started ? formatSpan((Date.now() - started) / 1000) : null;
       return {

@@ -4,7 +4,9 @@
 
 .dropZone {
   border-radius: var(--radius-sm, 4px);
-  transition: background 0.12s, outline-color 0.12s;
+  transition:
+    background 0.12s,
+    outline-color 0.12s;
 }
 
 .dropZoneActive {
@@ -28,13 +30,28 @@
 /* --- Shake animation (permission denied) ------------------------ */
 
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  15%       { transform: translateX(-6px); }
-  30%       { transform: translateX(5px); }
-  45%       { transform: translateX(-4px); }
-  60%       { transform: translateX(4px); }
-  75%       { transform: translateX(-2px); }
-  90%       { transform: translateX(2px); }
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  15% {
+    transform: translateX(-6px);
+  }
+  30% {
+    transform: translateX(5px);
+  }
+  45% {
+    transform: translateX(-4px);
+  }
+  60% {
+    transform: translateX(4px);
+  }
+  75% {
+    transform: translateX(-2px);
+  }
+  90% {
+    transform: translateX(2px);
+  }
 }
 
 .shaking {
@@ -44,8 +61,12 @@
 /* --- Highlight animation (search result selected) --------------- */
 
 @keyframes highlight-flash {
-  0%   { box-shadow: 0 0 0 2px var(--color-accent, #2aabee); }
-  100% { box-shadow: none; }
+  0% {
+    box-shadow: 0 0 0 2px var(--color-accent, #2aabee);
+  }
+  100% {
+    box-shadow: none;
+  }
 }
 
 .highlighted {
@@ -69,20 +90,12 @@
 /* --- Current channel highlight ---------------------------------- */
 
 .currentChannel {
-  background: linear-gradient(
-    135deg,
-    var(--color-accent-medium),
-    rgba(122, 58, 237, 0.10)
-  );
+  background: linear-gradient(135deg, var(--color-accent-medium), rgba(122, 58, 237, 0.1));
   border-color: var(--color-accent-fill);
 }
 
 .currentChannel:hover {
-  background: linear-gradient(
-    135deg,
-    rgba(42, 171, 238, 0.22),
-    rgba(122, 58, 237, 0.15)
-  );
+  background: linear-gradient(135deg, rgba(42, 171, 238, 0.22), rgba(122, 58, 237, 0.15));
 }
 
 /* --- Channel item (leaf / flat) --------------------------------- */

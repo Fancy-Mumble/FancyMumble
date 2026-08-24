@@ -647,7 +647,9 @@
   color: var(--color-text-dim);
   font-size: 0.85rem;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .aclTabBtn:hover {
@@ -1439,4 +1441,3 @@ button.aclCardHeader:hover {
   flex-direction: column;
   gap: 4px;
 }
-

@@ -212,11 +212,7 @@ export function MarketplaceAdmin({ onOpenPlugin }: Readonly<{ onOpenPlugin?: (id
       toolbar={
         <>
           <Box sx={{ width: 220 }}>
-            <SearchBox
-              value={query}
-              onChange={setQuery}
-              placeholder={t("marketplace.searchPlaceholder")}
-            />
+            <SearchBox value={query} onChange={setQuery} placeholder={t("marketplace.searchPlaceholder")} />
           </Box>
           {isDevMode && (
             <TextField
@@ -281,10 +277,7 @@ export function MarketplaceAdmin({ onOpenPlugin }: Readonly<{ onOpenPlugin?: (id
           }}
         >
           {results.map((plugin) => {
-            const iconSrc = resolveMarketplaceImage(
-              plugin.icon_url,
-              baseUrl === PROD_URL ? null : baseUrl,
-            );
+            const iconSrc = resolveMarketplaceImage(plugin.icon_url, baseUrl === PROD_URL ? null : baseUrl);
             const isInstalled = installed.some((entry) => entry.marketplace_id === plugin.id);
             const incompatible = plugin.compatible === false;
             return (

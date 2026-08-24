@@ -376,7 +376,11 @@ export function AccountPanel() {
               {totpEnroll.uri ? (
                 <div className={styles.qrCenter}>
                   <div className={styles.qrFrame}>
-                    <QrCode value={totpEnroll.uri} label={t("account.totp.qrLabel")} testId={TID.accountTotpQr} />
+                    <QrCode
+                      value={totpEnroll.uri}
+                      label={t("account.totp.qrLabel")}
+                      testId={TID.accountTotpQr}
+                    />
                   </div>
                 </div>
               ) : (
@@ -581,4 +585,3 @@ function TotpSecretField({
     </div>
   );
 }
-

@@ -40,9 +40,9 @@
 /* Secondary variant */
 .secondary .btnMain,
 .secondary .btnChevron {
-  background: var(--surface-2, rgba(255,255,255,0.08));
+  background: var(--surface-2, rgba(255, 255, 255, 0.08));
   color: var(--text-primary, #e8eaf0);
-  border: 1px solid var(--border, rgba(255,255,255,0.12));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
@@ -52,7 +52,7 @@
 }
 .secondary .btnMain:hover,
 .secondary .btnChevron:hover {
-  background: var(--surface-3, rgba(255,255,255,0.12));
+  background: var(--surface-3, rgba(255, 255, 255, 0.12));
 }
 
 /* Shape */
@@ -76,7 +76,7 @@
   right: 0;
   min-width: 220px;
   background: var(--surface-overlay, #1e2130);
-  border: 1px solid var(--border, rgba(255,255,255,0.12));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
   border-radius: 8px;
   padding: 4px;
   display: flex;

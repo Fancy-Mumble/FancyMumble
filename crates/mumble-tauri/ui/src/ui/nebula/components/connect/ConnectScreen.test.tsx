@@ -261,17 +261,21 @@ describe("the address chip stays readable over any banner", () => {
   /** `over` seen through the chip's scrim, as the compositor would blend it. */
   function throughScrim(over: readonly [number, number, number]): [number, number, number] {
     const { scrim, scrimAlpha } = ADDRESS_CHIP;
-    return over.map((channel, at) =>
-      Math.round(scrim[at] * scrimAlpha + channel * (1 - scrimAlpha)),
-    ) as [number, number, number];
+    return over.map((channel, at) => Math.round(scrim[at] * scrimAlpha + channel * (1 - scrimAlpha))) as [
+      number,
+      number,
+      number,
+    ];
   }
 
   /** The chip's ink over that composite. */
   function ink(ground: readonly [number, number, number]): [number, number, number] {
     const { ink: colour, inkAlpha } = ADDRESS_CHIP;
-    return ground.map((channel, at) =>
-      Math.round(colour[at] * inkAlpha + channel * (1 - inkAlpha)),
-    ) as [number, number, number];
+    return ground.map((channel, at) => Math.round(colour[at] * inkAlpha + channel * (1 - inkAlpha))) as [
+      number,
+      number,
+      number,
+    ];
   }
 
   // WCAG 2.1 AA for body text. The chip is small, so this is the floor that

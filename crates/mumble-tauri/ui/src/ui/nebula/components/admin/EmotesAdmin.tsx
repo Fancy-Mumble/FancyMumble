@@ -113,9 +113,7 @@ export function EmotesAdmin() {
           onChange={setDescription}
           placeholder="(optional)"
         />
-        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: "7px" }}>
-          {t("emotes.fieldImage")}
-        </Typography>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: "7px" }}>{t("emotes.fieldImage")}</Typography>
         <Stack direction="row" alignItems="center" gap={1.25}>
           <Button size="small" variant="outlined" onClick={() => void pickFile()}>
             {filePath ? t("emotes.changeFile") : t("emotes.chooseFile")}
@@ -161,10 +159,7 @@ export function EmotesAdmin() {
                   sx={{ flex: "none", width: 28, height: 28, objectFit: "contain" }}
                 />
                 <Stack direction="row" alignItems="center" gap={1.25} sx={{ flex: 1, minWidth: 0 }}>
-                  <Box
-                    component="code"
-                    sx={{ fontFamily: NEBULA_MONO, fontSize: 11.5, fontWeight: 600 }}
-                  >
+                  <Box component="code" sx={{ fontFamily: NEBULA_MONO, fontSize: 11.5, fontWeight: 600 }}>
                     :{emote.shortcode}:
                   </Box>
                   <Box component="span" sx={{ fontSize: 14 }}>
