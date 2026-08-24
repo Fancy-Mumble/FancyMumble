@@ -144,6 +144,142 @@ export const LIMITS = {
 
 export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 
+/**
+ * The pixel box each kind of artwork is scaled into before it is stored.
+ *
+ * Sized from where the image is actually painted, doubled for a HiDPI screen:
+ * the banner spans the connect screen at 210 CSS pixels tall, the mark is a
+ * 72-pixel square. Anything larger costs every viewer decoded-bitmap memory -
+ * width x height x 4 bytes, held in the renderer's image cache - to paint
+ * detail no one can see, which is the same reason avatars are downscaled on
+ * the way in.
+ */
+export const IMAGE_BOUNDS = {
+  banner: { width: 1600, height: 600 },
+  icon: { width: 256, height: 256 },
+} as const;
+
+/** What an image fitted for upload came out as. */
+export interface FittedImage {
+  readonly bytes: Uint8Array;
+  /** Pixels of the fitted image, or `0` when nothing decoded it. */
+  readonly width: number;
+  readonly height: number;
+  /** False when these are the operator's own bytes, handed back untouched. */
+  readonly resized: boolean;
+  readonly originalBytes: number;
+}
+
+/**
+ * Qualities tried at one size, largest first.
+ *
+ * Re-encoding is always to WebP: it is one of the three formats the server
+ * accepts, it carries transparency - a mark is usually a logo on nothing - and
+ * at these sizes it lands well under the cap where a PNG of the same picture
+ * would not.
+ */
+const IMAGE_QUALITY = [0.92, 0.82, 0.72, 0.62, 0.5, 0.4] as const;
+
+/** How much smaller to go when no quality at the current size fit. */
+const IMAGE_SHRINK = 0.75;
+
+/** Below this longest edge, shrinking further is worse than the refusal. */
+const IMAGE_MIN_EDGE = 64;
+
+/**
+ * Scale and re-encode a chosen file until it fits what the server stores.
+ *
+ * Operators pick artwork out of a folder, and what is in that folder is a
+ * camera JPEG or an export at print resolution. Sending those bytes as chosen
+ * fails twice over: the transport refuses a body past its own buffer limit
+ * long before the API can say anything useful, and even a file that squeaks
+ * under it is a picture every client then decodes at a size nothing paints.
+ * So the fit happens here, where the picture is still a picture, rather than
+ * being reported as a number the operator has no tool to act on.
+ *
+ * A file that is already within both the byte cap and the pixel box comes back
+ * untouched - an operator who prepared artwork deliberately gets the encoding
+ * they prepared, not a re-compression of it.
+ *
+ * The server stays the authority. Nothing here relaxes a limit; the smallest
+ * result is uploaded even if it still does not fit, so a picture this cannot
+ * shrink is refused by the API naming the real number rather than being
+ * silently dropped on the floor.
+ */
+export async function fitLiveryImage(file: Blob, which: "banner" | "icon"): Promise<FittedImage> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const limit = which === "banner" ? LIMITS.bannerBytes : LIMITS.iconBytes;
+  const bounds = IMAGE_BOUNDS[which];
+  const untouched = (width = 0, height = 0): FittedImage => ({
+    bytes,
+    width,
+    height,
+    resized: false,
+    originalBytes: bytes.length,
+  });
+
+  // Absent in tests and in any webview without them. Not being able to fit an
+  // image is not a reason to refuse to upload one: the original goes as it is,
+  // and the server answers for it.
+  if (typeof createImageBitmap !== "function" || typeof OffscreenCanvas !== "function") {
+    return untouched();
+  }
+
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    // Undecodable here says nothing about the server's decoder, and the
+    // upload's own refusal names the reason better than a guess would.
+    return untouched();
+  }
+
+  try {
+    const fit = Math.min(1, bounds.width / bitmap.width, bounds.height / bitmap.height);
+    if (fit >= 1 && bytes.length <= limit) return untouched(bitmap.width, bitmap.height);
+
+    // Attempts are weighed by `Blob.size` and only the one that is kept is read
+    // into memory: a rejected encode is a picture-sized copy nothing looks at.
+    let best: { blob: Blob; width: number; height: number } | null = null;
+    const keep = async (attempt: { blob: Blob; width: number; height: number }) => ({
+      bytes: new Uint8Array(await attempt.blob.arrayBuffer()),
+      width: attempt.width,
+      height: attempt.height,
+      resized: true,
+      originalBytes: bytes.length,
+    });
+
+    for (let scale = fit; ; scale *= IMAGE_SHRINK) {
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = new OffscreenCanvas(width, height);
+      const context = canvas.getContext("2d");
+      if (!context) break;
+      context.drawImage(bitmap, 0, 0, width, height);
+
+      // Sequential on purpose: the point of the ladder is to stop at the first
+      // quality that fits, so encoding the rest is work thrown away.
+      for (const quality of IMAGE_QUALITY) {
+        const blob = await canvas.convertToBlob({ type: "image/webp", quality });
+        const attempt = { blob, width, height };
+        if (blob.size <= limit) return keep(attempt);
+        if (!best || blob.size < best.blob.size) best = attempt;
+      }
+
+      // Quality is spent before pixels are, and pixels only down to here: a
+      // banner shrunk past legibility is a worse answer than the refusal.
+      if (Math.max(width, height) <= IMAGE_MIN_EDGE) break;
+    }
+    return best ? keep(best) : untouched(bitmap.width, bitmap.height);
+  } catch {
+    // A canvas that cannot encode - no WebP encoder, a tainted surface - leaves
+    // the original as the only thing to send.
+    return untouched();
+  } finally {
+    bitmap.close();
+  }
+}
+
 /** Fields the editor may write, which is every one the API accepts. */
 export type LiveryField =
   | "display_name"

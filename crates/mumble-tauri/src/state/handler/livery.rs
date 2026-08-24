@@ -15,9 +15,17 @@
 //! editing a motto costs a few hundred bytes rather than the banner again. What
 //! is already cached stays cached: a push carries no art at all, and the keys
 //! on the document are what tell us whether the cache still matches.
+//!
+//! That is also why a push can name a key this client has never seen - an
+//! operator who just replaced the banner is the ordinary case - and why the
+//! answer to one is to ask for that image: a document is not finished arriving
+//! until the artwork it names is here. Without the ask, replacing a banner
+//! repaints every connected client with no banner at all until it reconnects.
 
+use mumble_protocol::command;
 use mumble_protocol::proto::fancy;
 use serde::Serialize;
+use tracing::{debug, warn};
 
 use super::{HandleMessage, HandlerContext};
 
@@ -203,11 +211,46 @@ impl HandleMessage for fancy::domain::LiveryDoc {
             .collect();
         state.livery_art.retain(|key, _| named.contains(key));
 
+        // A key this client has never held, which is what a push carrying no
+        // art looks like the moment an operator replaces a picture. Asked for
+        // once per key: a server that cannot produce the blob would otherwise
+        // answer every reply with another document naming it.
+        state.livery_art_asked.retain(|key| named.contains(key));
+        let missing: Vec<String> = named
+            .iter()
+            .filter(|key| !state.livery_art.contains_key(*key))
+            .cloned()
+            .collect();
+        let wanted: Vec<String> = missing
+            .into_iter()
+            .filter(|key| state.livery_art_asked.insert(key.clone()))
+            .collect();
+        // What to name as already held, so the reply carries only the missing
+        // one rather than both images again.
+        let have_keys: Vec<String> = state.livery_art.keys().cloned().collect();
+        let handle = state.conn.client_handle.clone();
+
         let snapshot = to_snapshot(self, |key| state.livery_art.get(key).cloned());
         state.livery = Some(snapshot.clone());
         drop(state);
 
+        // Emitted first: the words and colours in this document are ready now,
+        // and the artwork lands as a second push a moment later.
         ctx.emit("server-livery", LiveryPayload { livery: snapshot });
+
+        if wanted.is_empty() {
+            return;
+        }
+        let Some(handle) = handle else {
+            warn!("livery: art is missing but there is no client handle to ask on");
+            return;
+        };
+        let _art_task = tokio::spawn(async move {
+            match handle.send(command::RequestLivery { have_keys }).await {
+                Ok(()) => debug!(keys = wanted.len(), "livery: asked for missing art"),
+                Err(error) => warn!("livery: failed to ask for missing art: {error}"),
+            }
+        });
     }
 }
 

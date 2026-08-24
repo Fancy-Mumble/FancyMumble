@@ -34,6 +34,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getPreferences, updatePreferences } from "@core/preferencesStorage";
+import { useAppStore } from "@core/store";
 import { listen } from "@tauri-apps/api/event";
 import {
   IMAGE_TYPES,
@@ -44,6 +45,7 @@ import {
   clearLiveryImage,
   currentLivery,
   diffLivery,
+  fitLiveryImage,
   fromSnapshot,
   isHexColour,
   uploadLiveryImage,
@@ -143,6 +145,10 @@ export function LiveryTab() {
   const [open, setOpen] = useState<Slot | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // What the last upload had to do to the operator's file, when it did
+  // anything. The bytes on the server are not the bytes they picked, so it is
+  // said rather than done quietly.
+  const [resized, setResized] = useState<string | null>(null);
 
   const bannerInput = useRef<HTMLInputElement>(null);
   const iconInput = useRef<HTMLInputElement>(null);
@@ -176,6 +182,7 @@ export function LiveryTab() {
   const run = async (work: () => Promise<void>) => {
     setBusy(true);
     setError(null);
+    setResized(null);
     try {
       await work();
     } catch (reason) {
@@ -187,6 +194,32 @@ export function LiveryTab() {
     }
   };
 
+  /**
+   * Replace one image with a chosen file, scaled to what the server stores.
+   *
+   * Fitted before it goes out: what an operator picks out of a folder is a
+   * camera JPEG or a print-resolution export, and sending that fails at the
+   * transport's buffer limit with a message about body length rather than
+   * about artwork.
+   */
+  const replaceImage = (which: "banner" | "icon", file: File) =>
+    void run(async () => {
+      const fitted = await fitLiveryImage(file, which);
+      await uploadLiveryImage(creds, which, fitted.bytes);
+      if (fitted.resized) {
+        setResized(
+          t("livery.resized", {
+            defaultValue: "Resized to {{width}}×{{height}}, {{before}} → {{after}}.",
+            width: fitted.width,
+            height: fitted.height,
+            before: kib(fitted.originalBytes),
+            after: kib(fitted.bytes.length),
+          }),
+        );
+      }
+      await load();
+    });
+
   // Read once, then follow the server's own push, which arrives whenever
   // anybody changes the livery - including this page saving.
   useEffect(() => {
@@ -194,9 +227,18 @@ export function LiveryTab() {
     if (!("__TAURI_INTERNALS__" in globalThis)) return;
     let cancelled = false;
     let unlisten: (() => void) | null = null;
-    void listen<{ livery: LiverySnapshot | null }>("server-livery", (event) => {
-      if (!cancelled) adopt(event.payload.livery, false);
-    })
+    void listen<{ livery: LiverySnapshot | null; serverId?: string | null }>(
+      "server-livery",
+      (event) => {
+        if (cancelled) return;
+        // Only the server this page administers. Every session pushes on the
+        // one event name, so an unfiltered listener lets a background server's
+        // document overwrite the editor the operator is typing into.
+        const from = event.payload.serverId ?? null;
+        if (from && from !== useAppStore.getState().activeServerId) return;
+        adopt(event.payload.livery, false);
+      },
+    )
       .then((stop) => {
         if (cancelled) stop();
         else unlisten = stop;
@@ -503,15 +545,7 @@ export function LiveryTab() {
                   accept={IMAGE_TYPES.join(",")}
                   onChange={(event) => {
                     const file = event.target.files?.[0];
-                    if (file)
-                      void run(async () => {
-                        await uploadLiveryImage(
-                          creds,
-                          "banner",
-                          new Uint8Array(await file.arrayBuffer()),
-                        );
-                        await load();
-                      });
+                    if (file) replaceImage("banner", file);
                   }}
                 />
                 <button
@@ -560,11 +594,7 @@ export function LiveryTab() {
               accept={IMAGE_TYPES.join(",")}
               onChange={(event) => {
                 const file = event.target.files?.[0];
-                if (file)
-                  void run(async () => {
-                    await uploadLiveryImage(creds, "icon", new Uint8Array(await file.arrayBuffer()));
-                    await load();
-                  });
+                if (file) replaceImage("icon", file);
               }}
             />
             <button
@@ -762,6 +792,13 @@ export function LiveryTab() {
               </div>
             )}
           </>
+        )}
+
+        {resized && (
+          <div className={styles.notice}>
+            <span className={styles.noticeDot} />
+            <span>{resized}</span>
+          </div>
         )}
 
         {error && <div className={styles.error}>{error}</div>}

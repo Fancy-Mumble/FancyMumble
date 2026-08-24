@@ -42,6 +42,7 @@ import { Box, Button, IconButton, Slider, TextField, Typography } from "@mui/mat
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { getPreferences, updatePreferences } from "@core/preferencesStorage";
+import { useAppStore } from "@core/store";
 import {
   IMAGE_TYPES,
   LIMITS,
@@ -51,6 +52,7 @@ import {
   clearLiveryImage,
   currentLivery,
   diffLivery,
+  fitLiveryImage,
   fromSnapshot,
   isHexColour,
   requestOperatorTicket,
@@ -111,6 +113,38 @@ function dataUriBytes(uri: string): number {
   return Math.floor((base64.length * 3) / 4) - padding;
 }
 
+/**
+ * The page is a form beside a 300px preview, not a table: past the mock's own
+ * measure the fields stretch into a single line each and the banner card turns
+ * into a letterbox nothing on the connect screen resembles.
+ */
+const PAGE_WIDTH = 1040;
+
+/**
+ * The floor both columns' header rows are held to.
+ *
+ * The left column opens on a word and the right one on a segmented switch, so
+ * left to themselves the first field and the card it previews start on
+ * different lines. 39 is the switch's own height - a 12px label on the body's
+ * 1.55 leading, 6px of padding above and below, then the group's own 3px and
+ * its rule - which is the taller of the two and so the one to match. A floor
+ * rather than a height: if the switch ever outgrows this it should push the
+ * row open, not spill out of it.
+ */
+const HEAD_HEIGHT = 39;
+
+/**
+ * How big the icon is drawn while it is being chosen.
+ *
+ * Larger than the 42px the connect card shows, on purpose: a server mark is
+ * usually a glyph or a face, and at the size a viewer glances past it an
+ * operator cannot tell a good crop from a bad one.
+ */
+const ICON_PREVIEW = 80;
+
+/** What makes a card fill its side of the artwork row rather than its content. */
+const CARD_COLUMN = { display: "flex", flexDirection: "column", boxSizing: "border-box" } as const;
+
 /** Characters as the *server* counts them - code points, not UTF-16 units. */
 const used = (value: string | undefined) => [...(value ?? "")].length;
 
@@ -140,6 +174,10 @@ export function LiveryAdmin() {
   const [open, setOpen] = useState<Slot | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // What the last upload had to do to the operator's file, when it did
+  // anything. Said rather than done quietly: the bytes on the server are not
+  // the bytes they picked.
+  const [note, setNote] = useState<string | null>(null);
 
   const bannerInput = useRef<HTMLInputElement>(null);
   const iconInput = useRef<HTMLInputElement>(null);
@@ -172,6 +210,7 @@ export function LiveryAdmin() {
   const run = async (work: () => Promise<void>) => {
     setBusy(true);
     setError(null);
+    setNote(null);
     try {
       await work();
     } catch (reason) {
@@ -190,9 +229,18 @@ export function LiveryAdmin() {
     if (!("__TAURI_INTERNALS__" in globalThis)) return;
     let cancelled = false;
     let unlisten: (() => void) | null = null;
-    void listen<{ livery: LiverySnapshot | null }>("server-livery", (event) => {
-      if (!cancelled) adopt(event.payload.livery, false);
-    })
+    void listen<{ livery: LiverySnapshot | null; serverId?: string | null }>(
+      "server-livery",
+      (event) => {
+        if (cancelled) return;
+        // Only the server this page administers. Every session pushes on the
+        // one event name, so an unfiltered listener lets a background server's
+        // document overwrite the editor the operator is typing into.
+        const from = event.payload.serverId ?? null;
+        if (from && from !== useAppStore.getState().activeServerId) return;
+        adopt(event.payload.livery, false);
+      },
+    )
       .then((stop) => {
         if (cancelled) stop();
         else unlisten = stop;
@@ -255,7 +303,23 @@ export function LiveryAdmin() {
     withCreds(
       (creds) =>
         void run(async () => {
-          await uploadLiveryImage(creds, which, new Uint8Array(await file.arrayBuffer()));
+          // Fitted before it goes out: what an operator picks out of a folder
+          // is a camera JPEG or a print-resolution export, and sending that
+          // fails at the transport's buffer limit with a message about body
+          // length rather than about artwork.
+          const fitted = await fitLiveryImage(file, which);
+          await uploadLiveryImage(creds, which, fitted.bytes);
+          if (fitted.resized) {
+            setNote(
+              t("livery.resized", {
+                defaultValue: "Resized to {{width}}×{{height}}, {{before}} → {{after}}.",
+                width: fitted.width,
+                height: fitted.height,
+                before: kib(fitted.originalBytes),
+                after: kib(fitted.bytes.length),
+              }),
+            );
+          }
           await load();
         }),
     );
@@ -307,7 +371,7 @@ export function LiveryAdmin() {
 
   return (
     <AdminPage
-      wide
+      maxWidth={PAGE_WIDTH}
       title={t("livery.title", "Livery")}
       hint={t(
         "livery.lede",
@@ -342,13 +406,15 @@ export function LiveryAdmin() {
     >
       <Stack direction="row" gap={2.5} alignItems="flex-start" flexWrap="wrap">
         <Box sx={{ flex: "1 1 460px", minWidth: 380 }}>
-          <Typography sx={{ fontSize: 12.5, fontWeight: 600, mb: "10px" }}>
-            {t("livery.identity", "Identity")}
-          </Typography>
+          <Stack direction="row" alignItems="center" sx={{ minHeight: HEAD_HEIGHT, mb: "10px" }}>
+            <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>
+              {t("livery.identity", "Identity")}
+            </Typography>
+          </Stack>
 
           <Stack gap={1.5}>
             <Box>
-              <Stack direction="row" justifyContent="space-between" sx={{ mb: "6px" }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: "6px" }}>
                 <Typography sx={{ fontSize: 12, fontWeight: 600 }}>
                   {t("livery.displayName", "Display name")}
                 </Typography>
@@ -370,7 +436,7 @@ export function LiveryAdmin() {
             </Box>
 
             <Box>
-              <Stack direction="row" justifyContent="space-between" sx={{ mb: "6px" }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: "6px" }}>
                 <Typography sx={{ fontSize: 12, fontWeight: 600 }}>
                   {t("livery.tagline", "Tagline")}
                 </Typography>
@@ -386,7 +452,7 @@ export function LiveryAdmin() {
             </Box>
 
             <Box>
-              <Stack direction="row" justifyContent="space-between" sx={{ mb: "6px" }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: "6px" }}>
                 <Typography sx={{ fontSize: 12, fontWeight: 600 }}>
                   {t("livery.motd", "Message of the day")}
                 </Typography>
@@ -572,6 +638,7 @@ export function LiveryAdmin() {
           <Stack direction="row" gap={1.25} alignItems="stretch" flexWrap="wrap">
             <Box
               sx={(theme) => ({
+                display: "flex",
                 flex: "1 1 280px",
                 borderRadius: radius("lg"),
                 outline: bannerDragOver ? `2px solid ${theme.palette.nebula.accent}` : "none",
@@ -589,7 +656,7 @@ export function LiveryAdmin() {
                 if (file) pickImage("banner", file);
               }}
             >
-              <SettingsCard sx={{ p: 0, overflow: "hidden" }}>
+              <SettingsCard sx={{ p: 0, flex: 1, minWidth: 0, overflow: "hidden", ...CARD_COLUMN }}>
                 {banner ? (
                   <Box sx={{ position: "relative", height: 96 }}>
                     <Box
@@ -635,7 +702,7 @@ export function LiveryAdmin() {
                     {t("livery.noBanner", "No banner")}
                   </Box>
                 )}
-                <Box sx={{ p: "12px 14px" }}>
+                <Box sx={{ p: "12px 14px", flex: 1 }}>
                   <Stack direction="row" justifyContent="space-between" alignItems="baseline">
                     <Typography sx={{ fontSize: 12, fontWeight: 600 }}>
                       {t("livery.banner", "Banner")}
@@ -711,6 +778,7 @@ export function LiveryAdmin() {
 
             <Box
               sx={(theme) => ({
+                display: "flex",
                 flex: "0 0 150px",
                 borderRadius: radius("lg"),
                 outline: iconDragOver ? `2px solid ${theme.palette.nebula.accent}` : "none",
@@ -728,24 +796,64 @@ export function LiveryAdmin() {
                 if (file) pickImage("icon", file);
               }}
             >
-              <SettingsCard sx={{ textAlign: "center" }}>
+              <SettingsCard
+                sx={{
+                  textAlign: "center",
+                  flex: 1,
+                  minWidth: 0,
+                  ...CARD_COLUMN,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  position: "relative",
+                }}
+              >
+                {draft.icon_key && (
+                  // In the corner of the thing it clears rather than under it,
+                  // which is where a second button reads as a second choice
+                  // about the icon instead of a way to be rid of it.
+                  <IconButton
+                    size="small"
+                    disabled={busy}
+                    title={t("livery.removeIcon", "Remove icon")}
+                    aria-label={t("livery.removeIcon", "Remove icon")}
+                    sx={{ position: "absolute", top: 4, right: 4 }}
+                    onClick={() =>
+                      withCreds(
+                        (creds) =>
+                          void run(async () => {
+                            await clearLiveryImage(creds, "icon");
+                            await load();
+                          }),
+                      )
+                    }
+                  >
+                    <CloseIcon width={12} height={12} />
+                  </IconButton>
+                )}
                 {icon ? (
                   <Box
                     component="img"
                     src={icon}
                     alt=""
-                    sx={{ width: 48, height: 48, borderRadius: radius("lg"), objectFit: "cover" }}
+                    sx={{
+                      width: ICON_PREVIEW,
+                      height: ICON_PREVIEW,
+                      flex: "none",
+                      borderRadius: radius("lg"),
+                      objectFit: "cover",
+                    }}
                   />
                 ) : (
                   <Box
                     sx={(theme) => ({
-                      width: 48,
-                      height: 48,
+                      width: ICON_PREVIEW,
+                      height: ICON_PREVIEW,
+                      flex: "none",
                       mx: "auto",
                       borderRadius: radius("lg"),
                       display: "grid",
                       placeItems: "center",
-                      fontSize: 20,
+                      fontSize: 30,
                       fontWeight: 700,
                       background: theme.palette.nebula.card2,
                       color: theme.palette.nebula.muted,
@@ -771,33 +879,15 @@ export function LiveryAdmin() {
                     if (file) pickImage("icon", file);
                   }}
                 />
-                <Stack gap={0.5} sx={{ mt: "10px" }}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    disabled={busy}
-                    onClick={() => iconInput.current?.click()}
-                  >
-                    {t("livery.replace", "Replace")}
-                  </Button>
-                  {draft.icon_key && (
-                    <Button
-                      size="small"
-                      disabled={busy}
-                      onClick={() =>
-                        withCreds(
-                          (creds) =>
-                            void run(async () => {
-                              await clearLiveryImage(creds, "icon");
-                              await load();
-                            }),
-                        )
-                      }
-                    >
-                      {t("livery.remove", "Remove")}
-                    </Button>
-                  )}
-                </Stack>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={busy}
+                  sx={{ mt: "10px" }}
+                  onClick={() => iconInput.current?.click()}
+                >
+                  {t("livery.replace", "Replace")}
+                </Button>
               </SettingsCard>
             </Box>
           </Stack>
@@ -1035,6 +1125,7 @@ export function LiveryAdmin() {
             </>
           )}
 
+          {note && <Banner tone="info">{note}</Banner>}
           {error && <Banner tone="danger">{error}</Banner>}
         </Box>
 
@@ -1042,7 +1133,12 @@ export function LiveryAdmin() {
             is the whole point of it - so its palette comes from `shownSurface`
             and friends rather than from the Nebula theme. */}
         <Box sx={{ flex: "0 0 300px" }}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: "10px" }}>
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="space-between"
+            sx={{ minHeight: HEAD_HEIGHT, mb: "10px" }}
+          >
             <Typography
               sx={(theme) => ({
                 fontSize: 10,
@@ -1103,7 +1199,18 @@ export function LiveryAdmin() {
               )}
             </Box>
 
-            <Box sx={{ p: "14px 16px 16px", textAlign: "center", background: "var(--pv-aura)" }}>
+            <Box
+              sx={{
+                p: "14px 16px 16px",
+                textAlign: "center",
+                background: "var(--pv-aura)",
+                // Positioned so the mark, which pulls up into the banner with a
+                // negative margin, paints over it: the banner strip above is
+                // itself positioned, and a static sibling loses to it however
+                // late it comes in the document.
+                position: "relative",
+              }}
+            >
               <Box
                 sx={{
                   width: 42,
