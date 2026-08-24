@@ -5,10 +5,15 @@ import { withNebulaTheme } from "@nebula/testTheme";
 const writes: unknown[] = [];
 vi.mock("@core/utils/store", () => {
   const mem: Record<string, unknown> = {};
-  return { load: async () => ({
-    get: async (k: string) => mem[k],
-    set: async (k: string, v: unknown) => { writes.push(v); mem[k] = v; },
-  }) };
+  return {
+    load: async () => ({
+      get: async (k: string) => mem[k],
+      set: async (k: string, v: unknown) => {
+        writes.push(v);
+        mem[k] = v;
+      },
+    }),
+  };
 });
 
 // The dialog and the byte store live in the backend; the probe checks the
@@ -45,9 +50,12 @@ describe("real flow: settings -> back to chat", () => {
     // 2. user navigates back to chat: settings unmounts, backdrop mounts
     cleanup();
     render(withNebulaTheme(<ChatBackdrop />));
-    await waitFor(() => {
-      const img = document.querySelector("img");
-      expect(img?.getAttribute("src")).toBe("blob:stored");
-    }, { timeout: 2000 });
+    await waitFor(
+      () => {
+        const img = document.querySelector("img");
+        expect(img?.getAttribute("src")).toBe("blob:stored");
+      },
+      { timeout: 2000 },
+    );
   });
 });

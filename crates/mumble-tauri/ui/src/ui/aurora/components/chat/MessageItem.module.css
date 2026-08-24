@@ -1,7 +1,7 @@
 /* Extracted from AuroraClientExtensions.module.css - owns only this component's styles. */
 
 .messageSelected {
-  background: rgba(100, 178, 224, .075) !important;
+  background: rgba(100, 178, 224, 0.075) !important;
   box-shadow: inset 3px 0 #69b5df;
 }
 
@@ -12,7 +12,7 @@
   margin: 8px 0 0 2px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, .18);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 6px;
   background: #151b22;
   color: #dfe9ef;
@@ -35,10 +35,10 @@
   padding: 5px;
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(255, 255, 255, .1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 11px;
-  background: rgba(18, 23, 30, .96);
-  box-shadow: 0 18px 55px rgba(0, 0, 0, .45);
+  background: rgba(18, 23, 30, 0.96);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(20px);
 }
 
@@ -47,7 +47,7 @@
   justify-content: flex-start;
 }
 
-@media(max-width:620px) {
+@media (max-width: 620px) {
   .messageContextMenu {
     right: 8px !important;
     bottom: 8px !important;
@@ -88,7 +88,7 @@
   padding: 9px;
   overflow: auto;
   border-radius: 8px;
-  background: rgba(0, 0, 0, .24);
+  background: rgba(0, 0, 0, 0.24);
 }
 
 .messageBody code {
@@ -98,7 +98,7 @@
 .messageBody blockquote {
   margin: 6px 0;
   padding-left: 10px;
-  border-left: 2px solid rgba(101, 184, 237, .5);
+  border-left: 2px solid rgba(101, 184, 237, 0.5);
   color: #919eac;
 }
 
@@ -117,7 +117,7 @@
   min-width: 0;
 }
 
-.messageContent>header small {
+.messageContent > header small {
   margin-left: 6px;
   color: #697584;
   font-size: 8px;
@@ -130,13 +130,14 @@
   padding: 3px;
   display: none;
   gap: 1px;
-  border: 1px solid rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   background: #1a2029;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, .24);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
 }
 
-.messageContent:hover .messageActions, .messageActions:focus-within {
+.messageContent:hover .messageActions,
+.messageActions:focus-within {
   display: flex;
 }
 
@@ -161,8 +162,8 @@
 .reactionRow button {
   height: 25px;
   padding: 0 7px;
-  border: 1px solid rgba(101, 184, 237, .15);
-  background: rgba(101, 184, 237, .05);
+  border: 1px solid rgba(101, 184, 237, 0.15);
+  background: rgba(101, 184, 237, 0.05);
   font-size: 10px;
 }
 
@@ -184,10 +185,10 @@
   grid-column: 1/-1;
   min-height: 70px;
   padding: 9px;
-  border: 1px solid rgba(101, 184, 237, .35);
+  border: 1px solid rgba(101, 184, 237, 0.35);
   border-radius: 8px;
   outline: 0;
-  background: rgba(5, 8, 12, .5);
+  background: rgba(5, 8, 12, 0.5);
   color: #dce3ea;
   font: inherit;
   resize: vertical;
@@ -208,7 +209,7 @@
   align-items: center;
   gap: 6px;
   border-radius: 8px;
-  background: rgba(239, 100, 100, .06);
+  background: rgba(239, 100, 100, 0.06);
 }
 
 .deleteMessageConfirm span {

@@ -60,7 +60,9 @@
   width: 100%;
   box-sizing: border-box;
   font: inherit;
-  transition: border-color 120ms, background 120ms;
+  transition:
+    border-color 120ms,
+    background 120ms;
 }
 
 .search:focus {
@@ -97,13 +99,16 @@
   text-align: left;
   font: inherit;
   cursor: pointer;
-  transition: background 120ms, border-color 120ms, transform 60ms;
+  transition:
+    background 120ms,
+    border-color 120ms,
+    transform 60ms;
 }
 
 .item:hover,
 .item:focus-visible {
   background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.1);
   outline: none;
 }
 
@@ -161,8 +166,12 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes popIn {

@@ -20,9 +20,7 @@ import { usePreferenceSettings } from "./usePreferenceSettings";
  * step is inline and per-row rather than a dialog: the row being confirmed is
  * the one the user is looking at.
  */
-export function IdentitiesSettings({
-  onEditProfile,
-}: Readonly<{ onEditProfile?: (label: string) => void }>) {
+export function IdentitiesSettings({ onEditProfile }: Readonly<{ onEditProfile?: (label: string) => void }>) {
   const { t } = useTranslation(["settings", "common"]);
   const { prefs } = usePreferenceSettings();
   const connectedCertLabel = useAppStore((state) => state.connectedCertLabel);

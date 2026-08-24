@@ -17,7 +17,9 @@
   color: var(--color-text-primary);
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .micTestBtn:hover {
@@ -75,7 +77,10 @@
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .calibrateBtnPrimary {
@@ -91,7 +96,8 @@
 }
 
 @keyframes calibratePulse {
-  0%, 100% {
+  0%,
+  100% {
     background: var(--color-accent, #6366f1);
     box-shadow: 0 0 0 0 rgba(var(--color-accent-rgb, 99, 102, 241), 0.7);
   }

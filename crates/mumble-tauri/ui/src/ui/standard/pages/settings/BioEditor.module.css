@@ -32,7 +32,9 @@
   color: var(--color-text-secondary);
   font-size: 14px;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .bioToolBtn:hover {
@@ -118,7 +120,9 @@
   border: 2px solid transparent;
   border-radius: 4px;
   cursor: pointer;
-  transition: border-color 0.15s, transform 0.1s;
+  transition:
+    border-color 0.15s,
+    transform 0.1s;
 }
 
 .bioColourSwatch:hover {

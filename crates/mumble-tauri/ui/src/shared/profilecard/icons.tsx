@@ -54,10 +54,7 @@ export const VerifiedGlyph = icon(
   </>,
 );
 export const CrownGlyph = icon(<path d="M3 7l4 4 5-7 5 7 4-4-2 12H5L3 7Z" />, true);
-export const HeartGlyph = icon(
-  <path d="M12 20.5 3.9 12.6a5 5 0 0 1 7.1-7l1 1 1-1a5 5 0 1 1 7.1 7Z" />,
-  true,
-);
+export const HeartGlyph = icon(<path d="M12 20.5 3.9 12.6a5 5 0 0 1 7.1-7l1 1 1-1a5 5 0 1 1 7.1 7Z" />, true);
 export const ZapGlyph = icon(<path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" />, true);
 export const FlameGlyph = icon(
   <path d="M12 2c3 4 6 6 6 10a6 6 0 0 1-12 0c0-2 1-3.5 2-5 .4 1.6 1.3 2.4 2 2.4 1.3 0 2-2.6 2-7.4Z" />,
@@ -69,10 +66,7 @@ export const SnowGlyph = icon(
     <path d="m9 4 3 3 3-3M9 20l3-3 3 3" />
   </>,
 );
-export const SparkleGlyph = icon(
-  <path d="M12 2.5 14 9l6.5 2-6.5 2-2 6.5-2-6.5L3.5 11 10 9Z" />,
-  true,
-);
+export const SparkleGlyph = icon(<path d="M12 2.5 14 9l6.5 2-6.5 2-2 6.5-2-6.5L3.5 11 10 9Z" />, true);
 export const AwardGlyph = icon(
   <>
     <circle cx="12" cy="9" r="6" />
@@ -101,9 +95,7 @@ export const HeadphonesOffGlyph = icon(
 );
 export const SendGlyph = icon(<path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z" />);
 export const CloseGlyph = icon(<path d="M18 6 6 18M6 6l12 12" />);
-export const PencilGlyph = icon(
-  <path d="M17 3.5a2.1 2.1 0 0 1 3 3L7.5 19 3 20.5 4.5 16Z" />,
-);
+export const PencilGlyph = icon(<path d="M17 3.5a2.1 2.1 0 0 1 3 3L7.5 19 3 20.5 4.5 16Z" />);
 export const UsersGlyph = icon(
   <>
     <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />

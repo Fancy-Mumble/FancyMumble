@@ -68,7 +68,9 @@
   padding: 3px 8px;
   border-radius: 4px;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .headerBtn:hover {
@@ -129,11 +131,21 @@
   flex-shrink: 0;
 }
 
-.dotProbing { background: #6b7280; }
-.dotOffline { background: #ef4444; }
-.dotGreat   { background: #22c55e; }
-.dotOkay    { background: #eab308; }
-.dotPoor    { background: #f97316; }
+.dotProbing {
+  background: #6b7280;
+}
+.dotOffline {
+  background: #ef4444;
+}
+.dotGreat {
+  background: #22c55e;
+}
+.dotOkay {
+  background: #eab308;
+}
+.dotPoor {
+  background: #f97316;
+}
 
 .itemBody {
   display: flex;

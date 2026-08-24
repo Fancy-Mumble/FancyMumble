@@ -8,11 +8,7 @@
 /* Matches the own-bubble gradient + border-radius from ChatView.module.css,
    with reduced opacity while the upload is in-flight. */
 .bubble {
-  background: linear-gradient(
-    135deg,
-    var(--color-own-bubble-start) 0%,
-    var(--color-own-bubble-end) 100%
-  );
+  background: linear-gradient(135deg, var(--color-own-bubble-start) 0%, var(--color-own-bubble-end) 100%);
   border-radius: var(--radius-md) var(--radius-md) 4px var(--radius-md);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
@@ -62,8 +58,12 @@
 
 /* Indeterminate progress bar: a shimmer scan across the track. */
 @keyframes progressScan {
-  0%   { background-position: -100% 0; }
-  100% { background-position: 250% 0; }
+  0% {
+    background-position: -100% 0;
+  }
+  100% {
+    background-position: 250% 0;
+  }
 }
 
 .progressWrap {
@@ -97,8 +97,13 @@
 
 /* Pulse when bytes are fully queued but we're waiting for the server response. */
 @keyframes finalizePulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.45; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
 }
 
 .progressBarFinalizing {
@@ -134,7 +139,9 @@
   font-size: 0.875rem;
   line-height: 1;
   border-radius: 0.25rem;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
 }
 
 .dismissBtn:hover {

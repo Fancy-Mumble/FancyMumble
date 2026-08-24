@@ -171,7 +171,10 @@ export function BansAdmin() {
                     <TextField
                       {...props}
                       type="number"
-                      slotProps={{ ...props.slotProps, htmlInput: { ...props.slotProps.htmlInput, min: 0, max: 128 } }}
+                      slotProps={{
+                        ...props.slotProps,
+                        htmlInput: { ...props.slotProps.htmlInput, min: 0, max: 128 },
+                      }}
                       onChange={(e) => patch({ mask: Number(e.target.value) })}
                     />
                   )}

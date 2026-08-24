@@ -22,14 +22,14 @@
   color: var(--signal);
   font-size: 9px;
   font-weight: 800;
-  letter-spacing: .16em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
 .sideIntro strong {
   margin-top: 9px;
   font-size: 18px;
-  letter-spacing: -.02em;
+  letter-spacing: -0.02em;
 }
 
 .sideIntro small {
@@ -59,7 +59,9 @@
 
 .sidebar nav a span {
   color: #505766;
-  font: 8px ui-monospace, monospace;
+  font:
+    8px ui-monospace,
+    monospace;
 }
 
 .sidebar nav a:hover {
@@ -105,7 +107,7 @@
 .coverage small {
   color: #5e6573;
   font-size: 8px;
-  letter-spacing: .05em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 

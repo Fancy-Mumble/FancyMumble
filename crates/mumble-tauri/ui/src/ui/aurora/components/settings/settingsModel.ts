@@ -61,7 +61,8 @@ export const settingRows: PreferenceRow[] = [
   {
     key: "enableRichPresence",
     title: "Show Discord rich presence from other apps",
-    detail: "Read what games and other apps publish for Discord. Local only; a running Discord still gets everything.",
+    detail:
+      "Read what games and other apps publish for Discord. Local only; a running Discord still gets everything.",
   },
   {
     key: "richPresenceArtwork",

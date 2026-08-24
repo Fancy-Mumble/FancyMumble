@@ -29,12 +29,12 @@
   --color-accent-soft: rgba(26, 140, 216, 0.04);
   --color-accent-subtle: rgba(26, 140, 216, 0.06);
   --color-accent-light: rgba(26, 140, 216, 0.08);
-  --color-accent-medium: rgba(26, 140, 216, 0.10);
+  --color-accent-medium: rgba(26, 140, 216, 0.1);
   --color-accent-strong: rgba(26, 140, 216, 0.14);
   --color-accent-fill: rgba(26, 140, 216, 0.18);
   --color-accent-border: rgba(26, 140, 216, 0.22);
   --color-accent-selection: rgba(26, 140, 216, 0.15);
-  --color-accent-border-strong: rgba(26, 140, 216, 0.30);
+  --color-accent-border-strong: rgba(26, 140, 216, 0.3);
   --color-accent-gradient-end: rgba(21, 120, 184, 0.06);
   --color-accent-bright: #2a9ae0;
 
@@ -47,7 +47,7 @@
   --color-glass-hover: rgba(0, 0, 0, 0.06);
   --color-glass-medium: rgba(0, 0, 0, 0.08);
   --color-glass-active: rgba(26, 140, 216, 0.08);
-  --color-glass-strong: rgba(0, 0, 0, 0.10);
+  --color-glass-strong: rgba(0, 0, 0, 0.1);
   --color-glass-heavy: rgba(0, 0, 0, 0.12);
   --color-glass-border: rgba(0, 0, 0, 0.08);
   --color-glass-border-hover: rgba(0, 0, 0, 0.14);
@@ -60,16 +60,16 @@
   --color-danger-soft: rgba(220, 38, 38, 0.04);
   --color-danger-subtle: rgba(220, 38, 38, 0.06);
   --color-danger-bg: rgba(220, 38, 38, 0.08);
-  --color-danger-medium: rgba(220, 38, 38, 0.10);
+  --color-danger-medium: rgba(220, 38, 38, 0.1);
   --color-danger-strong: rgba(220, 38, 38, 0.12);
   --color-danger-border: rgba(220, 38, 38, 0.18);
   --color-danger-border-strong: rgba(220, 38, 38, 0.25);
-  --color-danger-alt-light: rgba(214, 48, 49, 0.10);
+  --color-danger-alt-light: rgba(214, 48, 49, 0.1);
   --color-danger-alt-glow: rgba(214, 48, 49, 0.25);
   --color-danger-alt-soft: rgba(214, 48, 49, 0.04);
   --color-danger-alt-subtle: rgba(214, 48, 49, 0.06);
   --color-danger-alt-border: rgba(214, 48, 49, 0.18);
-  --color-danger-alt-strong: rgba(214, 48, 49, 0.20);
+  --color-danger-alt-strong: rgba(214, 48, 49, 0.2);
   --color-danger-alt-border-strong: rgba(214, 48, 49, 0.28);
 
   /* -- Success / Online (green) ---------------------------------- */
@@ -77,9 +77,9 @@
   --color-online-bright: #22c55e;
   --color-online-subtle: rgba(22, 163, 74, 0.06);
   --color-online-bg: rgba(22, 163, 74, 0.08);
-  --color-online-medium: rgba(22, 163, 74, 0.10);
-  --color-online-glow: rgba(22, 163, 74, 0.30);
-  --color-success-gradient-start: rgba(22, 163, 74, 0.10);
+  --color-online-medium: rgba(22, 163, 74, 0.1);
+  --color-online-glow: rgba(22, 163, 74, 0.3);
+  --color-success-gradient-start: rgba(22, 163, 74, 0.1);
   --color-success-gradient-end: rgba(22, 163, 74, 0.04);
 
   /* -- Warning / Unverified (yellow/amber) ----------------------- */
@@ -92,8 +92,8 @@
   --color-warning-amber-subtle: rgba(217, 119, 6, 0.06);
   --color-warning-amber-glow: rgba(217, 119, 6, 0.25);
   --color-warning-bright-bg: rgba(234, 179, 8, 0.08);
-  --color-warning-bright-medium: rgba(234, 179, 8, 0.10);
-  --color-warning-bright-border: rgba(234, 179, 8, 0.20);
+  --color-warning-bright-medium: rgba(234, 179, 8, 0.1);
+  --color-warning-bright-border: rgba(234, 179, 8, 0.2);
 
   /* -- Link ------------------------------------------------------ */
   --color-link: #2563eb;
@@ -114,7 +114,7 @@
   --color-overlay-heavy: rgba(0, 0, 0, 0.25);
   --color-overlay-strong: rgba(0, 0, 0, 0.18);
   --color-overlay-dark: rgba(0, 0, 0, 0.45);
-  --color-overlay-darkest: rgba(0, 0, 0, 0.60);
+  --color-overlay-darkest: rgba(0, 0, 0, 0.6);
 
   /* -- Surfaces (bars, panels, toasts) --------------------------- */
   --color-surface-titlebar: rgba(255, 255, 255, 0.85);
@@ -129,15 +129,15 @@
 
   /* -- Search result type icons ---------------------------------- */
   --color-search-user: #16a34a;
-  --color-search-user-bg: rgba(22, 163, 74, 0.10);
+  --color-search-user-bg: rgba(22, 163, 74, 0.1);
   --color-search-group: #9333ea;
-  --color-search-group-bg: rgba(147, 51, 234, 0.10);
+  --color-search-group-bg: rgba(147, 51, 234, 0.1);
   --color-search-message: #d97706;
-  --color-search-message-bg: rgba(217, 119, 6, 0.10);
+  --color-search-message-bg: rgba(217, 119, 6, 0.1);
 
   /* -- Own bubble (sent messages) -------------------------------- */
   --color-own-bubble-start: rgba(26, 140, 216, 0.18);
-  --color-own-bubble-end: rgba(26, 140, 216, 0.10);
+  --color-own-bubble-end: rgba(26, 140, 216, 0.1);
   --color-own-bubble-text: #1a1a2e;
   --color-own-bubble-time: rgba(26, 26, 46, 0.5);
 

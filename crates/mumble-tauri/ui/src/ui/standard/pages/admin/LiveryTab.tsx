@@ -227,18 +227,15 @@ export function LiveryTab() {
     if (!("__TAURI_INTERNALS__" in globalThis)) return;
     let cancelled = false;
     let unlisten: (() => void) | null = null;
-    void listen<{ livery: LiverySnapshot | null; serverId?: string | null }>(
-      "server-livery",
-      (event) => {
-        if (cancelled) return;
-        // Only the server this page administers. Every session pushes on the
-        // one event name, so an unfiltered listener lets a background server's
-        // document overwrite the editor the operator is typing into.
-        const from = event.payload.serverId ?? null;
-        if (from && from !== useAppStore.getState().activeServerId) return;
-        adopt(event.payload.livery, false);
-      },
-    )
+    void listen<{ livery: LiverySnapshot | null; serverId?: string | null }>("server-livery", (event) => {
+      if (cancelled) return;
+      // Only the server this page administers. Every session pushes on the
+      // one event name, so an unfiltered listener lets a background server's
+      // document overwrite the editor the operator is typing into.
+      const from = event.payload.serverId ?? null;
+      if (from && from !== useAppStore.getState().activeServerId) return;
+      adopt(event.payload.livery, false);
+    })
       .then((stop) => {
         if (cancelled) stop();
         else unlisten = stop;
@@ -271,8 +268,7 @@ export function LiveryTab() {
     setTags(tags.map((entry, at) => (at === index ? { ...entry, ...change } : entry)));
 
   const coloursOn = Boolean(
-    (draft.dark && Object.keys(draft.dark).length) ||
-      (draft.light && Object.keys(draft.light).length),
+    (draft.dark && Object.keys(draft.dark).length) || (draft.light && Object.keys(draft.light).length),
   );
 
   const shownSurface = isHexColour(palette.surface ?? "") ? palette.surface! : STOCK[mode].surface;
@@ -305,9 +301,7 @@ export function LiveryTab() {
               <span>{t("livery.displayName", "Display name")}</span>
               <span
                 className={
-                  used(draft.display_name) > LIMITS.displayName
-                    ? styles.fieldMetaOver
-                    : styles.fieldMeta
+                  used(draft.display_name) > LIMITS.displayName ? styles.fieldMetaOver : styles.fieldMeta
                 }
               >
                 {used(draft.display_name)}/{LIMITS.displayName}
@@ -316,9 +310,7 @@ export function LiveryTab() {
             <input
               className={styles.input}
               value={draft.display_name ?? ""}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, display_name: event.target.value }))
-              }
+              onChange={(event) => setDraft((current) => ({ ...current, display_name: event.target.value }))}
             />
             <div className={styles.hint}>
               {t("livery.displayNameHint", "Shown next to")} {address}{" "}
@@ -330,9 +322,7 @@ export function LiveryTab() {
             <div className={styles.fieldHead}>
               <span>{t("livery.tagline", "Tagline")}</span>
               <span
-                className={
-                  used(draft.tagline) > LIMITS.tagline ? styles.fieldMetaOver : styles.fieldMeta
-                }
+                className={used(draft.tagline) > LIMITS.tagline ? styles.fieldMetaOver : styles.fieldMeta}
               >
                 {used(draft.tagline)}/{LIMITS.tagline}
               </span>
@@ -340,18 +330,14 @@ export function LiveryTab() {
             <input
               className={styles.input}
               value={draft.tagline ?? ""}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, tagline: event.target.value }))
-              }
+              onChange={(event) => setDraft((current) => ({ ...current, tagline: event.target.value }))}
             />
           </div>
 
           <div>
             <div className={styles.fieldHead}>
               <span>{t("livery.motd", "Message of the day")}</span>
-              <span
-                className={used(draft.motd) > LIMITS.motd ? styles.fieldMetaOver : styles.fieldMeta}
-              >
+              <span className={used(draft.motd) > LIMITS.motd ? styles.fieldMetaOver : styles.fieldMeta}>
                 {t("livery.plainText", "plain text")} · {used(draft.motd)}/{LIMITS.motd}
               </span>
             </div>
@@ -404,9 +390,7 @@ export function LiveryTab() {
                     title={tone[0] + tone.slice(1).toLowerCase()}
                     aria-label={tone}
                     aria-pressed={tag.tone === tone}
-                    className={`${styles.tone} ${TONE_CLASS[tone]} ${
-                      tag.tone === tone ? styles.toneOn : ""
-                    }`}
+                    className={`${styles.tone} ${TONE_CLASS[tone]} ${tag.tone === tone ? styles.toneOn : ""}`}
                     onClick={() => patchTag(index, { tone })}
                   />
                 ))}
@@ -432,10 +416,7 @@ export function LiveryTab() {
           )}
         </div>
         <div className={styles.hint}>
-          {t(
-            "livery.tagsHint",
-            "Tags carry a tone, not a colour — they adapt to each viewer's theme.",
-          )}
+          {t("livery.tagsHint", "Tags carry a tone, not a colour — they adapt to each viewer's theme.")}
         </div>
 
         <div className={styles.section}>{t("livery.artwork", "Artwork")}</div>
@@ -491,9 +472,7 @@ export function LiveryTab() {
                 {t("livery.cancel", "Cancel")}
               </button>
             </div>
-            <div className={styles.hint}>
-              {t("livery.tokenHint", "Not stored — retyped each session.")}
-            </div>
+            <div className={styles.hint}>{t("livery.tokenHint", "Not stored — retyped each session.")}</div>
           </div>
         )}
         <div className={styles.assets}>
@@ -562,11 +541,12 @@ export function LiveryTab() {
                     className={`${styles.assetBtn} ${styles.assetBtnGhost}`}
                     disabled={busy}
                     onClick={() =>
-                      withCreds(() =>
-                        void run(async () => {
-                          await clearLiveryImage(creds, "banner");
-                          await load();
-                        }),
+                      withCreds(
+                        () =>
+                          void run(async () => {
+                            await clearLiveryImage(creds, "banner");
+                            await load();
+                          }),
                       )
                     }
                   >
@@ -611,11 +591,12 @@ export function LiveryTab() {
                 className={`${styles.assetBtn} ${styles.assetBtnGhost}`}
                 disabled={busy}
                 onClick={() =>
-                  withCreds(() =>
-                    void run(async () => {
-                      await clearLiveryImage(creds, "icon");
-                      await load();
-                    }),
+                  withCreds(
+                    () =>
+                      void run(async () => {
+                        await clearLiveryImage(creds, "icon");
+                        await load();
+                      }),
                   )
                 }
               >
@@ -727,9 +708,7 @@ export function LiveryTab() {
             {open && (
               <div className={styles.editor}>
                 <div className={styles.editorHead}>
-                  {mode === "dark"
-                    ? t("livery.darkMode", "Dark mode")
-                    : t("livery.lightMode", "Light mode")}{" "}
+                  {mode === "dark" ? t("livery.darkMode", "Dark mode") : t("livery.lightMode", "Light mode")}{" "}
                   · {open}
                   <button
                     type="button"
@@ -784,8 +763,7 @@ export function LiveryTab() {
                   <span className={styles.noticePair}>
                     <span className={styles.noticeSwatch} style={{ background: storedAccent }} />
                     →
-                    <span className={styles.noticeSwatch} style={{ background: shownAccent }} />{" "}
-                    {shownAccent}
+                    <span className={styles.noticeSwatch} style={{ background: shownAccent }} /> {shownAccent}
                   </span>{" "}
                   {t("livery.clampTail", "so text stays legible. The stored value is unchanged.")}
                 </span>
@@ -829,9 +807,7 @@ export function LiveryTab() {
 
       <aside className={styles.preview}>
         <div className={styles.previewHead}>
-          <span className={styles.previewEyebrow}>
-            {t("livery.previewTitle", "CONNECT PREVIEW")}
-          </span>
+          <span className={styles.previewEyebrow}>{t("livery.previewTitle", "CONNECT PREVIEW")}</span>
           <div className={styles.modeSwitch}>
             {(["dark", "light"] as const).map((option) => (
               <button
@@ -911,10 +887,7 @@ export function LiveryTab() {
 
         {mode === "light" && !palette.surface && !palette.aura_from && (
           <p className={styles.previewNote}>
-            {t(
-              "livery.lightStock",
-              "Surface & aura not set for light — viewers get stock colours.",
-            )}
+            {t("livery.lightStock", "Surface & aura not set for light — viewers get stock colours.")}
           </p>
         )}
       </aside>

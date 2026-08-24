@@ -22,7 +22,9 @@
   background: var(--color-bg-secondary);
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
   font-family: inherit;
   font-size: 13px;
   width: 100%;
@@ -48,7 +50,8 @@
   border-radius: 50%;
 }
 
-.zoneCircle .overlay {  /* stylelint-disable-line selector-class-pattern */
+.zoneCircle .overlay {
+  /* stylelint-disable-line selector-class-pattern */
   border-radius: 50%;
 }
 
@@ -104,7 +107,9 @@
   border: 1px solid var(--color-danger, #ef4444);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .removeBtn:hover {

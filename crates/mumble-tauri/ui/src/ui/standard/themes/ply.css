@@ -6,22 +6,22 @@
 
 [data-theme="ply"] {
   /* -- Background ------------------------------------------------ */
-  --color-bg-primary: #F2F2F2;
-  --color-bg-secondary: #E8E8E8;
+  --color-bg-primary: #f2f2f2;
+  --color-bg-secondary: #e8e8e8;
   --color-bg-elevated: #ffffff;
   --color-surface: #ffffff;
-  --color-bg-deepest: #DBDBDB;
-  --color-bg-media: #E8E8E8;
-  --color-bg-app-gradient: #F2F2F2;
+  --color-bg-deepest: #dbdbdb;
+  --color-bg-media: #e8e8e8;
+  --color-bg-app-gradient: #f2f2f2;
   --color-bg-app-glow-accent: rgba(147, 171, 191, 0);
   --color-bg-app-glow-purple: rgba(2, 64, 41, 0);
 
   /* -- Text ------------------------------------------------------ */
-  --color-text-primary: #0D0D0D;
-  --color-text-secondary: rgba(13, 13, 13, 0.70);
+  --color-text-primary: #0d0d0d;
+  --color-text-secondary: rgba(13, 13, 13, 0.7);
   --color-text-muted: rgba(13, 13, 13, 0.48);
-  --color-text-on-accent: #F2F2F2;
-  --color-text-button: rgba(13, 13, 13, 0.80);
+  --color-text-on-accent: #f2f2f2;
+  --color-text-button: rgba(13, 13, 13, 0.8);
   --color-text-placeholder: rgba(13, 13, 13, 0.38);
 
   /* -- Accent (vivid steel blue) -------------------------------- */
@@ -32,7 +32,7 @@
   --color-accent-subtle: rgba(46, 127, 194, 0.12);
   --color-accent-light: rgba(46, 127, 194, 0.18);
   --color-accent-medium: rgba(46, 127, 194, 0.28);
-  --color-accent-strong: rgba(46, 127, 194, 0.40);
+  --color-accent-strong: rgba(46, 127, 194, 0.4);
   --color-accent-fill: rgba(46, 127, 194, 0.52);
   --color-accent-border: rgba(46, 127, 194, 0.58);
   --color-accent-selection: rgba(46, 127, 194, 0.32);
@@ -50,17 +50,17 @@
   --color-glass-medium: rgba(13, 13, 13, 0.12);
   --color-glass-active: rgba(147, 171, 191, 0.22);
   --color-glass-strong: rgba(13, 13, 13, 0.16);
-  --color-glass-heavy: rgba(13, 13, 13, 0.20);
+  --color-glass-heavy: rgba(13, 13, 13, 0.2);
   --color-glass-border: rgba(13, 13, 13, 0.14);
   --color-glass-border-hover: rgba(13, 13, 13, 0.26);
 
   /* -- Danger / Error (vivid red) -------------------------------- */
-  --color-danger: #F20505;
+  --color-danger: #f20505;
   --color-danger-alt: #c80404;
   --color-danger-light: #f55050;
   --color-danger-muted: #a00303;
   --color-danger-soft: rgba(242, 5, 5, 0.06);
-  --color-danger-subtle: rgba(242, 5, 5, 0.10);
+  --color-danger-subtle: rgba(242, 5, 5, 0.1);
   --color-danger-bg: rgba(242, 5, 5, 0.14);
   --color-danger-medium: rgba(242, 5, 5, 0.18);
   --color-danger-strong: rgba(242, 5, 5, 0.24);
@@ -69,7 +69,7 @@
   --color-danger-alt-light: rgba(200, 4, 4, 0.14);
   --color-danger-alt-glow: rgba(200, 4, 4, 0.44);
   --color-danger-alt-soft: rgba(200, 4, 4, 0.06);
-  --color-danger-alt-subtle: rgba(200, 4, 4, 0.10);
+  --color-danger-alt-subtle: rgba(200, 4, 4, 0.1);
   --color-danger-alt-border: rgba(200, 4, 4, 0.28);
   --color-danger-alt-strong: rgba(200, 4, 4, 0.36);
   --color-danger-alt-border-strong: rgba(200, 4, 4, 0.52);
@@ -77,10 +77,10 @@
   /* -- Success / Online (vivid blue to match accent) ------------ */
   --color-online: #2e7fc2;
   --color-online-bright: #4a97d4;
-  --color-online-subtle: rgba(46, 127, 194, 0.10);
+  --color-online-subtle: rgba(46, 127, 194, 0.1);
   --color-online-bg: rgba(46, 127, 194, 0.16);
   --color-online-medium: rgba(46, 127, 194, 0.26);
-  --color-online-glow: rgba(46, 127, 194, 0.60);
+  --color-online-glow: rgba(46, 127, 194, 0.6);
   --color-success-gradient-start: rgba(46, 127, 194, 0.18);
   --color-success-gradient-end: rgba(46, 127, 194, 0.18);
 
@@ -90,11 +90,11 @@
   --color-warning-amber: #b06800;
   --color-warning-text: #7a4800;
   --color-warning-soft: rgba(176, 104, 0, 0.06);
-  --color-warning-subtle: rgba(176, 104, 0, 0.10);
+  --color-warning-subtle: rgba(176, 104, 0, 0.1);
   --color-warning-amber-subtle: rgba(176, 104, 0, 0.08);
   --color-warning-amber-glow: rgba(176, 104, 0, 0.42);
   --color-warning-bright-bg: rgba(212, 128, 0, 0.12);
-  --color-warning-bright-medium: rgba(212, 128, 0, 0.20);
+  --color-warning-bright-medium: rgba(212, 128, 0, 0.2);
   --color-warning-bright-border: rgba(212, 128, 0, 0.42);
 
   /* -- Link (vivid blue) ----------------------------------------- */
@@ -102,13 +102,13 @@
 
   /* -- Picker palette (reactions / emoji picker) ----------- */
   --color-picker-accent: #2e7fc2;
-  --color-picker-dark: #F2F2F2;
+  --color-picker-dark: #f2f2f2;
   --color-picker-bg: #ffffff;
-  --color-picker-border: #CCCCCC;
-  --color-picker-hover: #E8E8E8;
-  --color-picker-muted: rgba(13, 13, 13, 0.50);
-  --color-picker-text: #0D0D0D;
-  --color-picker-active: #CCCCCC;
+  --color-picker-border: #cccccc;
+  --color-picker-hover: #e8e8e8;
+  --color-picker-muted: rgba(13, 13, 13, 0.5);
+  --color-picker-text: #0d0d0d;
+  --color-picker-active: #cccccc;
 
   /* -- Overlays / Shadows ---------------------------------------- */
   --color-overlay-light: rgba(0, 0, 0, 0.07);
@@ -119,15 +119,15 @@
   --color-overlay-darkest: rgba(0, 0, 0, 0.64);
 
   /* -- Surfaces (bars, panels, toasts) --------------------------- */
-  --color-surface-titlebar: #F2F2F2;
-  --color-surface-action-bar: #E8E8E8;
+  --color-surface-titlebar: #f2f2f2;
+  --color-surface-action-bar: #e8e8e8;
   --color-surface-toast: #ffffff;
-  --color-surface-streaming: #F2F2F2;
+  --color-surface-streaming: #f2f2f2;
 
   /* -- Badge / specialty colors ---------------------------------- */
   --color-badge-fancy: #2e7fc2;
   --color-badge-signal: #2e7fc2;
-  --color-badge-server: #F20505;
+  --color-badge-server: #f20505;
 
   /* -- Search result type icons ---------------------------------- */
   --color-search-user: #2e7fc2;
@@ -140,7 +140,7 @@
   /* -- Own bubble (sent messages) -------------------------------- */
   --color-own-bubble-start: rgba(46, 127, 194, 0.22);
   --color-own-bubble-end: rgba(46, 127, 194, 0.22);
-  --color-own-bubble-text: #0D0D0D;
+  --color-own-bubble-text: #0d0d0d;
   --color-own-bubble-time: rgba(13, 13, 13, 0.58);
 
   /* -- Quote ----------------------------------------------------- */

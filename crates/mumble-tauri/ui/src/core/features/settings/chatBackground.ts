@@ -146,11 +146,7 @@ export function useStoredBackgroundUrl(fileName: string | null): string | null {
 /**
  * Bake blur/dim into a stored still and return the processed file's name.
  */
-export function processBackgroundImage(
-  fileName: string,
-  sigma: number,
-  dim: number,
-): Promise<string> {
+export function processBackgroundImage(fileName: string, sigma: number, dim: number): Promise<string> {
   return invoke<string>("process_chat_background_image", { fileName, sigma, dim });
 }
 
@@ -169,11 +165,7 @@ export function extractBackgroundPoster(fileName: string): Promise<string | null
  * backend cannot decode, which callers treat as "stay on the live CSS filter",
  * not as a failed pick.
  */
-export function bakeBackgroundVideo(
-  fileName: string,
-  sigma: number,
-  dim: number,
-): Promise<string> {
+export function bakeBackgroundVideo(fileName: string, sigma: number, dim: number): Promise<string> {
   return invoke<string>("bake_chat_background_video", { fileName, sigma, dim });
 }
 
@@ -190,9 +182,7 @@ export interface BakeProgress {
 
 /** Subscribe to bake progress; returns an unsubscribe function. */
 export function onBakeProgress(callback: (progress: BakeProgress) => void): () => void {
-  const pending = listen<BakeProgress>("chat-background-bake-progress", (event) =>
-    callback(event.payload),
-  );
+  const pending = listen<BakeProgress>("chat-background-bake-progress", (event) => callback(event.payload));
   return () => {
     void pending.then((unlisten) => unlisten());
   };
@@ -281,9 +271,7 @@ function loadVideoFrame(src: string, seekIn: boolean): Promise<HTMLVideoElement>
  * Purely advisory: an unplayable wallpaper still shows its poster, so the
  * caller's job is to say so, not to refuse the pick.
  */
-export async function probeVideoPlayback(
-  src: string,
-): Promise<{ playable: boolean; reason: string | null }> {
+export async function probeVideoPlayback(src: string): Promise<{ playable: boolean; reason: string | null }> {
   try {
     const video = await loadVideoFrame(src, false);
     video.removeAttribute("src");

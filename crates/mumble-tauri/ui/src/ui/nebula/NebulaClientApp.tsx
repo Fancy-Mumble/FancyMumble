@@ -55,11 +55,7 @@ import {
   Stack,
 } from "./components";
 import type { SettingsPageId } from "./components";
-import {
-  useAdminCapabilities,
-  useAdminNavEntries,
-  type AdminPageId,
-} from "./components/admin";
+import { useAdminCapabilities, useAdminNavEntries, type AdminPageId } from "./components/admin";
 /**
  * The two surfaces the client is not, loaded when they are asked for.
  *
@@ -206,9 +202,7 @@ export default function NebulaClientApp() {
    * that could both be set.
    */
   const [channelDialog, setChannelDialog] = useState<
-    | { mode: "edit"; channel: ChannelEntry }
-    | { mode: "create"; parentId: number; tempOnly: boolean }
-    | null
+    { mode: "edit"; channel: ChannelEntry } | { mode: "create"; parentId: number; tempOnly: boolean } | null
   >(null);
   const [deletingChannel, setDeletingChannel] = useState<ChannelEntry | null>(null);
 
@@ -371,9 +365,7 @@ export default function NebulaClientApp() {
   // Only an open connection carries branding. A saved address the user is
   // merely looking at has sent nothing, and lending it the open server's livery
   // is what put one server's banner on every server's page.
-  const selectedLivery = selectedGroup?.sessionId
-    ? (liveries[selectedGroup.sessionId] ?? null)
-    : null;
+  const selectedLivery = selectedGroup?.sessionId ? (liveries[selectedGroup.sessionId] ?? null) : null;
 
   const toggleFavorite = useCallback(
     (group: ServerGroup) => {
@@ -429,10 +421,7 @@ export default function NebulaClientApp() {
   // are trusted, who is waiting for one. Standard owns these flows; what
   // Nebula decides is where the banners sit and that a revoked key disables
   // the composer rather than letting a send fail silently.
-  const persistent = usePersistentChat(
-    activeDmUser ? null : selectedChannel,
-    activeChannel?.name ?? "",
-  );
+  const persistent = usePersistentChat(activeDmUser ? null : selectedChannel, activeChannel?.name ?? "");
 
   /**
    * The banners that belong to the conversation rather than to the window.
@@ -588,9 +577,7 @@ export default function NebulaClientApp() {
 
   // One card, one place in the tree: the person whose card was clicked open and
   // stays, or - while nothing is pinned - the one the pointer is resting on.
-  const profileCardUser = users.find(
-    (user) => user.session === (selectedUser ?? hovered.target?.session),
-  );
+  const profileCardUser = users.find((user) => user.session === (selectedUser ?? hovered.target?.session));
 
   if (mini && joinedChannel)
     return (

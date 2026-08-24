@@ -67,7 +67,10 @@
   cursor: pointer;
   padding: 0;
   text-align: left;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .card:hover {
@@ -132,7 +135,9 @@
   color: var(--color-surface-streaming);
   opacity: 0;
   transform: scale(0.7);
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
   box-shadow: 0 4px 16px var(--color-overlay-strong);
 }
 

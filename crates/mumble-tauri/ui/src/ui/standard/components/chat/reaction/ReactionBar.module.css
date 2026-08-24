@@ -20,7 +20,9 @@
   background: var(--color-glass-subtle);
   font-size: 0.8rem;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
   user-select: none;
   line-height: 1.4;
 }

@@ -67,9 +67,7 @@ const IMAGE_BOUND = { width: 400, height: 400, bytes: 80_000 };
  * Read and shrunk here, it is carried by the profile itself.
  */
 function pasteImage(view: EditorView, event: ClipboardEvent): boolean {
-  const pasted = Array.from(event.clipboardData?.files ?? []).find((file) =>
-    file.type.startsWith("image/"),
-  );
+  const pasted = Array.from(event.clipboardData?.files ?? []).find((file) => file.type.startsWith("image/"));
   if (!pasted) return false;
   event.preventDefault();
   const reader = new FileReader();
@@ -164,9 +162,7 @@ export function RichTextField({
     },
     editorProps: {
       attributes: { "aria-label": ariaLabel, role: "textbox" },
-      handleKeyDown: singleLine
-        ? (_view, event) => event.key === "Enter" && !event.shiftKey
-        : undefined,
+      handleKeyDown: singleLine ? (_view, event) => event.key === "Enter" && !event.shiftKey : undefined,
       handlePaste: singleLine ? undefined : pasteImage,
     },
   });
@@ -231,7 +227,12 @@ export function RichTextField({
           </ToolButton>
         )}
         {shown.has("italic") && (
-          <ToolButton editor={editor} mark="italic" label="Italic" onClick={(chain) => chain.toggleItalic().run()}>
+          <ToolButton
+            editor={editor}
+            mark="italic"
+            label="Italic"
+            onClick={(chain) => chain.toggleItalic().run()}
+          >
             <ItalicIcon width={13} height={13} />
           </ToolButton>
         )}
@@ -327,7 +328,13 @@ export function RichTextField({
           },
           "& p": { margin: 0 },
           "& p + p": { marginTop: "0.5em" },
-          "& img": { maxWidth: "100%", height: "auto", borderRadius: radius("md"), display: "block", margin: "4px 0" },
+          "& img": {
+            maxWidth: "100%",
+            height: "auto",
+            borderRadius: radius("md"),
+            display: "block",
+            margin: "4px 0",
+          },
           // The card draws a link in its accent; the field has to agree, or
           // what is being written does not look like what will be read.
           "& a": { color: nebula.accent, textDecoration: "underline" },

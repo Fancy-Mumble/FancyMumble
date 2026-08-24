@@ -51,7 +51,9 @@
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.2s, box-shadow 0.2s;
+  transition:
+    opacity 0.2s,
+    box-shadow 0.2s;
   box-shadow: 0 4px 16px var(--color-accent-glow);
 }
 
@@ -78,7 +80,9 @@
 
 .searchInput {
   width: 100%;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 }
 
 .searchInput::placeholder {

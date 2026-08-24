@@ -52,7 +52,9 @@
   color: var(--color-text-secondary);
   opacity: 0.5;
   cursor: pointer;
-  transition: opacity 0.15s, background 0.15s;
+  transition:
+    opacity 0.15s,
+    background 0.15s;
 }
 
 .closeButton:hover {
@@ -105,7 +107,9 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .loadingText {
@@ -122,7 +126,9 @@
   border-color: var(--color-accent-border);
   -webkit-backdrop-filter: blur(28px);
   backdrop-filter: blur(28px);
-  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 var(--color-glass-border);
+  box-shadow:
+    0 4px 32px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 var(--color-glass-border);
 }
 
 /* --- Variant: danger -------------------------------------------- */

@@ -375,7 +375,11 @@ export function AccountSettings() {
             {totpEnroll.uri ? (
               <Box sx={{ display: "flex", justifyContent: "center", mb: "16px" }}>
                 <Box sx={{ p: "10px", background: "#ffffff", borderRadius: radius("lg"), lineHeight: 0 }}>
-                  <QrCode value={totpEnroll.uri} label={t("account.totp.qrLabel")} testId={TID.accountTotpQr} />
+                  <QrCode
+                    value={totpEnroll.uri}
+                    label={t("account.totp.qrLabel")}
+                    testId={TID.accountTotpQr}
+                  />
                 </Box>
               </Box>
             ) : (
@@ -410,14 +414,22 @@ export function AccountSettings() {
             />
             {feedbackFor("totp_verify")}
             {totpEnroll.uri && (
-              <Box sx={(theme) => ({ mt: "14px", pt: "12px", borderTop: `1px solid ${theme.palette.nebula.line}` })}>
+              <Box
+                sx={(theme) => ({
+                  mt: "14px",
+                  pt: "12px",
+                  borderTop: `1px solid ${theme.palette.nebula.line}`,
+                })}
+              >
                 {totpFallback === "qr" ? (
                   <DisclosureLink testId={TID.accountTotpCantScan} onClick={() => setTotpFallback("link")}>
                     {t("account.totp.cantScan")}
                   </DisclosureLink>
                 ) : (
                   <>
-                    <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted, mb: "10px" })}>
+                    <Typography
+                      sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted, mb: "10px" })}
+                    >
                       {t("account.totp.linkHint")}
                     </Typography>
                     <CopyField
@@ -429,7 +441,10 @@ export function AccountSettings() {
                       sx={{ mb: totpFallback === "link" ? "10px" : "12px" }}
                     />
                     {totpFallback === "link" ? (
-                      <DisclosureLink testId={TID.accountTotpRevealSecret} onClick={() => setTotpFallback("secret")}>
+                      <DisclosureLink
+                        testId={TID.accountTotpRevealSecret}
+                        onClick={() => setTotpFallback("secret")}
+                      >
                         {t("account.totp.revealSecret")}
                       </DisclosureLink>
                     ) : (

@@ -78,7 +78,9 @@
   border-radius: 3px;
   background: var(--color-text-muted);
   opacity: 0.5;
-  transition: opacity 0.15s, width 0.15s;
+  transition:
+    opacity 0.15s,
+    width 0.15s;
 }
 
 .splitHandle:hover {
@@ -114,7 +116,9 @@
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
   border-bottom: 1px solid var(--color-glass-border);
-  transition: background 0.2s, border-color 0.2s;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
 }
 
 /* Streaming leaves the in-app header visually untouched: the "you are
@@ -193,8 +197,13 @@
 }
 
 @keyframes liveDotPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .viewerCount {
@@ -216,7 +225,9 @@
   background: var(--color-danger-alt-light);
   color: var(--color-danger-alt);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .streamCloseBtn:hover {
@@ -285,7 +296,10 @@
   background: var(--color-glass);
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    border-color 0.2s;
   flex-shrink: 0;
 }
 
@@ -315,7 +329,10 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s, transform 0.1s;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    transform 0.1s;
   flex-shrink: 0;
 }
 
@@ -492,7 +509,9 @@
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
-  transition: background 0.15s, transform 0.1s;
+  transition:
+    background 0.15s,
+    transform 0.1s;
   animation: pillSlideUp 0.2s ease;
 }
 
@@ -716,11 +735,7 @@
 }
 
 .bubble.ownBubble {
-  background: linear-gradient(
-    135deg,
-    var(--color-own-bubble-start) 0%,
-    var(--color-own-bubble-end) 100%
-  );
+  background: linear-gradient(135deg, var(--color-own-bubble-start) 0%, var(--color-own-bubble-end) 100%);
   border: none;
   border-radius: var(--radius-md) var(--radius-md) 4px var(--radius-md);
   box-shadow: none;
@@ -816,8 +831,13 @@
 }
 
 @keyframes galleryTileShimmer {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 0.75; }
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.75;
+  }
 }
 
 .pluginComponents {
@@ -867,7 +887,9 @@
   color: rgba(255, 255, 255, 0.45);
   cursor: pointer;
   flex-shrink: 0;
-  transition: color 0.12s, background 0.12s;
+  transition:
+    color 0.12s,
+    background 0.12s;
 }
 
 .inlineActionBtn:hover {
@@ -1190,7 +1212,9 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: opacity 0.2s, transform 0.1s;
+  transition:
+    opacity 0.2s,
+    transform 0.1s;
   box-shadow: 0 2px 12px var(--color-accent-glow);
 }
 
@@ -1225,7 +1249,10 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: color 0.2s, border-color 0.2s, background 0.2s;
+  transition:
+    color 0.2s,
+    border-color 0.2s,
+    background 0.2s;
 }
 
 /* --- Quote preview strip (above composer) ----------------------- */
@@ -1307,8 +1334,12 @@
 }
 
 @keyframes quoteFlash {
-  0% { background-color: rgba(100, 150, 255, 0.25); }
-  100% { background-color: transparent; }
+  0% {
+    background-color: rgba(100, 150, 255, 0.25);
+  }
+  100% {
+    background-color: transparent;
+  }
 }
 
 .attachBtn:hover:not(:disabled) {
@@ -1357,7 +1388,9 @@
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
   width: 100%;
   text-align: left;
 }
@@ -1466,7 +1499,9 @@
   border: 2px solid var(--color-glass-border);
   border-radius: 4px;
   cursor: pointer;
-  transition: background 0.1s, border-color 0.1s;
+  transition:
+    background 0.1s,
+    border-color 0.1s;
   align-self: center;
 }
 
@@ -1488,7 +1523,6 @@
   align-items: center;
   gap: 8px;
 }
-
 
 /* --- Mention chips & self-mention highlight ------------------------ */
 
@@ -1678,7 +1712,9 @@
   padding: 0;
   border: none;
   cursor: pointer;
-  transition: transform 0.12s, box-shadow 0.12s;
+  transition:
+    transform 0.12s,
+    box-shadow 0.12s;
 }
 
 .pendingAttachThumbBtn:hover {
@@ -1849,4 +1885,3 @@
   font-size: 14px;
   font-weight: 600;
 }
-

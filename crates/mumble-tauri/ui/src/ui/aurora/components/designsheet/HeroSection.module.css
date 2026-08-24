@@ -3,7 +3,7 @@
 .hero {
   position: relative;
   display: grid;
-  grid-template-columns: 1.15fr .85fr;
+  grid-template-columns: 1.15fr 0.85fr;
   align-items: center;
   min-height: 620px;
   padding: clamp(64px, 8vw, 120px);
@@ -18,8 +18,10 @@
   content: "";
   background-size: 52px 52px;
   mask-image: linear-gradient(to right, black, transparent 85%);
-  opacity: .13;
-  background-image: linear-gradient(rgb(255 255 255 / 5%) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255 / 5%) 1px, transparent 1px);
+  opacity: 0.13;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 5%) 1px, transparent 1px);
 }
 
 .heroCopy {
@@ -35,7 +37,7 @@
   padding: 7px 9px;
   font-size: 9px;
   font-weight: 800;
-  letter-spacing: .1em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   border: 1px solid rgb(200 255 98 / 18%);
   border-radius: 999px;
@@ -49,8 +51,8 @@
 .hero h1 {
   margin: 24px 0 22px;
   font-weight: 570;
-  line-height: .93;
-  letter-spacing: -.065em;
+  line-height: 0.93;
+  letter-spacing: -0.065em;
   font-size: clamp(46px, 6.2vw, 80px);
 }
 
@@ -163,7 +165,7 @@
     position: absolute;
     right: -8%;
     width: 42vw;
-    opacity: .6;
+    opacity: 0.6;
   }
 
   .heroCopy {
@@ -181,7 +183,7 @@
     z-index: 1;
     right: -42%;
     width: 78vw;
-    opacity: .26;
+    opacity: 0.26;
   }
 
   .orbitAvatar {

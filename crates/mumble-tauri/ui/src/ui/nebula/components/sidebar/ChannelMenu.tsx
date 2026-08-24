@@ -94,28 +94,19 @@ export function ChannelMenu({
       {structural
         ? null
         : [
-            <MenuItem
-              key="text"
-              onClick={run(() => void useAppStore.getState().selectChannel(channel.id))}
-            >
+            <MenuItem key="text" onClick={run(() => void useAppStore.getState().selectChannel(channel.id))}>
               <Glyph>
                 <HashIcon width={13} height={13} />
               </Glyph>
               Open text chat
             </MenuItem>,
-            <MenuItem
-              key="join"
-              onClick={run(() => void useAppStore.getState().joinChannel(channel.id))}
-            >
+            <MenuItem key="join" onClick={run(() => void useAppStore.getState().joinChannel(channel.id))}>
               <Glyph>
                 <Link2Icon width={13} height={13} />
               </Glyph>
               Join channel
             </MenuItem>,
-            <MenuItem
-              key="listen"
-              onClick={run(() => void useAppStore.getState().toggleListen(channel.id))}
-            >
+            <MenuItem key="listen" onClick={run(() => void useAppStore.getState().toggleListen(channel.id))}>
               <Glyph>
                 <RadioIcon width={13} height={13} />
               </Glyph>

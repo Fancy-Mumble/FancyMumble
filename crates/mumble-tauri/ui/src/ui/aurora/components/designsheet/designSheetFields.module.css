@@ -71,7 +71,9 @@
 
 .field input:focus {
   border-color: #72c7ff;
-  box-shadow: 0 0 0 3px rgb(70 162 255 / 12%), inset 0 1px rgb(255 255 255 / 5%);
+  box-shadow:
+    0 0 0 3px rgb(70 162 255 / 12%),
+    inset 0 1px rgb(255 255 255 / 5%);
 }
 
 .inputWithIcon:focus-within {
@@ -98,7 +100,9 @@
 .inputWithIcon kbd {
   margin-left: auto;
   color: #707887;
-  font: 8px ui-monospace, monospace;
+  font:
+    8px ui-monospace,
+    monospace;
 }
 
 .fieldError input {

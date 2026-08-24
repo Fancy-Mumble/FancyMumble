@@ -62,10 +62,7 @@ export const FANCY_PROTOCOL_EPOCH = 1;
  * and it would have hidden it on merit: no version is announced, and none ever
  * will be.
  */
-export function isAuditLogSupported(
-  v: number | null | undefined,
-  fancyProtocol?: number | null,
-): boolean {
+export function isAuditLogSupported(v: number | null | undefined, fancyProtocol?: number | null): boolean {
   if (fancyProtocol === FANCY_PROTOCOL_EPOCH) return true;
   return v != null && v >= AUDIT_LOG_MIN_FANCY_VERSION;
 }
@@ -131,8 +128,7 @@ export default function AdminPanel() {
   // The audit page needs the audit protocol (0.4.2+) and the ViewAudit gate,
   // which resolves to Write on root today (same as the other admin surfaces).
   const canViewAudit =
-    isAuditLogSupported(serverFancyVersion, serverFancyProtocol) &&
-    (rootChannelPerms & PERM_WRITE) !== 0;
+    isAuditLogSupported(serverFancyVersion, serverFancyProtocol) && (rootChannelPerms & PERM_WRITE) !== 0;
   // If the file-server plugin is disabled at runtime while its tab is open,
   // its gate flips false - redirect back to a tab that still exists.
   useEffect(() => {

@@ -37,7 +37,9 @@
   border-radius: var(--radius-sm, 4px);
   color: var(--color-text-secondary, #9aa0aa);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
 
 .refreshBtn:hover {

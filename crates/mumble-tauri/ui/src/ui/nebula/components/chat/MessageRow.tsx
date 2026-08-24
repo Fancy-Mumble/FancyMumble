@@ -6,15 +6,7 @@ import type { ChatMessage } from "@core/types";
 import { getReactions, hasReacted } from "@core/features/chat/reaction/reactionStore";
 import { decodeFileAttachmentPayload } from "@core/features/chat/fileAttachments";
 import { getPoll } from "@core/features/chat/poll/model";
-import {
-  CheckIcon,
-  CopyIcon,
-  EditIcon,
-  PinIcon,
-  QuoteIcon,
-  TrashIcon,
-  WarningIcon,
-} from "@ui/icons";
+import { CheckIcon, CopyIcon, EditIcon, PinIcon, QuoteIcon, TrashIcon, WarningIcon } from "@ui/icons";
 import ReactionBar from "@standard/components/chat/reaction/ReactionBar";
 import EmojiPicker from "@standard/components/elements/EmojiPicker";
 import LinkPreviewCard from "@standard/components/chat/linkpreview/LinkPreviewCard";
@@ -81,8 +73,7 @@ export function MessageRow({
       : {
           onMouseEnter: (event: React.MouseEvent) => onHoverProfile?.(message.sender_session!, event),
           onMouseLeave: onLeaveProfile,
-          onContextMenu: (event: React.MouseEvent) =>
-            onContextMenuProfile?.(message.sender_session!, event),
+          onContextMenu: (event: React.MouseEvent) => onContextMenuProfile?.(message.sender_session!, event),
         };
 
   const [hovered, setHovered] = useState(false);
@@ -155,9 +146,7 @@ export function MessageRow({
 
   const hasBody = body.trim().length > 0;
 
-  const quotes = content.quoteIds.map((id) => (
-    <QuoteBlock key={id} messageId={id} onScrollTo={onJumpTo} />
-  ));
+  const quotes = content.quoteIds.map((id) => <QuoteBlock key={id} messageId={id} onScrollTo={onJumpTo} />);
 
   const extras = (
     <>
@@ -284,7 +273,9 @@ export function MessageRow({
         {!grouped && (
           <Box
             component="button"
-            onClick={(event) => message.sender_session != null && onOpenProfile(message.sender_session, event)}
+            onClick={(event) =>
+              message.sender_session != null && onOpenProfile(message.sender_session, event)
+            }
             {...authorHandlers}
             sx={{ all: "unset", cursor: "pointer", display: "flex" }}
           >
@@ -297,7 +288,9 @@ export function MessageRow({
           <Stack direction="row" alignItems="baseline" gap={1}>
             <Typography
               component="button"
-              onClick={(event) => message.sender_session != null && onOpenProfile(message.sender_session, event)}
+              onClick={(event) =>
+                message.sender_session != null && onOpenProfile(message.sender_session, event)
+              }
               {...authorHandlers}
               sx={{
                 all: "unset",

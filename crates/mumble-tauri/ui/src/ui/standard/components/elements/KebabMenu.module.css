@@ -16,7 +16,10 @@
   background: var(--color-glass);
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    border-color 0.2s;
   flex-shrink: 0;
 }
 

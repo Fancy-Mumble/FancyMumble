@@ -48,7 +48,9 @@
   border-radius: 4px;
   color: #fff;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .toolBtn:hover {
@@ -67,7 +69,9 @@
   border-radius: 50%;
   border: 2px solid transparent;
   cursor: pointer;
-  transition: transform 0.1s, border-color 0.15s;
+  transition:
+    transform 0.1s,
+    border-color 0.15s;
 }
 
 .colorSwatch:hover {

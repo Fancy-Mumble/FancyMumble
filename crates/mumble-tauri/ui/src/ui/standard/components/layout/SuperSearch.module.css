@@ -12,7 +12,9 @@
   color: var(--color-text-muted);
   font-size: 13px;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
   min-width: 0;
   user-select: none;
 }

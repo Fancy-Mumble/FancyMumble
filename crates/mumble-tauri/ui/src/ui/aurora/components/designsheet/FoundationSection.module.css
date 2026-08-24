@@ -28,7 +28,9 @@
 .swatch span {
   margin-top: 3px;
   color: var(--muted);
-  font: 8px ui-monospace, monospace;
+  font:
+    8px ui-monospace,
+    monospace;
 }
 
 .ink {
@@ -66,14 +68,16 @@
   display: block;
   margin-bottom: 10px;
   color: var(--muted);
-  font: 8px ui-monospace, monospace;
+  font:
+    8px ui-monospace,
+    monospace;
   text-transform: uppercase;
 }
 
 .typeScale strong {
   font-weight: 560;
-  line-height: .95;
-  letter-spacing: -.05em;
+  line-height: 0.95;
+  letter-spacing: -0.05em;
   font-size: clamp(27px, 3.4vw, 43px);
 }
 

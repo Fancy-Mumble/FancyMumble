@@ -70,10 +70,7 @@ export interface ScheduledSlice {
 }
 
 /** State-only portion of {@link ScheduledSlice}. */
-type ScheduledState = Pick<
-  ScheduledSlice,
-  "scheduledMessages" | "scheduledLastAck" | "scheduledLoading"
->;
+type ScheduledState = Pick<ScheduledSlice, "scheduledMessages" | "scheduledLastAck" | "scheduledLoading">;
 
 /** Default scheduled-message state (also spread into the root `INITIAL`). */
 export const scheduledInitialState: ScheduledState = {

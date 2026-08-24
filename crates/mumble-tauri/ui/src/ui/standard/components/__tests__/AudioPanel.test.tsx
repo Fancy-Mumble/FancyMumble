@@ -74,11 +74,7 @@ interface DeviceLists {
   outputDevices?: { name: string; is_default: boolean }[];
 }
 
-function renderPanel(
-  overrides: Partial<AudioSettings> = {},
-  isExpert = false,
-  lists: DeviceLists = {},
-) {
+function renderPanel(overrides: Partial<AudioSettings> = {}, isExpert = false, lists: DeviceLists = {}) {
   const onChange = vi.fn();
   const onToggleAudioBackend = vi.fn();
   const settings = makeSettings(overrides);

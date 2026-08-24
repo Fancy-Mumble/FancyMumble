@@ -213,11 +213,7 @@ function latencyColor(rtt: number, palette: LatencyPalette): string {
   return palette.bad;
 }
 
-function drawGraph(
-  buffer: readonly LatencyPoint[],
-  svg: SVGSVGElement,
-  palette: LatencyPalette,
-): void {
+function drawGraph(buffer: readonly LatencyPoint[], svg: SVGSVGElement, palette: LatencyPalette): void {
   const plotW = LATENCY_GRAPH_W - PAD_L - PAD_R;
   const plotH = LATENCY_GRAPH_H - PAD_T - PAD_B;
 

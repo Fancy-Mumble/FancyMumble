@@ -1,99 +1,99 @@
 .list {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .category {
-    margin: 14px 0 3px;
-    padding: 0 9px;
-    color: #667283;
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: .09em;
-    text-transform: uppercase;
+  margin: 14px 0 3px;
+  padding: 0 9px;
+  color: #667283;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
 }
 
 .category:first-child {
-    margin-top: 2px;
+  margin-top: 2px;
 }
 
 .item {
-    width: 100%;
-    min-height: 36px;
-    padding: 0 9px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    border-radius: 9px;
-    background: transparent;
-    color: #8d99a8;
-    text-align: left;
-    cursor: pointer;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 9px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 9px;
+  background: transparent;
+  color: #8d99a8;
+  text-align: left;
+  cursor: pointer;
 }
 
 .item:hover {
-    background: rgba(255, 255, 255, .04);
-    color: #d3dae2;
+  background: rgba(255, 255, 255, 0.04);
+  color: #d3dae2;
 }
 
 .item svg {
-    flex: 0 0 auto;
-    width: 15px;
-    color: #66717f;
+  flex: 0 0 auto;
+  width: 15px;
+  color: #66717f;
 }
 
 .name {
-    min-width: 0;
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 13px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
 }
 
 .selected {
-    background: rgba(255, 255, 255, .06);
-    color: #eef2f7;
+  background: rgba(255, 255, 255, 0.06);
+  color: #eef2f7;
 }
 
 .current {
-    color: #a8dcfa;
-    box-shadow: inset 2px 0 0 #65b8ed;
+  color: #a8dcfa;
+  box-shadow: inset 2px 0 0 #65b8ed;
 }
 
 .current svg {
-    color: #65b8ed;
+  color: #65b8ed;
 }
 
 .locked .name {
-    opacity: .62;
+  opacity: 0.62;
 }
 
 .badgeIcon {
-    width: 12px !important;
-    color: #6d798a !important;
+  width: 12px !important;
+  color: #6d798a !important;
 }
 
 .unread {
-    flex: 0 0 auto;
-    min-width: 17px;
-    height: 17px;
-    padding: 0 5px;
-    display: grid;
-    place-items: center;
-    border-radius: 9px;
-    background: #65b8ed;
-    color: #0f2431;
-    font-size: 10px;
-    font-weight: 800;
+  flex: 0 0 auto;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #65b8ed;
+  color: #0f2431;
+  font-size: 10px;
+  font-weight: 800;
 }
 
 .count {
-    flex: 0 0 auto;
-    color: #6b7684;
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+  color: #6b7684;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Occupants are listed under their channel rather than stacked into it, so a
@@ -178,5 +178,5 @@
 }
 
 :global(html[data-ui-density="compact"]) .item {
-    min-height: 30px;
+  min-height: 30px;
 }

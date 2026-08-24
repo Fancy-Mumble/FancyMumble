@@ -6,7 +6,7 @@
   align-items: center;
   font-size: 9px;
   font-weight: 800;
-  letter-spacing: .1em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   border: 1px solid rgb(200 255 98 / 18%);
   border-radius: 999px;
@@ -62,7 +62,9 @@
   gap: 6px;
   align-items: center;
   color: #9fa5b1;
-  font: 9px ui-monospace, monospace;
+  font:
+    9px ui-monospace,
+    monospace;
 }
 
 .voiceTimer i {
@@ -217,7 +219,8 @@
   display: grid;
   place-items: center;
   height: 148px;
-  background: radial-gradient(circle at 70% 20%, #367fe8, transparent 38%), linear-gradient(145deg, #224467, #0e2138);
+  background:
+    radial-gradient(circle at 70% 20%, #367fe8, transparent 38%), linear-gradient(145deg, #224467, #0e2138);
 }
 
 .playerVisual > span {
@@ -274,7 +277,9 @@
 
 .playerControls time {
   color: #757d8a;
-  font: 7px ui-monospace, monospace;
+  font:
+    7px ui-monospace,
+    monospace;
 }
 
 @media (max-width: 720px) {

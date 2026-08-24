@@ -65,7 +65,9 @@
   height: 100%;
   overflow: hidden;
   color: var(--text);
-  background: radial-gradient(circle at 78% 10%, rgb(92 132 160 / 5%), transparent 34%), radial-gradient(circle at 18% 78%, rgb(109 128 145 / 3%), transparent 30%), #0b0f14;
+  background:
+    radial-gradient(circle at 78% 10%, rgb(92 132 160 / 5%), transparent 34%),
+    radial-gradient(circle at 18% 78%, rgb(109 128 145 / 3%), transparent 30%), #0b0f14;
 }
 
 .topbar {
@@ -113,7 +115,7 @@
   cursor: pointer;
   border: 1px solid var(--line-strong);
   border-radius: 10px;
-  transition: .18s ease;
+  transition: 0.18s ease;
   border-color: rgb(255 255 255 / 8%);
   background: rgb(255 255 255 / 3.5%);
   box-shadow: none;
@@ -127,20 +129,20 @@
   margin-right: 4px;
   color: var(--muted);
   font-size: 10px;
-  letter-spacing: .06em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .brand strong {
   font-size: 13px;
-  letter-spacing: .01em;
+  letter-spacing: 0.01em;
 }
 
 .brand small {
   margin-top: 2px;
   color: var(--muted);
   font-size: 9px;
-  letter-spacing: .09em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 
@@ -152,7 +154,7 @@
 }
 
 .backButton:disabled {
-  opacity: .45;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
@@ -260,14 +262,15 @@ a:focus-visible {
 
 @keyframes pulse {
   50% {
-    opacity: .5;
+    opacity: 0.5;
   }
 }
 
 @keyframes skeletonPulse {
-  0%, 100% {
+  0%,
+  100% {
     background-position: 100% 0;
-    opacity: .66;
+    opacity: 0.66;
   }
 
   50% {

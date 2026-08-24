@@ -25,7 +25,15 @@ import { withNebulaTheme } from "../../testTheme";
 import { OnboardingAdmin } from "./OnboardingAdmin";
 
 const channel = (id: number, name: string, parent: number | null): ChannelEntry =>
-  ({ id, name, parent_id: parent, position: 0, user_count: 0, permissions: 0, attributes: 0 }) as unknown as ChannelEntry;
+  ({
+    id,
+    name,
+    parent_id: parent,
+    position: 0,
+    user_count: 0,
+    permissions: 0,
+    attributes: 0,
+  }) as unknown as ChannelEntry;
 
 const CONFIG: OnboardingConfig = {
   version: 1,

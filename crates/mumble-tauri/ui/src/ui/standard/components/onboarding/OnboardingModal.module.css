@@ -103,7 +103,10 @@
   border-radius: var(--radius-md);
   color: var(--color-text-primary);
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, transform 0.08s;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    transform 0.08s;
 }
 
 .answer:hover {
@@ -154,7 +157,10 @@
   border-radius: 50%;
   border: 1.5px solid var(--color-glass-border);
   color: transparent;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
 }
 
 .checkmarkSelected {
@@ -224,7 +230,11 @@
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s,
+    opacity 0.15s;
 }
 
 .btn:hover:not(:disabled) {

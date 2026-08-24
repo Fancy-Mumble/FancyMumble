@@ -54,7 +54,9 @@ describe("requestOperatorTicket", () => {
       scopes: ["server-config:write"],
     });
 
-    getEventHandler()?.({ payload: { ticket: { token: "t", grantedScopes: [], expiresAtMs: 0, baseUrl: "" } } });
+    getEventHandler()?.({
+      payload: { ticket: { token: "t", grantedScopes: [], expiresAtMs: 0, baseUrl: "" } },
+    });
     await expect(pending).resolves.toEqual({
       token: "t",
       grantedScopes: [],

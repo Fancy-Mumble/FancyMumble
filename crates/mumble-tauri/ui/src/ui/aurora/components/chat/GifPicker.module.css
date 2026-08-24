@@ -2,46 +2,44 @@
    picker is a transient popover, and stretched across the whole chat its
    columns grow into huge tiles. */
 .picker {
-    max-width: 520px;
-    margin-left: auto;
-    border: 1px solid rgba(255, 255, 255, .09);
-    border-bottom: 0;
-    border-radius: 13px 13px 0 0;
-    padding: 9px;
-    border-bottom: 1px solid rgba(255, 255, 255, .07);
-    background: rgba(8, 11, 15, .32)
+  max-width: 520px;
+  margin-left: auto;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-bottom: 0;
+  border-radius: 13px 13px 0 0;
+  padding: 9px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(8, 11, 15, 0.32);
 }
 
 .picker header {
-    display: flex;
-    align-items: center;
+  display: flex;
+  align-items: center;
 }
 
 .picker header label {
-    flex: 1;
-    margin: 0 !important
+  flex: 1;
+  margin: 0 !important;
 }
 
-
-
-.picker>p {
-    margin: 8px 0 0;
-    color: #ef8888;
-    font-size: 10px
+.picker > p {
+  margin: 8px 0 0;
+  color: #ef8888;
+  font-size: 10px;
 }
 
-.picker>footer {
-    padding-top: 7px;
-    color: #687584;
-    font-size: 8px;
-    text-align: right
+.picker > footer {
+  padding-top: 7px;
+  color: #687584;
+  font-size: 8px;
+  text-align: right;
 }
 
 .state {
-    padding: 25px;
-    color: #7e8a99;
-    font-size: 10px;
-    text-align: center
+  padding: 25px;
+  color: #7e8a99;
+  font-size: 10px;
+  text-align: center;
 }
 
 /* An auto-filled grid, NOT CSS multi-column: a multicol box with a capped
@@ -49,38 +47,39 @@
    a stray horizontal scrollbar and tiles that stopped lining up. A grid keeps
    the rows aligned and scrolls the way a picker should. */
 .grid {
-    max-height: 292px;
-    margin-top: 8px;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-    gap: 4px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    overscroll-behavior: contain;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, .16) transparent
+  max-height: 292px;
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 4px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
 }
 
 /* The tile is a Button primitive, so its resting padding/min-height have to be
    cleared for the image to be the whole control. */
 .grid button {
-    width: 100%;
-    height: 84px;
-    min-height: 0 !important;
-    padding: 0 !important;
-    display: block !important;
-    overflow: hidden;
-    border-radius: 8px !important;
-    background: rgba(255, 255, 255, .03) !important
+  width: 100%;
+  height: 84px;
+  min-height: 0 !important;
+  padding: 0 !important;
+  display: block !important;
+  overflow: hidden;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.03) !important;
 }
 
-.grid button:hover, .grid button:focus-visible {
-    box-shadow: 0 0 0 2px rgba(101, 184, 237, .55)
+.grid button:hover,
+.grid button:focus-visible {
+  box-shadow: 0 0 0 2px rgba(101, 184, 237, 0.55);
 }
 
 .grid img {
-    width: 100%;
-    height: 100%;
-    display: block;
-    object-fit: cover
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }

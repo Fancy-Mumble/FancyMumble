@@ -121,7 +121,10 @@
   display: inline-flex;
   align-items: center;
   opacity: 0;
-  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+  transition:
+    opacity 0.12s ease,
+    color 0.12s ease,
+    background 0.12s ease;
 }
 
 .friendItem:hover .removeBtn,

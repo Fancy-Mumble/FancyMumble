@@ -46,9 +46,7 @@ export function GroupTitle({
 }: Readonly<{ children: ReactNode; hint?: string; space?: "wide" }>) {
   return (
     <Box sx={{ mt: space === "wide" ? "52px" : "26px" }}>
-      <Typography sx={{ fontSize: 13, fontWeight: 600, mb: hint ? "3px" : "10px" }}>
-        {children}
-      </Typography>
+      <Typography sx={{ fontSize: 13, fontWeight: 600, mb: hint ? "3px" : "10px" }}>{children}</Typography>
       {hint && (
         <Typography sx={(theme) => ({ mb: "12px", fontSize: 11.5, color: theme.palette.nebula.muted })}>
           {hint}
@@ -193,7 +191,10 @@ export function ValueHeader({ label, value }: Readonly<{ label: string; value: s
       sx={(theme) => ({ mb: "3px", fontSize: 11, color: theme.palette.nebula.muted })}
     >
       <span>{label}</span>
-      <Box component="span" sx={(theme) => ({ color: theme.palette.nebula.text, fontWeight: 500, flex: "none" })}>
+      <Box
+        component="span"
+        sx={(theme) => ({ color: theme.palette.nebula.text, fontWeight: 500, flex: "none" })}
+      >
         {value}
       </Box>
     </Stack>
@@ -512,9 +513,7 @@ export function Banner({
       }}
     >
       {title && (
-        <Typography
-          sx={{ fontSize: 11.5, fontWeight: 600, mb: children ? "3px" : 0, color: "inherit" }}
-        >
+        <Typography sx={{ fontSize: 11.5, fontWeight: 600, mb: children ? "3px" : 0, color: "inherit" }}>
           {title}
         </Typography>
       )}
@@ -715,7 +714,9 @@ export function OptionCardGrid<T extends string>({
               borderRadius: radius("md"),
               background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.card,
               border: `1px solid ${active ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
-              "&:hover": { background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.hover },
+              "&:hover": {
+                background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.hover,
+              },
             })}
           >
             <Typography sx={{ fontSize: 12.5, fontWeight: active ? 600 : 500 }}>{option.label}</Typography>

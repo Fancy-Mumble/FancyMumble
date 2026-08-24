@@ -84,25 +84,33 @@
 }
 
 .editorPage small {
-  font: 7px ui-monospace, monospace;
+  font:
+    7px ui-monospace,
+    monospace;
   color: #428eff;
 }
 
 .editorPage h3 {
   margin: 14px 0;
-  font: 28px/1.05 Georgia, serif;
-  letter-spacing: -.03em;
+  font:
+    28px/1.05 Georgia,
+    serif;
+  letter-spacing: -0.03em;
 }
 
 .editorPage p {
-  font: 11px/1.7 Georgia, serif;
+  font:
+    11px/1.7 Georgia,
+    serif;
 }
 
 .editorPage blockquote {
   margin: 20px 0 0;
   padding-left: 14px;
   color: #5f6370;
-  font: italic 13px Georgia, serif;
+  font:
+    italic 13px Georgia,
+    serif;
   border-left: 3px solid #8b7cff;
   border-color: #4e98ee;
 }

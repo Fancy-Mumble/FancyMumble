@@ -37,7 +37,9 @@
   border-radius: var(--radius-sm, 4px);
   color: var(--color-text-secondary, rgba(255, 255, 255, 0.7));
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
 
 .qatBtn:hover:not(:disabled) {
@@ -172,7 +174,10 @@
   padding: 6px 12px;
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  transition:
+    color 0.12s,
+    border-color 0.12s,
+    background 0.12s;
 }
 
 .tab:hover {
@@ -276,7 +281,9 @@
   border-radius: var(--radius-sm, 4px);
   color: var(--color-text-primary, #f5f6f8);
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
 }
 
 .groupCollapsedBtn:hover,
@@ -343,7 +350,9 @@
   color: var(--color-text-primary, #f5f6f8);
   font-size: 11px;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
 }
 
 .btnLarge:hover:not(:disabled) {
@@ -390,7 +399,9 @@
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
 }
 
 .btnSmall:hover:not(:disabled) {

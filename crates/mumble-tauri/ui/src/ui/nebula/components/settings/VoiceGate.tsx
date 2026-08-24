@@ -101,10 +101,7 @@ function AutoGate({ settings, gate }: Readonly<{ settings: AudioSettings; gate: 
         gate.speaking ? `Speaking · ${seconds} / 5.0 s` : `Silent · ${seconds} / 5.0 s`,
       ]
     : needed
-      ? [
-          "Calibration needed",
-          "Speak naturally for 5 seconds so the gate tunes itself to your mic.",
-        ]
+      ? ["Calibration needed", "Speak naturally for 5 seconds so the gate tunes itself to your mic."]
       : ["Gate calibrated", "Run it again if you change microphone, room or filters."];
 
   return (
@@ -292,8 +289,8 @@ function HearYourself({ gate }: Readonly<{ gate: Gate }>) {
           color: theme.palette.nebula.muted,
         })}
       >
-        Record up to {REPLAY_CAPACITY_MS / 1000} s through the same filters your listeners receive, then
-        play it back.
+        Record up to {REPLAY_CAPACITY_MS / 1000} s through the same filters your listeners receive, then play
+        it back.
       </Typography>
       <Box
         component="button"

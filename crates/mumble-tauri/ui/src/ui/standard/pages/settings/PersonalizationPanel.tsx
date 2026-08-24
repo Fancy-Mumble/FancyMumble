@@ -128,7 +128,9 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
   const [uiDesignBusy, setUiDesignBusy] = useState(false);
 
   useEffect(() => {
-    void getSelectedUiDesign().then(setUiDesign).catch(() => undefined);
+    void getSelectedUiDesign()
+      .then(setUiDesign)
+      .catch(() => undefined);
   }, []);
 
   const handleUiDesignChange = async (next: UiDesignId) => {

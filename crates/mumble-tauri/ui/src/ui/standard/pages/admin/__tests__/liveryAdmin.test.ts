@@ -106,9 +106,7 @@ describe("clampHex", () => {
 
   it("holds on a light surface too", () => {
     for (const accent of ["#fffef8", "#f5f3ee", "#ffffff"]) {
-      expect(contrast(clampHex(accent, "#f6f4f0"), "#f6f4f0")).toBeGreaterThanOrEqual(
-        CONTRAST_ACCENT,
-      );
+      expect(contrast(clampHex(accent, "#f6f4f0"), "#f6f4f0")).toBeGreaterThanOrEqual(CONTRAST_ACCENT);
     }
   });
 
@@ -178,9 +176,7 @@ describe("fromSnapshot", () => {
  */
 function stubCodec(source: { width: number; height: number }, weight: number) {
   const encoded: { width: number; height: number; quality: number }[] = [];
-  vi.stubGlobal("createImageBitmap", () =>
-    Promise.resolve({ ...source, close: () => undefined }),
-  );
+  vi.stubGlobal("createImageBitmap", () => Promise.resolve({ ...source, close: () => undefined }));
   vi.stubGlobal(
     "OffscreenCanvas",
     class {

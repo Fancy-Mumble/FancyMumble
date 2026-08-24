@@ -111,9 +111,7 @@ export function NotificationsSettings() {
 
   const patchEvent = useCallback((key: NotificationEvent, patch: Partial<NotificationEventConfig>) => {
     setSounds((prev) =>
-      prev
-        ? { ...prev, events: { ...prev.events, [key]: { ...prev.events[key], ...patch } } }
-        : prev,
+      prev ? { ...prev, events: { ...prev.events, [key]: { ...prev.events[key], ...patch } } } : prev,
     );
   }, []);
 
@@ -141,8 +139,7 @@ export function NotificationsSettings() {
   if (!prefs || !sounds) return null;
 
   const isExpert = prefs.userMode !== "normal";
-  const configFor = (key: NotificationEvent) =>
-    sounds.events[key] ?? DEFAULT_NOTIFICATION_SOUNDS.events[key];
+  const configFor = (key: NotificationEvent) => sounds.events[key] ?? DEFAULT_NOTIFICATION_SOUNDS.events[key];
   const allEnabled = NOTIFICATION_EVENT_KEYS.every((key) => configFor(key).enabled);
   const allDisabled = NOTIFICATION_EVENT_KEYS.every((key) => !configFor(key).enabled);
 

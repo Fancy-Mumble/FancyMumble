@@ -43,9 +43,7 @@ export function AdminPage({
         <Box sx={{ minWidth: 0 }}>
           <Typography sx={{ fontSize: 20, fontWeight: 600 }}>{title}</Typography>
           {hint && (
-            <Typography
-              sx={(theme) => ({ mt: "4px", fontSize: 12, color: theme.palette.nebula.muted })}
-            >
+            <Typography sx={(theme) => ({ mt: "4px", fontSize: 12, color: theme.palette.nebula.muted })}>
               {hint}
             </Typography>
           )}

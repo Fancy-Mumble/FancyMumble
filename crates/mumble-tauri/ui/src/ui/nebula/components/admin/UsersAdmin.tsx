@@ -1,5 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Menu, MenuItem, TextField, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Menu,
+  MenuItem,
+  TextField,
+  Typography,
+} from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -448,8 +461,7 @@ function RoleManagerDialog({
     [groups, user.user_id],
   );
 
-  const dirty =
-    membership.size !== initial.size || [...membership].some((name) => !initial.has(name));
+  const dirty = membership.size !== initial.size || [...membership].some((name) => !initial.has(name));
 
   const save = async () => {
     if (!dirty || saving || !acl) return;
@@ -460,9 +472,7 @@ function RoleManagerDialog({
       if (shouldBeMember === group.add.includes(user.user_id)) return group;
       return {
         ...group,
-        add: shouldBeMember
-          ? [...group.add, user.user_id]
-          : group.add.filter((id) => id !== user.user_id),
+        add: shouldBeMember ? [...group.add, user.user_id] : group.add.filter((id) => id !== user.user_id),
         // Adding somebody also has to lift an explicit removal, or the two
         // lists disagree and the server keeps them out.
         remove: shouldBeMember ? group.remove.filter((id) => id !== user.user_id) : group.remove,

@@ -51,9 +51,7 @@ export function RolesAdmin({ initialRole }: Readonly<{ initialRole?: string | nu
     let unlisten: (() => void) | null = null;
     acquireRegisteredTextures();
     void (async () => {
-      const off = await listen<RegisteredUser[]>("user-list", (event) =>
-        setRegisteredUsers(event.payload),
-      );
+      const off = await listen<RegisteredUser[]>("user-list", (event) => setRegisteredUsers(event.payload));
       if (cancelled) return off();
       unlisten = off;
       invoke("request_user_list").catch(() => undefined);
@@ -170,9 +168,7 @@ export function RolesAdmin({ initialRole }: Readonly<{ initialRole?: string | nu
   }
 
   const query = search.trim().toLowerCase();
-  const visible = (acl?.groups ?? []).filter(
-    (group) => !query || group.name.toLowerCase().includes(query),
-  );
+  const visible = (acl?.groups ?? []).filter((group) => !query || group.name.toLowerCase().includes(query));
 
   return (
     <AdminPage

@@ -33,13 +33,7 @@ import {
   LATENCY_GRAPH_W,
   type LatencyPalette,
 } from "@shared/serverinfo/model";
-import {
-  ChevronDownIcon,
-  CloseIcon,
-  RefreshCwIcon,
-  ServerIcon,
-  ShieldCheckIcon,
-} from "@ui/icons";
+import { ChevronDownIcon, CloseIcon, RefreshCwIcon, ServerIcon, ShieldCheckIcon } from "@ui/icons";
 import { NEBULA_MONO, radius } from "../../tokens";
 import { SectionLabel, Stack } from "../primitives";
 
@@ -50,7 +44,11 @@ const ACTIVATION_LABELS = {
 } as const;
 
 /** A titled group of facts, separated from its neighbours by a hairline. */
-function Section({ title, action, children }: Readonly<{
+function Section({
+  title,
+  action,
+  children,
+}: Readonly<{
   title?: string;
   action?: ReactNode;
   children: ReactNode;
@@ -91,7 +89,11 @@ function Facts({ mono, children }: Readonly<{ mono?: boolean; children: ReactNod
   );
 }
 
-function Fact({ label, value, mono }: Readonly<{
+function Fact({
+  label,
+  value,
+  mono,
+}: Readonly<{
   label: string;
   value: string | number | boolean;
   mono?: boolean;
@@ -123,7 +125,11 @@ function Fact({ label, value, mono }: Readonly<{
 }
 
 /** The panel's collapsible block: a card header that opens onto its body. */
-function Fold({ title, defaultExpanded, children }: Readonly<{
+function Fold({
+  title,
+  defaultExpanded,
+  children,
+}: Readonly<{
   title: ReactNode;
   defaultExpanded?: boolean;
   children: ReactNode;
@@ -239,10 +245,7 @@ function ActivityLog() {
   }
 
   return (
-    <Box
-      ref={listRef}
-      sx={{ maxHeight: 170, overflowY: "auto", display: "grid", gap: "3px" }}
-    >
+    <Box ref={listRef} sx={{ maxHeight: 170, overflowY: "auto", display: "grid", gap: "3px" }}>
       {serverLog.map((entry, i) => (
         <Stack direction="row" gap={1} key={`${entry.timestamp_ms}-${i}`}>
           <Typography
@@ -422,7 +425,10 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
                     <Fold
                       key={plugin.name}
                       title={
-                        <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                        <Box
+                          component="span"
+                          sx={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                        >
                           {`${plugin.name} v${plugin.version}`}
                           {isOfficialPlugin(plugin.name) && (
                             <Tooltip title="Official first-party plugin">
@@ -486,7 +492,11 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
                         />
                         <Fact mono label="Auto gain" value={audioSettings.auto_gain} />
                         <Fact mono label="Max gain" value={`${audioSettings.max_gain_db} dB`} />
-                        <Fact mono label="Activation" value={ACTIVATION_LABELS[activationKind(audioSettings)]} />
+                        <Fact
+                          mono
+                          label="Activation"
+                          value={ACTIVATION_LABELS[activationKind(audioSettings)]}
+                        />
                         <Fact
                           mono
                           label="Gate close ratio"
@@ -618,4 +628,3 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
     </Stack>
   );
 }
-

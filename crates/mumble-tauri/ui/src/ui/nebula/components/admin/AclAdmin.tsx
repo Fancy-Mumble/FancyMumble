@@ -345,12 +345,7 @@ export function AclAdmin({ initialChannel }: Readonly<{ initialChannel?: number 
 
               {activeTab === "rules" && <AclRules acl={aclData} onChange={patch} />}
               {activeTab === "groups" && (
-                <AclGroups
-                  acl={aclData}
-                  users={users}
-                  registeredNames={registeredNames}
-                  onChange={patch}
-                />
+                <AclGroups acl={aclData} users={users} registeredNames={registeredNames} onChange={patch} />
               )}
               {activeTab === "users" && (
                 <AccessUsers acl={aclData} users={users} registeredNames={registeredNames} />
@@ -577,7 +572,10 @@ function ChannelTreeNode({
           {node.channel.name}
         </Box>
         {isPrivate && (
-          <Box component="span" sx={(theme) => ({ flex: "none", fontSize: 9.5, color: theme.palette.nebula.dim })}>
+          <Box
+            component="span"
+            sx={(theme) => ({ flex: "none", fontSize: 9.5, color: theme.palette.nebula.dim })}
+          >
             {t("channelAcl.privateBadge")}
           </Box>
         )}
@@ -903,9 +901,8 @@ function GroupCard({
     const asNumber = Number(trimmed);
     if (Number.isFinite(asNumber) && asNumber >= 0) return asNumber;
     return (
-      users.find(
-        (user) => user.name.toLowerCase() === trimmed.toLowerCase() && user.user_id != null,
-      )?.user_id ?? null
+      users.find((user) => user.name.toLowerCase() === trimmed.toLowerCase() && user.user_id != null)
+        ?.user_id ?? null
     );
   };
 

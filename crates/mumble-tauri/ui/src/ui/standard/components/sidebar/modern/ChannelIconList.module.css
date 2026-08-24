@@ -12,13 +12,28 @@
 /* --- Shake animation (permission denied) ------------------------ */
 
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  15%       { transform: translateX(-6px); }
-  30%       { transform: translateX(5px); }
-  45%       { transform: translateX(-4px); }
-  60%       { transform: translateX(4px); }
-  75%       { transform: translateX(-2px); }
-  90%       { transform: translateX(2px); }
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  15% {
+    transform: translateX(-6px);
+  }
+  30% {
+    transform: translateX(5px);
+  }
+  45% {
+    transform: translateX(-4px);
+  }
+  60% {
+    transform: translateX(4px);
+  }
+  75% {
+    transform: translateX(-2px);
+  }
+  90% {
+    transform: translateX(2px);
+  }
 }
 
 .shaking {
@@ -28,8 +43,12 @@
 /* --- Highlight animation (search result selected) --------------- */
 
 @keyframes highlight-flash {
-  0%   { box-shadow: 0 0 0 2px var(--color-accent, #2aabee); }
-  100% { box-shadow: none; }
+  0% {
+    box-shadow: 0 0 0 2px var(--color-accent, #2aabee);
+  }
+  100% {
+    box-shadow: none;
+  }
 }
 
 .highlighted {
@@ -100,7 +119,9 @@
   align-items: center;
   justify-content: center;
   border: 2px solid transparent;
-  transition: border-color 0.15s, transform 0.15s;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
 }
 
 .channelIcon:hover {
@@ -209,7 +230,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .memberCountBtn:hover {
@@ -326,8 +349,13 @@
 }
 
 @keyframes livePulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.65; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.65;
+  }
 }
 
 /* --- Sticky current-channel clones ----------------------------- */

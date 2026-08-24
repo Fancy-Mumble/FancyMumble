@@ -533,13 +533,7 @@ export function ProfileCard({
         )}
 
         {message && !hover && (
-          <Composer
-            name={model.name}
-            ink={ink}
-            send={paint.send}
-            message={message}
-            trailing={trailing}
-          />
+          <Composer name={model.name} ink={ink} send={paint.send} message={message} trailing={trailing} />
         )}
 
         {footnote && !hover && (
@@ -624,17 +618,14 @@ function Bio({
     const measure = () => {
       const top = element.scrollTop > 1;
       const bottom = element.scrollTop + element.clientHeight < element.scrollHeight - 1;
-      setEdges((current) =>
-        current.top === top && current.bottom === bottom ? current : { top, bottom },
-      );
+      setEdges((current) => (current.top === top && current.bottom === bottom ? current : { top, bottom }));
     };
     measure();
     element.addEventListener("scroll", measure, { passive: true });
     // A bio's pictures are decoded after the first paint, so the height this
     // depends on is not settled when the effect runs: watching the text inside
     // is what turns "no fade" into a fade once the image has taken its space.
-    const observer =
-      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     observer?.observe(element);
     if (element.firstElementChild) observer?.observe(element.firstElementChild);
     return () => {
@@ -685,9 +676,7 @@ function Bio({
         // Reachable by keyboard only while there is something to scroll to, and
         // named there, so it is not an unexplained stop on the way to the
         // composer on every card that happens to be short.
-        {...(scrollable
-          ? { tabIndex: 0, role: "region" as const, "aria-label": `About ${name}` }
-          : null)}
+        {...(scrollable ? { tabIndex: 0, role: "region" as const, "aria-label": `About ${name}` } : null)}
       >
         <RichText html={html} linkColor={ink.accent} />
       </div>
@@ -713,9 +702,7 @@ function Row({
   style,
 }: Readonly<{ children: ReactNode; gap: number; style?: CSSProperties }>) {
   return (
-    <div
-      style={{ display: "flex", alignItems: "center", justifyContent: "center", gap, ...style }}
-    >
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap, ...style }}>
       {children}
     </div>
   );
@@ -723,10 +710,7 @@ function Row({
 
 function Dot({ tone }: Readonly<{ tone: string }>) {
   return (
-    <span
-      aria-hidden
-      style={{ width: 6, height: 6, borderRadius: "50%", background: tone, flex: "none" }}
-    />
+    <span aria-hidden style={{ width: 6, height: 6, borderRadius: "50%", background: tone, flex: "none" }} />
   );
 }
 
@@ -938,9 +922,7 @@ function Composer({
         </div>
       ) : (
         <button type="button" className="fpc-btn" onClick={message.onOpen} style={pill}>
-          <span style={{ flex: 1, textAlign: "left", fontSize: 11.5, color: ink.dim }}>
-            {placeholder}
-          </span>
+          <span style={{ flex: 1, textAlign: "left", fontSize: 11.5, color: ink.dim }}>{placeholder}</span>
           <span
             aria-hidden
             style={{

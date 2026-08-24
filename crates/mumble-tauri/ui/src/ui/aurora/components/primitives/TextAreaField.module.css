@@ -1,48 +1,48 @@
 .field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    color: #aeb7c3;
-    font-size: 10px;
-    font-weight: 700
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #aeb7c3;
+  font-size: 10px;
+  font-weight: 700;
 }
 
-.field>span {
-    display: flex;
-    align-items: baseline;
-    gap: 5px
+.field > span {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
 }
 
 .field small {
-    color: #687483;
-    font-weight: 400
+  color: #687483;
+  font-weight: 400;
 }
 
 .field textarea {
-    width: 100%;
-    min-height: 100px;
-    padding: 10px 12px;
-    border: 1px solid rgba(255, 255, 255, .09);
-    border-radius: 10px;
-    outline: 0;
-    background: rgba(6, 9, 13, .4);
-    color: #edf1f7;
-    font: inherit;
-    line-height: 1.5;
-    resize: vertical
+  width: 100%;
+  min-height: 100px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  outline: 0;
+  background: rgba(6, 9, 13, 0.4);
+  color: #edf1f7;
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
 }
 
 .field textarea:focus {
-    border-color: rgba(101, 184, 237, .5);
-    box-shadow: 0 0 0 3px rgba(101, 184, 237, .08)
+  border-color: rgba(101, 184, 237, 0.5);
+  box-shadow: 0 0 0 3px rgba(101, 184, 237, 0.08);
 }
 
-.field textarea[aria-invalid=true] {
-    border-color: rgba(239, 100, 100, .45)
+.field textarea[aria-invalid="true"] {
+  border-color: rgba(239, 100, 100, 0.45);
 }
 
 .field em {
-    color: #f29494;
-    font-size: 9px;
-    font-style: normal
+  color: #f29494;
+  font-size: 9px;
+  font-style: normal;
 }

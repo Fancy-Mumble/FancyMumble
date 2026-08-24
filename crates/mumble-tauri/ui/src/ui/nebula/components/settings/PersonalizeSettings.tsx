@@ -62,12 +62,7 @@ const DESIGNS: { id: UiDesignId; label: string }[] = [
 let bakeChain: Promise<void> = Promise.resolve();
 let bakeGeneration = 0;
 
-function queueVideoBake(
-  fileName: string,
-  posterName: string | null,
-  sigma: number,
-  dim: number,
-) {
+function queueVideoBake(fileName: string, posterName: string | null, sigma: number, dim: number) {
   const generation = ++bakeGeneration;
   bakeChain = bakeChain.then(async () => {
     if (generation !== bakeGeneration) return;
@@ -76,16 +71,10 @@ function queueVideoBake(
       // The poster gets the same treatment, so the fallback still matches the
       // baked clip frame-for-look. Both are stamped with the parameters they
       // were computed for; a slider moved since makes them stale together.
-      const poster = posterName
-        ? await processBackgroundImage(posterName, sigma, dim)
-        : null;
+      const poster = posterName ? await processBackgroundImage(posterName, sigma, dim) : null;
       if (generation !== bakeGeneration) return;
       const current = await loadPersonalization();
-      if (
-        current.chatBgVideo !== fileName ||
-        current.chatBgBlurSigma !== sigma ||
-        current.chatBgDim !== dim
-      )
+      if (current.chatBgVideo !== fileName || current.chatBgBlurSigma !== sigma || current.chatBgDim !== dim)
         return;
       await savePersonalization({
         ...current,
@@ -123,9 +112,7 @@ export function PersonalizeSettings() {
   useEffect(
     () =>
       onBakeProgress(({ done, total }) =>
-        setBakePercent(
-          total > 0 && done < total ? Math.round((done / total) * 100) : null,
-        ),
+        setBakePercent(total > 0 && done < total ? Math.round((done / total) * 100) : null),
       ),
     [],
   );
@@ -233,9 +220,7 @@ export function PersonalizeSettings() {
         chatBgVideo: null,
         chatBgVideoBaked: null,
       });
-      setBackgroundError(
-        error instanceof Error ? error.message : "Could not use that file.",
-      );
+      setBackgroundError(error instanceof Error ? error.message : "Could not use that file.");
     } finally {
       setBackgroundBusy(false);
     }
@@ -264,9 +249,7 @@ export function PersonalizeSettings() {
     const next = { ...data, ...changes };
     const saved = await patch(changes);
     if (saved && next.chatBgVideo) {
-      const poster = isStoreRef(next.chatBgOriginal)
-        ? storeRefName(next.chatBgOriginal)
-        : null;
+      const poster = isStoreRef(next.chatBgOriginal) ? storeRefName(next.chatBgOriginal) : null;
       queueVideoBake(next.chatBgVideo, poster, next.chatBgBlurSigma, next.chatBgDim);
     }
   };
@@ -364,7 +347,9 @@ export function PersonalizeSettings() {
               sx={(theme) => ({
                 height: 64,
                 borderRadius: radius("md"),
-                background: currentPreview ? `center/cover url(${currentPreview})` : theme.palette.nebula.card2,
+                background: currentPreview
+                  ? `center/cover url(${currentPreview})`
+                  : theme.palette.nebula.card2,
                 boxShadow: `0 0 0 2px ${theme.palette.nebula.accent}`,
               })}
             />
@@ -391,9 +376,7 @@ export function PersonalizeSettings() {
           "&:hover": { borderColor: theme.palette.nebula.accentLine },
         })}
       >
-        {backgroundBusy
-          ? "Preparing background…"
-          : "Choose an image or video — shown blurred behind chat"}
+        {backgroundBusy ? "Preparing background…" : "Choose an image or video — shown blurred behind chat"}
       </Box>
 
       {bakePercent !== null && (

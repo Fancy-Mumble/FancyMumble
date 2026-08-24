@@ -51,10 +51,7 @@ export default function ScheduledMessagesPanel({ channelId }: ScheduledMessagesP
     void listScheduledMessages();
   }, [listScheduledMessages]);
 
-  const pending = useMemo(
-    () => messages.filter((m) => m.status === ScheduleStatus.Pending),
-    [messages],
-  );
+  const pending = useMemo(() => messages.filter((m) => m.status === ScheduleStatus.Pending), [messages]);
 
   const statusLabel = useCallback(
     (status: number): string => {
@@ -149,7 +146,9 @@ export default function ScheduledMessagesPanel({ channelId }: ScheduledMessagesP
           />
         </label>
         {(localError || ackError) && (
-          <div className={styles.error} data-testid={TID.scheduledError}>{localError ?? ackError}</div>
+          <div className={styles.error} data-testid={TID.scheduledError}>
+            {localError ?? ackError}
+          </div>
         )}
         <button
           type="button"
@@ -164,11 +163,11 @@ export default function ScheduledMessagesPanel({ channelId }: ScheduledMessagesP
       </div>
 
       <div className={styles.list}>
-        {loading && pending.length === 0 && (
-          <div className={styles.empty}>{t("scheduled.loading")}</div>
-        )}
+        {loading && pending.length === 0 && <div className={styles.empty}>{t("scheduled.loading")}</div>}
         {!loading && pending.length === 0 && (
-          <div className={styles.empty} data-testid={TID.scheduledEmpty}>{t("scheduled.none")}</div>
+          <div className={styles.empty} data-testid={TID.scheduledEmpty}>
+            {t("scheduled.none")}
+          </div>
         )}
         {pending.map((m) => (
           <div key={m.scheduleId} className={styles.item} data-testid={TID.scheduledItem}>

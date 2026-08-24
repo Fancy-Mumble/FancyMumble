@@ -242,7 +242,12 @@ export function AdvancedSettings() {
                 >
                   {t("advanced.viewLogsBtn")}
                 </Button>
-                <Button size="small" variant="outlined" disabled={exporting} onClick={() => void exportLogs()}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={exporting}
+                  onClick={() => void exportLogs()}
+                >
                   {t("advanced.exportLogsBtn")}
                 </Button>
               </Stack>

@@ -7,9 +7,7 @@ import styles from "./WorkspaceSurface.module.css";
 
 const DownloadsPanel = lazy(() => import("@ui/standard/components/chat/download/DownloadsPanel"));
 const CalendarPanel = lazy(() => import("@ui/standard/components/chat/calendar/CalendarPanel"));
-const RichPresencePanel = lazy(
-  () => import("@ui/standard/components/chat/presence/RichPresencePanel"),
-);
+const RichPresencePanel = lazy(() => import("@ui/standard/components/chat/presence/RichPresencePanel"));
 const LiveDocPanel = lazy(() => import("@ui/standard/components/chat/livedoc/LiveDocPanel"));
 
 type WorkspaceTab = "documents" | "downloads" | "calendar" | "activity";

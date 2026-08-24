@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Box } from "@mui/material";
-import {
-  useResolvedBackgroundSource,
-  useStoredBackgroundUrl,
-} from "@core/features/settings/chatBackground";
+import { useResolvedBackgroundSource, useStoredBackgroundUrl } from "@core/features/settings/chatBackground";
 import {
   loadPersonalization,
   PERSONALIZATION_CHANGED_EVENT,
@@ -127,9 +124,7 @@ export function ChatBackdrop() {
     // whole column would take the wash, the message text and the chrome down
     // with it. Once the look is baked into the pixels only the saturation
     // nudge remains, and the compositor has nothing to recompute per frame.
-    filter: filtered
-      ? `blur(${sigma}px) saturate(1.05) brightness(${brightness})`
-      : "saturate(1.05)",
+    filter: filtered ? `blur(${sigma}px) saturate(1.05) brightness(${brightness})` : "saturate(1.05)",
     transform: "scale(1.08)",
     display: "block",
   } as const;

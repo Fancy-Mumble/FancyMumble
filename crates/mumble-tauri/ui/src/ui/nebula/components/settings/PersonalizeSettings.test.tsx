@@ -23,13 +23,11 @@ vi.mock("@core/utils/store", () => {
 
 // The picker dialog, the store reads and the codecs all live outside the
 // webview; what is under test is what the page does with what they hand back.
-const pickChatBackground =
-  vi.fn<() => Promise<{ kind: "image" | "video"; fileName: string } | null>>();
+const pickChatBackground = vi.fn<() => Promise<{ kind: "image" | "video"; fileName: string } | null>>();
 const extractBackgroundPoster = vi.fn<() => Promise<string | null>>();
 const captureAndStorePoster = vi.fn<() => Promise<string>>();
 const storedBackgroundUrl = vi.fn<() => Promise<string | null>>();
-const probeVideoPlayback =
-  vi.fn<() => Promise<{ playable: boolean; reason: string | null }>>();
+const probeVideoPlayback = vi.fn<() => Promise<{ playable: boolean; reason: string | null }>>();
 const bakeBackgroundVideo = vi.fn<() => Promise<string>>();
 const processBackgroundImage = vi.fn<() => Promise<string>>();
 const clearChatBackgroundStore = vi.fn<() => Promise<void>>();
@@ -51,9 +49,7 @@ vi.mock("@core/features/settings/chatBackground", () => ({
 }));
 
 const { PersonalizeSettings } = await import("./PersonalizeSettings");
-const { PERSONALIZATION_DEFAULTS, savePersonalization } = await import(
-  "@standard/personalizationStorage"
-);
+const { PERSONALIZATION_DEFAULTS, savePersonalization } = await import("@standard/personalizationStorage");
 
 const choose = () => fireEvent.click(screen.getByText(/Choose an image or video/i));
 

@@ -116,7 +116,9 @@
   cursor: pointer;
   overflow: hidden;
   text-align: left;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
 
 .option:hover:not(:disabled) {

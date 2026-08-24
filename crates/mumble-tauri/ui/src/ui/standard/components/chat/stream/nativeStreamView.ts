@@ -445,8 +445,7 @@ export function useNativeStreamView(
         // moves the camera to the PiP slot; the next IDR re-delivers its
         // avcC to the new slot (configs are rebuilt from in-band SPS/PPS),
         // and the slot's keyframe-request loop forces that IDR.
-        const asideCamera =
-          content === "camera" && Object.values(contentMap).includes("screen");
+        const asideCamera = content === "camera" && Object.values(contentMap).includes("screen");
         const slot = asideCamera ? slots.camera : slots.display;
         if (isConfig) slot.configure(bytes);
         else slot.feed(isH264, keyframe, timestampUs, bytes);

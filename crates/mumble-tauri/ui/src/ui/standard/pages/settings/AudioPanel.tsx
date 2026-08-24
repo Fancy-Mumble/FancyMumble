@@ -236,7 +236,6 @@ export function AudioPanel({
       <option value={selected}>{t("audio.deviceUnavailable", { name: selected })}</option>
     ) : null;
 
-
   return (
     <>
       <h2 className={styles.panelTitle}>{t("audio.panelTitle")}</h2>

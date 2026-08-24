@@ -39,8 +39,7 @@ const REGISTERED: Snapshot = {
 function lastUpdate() {
   const calls = invokeMock.mock.calls.filter(([cmd]) => cmd === "update_account_settings");
   return calls.at(-1)?.[1] as
-    | { action: string; value: string | null; currentPassword: string | null }
-    | undefined;
+    { action: string; value: string | null; currentPassword: string | null } | undefined;
 }
 
 async function renderPage(snapshot: Snapshot = REGISTERED) {
