@@ -400,7 +400,7 @@ fn push_samples(
     frame: &crate::audio::sample::AudioFrame,
 ) {
     let samples = frame.as_f32_samples();
-    notify_decoded(session, &samples);
+    notify_decoded(session, samples);
     if let Ok(mut bufs) = buffers.lock() {
         let buf = bufs
             .entry(session)

@@ -132,8 +132,14 @@ pub fn register_speaker_buffers(buffers: &SpeakerBuffers) {
     }
 }
 
+/// Decoded samples accumulated per speaker session.
+type DumpBuffers = Mutex<HashMap<u32, Vec<f32>>>;
+
 /// Accumulated decoded audio per speaker, written out on demand.
-static DUMP: OnceLock<Option<Mutex<HashMap<u32, Vec<f32>>>>> = OnceLock::new();
+///
+/// The outer `Option` is "dumping is off": set once, from the environment, so
+/// the hot path checks a pointer rather than re-reading a variable.
+static DUMP: OnceLock<Option<DumpBuffers>> = OnceLock::new();
 
 fn dump_dir() -> Option<&'static str> {
     static DIR: OnceLock<Option<String>> = OnceLock::new();

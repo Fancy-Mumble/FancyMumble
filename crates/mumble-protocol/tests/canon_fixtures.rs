@@ -21,6 +21,17 @@
 //! Establish which before regenerating: a codec that can re-baseline its own
 //! expectations is a codec with no test at all. Both copies move in one commit.
 
+#![allow(
+    unused_crate_dependencies,
+    reason = "integration test: it links the whole crate's dependency set and uses a few"
+)]
+
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "concise failure reporting in tests"
+)]
+
 use mumble_protocol::message::ControlMessage;
 use mumble_protocol::proto::mumble_tcp;
 use mumble_protocol::transport::codec::encode;

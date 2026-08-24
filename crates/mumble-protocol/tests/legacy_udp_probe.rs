@@ -12,6 +12,17 @@
 //!
 //! Every step prints, because the point is to find *which* one stops.
 
+#![allow(
+    unused_crate_dependencies,
+    reason = "integration test: it links the whole crate's dependency set and uses a few"
+)]
+
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "concise failure reporting in tests"
+)]
+
 use std::net::UdpSocket;
 use std::time::Duration;
 
@@ -183,7 +194,7 @@ impl Peer {
 
         println!("PROBE[{}]: speaking {} bytes through UDPTunnel", self.label, payload.len());
         self.transport
-            .send(&ControlMessage::UdpTunnel(payload.into()))
+            .send(&ControlMessage::UdpTunnel(payload))
             .await
             .expect("send tunnel");
     }
