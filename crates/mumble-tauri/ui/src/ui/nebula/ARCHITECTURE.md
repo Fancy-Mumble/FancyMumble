@@ -282,10 +282,7 @@ before, because a feature landed and its line was never struck.
 
 **Composing**
 
-- Rich text: the composer is plain text plus GIFs, not the TipTap editor. No
-  markdown toolbar, no code blocks, no tables.
-- No custom server emotes.
-- No poll creator. Polls that arrive are rendered and can be voted on.
+- No custom server emotes beyond what the body already carries.
 - No drag-and-drop onto the composer, and no pasted-image tray: a file is
   attached through the picker.
 - No scheduled messages, calendar/meeting composer, or LiveDoc. Note that the
@@ -294,18 +291,15 @@ before, because a feature landed and its line was never struck.
 
 **Reading**
 
-- No render windowing. Every in-memory message of the open conversation is
-  mounted, where Standard mounts a tail-anchored slice (`chatWindowing`,
-  `useChatScroll`). Fetching older history works; holding thousands of rows in
-  the DOM is the part that does not scale.
-- No per-message translation, and no multi-select or bulk delete. Copy, reply,
-  edit, pin and delete are present.
+- No per-message translation trigger. The overlay itself is mounted and works
+  the way it does in Standard, which drives it from selection rather than from
+  a row.
 
 **Channels and users**
 
 - No drag-and-drop: channels cannot be reordered by dragging and users cannot
   be dragged between channels. Reordering is the channel editor's `position`
-  field.
+  field, and moving a user is on their menu.
 - No blocking, ignoring or user notes. Existing relations are still honoured
   when filtering messages; they just cannot be edited here.
 
@@ -319,31 +313,61 @@ before, because a feature landed and its line was never struck.
 
 - No watch-together host controls. An active session's card renders; starting
   one does not.
-- No first-run onboarding wizard, friends page, shared-files panel or
-  rich-presence panel.
+- No first-run onboarding wizard, friends page, shared-files panel,
+  rich-presence panel, saved-server editor or channel recording.
 - No mobile layout. Nebula assumes a desktop window.
+
+
+## Form controls
+
+Nebula borrows Standard's pickers but deliberately does not load Standard's
+`global.css`, whose "form control baseline" is what stops half-styled controls
+drifting. A widget that leaves its input to the host - the emoji picker's search
+box among them - therefore arrived as a raw browser input in the middle of the
+mock.
+
+The equivalent baseline lives in `theme.ts`, under `MuiCssBaseline`, in Nebula's
+own tokens rather than Standard's. It is element-level on purpose, so a single
+class still wins: `MarkdownInput`'s invisible textarea sets its own padding,
+colour and border and is untouched by it.
 
 ## What a message is
 
 A chat body is HTML, but not every body is text: some are a marker standing in
 for an object the server broadcast separately. `messageContent` in
-`selectors.ts` decides which, and `MessageRow` draws the card - Standard's, in
-both cases, because a poll and a file card are self-contained widgets rather
-than layout. Rendering a marker as HTML prints its neighbours and drops the
-object, which is what happened here until a poll showed up as bare question
-text and an attachment as nothing at all.
+`selectors.ts` decides which - poll, file, the quotes a reply carries - and
+`MessageRow` draws the card. Rendering a marker as HTML prints its neighbours
+and drops the object, which is what happened here until a poll showed up as
+bare question text and an attachment as nothing at all.
 
 Editing runs the composer's encoding backwards. `composerHtml` and
-`editableText` are one round trip and live together for that reason: an edit
-that re-encoded text differently from the way it was first sent would rewrite
-the message every time it was saved. The editor is on the row rather than in
-the composer, which may be holding an unsent draft.
+`editableText` are one round trip and live together for that reason. Which row
+is being edited is the shell's state rather than the row's, because the message
+menu is mounted once for the whole conversation and is one of the things that
+starts an edit.
+
+The hover strip carries what is wanted mid-conversation - react, reply, edit,
+copy, pin, delete. Everything else is on the right-click menu, so the strip does
+not grow into a toolbar covering the message it belongs to. Reacting had to be
+on both: the reaction bar owns the "+" that adds one, and the bar only draws
+once a reaction exists, so the first one could never be placed.
 
 Several things are about the *conversation* rather than about what is on
 screen - the read watermark, where reading stopped, the lightbox gallery - so
 `NebulaClientApp` keeps `conversationMessages` apart from the searched list.
-Deriving them from the filtered list would let typing in the search box move
-this client's read receipt.
+
+## What is mounted
+
+Only the newest `BASE_WINDOW` messages are live DOM. The window grows as the
+reader climbs towards the top and snaps back at the bottom; the policy is
+core's `chatWindowing`, shared with Standard, so the two packs agree about what
+"near the top" means.
+
+Three things move rows above the reader and all three are corrected the same
+way, by the first *rendered* id changing: a fetched page of history, a window
+that has grown, and nothing else. Following a quote into unfetched history
+therefore takes two passes - the first widens the window, the second finds the
+row - which is why the jump carries a nonce and remembers the last one served.
 
 ## Encryption state
 

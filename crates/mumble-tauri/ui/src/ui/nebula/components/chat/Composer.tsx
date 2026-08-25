@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Stack } from "../primitives";
-import { Box, Dialog, DialogContent, IconButton, InputBase, Tooltip } from "@mui/material";
+import { Box, Dialog, DialogContent, IconButton, Tooltip } from "@mui/material";
 import { useTypingIndicator } from "@core/features/chat/typing/useTypingIndicator";
 import { sendPluginInteraction, useAppStore } from "@core/store";
 import { parseMentionTrigger, type MentionTrigger } from "@core/utils/mentions";
 import { collectSlashCommands, filterSlashCommands } from "@core/plugins/tier1/manifest";
 import { extractSlashQuery, parseSlashLine } from "@core/plugins/tier1/slashParser";
-import { EmojiPlusIcon, PlusIcon, SendIcon } from "@ui/icons";
+import { EmojiPlusIcon, PlusIcon, PollIcon, SendIcon } from "@ui/icons";
 import { KlipyGifBrowser } from "@standard/pages/settings/KlipyGifBrowser";
 import EmojiPicker from "@standard/components/elements/EmojiPicker";
 import MentionAutocomplete, {
@@ -16,6 +16,7 @@ import MentionAutocomplete, {
 } from "@standard/components/chat/mention/MentionAutocomplete";
 import { useMentionCandidates } from "@standard/components/chat/mention/useMentionCandidates";
 import SlashCommandMenu, { handleSlashKey } from "@standard/components/plugin/SlashCommandMenu";
+import MarkdownInput, { type MarkdownInputApi } from "@standard/components/chat/markdown/MarkdownInput";
 import { composerHtml } from "../../selectors";
 import { glassChrome } from "../../theme";
 import { radius } from "../../tokens";
@@ -26,6 +27,8 @@ interface ComposerProps {
   disabled?: boolean;
   onSend: (html: string) => void | Promise<void>;
   onAttach?: () => void;
+  /** Open the poll composer. Absent in DMs, which have no channel to poll. */
+  onCreatePoll?: () => void;
 }
 
 const POPUP = {
@@ -44,21 +47,48 @@ const POPUP = {
  * sends and Shift+Enter breaks the line, which is what the rest of the app
  * does; the textarea grows to a few lines and then scrolls.
  *
+ * The editable surface is Standard's `MarkdownInput` - an invisible textarea
+ * under a decorated overlay, so what is typed is formatted as it is typed. It
+ * is borrowed rather than redrawn because it is an editor, not layout, and a
+ * second one would be a second markdown dialect to keep honest.
+ *
  * Three things can be open over it while typing - the mention list, the slash
  * command list, the emoji grid - and all three are pickers, so all three are
- * Standard's rather than redrawn here. What is Nebula's is the pill, and the
- * arithmetic of putting a chosen thing into a plain textarea: the draft is a
- * string and the caret is an offset into it, so inserting is a splice plus a
- * setSelectionRange rather than an editor command.
+ * Standard's too. What is Nebula's is the pill around them, and the bookkeeping
+ * that decides when a list should open.
  */
-export function Composer({ target, disabled = false, onSend, onAttach }: Readonly<ComposerProps>) {
+export function Composer({
+  target,
+  disabled = false,
+  onSend,
+  onAttach,
+  onCreatePoll,
+}: Readonly<ComposerProps>) {
   const [draft, setDraft] = useState("");
   const [gifOpen, setGifOpen] = useState(false);
   const [emoji, setEmoji] = useState<{ x: number; y: number } | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const editor = useRef<MarkdownInputApi | null>(null);
+  /** Where the caret is, as the editor last reported it. */
+  const caret = useRef({ start: 0, end: 0 });
+  /**
+   * The draft as of this very moment.
+   *
+   * The editor calls `onChange` and then `onSelectionChange` inside one
+   * handler, so neither callback alone has both the new text and the new
+   * caret: state has not re-rendered in between. This ref is written by the
+   * first so the second can read what was actually typed.
+   */
+  const draftRef = useRef("");
   const { notifyTyping, resetTyping } = useTypingIndicator();
 
   const selectedChannel = useAppStore((state) => state.selectedChannel);
+  const users = useAppStore((state) => state.users);
+  // The editor draws `<@7>` as a chip rather than as markup, which needs a
+  // name for the session behind it.
+  const mentionName = useCallback(
+    (session: number) => users.find((user) => user.session === session)?.name,
+    [users],
+  );
   const pluginManifests = useAppStore((state) => state.pluginManifests);
 
   const [trigger, setTrigger] = useState<MentionTrigger | null>(null);
@@ -90,27 +120,12 @@ export function Composer({ target, disabled = false, onSend, onAttach }: Readonl
 
   /** Replace the given span of the draft, leaving the caret after the insert. */
   const replaceRange = useCallback((from: number, to: number, text: string) => {
-    setDraft((previous) => previous.slice(0, from) + text + previous.slice(to));
-    const caret = from + text.length;
-    // Placed after the commit rather than inside it: the value React is about
-    // to render is not in the textarea yet, so a caret set now would be moved
-    // straight back to the end by that render.
-    requestAnimationFrame(() => {
-      const node = inputRef.current;
-      if (!node) return;
-      node.focus();
-      node.setSelectionRange(caret, caret);
-    });
+    editor.current?.replaceRange(from, to, text);
   }, []);
 
   const insertAtCaret = useCallback(
-    (text: string) => {
-      const node = inputRef.current;
-      const from = node?.selectionStart ?? draft.length;
-      const to = node?.selectionEnd ?? from;
-      replaceRange(from, to, text);
-    },
-    [draft.length, replaceRange],
+    (text: string) => replaceRange(caret.current.start, caret.current.end, text),
+    [replaceRange],
   );
 
   const pickMention = useCallback(
@@ -129,27 +144,42 @@ export function Composer({ target, disabled = false, onSend, onAttach }: Readonl
   const pickSlash = useCallback(
     (entry: { command: { name: string } }) => {
       const leading = draft.length - draft.trimStart().length;
-      setDraft(draft.slice(0, leading) + "/" + entry.command.name + " ");
+      const next = draft.slice(0, leading) + "/" + entry.command.name + " ";
+      draftRef.current = next;
+      setDraft(next);
       setSlashIndex(0);
     },
     [draft],
   );
 
-  /** Re-read the mention trigger from wherever the caret has ended up. */
-  const syncTrigger = useCallback(() => {
-    const node = inputRef.current;
-    if (!node) return;
-    if (node.selectionStart !== node.selectionEnd) {
-      if (trigger) setTrigger(null);
+  /**
+   * Re-read the mention trigger for `text` at the given caret.
+   *
+   * The text is passed in rather than read from state: the editor reports a
+   * selection during its own change event, when `draft` still holds the value
+   * from before the keystroke. Parsing that would look for the trigger in the
+   * previous text and find nothing, leaving the popup to depend on a later
+   * selection event that a programmatic edit never fires.
+   */
+  const updateTrigger = useCallback((text: string, start: number, end: number) => {
+    caret.current = { start, end };
+    if (start !== end) {
+      setTrigger((previous) => (previous ? null : previous));
       return;
     }
-    const next = parseMentionTrigger(draft, node.selectionStart ?? 0);
-    if (next?.anchor === trigger?.anchor && next?.query === trigger?.query && next?.kind === trigger?.kind) {
-      return;
-    }
-    setTrigger(next);
-    setMentionIndex(0);
-  }, [draft, trigger]);
+    const next = parseMentionTrigger(text, start);
+    setTrigger((previous) => {
+      if (
+        next?.anchor === previous?.anchor &&
+        next?.query === previous?.query &&
+        next?.kind === previous?.kind
+      ) {
+        return previous;
+      }
+      setMentionIndex(0);
+      return next;
+    });
+  }, []);
 
   const submit = () => {
     const text = draft.trim();
@@ -160,6 +190,7 @@ export function Composer({ target, disabled = false, onSend, onAttach }: Readonl
     const parsed = parseSlashLine(text, allSlash);
     if (parsed) {
       setDraft("");
+      draftRef.current = "";
       resetTyping();
       if (parsed.errors.length > 0) {
         console.warn("[nebula] slash command rejected:", parsed.errors.join("; "));
@@ -172,12 +203,13 @@ export function Composer({ target, disabled = false, onSend, onAttach }: Readonl
     }
 
     setDraft("");
+    draftRef.current = "";
     setTrigger(null);
     resetTyping();
     void onSend(composerHtml(text));
   };
 
-  const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const onKeyDownCapture = (event: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
     // An open list owns the arrow keys and Enter. Only once nothing is open
     // does Enter go back to meaning send.
     if (slashOpen) {
@@ -187,7 +219,7 @@ export function Composer({ target, disabled = false, onSend, onAttach }: Readonl
         if (action.kind === "move") setSlashIndex(action.index);
         else if (action.kind === "pick") pickSlash(slashEntries[action.index]);
         else setDraft("");
-        return;
+        return true;
       }
     }
     if (trigger && candidates.length > 0) {
@@ -197,12 +229,11 @@ export function Composer({ target, disabled = false, onSend, onAttach }: Readonl
         if (action.kind === "move") setMentionIndex(action.index);
         else if (action.kind === "pick") pickMention(candidates[action.index]);
         else setTrigger(null);
-        return;
+        return true;
       }
     }
-    if (event.key !== "Enter" || event.shiftKey) return;
-    event.preventDefault();
-    submit();
+    // Enter is the editor's own submit, so it is left alone here.
+    return false;
   };
 
   return (
@@ -260,6 +291,18 @@ export function Composer({ target, disabled = false, onSend, onAttach }: Readonl
             </IconButton>
           </Tooltip>
         )}
+        {onCreatePoll && (
+          <Tooltip title="Poll">
+            <IconButton
+              aria-label="Create a poll"
+              disabled={disabled}
+              onClick={onCreatePoll}
+              sx={{ width: 28, height: 28 }}
+            >
+              <PollIcon width={16} height={16} />
+            </IconButton>
+          </Tooltip>
+        )}
         <Tooltip title="Emoji">
           <IconButton
             aria-label="Insert emoji"
@@ -291,30 +334,24 @@ export function Composer({ target, disabled = false, onSend, onAttach }: Readonl
         >
           GIF
         </Box>
-        <InputBase
-          inputRef={inputRef}
-          multiline
-          maxRows={6}
-          value={draft}
-          disabled={disabled}
-          placeholder={`Message ${target}`}
-          inputProps={{ "aria-label": `Message ${target}` }}
-          onChange={(event) => {
-            setDraft(event.target.value);
-            notifyTyping();
-          }}
-          onKeyUp={syncTrigger}
-          onClick={syncTrigger}
-          onSelect={syncTrigger}
-          onKeyDown={onKeyDown}
-          sx={{
-            flex: 1,
-            fontSize: 13,
-            // InputBase adds its own vertical padding on top of the row's, which
-            // pushes a single line off the pill's centre line.
-            "& .MuiInputBase-input": { padding: 0, lineHeight: 1.5 },
-          }}
-        />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <MarkdownInput
+            apiRef={editor}
+            value={draft}
+            disabled={disabled}
+            placeholder={`Message ${target}`}
+            ariaLabel={`Message ${target}`}
+            onChange={(next) => {
+              draftRef.current = next;
+              setDraft(next);
+              notifyTyping();
+            }}
+            onSubmit={submit}
+            onSelectionChange={(start, end) => updateTrigger(draftRef.current, start, end)}
+            onKeyDownCapture={onKeyDownCapture}
+            mentionResolver={mentionName}
+          />
+        </Box>
         <Tooltip title="Send">
           <span>
             <IconButton

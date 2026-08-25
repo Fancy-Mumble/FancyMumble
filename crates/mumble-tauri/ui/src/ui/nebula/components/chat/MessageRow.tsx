@@ -6,7 +6,16 @@ import type { ChatMessage } from "@core/types";
 import { getReactions, hasReacted } from "@core/features/chat/reaction/reactionStore";
 import { decodeFileAttachmentPayload } from "@core/features/chat/fileAttachments";
 import { getPoll } from "@core/features/chat/poll/model";
-import { CheckIcon, CopyIcon, EditIcon, PinIcon, QuoteIcon, TrashIcon, WarningIcon } from "@ui/icons";
+import {
+  CheckIcon,
+  CopyIcon,
+  EditIcon,
+  EmojiPlusIcon,
+  PinIcon,
+  QuoteIcon,
+  TrashIcon,
+  WarningIcon,
+} from "@ui/icons";
 import ReactionBar from "@standard/components/chat/reaction/ReactionBar";
 import EmojiPicker from "@standard/components/elements/EmojiPicker";
 import LinkPreviewCard from "@standard/components/chat/linkpreview/LinkPreviewCard";
@@ -41,6 +50,20 @@ interface MessageRowProps {
   onQuote?: (message: ChatMessage) => void;
   /** Bring the quoted message into view. */
   onJumpTo?: (messageId: string) => void;
+  /** Right-click anywhere on the message. */
+  onContextMenu?: (message: ChatMessage, at: { x: number; y: number }, editable: boolean) => void;
+  /** Selection mode: null when off, otherwise whether this row is picked. */
+  selected?: boolean | null;
+  onToggleSelected?: (messageId: string) => void;
+  /**
+   * Whether this row is the one being edited.
+   *
+   * Held by the shell rather than the row because the message menu, which is
+   * mounted once for the whole conversation, is one of the things that starts
+   * an edit - and it cannot reach a row's own state.
+   */
+  editing?: boolean;
+  onEditingChange?: (editing: boolean) => void;
 }
 
 /**
@@ -64,6 +87,11 @@ export function MessageRow({
   allMessageIds,
   onQuote,
   onJumpTo,
+  onContextMenu,
+  selected = null,
+  onToggleSelected,
+  editing = false,
+  onEditingChange,
 }: Readonly<MessageRowProps>) {
   // The avatar and the name are two handles on one person, so they carry the
   // same hover, the same click and the same menu.
@@ -90,8 +118,6 @@ export function MessageRow({
   // Read polls through the store as well as the module map: the map is what
   // holds them, but only the store tells React that one has arrived.
   const knownPolls = useAppStore((state) => state.polls);
-
-  const [editing, setEditing] = useState(false);
 
   // What the body *is* decides what gets drawn; only the leftover HTML is
   // sanitised, so a marker never reaches the renderer as text.
@@ -127,7 +153,7 @@ export function MessageRow({
   const canEdit = message.is_own && !!message.message_id && content.kind === "text";
 
   const commitEdit = (text: string) => {
-    setEditing(false);
+    onEditingChange?.(false);
     const trimmed = text.trim();
     if (!trimmed || !message.message_id) return;
     if (trimmed === editableText(message.body).trim()) return;
@@ -145,6 +171,30 @@ export function MessageRow({
   };
 
   const hasBody = body.trim().length > 0;
+
+  const openReactionPicker = (event: React.MouseEvent) => setPicker({ x: event.clientX, y: event.clientY });
+
+  const selecting = selected !== null;
+  const rowHandlers = {
+    onMouseEnter: () => setHovered(true),
+    onMouseLeave: () => setHovered(false),
+    onContextMenu: (event: React.MouseEvent) => {
+      if (!onContextMenu) return;
+      event.preventDefault();
+      onContextMenu(message, { x: event.clientX, y: event.clientY }, content.kind === "text");
+    },
+    // In selection mode the whole row is the checkbox: aiming at a small box
+    // beside a wall of text is the slowest way to pick several things.
+    onClick: selecting && message.message_id ? () => onToggleSelected?.(message.message_id!) : undefined,
+    sx: selecting
+      ? {
+          cursor: "pointer",
+          borderRadius: radius("md"),
+          outline: selected ? "2px solid" : "none",
+          outlineColor: "nebula.accent",
+        }
+      : undefined,
+  };
 
   const quotes = content.quoteIds.map((id) => <QuoteBlock key={id} messageId={id} onScrollTo={onJumpTo} />);
 
@@ -188,18 +238,13 @@ export function MessageRow({
 
   if (message.is_own) {
     return (
-      <Stack
-        alignItems="flex-end"
-        gap={0.5}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-      >
+      <Stack alignItems="flex-end" gap={0.5} {...rowHandlers}>
         {quotes}
         {editing ? (
           <BodyEditor
             initial={editableText(message.body)}
             onCommit={commitEdit}
-            onCancel={() => setEditing(false)}
+            onCancel={() => onEditingChange?.(false)}
           />
         ) : (
           hasBody && (
@@ -233,8 +278,9 @@ export function MessageRow({
           {hovered && !editing && (
             <RowActions
               message={message}
-              onEdit={canEdit ? () => setEditing(true) : undefined}
+              onEdit={canEdit ? () => onEditingChange?.(true) : undefined}
               onQuote={message.message_id ? () => onQuote?.(message) : undefined}
+              onReact={message.message_id ? openReactionPicker : undefined}
             />
           )}
           <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })}>
@@ -262,13 +308,7 @@ export function MessageRow({
   }
 
   return (
-    <Stack
-      direction="row"
-      gap={1.5}
-      sx={{ minWidth: 0 }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
+    <Stack direction="row" gap={1.5} {...rowHandlers} sx={{ minWidth: 0, ...(rowHandlers.sx ?? {}) }}>
       <Box sx={{ width: 38, flex: "none" }}>
         {!grouped && (
           <Box
@@ -323,6 +363,7 @@ export function MessageRow({
               <RowActions
                 message={message}
                 onQuote={message.message_id ? () => onQuote?.(message) : undefined}
+                onReact={message.message_id ? openReactionPicker : undefined}
               />
             )}
           </Stack>
@@ -424,10 +465,23 @@ function RowActions({
   message,
   onEdit,
   onQuote,
-}: Readonly<{ message: ChatMessage; onEdit?: () => void; onQuote?: () => void }>) {
+  onReact,
+}: Readonly<{
+  message: ChatMessage;
+  onEdit?: () => void;
+  onQuote?: () => void;
+  onReact?: (event: React.MouseEvent) => void;
+}>) {
   const canModerate = message.is_own && !!message.message_id;
   return (
     <Stack direction="row" gap={0.25}>
+      {onReact && (
+        <Tooltip title="React">
+          <IconButton size="small" aria-label="Add reaction" onClick={onReact}>
+            <EmojiPlusIcon width={12} height={12} />
+          </IconButton>
+        </Tooltip>
+      )}
       {onQuote && (
         <Tooltip title="Reply">
           <IconButton size="small" aria-label="Reply to message" onClick={onQuote}>

@@ -44,6 +44,7 @@ export {
   Pencil as EditIcon,
   Pin as PinIcon,
   Play as PlayIcon,
+  ChartBar as PollIcon,
   Plus as PlusIcon,
   Power as PowerIcon,
   Puzzle as PuzzleIcon,

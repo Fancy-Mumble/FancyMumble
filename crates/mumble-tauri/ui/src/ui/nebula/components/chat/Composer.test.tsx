@@ -15,11 +15,14 @@ function draw(props: Partial<React.ComponentProps<typeof Composer>> = {}) {
   return { onSend, field: screen.getByLabelText("Message #Gaming") as HTMLTextAreaElement };
 }
 
-/** Type into the field and move the caret to the end, as a keystroke would. */
+/**
+ * Type into the editor.
+ *
+ * The caret is placed before the change is dispatched because the editor
+ * reports the selection from that event - it does not watch key-up.
+ */
 function type(field: HTMLTextAreaElement, value: string) {
-  fireEvent.change(field, { target: { value } });
-  field.setSelectionRange(value.length, value.length);
-  fireEvent.keyUp(field);
+  fireEvent.change(field, { target: { value, selectionStart: value.length, selectionEnd: value.length } });
 }
 
 describe("Composer", () => {

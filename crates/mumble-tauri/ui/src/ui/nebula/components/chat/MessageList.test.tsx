@@ -81,4 +81,29 @@ describe("MessageList", () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
     Element.prototype.scrollIntoView = original;
   });
+
+  it("mounts only the newest window of a long conversation", () => {
+    const many = Array.from({ length: 260 }, (_, index) => message(`m${index}`));
+    const { container } = draw({ messages: many });
+    const rows = container.querySelectorAll("[data-message-id]");
+    // The tail window, not all 260 - every row carries an avatar, a sanitiser
+    // and a reaction subscription behind it.
+    expect(rows.length).toBeLessThan(many.length);
+    expect(rows.length).toBe(100);
+    // Anchored to the end: the newest message is mounted, the oldest is not.
+    expect(container.querySelector('[data-message-id="m259"]')).toBeTruthy();
+    expect(container.querySelector('[data-message-id="m0"]')).toBeNull();
+  });
+
+  it("widens the window to reach a jump target that is not mounted", () => {
+    const many = Array.from({ length: 260 }, (_, index) => message(`m${index}`));
+    const scrollIntoView = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    draw({ messages: many, jumpTo: { messageId: "m5", nonce: 1 } });
+
+    expect(scrollIntoView).toHaveBeenCalled();
+    Element.prototype.scrollIntoView = original;
+  });
 });

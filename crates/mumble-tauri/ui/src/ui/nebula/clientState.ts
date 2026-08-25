@@ -88,6 +88,48 @@ export function useFirstUnreadId(
   return messages[Math.max(0, messages.length - pending)]?.message_id ?? null;
 }
 
+/**
+ * Picking several messages out of a conversation to act on at once.
+ *
+ * Selection mode is entered from a message's own menu rather than sitting in
+ * the chrome: it is a mode you are put into by deciding to act on something,
+ * and a permanent "select" control would be a button that does nothing on
+ * every server that does not allow deletion.
+ *
+ * Leaving the conversation drops the selection - the ids belong to messages
+ * that are no longer on screen, and acting on them from somewhere else is
+ * never what was meant.
+ */
+export function useMessageSelection(conversationKey: unknown) {
+  const [active, setActive] = useState(false);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+
+  useEffect(() => {
+    setActive(false);
+    setSelected(new Set());
+  }, [conversationKey]);
+
+  const toggle = useCallback((messageId: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(messageId)) next.add(messageId);
+      return next;
+    });
+  }, []);
+
+  const begin = useCallback((messageId: string) => {
+    setActive(true);
+    setSelected(new Set([messageId]));
+  }, []);
+
+  const clear = useCallback(() => {
+    setActive(false);
+    setSelected(new Set());
+  }, []);
+
+  return { active, selected, toggle, begin, clear };
+}
+
 /** The optional right-hand roster and its own filter. */
 export function useMemberPanel() {
   const [open, setOpen] = useState(false);
