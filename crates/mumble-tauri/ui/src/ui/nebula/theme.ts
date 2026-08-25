@@ -32,6 +32,19 @@ declare module "@mui/material/styles" {
 /** The mock sizes everything against a 13px root, not MUI's 16px. */
 const BASE_FONT_SIZE = 13;
 
+/** Input types the baseline must not touch - they are not text surfaces. */
+const UNSTYLED_INPUT_TYPES = [
+  '[type="checkbox"]',
+  '[type="radio"]',
+  '[type="range"]',
+  '[type="file"]',
+  '[type="color"]',
+  '[type="submit"]',
+  '[type="button"]',
+  '[type="image"]',
+  '[type="reset"]',
+].join(", ");
+
 export function createNebulaTheme(
   mode: NebulaMode,
   accentOverride?: string,
@@ -113,6 +126,41 @@ export function createNebulaTheme(
             background: "transparent",
             color: nebula.text,
           },
+          /*
+           * A baseline for bare form controls.
+           *
+           * Nebula borrows Standard's pickers but deliberately does not load
+           * Standard's global.css, whose own "form control baseline" is what
+           * stops half-styled controls drifting. Without an equivalent here,
+           * every borrowed widget that leaves an input to the host - the emoji
+           * picker's search box among them - rendered as a raw browser input
+           * in the middle of the mock.
+           *
+           * MUI's own fields do not go through these selectors, so this only
+           * catches the controls nobody styled, which is exactly its job. A
+           * single class still wins, as a baseline must.
+           */
+          [`input:where(:not(${UNSTYLED_INPUT_TYPES})), textarea:where(:not([class*="Mui"])), select`]: {
+            padding: "8px 12px",
+            borderRadius: radius("sm"),
+            border: `1px solid ${nebula.line2}`,
+            background: nebula.card2,
+            color: nebula.text,
+            fontFamily: "inherit",
+            fontSize: "inherit",
+            lineHeight: 1.4,
+            outline: "none",
+          },
+          [`input:where(:not(${UNSTYLED_INPUT_TYPES}))::placeholder, textarea::placeholder`]: {
+            color: nebula.muted,
+          },
+          // An outline rather than a border swap: it cannot reflow the layout
+          // and it survives forced-colours modes.
+          [`input:where(:not(${UNSTYLED_INPUT_TYPES})):focus-visible, textarea:focus-visible, select:focus-visible`]:
+            {
+              outline: `2px solid ${nebula.accent}`,
+              outlineOffset: 1,
+            },
           // The mock's scrollbars are part of its surface language, not an
           // afterthought - thin, track-less, and the same tone as a chip.
           "*": { scrollbarWidth: "thin", scrollbarColor: `${nebula.card2} transparent` },

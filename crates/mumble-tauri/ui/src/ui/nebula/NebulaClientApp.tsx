@@ -24,6 +24,9 @@ import { useFileUpload, type FileShareChoice } from "@core/features/chat/useFile
 import FileShareDialog from "@standard/components/chat/file/FileShareDialog";
 import UploadProgressItem from "@standard/components/chat/upload/UploadProgressItem";
 import QuotePreviewStrip from "@standard/components/chat/quote/QuotePreviewStrip";
+import PollCreator from "@standard/components/chat/poll/PollCreator";
+import EmojiPicker from "@standard/components/elements/EmojiPicker";
+import { hasReacted } from "@core/features/chat/reaction/reactionStore";
 import type { MessageScope } from "@core/messageOffload";
 import {
   ChannelList,
@@ -73,6 +76,7 @@ const AdminScreen = lazy(() =>
 
 import { AddServerDialog } from "./components/connect/AddServerDialog";
 import { ScreenShareStrip } from "./components/chat/ScreenShareStrip";
+import { MessageMenu, type MessageMenuTarget } from "./components/chat/MessageMenu";
 import {
   useFirstUnreadId,
   useHideEmptyChannels,
@@ -83,6 +87,7 @@ import {
   useProfileAnchor,
   useScreenRouting,
   useUserMenu,
+  useMessageSelection,
   useSearchState,
   useServerPings,
   type HoverEvent,
@@ -400,7 +405,7 @@ export default function NebulaClientApp() {
     [conversationMessages],
   );
 
-  const { handlePollVote } = usePolls();
+  const { handlePollVote, handlePollCreate, showPollCreator, openPollCreator, closePollCreator } = usePolls();
 
   // Sends this client's own watermark and asks for everyone else's. Without
   // it Nebula would show other people's receipts and never return one, which
@@ -483,6 +488,28 @@ export default function NebulaClientApp() {
     );
   }, []);
 
+  const selection = useMessageSelection(`${selectedChannel}:${selectedDmUser}`);
+  const [messageMenu, setMessageMenu] = useState<MessageMenuTarget | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  /** The message a menu-opened reaction picker is about, and where it sits. */
+  const [reactionTarget, setReactionTarget] = useState<{
+    message: ChatMessage;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const ownHash = ownUser?.hash ?? "";
+  const react = useCallback(
+    (message: ChatMessage, emoji: string) => {
+      if (!message.message_id) return;
+      const already = ownHash && hasReacted(message.message_id, emoji, ownHash);
+      void useAppStore
+        .getState()
+        .sendReaction(message.channel_id, message.message_id, emoji, already ? "remove" : "add");
+    },
+    [ownHash],
+  );
+
   const jumpToMessage = useCallback((messageId: string) => {
     setJumpTo((prev) => ({ messageId, nonce: (prev?.nonce ?? 0) + 1 }));
   }, []);
@@ -492,6 +519,7 @@ export default function NebulaClientApp() {
   useEffect(() => {
     setPendingQuotes([]);
     setJumpTo(null);
+    setEditingMessageId(null);
   }, [selectedChannel, selectedDmUser]);
 
   const lightboxRef = useRef<LightboxHandle>(null);
@@ -927,6 +955,19 @@ export default function NebulaClientApp() {
                           allMessageIds={conversationMessageIds}
                           onQuote={quoteMessage}
                           onJumpTo={jumpToMessage}
+                          onContextMenu={(target, at, editable) =>
+                            setMessageMenu({ message: target, x: at.x, y: at.y, editable })
+                          }
+                          selected={
+                            selection.active && message.message_id
+                              ? selection.selected.has(message.message_id)
+                              : null
+                          }
+                          onToggleSelected={selection.toggle}
+                          editing={!!message.message_id && editingMessageId === message.message_id}
+                          onEditingChange={(next) =>
+                            setEditingMessageId(next ? (message.message_id ?? null) : null)
+                          }
                         />
                       )}
                     />
@@ -945,6 +986,45 @@ export default function NebulaClientApp() {
                           onCancel={uploads.cancel}
                         />
                       ))}
+                    </Stack>
+                  )}
+
+                  {selection.active && (
+                    <Stack
+                      direction="row"
+                      alignItems="center"
+                      gap={1}
+                      sx={(muiTheme) => ({
+                        mx: "34px",
+                        mt: "8px",
+                        px: "14px",
+                        py: "8px",
+                        borderRadius: radius("md"),
+                        background: muiTheme.palette.nebula.card,
+                        border: `1px solid ${muiTheme.palette.nebula.line}`,
+                      })}
+                    >
+                      <Typography sx={{ fontSize: 12 }}>{selection.selected.size} selected</Typography>
+                      <Button
+                        size="small"
+                        color="error"
+                        disabled={selection.selected.size === 0 || selectedChannel === null}
+                        onClick={() => {
+                          const ids = [...selection.selected];
+                          selection.clear();
+                          if (selectedChannel !== null && ids.length > 0) {
+                            void useAppStore
+                              .getState()
+                              .deletePchatMessages(selectedChannel, { messageIds: ids });
+                          }
+                        }}
+                        sx={{ ml: "auto" }}
+                      >
+                        Delete
+                      </Button>
+                      <Button size="small" onClick={selection.clear}>
+                        Cancel
+                      </Button>
                     </Stack>
                   )}
 
@@ -970,6 +1050,7 @@ export default function NebulaClientApp() {
                     disabled={(!activeChannel && !activeDmUser) || persistent.sendBlocked}
                     onSend={send}
                     onAttach={canAttach ? () => void pickAttachment() : undefined}
+                    onCreatePoll={selectedChannel !== null && !activeDmUser ? openPollCreator : undefined}
                   />
                 </>
               )}
@@ -1185,6 +1266,39 @@ export default function NebulaClientApp() {
                 if (target) void uploads.upload(target.filePath, target.filename, choice);
               }}
               onCancel={() => setShareTarget(null)}
+            />
+          )}
+
+          {/* A poll is a channel object rather than a message, which is why it
+              is composed in its own dialog and not in the composer. */}
+          {showPollCreator && (
+            <PollCreator
+              onSubmit={(question, options, multiple) => {
+                closePollCreator();
+                void handlePollCreate(question, options, multiple);
+              }}
+              onClose={closePollCreator}
+            />
+          )}
+
+          <MessageMenu
+            target={messageMenu}
+            onClose={() => setMessageMenu(null)}
+            onReact={(target, at) => setReactionTarget({ message: target, ...at })}
+            onQuote={quoteMessage}
+            onEdit={(target) => setEditingMessageId(target.message_id ?? null)}
+            onSelect={selection.begin}
+          />
+
+          {reactionTarget && (
+            <EmojiPicker
+              anchorX={reactionTarget.x}
+              anchorY={reactionTarget.y}
+              onSelect={(emoji) => {
+                react(reactionTarget.message, emoji);
+                setReactionTarget(null);
+              }}
+              onClose={() => setReactionTarget(null)}
             />
           )}
 

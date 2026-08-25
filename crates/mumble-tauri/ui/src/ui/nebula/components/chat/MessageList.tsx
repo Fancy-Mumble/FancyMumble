@@ -1,8 +1,15 @@
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Stack } from "../primitives";
 import { Box, Divider, Typography } from "@mui/material";
 import { useUserAvatars } from "@core/lazyBlobs";
 import type { ChatMessage, UserEntry } from "@core/types";
+import {
+  BASE_WINDOW,
+  GROW_THRESHOLD_PX,
+  grownTailCount,
+  tailCountAfterAppend,
+  tailCountToInclude,
+} from "@core/features/chat/chatWindowing";
 import { groupMessagesByDay } from "../../selectors";
 import { radius } from "../../tokens";
 
@@ -57,24 +64,58 @@ export function MessageList({
 }: Readonly<MessageListProps>) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedToBottom = useRef(true);
+
+  /**
+   * How many of the newest messages are actually mounted.
+   *
+   * A busy channel holds hundreds of messages in memory and every one of them
+   * was a live DOM subtree with an avatar, a sanitiser and a reaction
+   * subscription behind it. The window is anchored to the end because that is
+   * where reading starts; it grows as the reader climbs towards the top, and
+   * snaps back once they are at the bottom again and the history above is no
+   * longer being looked at.
+   *
+   * The sizing policy is core's, shared with Standard, so the two packs agree
+   * about what "near the top" and "a chunk" mean.
+   */
+  const [tailCount, setTailCount] = useState(BASE_WINDOW);
+  const previousCount = useRef(messages.length);
+  /** Nonce of the last jump actually served, so widening can take two passes. */
+  const servedJump = useRef(0);
   /** Scroll height before the last render, for the prepend correction below. */
   const previousHeight = useRef(0);
   const previousFirstId = useRef<string | null>(null);
+
+  const windowed = useMemo(
+    () => (messages.length <= tailCount ? messages : messages.slice(messages.length - tailCount)),
+    [messages, tailCount],
+  );
+
+  // Arrivals grow the window while the reader is scrolled up, so the rows
+  // above the viewport keep their place instead of being unmounted from under
+  // them; at the bottom it snaps back and the history is released.
+  useLayoutEffect(() => {
+    const appended = messages.length - previousCount.current;
+    previousCount.current = messages.length;
+    if (appended > 0) {
+      setTailCount((prev) => tailCountAfterAppend(prev, appended, pinnedToBottom.current));
+    }
+  }, [messages.length]);
 
   // One batched avatar fetch for the whole list; the texture size comes from
   // the live user entry, which is the only place that knows it.
   const senders = useMemo(() => {
     const textures = new Map(users.map((user) => [user.session, user.texture_size]));
     const seen = new Set<number>();
-    return messages.flatMap((message) => {
+    return windowed.flatMap((message) => {
       const session = message.sender_session;
       if (session == null || seen.has(session)) return [];
       seen.add(session);
       return [{ session, texture_size: textures.get(session) ?? null }];
     });
-  }, [messages, users]);
+  }, [users, windowed]);
   const avatars = useUserAvatars(senders);
-  const sections = useMemo(() => groupMessagesByDay(messages), [messages]);
+  const sections = useMemo(() => groupMessagesByDay(windowed), [windowed]);
 
   // Reading position is held across three different kinds of change, and they
   // want opposite things: an arriving message should follow the reader down if
@@ -85,7 +126,7 @@ export function MessageList({
     const node = scrollRef.current;
     if (!node) return;
 
-    const firstId = messages[0]?.message_id ?? null;
+    const firstId = windowed[0]?.message_id ?? null;
     const prepended = previousFirstId.current !== null && firstId !== previousFirstId.current;
     previousFirstId.current = firstId;
 
@@ -93,27 +134,34 @@ export function MessageList({
     else if (prepended) node.scrollTop += node.scrollHeight - previousHeight.current;
 
     previousHeight.current = node.scrollHeight;
-  }, [messages]);
+  }, [windowed]);
 
   // Jumping is deliberately not a scroll-into-view on every render: the row
   // is found by id at the moment it is asked for, and a message that is not
   // mounted (an older one still unfetched) simply does not move the view
   // rather than scrolling to the nearest wrong place.
   useLayoutEffect(() => {
-    if (!jumpTo) return;
+    if (!jumpTo || servedJump.current === jumpTo.nonce) return;
+    const index = messages.findIndex((message) => message.message_id === jumpTo.messageId);
+    if (index !== -1) {
+      setTailCount((prev) => tailCountToInclude(prev, index, messages.length));
+    }
     // Scanned rather than matched with a selector: a message id is an opaque
     // string from the server, and building a selector out of one means
     // escaping it correctly for every id a server might mint.
     const rows = scrollRef.current?.querySelectorAll("[data-message-id]") ?? [];
     const node = [...rows].find((row) => (row as HTMLElement).dataset.messageId === jumpTo.messageId);
+    // Not mounted yet: the widen above will re-run this once it lands, and the
+    // nonce stays unserved so the second pass does the scrolling.
     if (!node) return;
+    servedJump.current = jumpTo.nonce;
     pinnedToBottom.current = false;
     node.scrollIntoView({ block: "center", behavior: "smooth" });
     node.animate?.(
       [{ background: "transparent" }, { background: "rgba(120,150,255,.18)" }, { background: "transparent" }],
       { duration: 1200 },
     );
-  }, [jumpTo]);
+  }, [jumpTo, messages, tailCount]);
 
   return (
     <Box
@@ -121,6 +169,9 @@ export function MessageList({
       onScroll={(event) => {
         const node = event.currentTarget;
         pinnedToBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 60;
+        if (node.scrollTop < GROW_THRESHOLD_PX) {
+          setTailCount((prev) => grownTailCount(prev, messages.length));
+        }
       }}
       sx={{
         flex: 1,

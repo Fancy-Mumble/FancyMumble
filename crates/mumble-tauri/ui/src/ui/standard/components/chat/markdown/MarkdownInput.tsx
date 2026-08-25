@@ -492,6 +492,14 @@ interface MarkdownInputProps {
   apiRef?: React.RefObject<MarkdownInputApi | null>;
   /** Resolve a Mumble session ID to a display name for inline mention chips. */
   mentionResolver?: (session: number) => string | undefined;
+  /**
+   * Accessible name for the editor.
+   *
+   * The visible placeholder is drawn in the decorated overlay, which is
+   * `aria-hidden` - so without this the textarea reaches assistive technology
+   * with no name at all.
+   */
+  ariaLabel?: string;
 }
 
 /** Imperative methods exposed to a parent via `apiRef`. */
@@ -513,6 +521,7 @@ export default function MarkdownInput({
   onKeyDownCapture,
   apiRef,
   mentionResolver,
+  ariaLabel,
 }: Readonly<MarkdownInputProps>) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -690,6 +699,7 @@ export default function MarkdownInput({
       {/* Actual editable textarea (fully invisible - input only) */}
       <textarea
         ref={textareaRef}
+        aria-label={ariaLabel}
         className={styles.textarea}
         value={value}
         onChange={(e) => {

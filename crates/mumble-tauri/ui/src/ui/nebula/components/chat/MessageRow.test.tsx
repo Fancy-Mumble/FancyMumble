@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@core/store";
 import { registerPoll } from "@core/features/chat/poll/model";
@@ -78,7 +79,21 @@ describe("MessageRow", () => {
     const editMessage = vi.fn().mockResolvedValue(undefined);
     useAppStore.setState({ editMessage });
 
-    const { container } = draw(message({ is_own: true, body: "typo" }));
+    // Editing is controlled by the shell - the message menu starts one too -
+    // so the test owns the flag the way NebulaClientApp does.
+    function Controlled() {
+      const [editing, setEditing] = useState(false);
+      return (
+        <MessageRow
+          message={message({ is_own: true, body: "typo" })}
+          grouped={false}
+          onOpenProfile={() => {}}
+          editing={editing}
+          onEditingChange={setEditing}
+        />
+      );
+    }
+    const { container } = render(withNebulaTheme(<Controlled />));
     fireEvent.mouseEnter(container.firstElementChild!);
     fireEvent.click(screen.getByLabelText("Edit message"));
 
@@ -118,5 +133,14 @@ describe("MessageRow", () => {
     expect(screen.getByText("agreed")).toBeTruthy();
     expect(screen.getByText("the original")).toBeTruthy();
     expect(document.body.textContent).not.toContain("FANCY_QUOTE");
+  });
+
+  it("can react to a message that has no reactions yet", () => {
+    const { container } = draw(message());
+    fireEvent.mouseEnter(container.firstElementChild!);
+    // The reaction bar only draws once a reaction exists, so its own "+" can
+    // never place the first one - the row has to offer it.
+    fireEvent.click(screen.getByLabelText("Add reaction"));
+    expect(screen.getByRole("tablist")).toBeTruthy();
   });
 });
