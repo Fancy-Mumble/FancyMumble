@@ -56,6 +56,7 @@ mod search;
 mod server_settings;
 mod sessions;
 mod shared_handle;
+pub(crate) mod starling_files;
 pub mod types;
 
 // Re-export everything that lib.rs needs.
@@ -262,6 +263,10 @@ pub(super) struct SharedState {
     /// to let the frontend resync after an HMR reload via
     /// `get_plugin_broadcasts` instead of forcing a full reconnect.
     pub plugin_broadcasts: Vec<PluginDataPayload>,
+    /// File requests waiting on a signed URL from a canon server, and whether
+    /// this one does files at all. Empty for a server running the plugin,
+    /// which never sends a frame this reads.
+    pub starling_files: starling_files::StarlingFiles,
 }
 
 // --- Tauri-managed application state ------------------------------

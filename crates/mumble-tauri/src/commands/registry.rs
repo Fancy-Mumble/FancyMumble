@@ -145,6 +145,11 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::scheduled_message::list_scheduled_messages,
         super::scheduled_message::cancel_scheduled_message,
         // -- files / file-server ---------------------------------------
+        super::files::starling_upload_file,
+        super::files::starling_download_to_base64,
+        super::files::starling_download_to_file,
+        super::files::starling_list_files,
+        super::files::starling_files_available,
         super::files::upload_file,
         super::files::upload_bytes,
         super::files::upload_binary,
@@ -282,6 +287,10 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::screenshare::screen_share_capabilities,
         #[cfg(not(target_os = "android"))]
         super::screenshare::request_camera_access,
+        #[cfg(not(target_os = "android"))]
+        super::screenshare::self_capture_exclusion,
+        #[cfg(not(target_os = "android"))]
+        super::screenshare::set_self_capture_exclusion,
         // Real on Linux + Windows, loud stubs elsewhere (Android included).
         super::stream_view::start_native_stream_view,
         super::stream_view::stop_native_stream_view,

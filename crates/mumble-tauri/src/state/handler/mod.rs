@@ -13,6 +13,7 @@ mod channel_state;
 mod codec_version;
 mod custom_reactions_config;
 mod draw_stroke;
+mod files;
 mod forum;
 mod link_preview;
 mod livery;
@@ -172,6 +173,10 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::PchatReactionFetchResponse(m) => m.handle(ctx),
         ControlMessage::PchatPinDeliver(m) => m.handle(ctx),
         ControlMessage::PchatPinFetchResponse(m) => m.handle(ctx),
+        ControlMessage::FancyFileGrant(m) => m.handle(ctx),
+        ControlMessage::FancyFileShare(m) => m.handle(ctx),
+        ControlMessage::FancyFileListing(m) => m.handle(ctx),
+        ControlMessage::FancyFileRefused(m) => m.handle(ctx),
         ControlMessage::WebRtcSignal(m) => m.handle(ctx),
         ControlMessage::FancyCustomReactionsConfig(m) => m.handle(ctx),
         ControlMessage::FancyReadReceiptDeliver(m) => m.handle(ctx),
