@@ -15,6 +15,12 @@ use crate::state::types::{
 };
 use crate::state::SharedState;
 
+/// How much of a channel to ask for when probing for the file service.
+///
+/// A page rather than one row: the answer doubles as the channel file list, so
+/// asking for a single entry would mean asking again immediately.
+const FILE_PROBE_LIMIT: u32 = 100;
+
 impl HandleMessage for mumble_tcp::ServerSync {
     fn handle(&self, ctx: &HandlerContext) {
         let Some((_sessions, initial_channel)) = ctx.apply_sync_state(self) else {
@@ -36,6 +42,7 @@ impl HandleMessage for mumble_tcp::ServerSync {
         ctx.request_channel_permissions();
         ctx.register_push_subscribe();
         ctx.request_livery();
+        ctx.probe_file_service();
         ctx.init_pchat();
     }
 }
@@ -371,6 +378,50 @@ impl HandlerContext {
     ///
     /// The keys already cached are named, so a reconnect to a server whose
     /// banner has not changed carries the document and no artwork at all.
+    /// Find out whether this server shares files the canon way.
+    ///
+    /// Asked as a listing of the channel just joined, which is free and
+    /// answers even when the channel has nothing in it. There is no
+    /// capability message to read instead: a server without the service says
+    /// nothing at all, so the only way to know is to ask and see.
+    ///
+    /// A listing also fills the channel file list on the way past, so the
+    /// probe is not a wasted round trip on the servers that do have it.
+    fn probe_file_service(&self) {
+        let (handle, is_fancy, channel) = {
+            let state = self.shared.lock().ok();
+            state
+                .map(|s| {
+                    (
+                        s.conn.client_handle.clone(),
+                        s.server.fancy_version.is_some(),
+                        s.current_channel.unwrap_or_default(),
+                    )
+                })
+                .unwrap_or_default()
+        };
+        if !is_fancy {
+            debug!("files: skipped the probe (non-fancy server)");
+            return;
+        }
+        let Some(handle) = handle else {
+            warn!("files: no client handle to probe on");
+            return;
+        };
+        let _probe_task = tokio::spawn(async move {
+            match handle
+                .send(command::SendFancyFileList {
+                    channel_id: channel,
+                    limit: FILE_PROBE_LIMIT,
+                })
+                .await
+            {
+                Ok(()) => debug!(channel, "files: asked what is shared here"),
+                Err(error) => warn!("files: failed to ask for the listing: {error}"),
+            }
+        });
+    }
+
     fn request_livery(&self) {
         let (handle, is_fancy, have_keys) = {
             let state = self.shared.lock().ok();

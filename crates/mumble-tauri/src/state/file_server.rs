@@ -373,7 +373,7 @@ async fn emit_progress_events(
     }
 }
 
-fn build_progress_stream(
+pub(super) fn build_progress_stream(
     file: tokio::fs::File,
     file_size: u64,
     upload_id: String,

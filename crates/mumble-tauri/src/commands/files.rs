@@ -313,3 +313,77 @@ pub(crate) async fn read_file_base64(path: String) -> Result<String, String> {
     }
     Ok(STANDARD.encode(bytes))
 }
+
+// -- the canon file service --------------------------------------------
+//
+// A server running the plugin and a server running the canon service both
+// share files; the difference is who authorises the transfer. These commands
+// are the canon half, and the frontend picks between them on what the server
+// turned out to speak - see `starling_files_available`.
+
+/// Share one local file with a channel over the canon handshake.
+///
+/// Progress arrives on the same `upload-progress` events as the plugin path,
+/// keyed by `upload_id`, and `cancel_upload` stops it the same way.
+#[tauri::command]
+pub(crate) async fn starling_upload_file(
+    state: tauri::State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+    file_path: String,
+    channel_id: u32,
+    mime_type: Option<String>,
+    upload_id: Option<String>,
+) -> Result<crate::state::starling_files::SharedUpload, String> {
+    state
+        .starling_upload_file(
+            file_path,
+            channel_id,
+            mime_type,
+            upload_id.unwrap_or_default(),
+            app_handle,
+        )
+        .await
+}
+
+/// Fetch one shared object as base64.
+#[tauri::command]
+pub(crate) async fn starling_download_to_base64(
+    state: tauri::State<'_, AppState>,
+    key: String,
+) -> Result<String, String> {
+    state.starling_download_to_base64(key).await
+}
+
+/// Fetch one shared object straight to a path on disk.
+#[tauri::command]
+pub(crate) async fn starling_download_to_file(
+    state: tauri::State<'_, AppState>,
+    key: String,
+    dest_path: String,
+) -> Result<u64, String> {
+    state.starling_download_to_file(key, dest_path).await
+}
+
+/// Ask what has been shared in a channel.
+///
+/// The listing arrives as the `starling-file-listing` event rather than as a
+/// return value, because the same event is what an unprompted refresh uses.
+#[tauri::command]
+pub(crate) async fn starling_list_files(
+    state: tauri::State<'_, AppState>,
+    channel_id: u32,
+    limit: Option<u32>,
+) -> Result<(), String> {
+    state
+        .starling_list_files(channel_id, limit.unwrap_or(100))
+        .await
+}
+
+/// Whether this server does files the canon way.
+///
+/// `None` means nobody has asked yet. The frontend treats that as "try it":
+/// the first attempt is what settles the question.
+#[tauri::command]
+pub(crate) fn starling_files_available(state: tauri::State<'_, AppState>) -> Option<bool> {
+    state.starling_files_available()
+}
