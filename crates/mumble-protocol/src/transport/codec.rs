@@ -229,6 +229,13 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
         // Local tags with no epoch-0 wire form. `to_canon` frames both inside
         // outer type 1013 before anything reaches here; a raw one is refused
         // upstream of this, like every other canon-only message.
+        FancyFileUpload(m) => m.encode_to_vec(),
+        FancyFileDownload(m) => m.encode_to_vec(),
+        FancyFileList(m) => m.encode_to_vec(),
+        FancyFileGrant(m) => m.encode_to_vec(),
+        FancyFileShare(m) => m.encode_to_vec(),
+        FancyFileListing(m) => m.encode_to_vec(),
+        FancyFileRefused(m) => m.encode_to_vec(),
         FancyLiveryQuery(m) => m.encode_to_vec(),
         FancyServerLivery(m) => m.encode_to_vec(),
         FancyLiveryUpdate(m) => m.encode_to_vec(),
@@ -346,6 +353,27 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
 
     let msg = match msg_type {
         Version => ControlMessage::Version(mumble_tcp::Version::decode(payload)?),
+        FancyFileUpload => ControlMessage::FancyFileUpload(
+            crate::proto::fancy::files::UploadRequest::decode(payload)?,
+        ),
+        FancyFileDownload => ControlMessage::FancyFileDownload(
+            crate::proto::fancy::files::DownloadRequest::decode(payload)?,
+        ),
+        FancyFileList => {
+            ControlMessage::FancyFileList(crate::proto::fancy::files::ListRequest::decode(payload)?)
+        }
+        FancyFileGrant => {
+            ControlMessage::FancyFileGrant(crate::proto::fancy::files::Grant::decode(payload)?)
+        }
+        FancyFileShare => {
+            ControlMessage::FancyFileShare(crate::proto::fancy::files::Share::decode(payload)?)
+        }
+        FancyFileListing => {
+            ControlMessage::FancyFileListing(crate::proto::fancy::files::Listing::decode(payload)?)
+        }
+        FancyFileRefused => {
+            ControlMessage::FancyFileRefused(crate::proto::fancy::files::Refused::decode(payload)?)
+        }
         FancyLiveryQuery => ControlMessage::FancyLiveryQuery(
             crate::proto::fancy::domain::LiveryQuery::decode(payload)?,
         ),

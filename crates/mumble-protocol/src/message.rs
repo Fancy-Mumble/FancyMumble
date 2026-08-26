@@ -217,6 +217,25 @@ pub enum TcpMessageType {
     FancyOperatorTicketRequest = 175,
     /// Fancy Mumble: the server's answer to a ticket request.
     FancyOperatorTicketReply = 176,
+    /// Fancy Mumble: client asks to share a file, naming what it is sending.
+    ///
+    /// Epoch-0 has no file message: the plugin did this over plugin-data and
+    /// its own HTTP API, so there is nothing to translate from. These ids are
+    /// local tags that never reach a wire; the canon carries all seven inside
+    /// outer type 1009.
+    FancyFileUpload = 177,
+    /// Fancy Mumble: client asks for a URL to read an object it knows the key of.
+    FancyFileDownload = 178,
+    /// Fancy Mumble: client asks what has been shared in a channel.
+    FancyFileList = 179,
+    /// Fancy Mumble: the server's short-lived signed URL for one request.
+    FancyFileGrant = 180,
+    /// Fancy Mumble: a file has been shared with the channel.
+    FancyFileShare = 181,
+    /// Fancy Mumble: the files shared in a channel.
+    FancyFileListing = 182,
+    /// Fancy Mumble: the server declined a file request, and why.
+    FancyFileRefused = 183,
     /// Fancy Mumble: generic plugin envelope (bidirectional).
     PluginMessage = 200,
     /// Fancy Mumble: server enumerates loaded plugins after `ServerSync`.
@@ -471,6 +490,28 @@ pub enum ControlMessage {
     /// be a subset of what was asked for, or empty; see `denied_reason` when
     /// it is.
     FancyOperatorTicketReply(fancy::domain::OperatorTicketReply),
+    /// Fancy: client asks to share a file.
+    ///
+    /// Carries the canon type for the same reason livery does: files have no
+    /// epoch-0 form, so a hand-written twin would be translation between a
+    /// shape and itself. The bytes never travel here - this asks for a URL,
+    /// and [`Self::FancyFileGrant`] answers with one.
+    FancyFileUpload(fancy::files::UploadRequest),
+    /// Fancy: client asks for a URL to read an object.
+    FancyFileDownload(fancy::files::DownloadRequest),
+    /// Fancy: client asks what has been shared in a channel.
+    FancyFileList(fancy::files::ListRequest),
+    /// Fancy: a short-lived signed URL, correlated by `request_id`.
+    FancyFileGrant(fancy::files::Grant),
+    /// Fancy: a file has been shared with the channel.
+    ///
+    /// Sent to everyone in it including the uploader, which is how the
+    /// uploader learns the final key and the size that actually arrived.
+    FancyFileShare(fancy::files::Share),
+    /// Fancy: the files shared in a channel.
+    FancyFileListing(fancy::files::Listing),
+    /// Fancy: the server declined a file request, carrying a reason.
+    FancyFileRefused(fancy::files::Refused),
     /// Fancy: generic plugin envelope (bidirectional).
     PluginMessage(mumble_tcp::PluginMessage),
     /// Fancy: server enumerates loaded plugins.
@@ -511,6 +552,8 @@ message_type_mapping! {
     PchatKeyHoldersList, PchatKeyChallenge, PchatKeyChallengeResponse,
     PchatKeyChallengeResult, PchatDeleteMessages, PchatOfflineQueueDrain,
     FancyLiveryQuery, FancyServerLivery, FancyLiveryUpdate,
+    FancyFileUpload, FancyFileDownload, FancyFileList,
+    FancyFileGrant, FancyFileShare, FancyFileListing, FancyFileRefused,
     FancyOperatorTicketRequest, FancyOperatorTicketReply,
     PchatReaction, PchatReactionDeliver, PchatReactionFetchResponse,
     WebRtcSignal, PchatSenderKeyDistribution,

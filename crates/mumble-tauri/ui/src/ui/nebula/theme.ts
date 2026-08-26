@@ -154,9 +154,16 @@ export function createNebulaTheme(
           [`input:where(:not(${UNSTYLED_INPUT_TYPES}))::placeholder, textarea::placeholder`]: {
             color: nebula.muted,
           },
-          // An outline rather than a border swap: it cannot reflow the layout
-          // and it survives forced-colours modes.
-          [`input:where(:not(${UNSTYLED_INPUT_TYPES})):focus-visible, textarea:focus-visible, select:focus-visible`]:
+          /*
+           * An outline rather than a border swap: it cannot reflow the layout
+           * and it survives forced-colours modes.
+           *
+           * `:focus-visible` is inside `:where()` so this stays a zero-weight
+           * element selector. Written plainly it outranks a component's own
+           * `outline: none` - which is how the markdown editor, whose wrapper
+           * clips overflow, ended up drawing four corner specks on focus.
+           */
+          [`input:where(:not(${UNSTYLED_INPUT_TYPES})):where(:focus-visible), textarea:where(:focus-visible), select:where(:focus-visible)`]:
             {
               outline: `2px solid ${nebula.accent}`,
               outlineOffset: 1,

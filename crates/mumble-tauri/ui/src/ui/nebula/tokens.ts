@@ -27,7 +27,26 @@ export interface NebulaTokens {
   muted: string;
   dim: string;
   hover: string;
+  /**
+   * A neutral wash for glass that floats over the wallpaper.
+   *
+   * `card`/`card2` are tinted towards the scheme's blue, which is right for
+   * a panel sitting on the window colour and wrong for one sitting on the
+   * wallpaper: the tint reads as a coloured slab instead of glass. The
+   * canvas uses a plain white alpha here, and so does this.
+   */
+  wash: string;
+  washLine: string;
   accent: string;
+  /**
+   * Ink for the one filled element on a surface.
+   *
+   * Both accents are light enough that white on them is thin, so this is a
+   * dark ink rather than a foreground colour picked from the scheme. It is a
+   * token rather than a computed contrast because Nebula keeps its own
+   * accent - only the mode follows the user's theme.
+   */
+  onAccent: string;
   accentSoft: string;
   accentLine: string;
   ok: string;
@@ -84,9 +103,12 @@ export const NEBULA_TOKENS: Record<NebulaMode, NebulaTokens> = {
     muted: "#9fb3dd",
     dim: "#65779f",
     hover: "rgba(130,178,255,.12)",
-    accent: "#41b4f9",
-    accentSoft: "rgba(65,180,249,.22)",
-    accentLine: "rgba(65,180,249,.52)",
+    wash: "rgba(255,255,255,.06)",
+    washLine: "rgba(255,255,255,.12)",
+    accent: "#7c9fe8",
+    onAccent: "#0b1224",
+    accentSoft: "rgba(124,159,232,.22)",
+    accentLine: "rgba(124,159,232,.38)",
     ok: "#3cd88e",
     bad: "#f57e7e",
     warn: "#ecba55",
@@ -105,9 +127,12 @@ export const NEBULA_TOKENS: Record<NebulaMode, NebulaTokens> = {
     muted: "#666e85",
     dim: "#98a0b4",
     hover: "rgba(40,48,80,.05)",
-    accent: "#1691dc",
-    accentSoft: "rgba(22,145,220,.12)",
-    accentLine: "rgba(22,145,220,.34)",
+    wash: "rgba(255,255,255,.55)",
+    washLine: "rgba(40,48,80,.14)",
+    accent: "#4a6fc4",
+    onAccent: "#f7fbff",
+    accentSoft: "rgba(74,111,196,.14)",
+    accentLine: "rgba(74,111,196,.34)",
     ok: "#1ba572",
     bad: "#d05e5e",
     warn: "#aa8138",

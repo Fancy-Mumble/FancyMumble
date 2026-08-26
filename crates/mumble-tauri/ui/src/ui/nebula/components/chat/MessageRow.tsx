@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Box, IconButton, InputBase, Tooltip, Typography } from "@mui/material";
+import { Box, InputBase, Tooltip, Typography } from "@mui/material";
 import DOMPurify from "dompurify";
 import { useAppStore } from "@core/store";
 import type { ChatMessage } from "@core/types";
@@ -24,8 +24,9 @@ import PollCard from "@standard/components/chat/poll/PollCard";
 import FileAttachmentCard from "@standard/components/chat/file/FileAttachmentCard";
 import ReadReceiptIndicator from "@standard/components/chat/readreceipt/ReadReceiptIndicator";
 import QuoteBlock from "@standard/components/elements/QuoteBlock";
-import { composerHtml, editableText, formatTime, messageContent } from "../../selectors";
+import { composerHtml, editableText, formatTime, messageContent, plainText } from "../../selectors";
 import { UserAvatar, Stack } from "../primitives";
+import { floatingSurface } from "../../theme";
 import { radius } from "../../tokens";
 
 const WATCH_MARKER = /<!--\s*FANCY_WATCH:([^\s]+)\s*-->/;
@@ -238,7 +239,21 @@ export function MessageRow({
 
   if (message.is_own) {
     return (
-      <Stack alignItems="flex-end" gap={0.5} {...rowHandlers}>
+      <Stack
+        alignItems="flex-end"
+        gap={0.5}
+        {...rowHandlers}
+        sx={{ position: "relative", ...(rowHandlers.sx ?? {}) }}
+      >
+        {hovered && !editing && (
+          <RowActions
+            message={message}
+            align="right"
+            onEdit={canEdit ? () => onEditingChange?.(true) : undefined}
+            onQuote={message.message_id ? () => onQuote?.(message) : undefined}
+            onReact={message.message_id ? openReactionPicker : undefined}
+          />
+        )}
         {quotes}
         {editing ? (
           <BodyEditor
@@ -275,14 +290,6 @@ export function MessageRow({
           {extras}
         </Box>
         <Stack direction="row" alignItems="center" gap={0.75}>
-          {hovered && !editing && (
-            <RowActions
-              message={message}
-              onEdit={canEdit ? () => onEditingChange?.(true) : undefined}
-              onQuote={message.message_id ? () => onQuote?.(message) : undefined}
-              onReact={message.message_id ? openReactionPicker : undefined}
-            />
-          )}
           <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })}>
             {formatTime(message.timestamp)}
             {message.edited_at ? " · edited" : ""}
@@ -308,7 +315,20 @@ export function MessageRow({
   }
 
   return (
-    <Stack direction="row" gap={1.5} {...rowHandlers} sx={{ minWidth: 0, ...(rowHandlers.sx ?? {}) }}>
+    <Stack
+      direction="row"
+      gap={1.5}
+      {...rowHandlers}
+      sx={{ position: "relative", minWidth: 0, ...(rowHandlers.sx ?? {}) }}
+    >
+      {hovered && !editing && (
+        <RowActions
+          message={message}
+          align="right"
+          onQuote={message.message_id ? () => onQuote?.(message) : undefined}
+          onReact={message.message_id ? openReactionPicker : undefined}
+        />
+      )}
       <Box sx={{ width: 38, flex: "none" }}>
         {!grouped && (
           <Box
@@ -358,13 +378,6 @@ export function MessageRow({
               >
                 {message.plugin_name}
               </Typography>
-            )}
-            {hovered && !editing && (
-              <RowActions
-                message={message}
-                onQuote={message.message_id ? () => onQuote?.(message) : undefined}
-                onReact={message.message_id ? openReactionPicker : undefined}
-              />
             )}
           </Stack>
         )}
@@ -460,81 +473,118 @@ function BodyEditor({
   );
 }
 
-/** Hover affordances the mock keeps out of the resting state. */
+/**
+ * The hover menu: one pill floating over the bubble's top edge.
+ *
+ * Not a strip inside the header row - the canvas floats it clear of the
+ * message so it never reflows the text underneath, and gives it the composer's
+ * rhythm at 80% scale: bare icons, and one divider only before the destructive
+ * end.
+ */
 function RowActions({
   message,
   onEdit,
   onQuote,
   onReact,
+  align,
 }: Readonly<{
   message: ChatMessage;
   onEdit?: () => void;
   onQuote?: () => void;
   onReact?: (event: React.MouseEvent) => void;
+  /** Which edge of the bubble the pill hangs from. */
+  align: "left" | "right";
 }>) {
   const canModerate = message.is_own && !!message.message_id;
   return (
-    <Stack direction="row" gap={0.25}>
-      {onReact && (
-        <Tooltip title="React">
-          <IconButton size="small" aria-label="Add reaction" onClick={onReact}>
-            <EmojiPlusIcon width={12} height={12} />
-          </IconButton>
-        </Tooltip>
-      )}
-      {onQuote && (
-        <Tooltip title="Reply">
-          <IconButton size="small" aria-label="Reply to message" onClick={onQuote}>
-            <QuoteIcon width={12} height={12} />
-          </IconButton>
-        </Tooltip>
-      )}
-      {onEdit && (
-        <Tooltip title="Edit">
-          <IconButton size="small" aria-label="Edit message" onClick={onEdit}>
-            <EditIcon width={12} height={12} />
-          </IconButton>
-        </Tooltip>
-      )}
-      <Tooltip title="Copy text">
-        <IconButton
-          size="small"
-          aria-label="Copy message"
-          onClick={() => void navigator.clipboard?.writeText(message.body.replace(/<[^>]*>/g, ""))}
-        >
-          <CopyIcon width={12} height={12} />
-        </IconButton>
-      </Tooltip>
+    <Stack
+      direction="row"
+      alignItems="center"
+      gap="14px"
+      sx={(theme) => ({
+        position: "absolute",
+        top: -17,
+        ...(align === "right" ? { right: 0 } : { left: 0 }),
+        zIndex: 2,
+        height: 34,
+        px: "12px",
+        borderRadius: radius("lg"),
+        ...floatingSurface(theme),
+        backdropFilter: "blur(30px)",
+        WebkitBackdropFilter: "blur(30px)",
+        color: theme.palette.nebula.muted,
+      })}
+    >
+      {onReact && <PillButton label="Add reaction" onClick={onReact} icon={EmojiPlusIcon} />}
+      {onQuote && <PillButton label="Reply to message" onClick={onQuote} icon={QuoteIcon} />}
+      {onEdit && <PillButton label="Edit message" onClick={onEdit} icon={EditIcon} />}
+      <PillButton
+        label="Copy message"
+        onClick={() => void navigator.clipboard?.writeText(plainText(message.body))}
+        icon={CopyIcon}
+      />
       {message.message_id && (
-        <Tooltip title={message.pinned ? "Unpin" : "Pin"}>
-          <IconButton
-            size="small"
-            aria-label={message.pinned ? "Unpin message" : "Pin message"}
-            onClick={() =>
-              void useAppStore
-                .getState()
-                .pinMessage(message.channel_id, message.message_id!, !!message.pinned)
-            }
-          >
-            {message.pinned ? <CheckIcon width={12} height={12} /> : <PinIcon width={12} height={12} />}
-          </IconButton>
-        </Tooltip>
+        <PillButton
+          label={message.pinned ? "Unpin message" : "Pin message"}
+          onClick={() =>
+            void useAppStore.getState().pinMessage(message.channel_id, message.message_id!, !!message.pinned)
+          }
+          icon={message.pinned ? CheckIcon : PinIcon}
+        />
       )}
       {canModerate && (
-        <Tooltip title="Delete">
-          <IconButton
-            size="small"
-            aria-label="Delete message"
+        <>
+          {/* The only divider, and only ever before the destructive end. */}
+          <Box
+            aria-hidden
+            sx={(theme) => ({ width: "1px", height: 14, background: theme.palette.nebula.line2 })}
+          />
+          <PillButton
+            label="Delete message"
             onClick={() =>
               void useAppStore
                 .getState()
                 .deletePchatMessages(message.channel_id, { messageIds: [message.message_id!] })
             }
-          >
-            <TrashIcon width={12} height={12} />
-          </IconButton>
-        </Tooltip>
+            icon={TrashIcon}
+            danger
+          />
+        </>
       )}
     </Stack>
+  );
+}
+
+/** One bare 15px icon in the hover pill. */
+function PillButton({
+  label,
+  onClick,
+  icon: Icon,
+  danger = false,
+}: Readonly<{
+  label: string;
+  onClick: (event: React.MouseEvent) => void;
+  icon: React.ComponentType<{ width: number; height: number }>;
+  danger?: boolean;
+}>) {
+  return (
+    <Tooltip title={label}>
+      <Box
+        component="button"
+        type="button"
+        aria-label={label}
+        onClick={onClick}
+        sx={(theme) => ({
+          all: "unset",
+          cursor: "pointer",
+          display: "grid",
+          placeItems: "center",
+          color: danger ? theme.palette.nebula.bad : "inherit",
+          "&:hover": { color: danger ? theme.palette.nebula.bad : theme.palette.nebula.text },
+        })}
+      >
+        <Icon width={15} height={15} />
+      </Box>
+    </Tooltip>
   );
 }

@@ -13,6 +13,15 @@ import {
 import { groupMessagesByDay } from "../../selectors";
 import { radius } from "../../tokens";
 
+/**
+ * Where the message column stops growing.
+ *
+ * Earlier than the composer, because prose is read by the line: a paragraph
+ * spanning an ultrawide pane loses the reader on the way back to the left. On
+ * 21:9 the leftover width falls outside both caps rather than being filled.
+ */
+const COLUMN_MAX_WIDTH = 980;
+
 interface MessageListProps {
   messages: readonly ChatMessage[];
   /** Live users, used to resolve sender avatars in one batched fetch. */
@@ -177,48 +186,59 @@ export function MessageList({
         flex: 1,
         overflowY: "auto",
         minHeight: 0,
-        px: "34px",
         pt: "26px",
         pb: "12px",
         display: "flex",
         flexDirection: "column",
-        gap: "19px",
       }}
     >
-      {header}
-      {sections.map((section) => (
-        <Stack key={section.key} gap="19px">
-          <Box sx={{ display: "flex", justifyContent: "center" }}>
-            <Typography
-              sx={(theme) => ({
-                px: "11px",
-                py: "3px",
-                borderRadius: radius("lg"),
-                background: theme.palette.nebula.card,
-                border: `1px solid ${theme.palette.nebula.line}`,
-                fontSize: 10.5,
-                color: theme.palette.nebula.muted,
-              })}
-            >
-              {section.label}
-            </Typography>
-          </Box>
-          {section.messages.map((message, index) => (
-            <Stack
-              key={message.message_id ?? `${message.timestamp}-${index}`}
-              data-message-id={message.message_id ?? undefined}
-              gap="19px"
-            >
-              {firstUnreadId && message.message_id === firstUnreadId && <UnreadRule />}
-              {renderMessage(
-                message,
-                message.sender_session == null ? null : (avatars.get(message.sender_session) ?? null),
-                isGrouped(message, section.messages[index - 1]),
-              )}
-            </Stack>
-          ))}
-        </Stack>
-      ))}
+      <Box
+        sx={{
+          width: "100%",
+          maxWidth: COLUMN_MAX_WIDTH,
+          mx: "auto",
+          boxSizing: "border-box",
+          px: "20px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "19px",
+        }}
+      >
+        {header}
+        {sections.map((section) => (
+          <Stack key={section.key} gap="19px">
+            <Box sx={{ display: "flex", justifyContent: "center" }}>
+              <Typography
+                sx={(theme) => ({
+                  px: "11px",
+                  py: "3px",
+                  borderRadius: radius("lg"),
+                  background: theme.palette.nebula.card,
+                  border: `1px solid ${theme.palette.nebula.line}`,
+                  fontSize: 10.5,
+                  color: theme.palette.nebula.muted,
+                })}
+              >
+                {section.label}
+              </Typography>
+            </Box>
+            {section.messages.map((message, index) => (
+              <Stack
+                key={message.message_id ?? `${message.timestamp}-${index}`}
+                data-message-id={message.message_id ?? undefined}
+                gap="19px"
+              >
+                {firstUnreadId && message.message_id === firstUnreadId && <UnreadRule />}
+                {renderMessage(
+                  message,
+                  message.sender_session == null ? null : (avatars.get(message.sender_session) ?? null),
+                  isGrouped(message, section.messages[index - 1]),
+                )}
+              </Stack>
+            ))}
+          </Stack>
+        ))}
+      </Box>
     </Box>
   );
 }

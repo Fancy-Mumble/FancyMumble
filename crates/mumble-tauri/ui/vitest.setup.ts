@@ -134,3 +134,32 @@ if (typeof Text !== "undefined" && !("getClientRects" in Text.prototype)) {
 if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
+
+/**
+ * `localStorage`, which this environment does not hand over.
+ *
+ * jsdom creates it (constructing a JSDOM here directly gives one), but the
+ * vitest jsdom environment on these versions exposes `sessionStorage` and not
+ * `localStorage` - so anything settings-backed reads `undefined` and dies on
+ * `removeItem`. The product never sees this: a webview has the real thing.
+ *
+ * Backed by a Map rather than delegated to `sessionStorage`, so a test that
+ * fills it cannot leak into one that expects it empty.
+ */
+if (typeof globalThis.localStorage === "undefined") {
+  const cells = new Map<string, string>();
+  const storage: Storage = {
+    get length() {
+      return cells.size;
+    },
+    key: (index: number) => [...cells.keys()][index] ?? null,
+    getItem: (key: string) => cells.get(key) ?? null,
+    setItem: (key: string, value: string) => void cells.set(key, String(value)),
+    removeItem: (key: string) => void cells.delete(key),
+    clear: () => cells.clear(),
+  };
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: storage });
+  if (typeof window !== "undefined") {
+    Object.defineProperty(window, "localStorage", { configurable: true, value: storage });
+  }
+}

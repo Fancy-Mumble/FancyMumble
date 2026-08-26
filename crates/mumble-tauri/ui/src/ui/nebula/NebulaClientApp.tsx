@@ -22,8 +22,6 @@ import { usePolls } from "@standard/components/chat/poll/usePolls";
 import { useReadReceipts } from "@core/features/chat/readreceipt/useReadReceipts";
 import { useFileUpload, type FileShareChoice } from "@core/features/chat/useFileUpload";
 import FileShareDialog from "@standard/components/chat/file/FileShareDialog";
-import UploadProgressItem from "@standard/components/chat/upload/UploadProgressItem";
-import QuotePreviewStrip from "@standard/components/chat/quote/QuotePreviewStrip";
 import PollCreator from "@standard/components/chat/poll/PollCreator";
 import EmojiPicker from "@standard/components/elements/EmojiPicker";
 import { hasReacted } from "@core/features/chat/reaction/reactionStore";
@@ -522,6 +520,47 @@ export default function NebulaClientApp() {
     setEditingMessageId(null);
   }, [selectedChannel, selectedDmUser]);
 
+  const [dragOverWindow, setDragOverWindow] = useState(false);
+
+  /**
+   * Files dragged onto the window.
+   *
+   * Tauri's own event rather than the DOM's: a dropped `File` carries no path,
+   * and the uploader streams from one. Dropping asks the same share question
+   * the picker does - where the file may be seen is not a thing to assume
+   * because the route in was a drag.
+   */
+  useEffect(() => {
+    if (!canAttach) return;
+    let stop: (() => void) | undefined;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { getCurrentWebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+        const unlisten = await getCurrentWebviewWindow().onDragDropEvent((event) => {
+          if (event.payload.type === "over") setDragOverWindow(true);
+          else if (event.payload.type === "leave") setDragOverWindow(false);
+          else if (event.payload.type === "drop") {
+            setDragOverWindow(false);
+            const picked = event.payload.paths?.[0];
+            if (!picked || selectedChannel === null || uploads.isUploading()) return;
+            const filename = picked.replaceAll("\\", "/").split("/").pop() ?? "file";
+            setShareTarget({ filePath: picked, filename });
+          }
+        });
+        if (cancelled) unlisten();
+        else stop = unlisten;
+      } catch {
+        /* no shell to listen to - a browser dev session or a test */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      stop?.();
+      setDragOverWindow(false);
+    };
+  }, [canAttach, selectedChannel, uploads]);
+
   const lightboxRef = useRef<LightboxHandle>(null);
   const currentScope = useCallback((): MessageScope | null => {
     if (selectedDmUser !== null) return { scope: "dm", scopeId: String(selectedDmUser) };
@@ -973,22 +1012,6 @@ export default function NebulaClientApp() {
                     />
                   )}
 
-                  {/* Uploads in flight sit at the foot of the conversation
-                      rather than inside it: the message they will become does
-                      not exist yet, so there is no row for them to be part of. */}
-                  {uploads.placeholders.length > 0 && (
-                    <Stack gap={0.5} sx={{ px: "34px", pt: "8px" }}>
-                      {uploads.placeholders.map((placeholder) => (
-                        <UploadProgressItem
-                          key={placeholder.id}
-                          placeholder={placeholder}
-                          onDismiss={uploads.dismiss}
-                          onCancel={uploads.cancel}
-                        />
-                      ))}
-                    </Stack>
-                  )}
-
                   {selection.active && (
                     <Stack
                       direction="row"
@@ -1028,17 +1051,6 @@ export default function NebulaClientApp() {
                     </Stack>
                   )}
 
-                  {pendingQuotes.length > 0 && (
-                    <Box sx={{ px: "34px", pt: "8px" }}>
-                      <QuotePreviewStrip
-                        quotes={pendingQuotes}
-                        onRemove={(id) =>
-                          setPendingQuotes((prev) => prev.filter((quote) => quote.message_id !== id))
-                        }
-                      />
-                    </Box>
-                  )}
-
                   {selectedChannel !== null && !activeDmUser && (
                     <Box sx={{ px: "34px" }}>
                       <TypingIndicator channelId={selectedChannel} />
@@ -1051,6 +1063,13 @@ export default function NebulaClientApp() {
                     onSend={send}
                     onAttach={canAttach ? () => void pickAttachment() : undefined}
                     onCreatePoll={selectedChannel !== null && !activeDmUser ? openPollCreator : undefined}
+                    quotes={pendingQuotes}
+                    onRemoveQuote={(id) =>
+                      setPendingQuotes((prev) => prev.filter((quote) => quote.message_id !== id))
+                    }
+                    uploads={uploads.placeholders}
+                    onCancelUpload={uploads.cancel}
+                    dropActive={canAttach && dragOverWindow}
                   />
                 </>
               )}
