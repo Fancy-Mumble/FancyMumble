@@ -257,3 +257,25 @@ fn a_certificate_hash_survives_the_round_trip_to_the_canon_and_back() {
     assert_eq!(back.timestamp, Some(7));
     assert_eq!(back.channel_id, Some(4));
 }
+
+#[test]
+fn a_file_upload_request_is_still_the_bytes_starling_reads() {
+    // The one fixture with no epoch-0 twin: files never existed before the
+    // canon, so this frame is the canon type as the client holds it. If the
+    // two ends disagree here the failure is silent - an unrecognised outer
+    // type is skipped, and the composer waits out a grant that never comes.
+    let upload =
+        ControlMessage::FancyFileUpload(mumble_protocol::proto::fancy::files::UploadRequest {
+            request_id: "r-1".to_owned(),
+            channel: 4,
+            filename: "sunset.png".to_owned(),
+            content_type: "image/png".to_owned(),
+            size: 4096,
+            sha256: Vec::new(),
+        });
+    assert_eq!(
+        hex_of(&encode(&upload).expect("encodes")),
+        fixture("file upload"),
+        "the canon encoding changed; Starling's half of this test decodes the          recorded bytes, so one of the two ends has drifted"
+    );
+}

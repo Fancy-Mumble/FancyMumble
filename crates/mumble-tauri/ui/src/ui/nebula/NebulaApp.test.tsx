@@ -54,6 +54,18 @@ const SERVER = {
   cert_label: null,
 };
 
+/**
+ * Leave the server the way the dock now offers it.
+ *
+ * 8a's status bar is one 52px row - avatar, name over channel, mic, headphones
+ * and an overflow. Settings, administration and leaving moved into that
+ * overflow, so reaching Leave is two clicks rather than one.
+ */
+async function leaveFromDock() {
+  fireEvent.click(await screen.findByRole("button", { name: "More" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Leave server" }));
+}
+
 describe("NebulaApp", () => {
   beforeEach(() => {
     getSavedServersMock.mockReset();
@@ -120,7 +132,8 @@ describe("NebulaApp", () => {
     expect(screen.getByText("Voice off")).toBeTruthy();
     // Leaving means leaving the server, so it is live whenever there is a
     // session to leave - being in voice has nothing to do with it.
-    expect(screen.getByRole("button", { name: "Leave" })).toHaveProperty("disabled", false);
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    expect(await screen.findByRole("menuitem", { name: "Leave server" })).toBeTruthy();
   });
 
   it("asks before leaving a server, then disconnects the session", async () => {
@@ -134,7 +147,7 @@ describe("NebulaApp", () => {
       disconnectSession,
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: "Leave" }));
+    await leaveFromDock();
     // Nothing has happened yet: the confirmation is the point.
     expect(disconnectSession).not.toHaveBeenCalled();
 
@@ -157,7 +170,7 @@ describe("NebulaApp", () => {
       disconnectSession,
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: "Leave" }));
+    await leaveFromDock();
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("checkbox"));
     fireEvent.click(within(dialog).getByRole("button", { name: "Leave" }));
@@ -176,7 +189,7 @@ describe("NebulaApp", () => {
       disconnectSession,
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: "Leave" }));
+    await leaveFromDock();
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
 
@@ -196,7 +209,7 @@ describe("NebulaApp", () => {
       disconnectSession,
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: "Leave" }));
+    await leaveFromDock();
     await waitFor(() => expect(disconnectSession).toHaveBeenCalledWith("sess"));
     expect(screen.queryByText("Leave this server?")).toBeNull();
   });
@@ -261,7 +274,8 @@ describe("NebulaApp", () => {
       users: [{ session: 7, name: "ZewiWin", channel_id: 0, texture_size: null } as never],
     });
 
-    fireEvent.click(await screen.findByLabelText("Settings"));
+    fireEvent.click(await screen.findByRole("button", { name: "More" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Settings" }));
 
     expect(await screen.findByRole("button", { name: "Profile" })).toBeTruthy();
     for (const page of ["Voice", "Personalize", "Privacy", "Shortcuts", "Advanced"])

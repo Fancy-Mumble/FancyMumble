@@ -1,9 +1,13 @@
-import { Box, Button, IconButton, Tooltip, Typography } from "@mui/material";
+import { useState } from "react";
+import { Box, Menu, MenuItem, Tooltip, Typography } from "@mui/material";
 import { useAppStore } from "@core/store";
 import { selectMicLive, selectSelfDeafened } from "@core/store/voiceSelectors";
-import { HeadphonesIcon, HeadphonesOffIcon, MicIcon, MicOffIcon, SettingsIcon, ShieldIcon } from "@ui/icons";
-import { StatusDot, UserAvatar, Stack } from "../primitives";
-import { radius } from "../../tokens";
+import { HeadphonesIcon, HeadphonesOffIcon, MicIcon, MicOffIcon, KebabMenuIcon } from "@ui/icons";
+import { UserAvatar, Stack } from "../primitives";
+
+/** The dock sits on the composer's inset and radius; they are one strip. */
+const DOCK_INSET = "10px";
+const DOCK_RADIUS = "16px";
 
 interface VoiceDockProps {
   name: string;
@@ -45,136 +49,152 @@ export function VoiceDock({
   const micLive = useAppStore(selectMicLive);
   const deafened = useAppStore(selectSelfDeafened);
   const voiceState = useAppStore((state) => state.voiceState);
+  const [overflow, setOverflow] = useState<HTMLElement | null>(null);
 
   return (
-    <Box
+    <Stack
+      direction="row"
+      alignItems="center"
+      gap="14px"
       sx={(theme) => ({
         flex: "none",
-        m: "12px",
-        p: "14px",
-        borderRadius: radius("xl"),
-        background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line2}`,
-        backdropFilter: "blur(12px)",
-        boxShadow: "0 8px 28px rgba(0,0,0,.14)",
+        height: 52,
+        m: DOCK_INSET,
+        px: "14px",
+        borderRadius: DOCK_RADIUS,
+        background: theme.palette.nebula.wash,
+        border: `1px solid ${theme.palette.nebula.washLine}`,
       })}
     >
-      <Stack direction="row" alignItems="center" gap={1.25} sx={{ mb: "9px" }}>
-        <Box
-          component="button"
-          onClick={onOpenProfile}
-          onContextMenu={onContextMenuProfile}
-          aria-label="Your profile"
-          sx={{ all: "unset", cursor: "pointer", display: "flex" }}
-        >
-          <UserAvatar name={name} session={session} textureSize={textureSize} size={30} />
-        </Box>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontWeight: 600, fontSize: 12.5 }} noWrap>
-            {name}
-          </Typography>
-          <Stack
-            direction="row"
-            alignItems="center"
-            gap={0.75}
-            sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.muted })}
-          >
-            <StatusDot status={voiceState === "inactive" ? "offline" : "online"} />
-            <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
-              {voiceState === "inactive" ? "Voice off" : (channelName ?? "Not in voice")}
-            </Box>
-            {latencyMs != null && <Box component="span">· {latencyMs} ms</Box>}
-          </Stack>
-        </Box>
-        <Stack direction="row" gap={0.25} sx={{ ml: "auto" }}>
-          {onOpenAdmin && (
-            <Tooltip title="Server admin">
-              <IconButton size="small" aria-label="Server admin" onClick={onOpenAdmin}>
-                <ShieldIcon width={13} height={13} />
-              </IconButton>
-            </Tooltip>
-          )}
-          <Tooltip title="Settings">
-            <IconButton size="small" aria-label="Settings" onClick={onOpenSettings}>
-              <SettingsIcon width={13} height={13} />
-            </IconButton>
-          </Tooltip>
-        </Stack>
+      <Box
+        component="button"
+        onClick={onOpenProfile}
+        onContextMenu={onContextMenuProfile}
+        aria-label="Your profile"
+        sx={{ all: "unset", cursor: "pointer", display: "flex", flex: "none" }}
+      >
+        {/* The avatar draws its own presence dot - a second one here sat
+            beside it rather than on it. */}
+        <UserAvatar
+          name={name}
+          session={session}
+          textureSize={textureSize}
+          size={28}
+          status={voiceState === "inactive" ? "offline" : "online"}
+        />
+      </Box>
+
+      {/* Name over channel: two lines in the width a status sentence used to
+          take, which is what lets the whole dock be one 52px row. */}
+      <Stack gap="1px" sx={{ flex: 1, minWidth: 0 }}>
+        <Typography sx={{ fontWeight: 600, fontSize: 13 }} noWrap>
+          {name}
+        </Typography>
+        <Typography sx={(theme) => ({ fontSize: 11, color: theme.palette.nebula.muted })} noWrap>
+          {voiceState === "inactive" ? "Voice off" : (channelName ?? "Not in voice")}
+          {latencyMs != null && voiceState !== "inactive" ? ` · ${latencyMs} ms` : ""}
+        </Typography>
       </Stack>
 
-      <Stack direction="row" gap={0.75}>
-        <ControlButton
-          off={!micLive}
-          label={micLive ? "Mute" : voiceState === "inactive" ? "Enable voice" : "Unmute"}
-          onClick={() =>
-            void (voiceState === "inactive"
-              ? useAppStore.getState().enableVoice()
-              : useAppStore.getState().toggleMute())
-          }
+      <DockIcon
+        label={micLive ? "Mute" : voiceState === "inactive" ? "Enable voice" : "Unmute"}
+        alert={!micLive}
+        onClick={() =>
+          void (voiceState === "inactive"
+            ? useAppStore.getState().enableVoice()
+            : useAppStore.getState().toggleMute())
+        }
+      >
+        {micLive ? <MicIcon width={18} height={18} /> : <MicOffIcon width={18} height={18} />}
+      </DockIcon>
+      <DockIcon
+        label={deafened ? "Undeafen" : "Deafen"}
+        alert={deafened}
+        onClick={() => void useAppStore.getState().toggleDeafen()}
+      >
+        {deafened ? <HeadphonesOffIcon width={18} height={18} /> : <HeadphonesIcon width={18} height={18} />}
+      </DockIcon>
+
+      <Box
+        aria-hidden
+        sx={(theme) => ({ width: "1px", height: 16, background: theme.palette.nebula.line2 })}
+      />
+
+      <DockIcon label="More" onClick={(event) => setOverflow(event.currentTarget)}>
+        <KebabMenuIcon width={18} height={18} />
+      </DockIcon>
+
+      {/* Settings, administration and leaving are all here now. The row has
+          space for three controls, and leaving is not one you want under a
+          thumb that is aiming for mute. */}
+      <Menu anchorEl={overflow} open={!!overflow} onClose={() => setOverflow(null)}>
+        <MenuItem
+          onClick={() => {
+            setOverflow(null);
+            onOpenSettings();
+          }}
         >
-          {micLive ? <MicIcon width={13} height={13} /> : <MicOffIcon width={13} height={13} />}
-        </ControlButton>
-        <ControlButton
-          off={deafened}
-          label={deafened ? "Undeafen" : "Deafen"}
-          onClick={() => void useAppStore.getState().toggleDeafen()}
-        >
-          {deafened ? (
-            <HeadphonesOffIcon width={13} height={13} />
-          ) : (
-            <HeadphonesIcon width={13} height={13} />
-          )}
-        </ControlButton>
-        <Button
-          variant="outlined"
-          disabled={!onLeave}
-          onClick={onLeave}
-          sx={(theme) => ({
-            flex: 1.7,
-            height: 29,
-            fontSize: 11,
-            color: theme.palette.nebula.bad,
-            borderColor: theme.palette.nebula.line2,
-          })}
-        >
-          Leave
-        </Button>
-      </Stack>
-    </Box>
+          Settings
+        </MenuItem>
+        {onOpenAdmin && (
+          <MenuItem
+            onClick={() => {
+              setOverflow(null);
+              onOpenAdmin();
+            }}
+          >
+            Server admin
+          </MenuItem>
+        )}
+        {onLeave && (
+          <MenuItem
+            onClick={() => {
+              setOverflow(null);
+              onLeave();
+            }}
+            sx={(theme) => ({ color: theme.palette.nebula.bad })}
+          >
+            Leave server
+          </MenuItem>
+        )}
+      </Menu>
+    </Stack>
   );
 }
 
 /**
- * A control in the dock's button row.
+ * One control in the dock's row.
  *
- * The mock keeps these neutral - one chip colour, one icon colour - and lets
- * the icon itself carry the state (a struck-through mic reads as muted). Only
- * the glyph tints when the control is off, so the row stays a quiet strip
- * rather than a red alarm the moment voice is disabled.
+ * Bare, like the composer's tools: the row is the container. Only the glyph
+ * tints when a control is off, so a muted mic reads without the strip turning
+ * into an alarm.
  */
-function ControlButton({
-  off,
+function DockIcon({
   label,
+  alert = false,
   onClick,
   children,
-}: Readonly<{ off: boolean; label: string; onClick: () => void; children: React.ReactNode }>) {
+}: Readonly<{
+  label: string;
+  alert?: boolean;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  children: React.ReactNode;
+}>) {
   return (
     <Tooltip title={label}>
       <Box
         component="button"
+        type="button"
         aria-label={label}
         onClick={onClick}
         sx={(theme) => ({
           all: "unset",
-          flex: 1,
-          height: 29,
-          borderRadius: radius("md"),
           cursor: "pointer",
+          flex: "none",
           display: "grid",
           placeItems: "center",
-          color: off ? theme.palette.nebula.muted : theme.palette.nebula.text,
-          background: theme.palette.nebula.card2,
-          "&:hover": { background: theme.palette.nebula.hover },
+          color: alert ? theme.palette.nebula.bad : theme.palette.nebula.muted,
+          "&:hover": { color: alert ? theme.palette.nebula.bad : theme.palette.nebula.text },
         })}
       >
         {children}

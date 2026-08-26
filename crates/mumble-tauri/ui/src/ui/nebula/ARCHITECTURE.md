@@ -461,3 +461,75 @@ What is *not* split is anything the window shows at rest. The composer's
 pickers, the profile card and the message row are all on screen in the first
 second of a session, so deferring them would only add a round trip to the thing
 the user is already looking at.
+
+
+## The composer surface
+
+Drawn from the "Chat Composer" canvas, artboard 8a — "Final: floating
+composer, docked status bar". The canvas argues its way there over eight
+boards, and two of the turns matter because they reverse each other:
+
+- 5a moved the composer from a card to a footer, because a card "looked out of
+  place - an opaque slab floating on the wallpaper with a second field boxed
+  inside it".
+- 8a floats it again, but on a **10px inset** rather than as a slab: tight
+  enough to read as part of the pane, loose enough to show the wallpaper on all
+  four sides.
+
+So the panel is inset 10px, 16px radius, blurred at 32, and the text shares one
+52px row with the tools. 4a's two-row arrangement is gone, and so is its
+"⇧↵ new line" hint - the row has no space for a caption that only repeats what
+Shift+Enter already does.
+
+**The panel only ever grows upward.** Replies and files dock *above* the input
+row inside the same panel, each on its own bottom hairline; the inset never
+changes. A quote is a full-width 40px row - reply glyph, author, message,
+dismiss - so two replies are two rows rather than a wrapping cluster of chips.
+
+**Progress is the hairline.** An upload fills the divider under its own row
+with the accent instead of adding a bar, so nothing new appears while a file
+goes up. Send stays disabled until it lands, because the message carries the
+file's marker and there is no marker until the server has answered - sending
+early would send a reference to nothing. A *failed* upload does not hold send:
+it is never going to land.
+
+**One accent, one press.** It is on send alone, plus the upload hairline.
+`onAccent` is a token because both schemes' accents are light enough that white
+on them is thin.
+
+Geometry is the canvas's and lives in constants at the top of `Composer.tsx`,
+outside the radius scale - the scale tops out at 20 and this surface is drawn
+to its own. Colour is *not* taken from the canvas: it comes from the theme, so
+the composer follows the user's light or dark scheme rather than pinning the
+artboard's palette.
+
+Files are dropped through Tauri's own drag-drop event, not the DOM's: a dropped
+`File` carries no path and the uploader streams from one. The composer only
+draws the target, and is told when to.
+
+
+## Wide windows
+
+Nothing stretches. Two caps and one centre line, from artboard 10a:
+
+- the composer grows to **1360px** - about a 16:9 pane - then centres;
+- the message column caps earlier at **980px**, because prose is read by the
+  line and a paragraph spanning an ultrawide pane loses the reader on the way
+  back to the left.
+
+On 21:9 the leftover width falls outside both rather than being filled. Below
+about 1000px neither cap bites, so a laptop keeps the 10px inset edge to edge
+and nothing changes.
+
+Popovers keep their own width and hang off the icon that opened them - a GIF
+grid spanning the whole footer is unusable however wide the window is. The GIF
+browser is a panel on the composer's own inset rather than a centred modal:
+9a asks for popovers, not dialogs, and explicitly for no scrim over the
+conversation.
+
+## The hover menu
+
+One pill, floating over the bubble's top edge rather than sitting inside the
+header row - so it never reflows the text underneath. It carries the composer's
+rhythm at 80% scale: bare 15px icons, 34px tall, and exactly one divider, only
+ever before the destructive end.

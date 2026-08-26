@@ -35,4 +35,13 @@ describe("nebula form-control baseline", () => {
   it("focuses with an outline, which cannot reflow the layout", () => {
     expect(baselineCss()).toMatch(/:focus-visible[^{]*\{[^}]*outline:/);
   });
+
+  it("keeps the focus rule weightless so a component's own outline wins", () => {
+    // Written as a plain `textarea:focus-visible` this outranks a class that
+    // says `outline: none`, and a widget clipping its overflow then shows the
+    // outline as specks in its corners.
+    const css = baselineCss();
+    expect(css).toContain("textarea:where(:focus-visible)");
+    expect(css).not.toMatch(/[^)]textarea:focus-visible/);
+  });
 });

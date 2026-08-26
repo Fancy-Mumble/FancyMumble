@@ -51,6 +51,8 @@ const LINK_PREVIEW: u16 = 1016;
 const SCREENSHARE: u16 = 1008;
 /// Outer type for the operator record.
 const AUDIT: u16 = 1012;
+/// Outer type for file sharing: the URL handshake, not the bytes.
+const FILES: u16 = 1009;
 /// Outer type for chat and its history - which is where scheduled messages
 /// live, because at the due time a scheduled message *is* a text message.
 const TEXT: u16 = 1005;
@@ -78,6 +80,7 @@ const AUDIT_DEFAULT_LIMIT: u32 = 50;
               adds indirection without reducing what a reader has to check"
 )]
 pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
+    use fancy::files::files_envelope::Body as Files;
     use fancy::social::social_envelope::Body as Social;
 
     let body = match msg {
@@ -413,6 +416,20 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
                 )),
             };
             return Some((PCHAT, envelope.encode_to_vec()));
+        }
+        // Files pass through whole rather than being translated. Epoch 0 had no
+        // file message at all - the plugin did this over plugin-data and its
+        // own HTTP API - so these variants already carry the canon type and
+        // there is nothing to map between. All three are requests: the bytes
+        // never travel here, only the ask for a URL to move them over.
+        ControlMessage::FancyFileUpload(request) => {
+            return Some((FILES, files_envelope(Files::Upload(request.clone()))));
+        }
+        ControlMessage::FancyFileDownload(request) => {
+            return Some((FILES, files_envelope(Files::Download(request.clone()))));
+        }
+        ControlMessage::FancyFileList(request) => {
+            return Some((FILES, files_envelope(Files::List(request.clone()))));
         }
         _ => return None,
     };
@@ -1010,8 +1027,33 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 _ => None,
             })
         }
+        FILES => {
+            use fancy::files::files_envelope::Body as Files;
+
+            let Ok(envelope) = fancy::files::FilesEnvelope::decode(payload) else {
+                return Ok(None);
+            };
+            // Every server-sent body has a variant of its own, so this is a
+            // rewrap rather than a translation - see the variants' docs for why
+            // they carry the canon type instead of an epoch-0 twin.
+            Ok(match envelope.body {
+                Some(Files::Grant(grant)) => Some(ControlMessage::FancyFileGrant(grant)),
+                Some(Files::Share(share)) => Some(ControlMessage::FancyFileShare(share)),
+                Some(Files::Listing(listing)) => Some(ControlMessage::FancyFileListing(listing)),
+                Some(Files::Refused(refused)) => Some(ControlMessage::FancyFileRefused(refused)),
+                // The request arms. A server sending one of those is either
+                // confused or newer than this client; either way there is
+                // nothing here that handles it, so it takes the unknown path.
+                Some(Files::Upload(_) | Files::Download(_) | Files::List(_)) | None => None,
+            })
+        }
         _ => Ok(None),
     }
+}
+
+/// Wrap one files body in the envelope its outer type expects.
+fn files_envelope(body: fancy::files::files_envelope::Body) -> Vec<u8> {
+    fancy::files::FilesEnvelope { body: Some(body) }.encode_to_vec()
 }
 
 /// A canon reaction, as the delivery this client's UI already handles.
@@ -1840,6 +1882,72 @@ mod tests {
             message.sender_cert.is_empty(),
             "identity is the server's to stamp, never the client's to claim"
         );
+    }
+
+    #[test]
+    fn a_file_request_reaches_the_files_service_and_its_answers_come_back() {
+        // The whole point of the handshake: an upload is an ask for a URL, and
+        // the URL arrives as a `Grant` correlated by `request_id`. If either
+        // direction fell through to the relay the client would be negotiating
+        // an upload with the other clients rather than with the file server.
+        let asked = ControlMessage::FancyFileUpload(fancy::files::UploadRequest {
+            request_id: "r-7".to_owned(),
+            channel: 3,
+            filename: "sunset.png".to_owned(),
+            content_type: "image/png".to_owned(),
+            size: 4096,
+            sha256: Vec::new(),
+        });
+        let (outer, payload) = to_canon(&asked).expect("files has a canon home");
+        assert_eq!(outer, FILES);
+
+        let envelope = fancy::files::FilesEnvelope::decode(payload.as_slice()).unwrap();
+        let Some(fancy::files::files_envelope::Body::Upload(request)) = envelope.body else {
+            panic!("expected an UploadRequest");
+        };
+        assert_eq!(request.request_id, "r-7");
+        assert_eq!(request.filename, "sunset.png");
+
+        let answer = fancy::files::FilesEnvelope {
+            body: Some(fancy::files::files_envelope::Body::Grant(
+                fancy::files::Grant {
+                    request_id: "r-7".to_owned(),
+                    key: "3/0189/sunset.png".to_owned(),
+                    url: "https://files.example/3/0189/sunset.png?expires=1&sig=aa".to_owned(),
+                    method: "PUT".to_owned(),
+                    expires_at_ms: 1,
+                },
+            )),
+        };
+        let back = from_canon(FILES, &answer.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::FancyFileGrant(grant) = back else {
+            panic!("expected a Grant back");
+        };
+        assert_eq!(
+            grant.request_id, "r-7",
+            "the correlation is what tells one in-flight upload from another"
+        );
+        assert_eq!(grant.method, "PUT");
+    }
+
+    #[test]
+    fn a_files_request_coming_back_from_a_server_is_left_alone() {
+        // A server has no business sending the client an `UploadRequest`. There
+        // is no handler for one, so inventing a `ControlMessage` for it would
+        // be translating into a vocabulary the app above does not have.
+        let request = fancy::files::FilesEnvelope {
+            body: Some(fancy::files::files_envelope::Body::Download(
+                fancy::files::DownloadRequest {
+                    request_id: "r-1".to_owned(),
+                    key: "3/0189/sunset.png".to_owned(),
+                },
+            )),
+        };
+        assert!(from_canon(FILES, &request.encode_to_vec())
+            .unwrap()
+            .is_none());
     }
 
     #[test]
