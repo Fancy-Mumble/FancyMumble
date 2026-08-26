@@ -28,6 +28,7 @@ import MessageSelectionBar from "./message/MessageSelectionBar";
 import ConfirmDialog from "../elements/ConfirmDialog";
 import Toast from "../elements/Toast";
 import type { FileShareChoice } from "./file/FileShareDialog";
+import { uploadAttachment } from "@core/features/chat/useFileUpload";
 const FileShareDialog = lazy(() => import("./file/FileShareDialog"));
 import {
   encodeFileAttachmentMarker,
@@ -829,22 +830,13 @@ export default function ChatView({
             );
           },
         );
-        const resp = await uploadFile({
+        const info: FileAttachmentInfo = await uploadAttachment({
           filePath,
           channelId: selectedChannel,
-          mode: choice.mode,
-          password: choice.password,
-          ttlSeconds: choice.ttlSeconds,
           filename,
           uploadId: placeholderId,
+          choice,
         });
-        const info: FileAttachmentInfo = {
-          url: resp.download_url,
-          filename,
-          sizeBytes: resp.size_bytes,
-          mode: resp.access_mode,
-          expiresAt: resp.expires_at,
-        };
         const marker = encodeFileAttachmentMarker(info);
         const body = choice.message ? `${choice.message}\n${marker}` : marker;
         if (selectedDmUser !== null) {

@@ -15,6 +15,7 @@ import { useCallback, useRef, useState } from "react";
 import { useAppStore } from "../../store";
 import type { FileAccessMode } from "../../types";
 import { encodeFileAttachmentMarker, type FileAttachmentInfo } from "./fileAttachments";
+import { mimeForFilename } from "./starlingFiles";
 
 /** How the uploader wants this file shared, as answered by the pack's dialog. */
 export interface FileShareChoice {
@@ -79,23 +80,7 @@ export function useFileUpload({ channelId, dmSession }: FileUploadTarget) {
         );
 
         const store = useAppStore.getState();
-        const response = await store.uploadFile({
-          filePath,
-          channelId,
-          mode: choice.mode,
-          password: choice.password,
-          ttlSeconds: choice.ttlSeconds,
-          filename,
-          uploadId: id,
-        });
-
-        const info: FileAttachmentInfo = {
-          url: response.download_url,
-          filename,
-          sizeBytes: response.size_bytes,
-          mode: response.access_mode,
-          expiresAt: response.expires_at,
-        };
+        const info = await uploadAttachment({ filePath, channelId, filename, uploadId: id, choice });
         const marker = encodeFileAttachmentMarker(info);
         const body = choice.message ? `${choice.message}\n${marker}` : marker;
 
@@ -132,4 +117,88 @@ export function useFileUpload({ channelId, dmSession }: FileUploadTarget) {
   }, []);
 
   return { placeholders, upload, cancel, dismiss, isUploading: () => uploading.current };
+}
+
+/**
+ * Put one file on whichever kind of file server this is, and describe it.
+ *
+ * Two servers, one flow. The plugin answers with a link that lasts; the canon
+ * service answers with a key and signs a URL per look. Everything from the
+ * marker down is the same either way, which is why every pack calls this
+ * rather than deciding for itself - see `starlingFiles.ts`.
+ */
+export async function uploadAttachment({
+  filePath,
+  channelId,
+  filename,
+  uploadId,
+  choice,
+}: {
+  filePath: string;
+  channelId: number;
+  filename: string;
+  uploadId: string;
+  choice: FileShareChoice;
+}): Promise<FileAttachmentInfo> {
+  const store = useAppStore.getState();
+  return store.fileServerKind === "canon"
+    ? await uploadOverCanon(filePath, channelId, filename, uploadId)
+    : await uploadOverPlugin(store, filePath, channelId, filename, uploadId, choice);
+}
+
+/** Share a file with a server that runs the file-server plugin. */
+async function uploadOverPlugin(
+  store: ReturnType<typeof useAppStore.getState>,
+  filePath: string,
+  channelId: number,
+  filename: string,
+  uploadId: string,
+  choice: FileShareChoice,
+): Promise<FileAttachmentInfo> {
+  const response = await store.uploadFile({
+    filePath,
+    channelId,
+    mode: choice.mode,
+    password: choice.password,
+    ttlSeconds: choice.ttlSeconds,
+    filename,
+    uploadId,
+  });
+  return {
+    url: response.download_url,
+    filename,
+    sizeBytes: response.size_bytes,
+    mode: response.access_mode,
+    expiresAt: response.expires_at,
+  };
+}
+
+/**
+ * Share a file with a server that speaks the canon.
+ *
+ * The visibility the dialog asked about is not sent: the canon has no field
+ * for it, and the server scopes a file to the channel it was shared in. The
+ * marker says `session` for the same reason - it is what "only people here"
+ * already means everywhere else in the client.
+ */
+async function uploadOverCanon(
+  filePath: string,
+  channelId: number,
+  filename: string,
+  uploadId: string,
+): Promise<FileAttachmentInfo> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  const shared = await invoke<{ key: string; size: number }>("starling_upload_file", {
+    filePath,
+    channelId,
+    mimeType: mimeForFilename(filename),
+    uploadId,
+  });
+  return {
+    url: "",
+    key: shared.key,
+    filename,
+    sizeBytes: shared.size,
+    mode: "session",
+  };
 }

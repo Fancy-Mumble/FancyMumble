@@ -3,11 +3,21 @@ import type { FileAccessMode } from "@core/types";
 import { base64ToBytes, bytesToBase64 } from "@core/utils/base64";
 
 export interface FileAttachmentInfo {
+  /** A link anyone holding it can fetch, or `""` when there is no such link. */
   readonly url: string;
   readonly filename: string;
   readonly sizeBytes?: number;
   readonly mode: FileAccessMode;
   readonly expiresAt?: number | null;
+  /**
+   * The stored key, on a server that signs a URL per request.
+   *
+   * Present instead of `url`, not alongside it: the URL such a server would
+   * put here expires in about a minute, so a message carrying one would be a
+   * message with a dead link in it by the time anyone scrolled back to it.
+   * See `starlingFiles.ts` for how a card turns this into something to render.
+   */
+  readonly key?: string;
 }
 
 export const FANCY_FILE_MARKER_RE = /<!-- FANCY_FILE:([A-Za-z0-9+/=]+) -->/;
@@ -20,8 +30,15 @@ export function encodeFileAttachmentMarker(info: FileAttachmentInfo): string {
 export function decodeFileAttachmentPayload(payload: string): FileAttachmentInfo | null {
   try {
     const parsed = JSON.parse(new TextDecoder().decode(base64ToBytes(payload))) as FileAttachmentInfo;
-    if (typeof parsed?.url !== "string" || typeof parsed?.filename !== "string") return null;
-    return { ...parsed, url: rebaseFileServerUrl(parsed.url) };
+    if (typeof parsed?.filename !== "string") return null;
+    // One of the two has to be there. A marker with neither names no file at
+    // all, and drawing a card for it would be drawing a download button that
+    // cannot be pressed.
+    const hasKey = typeof parsed.key === "string" && parsed.key.length > 0;
+    if (typeof parsed.url !== "string" || (parsed.url.length === 0 && !hasKey)) return null;
+    // Rebasing is for the plugin: it rewrites a URL that names an origin the
+    // server advertised. There is nothing to rebase when there is no URL.
+    return { ...parsed, url: parsed.url ? rebaseFileServerUrl(parsed.url) : "" };
   } catch {
     return null;
   }

@@ -8,6 +8,7 @@ import {
   useComposerAutocomplete,
 } from "../../components";
 import { encodeFileAttachmentMarker } from "@core/features/chat/fileAttachments";
+import { uploadAttachment } from "@core/features/chat/useFileUpload";
 import { useTypingIndicator } from "@core/features/chat/typing/useTypingIndicator";
 import { useAppStore } from "@core/store";
 import type { ChannelEntry } from "@core/types";
@@ -63,7 +64,6 @@ export function RichComposer({
       ? serverConfig.max_image_message_length
       : serverConfig.max_message_length;
   const fileServerConfig = useAppStore((state) => state.fileServerConfig);
-  const uploadFile = useAppStore((state) => state.uploadFile);
   const users = useAppStore((state) => state.users);
   const { notifyTyping, resetTyping } = useTypingIndicator();
   const enabled = !!channel || !!targetLabel;
@@ -211,21 +211,14 @@ export function RichComposer({
     const filename = selected.split(/[\\/]/).pop() || "attachment";
     setSending(true);
     try {
-      const response = await uploadFile({
+      const info = await uploadAttachment({
         filePath: selected,
         channelId: channel.id,
-        mode: "session",
         filename,
+        uploadId: "",
+        choice: { mode: "session" },
       });
-      await onSend(
-        encodeFileAttachmentMarker({
-          url: response.download_url,
-          filename,
-          sizeBytes: response.size_bytes,
-          mode: response.access_mode,
-          expiresAt: response.expires_at,
-        }),
-      );
+      await onSend(encodeFileAttachmentMarker(info));
     } catch (reason) {
       setAttachmentError(reason instanceof Error ? reason.message : String(reason));
     } finally {

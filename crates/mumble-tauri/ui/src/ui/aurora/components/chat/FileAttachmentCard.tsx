@@ -7,6 +7,11 @@ import {
   previewKindForFilename,
   type FileAttachmentInfo,
 } from "@core/features/chat/fileAttachments";
+import {
+  isCanonAttachment,
+  saveCanonAttachment,
+  useCanonPreviewSrc,
+} from "@core/features/chat/starlingFiles";
 import { useAppStore } from "@core/store";
 import { formatBytes } from "@core/utils/format";
 import { Button, TextField } from "../primitives";
@@ -27,7 +32,17 @@ export function FileAttachmentCard({ info }: { info: FileAttachmentInfo }) {
   const [error, setError] = useState<string | null>(null);
   const kind = previewKindForFilename(info.filename);
   const expired = !!info.expiresAt && info.expiresAt * 1000 < Date.now();
-  const previewSource = savedPath ? convertFileSrc(savedPath) : info.mode === "public" ? info.url : null;
+  // A canon attachment has no open link: the preview is bytes this client
+  // fetched against a URL the server signed for one look.
+  const canon = isCanonAttachment(info);
+  const canonSource = useCanonPreviewSrc(info);
+  const previewSource = savedPath
+    ? convertFileSrc(savedPath)
+    : canon
+      ? canonSource
+      : info.mode === "public"
+        ? info.url
+        : null;
 
   const download = async () => {
     if (info.mode === "password" && !askPassword) {
@@ -39,16 +54,19 @@ export function FileAttachmentCard({ info }: { info: FileAttachmentInfo }) {
     try {
       const destination = await save({ defaultPath: info.filename });
       if (!destination) return;
-      const written = await downloadFile({
-        url: info.url,
-        destPath: destination,
-        password: info.mode === "password" ? password : undefined,
-      });
+      const written = canon
+        ? await saveCanonAttachment(info.key ?? "", destination)
+        : await downloadFile({
+            url: info.url,
+            destPath: destination,
+            password: info.mode === "password" ? password : undefined,
+          });
       addDownload({
         filename: info.filename,
         destPath: destination,
         sizeBytes: written,
-        sourceUrl: info.url,
+        // The key is the only lasting name a canon attachment has.
+        sourceUrl: canon ? (info.key ?? "") : info.url,
         mode: info.mode,
       });
       setSavedPath(destination);
@@ -98,7 +116,8 @@ export function FileAttachmentCard({ info }: { info: FileAttachmentInfo }) {
         >
           {expired ? "Expired" : busy ? "Saving…" : savedPath ? "Save another copy" : "Download"}
         </Button>
-        {(info.mode === "public" || info.mode === "password") && !expired && (
+        {/* Never for a canon attachment: there is no address to open. */}
+        {!canon && (info.mode === "public" || info.mode === "password") && !expired && (
           <Button onClick={() => void openUrl(info.url)}>Open</Button>
         )}
       </footer>
