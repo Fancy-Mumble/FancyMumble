@@ -5,6 +5,11 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useAppStore } from "@core/store";
 import { previewKindForFilename, type FileAttachmentInfo } from "@core/features/chat/fileAttachments";
+import {
+  isCanonAttachment,
+  saveCanonAttachment,
+  useCanonPreviewSrc,
+} from "@core/features/chat/starlingFiles";
 import { formatBytes } from "@core/utils/format";
 import { MediaLightbox } from "../media/MediaPreview";
 import { FilePasswordDialog } from "./FilePasswordDialog";
@@ -43,14 +48,21 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
 
   const kind = previewKindForFilename(info.filename);
   const previewable = kind === "image" || kind === "audio" || kind === "video";
+  // A file whose URL only the server can mint, one look at a time.
+  const canon = isCanonAttachment(info);
+  const canonSrc = useCanonPreviewSrc(info);
 
   // Post-download: local asset URL (works for any access mode).
-  // Pre-download: public files only - URL is a signed but open link.
+  // Pre-download: public files only - URL is a signed but open link. A canon
+  // attachment has no open link at all, so its preview is bytes this client
+  // fetched, held as an object URL.
   const previewSrc = savedPath
     ? convertFileSrc(savedPath)
-    : info.mode === "public" && previewable
-      ? info.url
-      : null;
+    : canon
+      ? canonSrc
+      : info.mode === "public" && previewable
+        ? info.url
+        : null;
 
   const handleOpenInBrowser = useCallback(() => {
     openUrl(info.url).catch(() => {
@@ -106,10 +118,15 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
 
   const handlePreviewError = useCallback(() => {
     if (expired) return;
+    // Nothing to probe for a canon attachment: it has no URL to ask about,
+    // and it never expires on its own - the server keeps it or collects it.
+    if (canon) return;
     void probeForExpiry();
-  }, [expired, probeForExpiry]);
+  }, [expired, probeForExpiry, canon]);
 
-  const canOpenInBrowser = (info.mode === "public" || info.mode === "password") && !expired;
+  // Never for a canon attachment: there is no address to open. The URL that
+  // reaches this client is good for one request and about a minute.
+  const canOpenInBrowser = !canon && (info.mode === "public" || info.mode === "password") && !expired;
 
   // Open the native password dialog and resolve with the entered value (or
   // null if cancelled).
@@ -149,12 +166,16 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
         }
         password = entered;
       }
-      const written = await downloadFile({ url: info.url, destPath: dest, password });
+      const written = canon
+        ? await saveCanonAttachment(info.key ?? "", dest)
+        : await downloadFile({ url: info.url, destPath: dest, password });
       addDownload({
         filename: info.filename,
         destPath: dest,
         sizeBytes: written,
-        sourceUrl: info.url,
+        // The key stands in for the URL in the downloads list, because it is
+        // the only lasting name this file has.
+        sourceUrl: canon ? (info.key ?? "") : info.url,
         mode: info.mode,
       });
       setSaved(true);
@@ -169,7 +190,7 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
     } finally {
       setBusy(false);
     }
-  }, [downloadFile, addDownload, info, askPassword]);
+  }, [downloadFile, addDownload, info, askPassword, canon]);
 
   const preview = (() => {
     if (!previewSrc) return null;

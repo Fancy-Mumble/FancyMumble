@@ -61,6 +61,7 @@ import {
 import type { InteractionResponse } from "../plugins/tier1/types";
 import { parseClientManifest } from "../plugins/tier1/manifest";
 import { applyReadStates, clearReadReceipts } from "../features/chat/readreceipt/readReceiptStore";
+import { canonFileServerConfig } from "../features/chat/starlingFiles";
 import { useOnboardingStore } from "../features/onboarding/onboardingStore";
 import type { OnboardingConfigEvent, OnboardingResponseEvent } from "../types";
 import { offloadManager } from "../messageOffload";
@@ -337,6 +338,10 @@ export interface AppState
   /** Capabilities fetched from `GET {baseUrl}/capabilities` after receiving
    *  the file-server config. `null` when not yet fetched or no file-server. */
   fileServerCapabilities: FileServerCapabilities | null;
+  /** Which kind of file sharing this server turned out to do: the plugin with
+   *  its HTTP API, the canon service over the control connection, or neither.
+   *  `null` until something has answered either way. */
+  fileServerKind: "plugin" | "canon" | null;
   /** Configuration advertised by the live-doc plugin on connect via
    *  `fancy-live-doc-config`. `null` when the server has no live-doc plugin. */
   liveDocPluginConfig: LiveDocPluginConfig | null;
@@ -824,6 +829,7 @@ const INITIAL: Pick<
   | "serverConfig"
   | "fileServerConfig"
   | "fileServerCapabilities"
+  | "fileServerKind"
   | "liveDocPluginConfig"
   | "pluginRegistry"
   | "pluginManifests"
@@ -918,6 +924,7 @@ const INITIAL: Pick<
   },
   fileServerConfig: null,
   fileServerCapabilities: null,
+  fileServerKind: null,
   liveDocPluginConfig: null,
   pluginRegistry: [],
   pluginManifests: emptyPluginTier1Slice.pluginManifests,
@@ -1762,6 +1769,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
       if (name === PLUGIN_NAME_FILE_SERVER) {
         patch.fileServerConfig = null;
         patch.fileServerCapabilities = null;
+        patch.fileServerKind = null;
         patch.customServerEmotes = [];
         viewOpen = s.fileServerAdminOpen;
       } else if (name === PLUGIN_NAME_LIVE_DOC) {
@@ -2419,7 +2427,7 @@ function processPluginDataEvent(payload: {
         canShareFilesPublic: raw.can_share_files_public !== false,
         registered: !!raw.registered,
       };
-      useAppStore.setState({ fileServerConfig: cfg });
+      useAppStore.setState({ fileServerConfig: cfg, fileServerKind: "plugin" });
     } catch (e) {
       console.error("plugin-data file-server-config processing error:", e);
     }
@@ -3029,6 +3037,23 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
         }
       },
     ),
+
+    // The canon file service answered, so this server shares files after all.
+    //
+    // There is no capability message to read: a server without the service
+    // says nothing at all, so the client asks for a channel listing on connect
+    // and this is the answer. Everything above reads `fileServerConfig` to
+    // decide whether attaching is possible, so the answer is written there in
+    // the shape the plugin would have advertised - see `canonFileServerConfig`
+    // for which of those fields the canon actually knows.
+    await listen<{ channelId: number; files: unknown[] }>("starling-file-listing", () => {
+      const state = useAppStore.getState();
+      if (state.fileServerKind === "plugin") return;
+      useAppStore.setState({
+        fileServerKind: "canon",
+        fileServerConfig: state.fileServerConfig ?? canonFileServerConfig(state.ownSession ?? 0),
+      });
+    }),
 
     // New direct message arrived.
     await listen<{ session: number }>(TauriEvent.NewDm, async (event) => {

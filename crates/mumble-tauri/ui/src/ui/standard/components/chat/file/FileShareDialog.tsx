@@ -56,6 +56,10 @@ export default function FileShareDialog({
   const messageRef = useRef<HTMLTextAreaElement>(null);
 
   const maxTtl = useAppStore((s) => s.fileServerConfig?.maxTtlSeconds ?? 0);
+  // A canon server has no per-file lifetime: retention is one server-wide
+  // setting, and the upload request carries no expiry to ask for. Offering
+  // the choice would be offering a promise nothing keeps.
+  const offerLifetime = useAppStore((s) => s.fileServerKind !== "canon");
   const availablePresets = useMemo(
     () => TTL_PRESETS.filter((p) => maxTtl === 0 || p.secs <= maxTtl),
     [maxTtl],
@@ -205,26 +209,28 @@ export default function FileShareDialog({
             />
           </div>
 
-          <div className={styles.field}>
-            <label className={styles.label} htmlFor="file-share-ttl">
-              {t("fileShare.duration.label")}
-            </label>
-            <select
-              id="file-share-ttl"
-              className={styles.input}
-              value={ttlChoice}
-              onChange={(e) => setTtlChoice(e.target.value)}
-            >
-              <option value="default">{t("fileShare.duration.default")}</option>
-              {availablePresets.map((p) => (
-                <option key={p.key} value={String(p.secs)}>
-                  {t(`fileShare.duration.${p.key}`, { defaultValue: p.label })}
-                </option>
-              ))}
-              {showMax && <option value="max">{t("fileShare.duration.max")}</option>}
-              {showNever && <option value="never">{t("fileShare.duration.never")}</option>}
-            </select>
-          </div>
+          {offerLifetime && (
+            <div className={styles.field}>
+              <label className={styles.label} htmlFor="file-share-ttl">
+                {t("fileShare.duration.label")}
+              </label>
+              <select
+                id="file-share-ttl"
+                className={styles.input}
+                value={ttlChoice}
+                onChange={(e) => setTtlChoice(e.target.value)}
+              >
+                <option value="default">{t("fileShare.duration.default")}</option>
+                {availablePresets.map((p) => (
+                  <option key={p.key} value={String(p.secs)}>
+                    {t(`fileShare.duration.${p.key}`, { defaultValue: p.label })}
+                  </option>
+                ))}
+                {showMax && <option value="max">{t("fileShare.duration.max")}</option>}
+                {showNever && <option value="never">{t("fileShare.duration.never")}</option>}
+              </select>
+            </div>
+          )}
 
           <div className={styles.actions}>
             <button type="button" className={styles.cancelBtn} onClick={onCancel}>
