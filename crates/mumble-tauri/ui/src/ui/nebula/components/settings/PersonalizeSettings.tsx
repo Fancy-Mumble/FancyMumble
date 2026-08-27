@@ -28,12 +28,19 @@ import {
 } from "@core/features/settings/chatBackground";
 import { Stack } from "../primitives";
 import { GroupTitle, PageTitle, SegmentedGroup, SliderRow } from "./controls";
+import { usePreferenceSettings } from "./usePreferenceSettings";
 import { radius } from "../../tokens";
 
 const MESSAGE_STYLES: { id: BubbleStyle; label: string }[] = [
   { id: "bubbles", label: "Bubbles" },
   { id: "flat", label: "Flat" },
   { id: "compact", label: "Compact" },
+];
+
+/** Where the servers are listed. Both draw the same set. */
+const SERVER_SWITCHERS: { id: "rail" | "titlebar"; label: string }[] = [
+  { id: "rail", label: "Sidebar" },
+  { id: "titlebar", label: "Title bar" },
 ];
 
 const CHANNEL_VIEWERS: { id: ChannelViewerStyle; label: string }[] = [
@@ -100,6 +107,7 @@ function queueVideoBake(fileName: string, posterName: string | null, sigma: numb
  */
 export function PersonalizeSettings() {
   const [data, setData] = useState<PersonalizationData | null>(null);
+  const { prefs, set } = usePreferenceSettings();
   const [design, setDesign] = useState<UiDesignId>("nebula");
   const [backgroundBusy, setBackgroundBusy] = useState(false);
   const [backgroundError, setBackgroundError] = useState<string | null>(null);
@@ -436,6 +444,16 @@ export function PersonalizeSettings() {
           onCommit={(value) => void commitEffectSlider({ chatBgDim: value })}
         />
       </Stack>
+
+      <GroupTitle hint="The rail keeps every server in view; the title bar keeps the window taller.">
+        Server list
+      </GroupTitle>
+      <SegmentedGroup
+        ariaLabel="Server list"
+        options={SERVER_SWITCHERS}
+        value={prefs?.serverSwitcher ?? "rail"}
+        onChange={(id) => set({ serverSwitcher: id })}
+      />
 
       <GroupTitle>Channel viewer</GroupTitle>
       <SegmentedGroup
