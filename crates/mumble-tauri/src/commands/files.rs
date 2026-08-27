@@ -314,6 +314,20 @@ pub(crate) async fn read_file_base64(path: String) -> Result<String, String> {
     Ok(STANDARD.encode(bytes))
 }
 
+/// The size of a local file, in bytes.
+///
+/// A composer that stages a file before uploading it says how big it is, and
+/// that is the one thing about a bare path the webview cannot work out for
+/// itself. Reading the whole file back through [`read_file_base64`] just to
+/// measure it would pull a video through IPC to print "84 MB".
+#[tauri::command]
+pub(crate) async fn file_size(path: String) -> Result<u64, String> {
+    let meta = tokio::fs::metadata(&path)
+        .await
+        .map_err(|e| format!("stat {path}: {e}"))?;
+    Ok(meta.len())
+}
+
 // -- the canon file service --------------------------------------------
 //
 // A server running the plugin and a server running the canon service both

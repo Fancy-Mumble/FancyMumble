@@ -25,11 +25,44 @@ import FileAttachmentCard from "@standard/components/chat/file/FileAttachmentCar
 import ReadReceiptIndicator from "@standard/components/chat/readreceipt/ReadReceiptIndicator";
 import QuoteBlock from "@standard/components/elements/QuoteBlock";
 import { composerHtml, editableText, formatTime, messageContent, plainText } from "../../selectors";
-import { UserAvatar, Stack } from "../primitives";
+import { LinkGuard, UserAvatar, Stack } from "../primitives";
 import { floatingSurface } from "../../theme";
 import { radius } from "../../tokens";
 
 const WATCH_MARKER = /<!--\s*FANCY_WATCH:([^\s]+)\s*-->/;
+
+/** The schemes a link in a message may point at; standard's renderer allows
+ *  exactly these, and anything else loses its `href` rather than its text. */
+const SAFE_URL_RE = /^(?:https?:|mailto:|#)/i;
+
+/**
+ * Sanitise a message body and hand its links to `LinkGuard`.
+ *
+ * DOMPurify keeps anchors but leaves them live, and a live anchor in a webview
+ * navigates the app itself: the window becomes the target page with no way
+ * back. Tagging each one `data-external` is what standard's renderer does, and
+ * what the guard watches for before it hands the URL to the system browser.
+ */
+function sanitizeBody(html: string): string {
+  const fragment = DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: ["target", "rel"],
+    RETURN_DOM_FRAGMENT: true,
+  }) as unknown as DocumentFragment;
+
+  for (const anchor of Array.from(fragment.querySelectorAll("a"))) {
+    if (!SAFE_URL_RE.test((anchor.getAttribute("href") ?? "").trim())) {
+      anchor.removeAttribute("href");
+    }
+    anchor.setAttribute("target", "_blank");
+    anchor.setAttribute("rel", "noopener noreferrer");
+    anchor.dataset["external"] = "true";
+  }
+
+  const wrapper = document.createElement("div");
+  wrapper.appendChild(fragment);
+  return wrapper.innerHTML;
+}
 
 interface MessageRowProps {
   message: ChatMessage;
@@ -123,10 +156,7 @@ export function MessageRow({
   // What the body *is* decides what gets drawn; only the leftover HTML is
   // sanitised, so a marker never reaches the renderer as text.
   const content = useMemo(() => messageContent(message.body), [message.body]);
-  const body = useMemo(
-    () => DOMPurify.sanitize(content.html, { USE_PROFILES: { html: true }, ADD_ATTR: ["target", "rel"] }),
-    [content.html],
-  );
+  const body = useMemo(() => sanitizeBody(content.html), [content.html]);
   const poll =
     content.kind === "poll" ? (knownPolls.get(content.pollId) ?? getPoll(content.pollId)) : undefined;
   const attachment = content.kind === "file" ? decodeFileAttachmentPayload(content.payload) : null;
@@ -263,27 +293,33 @@ export function MessageRow({
           />
         ) : (
           hasBody && (
-            <Box
-              onClick={openImageUnder}
-              sx={(theme) => ({
-                maxWidth: "min(620px, 78%)",
-                px: "14px",
-                py: "9px",
-                borderRadius: `${radius("lg")} ${radius("lg")} ${radius("sm")} ${radius("lg")}`,
-                background: theme.palette.nebula.accentSoft,
-                border: `1px solid ${theme.palette.nebula.accentLine}`,
-                lineHeight: 1.55,
-                wordBreak: "break-word",
-                "& img": {
-                  maxWidth: "100%",
-                  borderRadius: radius("lg"),
-                  display: "block",
-                  cursor: "zoom-in",
-                },
-                "& a": { color: theme.palette.nebula.accent },
-              })}
-              dangerouslySetInnerHTML={{ __html: body }}
-            />
+            <LinkGuard>
+              <Box
+                onClick={openImageUnder}
+                sx={(theme) => ({
+                  maxWidth: "min(620px, 78%)",
+                  px: "14px",
+                  py: "9px",
+                  borderRadius: `${radius("lg")} ${radius("lg")} ${radius("sm")} ${radius("lg")}`,
+                  background: theme.palette.nebula.accentSoft,
+                  border: `1px solid ${theme.palette.nebula.accentLine}`,
+                  lineHeight: 1.55,
+                  wordBreak: "break-word",
+                  "& img": {
+                    maxWidth: "100%",
+                    borderRadius: radius("lg"),
+                    display: "block",
+                    cursor: "zoom-in",
+                  },
+                  "& a": { color: theme.palette.nebula.accent },
+                  // A list keeps the river's rhythm: indented enough to read
+                  // as one, not so far that it starts a column of its own.
+                  "& ul, & ol": { my: "4px", pl: "22px" },
+                  "& li": { my: "2px" },
+                })}
+                dangerouslySetInnerHTML={{ __html: body }}
+              />
+            </LinkGuard>
           )
         )}
         <Box sx={{ maxWidth: "min(620px, 78%)", width: "100%", display: "flex", justifyContent: "flex-end" }}>
@@ -383,30 +419,36 @@ export function MessageRow({
         )}
         {quotes}
         {hasBody && (
-          <Box
-            onClick={openImageUnder}
-            sx={(theme) => ({
-              mt: grouped ? 0 : "2px",
-              lineHeight: 1.55,
-              wordBreak: "break-word",
-              "& img": {
-                maxWidth: 320,
-                borderRadius: radius("lg"),
-                display: "block",
-                mt: "8px",
-                cursor: "zoom-in",
-              },
-              "& a": { color: theme.palette.nebula.accent },
-              "& code": {
-                fontFamily: theme.typography.fontFamily,
-                px: "6px",
-                borderRadius: radius("sm"),
-                background: theme.palette.nebula.card2,
-                fontSize: 11.5,
-              },
-            })}
-            dangerouslySetInnerHTML={{ __html: body }}
-          />
+          <LinkGuard>
+            <Box
+              onClick={openImageUnder}
+              sx={(theme) => ({
+                mt: grouped ? 0 : "2px",
+                lineHeight: 1.55,
+                wordBreak: "break-word",
+                "& img": {
+                  maxWidth: 320,
+                  borderRadius: radius("lg"),
+                  display: "block",
+                  mt: "8px",
+                  cursor: "zoom-in",
+                },
+                "& a": { color: theme.palette.nebula.accent },
+                "& code": {
+                  fontFamily: theme.typography.fontFamily,
+                  px: "6px",
+                  borderRadius: radius("sm"),
+                  background: theme.palette.nebula.card2,
+                  fontSize: 11.5,
+                },
+                // A list keeps the river's rhythm: indented enough to read
+                // as one, not so far that it starts a column of its own.
+                "& ul, & ol": { my: "4px", pl: "22px" },
+                "& li": { my: "2px" },
+              })}
+              dangerouslySetInnerHTML={{ __html: body }}
+            />
+          </LinkGuard>
         )}
         {extras}
       </Box>
@@ -473,13 +515,16 @@ function BodyEditor({
   );
 }
 
+/** How far the hover pill stands off the message it belongs to. */
+const PILL_GAP = 4;
+
 /**
- * The hover menu: one pill floating over the bubble's top edge.
+ * The hover menu: one pill standing just off the bubble's top edge.
  *
  * Not a strip inside the header row - the canvas floats it clear of the
- * message so it never reflows the text underneath, and gives it the composer's
- * rhythm at 80% scale: bare icons, and one divider only before the destructive
- * end.
+ * message, so it neither reflows the text underneath nor lands on top of it,
+ * and gives it the composer's rhythm at 80% scale: bare icons, and one divider
+ * only before the destructive end.
  */
 function RowActions({
   message,
@@ -503,7 +548,9 @@ function RowActions({
       gap="14px"
       sx={(theme) => ({
         position: "absolute",
-        top: -17,
+        // Above the row, not half over it: hanging into the message put the pill
+        // on top of the first line, where it swallowed clicks meant for a link.
+        bottom: `calc(100% + ${PILL_GAP}px)`,
         ...(align === "right" ? { right: 0 } : { left: 0 }),
         zIndex: 2,
         height: 34,
@@ -513,6 +560,17 @@ function RowActions({
         backdropFilter: "blur(30px)",
         WebkitBackdropFilter: "blur(30px)",
         color: theme.palette.nebula.muted,
+        // The gap is air to look at, not to walk through: the pointer crossing
+        // it has to stay inside the row, or the row stops being hovered and the
+        // pill is gone before it is reached. This bridges it, invisibly.
+        "&::after": {
+          content: '""',
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: "100%",
+          height: `${PILL_GAP}px`,
+        },
       })}
     >
       {onReact && <PillButton label="Add reaction" onClick={onReact} icon={EmojiPlusIcon} />}

@@ -8,7 +8,7 @@
 //!
 //! ```text
 //! capture thread (per source)               dedicated tokio runtime
-//!   EncodePipeline (per-OS backend) ──► track.write_sample ──► RTP/SRTP ──► SFU
+//!   EncodePipeline (per-OS backend) ──► RTP packetise ──► track.write_rtp ──► SFU
 //!         ▲               RTCP PLI/FIR ──► per-track keyframe flag ──┘
 //! ```
 //!
@@ -28,6 +28,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use bytes::Bytes;
 use tokio::runtime::Runtime;
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264};
@@ -36,18 +37,22 @@ use webrtc::api::APIBuilder;
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
 use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::interceptor::registry::Registry;
-use webrtc::media::Sample;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtcp::payload_feedbacks::full_intra_request::FullIntraRequest;
 use webrtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication;
+use webrtc::rtp::codecs::h264::H264Payloader;
+use webrtc::rtp::header::Header;
+use webrtc::rtp::packet::Packet;
+use webrtc::rtp::packetizer::Payloader;
+use webrtc::rtp::sequence::{new_random_sequencer, Sequencer};
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::rtp_transceiver::rtp_sender::RTCRtpSender;
 use webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection;
 use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
-use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
+use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 
 use crate::encode::{EncodeSettings, EncodedFrame};
 use crate::pipeline::{create_pipeline, EncodePipeline};
@@ -60,6 +65,14 @@ use crate::sources::{self, SourceKind};
 /// multi-hundred-KB burst, and at the old 4 s cadence those bursts caused a
 /// receiver-visible stall (~250 ms "freeze") every 4 s on real uplinks.
 const PERIODIC_KEYFRAME: Duration = Duration::from_secs(20);
+
+/// RTP clock of the H.264 tracks we offer, in ticks per second.
+const RTP_CLOCK_HZ: u64 = 90_000;
+
+/// Payload bytes an RTP packet may carry. webrtc-rs paces its own
+/// packetizer to a 1200-byte outbound MTU (`RTP_OUTBOUND_MTU`), of which the
+/// fixed RTP header takes 12 - so the payloader gets what is left.
+const RTP_PAYLOAD_MTU: usize = 1200 - 12;
 
 /// Lifecycle notifications delivered to the embedder via [`SignalSink`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -358,7 +371,7 @@ impl ScreenBroadcaster {
         sink: &Arc<dyn SignalSink>,
         stop: &Arc<AtomicBool>,
         track_count: usize,
-    ) -> Result<(Arc<RTCPeerConnection>, Vec<Arc<TrackLocalStaticSample>>), String> {
+    ) -> Result<(Arc<RTCPeerConnection>, Vec<Arc<TrackLocalStaticRTP>>), String> {
         let mut media = MediaEngine::default();
         media
             .register_default_codecs()
@@ -402,7 +415,7 @@ impl ScreenBroadcaster {
         // SFU's mid-based forwarding and the viewers' track labeling rely on.
         let mut tracks = Vec::with_capacity(track_count);
         for i in 0..track_count {
-            let track = Arc::new(TrackLocalStaticSample::new(
+            let track = Arc::new(TrackLocalStaticRTP::new(
                 RTCRtpCodecCapability {
                     mime_type: MIME_TYPE_H264.to_owned(),
                     clock_rate: 90000,
@@ -512,7 +525,7 @@ impl ScreenBroadcaster {
     fn spawn_capture_thread(
         source: BroadcastSource,
         settings: EncodeSettings,
-        track: Arc<TrackLocalStaticSample>,
+        track: Arc<TrackLocalStaticRTP>,
         stop: Arc<AtomicBool>,
         sink: &Arc<dyn SignalSink>,
         rt: tokio::runtime::Handle,
@@ -548,14 +561,106 @@ impl Drop for ScreenBroadcaster {
     }
 }
 
-/// Send-leg accounting for the capture loop: RTP-timestamped `write_sample`,
-/// its timing distribution, and sender-gap detection - all rolled up into a
+/// H.264 -> RTP packetiser for one track.
+///
+/// The whole point of doing this by hand instead of using
+/// `TrackLocalStaticSample` is the TIMESTAMP. That helper takes a per-sample
+/// `duration` and hands it to `rtp`'s packetizer, which stamps the packet with
+/// the timestamp accumulated SO FAR and only then adds the duration - so the
+/// duration passed with frame N becomes the increment of frame N+1. Feeding it
+/// the measured gap (the only honest value available at write time, since the
+/// next frame has not happened yet) therefore stamps every frame with its
+/// PREDECESSOR's cadence. At a steady rate that is a harmless constant offset;
+/// at the variable rate a screen share actually runs at, one 300 ms sender
+/// stall makes that frame look ~270 ms late to the receiver and the next one
+/// ~270 ms early. Libwebrtc reads the late one as network jitter and inflates
+/// its playout delay to insure against it (decaying that back at only
+/// ~100 ms per second of stream time), and holds the early one back - a second,
+/// entirely self-inflicted freeze. Encoder hiccups thus turned directly into
+/// permanent latency.
+///
+/// Stamping each access unit with the real, monotonic time it is handed to the
+/// track removes the whole class: the receiver sees exactly the cadence we
+/// sent, so its jitter estimate reflects the network alone and settles at the
+/// minimum. The clock is deliberately the EMIT instant rather than a capture
+/// timestamp - a pipeline stall then reads as "nothing to show yet", which is
+/// the truth, instead of as media that arrived late and must be buffered for.
+#[derive(Debug)]
+struct RtpStamper {
+    payloader: H264Payloader,
+    sequencer: Box<dyn Sequencer + Send + Sync>,
+    /// Emit instant of the first packetised frame; timestamps are offsets
+    /// from it, so the stream starts at `ts_base` however long setup took.
+    epoch: Option<Instant>,
+    ts_base: u32,
+}
+
+impl RtpStamper {
+    fn new() -> Self {
+        Self {
+            payloader: H264Payloader::default(),
+            sequencer: Box::new(new_random_sequencer()),
+            epoch: None,
+            // RFC 3550 wants a random starting point. Nothing security-critical
+            // rides on it (SRTP keys off SSRC + sequence number, and the header
+            // travels in the clear either way) - it just keeps the stream from
+            // being trivially correlated across restarts.
+            ts_base: rand::random::<u32>(),
+        }
+    }
+
+    /// Fragment one Annex-B access unit emitted at `at` into RTP packets.
+    ///
+    /// SSRC and payload type are left at 0: `TrackLocalStaticRTP` overwrites
+    /// both per binding on write, from what the SDP actually negotiated.
+    fn packetize(&mut self, data: Vec<u8>, at: Instant) -> Vec<Packet> {
+        let epoch = *self.epoch.get_or_insert(at);
+        // 1 us is 9/100 of a tick at 90 kHz - exact integer math, no drift.
+        // Wrapping is the RTP contract: the field is 32 bits and rolls over
+        // ~13 h into a stream, which receivers handle by design.
+        let elapsed_us = at.saturating_duration_since(epoch).as_micros() as u64;
+        let ticks = elapsed_us.wrapping_mul(RTP_CLOCK_HZ / 1000) / 1000;
+        let timestamp = self.ts_base.wrapping_add(ticks as u32);
+
+        let payloads = match self.payloader.payload(RTP_PAYLOAD_MTU, &Bytes::from(data)) {
+            Ok(payloads) => payloads,
+            Err(e) => {
+                tracing::warn!("screenshare: H.264 payloading failed: {e}");
+                return Vec::new();
+            }
+        };
+        let last = payloads.len().saturating_sub(1);
+        payloads
+            .into_iter()
+            .enumerate()
+            .map(|(i, payload)| Packet {
+                header: Header {
+                    version: 2,
+                    // The marker bit ends an access unit; the receiver uses it
+                    // to know the frame is complete without waiting for the
+                    // next one's timestamp change.
+                    marker: i == last,
+                    payload_type: 0,
+                    sequence_number: self.sequencer.next_sequence_number(),
+                    timestamp,
+                    ssrc: 0,
+                    ..Default::default()
+                },
+                payload,
+            })
+            .collect()
+    }
+}
+
+/// Send-leg accounting for the capture loop: RTP packetisation and writes,
+/// their timing distribution, and sender-gap detection - all rolled up into a
 /// 5 s log. A gap between EMITTED frames past the receiver freeze threshold
 /// (~150 ms) is a visible stutter, so each is logged with `produce_ms` (time
 /// spent inside `next_frame`: capture+convert+encode+collect) and its keyframe
 /// flag, which localises the stall (large `produce_ms` => pipeline stalled).
+#[derive(Debug)]
 struct SendLeg {
-    last_sample_at: Option<Instant>,
+    stamper: RtpStamper,
     write_total: Duration,
     write_max: Duration,
     write_count: u32,
@@ -563,13 +668,12 @@ struct SendLeg {
     gap_max: Duration,
     gap_over: u32,
     keyframes: u32,
-    frame_interval: Duration,
 }
 
 impl SendLeg {
-    fn new(frame_interval: Duration) -> Self {
+    fn new() -> Self {
         Self {
-            last_sample_at: None,
+            stamper: RtpStamper::new(),
             write_total: Duration::ZERO,
             write_max: Duration::ZERO,
             write_count: 0,
@@ -577,7 +681,6 @@ impl SendLeg {
             gap_max: Duration::ZERO,
             gap_over: 0,
             keyframes: 0,
-            frame_interval,
         }
     }
 
@@ -589,10 +692,55 @@ impl SendLeg {
         frame: EncodedFrame,
         gap: Duration,
         produce_took: Duration,
-        track: &TrackLocalStaticSample,
+        track: &TrackLocalStaticRTP,
         rt: &tokio::runtime::Handle,
         stop: &AtomicBool,
     ) {
+        self.note_gap(&frame, gap, produce_took);
+
+        // No live binding (not negotiated yet, or the sender is paused) means
+        // nothing would go on the wire - and packetising anyway would burn
+        // sequence numbers, which SRTP's rollover counter cannot tolerate.
+        // Skipping is safe for timestamps too: they come from the clock, not
+        // from a running total, so the stream resumes correctly stamped.
+        if rt.block_on(track.all_binding_paused()) {
+            return;
+        }
+
+        let bytes = frame.data.len();
+        let packets = self.stamper.packetize(frame.data, Instant::now());
+        let write_start = Instant::now();
+        let failed = rt.block_on(async {
+            let mut failed = 0u32;
+            for packet in &packets {
+                if track.write_rtp_with_extensions(packet, &[]).await.is_err() {
+                    failed += 1;
+                }
+            }
+            failed
+        });
+        if failed > 0 && !stop.load(Ordering::SeqCst) {
+            tracing::warn!(packets = failed, "screenshare: write_rtp failed");
+        }
+
+        let took = write_start.elapsed();
+        self.write_total += took;
+        self.write_max = self.write_max.max(took);
+        self.write_count += 1;
+        if took > Duration::from_millis(100) {
+            tracing::debug!(
+                ms = took.as_millis() as u64,
+                bytes,
+                rtp_packets = packets.len(),
+                "screenshare: track write stalled"
+            );
+        }
+        self.roll_up_log();
+    }
+
+    /// Fold one frame's cadence into the window counters, logging the gaps
+    /// long enough for a receiver to score as a freeze.
+    fn note_gap(&mut self, frame: &EncodedFrame, gap: Duration, produce_took: Duration) {
         self.gap_max = self.gap_max.max(gap);
         if frame.keyframe {
             self.keyframes += 1;
@@ -607,60 +755,35 @@ impl SendLeg {
                 "screenshare: sender frame gap",
             );
         }
-        // RTP timestamps must advance by the REAL elapsed time. Stamping the
-        // nominal 1/max_fps duration while the pipeline runs slower makes frames
-        // arrive later than their timestamps claim, so the receiver's jitter
-        // buffer backs up without bound - playback crawls and delay grows.
-        let now = Instant::now();
-        let duration = match self.last_sample_at.replace(now) {
-            Some(prev) => now.duration_since(prev).max(Duration::from_millis(1)),
-            None => self.frame_interval,
-        };
-        let bytes = frame.data.len();
-        let sample = Sample {
-            data: frame.data.into(),
-            duration,
-            ..Default::default()
-        };
-        let write_start = Instant::now();
-        if rt.block_on(track.write_sample(&sample)).is_err() && !stop.load(Ordering::SeqCst) {
-            tracing::warn!("screenshare: write_sample failed");
+    }
+
+    /// Emit and reset the 5 s send-leg summary once the window is up.
+    fn roll_up_log(&mut self) {
+        if self.write_window.elapsed() < Duration::from_secs(5) {
+            return;
         }
-        let took = write_start.elapsed();
-        self.write_total += took;
-        self.write_max = self.write_max.max(took);
-        self.write_count += 1;
-        if took > Duration::from_millis(100) {
-            tracing::debug!(
-                ms = took.as_millis() as u64,
-                bytes,
-                "screenshare: write_sample stalled"
-            );
-        }
-        if self.write_window.elapsed() >= Duration::from_secs(5) {
-            tracing::debug!(
-                frames = self.write_count,
-                avg_ms = (self.write_total.as_millis() as u64) / u64::from(self.write_count.max(1)),
-                max_ms = self.write_max.as_millis() as u64,
-                gap_max_ms = self.gap_max.as_millis() as u64,
-                gaps_over_150 = self.gap_over,
-                keyframes = self.keyframes,
-                "screenshare: send-leg timings",
-            );
-            self.write_total = Duration::ZERO;
-            self.write_max = Duration::ZERO;
-            self.write_count = 0;
-            self.gap_max = Duration::ZERO;
-            self.gap_over = 0;
-            self.keyframes = 0;
-            self.write_window = Instant::now();
-        }
+        tracing::debug!(
+            frames = self.write_count,
+            avg_ms = (self.write_total.as_millis() as u64) / u64::from(self.write_count.max(1)),
+            max_ms = self.write_max.as_millis() as u64,
+            gap_max_ms = self.gap_max.as_millis() as u64,
+            gaps_over_150 = self.gap_over,
+            keyframes = self.keyframes,
+            "screenshare: send-leg timings",
+        );
+        self.write_total = Duration::ZERO;
+        self.write_max = Duration::ZERO;
+        self.write_count = 0;
+        self.gap_max = Duration::ZERO;
+        self.gap_over = 0;
+        self.keyframes = 0;
+        self.write_window = Instant::now();
     }
 }
 
 /// Body of a capture thread (see [`ScreenBroadcaster::spawn_capture_thread`]):
 /// pure orchestration over the selected [`EncodePipeline`] backend - frame
-/// pacing, keyframe scheduling, real-elapsed RTP timestamping and the track
+/// pacing, keyframe scheduling, wall-clock RTP timestamping and the track
 /// writes. Which backend runs (per-OS GPU, portable CPU, or camera) is
 /// decided by [`create_pipeline`]. A failing source fails the WHOLE
 /// broadcast (the embedder tears down and reports), keeping partial-share
@@ -683,7 +806,7 @@ async fn watch_sender_keyframes(sender: Arc<RTCRtpSender>, flag: Arc<AtomicBool>
 fn capture_loop(
     source: BroadcastSource,
     settings: EncodeSettings,
-    track: &TrackLocalStaticSample,
+    track: &TrackLocalStaticRTP,
     stop: &AtomicBool,
     sink: &Arc<dyn SignalSink>,
     rt: &tokio::runtime::Handle,
@@ -706,7 +829,7 @@ fn capture_loop(
 
     let frame_interval = Duration::from_secs_f32(1.0 / settings.max_fps.max(1.0));
     let mut last_keyframe = Instant::now();
-    let mut send_leg = SendLeg::new(frame_interval);
+    let mut send_leg = SendLeg::new();
 
     // Gap-fill keep-alive. Change-driven capture (WGC) emits nothing while the
     // screen is still, so a pause leaves a hole in the sent stream; a hole
@@ -851,5 +974,116 @@ impl StallWatch {
             );
             sink.on_state(BroadcastState::CaptureStalled);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RtpStamper, RTP_PAYLOAD_MTU};
+    use std::time::{Duration, Instant};
+
+    /// One Annex-B access unit of `len` payload bytes, NAL type 1 (non-IDR
+    /// slice) so the payloader neither buffers it as a parameter set nor
+    /// tries to aggregate it into a STAP-A.
+    fn access_unit(len: usize) -> Vec<u8> {
+        let mut au = vec![0, 0, 0, 1, 0x41];
+        au.resize(len, 0xAB);
+        au
+    }
+
+    /// Ticks the 90 kHz RTP clock advances over `ms` milliseconds.
+    fn ticks(ms: u64) -> u32 {
+        u32::try_from(ms * 90).expect("test offsets stay small")
+    }
+
+    /// The regression this whole packetiser exists for: a frame's timestamp
+    /// must reflect WHEN THAT FRAME was emitted. The old
+    /// `TrackLocalStaticSample` path passed the elapsed gap as the sample
+    /// duration, which `rtp`'s packetizer applies to the FOLLOWING packet, so
+    /// every frame carried its predecessor's cadence - fake jitter that
+    /// libwebrtc answered with permanent playout delay.
+    #[test]
+    fn timestamps_track_real_emit_times_not_the_previous_gap() {
+        let mut stamper = RtpStamper::new();
+        let t0 = Instant::now();
+        // Deliberately irregular: steady 33 ms, a 300 ms encoder stall, then
+        // recovery. This is the shape that used to inflate the jitter buffer.
+        let offsets_ms = [0u64, 33, 66, 366, 399, 489, 522];
+
+        let stamps: Vec<u32> = offsets_ms
+            .iter()
+            .map(|&ms| {
+                let packets = stamper.packetize(access_unit(64), t0 + Duration::from_millis(ms));
+                assert_eq!(packets.len(), 1, "a 64-byte AU is one packet");
+                packets[0].header.timestamp
+            })
+            .collect();
+
+        let base = stamps[0];
+        for (&ms, &stamp) in offsets_ms.iter().zip(&stamps) {
+            assert_eq!(
+                stamp.wrapping_sub(base),
+                ticks(ms),
+                "frame at {ms} ms carries the wrong RTP timestamp",
+            );
+        }
+    }
+
+    /// Sequence numbers must be gapless across frames AND across the
+    /// fragments of one frame - a hole is indistinguishable from packet loss
+    /// and costs the receiver a NACK round trip (or a freeze).
+    #[test]
+    fn sequence_numbers_are_contiguous_across_fragments_and_frames() {
+        let mut stamper = RtpStamper::new();
+        let t0 = Instant::now();
+        let mut seqs = Vec::new();
+        for i in 0..3u64 {
+            // Larger than the MTU, so each frame fragments into several FU-A.
+            let packets = stamper.packetize(
+                access_unit(RTP_PAYLOAD_MTU * 3),
+                t0 + Duration::from_millis(i * 33),
+            );
+            assert!(packets.len() > 1, "oversized AU must fragment");
+            seqs.extend(packets.iter().map(|p| p.header.sequence_number));
+        }
+        for pair in seqs.windows(2) {
+            assert_eq!(
+                pair[1],
+                pair[0].wrapping_add(1),
+                "sequence numbers must not skip: {seqs:?}",
+            );
+        }
+    }
+
+    /// Every fragment of one access unit shares that frame's timestamp, and
+    /// only the last one carries the marker bit (the end-of-frame signal the
+    /// receiver decodes on).
+    #[test]
+    fn fragments_share_a_timestamp_and_only_the_last_is_marked() {
+        let mut stamper = RtpStamper::new();
+        let packets = stamper.packetize(access_unit(RTP_PAYLOAD_MTU * 3), Instant::now());
+        assert!(packets.len() > 1, "oversized AU must fragment");
+
+        let stamp = packets[0].header.timestamp;
+        assert!(
+            packets.iter().all(|p| p.header.timestamp == stamp),
+            "one access unit is one instant",
+        );
+        let marked: Vec<bool> = packets.iter().map(|p| p.header.marker).collect();
+        let expected: Vec<bool> = (0..packets.len()).map(|i| i == packets.len() - 1).collect();
+        assert_eq!(marked, expected, "marker belongs on the last fragment only");
+    }
+
+    /// A screen share that sits idle for minutes and then moves must not
+    /// jump its clock backwards, and must still be stamped in real time.
+    #[test]
+    fn long_idle_gaps_advance_the_clock_monotonically() {
+        let mut stamper = RtpStamper::new();
+        let t0 = Instant::now();
+        let first = stamper.packetize(access_unit(64), t0)[0].header.timestamp;
+        let after_idle = stamper.packetize(access_unit(64), t0 + Duration::from_secs(120))[0]
+            .header
+            .timestamp;
+        assert_eq!(after_idle.wrapping_sub(first), ticks(120_000));
     }
 }

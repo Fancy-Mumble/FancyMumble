@@ -425,6 +425,8 @@
       "changeSource": "Changer de source",
       "quality": "Qualité du flux",
       "custom": "Personnalisé",
+      "hideSelf": "Masquer l'application à la capture",
+      "hideSelfHint": "Pendant un partage d'écran, les fenêtres de cette application sont invisibles à toute capture - y compris vos propres captures d'écran. Désactivez-le pour capturer le client (l'aperçu peut alors se refléter lui-même).",
       "shareAudio": "Partager l'audio du flux",
       "comingSoon": "Bientôt"
     },

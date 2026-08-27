@@ -442,6 +442,8 @@
       "changeSource": "Change Stream",
       "quality": "Stream Quality",
       "custom": "Custom",
+      "hideSelf": "Hide App From Capture",
+      "hideSelfHint": "While sharing a screen, this app's windows are invisible to every capture - including your own screenshots. Turn it off to screenshot or record the client (your live preview may then show a mirror of itself).",
       "shareAudio": "Share Stream Audio",
       "comingSoon": "Soon"
     },

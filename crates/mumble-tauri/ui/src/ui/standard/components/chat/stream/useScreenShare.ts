@@ -218,6 +218,18 @@ function stopBroadcasting(): void {
   }
 }
 
+/** Stop the broadcast this window owns, from outside the hook.
+ *
+ *  {@link useScreenShare} owns the capture and only one component may mount
+ *  it, but stopping is a plain command with no state of its own - and the
+ *  controls that offer it (Nebula's voice dock among them) live elsewhere in
+ *  the tree. Everything it touches is module state or the store, so it is safe
+ *  to call from anywhere; {@link ScreenShareHook.stopSharing} is this. */
+export function stopOwnBroadcast(): void {
+  broadcasterSources = null;
+  endOwnBroadcast("user stopped");
+}
+
 /** Tear down the local broadcast end-to-end: the Rust capture/peer, the
  *  loopback viewer feeding the own-preview, webview bookkeeping, store
  *  state, and the STOP announcement to the channel.  Shared by the header
@@ -271,9 +283,6 @@ interface ViewerState {
   cameraStream: MediaStream;
   /** ServerId of the connection that owns this viewer PC. */
   serverId: string | null;
-  /** Adaptive jitter-buffer controller + its polling handle. */
-  jitterCtl: JitterCtl;
-  jitterMonitor: ReturnType<typeof setInterval> | null;
 }
 
 const viewerPcs = new Map<number, ViewerState>();
@@ -353,7 +362,6 @@ function flushViewerIce(session: number): void {
 function closeViewer(session?: number): void {
   if (session === undefined) {
     for (const [sess, state] of viewerPcs) {
-      if (state.jitterMonitor !== null) clearInterval(state.jitterMonitor);
       state.pc.close();
       notifyStreamListeners(sess, NO_STREAMS);
     }
@@ -362,7 +370,6 @@ function closeViewer(session?: number): void {
   }
   const state = viewerPcs.get(session);
   if (state) {
-    if (state.jitterMonitor !== null) clearInterval(state.jitterMonitor);
     state.pc.close();
     viewerPcs.delete(session);
     notifyStreamListeners(session, NO_STREAMS);
@@ -384,47 +391,39 @@ function reconnectOrDropViewer(broadcasterSession: number): void {
 }
 
 /**
- * Adaptive jitter-buffer control for received screen-share video.
+ * Playout-delay policy for received screen-share video: let Chromium run its
+ * own estimator at its minimum, and never floor it from here.
  *
- * Screen-share senders emit occasional large inter-frame gaps (measured:
- * ~200-300 ms sender-pipeline stalls, in bursts) that a shallow buffer cannot
- * absorb, so each surfaces as a decoded FREEZE even though decode (~0.5 ms/
- * frame) and the network (0% loss) are healthy. A deeper jitter buffer plays
- * through the gap instead - but depth costs latency, so we adapt it: GROW fast
- * toward a 2 s ceiling while freezes keep happening, then SHRINK slowly back
- * toward a modest floor once the stream has been freeze-free AND the measured
- * buffer occupancy is steady (low variance = healthy, no need for the depth).
- * Screen sharing tolerates the added latency; this is not an interactive path.
+ * There used to be an adaptive controller in this file that grew
+ * `jitterBufferTarget` by 400 ms on every tick where `freezeCount` moved,
+ * up to a 2 s ceiling. It was wrong twice over.
+ *
+ * Wrong signal: a "freeze" is Chromium scoring an inter-frame gap at
+ * >= max(3x average, average + 150 ms). Those gaps are SENDER gaps - the
+ * capture pipeline produced nothing. No amount of receive buffering invents a
+ * frame that was never sent, so the knob cannot fix what the counter reports,
+ * and the loop just kept ratcheting.
+ *
+ * Wrong direction: `jitterBufferTarget` is a FLOOR on playout delay
+ * (Chromium plays out at max(target, its own estimate)), and the shrink path
+ * required three clean ticks AND a per-tick buffer-occupancy spread under
+ * 80 ms - a test that screen content, which alternates between ~30 fps active
+ * and the ~11 fps idle keep-alive, essentially never passes. So the target
+ * climbed to 2000 ms and stayed there: the buffer that "only ever goes up".
+ *
+ * The actual cause of the fake jitter was on the sender - RTP timestamps
+ * lagged one frame behind the real emit cadence (see `RtpStamper` in
+ * fancy-screenshare's broadcast.rs). With honest timestamps Chromium sees
+ * only real network jitter, which is exactly what its estimator is built for:
+ * it reacts to a late frame immediately and decays the delay back down on its
+ * own. Leaving the floor at 0 is what makes the latency the lowest available,
+ * and it costs no smoothness - Chromium still buffers for whatever jitter it
+ * genuinely measures.
+ *
+ * If a future change needs depth here, drive it from arrival-vs-timestamp
+ * lateness, never from `freezeCount`.
  */
-const JB_START_MS = 500; // initial target
-const JB_FLOOR_MS = 300; // never below this - some buffer always helps
-const JB_CEILING_MS = 2000; // grow no further (user-facing latency cap)
-const JB_GROW_MS = 400; // additive step when a freeze is seen
-const JB_SHRINK_MS = 150; // gentler step down when consistently healthy
-const JB_TICK_MS = 2000; // control cadence
-const JB_CLEAN_TICKS_TO_SHRINK = 3; // ~6 s freeze-free before easing down
-const JB_STABLE_SPREAD_MS = 80; // max buffer-occupancy spread to call "steady"
-
-interface JitterCtl {
-  targetMs: number;
-  lastFreeze: number;
-  lastDelay: number;
-  lastEmitted: number;
-  /** Recent per-tick buffer occupancy (ms) for the steadiness test. */
-  bufferHist: number[];
-  cleanTicks: number;
-}
-
-function newJitterCtl(): JitterCtl {
-  return {
-    targetMs: JB_START_MS,
-    lastFreeze: 0,
-    lastDelay: 0,
-    lastEmitted: 0,
-    bufferHist: [],
-    cleanTicks: 0,
-  };
-}
+const JB_TARGET_MS = 0;
 
 /** Set the jitter-buffer target on a viewer PC's video receivers. Best-effort:
  *  the property is recent (Chromium/WebView2), with `playoutDelayHint` as an
@@ -448,61 +447,6 @@ function applyVideoJitterBufferTarget(pc: RTCPeerConnection, targetMs: number): 
     } catch (e) {
       console.warn("[sfu] could not set video jitter buffer target:", e);
     }
-  }
-}
-
-/** One control step: sample video freeze + buffer counters and nudge the
- *  target up (freezing) or down (steadily healthy). */
-async function adaptJitterBuffer(session: number): Promise<void> {
-  const state = viewerPcs.get(session);
-  if (!state) return;
-  const ctl = state.jitterCtl;
-  let report: RTCStatsReport;
-  try {
-    report = await state.pc.getStats();
-  } catch {
-    return;
-  }
-  let freeze = 0;
-  let delay = 0;
-  let emitted = 0;
-  for (const raw of report.values() as Iterable<Record<string, unknown>>) {
-    if (raw.type !== "inbound-rtp") continue;
-    if ((raw.kind ?? raw.mediaType) !== "video") continue;
-    freeze += (raw.freezeCount as number | undefined) ?? 0;
-    delay += (raw.jitterBufferDelay as number | undefined) ?? 0;
-    emitted += (raw.jitterBufferEmittedCount as number | undefined) ?? 0;
-  }
-
-  const froze = freeze > ctl.lastFreeze;
-  ctl.lastFreeze = freeze;
-  const dEmitted = emitted - ctl.lastEmitted;
-  const dDelay = delay - ctl.lastDelay;
-  ctl.lastEmitted = emitted;
-  ctl.lastDelay = delay;
-  if (dEmitted > 0 && dDelay >= 0) {
-    ctl.bufferHist.push((dDelay / dEmitted) * 1000);
-    if (ctl.bufferHist.length > 5) ctl.bufferHist.shift();
-  }
-
-  let next = ctl.targetMs;
-  if (froze) {
-    next = Math.min(JB_CEILING_MS, ctl.targetMs + JB_GROW_MS);
-    ctl.cleanTicks = 0;
-  } else {
-    ctl.cleanTicks += 1;
-    const steady =
-      ctl.bufferHist.length >= 3 &&
-      Math.max(...ctl.bufferHist) - Math.min(...ctl.bufferHist) < JB_STABLE_SPREAD_MS;
-    if (ctl.cleanTicks >= JB_CLEAN_TICKS_TO_SHRINK && steady && ctl.targetMs > JB_FLOOR_MS) {
-      next = Math.max(JB_FLOOR_MS, ctl.targetMs - JB_SHRINK_MS);
-      ctl.cleanTicks = 0;
-    }
-  }
-  if (next !== ctl.targetMs) {
-    ctl.targetMs = next;
-    applyVideoJitterBufferTarget(state.pc, next);
-    console.debug(`[sfu] jitter buffer target -> ${next}ms (froze=${froze})`);
   }
 }
 
@@ -549,8 +493,6 @@ async function startWatching(broadcasterSession: number): Promise<void> {
     primaryStream: new MediaStream(),
     cameraStream: new MediaStream(),
     serverId: sid,
-    jitterCtl: newJitterCtl(),
-    jitterMonitor: null,
   };
   viewerPcs.set(broadcasterSession, state);
 
@@ -561,11 +503,7 @@ async function startWatching(broadcasterSession: number): Promise<void> {
   pc.addTransceiver("video", { direction: "recvonly" });
   pc.addTransceiver("video", { direction: "recvonly" });
   pc.addTransceiver("audio", { direction: "recvonly" });
-  applyVideoJitterBufferTarget(pc, state.jitterCtl.targetMs);
-  // Adapt the buffer depth to observed freezes for the life of the viewer.
-  state.jitterMonitor = setInterval(() => {
-    void adaptJitterBuffer(broadcasterSession);
-  }, JB_TICK_MS);
+  applyVideoJitterBufferTarget(pc, JB_TARGET_MS);
 
   pc.ontrack = (e) => {
     const s = viewerPcs.get(broadcasterSession);
@@ -1170,10 +1108,7 @@ export function useScreenShare(): ScreenShareHook {
     })();
   }, []);
 
-  const stopSharingCb = useCallback(() => {
-    broadcasterSources = null;
-    endOwnBroadcast("user stopped");
-  }, []);
+  const stopSharingCb = useCallback(() => stopOwnBroadcast(), []);
 
   // Auto-connect to all active broadcasters in our channel so streams are
   // ready before the user clicks into focus view, and disconnect from

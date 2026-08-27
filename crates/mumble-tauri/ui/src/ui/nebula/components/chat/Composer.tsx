@@ -1,15 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Stack } from "../primitives";
-import { Box, IconButton, Tooltip, Typography } from "@mui/material";
-import type { SxProps, Theme } from "@mui/material/styles";
+import { Box, IconButton, Menu, MenuItem, Tooltip, Typography } from "@mui/material";
+import { alpha, type SxProps, type Theme } from "@mui/material/styles";
 import { useTypingIndicator } from "@core/features/chat/typing/useTypingIndicator";
 import { sendPluginInteraction, useAppStore } from "@core/store";
 import { parseMentionTrigger, type MentionTrigger } from "@core/utils/mentions";
 import { collectSlashCommands, filterSlashCommands } from "@core/plugins/tier1/manifest";
 import { extractSlashQuery, parseSlashLine } from "@core/plugins/tier1/slashParser";
-import { ArrowUpIcon, AttachIcon, CloseIcon, PollIcon, SmileIcon, UploadIcon } from "@ui/icons";
-import { KlipyGifBrowser } from "@standard/pages/settings/KlipyGifBrowser";
-import EmojiPicker from "@standard/components/elements/EmojiPicker";
+import { AttachIcon, CloseIcon, PlusIcon, PollIcon, SendIcon, UploadIcon } from "@ui/icons";
+import { FormatBar, type FormatAction } from "./FormatBar";
+import { PopoverPanel, PopoverScrim } from "./popover/PopoverPanel";
+import { GIF_POPOVER_WIDTH, GifPopover } from "./popover/GifPopover";
+import { EMOJI_POPOVER_WIDTH, EmojiPopover } from "./popover/EmojiPopover";
+import { POLL_POPOVER_WIDTH, PollPopover } from "./popover/PollPopover";
+import { FILE_SHARE_POPOVER_WIDTH, FileSharePopover } from "./popover/FileSharePopover";
 import MentionAutocomplete, {
   candidateInsertText,
   handleMentionKey,
@@ -19,9 +23,11 @@ import { useMentionCandidates } from "@standard/components/chat/mention/useMenti
 import SlashCommandMenu, { handleSlashKey } from "@standard/components/plugin/SlashCommandMenu";
 import MarkdownInput, { type MarkdownInputApi } from "@standard/components/chat/markdown/MarkdownInput";
 import type { ChatMessage } from "@core/types";
-import type { UploadPlaceholder } from "@core/features/chat/useFileUpload";
+import type { FileShareChoice, StagedAttachment, UploadPlaceholder } from "@core/features/chat/useFileUpload";
+import { formatBytes } from "@core/utils/format";
 import { composerHtml, plainText } from "../../selectors";
 import { glassChrome } from "../../theme";
+import { NEBULA_MONO, radius } from "../../tokens";
 
 interface ComposerProps {
   /** Placeholder target, e.g. "#Gaming" or "@Lorelando". */
@@ -29,12 +35,28 @@ interface ComposerProps {
   disabled?: boolean;
   onSend: (html: string) => void | Promise<void>;
   onAttach?: () => void;
-  /** Open the poll composer. Absent in DMs, which have no channel to poll. */
-  onCreatePoll?: () => void;
+  /**
+   * Why files cannot be sent here, or null when they can.
+   *
+   * The button is drawn either way. Hiding it left no way to tell a server
+   * that refuses attachments from a client that has lost track of whether it
+   * can send them - the reader just sees a gap where a paperclip should be.
+   */
+  attachBlocked?: string | null;
+  /** Post a poll. Absent in DMs, which have no channel to poll. */
+  onCreatePoll?: (question: string, options: string[], multiple: boolean) => void;
+  /** The file waiting on a share decision, if one has been picked. */
+  pendingFile?: string | null;
+  canSharePublic?: boolean;
+  /** Send the picked file with the chosen visibility. */
+  onShare?: (choice: FileShareChoice) => void;
   /** Messages this one is replying to, drawn above the text. */
   quotes?: readonly ChatMessage[];
   onRemoveQuote?: (messageId: string) => void;
-  /** Uploads in flight, drawn as tiles above the text. */
+  /** Files picked and answered for, waiting on the message that sends them. */
+  attachments?: readonly StagedAttachment[];
+  onRemoveAttachment?: (id: string) => void;
+  /** Uploads in flight, drawn as a tray above the text. */
   uploads?: readonly UploadPlaceholder[];
   onCancelUpload?: (id: string) => void;
   /**
@@ -58,7 +80,8 @@ interface ComposerProps {
  * artboard's two.
  */
 /** The inset that lets the wallpaper show around all four sides. */
-const PANEL_INSET = "10px";
+const PANEL_INSET_PX = 10;
+const PANEL_INSET = `${PANEL_INSET_PX}px`;
 /**
  * Where the composer stops growing.
  *
@@ -67,23 +90,36 @@ const PANEL_INSET = "10px";
  * the inset edge to edge.
  */
 const PANEL_MAX_WIDTH = 1360;
-/**
- * Popovers keep their own width.
- *
- * They are anchored to the icon that opened them and never stretched to the
- * pane - on an ultrawide window a GIF grid spanning the whole footer is
- * unusable, and the cap is what stops it.
- */
-const GIF_POPOVER_WIDTH = 400;
+/** The four panels that can hang off the composer. */
+type PopoverKind = "emoji" | "gif" | "poll" | "share";
+
+/** A panel that only has a sentence to say is narrower than one you act in. */
+const NOTICE_POPOVER_WIDTH = 300;
 const PANEL_RADIUS = "16px";
-const TILE_RADIUS = "14px";
 const PANEL_BLUR = "blur(32px) saturate(160%)";
+/** The square a staged file is previewed in, and the disc that removes it. */
+const TILE_PX = 54;
+const TILE_CLOSE_PX = 17;
 
 const POPUP = {
   position: "absolute",
   bottom: "100%",
   left: PANEL_INSET,
   right: PANEL_INSET,
+  zIndex: 20,
+} as const;
+
+/**
+ * The formatting bar sits at the height the lists do, but not at their width.
+ *
+ * The lists are pickers and fill the pane so their rows are readable; a bar of
+ * icons stretched to an ultrawide window would be seven buttons and a metre of
+ * empty glass. So it keeps its own width and is centred over the words it is
+ * about - `left` is set per selection and the transform does the centring.
+ */
+const FORMAT_BAR = {
+  position: "absolute",
+  bottom: "100%",
   zIndex: 20,
 } as const;
 
@@ -110,19 +146,72 @@ export function Composer({
   disabled = false,
   onSend,
   onAttach,
+  attachBlocked = null,
   onCreatePoll,
+  pendingFile = null,
+  canSharePublic = false,
+  onShare,
   quotes = [],
   onRemoveQuote,
+  attachments = [],
+  onRemoveAttachment,
   uploads = [],
   onCancelUpload,
   dropActive = false,
 }: Readonly<ComposerProps>) {
   const [draft, setDraft] = useState("");
-  const [gifOpen, setGifOpen] = useState(false);
-  /** Left offset of the GIF button within the composer, so the panel hangs off it. */
-  const [gifLeft, setGifLeft] = useState(0);
+  /**
+   * Whether the editor holds focus.
+   *
+   * Kept here rather than left to the editor because the panel is what has to
+   * light: the pill *is* the field, so `:focus-within` would have to be said
+   * on it anyway, and a boolean also serves the placeholder and the caret,
+   * which are drawn by the editor and coloured from out here.
+   */
+  const [focused, setFocused] = useState(false);
+  /**
+   * Which popover is open and where its icon is.
+   *
+   * One piece of state for all of them: they occupy the same space above the
+   * composer, so two open at once is never a thing to represent - and each
+   * hangs off the icon that opened it rather than off the panel's edge.
+   */
+  const [popover, setPopover] = useState<{ kind: PopoverKind; left: number } | null>(null);
+  /**
+   * The attach button, while its menu is open.
+   *
+   * The canvas hangs a small menu off the paperclip rather than wiring it
+   * straight to one destination - files and polls are both things you attach,
+   * and the row has space for one button, not two. Holding the element rather
+   * than a boolean gives the menu its anchor and gives whatever it opens the
+   * same anchor, so a popover chosen from the menu still lines up with the
+   * paperclip instead of with the menu row that was clicked.
+   */
+  const [attachMenu, setAttachMenu] = useState<HTMLElement | null>(null);
+  /**
+   * The run of the draft that is selected, or null when none is.
+   *
+   * Kept as state rather than read off `caret`, which is a ref: the bar has to
+   * appear when the selection does, and a ref changing renders nothing. The
+   * offsets themselves are what re-run the measurement below, so moving a
+   * selection without changing its length still moves the bar.
+   */
+  const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
+  const bar = useRef<HTMLDivElement>(null);
+  /** Where the bar's centre goes, in pixels from the shell's left edge. */
+  const [barLeft, setBarLeft] = useState<number | null>(null);
   const shell = useRef<HTMLDivElement>(null);
-  const [emoji, setEmoji] = useState<{ x: number; y: number } | null>(null);
+
+  /** Anchor a popover to one of the row's buttons, clamped inside the pane. */
+  const openPopoverFrom = (kind: PopoverKind, button: HTMLElement | null, width: number) => {
+    const anchor = button?.getBoundingClientRect();
+    const box = shell.current?.getBoundingClientRect();
+    const room = (box?.width ?? width) - width - 20;
+    setPopover({ kind, left: Math.max(0, Math.min((anchor?.left ?? 0) - (box?.left ?? 0), room)) });
+  };
+  /** The same, for the button that was just pressed. */
+  const openPopover = (kind: PopoverKind, event: React.MouseEvent<HTMLElement>, width: number) =>
+    openPopoverFrom(kind, event.currentTarget, width);
   const editor = useRef<MarkdownInputApi | null>(null);
   /** Where the caret is, as the editor last reported it. */
   const caret = useRef({ start: 0, end: 0 });
@@ -219,6 +308,7 @@ export function Composer({
    */
   const updateTrigger = useCallback((text: string, start: number, end: number) => {
     caret.current = { start, end };
+    setSelection(start === end ? null : { start, end });
     if (start !== end) {
       setTrigger((previous) => (previous ? null : previous));
       return;
@@ -235,6 +325,45 @@ export function Composer({
       setMentionIndex(0);
       return next;
     });
+  }, []);
+
+  /**
+   * Put the bar over the words it is about.
+   *
+   * A layout effect rather than an effect, and measured rather than derived:
+   * the overlay lays the draft out glyph by glyph, so where a word ends up is
+   * something only the DOM knows, and asking after the paint would show the
+   * bar in last selection's place for a frame. It stays inside the pane's
+   * inset, so a word at either edge does not push it off the glass.
+   */
+  useLayoutEffect(() => {
+    if (!selection) {
+      setBarLeft(null);
+      return;
+    }
+    const box = shell.current?.getBoundingClientRect();
+    const width = bar.current?.offsetWidth ?? 0;
+    if (!box || !width) return;
+    const half = width / 2;
+    const min = PANEL_INSET_PX + half;
+    const max = box.width - PANEL_INSET_PX - half;
+    const rect = editor.current?.selectionRect();
+    // With nothing measurable - a selection the overlay has not drawn yet -
+    // the bar waits at the left edge rather than jumping to the middle.
+    const centre = rect ? (rect.left + rect.right) / 2 - box.left : min;
+    setBarLeft(max < min ? box.width / 2 : Math.min(Math.max(centre, min), max));
+  }, [selection, draft]);
+
+  /**
+   * Carry out a formatting button.
+   *
+   * The editor does the work: it owns the markdown dialect and the caret, and
+   * Ctrl+B already goes through the same two entry points. Deciding here what
+   * `**` means would be a second dialect to keep honest.
+   */
+  const applyFormat = useCallback((action: FormatAction) => {
+    if (action.kind === "mark") editor.current?.wrapSelection(action.before, action.after);
+    else editor.current?.toggleList(action.list);
   }, []);
 
   const submit = () => {
@@ -270,7 +399,7 @@ export function Composer({
   const dropping = dropActive;
   // The border lights up while there is something to send, which is also when
   // the panel has grown a row it did not have at rest.
-  const sendable = draft.trim().length > 0 || quotes.length > 0;
+  const sendable = draft.trim().length > 0 || quotes.length > 0 || attachments.length > 0;
   const uploading = uploads.some((upload) => upload.state === "uploading");
 
   const onKeyDownCapture = (event: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
@@ -300,6 +429,14 @@ export function Composer({
     return false;
   };
 
+  /**
+   * Whether the panel is lit.
+   *
+   * A disabled composer never lights: it is dimmed to 0.6 and cannot take a
+   * keystroke, and an accent edge on it would promise one.
+   */
+  const lit = focused && !disabled;
+
   return (
     <Box
       ref={shell}
@@ -323,6 +460,25 @@ export function Composer({
           />
         </Box>
       )}
+      {/* The mention list never coincides with a selection - a trigger is a
+          caret in a word - but a slash line can be selected, and both want
+          this spot. The list wins: it is what Enter is about to act on. */}
+      {!slashOpen && selection && (
+        <Box
+          ref={bar}
+          sx={{
+            ...FORMAT_BAR,
+            ...(barLeft === null
+              ? { left: PANEL_INSET_PX }
+              : { left: barLeft, transform: "translateX(-50%)" }),
+          }}
+        >
+          <FormatBar
+            onFormat={applyFormat}
+            onEmoji={(event) => openPopover("emoji", event, EMOJI_POPOVER_WIDTH)}
+          />
+        </Box>
+      )}
       {!slashOpen && trigger && candidates.length > 0 && (
         <Box sx={POPUP}>
           <MentionAutocomplete
@@ -335,201 +491,236 @@ export function Composer({
       )}
 
       <Box
+        data-nebula-composer
         sx={(theme) => ({
           boxSizing: "border-box",
           display: "flex",
           flexDirection: "column",
           borderRadius: PANEL_RADIUS,
           overflow: "hidden",
-          background: theme.palette.nebula.wash,
           backdropFilter: PANEL_BLUR,
           WebkitBackdropFilter: PANEL_BLUR,
-          border: `1px solid ${theme.palette.nebula.washLine}`,
           opacity: disabled ? 0.6 : 1,
+          // Focus is stated on the panel, because the panel is the field. A
+          // ring drawn around the words inside would be a second field boxed
+          // within the first - the thing the canvas set out to remove - so the
+          // edge that is already there turns accent instead, and throws a
+          // hairline of soft accent just outside itself. Short enough to feel
+          // like the click that caused it.
+          transition: "background .14s ease, border-color .14s ease, box-shadow .14s ease",
+          // The fill comes up a step with it. Held as a wash of accent over
+          // the neutral one rather than swapped for a tinted token, so the
+          // step is a lift in both schemes - the light scheme's tinted card is
+          // *darker* than its wash, and lighting a surface by darkening it
+          // reads as the panel going away.
+          background: lit
+            ? `linear-gradient(0deg,${alpha(theme.palette.nebula.accent, 0.09)},${alpha(
+                theme.palette.nebula.accent,
+                0.09,
+              )}),${theme.palette.nebula.wash}`
+            : theme.palette.nebula.wash,
+          // Stronger than `accentLine`, which is the weight a *resting* accent
+          // edge is drawn at - a selected card, a hovered row. This edge is
+          // saying where the keyboard is pointed, and over a light scheme's
+          // near-white wash a resting weight barely separates from the
+          // hairline it replaces.
+          border: `1px solid ${lit ? alpha(theme.palette.nebula.accent, 0.6) : theme.palette.nebula.washLine}`,
+          // Enough to lift the panel off the river behind it without the long
+          // throw a floating menu gets - it is docked, not floating.
+          boxShadow: lit
+            ? `0 0 0 1px ${alpha(theme.palette.nebula.accent, 0.2)}, 0 6px 24px rgba(0,0,0,.12)`
+            : "0 6px 24px rgba(0,0,0,.12)",
         })}
       >
-        {/* Quotes are rows, not chips: two replies are two rows, and the panel
-            grows upward from the input rather than wrapping a cluster of
-            little cards above it. */}
-        {quotes.map((quote) => (
-          <Stack
-            key={quote.message_id}
-            direction="row"
-            alignItems="center"
-            gap="12px"
-            sx={(theme) => ({
-              height: 40,
-              flex: "none",
-              px: "14px",
-              borderBottom: `1px solid ${theme.palette.nebula.washLine}`,
-            })}
-          >
-            <Box aria-hidden sx={(theme) => ({ display: "flex", color: theme.palette.nebula.dim })}>
-              <ReplyGlyph />
-            </Box>
-            <Typography
-              sx={(theme) => ({ fontSize: 12, fontWeight: 600, color: theme.palette.nebula.accent })}
-            >
-              {quote.sender_name}
-            </Typography>
-            <Typography
-              sx={(theme) => ({
-                flex: 1,
-                minWidth: 0,
-                fontSize: 13,
-                color: theme.palette.nebula.muted,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              })}
-            >
-              {plainText(quote.body)}
-            </Typography>
-            <BareButton
-              label={`Stop replying to ${quote.sender_name}`}
-              onClick={() => quote.message_id && onRemoveQuote?.(quote.message_id)}
-              size={16}
-            >
-              <CloseIcon width={13} height={13} />
-            </BareButton>
-          </Stack>
-        ))}
+        {/* Quotes are rows in one tray, not chips and not a tray each: two
+            replies are two lines under a single hairline, so answering a
+            second message grows the panel by a row rather than by a band. */}
+        {quotes.length > 0 && (
+          <Tray>
+            {quotes.map((quote, index) => (
+              <Fragment key={quote.message_id}>
+                {index > 0 && <TrayRule />}
+                <Stack direction="row" alignItems="center" gap="9px" sx={{ px: "4px", py: "6px" }}>
+                  <Box
+                    aria-hidden
+                    sx={(theme) => ({ display: "flex", flex: "none", color: theme.palette.nebula.dim })}
+                  >
+                    <ReplyGlyph />
+                  </Box>
+                  <Typography
+                    sx={(theme) => ({
+                      flex: "none",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: theme.palette.nebula.accent,
+                    })}
+                  >
+                    {quote.sender_name}
+                  </Typography>
+                  <Typography
+                    sx={(theme) => ({
+                      flex: 1,
+                      minWidth: 0,
+                      fontSize: 12,
+                      color: theme.palette.nebula.muted,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    })}
+                  >
+                    {plainText(quote.body)}
+                  </Typography>
+                  <TrayClose
+                    label={`Stop replying to ${quote.sender_name}`}
+                    onClick={() => quote.message_id && onRemoveQuote?.(quote.message_id)}
+                  />
+                </Stack>
+              </Fragment>
+            ))}
+          </Tray>
+        )}
 
-        {/* One tray for files, and the progress is the hairline under it -
-            nothing new appears while a file is going up. */}
-        {uploads.map((upload) => (
-          <Stack
-            key={upload.id}
-            direction="row"
-            alignItems="center"
-            gap="10px"
-            sx={(theme) => ({
-              position: "relative",
-              height: 72,
-              flex: "none",
-              px: "14px",
-              borderBottom: `1px solid ${theme.palette.nebula.washLine}`,
-            })}
-          >
-            <Box
-              aria-hidden
-              sx={(theme) => ({
-                width: 52,
-                height: 52,
-                flex: "none",
-                display: "grid",
-                placeItems: "center",
-                borderRadius: TILE_RADIUS,
-                background: theme.palette.nebula.card2,
-                fontFamily: "ui-monospace,Menlo,monospace",
-                fontSize: 9,
-                color: theme.palette.nebula.muted,
-              })}
+        {/* Staged files are tiles on one scrolling line, because what you need
+            to check about a picked file is that it is the right one - which is
+            a look at the picture, not a filename in a list. The row ends in a
+            dashed square rather than sending you back to the paperclip. */}
+        {attachments.length > 0 && (
+          <Tray>
+            <Stack
+              direction="row"
+              alignItems="center"
+              gap="8px"
+              sx={{ px: "4px", py: "6px", overflowX: "auto" }}
             >
-              {extension(upload.filename)}
-            </Box>
-            <Stack gap="3px" sx={{ flex: 1, minWidth: 0 }}>
-              <Typography
-                sx={{
-                  fontSize: 13,
-                  fontWeight: 500,
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                {upload.filename}
-              </Typography>
-              <Typography sx={(theme) => ({ fontSize: 11, color: theme.palette.nebula.muted })}>
-                {upload.state === "error"
-                  ? (upload.errorMessage ?? "Upload failed")
-                  : `${upload.progress ?? 0}% · sending`}
-              </Typography>
+              {attachments.map((file) => (
+                <AttachmentTile key={file.id} file={file} onRemove={() => onRemoveAttachment?.(file.id)} />
+              ))}
+              <Tooltip title="Add another file">
+                <Box
+                  component="button"
+                  type="button"
+                  aria-label="Add another file"
+                  disabled={disabled}
+                  onClick={(event: React.MouseEvent<HTMLElement>) =>
+                    openPopover("share", event, FILE_SHARE_POPOVER_WIDTH)
+                  }
+                  sx={(theme) => ({
+                    all: "unset",
+                    cursor: "pointer",
+                    flex: "none",
+                    boxSizing: "border-box",
+                    width: 44,
+                    height: TILE_PX,
+                    display: "grid",
+                    placeItems: "center",
+                    borderRadius: radius("md"),
+                    border: `1px dashed ${theme.palette.nebula.washLine}`,
+                    color: theme.palette.nebula.dim,
+                    "&:hover": {
+                      borderColor: theme.palette.nebula.accentLine,
+                      color: theme.palette.nebula.accent,
+                    },
+                  })}
+                >
+                  <PlusIcon width={14} height={14} />
+                </Box>
+              </Tooltip>
             </Stack>
-            <Box
-              component="button"
-              type="button"
-              aria-label={`Cancel upload of ${upload.filename}`}
-              onClick={() => onCancelUpload?.(upload.id)}
-              sx={(theme) => ({
-                all: "unset",
-                cursor: "pointer",
-                fontSize: 12,
-                color: theme.palette.nebula.muted,
-                "&:hover": { color: theme.palette.nebula.text },
-              })}
-            >
-              Cancel
-            </Box>
-            {/* The divider fills as it goes, so the row gains no second bar. */}
-            <Box aria-hidden sx={{ position: "absolute", left: 0, right: 0, bottom: 0, height: "1px" }}>
-              <Box
-                sx={(theme) => ({
-                  height: "1px",
-                  width: `${upload.state === "error" ? 100 : (upload.progress ?? 0)}%`,
-                  background:
-                    upload.state === "error" ? theme.palette.nebula.bad : theme.palette.nebula.accent,
-                })}
-              />
-            </Box>
-          </Stack>
-        ))}
+          </Tray>
+        )}
+
+        {/* One tray for what is going up, and the bar is inside the row rather
+            than along the panel's edge: a file has a name, a size and a share
+            of itself already sent, and all three belong to the same line. */}
+        {uploads.length > 0 && (
+          <Tray>
+            {uploads.map((upload, index) => (
+              <Fragment key={upload.id}>
+                {index > 0 && <TrayRule />}
+                <UploadRow upload={upload} onCancel={() => onCancelUpload?.(upload.id)} />
+              </Fragment>
+            ))}
+          </Tray>
+        )}
 
         <Stack
           direction="row"
           alignItems="center"
-          gap="16px"
-          sx={{ minHeight: 52, flex: "none", px: "14px", py: "8px" }}
+          gap="9px"
+          sx={{ minHeight: 54, flex: "none", px: "15px", py: "11px" }}
         >
-          {onAttach && (
-            <BareButton label="Attach a file" onClick={onAttach} disabled={disabled}>
-              <AttachIcon width={18} height={18} />
-            </BareButton>
-          )}
+          {/* One button for everything that gets attached. With only one
+              destination there is nothing to choose between, so it opens that
+              destination rather than a menu of one. */}
           <BareButton
-            label="Insert emoji"
+            label={attachBlocked ?? "Attach a file"}
             disabled={disabled}
+            muted={!!attachBlocked}
+            active={!!attachMenu}
             onClick={(event) => {
-              const box = event.currentTarget.getBoundingClientRect();
-              setEmoji({ x: box.left, y: box.top });
+              if (attachBlocked) openPopover("share", event, NOTICE_POPOVER_WIDTH);
+              else if (!onCreatePoll) openPopover("share", event, FILE_SHARE_POPOVER_WIDTH);
+              else setAttachMenu(event.currentTarget);
             }}
           >
-            <SmileIcon width={18} height={18} />
+            <AttachIcon width={16} height={16} />
           </BareButton>
-
-          <HairDivider />
-
+          {/* A word, not a glyph: the canvas gives GIF a small chip of its own
+              because there is no picture of "GIF" anyone reads faster. */}
           <Box
             component="button"
             type="button"
             aria-label="Insert a GIF"
             disabled={disabled}
-            onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
-              const anchor = event.currentTarget.getBoundingClientRect();
-              const box = shell.current?.getBoundingClientRect();
-              // Clamped so a button near the right edge does not push the
-              // panel off the pane.
-              const width = box?.width ?? GIF_POPOVER_WIDTH;
-              setGifLeft(Math.max(0, Math.min(anchor.left - (box?.left ?? 0), width - GIF_POPOVER_WIDTH)));
-              setGifOpen(true);
-            }}
+            onClick={(event) => openPopover("gif", event, GIF_POPOVER_WIDTH)}
             sx={(theme) => ({
               all: "unset",
               cursor: "pointer",
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "0.07em",
+              flex: "none",
+              padding: "4px 8px",
+              borderRadius: radius("sm"),
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: "0.03em",
               color: theme.palette.nebula.muted,
-              "&:hover": { color: theme.palette.nebula.text },
+              "&:hover": { background: theme.palette.nebula.hover, color: theme.palette.nebula.text },
             })}
           >
             GIF
           </Box>
-          {onCreatePoll && (
-            <BareButton label="Create a poll" onClick={onCreatePoll} disabled={disabled}>
-              <PollIcon width={18} height={18} />
-            </BareButton>
-          )}
+
+          <Menu
+            anchorEl={attachMenu}
+            open={!!attachMenu}
+            onClose={() => setAttachMenu(null)}
+            anchorOrigin={{ vertical: "top", horizontal: "left" }}
+            transformOrigin={{ vertical: "bottom", horizontal: "left" }}
+          >
+            <MenuItem
+              onClick={() => {
+                const anchor = attachMenu;
+                setAttachMenu(null);
+                openPopoverFrom("share", anchor, FILE_SHARE_POPOVER_WIDTH);
+              }}
+            >
+              <MenuGlyph>
+                <AttachIcon width={14} height={14} />
+              </MenuGlyph>
+              Upload a file
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                const anchor = attachMenu;
+                setAttachMenu(null);
+                openPopoverFrom("poll", anchor, POLL_POPOVER_WIDTH);
+              }}
+            >
+              <MenuGlyph>
+                <PollIcon width={14} height={14} />
+              </MenuGlyph>
+              Create a poll
+            </MenuItem>
+          </Menu>
 
           {/* The text shares the row with the tools rather than taking one of
               its own - the panel only grows for things that dock above it. */}
@@ -544,6 +735,18 @@ export function Composer({
            * or the caret drifts off the text, so both are zeroed together.
            */}
           <Box
+            // Focus and blur are taken here rather than on the textarea: they
+            // are the DOM's bubbling pair, so the one listener covers the
+            // field however deep the editor puts it.
+            onFocus={() => setFocused(true)}
+            // Leaving the editor puts the bar away. A textarea keeps its
+            // selection through a blur, so without this the bar would hang
+            // over a composer nobody is typing in. The bar's own buttons
+            // refuse focus, so pressing one is not leaving.
+            onBlur={() => {
+              setFocused(false);
+              setSelection(null);
+            }}
             sx={(theme) => ({
               flex: 1,
               minWidth: 0,
@@ -552,8 +755,24 @@ export function Composer({
               // Feeding it Nebula's palette makes it right here regardless -
               // without them the placeholder inherits and comes out white.
               "--color-text-primary": theme.palette.nebula.text,
-              "--color-text-muted": theme.palette.nebula.dim,
+              // The placeholder comes up with the panel. Dim is the colour of
+              // a line nobody is writing; once the caret is in it, the words
+              // are about to be replaced and are worth reading first.
+              "--color-text-muted": lit ? theme.palette.nebula.muted : theme.palette.nebula.dim,
               "--color-accent": theme.palette.nebula.accent,
+              // The editor draws its own caret, in the text's colour by
+              // default. In a panel that lights accent the caret is the
+              // smallest part of the same statement, so it lights too.
+              "--color-caret": theme.palette.nebula.accent,
+              // And so does the selection. The browser's own highlight is a
+              // flat slab of system blue that owes nothing to the scheme; the
+              // canvas marks the run the way it marks a code span instead - a
+              // wash of accent inside a hairline of it, rounded. The edge is
+              // what keeps it legible over glass, where a fill alone at this
+              // alpha is barely a change of shade.
+              "--color-selection": theme.palette.nebula.accentSoft,
+              "--selection-ring": `0 0 0 1px ${theme.palette.nebula.accentLine}`,
+              "--selection-radius": "3px",
               "& > div": {
                 minHeight: 22,
                 maxHeight: 120,
@@ -562,6 +781,15 @@ export function Composer({
                 borderRadius: 0,
               },
               "& > div > div, & > div > textarea": { padding: 0, fontSize: 14, lineHeight: 1.4 },
+              // The panel is the field, so the field inside it must not draw
+              // one of its own. Standard's global sheet writes
+              // `textarea:focus-visible` plainly, which outranks the editor's
+              // own `outline: none` - and the wrapper clips it into a boxed
+              // ring around the words. Said here at a weight that wins.
+              "& > div > textarea:focus, & > div > textarea:focus-visible": {
+                outline: "none",
+                boxShadow: "none",
+              },
             })}
           >
             <MarkdownInput
@@ -570,6 +798,7 @@ export function Composer({
               disabled={disabled}
               placeholder={`Message ${target}`}
               ariaLabel={`Message ${target}`}
+              keepPlaceholderOnFocus
               onChange={(next) => {
                 draftRef.current = next;
                 setDraft(next);
@@ -590,19 +819,23 @@ export function Composer({
                 onClick={submit}
                 sx={(theme) => ({
                   flex: "none",
-                  width: 30,
-                  height: 30,
+                  width: 32,
+                  height: 32,
                   borderRadius: "999px",
                   background: theme.palette.nebula.accent,
                   color: theme.palette.nebula.onAccent,
+                  // The one lit element on the panel, and the canvas lights it
+                  // properly: a disc that throws its own accent underneath it.
+                  boxShadow: `0 4px 14px ${theme.palette.nebula.accent}66`,
                   "&:hover": { background: theme.palette.nebula.accent, filter: "brightness(1.08)" },
                   "&.Mui-disabled": {
                     background: theme.palette.nebula.card2,
                     color: theme.palette.nebula.dim,
+                    boxShadow: "none",
                   },
                 })}
               >
-                <ArrowUpIcon width={15} height={15} />
+                <SendIcon width={14} height={14} />
               </IconButton>
             </span>
           </Tooltip>
@@ -634,54 +867,357 @@ export function Composer({
         </Box>
       )}
 
-      {emoji && (
-        <EmojiPicker
-          anchorX={emoji.x}
-          anchorY={emoji.y}
-          onSelect={(glyph) => {
-            setEmoji(null);
-            insertAtCaret(glyph);
-          }}
-          onClose={() => setEmoji(null)}
-        />
-      )}
-
-      {/* A popover on the composer's own inset, not a centred modal with a
-          scrim over the conversation. */}
-      {gifOpen && (
+      {popover && (
         <>
-          <Box
-            onClick={() => setGifOpen(false)}
-            sx={{ position: "fixed", inset: 0, zIndex: 24 }}
-            aria-hidden
-          />
-          <Box
-            sx={(theme) => ({
-              position: "absolute",
-              bottom: "100%",
-              left: gifLeft + 10,
-              width: GIF_POPOVER_WIDTH,
-              maxWidth: "calc(100% - 20px)",
-              zIndex: 25,
-              borderRadius: PANEL_RADIUS,
-              overflow: "hidden",
-              background: theme.palette.nebula.wash,
-              backdropFilter: PANEL_BLUR,
-              WebkitBackdropFilter: PANEL_BLUR,
-              border: `1px solid ${theme.palette.nebula.washLine}`,
-            })}
-          >
-            <KlipyGifBrowser
+          <PopoverScrim onClose={() => setPopover(null)} />
+          {popover.kind === "poll" && onCreatePoll && (
+            <PollPopover
+              left={popover.left}
+              onSubmit={(question, options, multiple) => {
+                setPopover(null);
+                onCreatePoll(question, options, multiple);
+              }}
+              onClose={() => setPopover(null)}
+            />
+          )}
+          {popover.kind === "share" && attachBlocked && (
+            <PopoverPanel
+              width={NOTICE_POPOVER_WIDTH}
+              left={popover.left}
+              title="Files"
+              onClose={() => setPopover(null)}
+            >
+              <Typography sx={{ px: "14px", py: "14px", fontSize: 13, lineHeight: 1.5 }}>
+                {attachBlocked}.
+              </Typography>
+            </PopoverPanel>
+          )}
+          {popover.kind === "share" && !attachBlocked && onAttach && (
+            <FileSharePopover
+              left={popover.left}
+              filename={pendingFile}
+              canSharePublic={canSharePublic}
+              onBrowse={onAttach}
+              onSubmit={(choice) => {
+                setPopover(null);
+                onShare?.(choice);
+              }}
+              onClose={() => setPopover(null)}
+            />
+          )}
+          {popover.kind === "emoji" ? (
+            <EmojiPopover
+              left={popover.left}
+              onSelect={(glyph) => {
+                setPopover(null);
+                insertAtCaret(glyph);
+              }}
+              onClose={() => setPopover(null)}
+            />
+          ) : popover.kind === "gif" ? (
+            <GifPopover
+              left={popover.left}
               onSelect={(url) => {
-                setGifOpen(false);
+                setPopover(null);
                 void onSend(`<img src="${url}" alt="GIF">`);
               }}
+              onClose={() => setPopover(null)}
             />
-          </Box>
+          ) : null}
         </>
       )}
     </Box>
   );
+}
+
+/**
+ * A strip docked above the input row.
+ *
+ * Everything the composer is holding but has not sent yet - replies, staged
+ * files, uploads in flight - is drawn in one of these. They stack, and each
+ * closes with the same hairline, so the panel reads as one surface growing
+ * upward rather than as a pile of cards balanced on the field.
+ */
+function Tray({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <Box
+      data-nebula-tray
+      sx={(theme) => ({
+        flex: "none",
+        px: "11px",
+        py: "5px",
+        borderBottom: `1px solid ${theme.palette.nebula.washLine}`,
+      })}
+    >
+      {children}
+    </Box>
+  );
+}
+
+/**
+ * The line between two rows of the same tray.
+ *
+ * Lighter than the tray's own edge and inset from it: two replies are one
+ * thing the message is doing, and a full-weight rule between them would read
+ * as two trays that happen to be touching.
+ */
+function TrayRule() {
+  return (
+    <Box
+      aria-hidden
+      data-nebula-tray-rule
+      sx={(theme) => ({ height: "1px", mx: "4px", background: theme.palette.nebula.line })}
+    />
+  );
+}
+
+/** The small cross that takes a tray row away, held to the row's right edge. */
+function TrayClose({ label, onClick }: Readonly<{ label: string; onClick: () => void }>) {
+  return (
+    <BareButton label={label} onClick={onClick} size={20} sx={{ ml: "auto", borderRadius: radius("sm") }}>
+      <CloseIcon width={10} height={10} />
+    </BareButton>
+  );
+}
+
+/**
+ * The cross that sits *on* a tile rather than beside it.
+ *
+ * A staged file is a picture, and a picture has no margin to put a button in -
+ * so this one is a disc on the corner, dark enough to stay a cross over
+ * whatever the photograph happens to be doing underneath it.
+ */
+function TileClose({ label, onClick }: Readonly<{ label: string; onClick: () => void }>) {
+  return (
+    <Box
+      component="button"
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      sx={{
+        all: "unset",
+        cursor: "pointer",
+        position: "absolute",
+        right: "4px",
+        top: "4px",
+        width: TILE_CLOSE_PX,
+        height: TILE_CLOSE_PX,
+        display: "grid",
+        placeItems: "center",
+        borderRadius: "50%",
+        background: "rgba(8,11,18,.78)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+        color: "#dfe4ec",
+        "&:hover": { background: "rgba(8,11,18,.92)", color: "#ffffff" },
+      }}
+    >
+      <CloseIcon width={9} height={9} />
+    </Box>
+  );
+}
+
+/**
+ * One staged file, drawn as what it is.
+ *
+ * An image is its own label, so it gets the square and nothing else. Anything
+ * without a picture gets the opposite treatment - a type badge, the name and
+ * the size - because for those, three facts *are* the file.
+ */
+function AttachmentTile({ file, onRemove }: Readonly<{ file: StagedAttachment; onRemove: () => void }>) {
+  const remove = `Remove ${file.filename}`;
+
+  if (file.previewUrl) {
+    return (
+      <Box
+        sx={(theme) => ({
+          position: "relative",
+          flex: "none",
+          width: TILE_PX,
+          height: TILE_PX,
+          borderRadius: radius("md"),
+          overflow: "hidden",
+          border: `1px solid ${theme.palette.nebula.line}`,
+        })}
+      >
+        <Box
+          component="img"
+          src={file.previewUrl}
+          alt={file.filename}
+          sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
+        <TileClose label={remove} onClick={onRemove} />
+      </Box>
+    );
+  }
+
+  return (
+    <Stack
+      direction="row"
+      alignItems="center"
+      gap="9px"
+      sx={(theme) => ({
+        position: "relative",
+        flex: "none",
+        boxSizing: "border-box",
+        height: TILE_PX,
+        pl: "8px",
+        // Room for the disc on the corner, so a long name never runs under it.
+        pr: "30px",
+        borderRadius: radius("md"),
+        background: theme.palette.nebula.card2,
+        border: `1px solid ${theme.palette.nebula.line}`,
+      })}
+    >
+      <Box
+        aria-hidden
+        sx={(theme) => ({
+          width: 34,
+          height: 38,
+          flex: "none",
+          display: "grid",
+          placeItems: "center",
+          borderRadius: radius("sm"),
+          background: theme.palette.nebula.panel,
+          border: `1px solid ${theme.palette.nebula.line2}`,
+          fontFamily: NEBULA_MONO,
+          fontSize: 8.5,
+          fontWeight: 600,
+          color: theme.palette.nebula.muted,
+        })}
+      >
+        {extension(file.filename)}
+      </Box>
+      <Stack sx={{ minWidth: 0 }}>
+        <Typography
+          sx={{
+            fontSize: 11.5,
+            fontWeight: 500,
+            maxWidth: 130,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {file.filename}
+        </Typography>
+        {file.sizeBytes !== undefined && (
+          <Typography sx={(theme) => ({ fontSize: 10, mt: "1px", color: theme.palette.nebula.dim })}>
+            {formatBytes(file.sizeBytes)}
+          </Typography>
+        )}
+      </Stack>
+      <TileClose label={remove} onClick={onRemove} />
+    </Stack>
+  );
+}
+
+/**
+ * One file on its way to the server.
+ *
+ * The bar is three pixels inside the row rather than a hairline along the
+ * panel's edge, which is what lets a second upload have one of its own - and
+ * what keeps the progress attached to the name it belongs to.
+ */
+function UploadRow({ upload, onCancel }: Readonly<{ upload: UploadPlaceholder; onCancel: () => void }>) {
+  const failed = upload.state === "error";
+  // A failure stops the bar where it stopped. Filling it would say the file
+  // got there, which is the opposite of what the row underneath says.
+  const done = upload.progress ?? 0;
+
+  return (
+    <Stack direction="row" alignItems="center" gap="10px" sx={{ px: "4px", py: "6px" }}>
+      <Box
+        aria-hidden
+        sx={(theme) => ({
+          width: 40,
+          height: 40,
+          flex: "none",
+          display: "grid",
+          placeItems: "center",
+          overflow: "hidden",
+          borderRadius: radius("md"),
+          border: `1px solid ${theme.palette.nebula.line}`,
+          background: theme.palette.nebula.card2,
+          fontFamily: NEBULA_MONO,
+          fontSize: 9,
+          fontWeight: 600,
+          color: theme.palette.nebula.muted,
+        })}
+      >
+        {upload.previewUrl ? (
+          <Box
+            component="img"
+            src={upload.previewUrl}
+            alt=""
+            sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+        ) : (
+          extension(upload.filename)
+        )}
+      </Box>
+      <Stack sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          sx={{
+            fontSize: 11.5,
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {upload.filename}
+        </Typography>
+        <Typography
+          sx={(theme) => ({
+            fontSize: 10,
+            mt: "2px",
+            fontVariantNumeric: "tabular-nums",
+            color: failed ? theme.palette.nebula.bad : theme.palette.nebula.dim,
+          })}
+        >
+          {failed ? (upload.errorMessage ?? "Upload failed") : uploadProgressLine(upload)}
+        </Typography>
+        <Box
+          aria-hidden
+          sx={(theme) => ({
+            height: 3,
+            mt: "5px",
+            borderRadius: "2px",
+            overflow: "hidden",
+            background: theme.palette.nebula.card2,
+          })}
+        >
+          <Box
+            sx={(theme) => ({
+              height: "100%",
+              width: `${done}%`,
+              borderRadius: "2px",
+              background: failed ? theme.palette.nebula.bad : theme.palette.nebula.accent,
+            })}
+          />
+        </Box>
+      </Stack>
+      <TrayClose label={`Cancel upload of ${upload.filename}`} onClick={onCancel} />
+    </Stack>
+  );
+}
+
+/**
+ * What an upload has to say about itself, in the order it becomes knowable.
+ *
+ * The size is there from the start, the percentage from the first event, the
+ * estimate only once there is a rate to estimate from - and each is simply
+ * left out until it is true, rather than stood in for by a zero.
+ */
+function uploadProgressLine(upload: UploadPlaceholder): string {
+  return [
+    upload.totalBytes === undefined ? null : formatBytes(upload.totalBytes),
+    `${upload.progress ?? 0}%`,
+    upload.etaSeconds === undefined ? null : `${upload.etaSeconds}s left`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 /**
@@ -695,13 +1231,19 @@ function BareButton({
   label,
   onClick,
   disabled = false,
-  size = 22,
+  muted = false,
+  active = false,
+  size = 28,
   sx,
   children,
 }: Readonly<{
   label: string;
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
   disabled?: boolean;
+  /** Drawn as unavailable, but still pressable so it can say why. */
+  muted?: boolean;
+  /** Holding something open - the fill stays while it is. */
+  active?: boolean;
   size?: number;
   sx?: SxProps<Theme>;
   children: React.ReactNode;
@@ -712,19 +1254,25 @@ function BareButton({
         component="button"
         type="button"
         aria-label={label}
+        aria-expanded={active || undefined}
         disabled={disabled}
         onClick={onClick}
         sx={[
           (theme: Theme) => ({
             all: "unset",
             cursor: disabled ? "default" : "pointer",
+            flex: "none",
             width: size,
             height: size,
             display: "grid",
             placeItems: "center",
-            color: theme.palette.nebula.muted,
-            opacity: disabled ? 0.5 : 1,
-            "&:hover": { color: disabled ? undefined : theme.palette.nebula.text },
+            borderRadius: radius("md"),
+            background: active ? theme.palette.nebula.card2 : "transparent",
+            color: active ? theme.palette.nebula.text : theme.palette.nebula.muted,
+            opacity: disabled || muted ? 0.45 : 1,
+            "&:hover": disabled
+              ? undefined
+              : { background: theme.palette.nebula.hover, color: theme.palette.nebula.text },
           }),
           ...(Array.isArray(sx) ? sx : [sx]),
         ]}
@@ -735,10 +1283,12 @@ function BareButton({
   );
 }
 
-/** The upright hairline that groups the tool row, rather than a chip edge. */
-function HairDivider() {
+/** The muted glyph a menu row leads with, as the canvas draws its menus. */
+function MenuGlyph({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <Box aria-hidden sx={(theme) => ({ width: "1px", height: 18, background: theme.palette.nebula.line2 })} />
+    <Box aria-hidden sx={(theme) => ({ display: "flex", flex: "none", color: theme.palette.nebula.muted })}>
+      {children}
+    </Box>
   );
 }
 

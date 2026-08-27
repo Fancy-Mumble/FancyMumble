@@ -34,6 +34,54 @@ export interface UploadPlaceholder {
   readonly errorMessage?: string;
   /** 0-100, present once the first progress event has arrived. */
   readonly progress?: number;
+  /** The file's size on disk, known before a byte has moved. */
+  readonly totalBytes?: number;
+  /**
+   * Seconds left at the rate so far, or absent while there is no rate yet.
+   *
+   * Measured rather than assumed: the first progress event arrives before any
+   * time has passed, and a figure divided by nothing is not "instant".
+   */
+  readonly etaSeconds?: number;
+  /**
+   * A local preview of the file, for the kinds that have one.
+   *
+   * Carried through from whoever staged the file - the uploader is handed a
+   * path, and a path is not something an `<img>` can be pointed at.
+   */
+  readonly previewUrl?: string;
+}
+
+/**
+ * A file the composer is holding: picked and answered for, not yet sent.
+ *
+ * Staging is what lets one message carry several files and a sentence about
+ * them. The share question is answered per batch rather than per file, so the
+ * answer travels with each one from here to the upload it becomes.
+ */
+export interface StagedAttachment {
+  readonly id: string;
+  readonly filePath: string;
+  readonly filename: string;
+  /** Size on disk, absent until the stat comes back. */
+  readonly sizeBytes?: number;
+  /** A local preview URL, for the kinds that have one. */
+  readonly previewUrl?: string;
+  /** How this file may be shared, as answered for the batch it arrived in. */
+  readonly choice: FileShareChoice;
+}
+
+/**
+ * How long the rest of this upload will take at the rate it has managed.
+ *
+ * `undefined` rather than zero when there is nothing to go on: the first
+ * progress event lands in the same millisecond the upload started, and
+ * "0s left" on a file that has not begun is a worse answer than no answer.
+ */
+function remainingSeconds(startedAt: number, bytesSent: number, totalBytes: number): number | undefined {
+  const elapsed = (Date.now() - startedAt) / 1000;
+  if (elapsed <= 0 || bytesSent <= 0 || totalBytes <= bytesSent) return undefined;
+  return Math.max(1, Math.round((totalBytes - bytesSent) / (bytesSent / elapsed)));
 }
 
 function newUploadId(): string {
@@ -56,11 +104,27 @@ export function useFileUpload({ channelId, dmSession }: FileUploadTarget) {
   }, []);
 
   const upload = useCallback(
-    async (filePath: string, filename: string, choice: FileShareChoice) => {
+    async (
+      filePath: string,
+      filename: string,
+      choice: FileShareChoice,
+      /** What the stager already knows about the file, so the row can say it. */
+      known: { sizeBytes?: number; previewUrl?: string } = {},
+    ) => {
       if (channelId === null) return;
       const id = newUploadId();
-      setPlaceholders((prev) => [...prev, { id, filename, state: "uploading" }]);
+      setPlaceholders((prev) => [
+        ...prev,
+        {
+          id,
+          filename,
+          state: "uploading",
+          totalBytes: known.sizeBytes,
+          previewUrl: known.previewUrl,
+        },
+      ]);
       uploading.current = true;
+      const startedAt = Date.now();
 
       let unlisten: (() => void) | undefined;
       try {
@@ -69,12 +133,19 @@ export function useFileUpload({ channelId, dmSession }: FileUploadTarget) {
           "upload-progress",
           (event) => {
             if (event.payload.uploadId !== id) return;
-            const pct =
-              event.payload.totalBytes > 0
-                ? Math.min(99, Math.round((event.payload.bytesSent / event.payload.totalBytes) * 100))
-                : 0;
+            const { bytesSent, totalBytes } = event.payload;
+            const pct = totalBytes > 0 ? Math.min(99, Math.round((bytesSent / totalBytes) * 100)) : 0;
             setPlaceholders((prev) =>
-              prev.map((entry) => (entry.id === id ? { ...entry, progress: pct } : entry)),
+              prev.map((entry) =>
+                entry.id === id
+                  ? {
+                      ...entry,
+                      progress: pct,
+                      totalBytes: totalBytes > 0 ? totalBytes : entry.totalBytes,
+                      etaSeconds: remainingSeconds(startedAt, bytesSent, totalBytes),
+                    }
+                  : entry,
+              ),
             );
           },
         );

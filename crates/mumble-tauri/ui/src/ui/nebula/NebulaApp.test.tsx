@@ -57,13 +57,12 @@ const SERVER = {
 /**
  * Leave the server the way the dock now offers it.
  *
- * 8a's status bar is one 52px row - avatar, name over channel, mic, headphones
- * and an overflow. Settings, administration and leaving moved into that
- * overflow, so reaching Leave is two clicks rather than one.
+ * The status card gives the voice controls a row of their own, and `Leave`
+ * sits at its right end rather than inside the overflow - one click, on the
+ * button that says the word.
  */
 async function leaveFromDock() {
-  fireEvent.click(await screen.findByRole("button", { name: "More" }));
-  fireEvent.click(await screen.findByRole("menuitem", { name: "Leave server" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Disconnect from this server" }));
 }
 
 describe("NebulaApp", () => {
@@ -132,8 +131,7 @@ describe("NebulaApp", () => {
     expect(screen.getByText("Voice off")).toBeTruthy();
     // Leaving means leaving the server, so it is live whenever there is a
     // session to leave - being in voice has nothing to do with it.
-    fireEvent.click(screen.getByRole("button", { name: "More" }));
-    expect(await screen.findByRole("menuitem", { name: "Leave server" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Disconnect from this server" })).toBeTruthy();
   });
 
   it("asks before leaving a server, then disconnects the session", async () => {
@@ -275,7 +273,7 @@ describe("NebulaApp", () => {
     });
 
     fireEvent.click(await screen.findByRole("button", { name: "More" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Settings" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Sound & devices" }));
 
     expect(await screen.findByRole("button", { name: "Profile" })).toBeTruthy();
     for (const page of ["Voice", "Personalize", "Privacy", "Shortcuts", "Advanced"])

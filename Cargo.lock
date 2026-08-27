@@ -2120,6 +2120,7 @@ version = "0.1.0"
 dependencies = [
  "ashpd",
  "base64 0.22.1",
+ "bytes",
  "cros-codecs",
  "fast_image_resize",
  "image",
@@ -2127,6 +2128,7 @@ dependencies = [
  "nokhwa",
  "openh264",
  "pipewire",
+ "rand 0.10.2",
  "serde",
  "serde_json",
  "tokio",

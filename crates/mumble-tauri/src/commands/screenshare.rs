@@ -7,6 +7,7 @@
 //! back by [`try_intercept_answer`], called from the `WebRtcSignal` message
 //! handler before signals are forwarded to the webview.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use fancy_screenshare::{
@@ -26,6 +27,27 @@ static BROADCASTER: OnceLock<Mutex<Option<ScreenBroadcaster>>> = OnceLock::new()
 
 fn broadcaster_slot() -> &'static Mutex<Option<ScreenBroadcaster>> {
     BROADCASTER.get_or_init(|| Mutex::new(None))
+}
+
+/// Whether our own windows should hide from screen capture while a SCREEN
+/// share runs (see `start_screen_broadcast` for why they do by default).
+///
+/// The user can lift it - a hidden window cannot be screenshotted or
+/// recorded by anything, the Snipping Tool included, which is a surprise
+/// when you only wanted your own capture of the app. Deliberately process
+/// state and not a persisted setting: the feedback loop it guards against
+/// is real, so every restart starts safe again.
+static HIDE_SELF_FROM_CAPTURE: AtomicBool = AtomicBool::new(true);
+
+/// Whether the running broadcast captures a screen, i.e. whether the
+/// preference above currently has anything to apply to.
+static BROADCASTING_SCREEN: AtomicBool = AtomicBool::new(false);
+
+/// Re-apply the exclusion the current broadcast and preference call for.
+fn sync_capture_exclusion(app: &AppHandle) {
+    let hide = BROADCASTING_SCREEN.load(Ordering::Relaxed)
+        && HIDE_SELF_FROM_CAPTURE.load(Ordering::Relaxed);
+    set_own_windows_excluded_from_capture(app, hide);
 }
 
 /// Lifecycle event payload emitted to the webview as `screen-broadcast-state`.
@@ -252,8 +274,10 @@ pub(crate) async fn start_screen_broadcast(
     // captures) kills the loop and stops chats leaking into shares. Window
     // shares are unaffected: picking THIS app's window still works because
     // exclusion is only applied while a screen share runs.
+    // ...unless the user asked for their app back (see HIDE_SELF_FROM_CAPTURE).
     let excludes_screen = sources.iter().any(|s| s.kind == SourceKind::Screen);
-    set_own_windows_excluded_from_capture(&app, excludes_screen);
+    BROADCASTING_SCREEN.store(excludes_screen, Ordering::Relaxed);
+    sync_capture_exclusion(&app);
 
     let sink = std::sync::Arc::new(MumbleSignalSink { app, server_id });
     let settings = encode_settings_for(max_dimension, max_fps);
@@ -310,11 +334,19 @@ pub(crate) async fn start_screen_broadcast(
 /// Apply (or lift) capture exclusion on every window of this app. Best
 /// effort: a window that cannot be excluded logs and stays visible in the
 /// share rather than failing the broadcast.
+///
+/// The drawing overlay is left alone: it excludes itself on creation and
+/// must stay excluded whatever the share does, or the annotations drawn for
+/// the broadcaster get recorded back into their own stream.
 #[cfg(not(target_os = "android"))]
 fn set_own_windows_excluded_from_capture(app: &AppHandle, excluded: bool) {
+    use crate::commands::draw_overlay::DRAW_OVERLAY_LABEL;
     use crate::platform::window::WindowExt;
     use tauri::Manager;
     for (label, window) in app.webview_windows() {
+        if label == DRAW_OVERLAY_LABEL {
+            continue;
+        }
         if let Err(e) = window.set_excluded_from_capture(excluded) {
             tracing::warn!(%label, excluded, "screenshare: capture exclusion failed: {e}");
         }
@@ -323,6 +355,23 @@ fn set_own_windows_excluded_from_capture(app: &AppHandle, excluded: bool) {
 
 #[cfg(target_os = "android")]
 fn set_own_windows_excluded_from_capture(_app: &AppHandle, _excluded: bool) {}
+
+/// Whether this app's windows hide from screen capture while screen-sharing.
+#[tauri::command]
+pub(crate) fn self_capture_exclusion() -> bool {
+    HIDE_SELF_FROM_CAPTURE.load(Ordering::Relaxed)
+}
+
+/// Hide this app's windows from screen capture while screen-sharing, or stop
+/// doing so - the toggle behind the config menu's "hide from capture" item.
+///
+/// Takes effect on the running share immediately, so a user who wants to
+/// screenshot or record the client does not have to restart their share.
+#[tauri::command]
+pub(crate) fn set_self_capture_exclusion(app: AppHandle, hidden: bool) {
+    HIDE_SELF_FROM_CAPTURE.store(hidden, Ordering::Relaxed);
+    sync_capture_exclusion(&app);
+}
 
 /// Platform traits of the share flow, queried once by the frontend to shape
 /// its UI.
@@ -375,7 +424,8 @@ pub(crate) async fn request_camera_access() -> Result<bool, String> {
 /// Stop the active broadcast (no-op when none is running).
 #[tauri::command]
 pub(crate) async fn stop_screen_broadcast(app: AppHandle) -> Result<(), String> {
-    set_own_windows_excluded_from_capture(&app, false);
+    BROADCASTING_SCREEN.store(false, Ordering::Relaxed);
+    sync_capture_exclusion(&app);
     let old = {
         let mut slot = broadcaster_slot()
             .lock()

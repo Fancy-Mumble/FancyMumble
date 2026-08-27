@@ -772,6 +772,18 @@
   word-break: break-word;
 }
 
+/* Lists are the one block-level thing the markdown converter emits. Indented
+   enough to read as a list, not so far that it starts a column of its own. */
+.messageBody ul,
+.messageBody ol {
+  margin: 4px 0;
+  padding-inline-start: 22px;
+}
+
+.messageBody li {
+  margin: 2px 0;
+}
+
 /* --- Image gallery grid (multi-message galleries) --------------- */
 /* Each tile is a normal, individually-offloadable message; these rules lay a
    run of same-group image messages out as one tiled grid. */

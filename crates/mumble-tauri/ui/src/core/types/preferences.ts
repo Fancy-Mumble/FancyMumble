@@ -69,6 +69,21 @@ export interface UserPreferences {
   calibrationSignature?: string | null;
   /** User's preferred ordering of the server tabs (by server id). */
   serverTabOrder?: ServerId[];
+  /**
+   * The order of the tiles on the server rail, by host:port.
+   *
+   * Keyed on the address rather than the session id that serverTabOrder uses:
+   * the rail lists saved servers too, and a session id only exists while a
+   * server is connected, so it could not name a tile that survives a restart.
+   */
+  serverRailOrder?: string[];
+  /**
+   * Where the list of servers lives: the rail down the left, or the title bar.
+   *
+   * Both show the same servers - this only decides which one is drawn, so
+   * whichever the user does not pick simply is not rendered.
+   */
+  serverSwitcher?: "rail" | "titlebar";
   /** Collapsed/expanded state of sidebar sections. */
   sidebarSections?: SidebarSections;
   /** When true, the channel viewer hides channels that have no members. */
@@ -140,6 +155,12 @@ export interface UserPreferences {
   /** When false, the disconnect confirmation dialog is skipped (the user chose
    *  "never show again").  Defaults to true. */
   showDisconnectWarning?: boolean;
+  /** Hosts the user ticked "Trust <host>" for in the external-link warning.
+   *  A link to one of these opens in the browser without asking again. Exact
+   *  hosts (port included) as `URL.host` gives them - lowercased, and punycode
+   *  for an internationalised name. Empty by default: nothing is trusted until
+   *  the user says so. */
+  trustedLinkHosts?: string[];
 }
 
 /** Controls when the server welcome message modal appears on connect. */
