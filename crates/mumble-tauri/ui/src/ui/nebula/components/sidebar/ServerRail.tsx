@@ -5,7 +5,7 @@ import { reorderServerRail, serverTint, type ServerRailEntry } from "../../selec
 import { UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
 import type { ServerPingResult } from "@core/types";
-import { ServerRailPanel } from "./ServerRailPanel";
+import { ServerRailPanel, ServerRailRowGhost } from "./ServerRailPanel";
 import { ServerRailCard, type RailCardOccupant } from "./ServerRailCard";
 
 /** Every tile, and the two buttons that bracket them, are one square. */
@@ -282,7 +282,14 @@ export function ServerRail({
   const rowRefs = useRef(new Map<string, HTMLElement>());
   const visibleRefs = () => (expanded ? rowRefs.current : tileRefs.current);
   const gesture = useRef<{ key: string; startY: number; moved: boolean } | null>(null);
-  const [drag, setDrag] = useState<{ key: string; y: number; left: number; slots: TileSlot[] } | null>(null);
+  const [drag, setDrag] = useState<{
+    key: string;
+    y: number;
+    left: number;
+    width: number;
+    height: number;
+    slots: TileSlot[];
+  } | null>(null);
 
   const beginGesture = useCallback(
     (key: string) => (event: React.PointerEvent<HTMLElement>) => {
@@ -311,6 +318,8 @@ export function ServerRail({
           // The ghost tracks the pointer up and down but stays in the rail:
           // the tile is going back into this column, not anywhere else.
           left: source?.left ?? 0,
+          width: source?.width ?? TILE,
+          height: source?.height ?? TILE,
           slots: measureSlots(visibleRefs()),
         });
         return;
@@ -414,12 +423,26 @@ export function ServerRail({
       {dragKey && dropBefore === null && <DropLine />}
 
       {drag && draggedEntry && (
-        <DragGhost
-          entry={draggedEntry}
-          icon={icons?.get(draggedEntry.group.key)}
-          y={drag.y}
-          left={drag.left}
-        />
+        <DragGhost y={drag.y} left={drag.left} width={drag.width} height={drag.height}>
+          {expanded ? (
+            <ServerRailRowGhost
+              entry={draggedEntry}
+              active={draggedEntry.group.key === activeKey}
+              icon={icons?.get(draggedEntry.group.key)}
+              banner={banners?.get(draggedEntry.group.key)}
+              ping={pings?.get(draggedEntry.group.key)}
+              activeChannelName={activeChannelName}
+            />
+          ) : (
+            <UserAvatar
+              name={draggedEntry.group.label}
+              size={TILE}
+              square
+              src={icons?.get(draggedEntry.group.key)}
+              gradient={serverTint(draggedEntry.group.key)}
+            />
+          )}
+        </DragGhost>
       )}
 
       <RailButton label="Add a server" onClick={onAddServer} dashed>
@@ -500,41 +523,50 @@ function DropLine() {
   );
 }
 
-/** The tile under the pointer, pinned to the rail column. */
+/**
+ * Whatever is being carried, under the pointer.
+ *
+ * Sized from the element it was picked up from, so the collapsed rail carries
+ * a tile and the pinned panel carries the whole row. Rendered at the document
+ * root: the rail blurs what is behind it, and a backdrop-filter makes its
+ * element the containing block for anything fixed inside it - the ghost would
+ * otherwise be placed against the rail rather than the window.
+ */
 function DragGhost({
-  entry,
-  icon,
   y,
   left,
-}: Readonly<{ entry: ServerRailEntry; icon?: string; y: number; left: number }>) {
-  // Rendered at the document root: the rail blurs what is behind it, and a
-  // backdrop-filter makes its element the containing block for anything fixed
-  // inside it - the ghost would then be placed against the rail, not the window.
+  width,
+  height,
+  children,
+}: Readonly<{
+  y: number;
+  left: number;
+  width: number;
+  height: number;
+  children: React.ReactNode;
+}>) {
   return (
     <Portal>
       <Box
         aria-hidden
-        sx={{
+        sx={(theme) => ({
           position: "fixed",
           left,
-          top: y - TILE / 2,
-          width: TILE,
-          height: TILE,
+          top: y - height / 2,
+          width,
+          height,
           zIndex: 60,
           pointerEvents: "none",
           borderRadius: radius("lg"),
           overflow: "hidden",
-          transform: "scale(1.08)",
+          transform: "scale(1.04)",
           boxShadow: "0 12px 28px rgba(2,6,18,.55)",
-        }}
+          // Panel rows are translucent by design; carried, they need a ground of
+          // their own or the row underneath reads through them.
+          background: theme.palette.nebula.bg0,
+        })}
       >
-        <UserAvatar
-          name={entry.group.label}
-          size={TILE}
-          square
-          src={icon}
-          gradient={serverTint(entry.group.key)}
-        />
+        {children}
       </Box>
     </Portal>
   );

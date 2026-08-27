@@ -96,6 +96,7 @@ function PanelRow({
   registerRef,
   onPointerDown,
   onSelect,
+  ghost = false,
 }: Readonly<{
   entry: ServerRailEntry;
   active: boolean;
@@ -107,23 +108,29 @@ function PanelRow({
   registerRef?: (element: HTMLElement | null) => void;
   onPointerDown?: (event: React.PointerEvent<HTMLElement>) => void;
   onSelect: () => void;
+  /** Drawn as the thing under the pointer rather than as a control. */
+  ghost?: boolean;
 }>) {
   const { group, status, unread } = entry;
   const meta = subtitle(entry, ping, activeChannelName);
 
   return (
     <Box
-      component="button"
-      type="button"
-      ref={registerRef}
-      onClick={onSelect}
-      onPointerDown={(event: React.PointerEvent<HTMLElement>) => {
-        // The banner and the icon are both images, which the browser would
-        // rather drag than let the row own the gesture.
-        event.preventDefault();
-        onPointerDown?.(event);
-      }}
-      aria-current={active ? "true" : undefined}
+      component={ghost ? "div" : "button"}
+      type={ghost ? undefined : "button"}
+      ref={ghost ? undefined : registerRef}
+      onClick={ghost ? undefined : onSelect}
+      onPointerDown={
+        ghost
+          ? undefined
+          : (event: React.PointerEvent<HTMLElement>) => {
+              // The banner and the icon are both images, which the browser would
+              // rather drag than let the row own the gesture.
+              event.preventDefault();
+              onPointerDown?.(event);
+            }
+      }
+      aria-current={ghost || !active ? undefined : "true"}
       sx={(theme) => ({
         all: "unset",
         boxSizing: "border-box",
@@ -349,5 +356,41 @@ export function ServerRailPanel({
         Hover a tile for the same card without pinning
       </Typography>
     </Box>
+  );
+}
+
+/**
+ * The panel row, drawn as the thing under the pointer.
+ *
+ * The same component the panel lists, so a carried row cannot drift from the
+ * one it came from - it is the row, minus the parts that make it a control.
+ */
+export function ServerRailRowGhost({
+  entry,
+  active,
+  icon,
+  banner,
+  ping,
+  activeChannelName,
+}: Readonly<{
+  entry: ServerRailEntry;
+  /** Carried as it looked: the open server keeps its banner. */
+  active: boolean;
+  icon?: string;
+  banner?: string;
+  ping?: ServerPingResult;
+  activeChannelName?: string | null;
+}>) {
+  return (
+    <PanelRow
+      entry={entry}
+      active={active}
+      icon={icon}
+      banner={banner}
+      ping={ping}
+      activeChannelName={activeChannelName}
+      onSelect={() => {}}
+      ghost
+    />
   );
 }
