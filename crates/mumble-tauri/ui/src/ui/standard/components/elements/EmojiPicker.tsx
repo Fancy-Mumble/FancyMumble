@@ -16,14 +16,15 @@ import styles from "./EmojiPicker.module.css";
 // Minimal built-in set grouped by category.  Keeps the bundle small
 // while covering the most common reactions.
 
-interface EmojiCategory {
+export interface EmojiCategory {
   readonly id: string;
   readonly icon: string;
   readonly label: string;
   readonly emojis: readonly string[];
 }
 
-const CATEGORIES: readonly EmojiCategory[] = [
+/** Shared so a pack can draw its own picker over the same set. */
+export const CATEGORIES: readonly EmojiCategory[] = [
   {
     id: "people",
     icon: "\uD83D\uDE00",
