@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { Box, Tooltip } from "@mui/material";
+import { Box, Portal, Tooltip } from "@mui/material";
 import { ChevronRightIcon, LogOutIcon, PlusIcon } from "@ui/icons";
 import { reorderServerRail, serverTint, type ServerRailEntry } from "../../selectors";
 import { UserAvatar } from "../primitives";
@@ -118,7 +118,12 @@ function RailTile({
       onMouseEnter={(event: { currentTarget: HTMLElement }) => onHover(event.currentTarget.offsetTop)}
       onMouseLeave={onLeave}
       ref={registerRef}
-      onPointerDown={onDragPointerDown}
+      onPointerDown={(event: React.PointerEvent<HTMLElement>) => {
+        // Stops the browser starting its own image drag from the avatar, which
+        // cancels the pointer stream and kills the gesture before it moves.
+        event.preventDefault();
+        onDragPointerDown(event);
+      }}
       sx={(theme) => ({
         all: "unset",
         boxSizing: "border-box",
@@ -131,6 +136,9 @@ function RailTile({
         // selection or a scroll from the same gesture.
         userSelect: "none",
         touchAction: "none",
+        // The avatar inside is an img, which the browser will happily drag on
+        // its own; the tile owns this gesture, not its contents.
+        "& img": { WebkitUserDrag: "none", pointerEvents: "none" },
         borderRadius: radius("lg"),
         outline: active ? "2px solid " + theme.palette.nebula.accent : "none",
         outlineOffset: 2,
@@ -487,31 +495,36 @@ function DragGhost({
   y,
   left,
 }: Readonly<{ entry: ServerRailEntry; icon?: string; y: number; left: number }>) {
+  // Rendered at the document root: the rail blurs what is behind it, and a
+  // backdrop-filter makes its element the containing block for anything fixed
+  // inside it - the ghost would then be placed against the rail, not the window.
   return (
-    <Box
-      aria-hidden
-      sx={{
-        position: "fixed",
-        left,
-        top: y - TILE / 2,
-        width: TILE,
-        height: TILE,
-        zIndex: 60,
-        pointerEvents: "none",
-        borderRadius: radius("lg"),
-        overflow: "hidden",
-        transform: "scale(1.08)",
-        boxShadow: "0 12px 28px rgba(2,6,18,.55)",
-      }}
-    >
-      <UserAvatar
-        name={entry.group.label}
-        size={TILE}
-        square
-        src={icon}
-        gradient={serverTint(entry.group.key)}
-      />
-    </Box>
+    <Portal>
+      <Box
+        aria-hidden
+        sx={{
+          position: "fixed",
+          left,
+          top: y - TILE / 2,
+          width: TILE,
+          height: TILE,
+          zIndex: 60,
+          pointerEvents: "none",
+          borderRadius: radius("lg"),
+          overflow: "hidden",
+          transform: "scale(1.08)",
+          boxShadow: "0 12px 28px rgba(2,6,18,.55)",
+        }}
+      >
+        <UserAvatar
+          name={entry.group.label}
+          size={TILE}
+          square
+          src={icon}
+          gradient={serverTint(entry.group.key)}
+        />
+      </Box>
+    </Portal>
   );
 }
 
