@@ -7,6 +7,7 @@
  * component body. Keeping them pure means the layout decisions they encode
  * (ordering, indent depth, what counts as "today") are testable on their own.
  */
+import { htmlToMarkdown, markdownToHtml } from "@standard/components/chat/markdown/MarkdownInput";
 import { hslToHex } from "@core/utils/colorUtils";
 import { hueFromKey } from "@shared/profilecard/tint";
 import type { ChannelEntry, ConnectionStatus, SavedServer, SearchResult, UserEntry } from "@core/types";
@@ -87,13 +88,15 @@ export function orderChannels(input: ChannelFilter): OrderedChannel[] {
   return ordered;
 }
 
-/** Who is sitting in one channel, talkers first, then alphabetical. */
-export function channelOccupants(
-  users: readonly UserEntry[],
-  channelId: number,
-  talkingSessions: ReadonlySet<number>,
-): UserEntry[] {
-  return users.filter((user) => user.channel_id === channelId).sort(occupantOrder(talkingSessions));
+/**
+ * Who is sitting in one channel, alphabetically.
+ *
+ * Deliberately not ordered by who is talking: push-to-talk taps would then
+ * reshuffle the roster several times a sentence. The avatar ring and the
+ * talking bars already say who has the floor without moving anyone.
+ */
+export function channelOccupants(users: readonly UserEntry[], channelId: number): UserEntry[] {
+  return users.filter((user) => user.channel_id === channelId).sort(byName);
 }
 
 /**
@@ -104,26 +107,19 @@ export function channelOccupants(
  * servers where it hurts, a few hundred channels holding a few hundred people.
  * Channels nobody is in are absent rather than mapped to an empty array.
  */
-export function groupOccupants(
-  users: readonly UserEntry[],
-  talkingSessions: ReadonlySet<number>,
-): ReadonlyMap<number, UserEntry[]> {
+export function groupOccupants(users: readonly UserEntry[]): ReadonlyMap<number, UserEntry[]> {
   const byChannel = new Map<number, UserEntry[]>();
   for (const user of users) {
     const bucket = byChannel.get(user.channel_id);
     if (bucket) bucket.push(user);
     else byChannel.set(user.channel_id, [user]);
   }
-  const order = occupantOrder(talkingSessions);
-  for (const bucket of byChannel.values()) bucket.sort(order);
+  for (const bucket of byChannel.values()) bucket.sort(byName);
   return byChannel;
 }
 
-/** Whoever is talking first, then alphabetically. */
-function occupantOrder(talkingSessions: ReadonlySet<number>) {
-  return (left: UserEntry, right: UserEntry) =>
-    Number(talkingSessions.has(right.session)) - Number(talkingSessions.has(left.session)) ||
-    left.name.localeCompare(right.name);
+function byName(left: UserEntry, right: UserEntry) {
+  return left.name.localeCompare(right.name);
 }
 
 export interface UserMenuInput {
@@ -368,32 +364,30 @@ export function messageContent(body: string): MessageContent {
 /**
  * What the composer puts on the wire for a line of typed text.
  *
- * Nebula's composer sends plain text, so the body it builds is escaped
- * rather than parsed. This lives beside `editableText` because the two are
- * one round trip: an edit that re-encoded text differently from the way it
- * was first sent would rewrite the message on every save.
+ * The editable surface decorates markdown as it is typed, so the wire format
+ * has to be the markdown one. Escaping the draft instead is what made the
+ * formatting stop at the composer's edge: what was drawn bold while it was
+ * being written arrived at everyone else as a word between four asterisks.
+ *
+ * Standard's converter is called rather than a second one written here. The
+ * two packs send into the same channels, and a dialect that differed between
+ * them would read as one client's messages formatting and the other's not.
  */
 export function composerHtml(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll("\n", "<br>");
+  return markdownToHtml(text);
 }
 
 /**
  * A message body turned back into what its author typed.
  *
- * The composer sends escaped text with `<br>` for line breaks, so editing
- * has to run that transformation backwards rather than showing raw markup:
- * the inverse of `escapeHtml(text).replaceAll("\n", "<br>")`. Entities are
- * unescaped by the parser rather than by hand, so `&amp;lt;` survives a
- * round trip that a naive replace would corrupt.
+ * The inverse of `composerHtml`, so a message opened for editing shows the
+ * markdown that produced it rather than the markup it was stored as. The two
+ * are one round trip and live together for that reason: an edit that
+ * re-encoded text differently from the way it was first sent would rewrite
+ * the message on every save.
  */
 export function editableText(body: string): string {
-  const withBreaks = body.replace(/<br\s*\/?>/gi, "\n");
-  if (typeof DOMParser === "undefined") return withBreaks;
-  return new DOMParser().parseFromString(withBreaks, "text/html").body.textContent ?? "";
+  return htmlToMarkdown(body);
 }
 
 /** `18:06` in the user's locale, matching the mock's message stamps. */
@@ -484,6 +478,107 @@ export function groupSavedServers(
   return [...groups.values()].sort(
     (left, right) => Number(right.favorite) - Number(left.favorite) || left.label.localeCompare(right.label),
   );
+}
+
+/** What a rail tile is doing. */
+export type ServerRailStatus = "connected" | "connecting" | "saved";
+
+/**
+ * One tile on the server rail.
+ *
+ * The rail lists *servers*, so a tile is keyed on the address rather than on a
+ * session: a saved server nobody is connected to still has one, and two
+ * identities on one address share one. The session, where there is one, is
+ * what the tile reports on.
+ */
+export interface ServerRailEntry {
+  group: ServerGroup;
+  session: (GroupableSession & { label?: string }) | null;
+  status: ServerRailStatus;
+  /** Messages waiting here. Zero unless the server is connected. */
+  unread: number;
+}
+
+/** `host:port`, lowercased - the identity of the server itself. */
+function addressKey(address: { host: string; port: number }): string {
+  return `${address.host}:${address.port}`.toLocaleLowerCase();
+}
+
+/**
+ * The rail, in the order it is drawn.
+ *
+ * Saved servers come first, in whatever order the user dragged them into. A
+ * server connected without ever having been saved - an address typed straight
+ * into quick connect - appends rather than going missing, because the rail is
+ * the only way back to its tab.
+ *
+ * Unread is read off the session rather than the saved entry: it belongs to
+ * the connection, so a server nobody is on has nothing waiting by definition.
+ * Tiles the stored order says nothing about append instead of jumping to the
+ * front, so connecting somewhere new never reshuffles the rail.
+ */
+export function serverRailEntries(
+  groups: readonly ServerGroup[],
+  sessions: readonly (GroupableSession & { label?: string })[] = [],
+  unreadTotals: Readonly<Record<string, number>> = {},
+  order: readonly string[] = [],
+): ServerRailEntry[] {
+  const entryFor = (group: ServerGroup): ServerRailEntry => {
+    const session = sessions.find((candidate) => addressKey(candidate) === group.key && isLive(candidate));
+    return {
+      group,
+      session: session ?? null,
+      status: !session ? "saved" : session.status === "connecting" ? "connecting" : "connected",
+      unread: session ? (unreadTotals[session.id] ?? 0) : 0,
+    };
+  };
+
+  const byKey = new Map<string, ServerRailEntry>();
+  for (const group of groups) byKey.set(group.key, entryFor(group));
+
+  for (const session of sessions) {
+    const key = addressKey(session);
+    if (!isLive(session) || byKey.has(key)) continue;
+    byKey.set(
+      key,
+      entryFor({
+        key,
+        label: session.label || session.host,
+        host: session.host,
+        port: session.port,
+        identities: [],
+        favorite: false,
+        sessionId: session.id,
+      }),
+    );
+  }
+
+  const rank = new Map(order.map((key, index) => [key, index]));
+  const rankOf = (entry: ServerRailEntry) => rank.get(entry.group.key) ?? Number.MAX_SAFE_INTEGER;
+  return [...byKey.values()].sort((left, right) => rankOf(left) - rankOf(right));
+}
+
+/**
+ * The rail order to persist after a tile is dropped.
+ *
+ * A move is expressed as "this key now sits where that one was" rather than as
+ * a pair of indices: the list the user dragged in is the rendered one, and an
+ * index into it stops meaning anything the moment a server connects or a saved
+ * entry is removed. A null target drops the tile at the end.
+ */
+export function reorderServerRail(
+  entries: readonly ServerRailEntry[],
+  movedKey: string,
+  beforeKey: string | null,
+): string[] {
+  const keys = entries.map((entry) => entry.group.key);
+  // Dropping a tile on itself is a no-op, not a move to the end.
+  if (movedKey === beforeKey || !keys.includes(movedKey)) return keys;
+
+  const rest = keys.filter((key) => key !== movedKey);
+  const at = beforeKey === null ? -1 : rest.indexOf(beforeKey);
+  rest.splice(at === -1 ? rest.length : at, 0, movedKey);
+  return rest;
 }
 
 export { userTint, type UserTint } from "@shared/profilecard/tint";
