@@ -13,6 +13,8 @@ import {
   preferredIdentity,
   quickConnectTargets,
   quickSwitchTargets,
+  reorderServerRail,
+  serverRailEntries,
   globalSearchRows,
   formatLastJoined,
   serverTint,
@@ -107,13 +109,9 @@ describe("orderChannels", () => {
 });
 
 describe("channelOccupants", () => {
-  it("puts talkers first, then sorts by name", () => {
+  it("sorts by name and ignores who is talking", () => {
     const users = [user(1, "Zoe", 4), user(2, "Adam", 4), user(3, "Mia", 4), user(4, "Elsewhere", 5)];
-    expect(channelOccupants(users, 4, new Set([3])).map((entry) => entry.name)).toEqual([
-      "Mia",
-      "Adam",
-      "Zoe",
-    ]);
+    expect(channelOccupants(users, 4).map((entry) => entry.name)).toEqual(["Adam", "Mia", "Zoe"]);
   });
 });
 
@@ -628,5 +626,83 @@ describe("composerHtml and editableText", () => {
 
   it("turns every break variant back into a newline", () => {
     expect(editableText("one<br>two<br />three")).toBe("one\ntwo\nthree");
+  });
+});
+
+describe("serverRailEntries", () => {
+  const saved = (id: string, host: string, username: string) =>
+    ({ id, label: host, host, port: 64738, username, cert_label: null, favorite: false }) as never;
+  const sess = (id: string, host: string, status: ConnectionStatus) => ({
+    id,
+    host,
+    port: 64738,
+    username: "Sebi",
+    status,
+  });
+
+  it("gives a saved server a tile even when nobody is connected to it", () => {
+    const entries = serverRailEntries(groupSavedServers([saved("a", "magical.rocks", "Sebi")]));
+    expect(entries).toHaveLength(1);
+    expect(entries[0].status).toBe("saved");
+    expect(entries[0].unread).toBe(0);
+  });
+
+  it("tells a connecting server apart from a connected one", () => {
+    const servers = [saved("a", "magical.rocks", "Sebi"), saved("b", "voice.kumo.gg", "Sebi")];
+    const sessions = [sess("s1", "magical.rocks", "connected"), sess("s2", "voice.kumo.gg", "connecting")];
+    const entries = serverRailEntries(groupSavedServers(servers, sessions), sessions);
+    expect(entries.map((entry) => entry.status)).toEqual(["connected", "connecting"]);
+  });
+
+  it("counts unread against the session, so a server nobody is on has none", () => {
+    const servers = [saved("a", "magical.rocks", "Sebi"), saved("b", "voice.kumo.gg", "Sebi")];
+    const sessions = [sess("s1", "magical.rocks", "connected")];
+    const entries = serverRailEntries(groupSavedServers(servers, sessions), sessions, { s1: 12, s2: 99 });
+    expect(entries.map((entry) => entry.unread)).toEqual([12, 0]);
+  });
+
+  it("keeps a tile for a live session that was never saved", () => {
+    // Quick connect can open an address that is not in the saved list, and the
+    // rail is the only way back to that tab.
+    const sessions = [sess("s1", "one-off.example", "connected")];
+    const entries = serverRailEntries([], sessions);
+    expect(entries.map((entry) => entry.group.label)).toEqual(["one-off.example"]);
+    expect(entries[0].session?.id).toBe("s1");
+  });
+
+  it("follows the stored order and appends anything it does not name", () => {
+    const servers = [
+      saved("a", "aaa.example", "Sebi"),
+      saved("b", "bbb.example", "Sebi"),
+      saved("c", "ccc.example", "Sebi"),
+    ];
+    const entries = serverRailEntries(groupSavedServers(servers), [], {}, [
+      "ccc.example:64738",
+      "aaa.example:64738",
+    ]);
+    expect(entries.map((entry) => entry.group.host)).toEqual(["ccc.example", "aaa.example", "bbb.example"]);
+  });
+});
+
+describe("reorderServerRail", () => {
+  const rail = (...hosts: string[]) =>
+    hosts.map((host) => ({ group: { key: host } })) as never as Parameters<typeof reorderServerRail>[0];
+
+  it("drops a tile in front of the one it was released over", () => {
+    expect(reorderServerRail(rail("a", "b", "c"), "c", "a")).toEqual(["c", "a", "b"]);
+  });
+
+  it("drops a tile at the end when it was released past the last one", () => {
+    expect(reorderServerRail(rail("a", "b", "c"), "a", null)).toEqual(["b", "c", "a"]);
+  });
+
+  it("leaves the order alone when the tile is dropped on itself", () => {
+    expect(reorderServerRail(rail("a", "b", "c"), "b", "b")).toEqual(["a", "b", "c"]);
+  });
+
+  it("returns the order unchanged when the moved tile is not on the rail", () => {
+    // A tile can leave the rail mid-drag - the server it stood for was removed
+    // in another window - and the drop must not invent an entry for it.
+    expect(reorderServerRail(rail("a", "b"), "gone", "a")).toEqual(["a", "b"]);
   });
 });
