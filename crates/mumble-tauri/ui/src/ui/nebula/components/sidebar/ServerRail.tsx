@@ -1,3 +1,4 @@
+import { useCallback, useRef, useState } from "react";
 import { Box, Tooltip } from "@mui/material";
 import { ChevronRightIcon, LogOutIcon, PlusIcon } from "@ui/icons";
 import { serverTint, type ServerRailEntry } from "../../selectors";
@@ -5,6 +6,7 @@ import { UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
 import type { ServerPingResult } from "@core/types";
 import { ServerRailPanel } from "./ServerRailPanel";
+import { ServerRailCard, type RailCardOccupant } from "./ServerRailCard";
 
 /** Every tile, and the two buttons that bracket them, are one square. */
 const TILE = 40;
@@ -18,6 +20,11 @@ interface ServerRailProps {
   pings?: ReadonlyMap<string, ServerPingResult>;
   /** Where you are on the server you are connected to. */
   activeChannelName?: string | null;
+  /** The name you arrived as on the connected server. */
+  ownName?: string | null;
+  /** Who is in your channel, for the card of the server you are on. */
+  occupants?: readonly RailCardOccupant[];
+  onCancelConnect?: (entry: ServerRailEntry) => void;
   /** The server whose screen is open, so the rail can say where you are. */
   activeKey: string | null;
   expanded: boolean;
@@ -41,40 +48,62 @@ function RailTile({
   active,
   icon,
   onSelect,
-}: Readonly<{ entry: ServerRailEntry; active: boolean; icon?: string; onSelect: () => void }>) {
+  onHover,
+  onLeave,
+}: Readonly<{
+  entry: ServerRailEntry;
+  active: boolean;
+  icon?: string;
+  onSelect: () => void;
+  onHover: (top: number) => void;
+  onLeave: () => void;
+}>) {
   const { group, status, unread } = entry;
   const waiting = unread > 99 ? "99+" : String(unread);
-  const detail = status === "connecting" ? "connecting" : status === "connected" ? "connected" : "not connected";
+  const detail =
+    status === "connecting" ? "connecting" : status === "connected" ? "connected" : "not connected";
 
   return (
-    <Tooltip title={group.label + " - " + detail} placement="right">
-      <Box
-        component="button"
-        type="button"
-        aria-current={active ? "true" : undefined}
-        aria-label={group.label + ", " + detail + (unread > 0 ? ", " + unread + " unread" : "")}
-        onClick={onSelect}
-        sx={(theme) => ({
-          all: "unset",
-          boxSizing: "border-box",
-          position: "relative",
-          width: TILE,
-          height: TILE,
-          flex: "none",
-          cursor: "pointer",
-          borderRadius: radius("lg"),
-          outline: active ? "2px solid " + theme.palette.nebula.accent : "none",
-          outlineOffset: 2,
-          opacity: status === "saved" ? 0.72 : 1,
-          "&:hover": { opacity: 1 },
-          "&:focus-visible": { outline: "2px solid " + theme.palette.nebula.accent, outlineOffset: 2 },
-        })}
-      >
-        <UserAvatar name={group.label} size={TILE} square src={icon} gradient={serverTint(group.key)} />
-        <ConnectionPip status={status} />
-        {unread > 0 && <UnreadBadge label={waiting} />}
-      </Box>
-    </Tooltip>
+    // No tooltip: hovering a tile opens the card, and the two would collide.
+    <Box
+      component="button"
+      type="button"
+      aria-current={active ? "true" : undefined}
+      aria-label={group.label + ", " + detail + (unread > 0 ? ", " + unread + " unread" : "")}
+      onClick={onSelect}
+      onMouseEnter={(event: { currentTarget: HTMLElement }) => onHover(event.currentTarget.offsetTop)}
+      onMouseLeave={onLeave}
+      sx={(theme) => ({
+        all: "unset",
+        boxSizing: "border-box",
+        position: "relative",
+        width: TILE,
+        height: TILE,
+        flex: "none",
+        cursor: "pointer",
+        borderRadius: radius("lg"),
+        outline: active ? "2px solid " + theme.palette.nebula.accent : "none",
+        outlineOffset: 2,
+        opacity: status === "saved" ? 0.72 : 1,
+        transition: "transform 120ms ease",
+        // The tile under the pointer lifts and takes a ring, which is what
+        // ties it to the card that opens beside it.
+        "&:hover": {
+          opacity: 1,
+          transform: "scale(1.08)",
+          outline: "2px solid " + (active ? theme.palette.nebula.accent : theme.palette.nebula.line2),
+        },
+        "@media (prefers-reduced-motion: reduce)": {
+          transition: "none",
+          "&:hover": { transform: "none" },
+        },
+        "&:focus-visible": { outline: "2px solid " + theme.palette.nebula.accent, outlineOffset: 2 },
+      })}
+    >
+      <UserAvatar name={group.label} size={TILE} square src={icon} gradient={serverTint(group.key)} />
+      <ConnectionPip status={status} />
+      {unread > 0 && <UnreadBadge label={waiting} />}
+    </Box>
   );
 }
 /** Bottom-right: the link to the server, and nothing else. */
@@ -157,6 +186,9 @@ export function ServerRail({
   banners,
   pings,
   activeChannelName,
+  ownName,
+  occupants,
+  onCancelConnect,
   activeKey,
   expanded,
   onToggleExpanded,
@@ -164,6 +196,23 @@ export function ServerRail({
   onAddServer,
   onDisconnect,
 }: Readonly<ServerRailProps>) {
+  // Hovering a tile opens its card; the card stays open while the pointer is
+  // travelling towards it, which is the only reason the close is delayed.
+  const [hovered, setHovered] = useState<{ key: string; top: number } | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const holdOpen = useCallback(() => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  }, []);
+
+  const closeSoon = useCallback(() => {
+    holdOpen();
+    closeTimer.current = setTimeout(() => setHovered(null), 120);
+  }, [holdOpen]);
+
+  const hoveredEntry = entries.find((candidate) => candidate.group.key === hovered?.key) ?? null;
+
   return (
     <Box
       component="nav"
@@ -210,12 +259,45 @@ export function ServerRail({
           active={entry.group.key === activeKey}
           icon={icons?.get(entry.group.key)}
           onSelect={() => onSelect(entry)}
+          onHover={(top) => {
+            holdOpen();
+            setHovered({ key: entry.group.key, top });
+          }}
+          onLeave={closeSoon}
         />
       ))}
 
       <RailButton label="Add a server" onClick={onAddServer} dashed>
         <PlusIcon width={15} height={15} />
       </RailButton>
+
+      {onDisconnect && (
+        <RailButton label="Disconnect from this server" onClick={onDisconnect} tone="bad" atBottom>
+          <LogOutIcon width={15} height={15} />
+        </RailButton>
+      )}
+
+      {/* The pinned panel says everything the card would, so the two never
+          show together. */}
+      {!expanded && hoveredEntry && hovered && (
+        <ServerRailCard
+          entry={hoveredEntry}
+          icon={icons?.get(hoveredEntry.group.key)}
+          banner={banners?.get(hoveredEntry.group.key)}
+          ping={pings?.get(hoveredEntry.group.key)}
+          channelName={hoveredEntry.group.key === activeKey ? activeChannelName : null}
+          ownName={ownName}
+          occupants={hoveredEntry.group.key === activeKey ? occupants : []}
+          top={hovered.top}
+          onOpen={() => {
+            setHovered(null);
+            onSelect(hoveredEntry);
+          }}
+          onCancel={onCancelConnect ? () => onCancelConnect(hoveredEntry) : undefined}
+          onPointerEnter={holdOpen}
+          onPointerLeave={closeSoon}
+        />
+      )}
 
       {expanded && (
         <ServerRailPanel
@@ -229,12 +311,6 @@ export function ServerRail({
           onSelect={onSelect}
           onAddServer={onAddServer}
         />
-      )}
-
-      {onDisconnect && (
-        <RailButton label="Disconnect from this server" onClick={onDisconnect} tone="bad" atBottom>
-          <LogOutIcon width={15} height={15} />
-        </RailButton>
       )}
     </Box>
   );
