@@ -3,6 +3,8 @@ import { ChevronRightIcon, LogOutIcon, PlusIcon } from "@ui/icons";
 import { serverTint, type ServerRailEntry } from "../../selectors";
 import { UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
+import type { ServerPingResult } from "@core/types";
+import { ServerRailPanel } from "./ServerRailPanel";
 
 /** Every tile, and the two buttons that bracket them, are one square. */
 const TILE = 40;
@@ -11,6 +13,11 @@ interface ServerRailProps {
   entries: readonly ServerRailEntry[];
   /** Server artwork, keyed by host:port. Missing ones fall back to initials. */
   icons?: ReadonlyMap<string, string>;
+  banners?: ReadonlyMap<string, string>;
+  /** Occupancy and latency, keyed by host:port, for the pinned panel. */
+  pings?: ReadonlyMap<string, ServerPingResult>;
+  /** Where you are on the server you are connected to. */
+  activeChannelName?: string | null;
   /** The server whose screen is open, so the rail can say where you are. */
   activeKey: string | null;
   expanded: boolean;
@@ -147,6 +154,9 @@ function UnreadBadge({ label }: Readonly<{ label: string }>) {
 export function ServerRail({
   entries,
   icons,
+  banners,
+  pings,
+  activeChannelName,
   activeKey,
   expanded,
   onToggleExpanded,
@@ -168,6 +178,10 @@ export function ServerRail({
         gap: "7px",
         py: "10px",
         position: "relative",
+        // The blur below makes this a stacking context, so the pinned panel
+        // cannot lift itself above the sidebar from in here - the rail as a
+        // whole has to sit above it instead.
+        zIndex: 45,
         borderRight: "1px solid " + theme.palette.nebula.line,
         background: theme.palette.nebula.panel,
         backdropFilter: "blur(14px)",
@@ -202,6 +216,20 @@ export function ServerRail({
       <RailButton label="Add a server" onClick={onAddServer} dashed>
         <PlusIcon width={15} height={15} />
       </RailButton>
+
+      {expanded && (
+        <ServerRailPanel
+          entries={entries}
+          activeKey={activeKey}
+          icons={icons}
+          banners={banners}
+          pings={pings}
+          activeChannelName={activeChannelName}
+          onClose={onToggleExpanded}
+          onSelect={onSelect}
+          onAddServer={onAddServer}
+        />
+      )}
 
       {onDisconnect && (
         <RailButton label="Disconnect from this server" onClick={onDisconnect} tone="bad" atBottom>
