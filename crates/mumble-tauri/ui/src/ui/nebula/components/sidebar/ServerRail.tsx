@@ -1,7 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { Fragment, useCallback, useRef, useState } from "react";
 import { Box, Tooltip } from "@mui/material";
 import { ChevronRightIcon, LogOutIcon, PlusIcon } from "@ui/icons";
-import { serverTint, type ServerRailEntry } from "../../selectors";
+import { reorderServerRail, serverTint, type ServerRailEntry } from "../../selectors";
 import { UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
 import type { ServerPingResult } from "@core/types";
@@ -33,6 +33,8 @@ interface ServerRailProps {
   onAddServer: () => void;
   /** Absent while nothing is connected - there is then nothing to leave. */
   onDisconnect?: () => void;
+  /** The new order, by host:port, after a tile is dropped. */
+  onReorder?: (keys: readonly string[]) => void;
 }
 /**
  * One server.
@@ -50,6 +52,11 @@ function RailTile({
   onSelect,
   onHover,
   onLeave,
+  dragging,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDrop,
 }: Readonly<{
   entry: ServerRailEntry;
   active: boolean;
@@ -57,6 +64,12 @@ function RailTile({
   onSelect: () => void;
   onHover: (top: number) => void;
   onLeave: () => void;
+  dragging: boolean;
+  onDragStart: (event: React.DragEvent<HTMLElement>) => void;
+  onDragEnd: () => void;
+  /** True while the pointer is over the upper half of this tile. */
+  onDragOver: (before: boolean) => void;
+  onDrop: () => void;
 }>) {
   const { group, status, unread } = entry;
   const waiting = unread > 99 ? "99+" : String(unread);
@@ -73,6 +86,27 @@ function RailTile({
       onClick={onSelect}
       onMouseEnter={(event: { currentTarget: HTMLElement }) => onHover(event.currentTarget.offsetTop)}
       onMouseLeave={onLeave}
+      draggable
+      onDragStart={(event: React.DragEvent<HTMLElement>) => {
+        // Chromium abandons a drag whose dataTransfer was left empty, so the
+        // tile has to put something on it even though the drop reads state,
+        // not the payload.
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", entry.group.key);
+        onDragStart(event);
+      }}
+      onDragEnd={onDragEnd}
+      onDragOver={(event: React.DragEvent<HTMLElement>) => {
+        // Without this the drop is refused and the rail never reorders.
+        event.preventDefault();
+        const box = event.currentTarget.getBoundingClientRect();
+        event.dataTransfer.dropEffect = "move";
+        onDragOver(event.clientY < box.top + box.height / 2);
+      }}
+      onDrop={(event: React.DragEvent<HTMLElement>) => {
+        event.preventDefault();
+        onDrop();
+      }}
       sx={(theme) => ({
         all: "unset",
         boxSizing: "border-box",
@@ -81,10 +115,14 @@ function RailTile({
         height: TILE,
         flex: "none",
         cursor: "pointer",
+        // Chromium will not start a drag on a form control without this, and a
+        // text selection inside the tile would swallow the gesture.
+        WebkitUserDrag: "element",
+        userSelect: "none",
         borderRadius: radius("lg"),
         outline: active ? "2px solid " + theme.palette.nebula.accent : "none",
         outlineOffset: 2,
-        opacity: status === "saved" ? 0.72 : 1,
+        opacity: dragging ? 0.4 : status === "saved" ? 0.72 : 1,
         transition: "transform 120ms ease",
         // The tile under the pointer lifts and takes a ring, which is what
         // ties it to the card that opens beside it.
@@ -195,6 +233,7 @@ export function ServerRail({
   onSelect,
   onAddServer,
   onDisconnect,
+  onReorder,
 }: Readonly<ServerRailProps>) {
   // Hovering a tile opens its card; the card stays open while the pointer is
   // travelling towards it, which is the only reason the close is delayed.
@@ -212,6 +251,21 @@ export function ServerRail({
   }, [holdOpen]);
 
   const hoveredEntry = entries.find((candidate) => candidate.group.key === hovered?.key) ?? null;
+
+  // A drag names the tile being moved and the one it would land in front of;
+  // a null target means the end of the rail.
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [dropBefore, setDropBefore] = useState<string | null>(null);
+
+  const endDrag = useCallback(() => {
+    setDragKey(null);
+    setDropBefore(null);
+  }, []);
+
+  const drop = useCallback(() => {
+    if (dragKey && onReorder) onReorder(reorderServerRail(entries, dragKey, dropBefore));
+    endDrag();
+  }, [dragKey, dropBefore, endDrag, entries, onReorder]);
 
   return (
     <Box
@@ -252,20 +306,34 @@ export function ServerRail({
         sx={(theme) => ({ width: 22, height: "1px", my: "1px", background: theme.palette.nebula.line2 })}
       />
 
-      {entries.map((entry) => (
-        <RailTile
-          key={entry.group.key}
-          entry={entry}
-          active={entry.group.key === activeKey}
-          icon={icons?.get(entry.group.key)}
-          onSelect={() => onSelect(entry)}
-          onHover={(top) => {
-            holdOpen();
-            setHovered({ key: entry.group.key, top });
-          }}
-          onLeave={closeSoon}
-        />
+      {entries.map((entry, index) => (
+        <Fragment key={entry.group.key}>
+          {dragKey && dropBefore === entry.group.key && <DropSlot />}
+          <RailTile
+            entry={entry}
+            active={entry.group.key === activeKey}
+            icon={icons?.get(entry.group.key)}
+            dragging={dragKey === entry.group.key}
+            onSelect={() => onSelect(entry)}
+            onHover={(top) => {
+              if (dragKey) return;
+              holdOpen();
+              setHovered({ key: entry.group.key, top });
+            }}
+            onLeave={closeSoon}
+            onDragStart={() => {
+              setHovered(null);
+              setDragKey(entry.group.key);
+            }}
+            onDragEnd={endDrag}
+            onDragOver={(before) =>
+              setDropBefore(before ? entry.group.key : (entries[index + 1]?.group.key ?? null))
+            }
+            onDrop={drop}
+          />
+        </Fragment>
       ))}
+      {dragKey && dropBefore === null && <DropSlot />}
 
       <RailButton label="Add a server" onClick={onAddServer} dashed>
         <PlusIcon width={15} height={15} />
@@ -313,6 +381,23 @@ export function ServerRail({
         />
       )}
     </Box>
+  );
+}
+
+/** Where a dragged tile would land. */
+function DropSlot() {
+  return (
+    <Box
+      aria-hidden
+      sx={(theme) => ({
+        width: TILE,
+        height: TILE,
+        flex: "none",
+        borderRadius: radius("lg"),
+        border: "1.5px dashed " + theme.palette.nebula.accentLine,
+        background: theme.palette.nebula.accentSoft,
+      })}
+    />
   );
 }
 

@@ -67,4 +67,16 @@ describe("ServerRail", () => {
     fireEvent.click(screen.getByRole("button", { name: /voice.kumo.gg/ }));
     expect(onSelect.mock.calls[0][0].group.host).toBe("voice.kumo.gg");
   });
+
+  it("reorders the rail when a tile is dropped past another", () => {
+    const onReorder = vi.fn();
+    rail({ onReorder });
+    const [first, second] = screen.getAllByRole("button", { name: /magical.rocks|voice.kumo.gg/ });
+    fireEvent.dragStart(first, { dataTransfer: { setData: () => {}, effectAllowed: "" } });
+    // jsdom drag events carry no pointer position, so this reads as the lower
+    // half of the last tile - the end of the rail.
+    fireEvent.dragOver(second, { dataTransfer: { dropEffect: "" } });
+    fireEvent.drop(second);
+    expect(onReorder).toHaveBeenCalledWith(["voice.kumo.gg:64738", "magical.rocks:64738"]);
+  });
 });
