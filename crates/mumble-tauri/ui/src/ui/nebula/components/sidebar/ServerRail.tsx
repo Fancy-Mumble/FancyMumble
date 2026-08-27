@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Box, Tooltip } from "@mui/material";
 import { ChevronRightIcon, LogOutIcon, PlusIcon } from "@ui/icons";
 import { reorderServerRail, serverTint, type ServerRailEntry } from "../../selectors";
@@ -10,6 +10,41 @@ import { ServerRailCard, type RailCardOccupant } from "./ServerRailCard";
 
 /** Every tile, and the two buttons that bracket them, are one square. */
 const TILE = 40;
+
+/** How far the pointer travels before a press becomes a drag. */
+const DRAG_SLACK = 4;
+
+/** Where one tile sat when the drag began. */
+interface TileSlot {
+  key: string;
+  top: number;
+  bottom: number;
+}
+
+/** The tiles as they stand, top to bottom, before anything moves. */
+function measureSlots(tiles: ReadonlyMap<string, HTMLElement>): TileSlot[] {
+  return [...tiles.entries()]
+    .map(([key, element]) => {
+      const box = element.getBoundingClientRect();
+      return { key, top: box.top, bottom: box.bottom };
+    })
+    .sort((left, right) => left.top - right.top);
+}
+
+/**
+ * The tile the carried one would land in front of, or null for the end.
+ *
+ * Measured against where the tiles were when the drag started rather than
+ * where they are now, so the indicator cannot chase itself: drawing it must
+ * never change the answer to where it should be drawn.
+ */
+function dropTarget(drag: { key: string; y: number; slots: readonly TileSlot[] }): string | null {
+  for (const slot of drag.slots) {
+    if (slot.key === drag.key) continue;
+    if (drag.y < (slot.top + slot.bottom) / 2) return slot.key;
+  }
+  return null;
+}
 
 interface ServerRailProps {
   entries: readonly ServerRailEntry[];
@@ -53,10 +88,8 @@ function RailTile({
   onHover,
   onLeave,
   dragging,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
-  onDrop,
+  onDragPointerDown,
+  registerRef,
 }: Readonly<{
   entry: ServerRailEntry;
   active: boolean;
@@ -64,12 +97,10 @@ function RailTile({
   onSelect: () => void;
   onHover: (top: number) => void;
   onLeave: () => void;
+  /** True for the tile currently being carried; the ghost stands in for it. */
   dragging: boolean;
-  onDragStart: (event: React.DragEvent<HTMLElement>) => void;
-  onDragEnd: () => void;
-  /** True while the pointer is over the upper half of this tile. */
-  onDragOver: (before: boolean) => void;
-  onDrop: () => void;
+  onDragPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
+  registerRef: (element: HTMLElement | null) => void;
 }>) {
   const { group, status, unread } = entry;
   const waiting = unread > 99 ? "99+" : String(unread);
@@ -86,27 +117,8 @@ function RailTile({
       onClick={onSelect}
       onMouseEnter={(event: { currentTarget: HTMLElement }) => onHover(event.currentTarget.offsetTop)}
       onMouseLeave={onLeave}
-      draggable
-      onDragStart={(event: React.DragEvent<HTMLElement>) => {
-        // Chromium abandons a drag whose dataTransfer was left empty, so the
-        // tile has to put something on it even though the drop reads state,
-        // not the payload.
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", entry.group.key);
-        onDragStart(event);
-      }}
-      onDragEnd={onDragEnd}
-      onDragOver={(event: React.DragEvent<HTMLElement>) => {
-        // Without this the drop is refused and the rail never reorders.
-        event.preventDefault();
-        const box = event.currentTarget.getBoundingClientRect();
-        event.dataTransfer.dropEffect = "move";
-        onDragOver(event.clientY < box.top + box.height / 2);
-      }}
-      onDrop={(event: React.DragEvent<HTMLElement>) => {
-        event.preventDefault();
-        onDrop();
-      }}
+      ref={registerRef}
+      onPointerDown={onDragPointerDown}
       sx={(theme) => ({
         all: "unset",
         boxSizing: "border-box",
@@ -115,10 +127,10 @@ function RailTile({
         height: TILE,
         flex: "none",
         cursor: "pointer",
-        // Chromium will not start a drag on a form control without this, and a
-        // text selection inside the tile would swallow the gesture.
-        WebkitUserDrag: "element",
+        // The rail carries its own drag, so the browser must not start a text
+        // selection or a scroll from the same gesture.
         userSelect: "none",
+        touchAction: "none",
         borderRadius: radius("lg"),
         outline: active ? "2px solid " + theme.palette.nebula.accent : "none",
         outlineOffset: 2,
@@ -252,20 +264,72 @@ export function ServerRail({
 
   const hoveredEntry = entries.find((candidate) => candidate.group.key === hovered?.key) ?? null;
 
-  // A drag names the tile being moved and the one it would land in front of;
-  // a null target means the end of the rail.
-  const [dragKey, setDragKey] = useState<string | null>(null);
-  const [dropBefore, setDropBefore] = useState<string | null>(null);
+  // The rail runs its own drag rather than the browser one: HTML5 drag never
+  // starts reliably on a form control inside the webview, and it gives no way
+  // to draw a ghost that stays pinned to the rail while the pointer wanders.
+  const tileRefs = useRef(new Map<string, HTMLElement>());
+  const gesture = useRef<{ key: string; startY: number; moved: boolean } | null>(null);
+  const [drag, setDrag] = useState<{ key: string; y: number; left: number; slots: TileSlot[] } | null>(null);
 
-  const endDrag = useCallback(() => {
-    setDragKey(null);
-    setDropBefore(null);
-  }, []);
+  const beginGesture = useCallback(
+    (key: string) => (event: React.PointerEvent<HTMLElement>) => {
+      if (event.button !== 0) return;
+      gesture.current = { key, startY: event.clientY, moved: false };
+    },
+    [],
+  );
 
-  const drop = useCallback(() => {
-    if (dragKey && onReorder) onReorder(reorderServerRail(entries, dragKey, dropBefore));
-    endDrag();
-  }, [dragKey, dropBefore, endDrag, entries, onReorder]);
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const held = gesture.current;
+      if (!held) return;
+      // A few pixels of slack, so a click on a tile is still a click.
+      if (!held.moved && Math.abs(event.clientY - held.startY) < DRAG_SLACK) return;
+      if (!held.moved) {
+        held.moved = true;
+        setHovered(null);
+        // The slots are measured once, at the moment the drag starts: the
+        // indicator is drawn without moving anything, so the tiles the
+        // pointer is judged against stay where they were.
+        const source = tileRefs.current.get(held.key)?.getBoundingClientRect();
+        setDrag({
+          key: held.key,
+          y: event.clientY,
+          // The ghost tracks the pointer up and down but stays in the rail:
+          // the tile is going back into this column, not anywhere else.
+          left: source?.left ?? 0,
+          slots: measureSlots(tileRefs.current),
+        });
+        return;
+      }
+      setDrag((current) => (current ? { ...current, y: event.clientY } : current));
+    };
+
+    const end = () => {
+      const held = gesture.current;
+      gesture.current = null;
+      if (!held?.moved) return;
+      setDrag((current) => {
+        if (current && onReorder) {
+          onReorder(reorderServerRail(entries, current.key, dropTarget(current)));
+        }
+        return null;
+      });
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+    };
+  }, [entries, onReorder]);
+
+  const dragKey = drag?.key ?? null;
+  const dropBefore = drag ? dropTarget(drag) : null;
+  const draggedEntry = entries.find((candidate) => candidate.group.key === dragKey) ?? null;
 
   return (
     <Box
@@ -306,34 +370,44 @@ export function ServerRail({
         sx={(theme) => ({ width: 22, height: "1px", my: "1px", background: theme.palette.nebula.line2 })}
       />
 
-      {entries.map((entry, index) => (
+      {entries.map((entry) => (
         <Fragment key={entry.group.key}>
-          {dragKey && dropBefore === entry.group.key && <DropSlot />}
+          {dropBefore === entry.group.key && <DropLine />}
           <RailTile
             entry={entry}
             active={entry.group.key === activeKey}
             icon={icons?.get(entry.group.key)}
             dragging={dragKey === entry.group.key}
-            onSelect={() => onSelect(entry)}
+            registerRef={(element) => {
+              if (element) tileRefs.current.set(entry.group.key, element);
+              else tileRefs.current.delete(entry.group.key);
+            }}
+            onSelect={() => {
+              // A drag that ends on the tile it started from must not also
+              // count as a click on it.
+              if (gesture.current?.moved || dragKey) return;
+              onSelect(entry);
+            }}
             onHover={(top) => {
               if (dragKey) return;
               holdOpen();
               setHovered({ key: entry.group.key, top });
             }}
             onLeave={closeSoon}
-            onDragStart={() => {
-              setHovered(null);
-              setDragKey(entry.group.key);
-            }}
-            onDragEnd={endDrag}
-            onDragOver={(before) =>
-              setDropBefore(before ? entry.group.key : (entries[index + 1]?.group.key ?? null))
-            }
-            onDrop={drop}
+            onDragPointerDown={beginGesture(entry.group.key)}
           />
         </Fragment>
       ))}
-      {dragKey && dropBefore === null && <DropSlot />}
+      {dragKey && dropBefore === null && <DropLine />}
+
+      {drag && draggedEntry && (
+        <DragGhost
+          entry={draggedEntry}
+          icon={icons?.get(draggedEntry.group.key)}
+          y={drag.y}
+          left={drag.left}
+        />
+      )}
 
       <RailButton label="Add a server" onClick={onAddServer} dashed>
         <PlusIcon width={15} height={15} />
@@ -384,20 +458,60 @@ export function ServerRail({
   );
 }
 
-/** Where a dragged tile would land. */
-function DropSlot() {
+/**
+ * Where the carried tile would land.
+ *
+ * A hairline rather than a gap: opening a slot would move every tile below it,
+ * and the pointer is being judged against where they were.
+ */
+function DropLine() {
   return (
     <Box
       aria-hidden
       sx={(theme) => ({
         width: TILE,
-        height: TILE,
+        height: 2,
+        my: "-1px",
         flex: "none",
-        borderRadius: radius("lg"),
-        border: "1.5px dashed " + theme.palette.nebula.accentLine,
-        background: theme.palette.nebula.accentSoft,
+        borderRadius: "1px",
+        background: theme.palette.nebula.accent,
       })}
     />
+  );
+}
+
+/** The tile under the pointer, pinned to the rail column. */
+function DragGhost({
+  entry,
+  icon,
+  y,
+  left,
+}: Readonly<{ entry: ServerRailEntry; icon?: string; y: number; left: number }>) {
+  return (
+    <Box
+      aria-hidden
+      sx={{
+        position: "fixed",
+        left,
+        top: y - TILE / 2,
+        width: TILE,
+        height: TILE,
+        zIndex: 60,
+        pointerEvents: "none",
+        borderRadius: radius("lg"),
+        overflow: "hidden",
+        transform: "scale(1.08)",
+        boxShadow: "0 12px 28px rgba(2,6,18,.55)",
+      }}
+    >
+      <UserAvatar
+        name={entry.group.label}
+        size={TILE}
+        square
+        src={icon}
+        gradient={serverTint(entry.group.key)}
+      />
+    </Box>
   );
 }
 

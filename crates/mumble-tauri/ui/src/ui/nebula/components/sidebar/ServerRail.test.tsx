@@ -68,15 +68,27 @@ describe("ServerRail", () => {
     expect(onSelect.mock.calls[0][0].group.host).toBe("voice.kumo.gg");
   });
 
-  it("reorders the rail when a tile is dropped past another", () => {
+  it("reorders the rail when a tile is carried past another", () => {
     const onReorder = vi.fn();
     rail({ onReorder });
-    const [first, second] = screen.getAllByRole("button", { name: /magical.rocks|voice.kumo.gg/ });
-    fireEvent.dragStart(first, { dataTransfer: { setData: () => {}, effectAllowed: "" } });
-    // jsdom drag events carry no pointer position, so this reads as the lower
-    // half of the last tile - the end of the rail.
-    fireEvent.dragOver(second, { dataTransfer: { dropEffect: "" } });
-    fireEvent.drop(second);
+    const [first] = screen.getAllByRole("button", { name: /magical.rocks|voice.kumo.gg/ });
+    fireEvent.pointerDown(first, { button: 0, clientY: 100 });
+    // jsdom gives every tile a zero-sized box, so any downward travel reads as
+    // past the last one - the end of the rail.
+    fireEvent.pointerMove(window, { clientY: 300 });
+    fireEvent.pointerUp(window, { clientY: 300 });
     expect(onReorder).toHaveBeenCalledWith(["voice.kumo.gg:64738", "magical.rocks:64738"]);
+  });
+
+  it("treats a press that never moved as a click, not a drag", () => {
+    const onReorder = vi.fn();
+    const onSelect = vi.fn();
+    rail({ onReorder, onSelect });
+    const [first] = screen.getAllByRole("button", { name: /magical.rocks/ });
+    fireEvent.pointerDown(first, { button: 0, clientY: 100 });
+    fireEvent.pointerUp(window, { clientY: 100 });
+    fireEvent.click(first);
+    expect(onReorder).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalled();
   });
 });
