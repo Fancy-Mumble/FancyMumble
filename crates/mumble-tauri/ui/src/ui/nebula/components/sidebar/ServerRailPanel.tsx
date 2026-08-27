@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { Box, Typography } from "@mui/material";
 import type { ServerPingResult } from "@core/types";
 import { CloseIcon, PlusIcon } from "@ui/icons";
@@ -15,9 +16,31 @@ interface ServerRailPanelProps {
   pings?: ReadonlyMap<string, ServerPingResult>;
   /** Where you are on the server you are connected to. */
   activeChannelName?: string | null;
+  /** The tile being carried, and the row it would land in front of. */
+  dragKey?: string | null;
+  dropBefore?: string | null;
+  registerRowRef?: (key: string, element: HTMLElement | null) => void;
+  onRowPointerDown?: (key: string) => (event: React.PointerEvent<HTMLElement>) => void;
   onClose: () => void;
   onSelect: (entry: ServerRailEntry) => void;
   onAddServer: () => void;
+}
+
+/** Where the carried row would land, drawn without moving anything. */
+function DropLine() {
+  return (
+    <Box
+      aria-hidden
+      sx={(theme) => ({
+        height: 2,
+        my: "-1px",
+        mx: "2px",
+        flex: "none",
+        borderRadius: "1px",
+        background: theme.palette.nebula.accent,
+      })}
+    />
+  );
 }
 
 /** How many people are on, in the form the mock prints it. */
@@ -69,6 +92,9 @@ function PanelRow({
   banner,
   ping,
   activeChannelName,
+  dragging,
+  registerRef,
+  onPointerDown,
   onSelect,
 }: Readonly<{
   entry: ServerRailEntry;
@@ -77,6 +103,9 @@ function PanelRow({
   banner?: string;
   ping?: ServerPingResult;
   activeChannelName?: string | null;
+  dragging?: boolean;
+  registerRef?: (element: HTMLElement | null) => void;
+  onPointerDown?: (event: React.PointerEvent<HTMLElement>) => void;
   onSelect: () => void;
 }>) {
   const { group, status, unread } = entry;
@@ -86,7 +115,14 @@ function PanelRow({
     <Box
       component="button"
       type="button"
+      ref={registerRef}
       onClick={onSelect}
+      onPointerDown={(event: React.PointerEvent<HTMLElement>) => {
+        // The banner and the icon are both images, which the browser would
+        // rather drag than let the row own the gesture.
+        event.preventDefault();
+        onPointerDown?.(event);
+      }}
       aria-current={active ? "true" : undefined}
       sx={(theme) => ({
         all: "unset",
@@ -100,6 +136,10 @@ function PanelRow({
         border: "1px solid " + (active ? theme.palette.nebula.accentLine : theme.palette.nebula.line2),
         "&:hover": { borderColor: theme.palette.nebula.accentLine },
         "&:focus-visible": { outline: "2px solid " + theme.palette.nebula.accent, outlineOffset: 2 },
+        opacity: dragging ? 0.4 : 1,
+        userSelect: "none",
+        touchAction: "none",
+        "& img": { WebkitUserDrag: "none", pointerEvents: "none" },
       })}
     >
       {active && banner && (
@@ -142,8 +182,7 @@ function PanelRow({
             sx={(theme) => ({
               fontSize: 10,
               mt: "2px",
-              color:
-                status === "connecting" ? theme.palette.nebula.warn : theme.palette.nebula.dim,
+              color: status === "connecting" ? theme.palette.nebula.warn : theme.palette.nebula.dim,
             })}
           >
             {meta}
@@ -187,6 +226,10 @@ export function ServerRailPanel({
   banners,
   pings,
   activeChannelName,
+  dragKey,
+  dropBefore,
+  registerRowRef,
+  onRowPointerDown,
   onClose,
   onSelect,
   onAddServer,
@@ -254,17 +297,26 @@ export function ServerRailPanel({
       </Box>
 
       {entries.map((entry) => (
-        <PanelRow
-          key={entry.group.key}
-          entry={entry}
-          active={entry.group.key === activeKey}
-          icon={icons?.get(entry.group.key)}
-          banner={banners?.get(entry.group.key)}
-          ping={pings?.get(entry.group.key)}
-          activeChannelName={activeChannelName}
-          onSelect={() => onSelect(entry)}
-        />
+        <Fragment key={entry.group.key}>
+          {dropBefore === entry.group.key && <DropLine />}
+          <PanelRow
+            entry={entry}
+            active={entry.group.key === activeKey}
+            icon={icons?.get(entry.group.key)}
+            banner={banners?.get(entry.group.key)}
+            ping={pings?.get(entry.group.key)}
+            activeChannelName={activeChannelName}
+            dragging={dragKey === entry.group.key}
+            registerRef={(element) => registerRowRef?.(entry.group.key, element)}
+            onPointerDown={onRowPointerDown?.(entry.group.key)}
+            onSelect={() => {
+              if (dragKey) return;
+              onSelect(entry);
+            }}
+          />
+        </Fragment>
       ))}
+      {dragKey && dropBefore === null && <DropLine />}
 
       <Box
         component="button"
@@ -291,7 +343,9 @@ export function ServerRailPanel({
         Add a server
       </Box>
 
-      <Typography sx={(theme) => ({ mt: "auto", px: "6px", pb: "4px", fontSize: 10, color: theme.palette.nebula.dim })}>
+      <Typography
+        sx={(theme) => ({ mt: "auto", px: "6px", pb: "4px", fontSize: 10, color: theme.palette.nebula.dim })}
+      >
         Hover a tile for the same card without pinning
       </Typography>
     </Box>

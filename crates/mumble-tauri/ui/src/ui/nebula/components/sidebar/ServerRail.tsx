@@ -275,7 +275,12 @@ export function ServerRail({
   // The rail runs its own drag rather than the browser one: HTML5 drag never
   // starts reliably on a form control inside the webview, and it gives no way
   // to draw a ghost that stays pinned to the rail while the pointer wanders.
+  // The rail keeps drawing its tiles behind the pinned panel, so the two views
+  // cannot share one map of elements - the panel would overwrite the rail and
+  // the drag would be measured against boxes nobody can see.
   const tileRefs = useRef(new Map<string, HTMLElement>());
+  const rowRefs = useRef(new Map<string, HTMLElement>());
+  const visibleRefs = () => (expanded ? rowRefs.current : tileRefs.current);
   const gesture = useRef<{ key: string; startY: number; moved: boolean } | null>(null);
   const [drag, setDrag] = useState<{ key: string; y: number; left: number; slots: TileSlot[] } | null>(null);
 
@@ -299,14 +304,14 @@ export function ServerRail({
         // The slots are measured once, at the moment the drag starts: the
         // indicator is drawn without moving anything, so the tiles the
         // pointer is judged against stay where they were.
-        const source = tileRefs.current.get(held.key)?.getBoundingClientRect();
+        const source = visibleRefs().get(held.key)?.getBoundingClientRect();
         setDrag({
           key: held.key,
           y: event.clientY,
           // The ghost tracks the pointer up and down but stays in the rail:
           // the tile is going back into this column, not anywhere else.
           left: source?.left ?? 0,
-          slots: measureSlots(tileRefs.current),
+          slots: measureSlots(visibleRefs()),
         });
         return;
       }
@@ -333,7 +338,7 @@ export function ServerRail({
       window.removeEventListener("pointerup", end);
       window.removeEventListener("pointercancel", end);
     };
-  }, [entries, onReorder]);
+  }, [entries, expanded, onReorder]);
 
   const dragKey = drag?.key ?? null;
   const dropBefore = drag ? dropTarget(drag) : null;
@@ -457,6 +462,13 @@ export function ServerRail({
           banners={banners}
           pings={pings}
           activeChannelName={activeChannelName}
+          dragKey={dragKey}
+          dropBefore={dropBefore}
+          registerRowRef={(key, element) => {
+            if (element) rowRefs.current.set(key, element);
+            else rowRefs.current.delete(key);
+          }}
+          onRowPointerDown={beginGesture}
           onClose={onToggleExpanded}
           onSelect={onSelect}
           onAddServer={onAddServer}
