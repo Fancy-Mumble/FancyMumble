@@ -33,6 +33,7 @@ function open(msg: ChatMessage = message(), editable = true) {
   const handlers = {
     onClose: vi.fn(),
     onReact: vi.fn(),
+    onQuickReact: vi.fn(),
     onQuote: vi.fn(),
     onEdit: vi.fn(),
     onSelect: vi.fn(),
@@ -54,6 +55,7 @@ describe("MessageMenu", () => {
           target={null}
           onClose={vi.fn()}
           onReact={vi.fn()}
+          onQuickReact={vi.fn()}
           onQuote={vi.fn()}
           onEdit={vi.fn()}
           onSelect={vi.fn()}
@@ -65,7 +67,7 @@ describe("MessageMenu", () => {
 
   it("offers reacting and replying on anyone's message", () => {
     const handlers = open();
-    fireEvent.click(screen.getByText("React"));
+    fireEvent.click(screen.getByRole("button", { name: "More reactions" }));
     expect(handlers.onReact).toHaveBeenCalledWith(expect.objectContaining({ message_id: "m1" }), {
       x: 10,
       y: 20,
@@ -89,7 +91,7 @@ describe("MessageMenu", () => {
 
   it("lets you delete your own message without the moderation bit", () => {
     open(message({ is_own: true }));
-    expect(screen.getByText("Delete")).toBeTruthy();
+    expect(screen.getByText("Delete message")).toBeTruthy();
     // Bulk selection is moderation, and this user has none.
     expect(screen.queryByText("Select messages…")).toBeNull();
   });
@@ -102,7 +104,7 @@ describe("MessageMenu", () => {
   it("offers bulk selection where the server grants DeleteMessage", () => {
     useAppStore.setState({ channels: [channel({ permissions: PERM_DELETE_MESSAGE })] });
     const handlers = open(message({ is_own: false }));
-    expect(screen.getByText("Delete")).toBeTruthy();
+    expect(screen.getByText("Delete message")).toBeTruthy();
     fireEvent.click(screen.getByText("Select messages…"));
     expect(handlers.onSelect).toHaveBeenCalledWith("m1");
   });
