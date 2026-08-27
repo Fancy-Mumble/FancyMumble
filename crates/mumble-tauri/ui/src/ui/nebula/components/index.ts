@@ -7,6 +7,7 @@ export { ChannelList } from "./sidebar/ChannelList";
 export { ChannelMenu } from "./sidebar/ChannelMenu";
 export { DirectMessageList } from "./sidebar/DirectMessageList";
 export { ServerList } from "./sidebar/ServerList";
+export { ServerRail } from "./sidebar/ServerRail";
 export { VoiceDock } from "./sidebar/VoiceDock";
 export { ServerInfoPanel } from "./server/ServerInfoPanel";
 export { ChatBackdrop } from "./chat/ChatBackdrop";
