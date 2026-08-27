@@ -48,7 +48,8 @@ interface KlipyPaginatedResponse {
   };
 }
 
-interface KlipyGif {
+/** Shared so a pack can draw its own grid over the same source. */
+export interface KlipyGif {
   id: number;
   title: string;
   url: string;
@@ -93,12 +94,12 @@ function mapMediaItems(items: KlipyMediaItem[]): KlipyGif[] {
     .filter(Boolean) as KlipyGif[];
 }
 
-interface PagedResult {
+export interface PagedResult {
   items: KlipyGif[];
   hasNext: boolean;
 }
 
-async function searchGifs(query: string, page = 1): Promise<PagedResult> {
+export async function searchGifs(query: string, page = 1): Promise<PagedResult> {
   const data = await klipyFetch<KlipyPaginatedResponse>("/gifs/search", {
     q: query,
     per_page: "30",
@@ -107,7 +108,7 @@ async function searchGifs(query: string, page = 1): Promise<PagedResult> {
   return { items: mapMediaItems(data.data.data), hasNext: data.data.has_next };
 }
 
-async function fetchTrending(page = 1): Promise<PagedResult> {
+export async function fetchTrending(page = 1): Promise<PagedResult> {
   const data = await klipyFetch<KlipyPaginatedResponse>("/gifs/trending", {
     per_page: "30",
     page: String(page),
