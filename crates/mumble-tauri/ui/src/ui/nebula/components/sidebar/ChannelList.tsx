@@ -51,7 +51,7 @@ export function ChannelList({
   onLeaveUser,
   onContextMenuUser,
 }: Readonly<ChannelListProps>) {
-  const occupantsByChannel = useMemo(() => groupOccupants(users, talkingSessions), [users, talkingSessions]);
+  const occupantsByChannel = useMemo(() => groupOccupants(users), [users]);
 
   return (
     <Box

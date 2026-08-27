@@ -15,10 +15,12 @@
 // every crate dependency it inherits but doesn't touch (the crate's
 // convention for `unused_crate_dependencies`; see e.g. sine_mic.rs).
 use base64 as _;
+use bytes as _;
 use fast_image_resize as _;
 use image as _;
 use nokhwa as _;
 use openh264 as _;
+use rand as _;
 use serde as _;
 use serde_json as _;
 use tokio as _;

@@ -43,10 +43,29 @@
   border: 1px solid var(--color-glass-border);
   border-radius: var(--radius-md, 10px);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  animation: menuIn 0.1s ease-out;
+}
+
+/* Item list inside the popup. */
+.list {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  animation: menuIn 0.1s ease-out;
+}
+
+/* Item list rendered straight into a host container (a dialog): no popup
+   chrome, and roomy enough that every row keeps its full line height - the
+   items are the whole content there, not a dropdown over something else. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+}
+
+.panel .item {
+  padding: 10px 12px;
 }
 
 @keyframes menuIn {
@@ -84,6 +103,17 @@
 }
 
 .item > span:first-of-type {
+  flex: 1;
+}
+
+/* On the quality rows the tick comes first: keep it a fixed gutter and let
+   the label take the free space, or the preset name is pushed to the far
+   edge while every other row starts at the left. */
+.item > .check:first-of-type {
+  flex: 0 0 15px;
+}
+
+.item > .check:first-of-type + span {
   flex: 1;
 }
 

@@ -223,6 +223,33 @@ lying. Turning voice off is now in Settings -> Voice, next to the rest of the
 capture controls; the dock keeps mute and deafen, which is what it is asked for
 mid-conversation.
 
+## Leaving for the browser
+
+A live anchor inside a webview navigates the app's own window: click a link in a
+message and the window becomes that page, with nothing left to click back with.
+`useExternalLinkGuard` is what stops that, and it is shared - it intercepts the
+anchors `sanitizeHtml` marked `data-external`, decides whether to ask, and hands
+the URL to the system browser. `LinkGuard` wraps a subtree in it; what Nebula
+adds is `LinkWarningDialog`, the surface it asks on, for the same reason
+`LeaveServerDialog` exists.
+
+The dialog draws the host apart from the rest of the URL, because the host is
+the whole question - it is what the tick would trust, and the only part worth
+reading before deciding. One even weight invites reading left to right and
+stopping at whatever looks familiar, which is the mistake a long deceptive path
+is built to cause. The host is printed as `URL` gives it: lowercased, and
+punycode for an internationalised name, so a homograph registration shows as
+`xn--pple-43d.com` rather than as something indistinguishable from `apple.com`.
+
+"Trust <host>" writes `trustedLinkHosts`, and that is a preference rather than a
+Nebula-local flag - a host vouched for here is not asked about again in
+Standard, whose dialog offers no tick of its own but honours the list. Trust is
+recorded on confirm, not on the tick, so a dialog that is ticked and then
+cancelled leaves nothing behind; it is keyed on the exact host, port included,
+since a suffix test would let `example.com.evil.tld` inherit `example.com`. A
+trusted host still leaves by the browser - trust silences the question, it is
+never permission to navigate this window.
+
 ## Glass
 
 The channel header and the composer are translucent over the conversation
@@ -283,8 +310,8 @@ before, because a feature landed and its line was never struck.
 **Composing**
 
 - No custom server emotes beyond what the body already carries.
-- No drag-and-drop onto the composer, and no pasted-image tray: a file is
-  attached through the picker.
+- No pasted-image tray: a file is attached through the picker or a drop, and
+  Ctrl+V of an image does nothing.
 - No scheduled messages, calendar/meeting composer, or LiveDoc. Note that the
   runtime already runs `useCalendarReminders`, so calendar reminders fire with
   no calendar to open them in.
@@ -418,6 +445,42 @@ An open list owns the arrow keys and Enter. Only when nothing is open does
 Enter mean send - otherwise choosing someone from the mention list would send
 the half-typed name instead of completing it.
 
+Selecting text raises a formatting bar at the height those lists dock at, and
+centred over the words it is about. It is drawn only while there is a
+selection: a toolbar that is always there is a row of controls to skip past on
+every glance at an empty composer, and the canvas gives that space to the
+message river. Its buttons refuse focus on mousedown, because taking it would
+collapse the selection they are about to act on.
+
+Where it sits is measured, not derived. The textarea underneath is one opaque
+box with no per-character geometry to ask for, so `MarkdownInput` publishes
+`selectionRect` instead: its overlay has drawn the selected run as its own
+spans and therefore laid it out glyph by glyph. A selection that wraps reports
+only its first line - the union of every line is just the whole pane. The
+measurement runs in a layout effect so the bar is placed before the frame is
+painted rather than a frame late, and it is clamped to the pane's inset, so a
+word at either edge does not push it off the glass.
+
+The bar decides *which* mark, never what a mark is. `MarkdownInput` publishes
+`wrapSelection` and `toggleList` - the same two entry points Ctrl+B and Ctrl+I
+already go through - so there is one answer to what `**` means rather than one
+per pack. The `Ctrl+B` chip on the right of the bar exists to say so: it
+teaches the keyboard while the mouse is being used.
+
+Lists are the one block-level thing the shared converter draws, and they were
+added for those two buttons. `markdownToHtml` lifts each run of `- ` or `1. `
+lines out before its newline pass, because a `<br>` between two `<li>`s is a
+blank line drawn inside the list; `htmlToMarkdown` puts the lines back, and the
+pair is an exact round trip so that editing a message does not rewrite it.
+
+`composerHtml` is that converter now, not an escape. Nebula used to send the
+draft escaped, which meant the formatting stopped at the composer's edge - what
+was drawn bold while it was being typed arrived at everyone else as a word
+between four asterisks. Standard's converter is called rather than a second one
+written here: both packs send into the same channels, and a dialect that
+differed between them would read as one client's messages formatting and the
+other's not.
+
 Uploading is not a design decision, so it is not one Nebula makes: pick, ask
 how it may be shared, stream, announce. That order lives in
 `core/features/chat/useFileUpload`, and what the pack owns is where the
@@ -493,9 +556,22 @@ file's marker and there is no marker until the server has answered - sending
 early would send a reference to nothing. A *failed* upload does not hold send:
 it is never going to land.
 
-**One accent, one press.** It is on send alone, plus the upload hairline.
-`onAccent` is a token because both schemes' accents are light enough that white
-on them is thin.
+**One accent, one press.** It is on send alone, plus the upload hairline and
+the panel's own edge while it holds the caret. `onAccent` is a token because
+both schemes' accents are light enough that white on them is thin.
+
+**Focus is drawn on the panel, because the panel is the field.** A ring around
+the words inside it would be 5a's "second field boxed inside" all over again,
+so the hairline that is already there turns accent instead, throws one more
+hairline of soft accent just outside itself, and the fill comes up a step -
+held as a wash of accent over the neutral one rather than swapped for a tinted
+token, because the light scheme's tinted card is *darker* than its wash and
+lighting a surface by darkening it reads as the panel going away. The
+placeholder comes up with it, from `dim` to `muted`: it names the channel the
+next line is going to, which is worth most right as it is about to be typed.
+The editor draws its own caret and takes its colour from `--color-caret`, so
+the caret lights with the rest. A disabled composer never lights - an accent
+edge on it would promise a keystroke it will not take.
 
 Geometry is the canvas's and lives in constants at the top of `Composer.tsx`,
 outside the radius scale - the scale tops out at 20 and this surface is drawn
@@ -506,6 +582,40 @@ artboard's palette.
 Files are dropped through Tauri's own drag-drop event, not the DOM's: a dropped
 `File` carries no path and the uploader streams from one. The composer only
 draws the target, and is told when to.
+
+**Trays.** Everything the composer is holding but has not sent - replies,
+staged files, uploads in flight - is drawn as a strip docked above the input
+row, in that order. They share one shape (`Tray`): 5px of padding on a
+`washLine` hairline, rows inset by 4px, and a lighter inset rule between rows
+of the same tray. Two replies are therefore two lines under one edge rather
+than two bands, which is what keeps a second reply from doubling the chrome.
+
+The three differ in what a row is worth looking at. A reply is a line of text,
+so it is one: arrow, name in accent, body in muted, cross. A staged file is
+something you need to *recognise*, so an image gets a 54px square and nothing
+else - the picture is the label - while a file with no picture gets the
+opposite, a type badge with its name and size, because for those three facts
+are the file. An upload is a name plus a claim about time, so it gets a 40px
+thumb, a line that says size, percentage and estimate, and a 3px bar inside the
+row. Each part of that line is left out until it is true rather than stood in
+for by a zero: the size is known before a byte moves, the percentage from the
+first event, the estimate only once there is a rate to estimate from. A failure
+stops the bar where it stopped - filling it would say the file arrived.
+
+**Staging.** Picking a file no longer starts an upload. The picker (or a drop)
+collects a batch, the share popover answers for that batch, and the answer
+travels with each file into `staged` - which is what the tray draws. Send is
+what uploads them, in order, with whatever was typed riding on the first so a
+photo and the sentence about it stay one thing in the river. That is the only
+reason the tray exists: without it a message could carry one file and no words
+about it, because the upload had already gone.
+
+**Selection.** The browser's own highlight is a slab of system blue that owes
+nothing to the scheme, and the editor hides it to draw its own. Nebula tells it
+what to draw through `--color-selection`, `--selection-ring` and
+`--selection-radius`: a wash of accent inside a hairline of it, rounded, the
+same way a code span is marked. The edge is what keeps it legible over glass,
+where a fill at this alpha is barely a change of shade.
 
 
 ## Wide windows
@@ -529,7 +639,12 @@ conversation.
 
 ## The hover menu
 
-One pill, floating over the bubble's top edge rather than sitting inside the
-header row - so it never reflows the text underneath. It carries the composer's
-rhythm at 80% scale: bare 15px icons, 34px tall, and exactly one divider, only
-ever before the destructive end.
+One pill, standing just off the bubble's top edge rather than sitting inside
+the header row - so it never reflows the text underneath, and clear of the
+message rather than hanging half into it: a pill lying over the first line
+covers whatever is on that line, and a link there stops being clickable. The
+4px it stands off by is air to look at, not to walk through - a pseudo-element
+bridges it, because a pointer crossing a real hole leaves the row, and a row
+that is no longer hovered takes the pill away before it is reached. It carries
+the composer's rhythm at 80% scale: bare 15px icons, 34px tall, and exactly one
+divider, only ever before the destructive end.

@@ -136,6 +136,28 @@ if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
 }
 
 /**
+ * `<dialog>`'s own methods, which jsdom declares the element for but does not
+ * implement. Anything that confirms before acting - the external-link guard
+ * most of all - calls `showModal` from a mount effect, so without these the
+ * component throws on mount instead of the test seeing the prompt it renders.
+ * Flipping the `open` attribute is what the spec says the methods do, minus
+ * the top layer and focus moves jsdom has no notion of either way.
+ */
+if (typeof HTMLDialogElement !== "undefined" && !HTMLDialogElement.prototype.showModal) {
+  HTMLDialogElement.prototype.show = function show(this: HTMLDialogElement) {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement, returnValue?: string) {
+    if (returnValue !== undefined) this.returnValue = returnValue;
+    this.open = false;
+    this.dispatchEvent(new Event("close"));
+  };
+}
+
+/**
  * `localStorage`, which this environment does not hand over.
  *
  * jsdom creates it (constructing a JSDOM here directly gives one), but the

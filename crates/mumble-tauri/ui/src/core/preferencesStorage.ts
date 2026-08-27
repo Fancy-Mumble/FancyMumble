@@ -35,6 +35,8 @@ const DEFAULTS: UserPreferences = {
   autoZipLogs: false,
   calibrationSignature: null,
   serverTabOrder: [],
+  serverRailOrder: [],
+  serverSwitcher: "rail",
   disableTypingIndicators: false,
   disableOsmMaps: false,
   disableLinkPreviews: false,
@@ -49,6 +51,7 @@ const DEFAULTS: UserPreferences = {
   hideEmptyChannels: false,
   welcomeMessageDisplay: "once",
   showDisconnectWarning: true,
+  trustedLinkHosts: [],
 };
 
 async function getStore() {

@@ -95,6 +95,16 @@
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
+.messageBody ul,
+.messageBody ol {
+  margin: 4px 0;
+  padding-inline-start: 22px;
+}
+
+.messageBody li {
+  margin: 2px 0;
+}
+
 .messageBody blockquote {
   margin: 6px 0;
   padding-left: 10px;

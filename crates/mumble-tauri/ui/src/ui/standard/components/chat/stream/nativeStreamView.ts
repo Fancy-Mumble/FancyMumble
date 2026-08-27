@@ -563,6 +563,10 @@ function createNativeStatsSampler(session: number): StatsSampler {
         jitterMs: null,
         jitterBufferDelay: 0,
         jitterBufferEmittedCount: 0,
+        // The native Rust viewer has no jitter buffer at all - it decodes on
+        // arrival - so there is no playout delay to report.
+        jitterBufferTargetDelay: 0,
+        jitterBufferMinimumDelay: 0,
         videoCodec: first?.videoCodec ?? codecLabel,
         audioCodec: null,
         rttMs: rust?.rttMs ?? null,

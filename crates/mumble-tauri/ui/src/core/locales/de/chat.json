@@ -425,6 +425,8 @@
       "changeSource": "Quelle ändern",
       "quality": "Stream-Qualität",
       "custom": "Benutzerdefiniert",
+      "hideSelf": "App vor Aufnahmen verbergen",
+      "hideSelfHint": "Während einer Bildschirmübertragung sind die Fenster dieser App für jede Aufnahme unsichtbar - auch für deine eigenen Screenshots. Schalte es aus, um den Client aufzunehmen (die Eigenvorschau kann sich dann selbst spiegeln).",
       "shareAudio": "Stream-Audio teilen",
       "comingSoon": "Bald"
     },

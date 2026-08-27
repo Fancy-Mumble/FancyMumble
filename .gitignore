@@ -66,3 +66,8 @@ dhat-heap*.json
 
 # flatpak-builder scratch (packaging/flatpak/README.md)
 .flatpak-builder/
+
+# vitest cache, written next to the crate rather than under ui/
+crates/mumble-tauri/node_modules/
+# built preview bundles; the entries beside them are the source
+crates/mumble-tauri/ui/preview/dist-*/

@@ -174,6 +174,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::files::write_translation_files,
         super::files::check_files_exist,
         super::files::read_file_base64,
+        super::files::file_size,
         // -- offload (message paging) ----------------------------------
         super::offload::offload_message,
         super::offload::load_offloaded_message,

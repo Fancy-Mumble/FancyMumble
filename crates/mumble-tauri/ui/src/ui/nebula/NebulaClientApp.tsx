@@ -1,11 +1,11 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Button, CssBaseline, Dialog, DialogContent, Typography } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAppStore } from "@core/store";
-import { getPreferences } from "@core/preferencesStorage";
+import { getPreferences, updatePreferences } from "@core/preferencesStorage";
 import { getSavedServers, getServerPassword, markServerJoined, updateServer } from "@core/serverStorage";
 import { getUserRelations, userRelationIdentity, type UserRelation } from "@core/userRelationsStorage";
 import { PERM_WRITE } from "@core/utils/permissions";
@@ -20,9 +20,9 @@ import { Lightbox, type LightboxHandle } from "@standard/components/elements/Lig
 import { usePersistentChat } from "@standard/components/security/PersistentChatOverlays";
 import { usePolls } from "@standard/components/chat/poll/usePolls";
 import { useReadReceipts } from "@core/features/chat/readreceipt/useReadReceipts";
-import { useFileUpload, type FileShareChoice } from "@core/features/chat/useFileUpload";
-import FileShareDialog from "@standard/components/chat/file/FileShareDialog";
-import PollCreator from "@standard/components/chat/poll/PollCreator";
+import { useFileUpload } from "@core/features/chat/useFileUpload";
+import type { FileShareChoice, StagedAttachment } from "@core/features/chat/useFileUpload";
+import { previewKindForFilename } from "@core/features/chat/fileAttachments";
 import EmojiPicker from "@standard/components/elements/EmojiPicker";
 import { hasReacted } from "@core/features/chat/reaction/reactionStore";
 import type { MessageScope } from "@core/messageOffload";
@@ -47,6 +47,7 @@ import {
   SearchBox,
   ServerInfoPanel,
   ServerList,
+  ServerRail,
   SettingsNav,
   useSettingsNavContext,
   SidebarShell,
@@ -97,6 +98,8 @@ import {
   orderChannels,
   plainText,
   quickConnectTargets,
+  serverRailEntries,
+  type ServerRailEntry,
   type GlobalSearchRow,
   type ServerGroup,
 } from "./selectors";
@@ -110,6 +113,32 @@ import { radius } from "./tokens";
 /** Pinned messages have no "unseen" concept in Nebula's chrome. */
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 
+/** A file chosen from the picker or a drop, before the share question. */
+interface PickedFile {
+  readonly filePath: string;
+  readonly filename: string;
+}
+
+/**
+ * Name a path.
+ *
+ * Both separators, because a Windows path arrives with backslashes and the
+ * same build runs against a Linux drop.
+ */
+function pickedFile(filePath: string): PickedFile {
+  return { filePath, filename: filePath.replaceAll("\\", "/").split("/").pop() ?? "file" };
+}
+
+/** What the share dialog calls the batch it is asking about. */
+function pickedFileLabel(files: readonly PickedFile[] | null): string | null {
+  if (!files || files.length === 0) return null;
+  return files.length === 1 ? files[0].filename : `${files.length} files`;
+}
+
+function newStagedId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `staged-${Math.random().toString(36).slice(2)}`;
+}
+
 /**
  * The Nebula client.
  *
@@ -122,6 +151,7 @@ const EMPTY_IDS: ReadonlySet<string> = new Set();
 export default function NebulaClientApp() {
   const status = useAppStore((state) => state.status);
   const sessions = useAppStore((state) => state.sessions);
+  const sessionUnreadTotals = useAppStore((state) => state.sessionUnreadTotals);
   const activeServerId = useAppStore((state) => state.activeServerId);
 
   // What each open server says it looks like, keyed by session. Read here once
@@ -192,6 +222,7 @@ export default function NebulaClientApp() {
   );
   const [addServerOpen, setAddServerOpen] = useState(false);
   const [quickConnectAnchor, setQuickConnectAnchor] = useState<HTMLElement | null>(null);
+  const [railExpanded, setRailExpanded] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [relations, setRelations] = useState<Record<string, UserRelation>>({});
   const [channelMenu, setChannelMenu] = useState<{ channel: ChannelEntry; x: number; y: number } | null>(
@@ -349,6 +380,55 @@ export default function NebulaClientApp() {
   // The sidebar chooses a server; the connect screen chooses which of that
   // server's identities to arrive as.
   const serverGroups = useMemo(() => groupSavedServers(savedServers, sessions), [savedServers, sessions]);
+  // The rail order is the user arrangement, loaded once and written back on
+  // every drop so a restart finds the tiles where they were left.
+  const [railOrder, setRailOrder] = useState<readonly string[]>([]);
+  const [serverSwitcher, setServerSwitcher] = useState<"rail" | "titlebar">("rail");
+  useEffect(() => {
+    let live = true;
+    const load = () => {
+      void getPreferences()
+        .then((preferences) => {
+          if (!live) return;
+          setRailOrder(preferences.serverRailOrder ?? []);
+          setServerSwitcher(preferences.serverSwitcher ?? "rail");
+        })
+        .catch(() => undefined);
+    };
+    load();
+    // Moving the list between the rail and the title bar has to happen as the
+    // setting is changed, not at the next launch.
+    globalThis.addEventListener("preferences-changed", load);
+    return () => {
+      live = false;
+      globalThis.removeEventListener("preferences-changed", load);
+    };
+  }, []);
+
+  const openServer = useCallback(
+    (entry: ServerRailEntry) => {
+      setSelectedServerKey(entry.group.key);
+      // A server you are already on switches to it; one you are not takes you
+      // to its connect page, which is where the identity gets chosen.
+      if (entry.session) {
+        void useAppStore.getState().switchServer(entry.session.id);
+        openScreen("chat");
+      } else {
+        openScreen("connect");
+      }
+    },
+    [openScreen],
+  );
+
+  const reorderRail = useCallback((keys: readonly string[]) => {
+    setRailOrder(keys);
+    void updatePreferences({ serverRailOrder: [...keys] });
+  }, []);
+
+  const railEntries = useMemo(
+    () => serverRailEntries(serverGroups, sessions, sessionUnreadTotals, railOrder),
+    [serverGroups, sessions, sessionUnreadTotals, railOrder],
+  );
   const visibleGroups = useMemo(() => {
     const needle = search.channelQuery.trim().toLocaleLowerCase();
     if (!needle) return serverGroups;
@@ -369,6 +449,41 @@ export default function NebulaClientApp() {
   // merely looking at has sent nothing, and lending it the open server's livery
   // is what put one server's banner on every server's page.
   const selectedLivery = selectedGroup?.sessionId ? (liveries[selectedGroup.sessionId] ?? null) : null;
+  // Artwork only reaches the rail for servers that are connected: a livery
+  // arrives over the session, so a saved server nobody is on has none to show
+  // and falls back to its initials.
+  const railBanners = useMemo(() => {
+    const art = new Map<string, string>();
+    for (const entry of railEntries) {
+      const banner = entry.session ? liveries[entry.session.id]?.bannerSrc : undefined;
+      if (banner) art.set(entry.group.key, banner);
+    }
+    return art;
+  }, [railEntries, liveries]);
+
+  // Only the channel you are actually sitting in, and only on the server you
+  // are on: the card cannot report a room on a server it is not connected to.
+  const railOccupants = useMemo(
+    () =>
+      joinedChannel
+        ? channelOccupants(users, joinedChannel.id).map((person) => ({
+            session: person.session,
+            name: person.name,
+            talking: talkingSessions.has(person.session),
+            muted: Boolean(person.mute || person.self_mute),
+          }))
+        : [],
+    [joinedChannel, users, talkingSessions],
+  );
+
+  const railIcons = useMemo(() => {
+    const icons = new Map<string, string>();
+    for (const entry of railEntries) {
+      const icon = entry.session ? liveries[entry.session.id]?.iconSrc : undefined;
+      if (icon) icons.set(entry.group.key, icon);
+    }
+    return icons;
+  }, [railEntries, liveries]);
 
   const toggleFavorite = useCallback(
     (group: ServerGroup) => {
@@ -385,15 +500,13 @@ export default function NebulaClientApp() {
 
   const roster = useMemo<UserEntry[]>(() => {
     const needle = memberPanel.query.trim().toLocaleLowerCase();
+    // Alphabetical only. Sorting talkers to the top made the panel jump on
+    // every push-to-talk tap; the talking bars mark the speaker in place.
     return users
       .filter((user) => memberPanel.scope === "server" || user.channel_id === selectedChannel)
       .filter((user) => !needle || user.name.toLocaleLowerCase().includes(needle))
-      .sort(
-        (left, right) =>
-          Number(talkingSessions.has(right.session)) - Number(talkingSessions.has(left.session)) ||
-          left.name.localeCompare(right.name),
-      );
-  }, [memberPanel.query, memberPanel.scope, selectedChannel, talkingSessions, users]);
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }, [memberPanel.query, memberPanel.scope, selectedChannel, users]);
 
   // Every id in the conversation, in order: the read-receipt watermark is a
   // position in this list rather than a per-message flag, so a row cannot work
@@ -403,7 +516,7 @@ export default function NebulaClientApp() {
     [conversationMessages],
   );
 
-  const { handlePollVote, handlePollCreate, showPollCreator, openPollCreator, closePollCreator } = usePolls();
+  const { handlePollVote, handlePollCreate } = usePolls();
 
   // Sends this client's own watermark and asks for everyone else's. Without
   // it Nebula would show other people's receipts and never return one, which
@@ -450,10 +563,51 @@ export default function NebulaClientApp() {
     channelId: selectedChannel,
     dmSession: activeDmUser?.session ?? null,
   });
-  const [shareTarget, setShareTarget] = useState<{ filePath: string; filename: string } | null>(null);
+  /**
+   * The batch waiting on the share question, and the batches that have had it.
+   *
+   * Two steps rather than one because they answer different things. Picking
+   * says *which* files; the dialog says who may see them. Only once both are
+   * settled does a file become an attachment on the message being written -
+   * which is what lets one message carry several files and a sentence about
+   * them, instead of firing off an upload per file the moment it is chosen.
+   */
+  const [shareTarget, setShareTarget] = useState<readonly PickedFile[] | null>(null);
+  const [staged, setStaged] = useState<readonly StagedAttachment[]>([]);
 
   /**
-   * Pick a file to attach, if this server will take one.
+   * Take an answered-for batch into the composer's tray.
+   *
+   * The size arrives a moment after the tile does: it is a stat on a path, and
+   * the tile is worth drawing before the disk has answered. Images get a local
+   * preview URL rather than being read into memory - the tray shows a 54px
+   * square, and pulling a 40-megapixel photograph through IPC to fill it would
+   * cost more than the upload it is standing in for.
+   */
+  const stageFiles = useCallback((files: readonly PickedFile[], choice: FileShareChoice) => {
+    const entries: StagedAttachment[] = files.map((file) => ({
+      id: newStagedId(),
+      filePath: file.filePath,
+      filename: file.filename,
+      previewUrl:
+        previewKindForFilename(file.filename) === "image" ? convertFileSrc(file.filePath) : undefined,
+      choice,
+    }));
+    setStaged((prev) => [...prev, ...entries]);
+    for (const entry of entries) {
+      void invoke<number>("file_size", { path: entry.filePath })
+        .then((sizeBytes) =>
+          setStaged((prev) => prev.map((file) => (file.id === entry.id ? { ...file, sizeBytes } : file))),
+        )
+        // A size that cannot be read is not worth a message: the file is still
+        // stageable and still sendable, and the tile simply does not say how
+        // big it is.
+        .catch(() => undefined);
+    }
+  }, []);
+
+  /**
+   * Pick files to attach, if this server will take one.
    *
    * The button is only rendered when the file server has said both that it is
    * there and that this user may share - an attach button that opens a picker
@@ -461,17 +615,16 @@ export default function NebulaClientApp() {
    */
   const canAttach = !!fileServerConfig?.canShareFiles && (!!activeChannel || !!activeDmUser);
   const pickAttachment = useCallback(async () => {
-    if (selectedChannel === null || uploads.isUploading()) return;
+    if (selectedChannel === null) return;
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
-      const picked = await open({ multiple: false, directory: false });
-      if (typeof picked !== "string") return;
-      const filename = picked.replaceAll("\\", "/").split("/").pop() ?? "file";
-      setShareTarget({ filePath: picked, filename });
+      const picked = await open({ multiple: true, directory: false });
+      const paths = typeof picked === "string" ? [picked] : (picked ?? []);
+      if (paths.length > 0) setShareTarget(paths.map(pickedFile));
     } catch (e) {
       console.error("file picker failed:", e);
     }
-  }, [selectedChannel, uploads]);
+  }, [selectedChannel]);
 
   // --- replying ---------------------------------------------------------
   const [pendingQuotes, setPendingQuotes] = useState<ChatMessage[]>([]);
@@ -518,6 +671,10 @@ export default function NebulaClientApp() {
     setPendingQuotes([]);
     setJumpTo(null);
     setEditingMessageId(null);
+    // Staged files belong to the message being written here. Carrying them to
+    // the next conversation would share them with a room that was never asked.
+    setStaged([]);
+    setShareTarget(null);
   }, [selectedChannel, selectedDmUser]);
 
   const [dragOverWindow, setDragOverWindow] = useState(false);
@@ -542,10 +699,9 @@ export default function NebulaClientApp() {
           else if (event.payload.type === "leave") setDragOverWindow(false);
           else if (event.payload.type === "drop") {
             setDragOverWindow(false);
-            const picked = event.payload.paths?.[0];
-            if (!picked || selectedChannel === null || uploads.isUploading()) return;
-            const filename = picked.replaceAll("\\", "/").split("/").pop() ?? "file";
-            setShareTarget({ filePath: picked, filename });
+            const paths = event.payload.paths ?? [];
+            if (paths.length === 0 || selectedChannel === null) return;
+            setShareTarget(paths.map(pickedFile));
           }
         });
         if (cancelled) unlisten();
@@ -559,7 +715,7 @@ export default function NebulaClientApp() {
       stop?.();
       setDragOverWindow(false);
     };
-  }, [canAttach, selectedChannel, uploads]);
+  }, [canAttach, selectedChannel]);
 
   const lightboxRef = useRef<LightboxHandle>(null);
   const currentScope = useCallback((): MessageScope | null => {
@@ -581,8 +737,28 @@ export default function NebulaClientApp() {
       .map((quote) => `<!-- FANCY_QUOTE:${quote.message_id} -->`)
       .join("");
     const body = markers + applyMentionsToHtml(html.trim(), mentionResolver);
-    if (!body.trim()) return;
+    if (!body.trim() && staged.length === 0) return;
     setPendingQuotes([]);
+
+    // Files that were staged go up now, and each becomes its own message -
+    // that is what an attachment is on this wire, a marker in a body. What was
+    // typed rides on the first of them rather than being sent separately, so a
+    // photo and the sentence about it stay one thing in the river; the rest go
+    // up bare, because saying it once is saying it.
+    if (staged.length > 0) {
+      setStaged([]);
+      const said = body.trim() ? body : staged[0].choice.message;
+      for (const [index, file] of staged.entries()) {
+        await uploads.upload(
+          file.filePath,
+          file.filename,
+          { ...file.choice, message: index === 0 ? said : undefined },
+          { sizeBytes: file.sizeBytes, previewUrl: file.previewUrl },
+        );
+      }
+      return;
+    }
+
     if (selectedDmUser !== null) await useAppStore.getState().sendDm(selectedDmUser, body);
     else if (selectedChannel !== null) await useAppStore.getState().sendMessage(selectedChannel, body);
   };
@@ -653,7 +829,7 @@ export default function NebulaClientApp() {
         <MiniMode
           serverLabel={activeSession?.label ?? "Connected"}
           channelName={joinedChannel.name}
-          occupants={channelOccupants(users, joinedChannel.id, talkingSessions)}
+          occupants={channelOccupants(users, joinedChannel.id)}
           ownSession={ownSession}
           talkingSessions={talkingSessions}
           latencyMs={null}
@@ -710,9 +886,35 @@ export default function NebulaClientApp() {
             onQuickConnect={setQuickConnectAnchor}
             quickConnectOpen={quickConnectAnchor !== null}
             onDisconnect={status === "connected" ? () => leave.request(activeSession) : undefined}
+            entries={railEntries}
+            icons={railIcons}
+            activeKey={selectedGroup?.key ?? null}
+            onSelectServer={openServer}
+            tabs={serverSwitcher === "titlebar"}
           />
 
           <Stack direction="row" sx={{ flex: 1, minHeight: 0 }}>
+            {serverSwitcher === "rail" && (
+            <ServerRail
+              entries={railEntries}
+              icons={railIcons}
+              banners={railBanners}
+              pings={pings}
+              activeChannelName={joinedChannel?.name ?? null}
+              ownName={activeSession?.username ?? null}
+              occupants={railOccupants}
+              activeKey={selectedGroup?.key ?? null}
+              expanded={railExpanded}
+              onToggleExpanded={() => setRailExpanded((open) => !open)}
+              onSelect={openServer}
+              onAddServer={() => {
+                setAddServerFor(null);
+                setAddServerOpen(true);
+              }}
+              onDisconnect={status === "connected" ? () => leave.request(activeSession) : undefined}
+              onReorder={reorderRail}
+            />
+            )}
             {screen === "chat" && channelSidebarOpen && (
               <SidebarShell
                 search={
@@ -742,7 +944,15 @@ export default function NebulaClientApp() {
                           }
                         : undefined
                     }
-                    onLeave={activeSession ? () => leave.request(activeSession) : undefined}
+                    /* Both need a channel to broadcast into; the strip that
+                       answers them lives on the chat screen, which is the only
+                       screen this dock is drawn on. */
+                    onShareScreen={
+                      currentChannel !== null ? () => setSurface("screen-share") : undefined
+                    }
+                    onShareCamera={
+                      currentChannel !== null ? () => setSurface("camera-share") : undefined
+                    }
                   />
                 }
               >
@@ -925,6 +1135,7 @@ export default function NebulaClientApp() {
 
                   <ScreenShareStrip
                     pickerRequested={surface === "screen-share"}
+                    cameraRequested={surface === "camera-share"}
                     onPickerClosed={() => setSurface(null)}
                   />
 
@@ -1062,11 +1273,33 @@ export default function NebulaClientApp() {
                     disabled={(!activeChannel && !activeDmUser) || persistent.sendBlocked}
                     onSend={send}
                     onAttach={canAttach ? () => void pickAttachment() : undefined}
-                    onCreatePoll={selectedChannel !== null && !activeDmUser ? openPollCreator : undefined}
+                    attachBlocked={
+                      activeChannel || activeDmUser
+                        ? fileServerConfig
+                          ? fileServerConfig.canShareFiles
+                            ? null
+                            : "This server does not let you share files"
+                          : "This server has no file sharing"
+                        : "Pick a conversation first"
+                    }
+                    onCreatePoll={
+                      selectedChannel !== null && !activeDmUser
+                        ? (question, options, multiple) => void handlePollCreate(question, options, multiple)
+                        : undefined
+                    }
+                    pendingFile={pickedFileLabel(shareTarget)}
+                    canSharePublic={fileServerConfig?.canShareFilesPublic ?? false}
+                    onShare={(choice) => {
+                      const target = shareTarget;
+                      setShareTarget(null);
+                      if (target) stageFiles(target, choice);
+                    }}
                     quotes={pendingQuotes}
                     onRemoveQuote={(id) =>
                       setPendingQuotes((prev) => prev.filter((quote) => quote.message_id !== id))
                     }
+                    attachments={staged}
+                    onRemoveAttachment={(id) => setStaged((prev) => prev.filter((file) => file.id !== id))}
                     uploads={uploads.placeholders}
                     onCancelUpload={uploads.cancel}
                     dropActive={canAttach && dragOverWindow}
@@ -1272,37 +1505,10 @@ export default function NebulaClientApp() {
             currentScope={currentScope}
           />
 
-          {/* How the picked file may be shared - public link, password, or
-              this channel only - asked before a byte leaves the machine. */}
-          {shareTarget && (
-            <FileShareDialog
-              open
-              filename={shareTarget.filename}
-              canSharePublic={fileServerConfig?.canShareFilesPublic ?? false}
-              onSubmit={(choice: FileShareChoice) => {
-                const target = shareTarget;
-                setShareTarget(null);
-                if (target) void uploads.upload(target.filePath, target.filename, choice);
-              }}
-              onCancel={() => setShareTarget(null)}
-            />
-          )}
-
-          {/* A poll is a channel object rather than a message, which is why it
-              is composed in its own dialog and not in the composer. */}
-          {showPollCreator && (
-            <PollCreator
-              onSubmit={(question, options, multiple) => {
-                closePollCreator();
-                void handlePollCreate(question, options, multiple);
-              }}
-              onClose={closePollCreator}
-            />
-          )}
-
           <MessageMenu
             target={messageMenu}
             onClose={() => setMessageMenu(null)}
+            onQuickReact={react}
             onReact={(target, at) => setReactionTarget({ message: target, ...at })}
             onQuote={quoteMessage}
             onEdit={(target) => setEditingMessageId(target.message_id ?? null)}

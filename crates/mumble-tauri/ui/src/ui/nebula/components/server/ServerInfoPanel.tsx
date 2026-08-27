@@ -35,7 +35,7 @@ import {
 } from "@shared/serverinfo/model";
 import { ChevronDownIcon, CloseIcon, RefreshCwIcon, ServerIcon, ShieldCheckIcon } from "@ui/icons";
 import { NEBULA_MONO, radius } from "../../tokens";
-import { SectionLabel, Stack } from "../primitives";
+import { LinkGuard, SectionLabel, Stack } from "../primitives";
 
 const ACTIVATION_LABELS = {
   ptt: "Push to Talk",
@@ -205,24 +205,32 @@ function PluginFacts({ plugin }: Readonly<{ plugin: PluginInfoRecord }>) {
   );
 }
 
-/** The server's own message, as HTML it authored - sanitised before it lands. */
+/**
+ * The server's own message, as HTML it authored - sanitised before it lands.
+ *
+ * `sanitizeHtml` marks the surviving links `data-external`, and `LinkGuard` is
+ * what acts on that: without it a click navigates the app's own window to the
+ * server's link and there is no way back.
+ */
 function WelcomeText({ html }: Readonly<{ html: string }>) {
   const clean = useMemo(() => sanitizeHtml(html), [html]);
   if (!clean) return null;
   return (
-    <Box
-      sx={(theme) => ({
-        maxHeight: 200,
-        overflowY: "auto",
-        fontSize: 12.5,
-        lineHeight: 1.5,
-        wordBreak: "break-word",
-        "& a": { color: theme.palette.nebula.accent, textDecoration: "none" },
-        "& a:hover": { textDecoration: "underline" },
-        "& img": { maxWidth: "100%" },
-      })}
-      dangerouslySetInnerHTML={{ __html: clean }}
-    />
+    <LinkGuard>
+      <Box
+        sx={(theme) => ({
+          maxHeight: 200,
+          overflowY: "auto",
+          fontSize: 12.5,
+          lineHeight: 1.5,
+          wordBreak: "break-word",
+          "& a": { color: theme.palette.nebula.accent, textDecoration: "none" },
+          "& a:hover": { textDecoration: "underline" },
+          "& img": { maxWidth: "100%" },
+        })}
+        dangerouslySetInnerHTML={{ __html: clean }}
+      />
+    </LinkGuard>
   );
 }
 

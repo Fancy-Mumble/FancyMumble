@@ -73,13 +73,22 @@
   color: var(--color-text-muted);
 }
 
+/* A caret standing in front of the placeholder is the empty-and-focused case.
+   The caret's own negative margins are there to keep it tight between glyphs;
+   against the placeholder they read as a collision, so the words step back. */
+.caret + .placeholder {
+  margin-left: 3px;
+}
+
 /* --- Custom caret (rendered in the overlay) -------------------- */
 
 .caret {
   display: inline-block;
   width: 0;
   height: 1.15em;
-  border-left: 1.5px solid var(--color-text-primary);
+  /* A host that wants the caret in its accent says so; the default is the
+     colour of the text the caret is standing in. */
+  border-left: 1.5px solid var(--color-caret, var(--color-text-primary));
   vertical-align: text-bottom;
   margin: 0 -0.75px;
   animation: caretBlink 1s step-end infinite;
@@ -94,9 +103,14 @@
 
 /* --- Selection highlight --------------------------------------- */
 
+/* The editor draws the selection itself (the textarea's own is hidden), so a
+   host that wants it to look like its own selection has to be able to say so.
+   The three properties are what a highlight is made of - a fill, a corner and
+   an optional edge - and each falls back to what Standard has always drawn. */
 .selection {
-  background: var(--color-accent-glow);
-  border-radius: 1px;
+  background: var(--color-selection, var(--color-accent-glow));
+  border-radius: var(--selection-radius, 1px);
+  box-shadow: var(--selection-ring, none);
 }
 
 /* --- Markdown decoration classes (real WYSIWYG formatting) ---- */

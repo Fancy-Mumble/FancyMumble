@@ -591,6 +591,18 @@ interface MarkdownInputProps {
    * with no name at all.
    */
   ariaLabel?: string;
+  /**
+   * Keep the placeholder up while the editor has focus.
+   *
+   * The default clears it on focus, which suits a field that draws its own
+   * chrome: the border says where you are and the empty line says the field
+   * is yours. A host that *is* the field - Nebula's composer pill - has no
+   * such second border to fall back on, and clearing the words there leaves a
+   * bar with nothing in it. Held up, the placeholder keeps saying which
+   * channel the next line is going to, which is worth most right as it is
+   * about to be typed.
+   */
+  keepPlaceholderOnFocus?: boolean;
 }
 
 /** Imperative methods exposed to a parent via `apiRef`. */
@@ -633,6 +645,7 @@ export default function MarkdownInput({
   apiRef,
   mentionResolver,
   ariaLabel,
+  keepPlaceholderOnFocus = false,
 }: Readonly<MarkdownInputProps>) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -857,13 +870,19 @@ export default function MarkdownInput({
   }, [hasFence, hljs]);
   const segments = useMemo(() => expandFenceSegments(parsed, hljs), [parsed, hljs]);
   const showCursor = (focused || isDragging) && !composing;
-  const showPlaceholder = !value && !focused;
+  const showPlaceholder = !value && (!focused || keepPlaceholderOnFocus);
 
   return (
     <div className={`${styles.wrapper} ${focused ? styles.focused : ""}`}>
       {/* Overlay: shows decorated text + custom caret + selection */}
       <div ref={overlayRef} className={styles.overlay} aria-hidden>
         {value ? renderFormattedOverlay(segments, selStart, selEnd, showCursor, mentionResolver) : null}
+        {/* An empty editor has no text to hang a caret inside, so the caret is
+            drawn here instead. Without it, clicking an empty composer put the
+            placeholder away and drew nothing in its place - a focused field
+            that looks exactly like an unfocused one, with no sign the keys
+            were going to land in it. */}
+        {!value && showCursor && <span className={styles.caret} />}
         {showPlaceholder && <span className={styles.placeholder}>{placeholder}</span>}
       </div>
       {/* Actual editable textarea (fully invisible - input only) */}

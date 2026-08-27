@@ -40,6 +40,8 @@ function makeReports() {
       jitter: 0.004,
       jitterBufferDelay: 12.5,
       jitterBufferEmittedCount: 500,
+      jitterBufferTargetDelay: 10.0,
+      jitterBufferMinimumDelay: 0,
     },
     {
       id: "c1",
@@ -142,6 +144,8 @@ function sampleAt(timestampMs: number, overrides: Partial<StatsSample>): StatsSa
     jitterMs: null,
     jitterBufferDelay: 0,
     jitterBufferEmittedCount: 0,
+    jitterBufferTargetDelay: 0,
+    jitterBufferMinimumDelay: 0,
     videoCodec: null,
     audioCodec: null,
     rttMs: null,
@@ -160,6 +164,8 @@ describe("deriveIntervalStats", () => {
       framesDecoded: 0,
       jitterBufferDelay: 0,
       jitterBufferEmittedCount: 0,
+      jitterBufferTargetDelay: 0,
+      jitterBufferMinimumDelay: 0,
     });
     const curr = sampleAt(1000, {
       bytesReceived: 125_000,
@@ -168,6 +174,8 @@ describe("deriveIntervalStats", () => {
       framesDecoded: 30,
       jitterBufferDelay: 0.05,
       jitterBufferEmittedCount: 25,
+      jitterBufferTargetDelay: 0.04,
+      jitterBufferMinimumDelay: 0.025,
     });
     const d = deriveIntervalStats(prev, curr);
     expect(d.bitrateKbps).toBeCloseTo(1000); // 125000 B * 8 / 1 s / 1000
@@ -175,6 +183,8 @@ describe("deriveIntervalStats", () => {
     expect(d.fps).toBeCloseTo(30); // derived from the decode delta
     expect(d.lossPct).toBeCloseTo(1); // 1 of 100 expected packets
     expect(d.bufferMs).toBeCloseTo(2); // 0.05 s / 25 emitted * 1000
+    expect(d.bufferTargetMs).toBeCloseTo(1.6); // 0.04 s / 25 emitted * 1000
+    expect(d.bufferMinimumMs).toBeCloseTo(1); // 0.025 s / 25 emitted * 1000
   });
 
   it("prefers the reported framesPerSecond over the decode delta", () => {

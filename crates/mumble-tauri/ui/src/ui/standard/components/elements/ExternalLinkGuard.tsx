@@ -13,9 +13,9 @@ import { WarningIcon } from "../../icons";
  *   </ExternalLinkGuard>
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { useExternalLinkGuard } from "@core/features/elements/useExternalLinkGuard";
 import styles from "./ExternalLinkGuard.module.css";
 
 // --- Warning dialog -----------------------------------------------
@@ -118,54 +118,21 @@ interface GuardProps {
  * Intercepts clicks on anchors tagged with data-external="true" inside its
  * subtree and shows a confirmation dialog before opening the URL.
  *
- * Uses a native DOM event listener (not a JSX onClick prop) so the wrapper
- * div does not need to be a focusable / interactive element.
+ * The interception, the trusted-host list and the handoff to the browser are
+ * `useExternalLinkGuard`'s, shared with the other packs; what stays here is the
+ * dialog, which is this design's. Standard draws no "trust this host" tick -
+ * that affordance is Nebula's - but it honours a host trusted there rather than
+ * asking a second time about a decision the user has already made.
  */
 export function ExternalLinkGuard({ children, className, style }: Readonly<GuardProps>) {
-  const [pendingUrl, setPendingUrl] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Attach a native click listener so the wrapper div is not declared
-  // as an interactive element in JSX (avoids a11y lint violations).
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const handler = (e: MouseEvent) => {
-      const anchor = (e.target as Element).closest("a[data-external]");
-      if (!anchor) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const href = anchor.getAttribute("href");
-      if (href) setPendingUrl(href);
-    };
-
-    el.addEventListener("click", handler);
-    return () => el.removeEventListener("click", handler);
-  }, []);
-
-  const handleConfirm = useCallback(() => {
-    if (pendingUrl) {
-      openUrl(pendingUrl).catch(() => {
-        // Fallback for non-Tauri environments (e.g. Vite dev server).
-        window.open(pendingUrl, "_blank", "noopener,noreferrer");
-      });
-    }
-    setPendingUrl(null);
-  }, [pendingUrl]);
-
-  const handleCancel = useCallback(() => {
-    setPendingUrl(null);
-  }, []);
+  const { containerRef, pendingUrl, confirm, cancel } = useExternalLinkGuard();
 
   return (
     <>
       <div ref={containerRef} className={className} style={style}>
         {children}
       </div>
-      {pendingUrl && (
-        <ExternalLinkDialog url={pendingUrl} onConfirm={handleConfirm} onCancel={handleCancel} />
-      )}
+      {pendingUrl && <ExternalLinkDialog url={pendingUrl} onConfirm={confirm} onCancel={cancel} />}
     </>
   );
 }

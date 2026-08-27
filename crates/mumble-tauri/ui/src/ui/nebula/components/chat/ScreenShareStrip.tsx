@@ -1,53 +1,55 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Button, Dialog, DialogContent, Typography } from "@mui/material";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Button, Dialog, DialogContent } from "@mui/material";
 import { useAppStore } from "@core/store";
-import { TID } from "@core/testids";
-import { useRemoteStreams, useScreenShare } from "@standard/components/chat/stream/useScreenShare";
+import { useScreenShare } from "@standard/components/chat/stream/useScreenShare";
 import ScreenSharePickerDialog from "@standard/components/chat/stream/ScreenSharePickerDialog";
-import { useNativeStreamView } from "@standard/components/chat/stream/nativeStreamView";
-import {
-  activeStreamViewerStrategy,
-  StreamViewerStrategyId,
-} from "@standard/components/chat/stream/viewerStrategy";
-import { getTrackContentMap } from "@standard/components/chat/stream/trackContent";
-import { UserAvatar, Stack } from "../primitives";
-import { SettingsIcon } from "@ui/icons";
+import { Stack } from "../primitives";
 import { radius } from "../../tokens";
+import { buildFeeds, type FeedKind, type SessionMedia } from "./share/feeds";
+import { SessionMediaSource } from "./share/SessionMediaSource";
+import { ScreenShareStage } from "./share/ScreenShareStage";
+import { usesNativeSurface } from "./share/StreamSurface";
 
-// Both are heavy and neither is on screen at rest: the stats panel pulls in
-// a chart and the config menu the whole encoder settings model.
-const StreamStatsPanel = lazy(() => import("@standard/components/chat/stream/StreamStatsPanel"));
-const StreamConfigMenu = lazy(() => import("@standard/components/chat/stream/StreamConfigMenu"));
-
-/** Whether the active strategy paints onto a canvas (the native Rust viewer -
- *  mandatory on Linux, where WebKitGTK has no WebRTC) instead of binding a
- *  MediaStream to `<video>`. Constant per page load (the strategy is latched),
- *  so branching on it inside a component never changes hook order. */
-function usesNativeSurface(): boolean {
-  return activeStreamViewerStrategy().id === StreamViewerStrategyId.Native;
-}
+// The bare item list, not the default export: that one is a kebab button that
+// anchors its own popup, which inside this dialog collapsed to a stray button
+// over a menu positioned out of the dialog's box.
+const StreamConfigItems = lazy(() =>
+  import("@standard/components/chat/stream/StreamConfigMenu").then((m) => ({
+    default: m.StreamConfigItems,
+  })),
+);
 
 interface ScreenShareStripProps {
   /** True while the channel menu's "Share screen" is waiting for a source. */
   pickerRequested: boolean;
+  /** The same, for the voice dock's "Share your camera": camera-only mode. */
+  cameraRequested?: boolean;
   onPickerClosed: () => void;
 }
 
 /**
- * The live video strip above the message river.
+ * Everything the live share owns above the message river.
  *
- * The mock puts shared screens and cameras in one grid pinned to the top of
- * the conversation rather than in a separate call view, so chat keeps running
- * underneath a share. The strip only exists while something is actually live -
- * there is no empty "no one is sharing" state to dismiss.
+ * This is the plumbing half - the source picker, the encoder dialog, the error
+ * banner, and one receive path per broadcaster - while the picture itself is
+ * {@link ScreenShareStage}. The split follows the lifetimes: a viewer
+ * connection must outlive any tile that happens to be drawing it, and the
+ * picker must outlive the stage, which does not exist until pixels do.
  */
-export function ScreenShareStrip({ pickerRequested, onPickerClosed }: Readonly<ScreenShareStripProps>) {
+export function ScreenShareStrip({
+  pickerRequested,
+  cameraRequested = false,
+  onPickerClosed,
+}: Readonly<ScreenShareStripProps>) {
   const share = useScreenShare();
   const users = useAppStore((state) => state.users);
   const currentChannel = useAppStore((state) => state.currentChannel);
   const ownSession = useAppStore((state) => state.ownSession);
   const error = useAppStore((state) => state.webrtcError);
   const webrtcConnecting = useAppStore((state) => state.webrtcConnecting);
+
+  const [qualityOpen, setQualityOpen] = useState(false);
+  const [media, setMedia] = useState<ReadonlyMap<number, SessionMedia>>(new Map());
 
   const broadcasters = useMemo(
     () =>
@@ -59,36 +61,61 @@ export function ScreenShareStrip({ pickerRequested, onPickerClosed }: Readonly<S
     [currentChannel, ownSession, share.broadcastingSessions, users],
   );
 
-  // The picker is the hook's own state; the channel menu just asks for it.
-  useEffect(() => {
-    if (pickerRequested && !share.pickerOpen) share.startSharing();
-  }, [pickerRequested, share]);
-  useEffect(() => {
-    if (pickerRequested && !share.pickerOpen) onPickerClosed();
-  }, [onPickerClosed, pickerRequested, share.pickerOpen]);
-
-  const live = broadcasters.length > 0 || share.isBroadcasting;
-
-  const [statsFor, setStatsFor] = useState<number | null>(null);
-  const [qualityOpen, setQualityOpen] = useState(false);
-
-  // Stats are read per session, and the session in question is whoever is on
-  // screen: the person being watched, or - when broadcasting - this client's
-  // own outbound stream.
-  const statsSession = share.watchingSession ?? (share.isBroadcasting ? ownSession : null);
-  const statsSampler = useMemo(
-    () => (statsFor === null ? null : activeStreamViewerStrategy().createStatsSampler(statsFor)),
-    [statsFor],
+  // Own share first: it is the one the user just started, and the stage takes
+  // its first feed when nothing else is selected.
+  const sessions = useMemo(
+    () => (share.isBroadcasting && ownSession !== null ? [ownSession, ...broadcasters] : [...broadcasters]),
+    [broadcasters, ownSession, share.isBroadcasting],
   );
+  const sessionKey = sessions.join(",");
 
-  // Nothing to show stats for any more - stop offering a panel about a stream
-  // that has ended rather than leaving it frozen on its last numbers.
+  // The picker is the hook's own state; the channel menu and the voice dock
+  // just ask for it. Which of the two asked decides whether the picker opens
+  // on every source or on cameras alone.
+  const requested = pickerRequested || cameraRequested;
   useEffect(() => {
-    if (statsFor !== null && statsSession === null) setStatsFor(null);
-  }, [statsFor, statsSession]);
+    if (!requested || share.pickerOpen) return;
+    if (cameraRequested) share.startCameraSharing();
+    else share.startSharing();
+  }, [cameraRequested, requested, share]);
+  useEffect(() => {
+    if (requested && !share.pickerOpen) onPickerClosed();
+  }, [onPickerClosed, requested, share.pickerOpen]);
+
   useEffect(() => {
     if (qualityOpen && !share.isBroadcasting) setQualityOpen(false);
   }, [qualityOpen, share.isBroadcasting]);
+
+  const publishMedia = useCallback((next: SessionMedia) => {
+    setMedia((previous) => new Map(previous).set(next.session, next));
+  }, []);
+
+  // Drop what a session that stopped sharing left behind, so a later share by
+  // the same person starts from its own transport rather than from stale refs.
+  useEffect(() => {
+    const live = new Set(sessionKey === "" ? [] : sessionKey.split(",").map(Number));
+    setMedia((previous) => {
+      if ([...previous.keys()].every((session) => live.has(session))) return previous;
+      return new Map([...previous].filter(([session]) => live.has(session)));
+    });
+  }, [sessionKey]);
+
+  // Screen versus window is ours to know only about our own broadcast - the
+  // announce other clients send carries screen-versus-camera and no more.
+  const ownDisplayKind: FeedKind =
+    share.activeSources?.find((source) => source.kind !== "device")?.kind === "window" ? "window" : "screen";
+
+  const feeds = useMemo(
+    () =>
+      buildFeeds(
+        sessions.map((session) => media.get(session)).filter((entry) => entry !== undefined),
+        (session) => users.find((user) => user.session === session)?.name ?? "Someone",
+        ownSession,
+        ownDisplayKind,
+        usesNativeSurface(),
+      ),
+    [media, ownDisplayKind, ownSession, sessions, users],
+  );
 
   return (
     <>
@@ -130,270 +157,39 @@ export function ScreenShareStrip({ pickerRequested, onPickerClosed }: Readonly<S
         </Stack>
       )}
 
-      {/* Resolution, frame rate and what is captured, changed on the live
-          share rather than only when it is started. */}
+      {/* Resolution, frame rate and what is captured, changed on the live share
+          rather than only when it is started. */}
       <Dialog open={qualityOpen} onClose={() => setQualityOpen(false)} maxWidth="xs" fullWidth>
         <DialogContent sx={{ p: 1.5 }}>
           <Suspense fallback={null}>
-            <StreamConfigMenu
+            <StreamConfigItems
+              layout="panel"
               settings={share.settings}
-              onStop={() => {
-                setQualityOpen(false);
-                share.stopSharing();
-              }}
-              onChangeSource={() => {
-                setQualityOpen(false);
-                share.startSharing();
-              }}
+              onStop={share.stopSharing}
+              onChangeSource={share.startSharing}
               onSetSettings={share.changeSettings}
+              onDismiss={() => setQualityOpen(false)}
             />
           </Suspense>
         </DialogContent>
       </Dialog>
 
-      {live && (
-        <Box
-          sx={(theme) => ({
-            flex: "none",
-            mx: "20px",
-            mt: "12px",
-            p: "8px",
-            borderRadius: radius("lg"),
-            background: "#0a0b0d",
-            border: `1px solid ${theme.palette.nebula.line2}`,
-          })}
-        >
-          <Stack direction="row" alignItems="center" gap={1} sx={{ px: "2px", pb: "8px" }}>
-            <Box
-              component="span"
-              sx={{
-                px: "8px",
-                py: "3px",
-                borderRadius: radius("sm"),
-                background: "#d95757",
-                color: "#fff",
-                fontSize: 10,
-                fontWeight: 600,
-                letterSpacing: ".04em",
-              }}
-            >
-              LIVE
-            </Box>
-            <Typography sx={{ fontSize: 11, color: "#c6c9d0" }}>
-              {broadcasters.length + (share.isBroadcasting ? 1 : 0)} sharing
-            </Typography>
-          </Stack>
+      {/* Draws nothing: the receive paths, mounted for as long as their
+          sessions are sharing rather than for as long as a tile draws them. */}
+      {sessions.map((session) => (
+        <SessionMediaSource
+          key={session}
+          session={session}
+          // The loopback preview can only start once the Rust broadcaster is on
+          // the wire; mounting earlier races START.
+          active={session !== ownSession || !webrtcConnecting}
+          onChange={publishMedia}
+        />
+      ))}
 
-          <Box
-            sx={{
-              display: "grid",
-              gap: "8px",
-              gridTemplateColumns: `repeat(${Math.min(3, broadcasters.length + (share.isBroadcasting ? 1 : 0))},1fr)`,
-              height: 270,
-            }}
-          >
-            {share.isBroadcasting && (
-              <Tile
-                stream={share.localStream}
-                label="You · sharing"
-                session={ownSession}
-                name="You"
-                own
-                // The loopback preview can only start once the Rust
-                // broadcaster is on the wire; mounting earlier races START.
-                nativeActive={!webrtcConnecting}
-              />
-            )}
-            {broadcasters.map((session) => (
-              <RemoteTile key={session} session={session} onWatch={() => share.watchBroadcast(session)} />
-            ))}
-          </Box>
-
-          <Stack direction="row" gap={0.625} justifyContent="center" sx={{ pt: "8px" }}>
-            <Button
-              size="small"
-              onClick={share.startCameraSharing}
-              sx={{ color: "#dfe1e6", background: "rgba(255,255,255,.08)" }}
-            >
-              Share my camera
-            </Button>
-            {share.isBroadcasting && (
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={share.stopSharing}
-                sx={{ color: "#e89a9a", borderColor: "rgba(217,87,87,.5)" }}
-              >
-                Stop sharing
-              </Button>
-            )}
-            {share.watchingSession !== null && (
-              <Button size="small" onClick={share.stopWatching} sx={{ color: "#dfe1e6" }}>
-                Stop watching
-              </Button>
-            )}
-            {share.isBroadcasting && (
-              <Button
-                size="small"
-                startIcon={<SettingsIcon width={13} height={13} />}
-                onClick={() => setQualityOpen(true)}
-                sx={{ color: "#dfe1e6" }}
-              >
-                Quality
-              </Button>
-            )}
-            {statsSession !== null && (
-              <Button
-                size="small"
-                onClick={() => setStatsFor((open) => (open === null ? statsSession : null))}
-                sx={{ color: "#dfe1e6" }}
-              >
-                {statsFor === null ? "Stats" : "Hide stats"}
-              </Button>
-            )}
-          </Stack>
-
-          {statsFor !== null && statsSampler && (
-            <Suspense fallback={null}>
-              <StreamStatsPanel
-                sampler={statsSampler}
-                contentByMid={getTrackContentMap(statsFor)}
-                onClose={() => setStatsFor(null)}
-              />
-            </Suspense>
-          )}
-        </Box>
+      {feeds.length > 0 && (
+        <ScreenShareStage feeds={feeds} share={share} onOpenQuality={() => setQualityOpen(true)} />
       )}
     </>
-  );
-}
-
-function RemoteTile({ session, onWatch }: Readonly<{ session: number; onWatch: () => void }>) {
-  const streams = useRemoteStreams(session);
-  const name = useAppStore(
-    (state) => state.users.find((user) => user.session === session)?.name ?? "Someone",
-  );
-  return (
-    <Tile
-      stream={streams.primary}
-      label={`${name} · screen`}
-      session={session}
-      name={name}
-      // Native viewports own their own receive path, so every tile opens one
-      // on mount - the counterpart of the webview family's channel
-      // auto-connect, which is what makes those tiles go live unprompted.
-      nativeActive
-      // Only the webview family has anything left for a click to do; under
-      // the native family the tile is already connecting on its own.
-      onClick={usesNativeSurface() || streams.primary ? undefined : onWatch}
-    />
-  );
-}
-
-function Tile({
-  stream,
-  label,
-  session,
-  name,
-  own = false,
-  nativeActive = false,
-  onClick,
-}: Readonly<{
-  /** Webview family: the MediaStream to bind. Always null under the native
-   *  family, which never produces one. */
-  stream: MediaStream | null;
-  label: string;
-  session: number | null;
-  name: string;
-  own?: boolean;
-  /** Native family: whether this tile should run a viewer for `session`. */
-  nativeActive?: boolean;
-  onClick?: () => void;
-}>) {
-  const nativeSurface = usesNativeSurface();
-  const video = useRef<HTMLVideoElement>(null);
-  const displayCanvas = useRef<HTMLCanvasElement>(null);
-  // The strip has no camera PiP, so the camera slot decodes into a ref that
-  // is never attached; its paints find no target and are dropped.
-  const cameraCanvas = useRef<HTMLCanvasElement>(null);
-  const native = useNativeStreamView(
-    session ?? -1,
-    nativeSurface && nativeActive,
-    displayCanvas,
-    cameraCanvas,
-  );
-  const hasMedia = nativeSurface ? native.hasDisplay : stream !== null;
-
-  useEffect(() => {
-    const element = video.current;
-    if (element && element.srcObject !== stream) element.srcObject = stream;
-  }, [stream]);
-
-  return (
-    <Box
-      onClick={onClick}
-      sx={{
-        position: "relative",
-        borderRadius: radius("md"),
-        overflow: "hidden",
-        background: "#000",
-        cursor: onClick ? "pointer" : "default",
-      }}
-    >
-      {!hasMedia && (
-        <Stack sx={{ height: "100%", alignItems: "center", justifyContent: "center" }}>
-          <Typography sx={{ fontSize: 11, color: "#9aa0a8" }}>
-            {native.failed ? "Stream unavailable" : onClick ? "Click to watch" : "Connecting…"}
-          </Typography>
-        </Stack>
-      )}
-      {/* The media surface is the only strategy-dependent part of the tile. */}
-      {nativeSurface ? (
-        <canvas
-          ref={displayCanvas}
-          data-testid={TID.streamNativeView}
-          data-own={own ? "true" : "false"}
-          data-session={session ?? undefined}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            display: hasMedia ? "block" : "none",
-          }}
-        />
-      ) : (
-        <video
-          ref={video}
-          autoPlay
-          playsInline
-          muted
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            display: hasMedia ? "block" : "none",
-          }}
-        />
-      )}
-      <Stack
-        direction="row"
-        alignItems="center"
-        gap={0.75}
-        sx={{
-          position: "absolute",
-          left: 8,
-          bottom: 8,
-          pl: "4px",
-          pr: "9px",
-          py: "3px",
-          borderRadius: radius("xl"),
-          background: "rgba(10,11,13,.75)",
-          backdropFilter: "blur(8px)",
-        }}
-      >
-        <UserAvatar name={name} session={session} size={16} />
-        <Typography sx={{ fontSize: 10.5, color: "#e6e9f0", fontWeight: 500 }}>{label}</Typography>
-      </Stack>
-    </Box>
   );
 }

@@ -251,6 +251,9 @@ export const TID = {
   /** Kebab/burger button opening the own-broadcast stream-config menu
    *  (stop / change source / quality), beside the stop-stream × button. */
   streamConfigMenu: "stream-config-menu",
+  /** Config-menu switch hiding this app's windows from screen capture
+   *  (checked = hidden, i.e. the client cannot be screenshotted). */
+  streamHideSelfToggle: "stream-hide-self-toggle",
   /** Gear button in the source picker opening the "Stream Mode" popover
    *  (presets + screen-resolution / frame-rate submenus). */
   screenShareSettings: "screen-share-settings",

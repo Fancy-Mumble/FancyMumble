@@ -6,7 +6,9 @@
  * connection-speed / network-activity / buffer-health rows (the last
  * three with YouTube-style scrolling bar graphs) it surfaces the
  * numbers that matter for a realtime stream - network latency (RTT,
- * also graphed), packet loss, jitter and the selected ICE path.
+ * also graphed), packet loss, jitter, the playout delay the receiver is
+ * holding (and how much of it is an imposed floor rather than measured
+ * network jitter) and the selected ICE path.
  *
  * Samples at 1 Hz through a {@link StatsSampler} created by the active
  * stream-viewer strategy's factory - the webview family samples
@@ -90,6 +92,14 @@ export interface StatsSample {
   /** Cumulative jitter-buffer delay in seconds (spec: sum over emitted samples). */
   jitterBufferDelay: number;
   jitterBufferEmittedCount: number;
+  /** Cumulative playout delay the UA was AIMING for, seconds. Its own jitter
+   *  estimate, floored by whatever `jitterBufferTarget` we asked for. */
+  jitterBufferTargetDelay: number;
+  /** Cumulative floor under that target, seconds - i.e. how much delay is
+   *  imposed rather than measured. We set `jitterBufferTarget` to 0, so this
+   *  staying near zero is what proves nothing on our side is padding the
+   *  latency (it is the counter that exposed the old freeze-driven ratchet). */
+  jitterBufferMinimumDelay: number;
   videoCodec: string | null;
   audioCodec: string | null;
   rttMs: number | null;
@@ -137,6 +147,8 @@ export function parseStatsReports(reports: Iterable<StatsDict>, timestampMs: num
     jitterMs: null,
     jitterBufferDelay: 0,
     jitterBufferEmittedCount: 0,
+    jitterBufferTargetDelay: 0,
+    jitterBufferMinimumDelay: 0,
     videoCodec: null,
     audioCodec: null,
     rttMs: null,
@@ -147,6 +159,8 @@ export function parseStatsReports(reports: Iterable<StatsDict>, timestampMs: num
   extractSelectedPair(all, byId, sample);
   let jitterBufferDelay = 0;
   let jitterBufferEmittedCount = 0;
+  let jitterBufferTargetDelay = 0;
+  let jitterBufferMinimumDelay = 0;
   for (const r of all) {
     if (r.type !== "inbound-rtp") continue;
     const kind = str(r.kind) ?? str(r.mediaType);
@@ -159,12 +173,16 @@ export function parseStatsReports(reports: Iterable<StatsDict>, timestampMs: num
       // buffer-health graph.
       jitterBufferDelay += num(r.jitterBufferDelay) ?? 0;
       jitterBufferEmittedCount += num(r.jitterBufferEmittedCount) ?? 0;
+      jitterBufferTargetDelay += num(r.jitterBufferTargetDelay) ?? 0;
+      jitterBufferMinimumDelay += num(r.jitterBufferMinimumDelay) ?? 0;
     } else if (kind === "audio" && codec) {
       sample.audioCodec = formatCodec(codec);
     }
   }
   sample.jitterBufferDelay = jitterBufferDelay;
   sample.jitterBufferEmittedCount = jitterBufferEmittedCount;
+  sample.jitterBufferTargetDelay = jitterBufferTargetDelay;
+  sample.jitterBufferMinimumDelay = jitterBufferMinimumDelay;
 
   // Mirror the first video track into the legacy top-level fields, and
   // aggregate packet counters across tracks for the connection-level loss %.
@@ -255,6 +273,10 @@ export interface IntervalStats {
   lossPct: number | null;
   /** Mean jitter-buffer (playout) delay over the interval, ms. */
   bufferMs: number | null;
+  /** Mean playout delay the UA aimed for over the interval, ms. */
+  bufferTargetMs: number | null;
+  /** Mean imposed FLOOR under that target over the interval, ms. */
+  bufferMinimumMs: number | null;
 }
 
 export function deriveIntervalStats(prev: StatsSample | null, curr: StatsSample): IntervalStats {
@@ -264,6 +286,8 @@ export function deriveIntervalStats(prev: StatsSample | null, curr: StatsSample)
     fps: curr.framesPerSecond,
     lossPct: null,
     bufferMs: null,
+    bufferTargetMs: null,
+    bufferMinimumMs: null,
   };
   if (!prev) return out;
   const dt = (curr.timestampMs - prev.timestampMs) / 1000;
@@ -285,6 +309,15 @@ export function deriveIntervalStats(prev: StatsSample | null, curr: StatsSample)
   const dEmitted = curr.jitterBufferEmittedCount - prev.jitterBufferEmittedCount;
   const dDelay = curr.jitterBufferDelay - prev.jitterBufferDelay;
   if (dEmitted > 0 && dDelay >= 0) out.bufferMs = (dDelay / dEmitted) * 1000;
+
+  // Target vs floor: `bufferMs` says what frames actually waited, these two
+  // say why. A floor well above zero means something asked for the delay
+  // rather than measured it - the failure mode the old adaptive controller
+  // produced, and the reason these are on the panel at all.
+  const dTarget = curr.jitterBufferTargetDelay - prev.jitterBufferTargetDelay;
+  if (dEmitted > 0 && dTarget >= 0) out.bufferTargetMs = (dTarget / dEmitted) * 1000;
+  const dMinimum = curr.jitterBufferMinimumDelay - prev.jitterBufferMinimumDelay;
+  if (dEmitted > 0 && dMinimum >= 0) out.bufferMinimumMs = (dMinimum / dEmitted) * 1000;
 
   return out;
 }
@@ -537,6 +570,18 @@ export default function StreamStatsPanel({
         value: `${fmt(interval.bufferMs)} ms`,
         graph: hist.buffer,
         color: "#b7d84b",
+      },
+      {
+        key: "playoutDelay",
+        // Untranslated on purpose: a technical diagnostic, like "Decoder"
+        // below. "target" is the delay the UA is aiming for, "floor" the part
+        // imposed by `jitterBufferTarget` rather than measured from the
+        // network. We pin that target to 0 (see useScreenShare.ts), so a
+        // non-zero floor here means something is padding latency; a target
+        // that climbs and never returns means the sender's RTP timestamps
+        // stopped matching its real cadence.
+        label: "Playout delay",
+        value: `target ${fmt(interval.bufferTargetMs)} ms · floor ${fmt(interval.bufferMinimumMs)} ms`,
       },
       {
         key: "latency",

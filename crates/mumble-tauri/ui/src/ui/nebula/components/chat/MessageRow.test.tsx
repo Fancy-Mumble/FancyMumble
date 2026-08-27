@@ -8,6 +8,9 @@ import type { ChatMessage } from "@core/types";
 import { withNebulaTheme } from "../../testTheme";
 import { MessageRow } from "./MessageRow";
 
+const openUrlMock = vi.fn((_url: string) => Promise.resolve());
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: (url: string) => openUrlMock(url) }));
+
 function message(partial: Partial<ChatMessage> = {}): ChatMessage {
   return {
     sender_session: 7,
@@ -133,6 +136,41 @@ describe("MessageRow", () => {
     expect(screen.getByText("agreed")).toBeTruthy();
     expect(screen.getByText("the original")).toBeTruthy();
     expect(document.body.textContent).not.toContain("FANCY_QUOTE");
+  });
+
+  it("hands a link in a message to the browser instead of the window", () => {
+    openUrlMock.mockClear();
+    const { container } = draw(message({ body: '<a href="https://example.org/docs">docs</a>' }));
+
+    const link = container.querySelector("a")!;
+    // Standard's renderer marks anchors for the guard; nebula's has to as well,
+    // or the guard has nothing to intercept.
+    expect(link.dataset["external"]).toBe("true");
+
+    const navigated = fireEvent.click(link);
+    // A live anchor would navigate the app's own window; the guard asks first,
+    // on nebula's own dialog rather than standard's.
+    expect(navigated).toBe(false);
+    expect(screen.getByText("Leaving Fancy Mumble")).toBeTruthy();
+    // The host is drawn apart from the path: it is what the warning is about.
+    expect(screen.getByText("example.org")).toBeTruthy();
+    expect(screen.getByText("HTTPS")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Open link"));
+    expect(openUrlMock).toHaveBeenCalledWith("https://example.org/docs");
+  });
+
+  it("hangs the hover pill above the row, clear of the message body", () => {
+    const { container } = draw(message({ body: '<a href="https://example.org/docs">example.org</a>' }));
+    fireEvent.mouseEnter(container.firstElementChild!);
+
+    const pill = screen.getByLabelText("Copy message").closest("div")!;
+    const style = getComputedStyle(pill);
+    // Half over the row is where it used to sit, and there it lay on the first
+    // line - a link printed there could not be clicked at all. Now it stands
+    // off the top edge: a fixed gap above the row, never a step back into it.
+    expect(style.bottom.startsWith("calc(100% + ")).toBe(true);
+    expect(style.top.startsWith("-")).toBe(false);
   });
 
   it("can react to a message that has no reactions yet", () => {

@@ -30,6 +30,11 @@ webrtc = "0.13"
 # Async runtime for the webrtc peer; the broadcaster owns a small dedicated
 # runtime so embedders (Tauri today, the Qt client later) need no ambient one.
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+# Zero-copy buffers for the RTP payloads handed to webrtc-rs.
+bytes = "1"
+# Random RTP timestamp base (RFC 3550 asks for one); same version the rest
+# of the workspace pins.
+rand = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 base64 = "0.22"
