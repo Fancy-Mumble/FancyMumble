@@ -376,6 +376,89 @@ function renderFormattedOverlay(
 
 // --- Markdown -> HTML (for sending) -------------------------------
 
+/**
+ * The line forms that open or continue a list.
+ *
+ * Ordered items accept `.` and `)` because both get typed, and the number
+ * itself is never read back: a list renumbers itself when it is rendered, so
+ * remembering that someone started at `3.` would only preserve a slip.
+ *
+ * Three digits at most, which is what keeps "2024. what a year" a sentence.
+ * A year opening a line is a far commoner thing to type in a chat window than
+ * a list that runs past its thousandth item.
+ */
+const BULLET_LINE = /^[ \t]*[-*+][ \t]+(.*)$/;
+const ORDERED_LINE = /^[ \t]*\d{1,3}[.)][ \t]+(.*)$/;
+/** Either marker, for taking one back off a line. */
+const LIST_PREFIX = /^[ \t]*(?:[-*+]|\d{1,3}[.)])[ \t]+/;
+
+/**
+ * Lift each run of list lines out of `html`, leaving a placeholder behind.
+ *
+ * Lists are the one block-level thing this converter draws, and they have to
+ * come out before the newline pass: a `<br>` between two `<li>`s is a blank
+ * line the browser draws *inside* the list. The placeholder sits on the lines
+ * it replaced, so the break that separated the list from its neighbours
+ * survives as a `<br>` - which is the newline `htmlToMarkdown` reads back.
+ */
+function stashLists(html: string, stash: string[]): string {
+  const out: string[] = [];
+  let run: string[] = [];
+  let kind: "ul" | "ol" | null = null;
+
+  const flush = () => {
+    if (!kind) return;
+    stash.push(`<${kind}>${run.map((item) => `<li>${item}</li>`).join("")}</${kind}>`);
+    out.push(`\u0000LIST${stash.length - 1}\u0000`);
+    run = [];
+    kind = null;
+  };
+
+  for (const line of html.split("\n")) {
+    const bullet = BULLET_LINE.exec(line);
+    const ordered = bullet ? null : ORDERED_LINE.exec(line);
+    const item = bullet ?? ordered;
+    if (!item) {
+      flush();
+      out.push(line);
+      continue;
+    }
+    // A bullet directly under a number starts a second list rather than
+    // joining the first: one <ul> holding both would silently renumber the
+    // half that was typed with digits.
+    const lineKind = bullet ? "ul" : "ol";
+    if (kind && kind !== lineKind) flush();
+    kind = lineKind;
+    run.push(item[1]);
+  }
+  flush();
+  return out.join("\n");
+}
+
+/**
+ * Turn a rendered list back into the lines that produced it.
+ *
+ * The separating newlines are put back only where the surrounding text does
+ * not already carry one. `<ul>` is a block element, so nothing before or after
+ * it holds the break the author typed; adding one unconditionally would grow a
+ * blank line every time a message with a list was edited and saved.
+ */
+function unwrapLists(text: string): string {
+  return text.replace(
+    /<(ul|ol)>([\s\S]*?)<\/\1>/gi,
+    (match: string, tag: string, body: string, offset: number, whole: string) => {
+      const ordered = tag.toLowerCase() === "ol";
+      const items = [...body.matchAll(/<li>([\s\S]*?)<\/li>/gi)].map(
+        (item, index) => (ordered ? `${index + 1}. ` : "- ") + item[1],
+      );
+      const end = offset + match.length;
+      const lead = offset > 0 && whole[offset - 1] !== "\n" ? "\n" : "";
+      const tail = end < whole.length && whole[end] !== "\n" ? "\n" : "";
+      return lead + items.join("\n") + tail;
+    },
+  );
+}
+
 /** Convert markdown syntax to HTML for the Mumble message body. */
 export function markdownToHtml(raw: string): string {
   let html = raw;
@@ -433,11 +516,18 @@ export function markdownToHtml(raw: string): string {
     const safe = url.replace(/"/g, "&quot;");
     return `<a href="${safe}" target="_blank" rel="noopener noreferrer">${safe}</a>${trail}`;
   });
+  // Lists come out before the newline pass, for the reason stashLists gives.
+  const listStash: string[] = [];
+  html = stashLists(html, listStash);
+
   // Newlines -> <br> (must come last so inline formatting is applied first)
   html = html.replaceAll("\n", "<br>");
 
   // Restore fenced code blocks after the <br> pass so their newlines survive.
   html = html.replace(/\u0000FENCE(\d+)\u0000/g, (_m, idx: string) => fenceStash[Number(idx)] ?? "");
+  // Lists come back after the <br> pass too, so their item boundaries stay
+  // boundaries rather than becoming blank lines inside the list.
+  html = html.replace(/\u0000LIST(\d+)\u0000/g, (_m, idx: string) => listStash[Number(idx)] ?? "");
   // Restore display math blocks (newlines already stripped, wrap in a span
   // so MediaPreview can find and render them with KaTeX).
   html = html.replace(/\u0000MATH_BLOCK(\d+)\u0000/g, (_m, idx: string) => {
@@ -455,6 +545,7 @@ export function htmlToMarkdown(html: string): string {
     /<pre><code(?:\s+class="language-([a-zA-Z0-9_+-]+)")?>([\s\S]*?)<\/code><\/pre>/gi,
     (_match, lang: string | undefined, body: string) => `\`\`\`${lang ?? ""}\n${body}\n\`\`\``,
   );
+  text = unwrapLists(text);
   text = text.replaceAll(/<a[^>]*>([^<]*)<\/a>/gi, "$1");
   text = text.replaceAll(/<code>([^<]*)<\/code>/gi, "`$1`");
   // Math spans (must come before the generic <span> strip)
@@ -508,6 +599,26 @@ export interface MarkdownInputApi {
   replaceRange(start: number, end: number, text: string): void;
   /** Focus the underlying textarea. */
   focus(): void;
+  /**
+   * Wrap the selection in markdown markers, leaving it selected.
+   *
+   * This is the same call Ctrl+B makes. It is published so that a formatting
+   * bar presses the button the keyboard already presses, rather than deciding
+   * a second time what `**` means - two answers to that is two dialects.
+   */
+  wrapSelection(before: string, after: string): void;
+  /** Turn the lines the selection touches into a list, or back into plain ones. */
+  toggleList(kind: "bullet" | "ordered"): void;
+  /**
+   * Where the selection is on screen, in viewport coordinates.
+   *
+   * The overlay is the only thing that knows: the textarea underneath is a
+   * single opaque box with no per-character geometry to ask for, while the
+   * overlay draws the selected run as its own spans and so has laid it out
+   * glyph by glyph. Null when nothing is selected, or before the overlay has
+   * caught up with a selection that was only just made.
+   */
+  selectionRect(): { left: number; right: number } | null;
 }
 
 export default function MarkdownInput({
@@ -564,6 +675,68 @@ export default function MarkdownInput({
     };
   }, [syncSelection]);
 
+  /** Wrap selection / insert at cursor with markdown markers. */
+  const wrapSelection = useCallback(
+    (before: string, after: string) => {
+      const el = textareaRef.current;
+      if (!el) return;
+      const start = el.selectionStart;
+      const end = el.selectionEnd;
+      const selected = value.slice(start, end);
+      const newVal = value.slice(0, start) + before + selected + after + value.slice(end);
+      onChange(newVal);
+      // Restore cursor position after React re-render.
+      requestAnimationFrame(() => {
+        el.selectionStart = start + before.length;
+        el.selectionEnd = end + before.length;
+        el.focus();
+        syncSelection();
+      });
+    },
+    [value, onChange, syncSelection],
+  );
+
+  /**
+   * Turn the lines the selection touches into a list, or back into plain ones.
+   *
+   * A list is a property of whole lines, so the span is grown to line
+   * boundaries first: selecting half a word and asking for a bullet still
+   * bullets that line. Pressing the same button again strips the markers
+   * rather than nesting a second set, which is what a toolbar button that
+   * shows no state has to do to stay usable.
+   */
+  const toggleList = useCallback(
+    (kind: "bullet" | "ordered") => {
+      const el = textareaRef.current;
+      if (!el) return;
+      const from = el.selectionStart === 0 ? 0 : value.lastIndexOf("\n", el.selectionStart - 1) + 1;
+      const lineEnd = value.indexOf("\n", el.selectionEnd);
+      const to = lineEnd === -1 ? value.length : lineEnd;
+      const lines = value.slice(from, to).split("\n");
+      // Blank lines are ignored on the way in and on the way out: they are the
+      // gaps between paragraphs, not empty items waiting for a bullet.
+      const filled = lines.filter((line) => line.trim() !== "");
+      const listed = filled.length > 0 && filled.every((line) => LIST_PREFIX.test(line));
+      let counter = 0;
+      const marked = lines
+        .map((line) => {
+          if (listed) return line.replace(LIST_PREFIX, "");
+          if (line.trim() === "") return line;
+          counter += 1;
+          return (kind === "ordered" ? `${counter}. ` : "- ") + line;
+        })
+        .join("\n");
+      onChange(value.slice(0, from) + marked + value.slice(to));
+      requestAnimationFrame(() => {
+        el.selectionStart = from;
+        el.selectionEnd = from + marked.length;
+        el.focus();
+        syncSelection();
+      });
+    },
+    [value, onChange, syncSelection],
+  );
+
   // Wire the imperative API exposed to the parent.
   useEffect(() => {
     if (!apiRef) return;
@@ -586,11 +759,29 @@ export default function MarkdownInput({
       focus() {
         textareaRef.current?.focus();
       },
+      wrapSelection,
+      toggleList,
+      selectionRect() {
+        const overlay = overlayRef.current;
+        if (!overlay) return null;
+        const rects = Array.from(overlay.querySelectorAll<HTMLElement>(`.${styles.selection}`)).map((mark) =>
+          mark.getBoundingClientRect(),
+        );
+        if (rects.length === 0) return null;
+        // A selection that wraps has spans on several lines. Only the first
+        // line is reported: that is where the selection starts and where the
+        // eye is, and the union of all of them is just the whole pane.
+        const line = rects.filter((rect) => Math.abs(rect.top - rects[0].top) < 1);
+        return {
+          left: Math.min(...line.map((rect) => rect.left)),
+          right: Math.max(...line.map((rect) => rect.right)),
+        };
+      },
     };
     return () => {
       if (apiRef.current) apiRef.current = null;
     };
-  }, [apiRef, value, onChange, onSelectionChange]);
+  }, [apiRef, value, onChange, onSelectionChange, wrapSelection, toggleList]);
 
   // Sync scroll between textarea and overlay.
   const syncScroll = useCallback(() => {
@@ -614,27 +805,6 @@ export default function MarkdownInput({
     el.style.height = `${clamped}px`;
     wrapper.style.height = `${clamped}px`;
   }, [value]);
-
-  /** Wrap selection / insert at cursor with markdown markers. */
-  const wrapSelection = useCallback(
-    (before: string, after: string) => {
-      const el = textareaRef.current;
-      if (!el) return;
-      const start = el.selectionStart;
-      const end = el.selectionEnd;
-      const selected = value.slice(start, end);
-      const newVal = value.slice(0, start) + before + selected + after + value.slice(end);
-      onChange(newVal);
-      // Restore cursor position after React re-render.
-      requestAnimationFrame(() => {
-        el.selectionStart = start + before.length;
-        el.selectionEnd = end + before.length;
-        el.focus();
-        syncSelection();
-      });
-    },
-    [value, onChange, syncSelection],
-  );
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
