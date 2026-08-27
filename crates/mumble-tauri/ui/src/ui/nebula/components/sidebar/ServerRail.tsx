@@ -9,6 +9,8 @@ const TILE = 40;
 
 interface ServerRailProps {
   entries: readonly ServerRailEntry[];
+  /** Server artwork, keyed by host:port. Missing ones fall back to initials. */
+  icons?: ReadonlyMap<string, string>;
   /** The server whose screen is open, so the rail can say where you are. */
   activeKey: string | null;
   expanded: boolean;
@@ -30,8 +32,9 @@ interface ServerRailProps {
 function RailTile({
   entry,
   active,
+  icon,
   onSelect,
-}: Readonly<{ entry: ServerRailEntry; active: boolean; onSelect: () => void }>) {
+}: Readonly<{ entry: ServerRailEntry; active: boolean; icon?: string; onSelect: () => void }>) {
   const { group, status, unread } = entry;
   const waiting = unread > 99 ? "99+" : String(unread);
   const detail = status === "connecting" ? "connecting" : status === "connected" ? "connected" : "not connected";
@@ -60,7 +63,7 @@ function RailTile({
           "&:focus-visible": { outline: "2px solid " + theme.palette.nebula.accent, outlineOffset: 2 },
         })}
       >
-        <UserAvatar name={group.label} size={TILE} square gradient={serverTint(group.key)} />
+        <UserAvatar name={group.label} size={TILE} square src={icon} gradient={serverTint(group.key)} />
         <ConnectionPip status={status} />
         {unread > 0 && <UnreadBadge label={waiting} />}
       </Box>
@@ -143,6 +146,7 @@ function UnreadBadge({ label }: Readonly<{ label: string }>) {
  */
 export function ServerRail({
   entries,
+  icons,
   activeKey,
   expanded,
   onToggleExpanded,
@@ -182,7 +186,7 @@ export function ServerRail({
 
       <Box
         aria-hidden
-        sx={(theme) => ({ width: 22, height: 1, my: "1px", background: theme.palette.nebula.line2 })}
+        sx={(theme) => ({ width: 22, height: "1px", my: "1px", background: theme.palette.nebula.line2 })}
       />
 
       {entries.map((entry) => (
@@ -190,6 +194,7 @@ export function ServerRail({
           key={entry.group.key}
           entry={entry}
           active={entry.group.key === activeKey}
+          icon={icons?.get(entry.group.key)}
           onSelect={() => onSelect(entry)}
         />
       ))}
