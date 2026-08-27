@@ -4,6 +4,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isDesktopPlatform } from "@core/utils/platform";
 import { CloseIcon, MinimizeIcon, PlusIcon, SquareIcon } from "@ui/icons";
 import { radius } from "../../tokens";
+import { serverTint, type ServerRailEntry } from "../../selectors";
+import { UserAvatar } from "../primitives";
 
 interface TitleBarProps {
   /** Label of the connected server, or undefined while disconnected. */
@@ -16,6 +18,14 @@ interface TitleBarProps {
   /** Whether quick connect is currently showing, for the button's state. */
   quickConnectOpen: boolean;
   onDisconnect?: () => void;
+  /** Every server, when the switcher lives up here instead of on the rail. */
+  entries?: readonly ServerRailEntry[];
+  /** Server artwork, keyed by host:port - the tab picture. */
+  icons?: ReadonlyMap<string, string>;
+  activeKey?: string | null;
+  onSelectServer?: (entry: ServerRailEntry) => void;
+  /** True when the title bar carries the whole list rather than one pill. */
+  tabs?: boolean;
 }
 
 // Window operations resolve the window on click rather than at render so the
@@ -37,7 +47,14 @@ export function TitleBar({
   onQuickConnect,
   quickConnectOpen,
   onDisconnect,
+  entries = [],
+  icons,
+  activeKey = null,
+  onSelectServer,
+  tabs = false,
 }: Readonly<TitleBarProps>) {
+  const activeEntry = entries.find((entry) => entry.group.key === activeKey) ?? null;
+
   return (
     <Stack
       direction="row"
@@ -69,7 +86,9 @@ export function TitleBar({
       >
         M
       </Box>
-      <Typography sx={{ fontWeight: 600, fontSize: 13, mr: "6px" }}>Fancy Mumble</Typography>
+      <Typography sx={{ fontWeight: 600, fontSize: 13, mr: "6px", whiteSpace: "nowrap" }}>
+        Fancy Mumble
+      </Typography>
 
       <Box
         component="button"
@@ -90,7 +109,34 @@ export function TitleBar({
         Friends
       </Box>
 
-      {serverLabel && (
+      {/* The strip gives way before the window controls do: a dozen servers
+          must not push the close button off the bar. */}
+      {tabs && (
+        <Stack
+          direction="row"
+          alignItems="center"
+          gap={0.5}
+          sx={{
+            minWidth: 0,
+            overflowX: "auto",
+            scrollbarWidth: "none",
+            "&::-webkit-scrollbar": { display: "none" },
+          }}
+        >
+          {entries.map((entry) => (
+            <ServerTab
+              key={entry.group.key}
+              entry={entry}
+              icon={icons?.get(entry.group.key)}
+              active={entry.group.key === activeKey}
+              onSelect={() => onSelectServer?.(entry)}
+              onDisconnect={onDisconnect}
+            />
+          ))}
+        </Stack>
+      )}
+
+      {!tabs && serverLabel && (
         <Stack
           direction="row"
           alignItems="center"
@@ -115,15 +161,19 @@ export function TitleBar({
               gap: 1,
             }}
           >
-            <Box
-              component="span"
-              sx={(theme) => ({
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                background: theme.palette.nebula.ok,
-              })}
-            />
+            {activeEntry ? (
+              <ServerFavicon entry={activeEntry} icon={icons?.get(activeEntry.group.key)} />
+            ) : (
+              <Box
+                component="span"
+                sx={(theme) => ({
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: theme.palette.nebula.ok,
+                })}
+              />
+            )}
             {serverLabel}
           </Box>
           {onDisconnect && (
@@ -182,5 +232,123 @@ export function TitleBar({
         </Stack>
       )}
     </Stack>
+  );
+}
+
+/**
+ * One server, up in the window chrome.
+ *
+ * The picture is the point: a browser tab is found by its favicon long before
+ * its title is read, and a rail of servers works the same way. The label is
+ * what confirms the choice, not what makes it.
+ */
+function ServerTab({
+  entry,
+  icon,
+  active,
+  onSelect,
+  onDisconnect,
+}: Readonly<{
+  entry: ServerRailEntry;
+  icon?: string;
+  active: boolean;
+  onSelect: () => void;
+  onDisconnect?: () => void;
+}>) {
+  const { group, status, unread } = entry;
+  return (
+    <Stack
+      direction="row"
+      alignItems="center"
+      gap={1}
+      sx={(theme) => ({
+        px: "9px",
+        py: "4px",
+        borderRadius: radius("md"),
+        fontSize: 12.5,
+        fontWeight: 500,
+        maxWidth: 190,
+        background: active ? theme.palette.nebula.card2 : "transparent",
+        color: active ? theme.palette.nebula.text : theme.palette.nebula.muted,
+        "&:hover": { background: theme.palette.nebula.hover },
+      })}
+    >
+      <Box
+        component="button"
+        type="button"
+        onClick={onSelect}
+        aria-current={active ? "true" : undefined}
+        sx={{
+          all: "unset",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          gap: "7px",
+          minWidth: 0,
+        }}
+      >
+        <ServerFavicon entry={entry} icon={icon} />
+        <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {group.label}
+        </Box>
+        {status !== "connected" && (
+          <Box component="span" sx={(theme) => ({ fontSize: 10, color: theme.palette.nebula.dim })}>
+            {status === "connecting" ? "…" : ""}
+          </Box>
+        )}
+        {unread > 0 && (
+          <Box
+            component="span"
+            sx={(theme) => ({
+              minWidth: 15,
+              height: 15,
+              px: "4px",
+              borderRadius: "8px",
+              display: "grid",
+              placeItems: "center",
+              background: theme.palette.nebula.bad,
+              color: theme.palette.nebula.bg0,
+              fontSize: 9,
+              fontWeight: 700,
+            })}
+          >
+            {unread > 99 ? "99+" : unread}
+          </Box>
+        )}
+      </Box>
+      {active && onDisconnect && (
+        <Box
+          component="button"
+          type="button"
+          aria-label={"Disconnect from " + group.label}
+          onClick={onDisconnect}
+          sx={(theme) => ({
+            all: "unset",
+            cursor: "pointer",
+            fontSize: 11,
+            lineHeight: 1,
+            color: theme.palette.nebula.dim,
+            "&:hover": { color: theme.palette.nebula.bad },
+          })}
+        >
+          ✕
+        </Box>
+      )}
+    </Stack>
+  );
+}
+
+/** The server picture, at the size a tab can spare. */
+function ServerFavicon({ entry, icon }: Readonly<{ entry: ServerRailEntry; icon?: string }>) {
+  return (
+    <Box sx={{ display: "flex", flex: "none", borderRadius: radius("sm"), overflow: "hidden" }}>
+      <UserAvatar
+        name={entry.group.label}
+        size={15}
+        square
+        src={icon}
+        gradient={serverTint(entry.group.key)}
+      />
+    </Box>
   );
 }
