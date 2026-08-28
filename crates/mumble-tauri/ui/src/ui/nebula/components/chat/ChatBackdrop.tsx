@@ -7,6 +7,11 @@ import {
   type PersonalizationData,
 } from "@standard/personalizationStorage";
 
+/** How often the watchdog samples the clip's position. */
+const WATCHDOG_INTERVAL_MS = 1000;
+/** Samples without progress before the clip is restarted. */
+const WATCHDOG_STUCK_TICKS = 2;
+
 /** Matches the OS "reduce motion" setting, and follows it if it changes. */
 function usePrefersReducedMotion(): boolean {
   const query = () => globalThis.matchMedia?.("(prefers-reduced-motion: reduce)") ?? null;
@@ -99,17 +104,50 @@ export function ChatBackdrop() {
 
   // A looping wallpaper decoding behind a window nobody is looking at is pure
   // heat. The element keeps its buffered frames, so coming back is instant.
+  //
+  // The rest keeps the clip going where `loop` alone did not. The attribute
+  // is honoured, yet the wallpaper has been seen frozen on its still after one
+  // pass, and a wallpaper that ran once is worse than none. So the element is
+  // restarted on `ended` (which `loop` should make unreachable), and a
+  // watchdog restarts it when it has stopped advancing while claiming to
+  // play - the stop the engine never announces, which no event can catch.
   const videoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
-    if (!playing) return;
-    const sync = () => {
-      const node = videoRef.current;
-      if (!node) return;
-      if (document.hidden) node.pause();
-      else void node.play().catch(() => undefined);
+    const node = videoRef.current;
+    if (!playing || !node) return;
+    const resume = () => void node.play().catch(() => undefined);
+    const restart = () => {
+      node.currentTime = 0;
+      resume();
     };
+    const sync = () => (document.hidden ? node.pause() : resume());
+
+    let lastTime = -1;
+    let stuckTicks = 0;
+    const watchdog = setInterval(() => {
+      // Not moving for a reason: hidden, mid-seek, or still buffering.
+      if (document.hidden || node.seeking || node.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
+        stuckTicks = 0;
+        return;
+      }
+      const advanced = node.currentTime !== lastTime;
+      lastTime = node.currentTime;
+      if (advanced) {
+        stuckTicks = 0;
+        return;
+      }
+      if (++stuckTicks < WATCHDOG_STUCK_TICKS) return;
+      stuckTicks = 0;
+      restart();
+    }, WATCHDOG_INTERVAL_MS);
+
+    node.addEventListener("ended", restart);
     document.addEventListener("visibilitychange", sync);
-    return () => document.removeEventListener("visibilitychange", sync);
+    return () => {
+      clearInterval(watchdog);
+      node.removeEventListener("ended", restart);
+      document.removeEventListener("visibilitychange", sync);
+    };
   }, [playing, videoSrc]);
 
   // Rounded because the slider hands over floats: `1 - 0.7` prints as
@@ -160,7 +198,14 @@ export function ChatBackdrop() {
           // A clip this webview turns out not to decode - H.264 on a
           // WebKitGTK build without the proprietary GStreamer plugins - drops
           // back to the poster rather than leaving the column empty.
-          onError={() => setVideoFailed(true)}
+          //
+          // Only an `error` that carries a MediaError is that failure. The
+          // poster's image loader dispatches its own `error` on this very
+          // element, with `error` still null; treating that as a dead clip is
+          // what left the wallpaper stuck on its still.
+          onError={(event) => {
+            if (event.currentTarget.error) setVideoFailed(true);
+          }}
           sx={media}
         />
       ) : (

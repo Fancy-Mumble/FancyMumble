@@ -121,12 +121,92 @@ describe("Nebula animated chat background", () => {
       expect(node).not.toBeNull();
       return node as HTMLVideoElement;
     });
+    // A decode failure: the element carries a MediaError when `error` fires.
+    Object.defineProperty(video, "error", { value: { code: 4 } });
     fireEvent.error(video);
 
     await waitFor(() => {
       expect(query("video")).toBeNull();
       expect(query<HTMLImageElement>("img")?.getAttribute("src")).toBe("blob:poster");
     });
+  });
+
+  it("keeps playing through an error the poster's loader dispatches", async () => {
+    await mount({
+      chatBgVideo: "video-raw.mp4",
+      chatBgOriginal: "bgstore:image-poster.jpg",
+    });
+
+    const video = await waitFor(() => {
+      const node = query<HTMLVideoElement>("video");
+      expect(node).not.toBeNull();
+      return node as HTMLVideoElement;
+    });
+    // The poster's image loader fires `error` on the <video> itself, with no
+    // MediaError attached. That is not a dead clip.
+    expect(video.error).toBeFalsy();
+    fireEvent.error(video);
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(query("video")).toBe(video);
+  });
+
+  it("starts over when the clip reports it ended", async () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    await mount({
+      chatBgVideo: "video-raw.mp4",
+      chatBgOriginal: "bgstore:image-poster.jpg",
+    });
+
+    const video = await waitFor(() => {
+      const node = query<HTMLVideoElement>("video");
+      expect(node).not.toBeNull();
+      return node as HTMLVideoElement;
+    });
+    video.currentTime = 17;
+    play.mockClear();
+    fireEvent.ended(video);
+
+    expect(video.currentTime).toBe(0);
+    expect(play).toHaveBeenCalledTimes(1);
+    play.mockRestore();
+  });
+
+  it("restarts a clip that stopped advancing while it claims to play", async () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    // Only the watchdog's interval is faked; `waitFor` keeps its real clock.
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      await mount({
+        chatBgVideo: "video-raw.mp4",
+        chatBgOriginal: "bgstore:image-poster.jpg",
+      });
+
+      const video = await waitFor(() => {
+        const node = query<HTMLVideoElement>("video");
+        expect(node).not.toBeNull();
+        return node as HTMLVideoElement;
+      });
+      Object.defineProperty(video, "readyState", { value: HTMLMediaElement.HAVE_ENOUGH_DATA });
+      Object.defineProperty(video, "seeking", { value: false });
+
+      // Advancing: the watchdog leaves it alone.
+      video.currentTime = 4;
+      vi.advanceTimersByTime(1000);
+      video.currentTime = 5;
+      vi.advanceTimersByTime(1000);
+      play.mockClear();
+
+      // Frozen at 5 for two samples: restart from the top.
+      vi.advanceTimersByTime(1000);
+      expect(play).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1000);
+      expect(video.currentTime).toBe(0);
+      expect(play).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+      play.mockRestore();
+    }
   });
 
   it("shows the poster when the stored clip is gone", async () => {
