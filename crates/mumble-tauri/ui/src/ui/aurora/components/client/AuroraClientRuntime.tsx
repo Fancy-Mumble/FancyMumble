@@ -44,6 +44,7 @@ function AuroraClientRuntimeInner({ onOpenMarketplace }: { onOpenMarketplace: (p
       setKlipyApiKey(preferences.klipyApiKey);
       useAppStore.setState({
         disableLinkPreviews: preferences.disableLinkPreviews ?? false,
+        disableOsmMaps: preferences.disableOsmMaps ?? false,
         enableExternalEmbeds: preferences.enableExternalEmbeds ?? false,
         streamerMode: preferences.streamerMode ?? false,
       });

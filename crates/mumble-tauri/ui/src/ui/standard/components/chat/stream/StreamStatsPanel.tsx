@@ -17,6 +17,7 @@
  * are exported as pure functions for unit tests.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { CloseIcon } from "../../../icons";
 import { TID } from "@core/testids";
@@ -433,6 +434,47 @@ export function createPcStatsSampler(getPc: () => RTCPeerConnection | null): Sta
   };
 }
 
+/** What the Rust broadcaster's uplink estimator reports (`screen_broadcast_stats`).
+ *  `null` whenever this client is not the one sharing. */
+interface BroadcastStats {
+  readonly targetBps: number;
+  readonly ceilingBps: number;
+  readonly fractionLost: number;
+  readonly rttMs: number | null;
+  readonly reports: number;
+  readonly trackTargetsBps: readonly number[];
+}
+
+/** Poll the broadcaster's uplink estimate at 1 Hz.
+ *
+ *  Returns `null` when this client is not broadcasting, which is the common
+ *  case - a viewer's panel simply has no uplink section. The command is
+ *  desktop-only, so a rejected invoke (mobile, or a build without the
+ *  broadcaster) is treated the same as "not broadcasting" rather than
+ *  surfaced as an error. */
+function useBroadcastStats(): BroadcastStats | null {
+  const [stats, setStats] = useState<BroadcastStats | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const poll = () => {
+      invoke<BroadcastStats | null>("screen_broadcast_stats")
+        .then((next) => {
+          if (!cancelled) setStats(next ?? null);
+        })
+        .catch(() => {
+          if (!cancelled) setStats(null);
+        });
+    };
+    poll();
+    const id = setInterval(poll, 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+  return stats;
+}
+
 interface StreamStatsPanelProps {
   /** Per-session probe from the active viewer strategy's factory
    *  (`activeStreamViewerStrategy().createStatsSampler(session)`). */
@@ -454,6 +496,7 @@ export default function StreamStatsPanel({
 }: StreamStatsPanelProps) {
   const { t } = useTranslation("chat");
   const [data, setData] = useState<PanelData | null>(null);
+  const uplink = useBroadcastStats();
   const prevSampleRef = useRef<StatsSample | null>(null);
   const historiesRef = useRef<Histories>({ bitrate: [], network: [], buffer: [], rtt: [], fps: [] });
 
@@ -652,6 +695,50 @@ export default function StreamStatsPanel({
         { key: `t${i}-jitter`, label: t("screenShare.stats.jitter"), value: `${fmt(v.jitterMs, 1)} ms` },
       );
     });
+
+    // Uplink section: only present while THIS client is the one sharing.
+    // Everything above describes what we receive; this is the one part of the
+    // panel that describes what we send, and what the network is telling the
+    // sender about it.
+    if (uplink) {
+      const lossPct = uplink.fractionLost * 100;
+      // No receiver reports means nothing is validating the target: the
+      // controller is running open-loop and the number below is a guess.
+      const unvalidated = uplink.reports === 0;
+      rows.push(
+        {
+          key: "uplink-h",
+          label: t("screenShare.stats.uplinkHeading"),
+          value: "",
+          heading: true,
+        },
+        {
+          key: "uplink-target",
+          label: t("screenShare.stats.uplinkTarget"),
+          value: `${fmt(uplink.targetBps / 1000)} / ${fmt(uplink.ceilingBps / 1000)} kbps${
+            unvalidated ? ` (${t("screenShare.stats.uplinkNoReports")})` : ""
+          }`,
+          testid: TID.streamStatsUplinkTarget,
+        },
+        {
+          key: "uplink-loss",
+          label: t("screenShare.stats.uplinkLoss"),
+          value: unvalidated ? "-" : `${fmt(lossPct, 1)} %`,
+        },
+        {
+          key: "uplink-rtt",
+          label: t("screenShare.stats.uplinkRtt"),
+          value: uplink.rttMs == null ? "-" : `${uplink.rttMs} ms`,
+        },
+      );
+      if (uplink.trackTargetsBps.length > 1) {
+        rows.push({
+          key: "uplink-tracks",
+          label: t("screenShare.stats.uplinkPerTrack"),
+          value: uplink.trackTargetsBps.map((bps) => `${fmt(bps / 1000)}`).join(" / ") + " kbps",
+        });
+      }
+    }
 
     rows.push({ key: "date", label: t("screenShare.stats.date"), value: new Date().toString() });
   }

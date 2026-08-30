@@ -4,6 +4,7 @@ import { ThemeProvider } from "@mui/material/styles";
 import { createNebulaTheme } from "@nebula/theme";
 import { ServerRail } from "@nebula/components/sidebar/ServerRail";
 import { ServerRailCard } from "@nebula/components/sidebar/ServerRailCard";
+import { SearchBox } from "@nebula/components/primitives";
 import type { ServerRailEntry, ServerRailStatus } from "@nebula/selectors";
 
 const entry = (host: string, status: ServerRailStatus, unread = 0): ServerRailEntry => ({
@@ -13,7 +14,7 @@ const entry = (host: string, status: ServerRailStatus, unread = 0): ServerRailEn
     host,
     port: 64738,
     identities: [],
-    favorite: false,
+    favorite: host === "kumo.jp",
     sessionId: status === "saved" ? null : "s-" + host,
   },
   session: status === "saved" ? null : { id: "s-" + host, host, port: 64738, username: "Zewi" },
@@ -23,6 +24,8 @@ const entry = (host: string, status: ServerRailStatus, unread = 0): ServerRailEn
 
 const card = new URLSearchParams(location.search).get("card");
 const expanded = new URLSearchParams(location.search).has("expanded");
+// The connect screen's shape: the list pinned open as the column itself.
+const pinned = new URLSearchParams(location.search).has("pinned");
 
 const pings = new Map<string, any>([
   ["magical.rocks:64738", { online: true, user_count: 3, max_user_count: 101, latency_ms: 18, server_version: "1.6.0" }],
@@ -50,12 +53,15 @@ createRoot(document.getElementById("root")!).render(
         entries={entries}
         activeKey="magical.rocks:64738"
         expanded={expanded}
+        pinned={pinned}
+        search={pinned ? <SearchBox value="" onChange={() => {}} placeholder="Search servers" /> : undefined}
         onToggleExpanded={() => {}}
         icons={icons}
         pings={pings}
         activeChannelName="Gaming"
         onSelect={() => {}}
         onAddServer={() => {}}
+        onToggleFavorite={() => {}}
         onDisconnect={() => {}}
       />
       <Box sx={{ width: 360, position: "relative", borderRight: "1px solid rgba(135,180,255,.11)" }}>
@@ -65,7 +71,10 @@ createRoot(document.getElementById("root")!).render(
               card === "connecting"
                 ? entry("localhost", "connecting", 0)
                 : card === "idle"
-                  ? { ...entry("kumo.jp", "saved", 12), group: { ...entry("kumo.jp", "saved", 12).group, identities: [{}, {}] as never } }
+                  ? {
+                      ...entry("kumo.jp", "saved", 12),
+                      group: { ...entry("kumo.jp", "saved", 12).group, identities: [{}, {}] as never },
+                    }
                   : entry("magical.rocks", "connected")
             }
             ping={pings.get(card === "idle" ? "kumo.jp:64738" : "magical.rocks:64738")}

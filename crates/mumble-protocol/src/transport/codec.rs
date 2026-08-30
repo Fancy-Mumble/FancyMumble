@@ -235,6 +235,9 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
         FancyFileGrant(m) => m.encode_to_vec(),
         FancyFileShare(m) => m.encode_to_vec(),
         FancyFileListing(m) => m.encode_to_vec(),
+        FancyFileManage(m) => m.encode_to_vec(),
+        FancyFileManaged(m) => m.encode_to_vec(),
+        FancyFileForget(m) => m.encode_to_vec(),
         FancyFileRefused(m) => m.encode_to_vec(),
         FancyLiveryQuery(m) => m.encode_to_vec(),
         FancyServerLivery(m) => m.encode_to_vec(),
@@ -368,6 +371,15 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
         FancyFileShare => {
             ControlMessage::FancyFileShare(crate::proto::fancy::files::Share::decode(payload)?)
         }
+        FancyFileManage => ControlMessage::FancyFileManage(
+            crate::proto::fancy::files::ManageRequest::decode(payload)?,
+        ),
+        FancyFileManaged => ControlMessage::FancyFileManaged(
+            crate::proto::fancy::files::ManageListing::decode(payload)?,
+        ),
+        FancyFileForget => ControlMessage::FancyFileForget(
+            crate::proto::fancy::files::ForgetRequest::decode(payload)?,
+        ),
         FancyFileListing => {
             ControlMessage::FancyFileListing(crate::proto::fancy::files::Listing::decode(payload)?)
         }

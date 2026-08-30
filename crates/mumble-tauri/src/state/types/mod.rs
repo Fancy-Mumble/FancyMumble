@@ -94,4 +94,24 @@ mod tests {
             "expected signal_v1 in JSON: {json}",
         );
     }
+
+    /// The `audio-transport-changed` listener in the UI store reads these two
+    /// field names; a rename here would silently blank the Server info panel's
+    /// transport rows rather than fail a build.
+    #[test]
+    fn serialize_audio_transport_payload_keys() {
+        let json = serde_json::to_string(&AudioTransportPayload {
+            udp_active: true,
+            cipher: Some("XChaCha20-Poly1305"),
+        })
+        .expect("serialize");
+        assert_eq!(json, r#"{"udp_active":true,"cipher":"XChaCha20-Poly1305"}"#);
+
+        let tcp = serde_json::to_string(&AudioTransportPayload {
+            udp_active: false,
+            cipher: None,
+        })
+        .expect("serialize");
+        assert_eq!(tcp, r#"{"udp_active":false,"cipher":null}"#);
+    }
 }

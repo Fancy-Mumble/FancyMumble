@@ -62,6 +62,7 @@
     "lucide-react": "^1.11.0",
     "marked": "^18.0.4",
     "prosemirror-markdown": "^1.13.1",
+    "protomaps-leaflet": "^5.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-i18next": "^15.0.0",

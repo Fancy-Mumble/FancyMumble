@@ -109,7 +109,10 @@ pub use send_draw_stroke::SendDrawStroke;
 pub use send_fancy_account_settings_update::SendFancyAccountSettingsUpdate;
 pub use send_fancy_audit_config_update::SendFancyAuditConfigUpdate;
 pub use send_fancy_audit_query::SendFancyAuditQuery;
-pub use send_fancy_file::{SendFancyFileDownload, SendFancyFileList, SendFancyFileUpload};
+pub use send_fancy_file::{
+    SendFancyFileDownload, SendFancyFileForget, SendFancyFileList, SendFancyFileManage,
+    SendFancyFileUpload,
+};
 pub use send_fancy_forum::{SendFancyForumDelete, SendFancyForumFetch, SendFancyForumPost};
 pub use send_fancy_onboarding_config_update::SendFancyOnboardingConfigUpdate;
 pub use send_fancy_onboarding_response::SendFancyOnboardingResponse;

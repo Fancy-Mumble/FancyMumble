@@ -3,14 +3,17 @@ import { hexToHsl } from "@core/utils/colorUtils";
 import type { ChannelEntry, ConnectionStatus, SearchResult, UserEntry } from "@core/types";
 import {
   channelOccupants,
+  channelPresence,
   composerHtml,
   editableText,
   messageContent,
   groupMessagesByDay,
   groupSavedServers,
+  isEncryptedChannel,
   listDirectConversations,
   orderChannels,
   preferredIdentity,
+  presenceLabel,
   quickConnectTargets,
   quickSwitchTargets,
   reorderServerRail,
@@ -112,6 +115,60 @@ describe("channelOccupants", () => {
   it("sorts by name and ignores who is talking", () => {
     const users = [user(1, "Zoe", 4), user(2, "Adam", 4), user(3, "Mia", 4), user(4, "Elsewhere", 5)];
     expect(channelOccupants(users, 4).map((entry) => entry.name)).toEqual(["Adam", "Mia", "Zoe"]);
+  });
+});
+
+describe("channelPresence", () => {
+  const holder = (cert_hash: string, name: string) => ({ cert_hash, name, is_online: false });
+  const here = [
+    { ...user(1, "Zoe", 4), hash: "aa" },
+    { ...user(2, "Adam", 4), hash: "bb" },
+    { ...user(3, "Elsewhere", 5), hash: "cc" },
+  ];
+
+  it("counts a plain channel as its occupants and nothing more", () => {
+    expect(channelPresence(here, 4)).toEqual({ inVoice: 2, members: 2 });
+  });
+
+  it("adds the key holders who are not in the channel", () => {
+    const holders = [holder("aa", "Zoe"), holder("dd", "Sebi"), holder("ee", "Mia")];
+    expect(channelPresence(here, 4, holders)).toEqual({ inVoice: 2, members: 4 });
+  });
+
+  it("keeps counting a holder who is connected but sitting elsewhere", () => {
+    const holders = [holder("cc", "Elsewhere")];
+    expect(channelPresence(here, 4, holders)).toEqual({ inVoice: 2, members: 3 });
+  });
+});
+
+describe("presenceLabel", () => {
+  it("says both numbers when they differ", () => {
+    expect(presenceLabel({ inVoice: 3, members: 5 })).toBe("3 in voice · 5 members");
+  });
+
+  it("drops the membership when it only restates who is present", () => {
+    expect(presenceLabel({ inVoice: 5, members: 5 })).toBe("5 in voice");
+  });
+
+  it("counts one member singly", () => {
+    expect(presenceLabel({ inVoice: 0, members: 1 })).toBe("0 in voice · 1 member");
+  });
+
+  it("says an empty channel is empty", () => {
+    expect(presenceLabel({ inVoice: 0, members: 0 })).toBe("Nobody here");
+  });
+});
+
+describe("isEncryptedChannel", () => {
+  it("reads the announced protocol", () => {
+    expect(isEncryptedChannel(channel({ id: 1, pchat_protocol: "signal_v1" }))).toBe(true);
+    expect(isEncryptedChannel(channel({ id: 1, pchat_protocol: "fancy_v1_full_archive" }))).toBe(true);
+  });
+
+  it("claims nothing for a channel that announces none", () => {
+    expect(isEncryptedChannel(channel({ id: 1, pchat_protocol: "none" }))).toBe(false);
+    expect(isEncryptedChannel(channel({ id: 1 }))).toBe(false);
+    expect(isEncryptedChannel(null)).toBe(false);
   });
 });
 

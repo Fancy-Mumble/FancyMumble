@@ -5,6 +5,7 @@ import { useAppStore } from "@core/store";
 import type { ChatMessage } from "@core/types";
 import { getReactions, hasReacted } from "@core/features/chat/reaction/reactionStore";
 import { decodeFileAttachmentPayload } from "@core/features/chat/fileAttachments";
+import { useLinkPreviews } from "@core/features/chat/useLinkPreviews";
 import { getPoll } from "@core/features/chat/poll/model";
 import {
   CheckIcon,
@@ -22,6 +23,7 @@ import LinkPreviewCard from "@standard/components/chat/linkpreview/LinkPreviewCa
 import WatchTogetherCard from "@standard/components/chat/watch/WatchTogetherCard";
 import PollCard from "@standard/components/chat/poll/PollCard";
 import FileAttachmentCard from "@standard/components/chat/file/FileAttachmentCard";
+import { AttachmentVisibilityBadge } from "./AttachmentVisibilityBadge";
 import ReadReceiptIndicator from "@standard/components/chat/readreceipt/ReadReceiptIndicator";
 import QuoteBlock from "@standard/components/elements/QuoteBlock";
 import { composerHtml, editableText, formatTime, messageContent, plainText } from "../../selectors";
@@ -143,10 +145,7 @@ export function MessageRow({
   const [picker, setPicker] = useState<{ x: number; y: number } | null>(null);
   const ownSession = useAppStore((state) => state.ownSession);
   const users = useAppStore((state) => state.users);
-  const embeds = useAppStore((state) =>
-    message.message_id ? state.linkEmbeds.get(message.message_id) : undefined,
-  );
-  const disablePreviews = useAppStore((state) => state.disableLinkPreviews);
+  const embeds = useLinkPreviews(message.message_id, message.body);
   const allowExternal = useAppStore((state) => state.enableExternalEmbeds);
   const reactionVersion = useAppStore((state) => state.reactionVersion);
   // Read polls through the store as well as the module map: the map is what
@@ -239,9 +238,14 @@ export function MessageRow({
           onVote={(pollId, selected) => onVote?.(pollId, selected)}
         />
       )}
-      {attachment && <FileAttachmentCard info={attachment} />}
+      {attachment && (
+        <FileAttachmentCard
+          info={attachment}
+          visibilityBadge={(overlaid) => <AttachmentVisibilityBadge info={attachment} overlay={overlaid} />}
+        />
+      )}
       {watchSessionId && <WatchTogetherCard sessionId={watchSessionId} mountKey={message.message_id ?? ""} />}
-      {embeds && !disablePreviews && (
+      {embeds && embeds.length > 0 && (
         <LinkPreviewCard embeds={embeds} allowExternalResources={allowExternal} />
       )}
       {reactions.length > 0 && (

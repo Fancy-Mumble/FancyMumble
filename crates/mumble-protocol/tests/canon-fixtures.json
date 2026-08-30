@@ -67,6 +67,12 @@
       "outer": 1009,
       "hex": "03f1000000230a210a03722d3110041a0a73756e7365742e706e672209696d6167652f706e67288020",
       "means": "FilesEnvelope{ Upload{ request_id: 'r-1', channel: 4, filename: 'sunset.png', content_type: 'image/png', size: 4096, sha256: empty } } -- the ask for a URL; the bytes never travel on the control connection"
+    },
+    {
+      "name": "files: a file upload request in channel 4 with a password",
+      "outer": 1009,
+      "hex": "03f1000000320a300a03722d3110041a0a73756e7365742e706e672209696d6167652f706e672880203802420768756e746572324880f524",
+      "means": "FilesEnvelope{ Upload{ request_id: 'r-1', channel: 4, filename: 'sunset.png', content_type: 'image/png', size: 4096, visibility: PASSWORD, password: 'hunter2', ttl_seconds: 604800 } } -- the two fields that decide who may reach the file; absent from the frame above, which is a session share"
     }
   ]
 }

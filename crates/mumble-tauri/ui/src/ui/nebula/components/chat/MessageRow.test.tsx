@@ -11,6 +11,11 @@ import { MessageRow } from "./MessageRow";
 const openUrlMock = vi.fn((_url: string) => Promise.resolve());
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: (url: string) => openUrlMock(url) }));
 
+const invokeMock = vi.fn<(cmd: string, args?: unknown) => Promise<unknown>>(() => Promise.resolve());
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: (...args: unknown[]) => invokeMock(args[0] as string, args[1]),
+}));
+
 function message(partial: Partial<ChatMessage> = {}): ChatMessage {
   return {
     sender_session: 7,
@@ -32,7 +37,81 @@ function draw(msg: ChatMessage, props: Partial<Parameters<typeof MessageRow>[0]>
 
 describe("MessageRow", () => {
   beforeEach(() => {
-    useAppStore.setState({ ownSession: 1, users: [], polls: new Map() });
+    invokeMock.mockClear();
+    useAppStore.setState({
+      ownSession: 1,
+      users: [],
+      polls: new Map(),
+      linkEmbeds: new Map(),
+      disableLinkPreviews: false,
+    });
+  });
+
+  it("asks the server for a preview of a link in the body and draws what comes back", async () => {
+    const url = "https://www.youtube.com/watch?v=Z_mrUkY41ts";
+    const { rerender } = draw(message({ message_id: "preview-1", body: `<a href="${url}">${url}</a>` }));
+
+    expect(invokeMock).toHaveBeenCalledWith("request_link_preview", {
+      urls: [url],
+      requestId: "preview-1",
+    });
+
+    // The embed arrives on its own event well after the row first mounted.
+    useAppStore.setState({
+      linkEmbeds: new Map([
+        ["preview-1", [{ url, type: "video", title: "Landing at Warsaw", site_name: "YouTube" }]],
+      ]),
+    });
+    rerender(
+      withNebulaTheme(
+        <MessageRow
+          message={message({ message_id: "preview-1", body: `<a href="${url}">${url}</a>` })}
+          grouped={false}
+          onOpenProfile={() => {}}
+        />,
+      ),
+    );
+
+    expect(await screen.findByText("Landing at Warsaw")).toBeTruthy();
+  });
+
+  it("draws the picture the server fetched, from the bytes it sent", () => {
+    // The server sends the image itself rather than a URL, precisely so no
+    // viewer contacts the origin to see it - so the card has to render from
+    // `preview.data_url`, and an ordinary link (type `"link"`, which is every
+    // page) has to get a picture at all.
+    const url = "https://en.wikipedia.org/wiki/Jean-Baptiste_Auriol";
+    const dataUrl = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+    useAppStore.setState({
+      linkEmbeds: new Map([
+        [
+          "preview-3",
+          [
+            {
+              url,
+              type: "link" as const,
+              title: "Jean-Baptiste Auriol",
+              description: "A French acrobat and tightrope walker.",
+              image: { url: "", preview: { data_url: dataUrl, mime: "image/jpeg" } },
+            },
+          ],
+        ],
+      ]),
+    });
+
+    draw(message({ message_id: "preview-3", body: `<a href="${url}">${url}</a>` }));
+
+    expect(screen.getByText("A French acrobat and tightrope walker.")).toBeTruthy();
+    const picture = document.querySelector(`img[src="${dataUrl}"]`);
+    expect(picture).toBeTruthy();
+  });
+
+  it("asks for nothing when previews are switched off", () => {
+    useAppStore.setState({ disableLinkPreviews: true });
+
+    draw(message({ message_id: "preview-2", body: '<a href="https://example.com">https://example.com</a>' }));
+
+    expect(invokeMock).not.toHaveBeenCalledWith("request_link_preview", expect.anything());
   });
 
   it("draws a poll rather than printing its marker", () => {

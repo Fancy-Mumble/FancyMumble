@@ -10,6 +10,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import MediaPlayer from "@shared/mediaplayer/MediaPlayer";
 import styles from "./MediaPreview.module.css";
 import { ExternalLinkGuard } from "../../elements/ExternalLinkGuard";
 import { EyeOffIcon } from "../../../icons";
@@ -601,9 +602,9 @@ export function MediaLightbox({
     >
       <div className={styles.lightboxContent}>
         {item.kind === "video" ? (
-          <video className={styles.lightboxMedia} src={item.src} controls autoPlay>
-            <track kind="captions" />
-          </video>
+          // Our controls rather than the platform's, so the lightbox looks the
+          // same on every system it opens on. See `MediaPlayer`.
+          <MediaPlayer className={styles.lightboxMedia} src={item.src} kind="video" label={item.alt} />
         ) : (
           <img className={styles.lightboxMedia} src={item.src} alt={item.alt} />
         )}

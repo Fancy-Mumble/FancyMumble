@@ -5,6 +5,7 @@ import type { ChatMessage } from "@core/types";
 import { getReactions, hasReacted } from "@core/features/chat/reaction/reactionStore";
 import { getReadersForMessage } from "@core/features/chat/readreceipt/readReceiptStore";
 import { FANCY_FILE_MARKER_RE } from "@core/features/chat/fileAttachments";
+import { useLinkPreviews } from "@core/features/chat/useLinkPreviews";
 import { CheckIcon, CopyIcon, EditIcon, PinIcon, QuoteIcon, TrashIcon } from "@ui/icons";
 import WatchStartButton from "@ui/standard/components/chat/watch/WatchStartButton";
 import WatchTogetherCard from "@ui/standard/components/chat/watch/WatchTogetherCard";
@@ -47,10 +48,7 @@ export default function MessageItem({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const embeds = useAppStore((state) =>
-    message.message_id ? state.linkEmbeds.get(message.message_id) : undefined,
-  );
-  const disableLinkPreviews = useAppStore((state) => state.disableLinkPreviews);
+  const embeds = useLinkPreviews(message.message_id, message.body);
   const allowExternal = useAppStore((state) => state.enableExternalEmbeds);
   const reactionVersion = useAppStore((state) => state.reactionVersion);
   const readReceiptVersion = useAppStore((state) => state.readReceiptVersion);
@@ -185,7 +183,7 @@ export default function MessageItem({
           <div className={extensionStyles.messageBody} dangerouslySetInnerHTML={{ __html: safeBody }} />
         )}
         {!watchSessionId && <WatchStartButton body={message.body} channelId={message.channel_id} />}
-        {!disableLinkPreviews && embeds && embeds.length > 0 && (
+        {embeds && embeds.length > 0 && (
           <LinkPreviews embeds={embeds} allowExternal={allowExternal} />
         )}
         {reactions.length > 0 && (

@@ -21,6 +21,7 @@ export {
   Code2 as CodeIcon,
   Command as CommandIcon,
   Copy as CopyIcon,
+  Database as DatabaseIcon,
   Download as DownloadIcon,
   ExternalLink as ExternalLinkIcon,
   FileText as FileTextIcon,

@@ -15,7 +15,89 @@ message FilesEnvelope {
     Listing listing = 5;
     ListRequest list = 6;
     Refused refused = 7;
+    ManageRequest manage = 8;
+    ManageListing managed = 9;
+    ForgetRequest forget = 10;
   }
+}
+
+// Whose files a management listing is about.
+enum Audience {
+  // The caller's own uploads, wherever they were shared. Needs no permission
+  // beyond being the person who uploaded them.
+  AUDIENCE_MINE = 0;
+  // Every file on the server, for an operator. Needs `Write` on the root.
+  AUDIENCE_EVERYONE = 1;
+}
+
+// "My shared files", and the operator's view of the same table.
+message ManageRequest {
+  string request_id = 1;
+  Audience audience = 2;
+  uint32 limit = 3;
+}
+
+message ManagedFile {
+  string key = 1;
+  uint32 channel = 2;
+  string filename = 3;
+  string content_type = 4;
+  uint64 size = 5;
+  Visibility visibility = 6;
+  uint64 shared_at_ms = 7;
+  // `0` for a share with no lifetime.
+  uint64 expires_at_ms = 8;
+  // When it was last read, or `0` if it never has been.
+  uint64 downloaded_at_ms = 9;
+  // The link, for a share that has one.
+  string share_url = 10;
+  // Who shared it, in terms that outlive their connection. `account` is `0`
+  // for a guest, and `cert` empty for a client that presented none.
+  uint64 uploader_account = 11;
+  string uploader_name = 12;
+  bytes uploader_cert = 13;
+  // Whether that person is connected right now, so a dashboard can say so.
+  bool uploader_online = 14;
+}
+
+// What the server holds, for the header of an operator's view.
+message Storage {
+  uint64 used_bytes = 1;
+  // `0` where the operator set no ceiling.
+  uint64 max_total_bytes = 2;
+  uint64 max_upload_bytes = 3;
+  uint64 file_count = 4;
+}
+
+message ManageListing {
+  string request_id = 1;
+  repeated ManagedFile files = 2;
+  // Only filled for `AUDIENCE_EVERYONE`: a user's own files say nothing about
+  // the server's disk.
+  Storage storage = 3;
+}
+
+// Remove one stored file, rows and bytes together.
+//
+// Your own needs no permission. Anyone else's needs `ResetUserContent` on the
+// root, which is murmur's bit for removing another person's content.
+message ForgetRequest {
+  string request_id = 1;
+  string key = 2;
+}
+
+// Who may reach a shared file.
+//
+// One axis, three points, ordered by how far the file travels. `SESSION` is
+// zero because it is what an upload that says nothing gets: a client too old
+// to know about this field asks for the narrowest sharing, never the widest.
+enum Visibility {
+  // Only the people the share is announced to, each fetch signed for.
+  VISIBILITY_SESSION = 0;
+  // Anyone holding the link, with no account and no signature.
+  VISIBILITY_PUBLIC = 1;
+  // Anyone holding the link who also knows the password.
+  VISIBILITY_PASSWORD = 2;
 }
 
 message UploadRequest {
@@ -25,6 +107,16 @@ message UploadRequest {
   string content_type = 4;
   uint64 size = 5;
   bytes sha256 = 6;
+  Visibility visibility = 7;
+  // How long the share should last, in seconds. `0` means it never expires,
+  // which is also what an upload that says nothing gets.
+  uint64 ttl_seconds = 9;
+  // The password for a `VISIBILITY_PASSWORD` share, and nothing otherwise.
+  //
+  // Sent once, on the control connection, and never stored: the server keeps
+  // an Argon2id hash to check against, and derives the file's encryption key
+  // from the same secret. Losing the password loses the file.
+  string password = 8;
 }
 
 message DownloadRequest {
@@ -38,6 +130,20 @@ message Grant {
   string method = 3;
   uint64 expires_at_ms = 4;
   string key = 5;
+  // Where this object will answer to anyone holding the link, once the bytes
+  // are in. Empty for a session share, which has no such address.
+  //
+  // Carried here rather than built by the client because the address is the
+  // server's to state: it is the operator's `public_url`, which the client
+  // never sees, and it does not expire the way `url` does.
+  string share_url = 6;
+  // When the finished share stops answering, or `0` for never.
+  //
+  // Distinct from `expires_at_ms` above, which is the moment this URL stops
+  // being spendable: one is the life of the link, the other the life of the
+  // file. The server's number rather than the client's arithmetic, so every
+  // reader agrees about when it goes.
+  uint64 share_expires_at_ms = 7;
 }
 
 message Share {
@@ -47,7 +153,14 @@ message Share {
   string filename = 4;
   uint64 size = 5;
   uint64 shared_at_ms = 6;
+  // Reachable by link at all. Kept as the coarse question every reader had
+  // before there were two ways of answering it; `visibility` says which.
   bool public = 7;
+  Visibility visibility = 8;
+  // The link, for a share that has one. Empty otherwise.
+  string share_url = 9;
+  // When this share stops answering, or `0` for never.
+  uint64 expires_at_ms = 10;
 }
 
 message ListRequest {

@@ -78,3 +78,47 @@ pub(crate) async fn process_background(
     .await
     .map_err(|e| e.to_string())?
 }
+
+// -- attachments ---------------------------------------------------------
+//
+// A pasted image, and the smaller copy Nebula's composer offers for a photo
+// it is about to share, both exist only as bytes in the webview - the one
+// from the clipboard, the other from a canvas resize
+// (`core/features/settings/imageUtils.ts`, reused rather than redone here in
+// Rust: it already decodes formats this crate's `image` build does not carry
+// features for, and already lowers quality until a copy fits a budget). The
+// uploader streams from a path either way, so this is the one step that has
+// to happen here: put the bytes on disk under the temp dir, and say where.
+
+/// Write base64-encoded image bytes to a scratch file, and return its path.
+#[tauri::command]
+pub(crate) async fn write_attachment_bytes(
+    data_base64: String,
+    mime_type: String,
+) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+
+    let bytes = STANDARD
+        .decode(&data_base64)
+        .map_err(|e| format!("decode attachment bytes: {e}"))?;
+    let ext = match mime_type.as_str() {
+        "image/jpeg" => "jpg",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        "image/bmp" => "bmp",
+        _ => "png",
+    };
+    let dir = std::env::temp_dir().join("fancy-mumble-attachments");
+    tokio::fs::create_dir_all(&dir)
+        .await
+        .map_err(|e| format!("create {}: {e}", dir.display()))?;
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let file = dir.join(format!("attachment-{millis}.{ext}"));
+    tokio::fs::write(&file, &bytes)
+        .await
+        .map_err(|e| format!("write {}: {e}", file.display()))?;
+    Ok(file.to_string_lossy().into_owned())
+}

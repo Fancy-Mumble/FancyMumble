@@ -7,6 +7,6 @@ export { UserAvatar } from "./UserAvatar";
 export { SearchBox } from "./SearchBox";
 export { RichTextField, type RichTextFieldProps, type RichTextTool } from "./RichTextField";
 export { PriorityBadge, VoiceStateBadges, speakerState } from "./SpeakerBadges";
-export { StatChip } from "./StatChip";
+export { StatChip, type StatChipTone } from "./StatChip";
 export { LinkGuard } from "./LinkGuard";
 export { LinkWarningDialog } from "./LinkWarningDialog";

@@ -104,6 +104,34 @@ card does not claim - `mutualServers` is null here because this client holds
 users for the active server only, and the row hides rather than inventing a
 number.
 
+## The User Information sheet
+
+The card is what you open to see who someone is; `components/user/UserInfoDialog`
+is what you open to see how they are connected - Mumble's "User Information"
+dialog, drawn as the mock draws it, from the (i) at the end of every roster
+row and from the user menu. `UserInfoSheet` is presentation only and takes
+every fact as a prop, so it can be previewed and tested without a server; the
+dialog gathers them. The figures come from `useLiveUserStats`, which asks the
+server once a second while the sheet is open and keeps the last 45 readings
+for the charts - Standard's `useUserStats` asks once, which is right for a
+card and wrong for a live chart. The pure derivations - the loss figure, the
+certificate line, what the ban list holds against this person - live in
+`userInfoModel.ts`.
+
+What the server does not say, the sheet does not claim. The address arrives
+only for yourself and for holders of Register on the root, so the Network
+card - address, the resolver's name for it (`reverse_dns`, on the backend,
+since a webview cannot ask), the place, the map - is marked admin-only and
+absent for everyone else. The map is OSM vector tiles from OpenFreeMap,
+painted by `protomaps-leaflet` with no label rules, because the mock's map
+is roads on a flat ground and a raster tile cannot shed its place names. The place comes from `useUserLocation` through the
+same `geolocateIp` Standard uses, and stops at the Privacy page's maps switch
+and at streamer mode: the lookup is the thing that leaves the machine, so the
+switch has to stop it rather than hide its result. The moderation buttons are
+gated by `userMenuActions`, exactly as the menu's entries are, and run the
+menu's own `invokeModeration`, so the two surfaces cannot disagree about
+what the viewer may do.
+
 ## The user menu
 
 Right-clicking a person opens `components/user/UserMenu`, and there is exactly
@@ -152,6 +180,23 @@ Rules:
 - `Stack` is imported from `components/primitives`, not from `@mui/material`.
   MUI 9 removed the flex shorthands (`alignItems`, `gap`, …) from Stack's props;
   the local shim folds them back into `sx` so rows stay one line.
+
+## The server list is one list
+
+The connect screen used to draw its own Servers column beside the rail, and the
+rail's own list - pinned open - said the same things about the same servers a
+few pixels to the left. So on that screen the rail is pinned open and *is* the
+column: `ServerRail` renders `ServerRailPanel` alone, the tiles give way to the
+rows rather than sitting beside a second copy of themselves, and the search
+field and the favourite star the old sidebar owned moved onto the panel.
+
+Pinned it takes part in the layout; opened from a tile on any other screen it
+still floats over that screen's sidebar and keeps its collapse button. The
+search narrows the rows only - the tiles stay put, because a rail that emptied
+as you typed would stop being a fixed place to aim at.
+
+With the switcher in the title bar there is no rail to pin, and the connect
+screen keeps the `SidebarShell` list.
 
 ## Quick connect
 
@@ -310,8 +355,6 @@ before, because a feature landed and its line was never struck.
 **Composing**
 
 - No custom server emotes beyond what the body already carries.
-- No pasted-image tray: a file is attached through the picker or a drop, and
-  Ctrl+V of an image does nothing.
 - No scheduled messages, calendar/meeting composer, or LiveDoc. Note that the
   runtime already runs `useCalendarReminders`, so calendar reminders fire with
   no calendar to open them in.
@@ -410,6 +453,34 @@ This was missing while the row's delete button already called
 of the state that says whether it is trustworthy. A design may draw a warning
 differently. It may not decline to draw it.
 
+The header says it as two chips, not one: whether the history is kept, and who
+can read it. They agree today - persistence is derived from the same
+`pchat_protocol` the encryption is - but they answer different questions, and a
+single badge would leave the reader unable to tell which one it meant. Each
+trust level carries its own glyph and its own word, so the four are told apart
+without reading the colour; the tone only makes disputed hard to miss. A key
+that has not been judged yet says `Encrypted` rather than `Unverified`, which is
+a verdict on a key that may simply not have arrived. The trust chip is the way
+in to the verification dialog, so the fact and the action to change it are the
+same target.
+
+
+## Who belongs to a channel
+
+An ordinary channel has no membership beyond who is standing in it, so the
+header says "3 in voice" and stops. A persisted one does: the server names the
+holders of the key its history is stored under, and someone who has stepped out
+still belongs to the room their messages are kept in. `channelPresence` adds
+those to the occupants, and the second half of the subtitle appears only when
+it is not restating the first.
+
+Absent members are counted by key rather than by "offline". Counting the
+offline ones - which is what the channel info panel does, because it labels
+them - would make the number drop as one of them connected and sat somewhere
+else, and a membership that shrinks when a member appears is worse than none.
+The count is only ever asked for once per persisted channel opened, since
+`query_key_holders` is a round trip.
+
 
 ## Where history comes from
 
@@ -481,14 +552,24 @@ written here: both packs send into the same channels, and a dialect that
 differed between them would read as one client's messages formatting and the
 other's not.
 
-Uploading is not a design decision, so it is not one Nebula makes: pick, ask
-how it may be shared, stream, announce. That order lives in
-`core/features/chat/useFileUpload`, and what the pack owns is where the
-progress row sits. The attach button is rendered only when the file server has
-said both that it is there and that this user may share - a button that opens a
+Uploading is not a design decision, so it is not one Nebula makes: stream,
+announce. That order lives in `core/features/chat/useFileUpload`, and what the
+pack owns is where the progress row sits and when a file joins `staged` in the
+first place - see **Staging** below, which is where "ask how it may be shared"
+moved to. The attach button is rendered only when the file server has said
+both that it is there and that this user may share - a button that opens a
 picker and then fails on upload wastes the choice the user just made. Standard
 still has its own copy of this lifecycle inside `ChatView`; moving it onto the
 shared hook is worth doing and has not been done.
+
+A photo staged for the "compressed" choice gets its smaller copy from
+`resizeImage` (`core/features/settings/imageUtils.ts`) - a canvas, the same one
+every other place in the client that shrinks an image already uses, not a
+second resizer written for this pack. The one piece Rust does is putting the
+result back on disk: the uploader streams from a path, a canvas produces a
+data-URL, and `write_attachment_bytes` is the one command that turns one into
+the other. A pasted image goes through the same command, from bytes the
+webview is already holding rather than a canvas resize.
 
 
 ## Chunks
@@ -581,7 +662,21 @@ artboard's palette.
 
 Files are dropped through Tauri's own drag-drop event, not the DOM's: a dropped
 `File` carries no path and the uploader streams from one. The composer only
-draws the target, and is told when to.
+draws the target, and is told when to; the shell stages the drop straight into
+`staged` the instant it lands, the same call the picker makes - no panel in
+between, nothing pressed first. The drop is gated on the same `canAttach` as
+the button, not on a selected channel: a direct message has none, and the
+uploader takes the DM session instead. And the shell hands over the drag's URI
+list with only `file://` stripped, so an image dragged out of a browser or out
+of the chat arrives as `http://…`; those are turned away with a notice rather
+than staged, because the uploader streams from a path and a URL is not one.
+
+A paste takes the other route in: the composer reads images off the clipboard
+itself (`DataTransferItemList` first, the async Clipboard API as the fallback
+WebKitGTK on Linux needs - it leaves a pasted image's `clipboardData` empty)
+and hands the shell a `File`. The shell writes it to a scratch file
+(`write_attachment_bytes`, the same command a photo's compressed copy is
+written by) and stages it exactly as a drop would.
 
 **Trays.** Everything the composer is holding but has not sent - replies,
 staged files, uploads in flight - is drawn as a strip docked above the input
@@ -602,13 +697,20 @@ for by a zero: the size is known before a byte moves, the percentage from the
 first event, the estimate only once there is a rate to estimate from. A failure
 stops the bar where it stopped - filling it would say the file arrived.
 
-**Staging.** Picking a file no longer starts an upload. The picker (or a drop)
-collects a batch, the share popover answers for that batch, and the answer
-travels with each file into `staged` - which is what the tray draws. Send is
-what uploads them, in order, with whatever was typed riding on the first so a
-photo and the sentence about it stay one thing in the river. That is the only
-reason the tray exists: without it a message could carry one file and no words
-about it, because the upload had already gone.
+**Staging.** Picking a file no longer starts an upload, and it no longer asks a
+question first either. The picker, a drop, and a paste all put a file straight
+into `staged` - that is what the tray draws - and how the batch may be seen
+lives on the tray itself (`AttachmentTray`, `ShareOptions`), folded away behind
+an "Options" row that only appears when there is a choice worth showing: a
+server that can share a link, or a photo with a compressed copy waiting. One
+answer for the whole batch, not one dialog per file, because visibility is a
+property of the message being written. Send is what uploads them, in order,
+with whatever was typed riding on the first so a photo and the sentence about
+it stay one thing in the river - and each file's quality is read off it
+individually, since a compressed copy that never turned out smaller falls back
+to the original rather than holding the batch to whichever one finished. That
+is the only reason the tray exists: without it a message could carry one file
+and no words about it, because the upload had already gone.
 
 **Selection.** The browser's own highlight is a slab of system blue that owes
 nothing to the scheme, and the editor hides it to draw its own. Nebula tells it

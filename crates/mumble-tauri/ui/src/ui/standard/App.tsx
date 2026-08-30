@@ -209,6 +209,7 @@ function MainApp() {
     getPreferences().then((prefs) => {
       setKlipyApiKey(prefs.klipyApiKey);
       useAppStore.setState({ disableLinkPreviews: prefs.disableLinkPreviews ?? false });
+      useAppStore.setState({ disableOsmMaps: prefs.disableOsmMaps ?? false });
       useAppStore.setState({ enableExternalEmbeds: prefs.enableExternalEmbeds ?? false });
       useAppStore.setState({ streamerMode: prefs.streamerMode ?? false });
       // Native notifications: streamer mode forces them off so they

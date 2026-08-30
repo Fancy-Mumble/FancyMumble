@@ -15,16 +15,23 @@
  * - "h264" (preferred): Rust forwards the COMPRESSED access units (AVCC,
  *   with the stream's SPS/PPS arriving as an out-of-band avcC config
  *   message - WebKit's WebCodecs only decodes with a `description`, its
- *   Annex-B mode errors); this hook decodes them with `VideoDecoder`
- *   (WebKit's GStreamer backend - NVDEC/VA-API hardware where present) and
- *   paints `VideoFrame`s onto a canvas composited on the GPU (Skia-GL).
+ *   Annex-B mode errors); they are decoded with `VideoDecoder` (WebKit's
+ *   GStreamer backend - NVDEC/VA-API hardware where present) and painted
+ *   as `VideoFrame`s onto a canvas composited on the GPU (Skia-GL).
  *   IPC carries exactly the stream bitrate; nobody transcodes anything.
  * - "jpeg" (fallback for webviews without WebCodecs): Rust decodes and
  *   sends JPEG frames, painted via `createImageBitmap` (async, off the
  *   main thread) onto the same canvas.
  *
- * Painting bypasses React entirely - state flips once per slot when the
- * first frame arrives (to drop placeholders), never per frame.
+ * Decode and paint run in a dedicated worker (nativeStreamViewWorker.ts,
+ * painting via `OffscreenCanvas`) so they survive WebKit's page throttling
+ * - an unfocused/occluded window used to freeze playback and replay it as
+ * a fast-forward burst on refocus - and stay clear of main-thread
+ * contention (React, chat, the video wallpaper). A webview without worker
+ * OffscreenCanvas support falls back to decoding in-page; both paths share
+ * their logic via nativeStreamCore.ts. Painting bypasses React entirely -
+ * state flips once per slot when the first frame arrives (to drop
+ * placeholders), never per frame.
  *
  * Windows (WebView2 = Chromium, full WebRTC) defaults to the webview
  * `<video>` viewer and only takes this path when the user selects the
@@ -36,18 +43,30 @@
  * `[midIndex u8, flags u8, width u16 LE, height u16 LE, timestampUs u64 LE]`
  * and the payload (recordLen spans header + payload). flags bit 0 =
  * keyframe, bit 1 = H.264 (else JPEG), bit 2 = decoder config (payload is
- * the track's avcC record, not a frame).
+ * the track's avcC record, not a frame). Parsing lives in
+ * nativeStreamCore.ts (`forEachBatchRecord`).
  */
 import { useEffect, useRef, useState } from "react";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { useAppStore } from "@core/store";
 import { getTrackContentMap } from "./trackContent";
+import {
+  EMPTY_SLOT_METRICS,
+  forEachBatchRecord,
+  makeSlot,
+  routeSlot,
+  type SlotKind,
+  type SlotMetrics,
+} from "./nativeStreamCore";
+import type { StreamWorkerEvent, StreamWorkerRequest } from "./nativeStreamViewWorker";
+import StreamViewWorker from "./nativeStreamViewWorker?worker";
 import type { StatsSample, VideoTrackStats } from "./StreamStatsPanel";
 import { registerStreamViewerStrategy, StreamViewerStrategyId, type StatsSampler } from "./viewerStrategy";
 
 // Singleton state (running viewers keyed per session, live IPC channels,
-// the strategy registration): a hot-swap must reload the page like
-// useScreenShare does, not strand stale decoders on dead instances.
+// the decode worker, the strategy registration): a hot-swap must reload
+// the page like useScreenShare does, not strand stale decoders on dead
+// instances.
 if (import.meta.hot) {
   import.meta.hot.accept(() => {
     import.meta.hot!.invalidate();
@@ -57,7 +76,8 @@ if (import.meta.hot) {
 /** Whether this webview can run WebRTC viewers at all (see module doc). */
 export const WEBVIEW_HAS_RTC = typeof RTCPeerConnection !== "undefined";
 
-/** Whether this webview can decode H.264 itself (drives the delivery mode). */
+/** Whether this webview can decode H.264 itself (drives the delivery mode
+ *  on the in-page fallback path; the worker reports its own capability). */
 const WEBVIEW_HAS_WEBCODECS = typeof VideoDecoder === "function";
 
 /** Serde values of `fancy_screenshare::viewer::DeliveryMode` - the payload
@@ -66,12 +86,6 @@ enum NativeDeliveryMode {
   H264 = "h264",
   Jpeg = "jpeg",
 }
-
-const HEADER_LEN = 14;
-
-/** Above this decode backlog, delta chunks are dropped until the next
- *  keyframe (catch-up instead of runaway latency on a slow decoder). */
-const MAX_DECODE_QUEUE = 30;
 
 /** Minimum spacing of keyframe (PLI) requests per view. */
 const KEYFRAME_REQUEST_MS = 1000;
@@ -86,259 +100,139 @@ export interface NativeStreamState {
   readonly failed: boolean;
 }
 
-/** Sliding window for the painted-fps estimate. */
-const FPS_WINDOW_MS = 2000;
+// ---------------------------------------------------------------------------
+// Decode worker (singleton; sessions multiplex over it)
+// ---------------------------------------------------------------------------
 
-/** JS-side decode/paint metrics of one slot, for the stats sampler. */
-export interface SlotMetrics {
-  /** Frames painted (cumulative). */
-  readonly painted: number;
-  /** Painted frames per second over the last {@link FPS_WINDOW_MS}. */
-  readonly fps: number;
-  /** Canvas (frame) dimensions; 0 before the first paint. */
-  readonly width: number;
-  readonly height: number;
-  /** VideoDecoder backlog (0 in JPEG mode). */
-  readonly queue: number;
-  /** Payload bytes / chunks / keyframes received on the channel. */
-  readonly fedBytes: number;
-  readonly fedChunks: number;
-  readonly fedKeyframes: number;
-  /** Paint gaps far above the running average (visible stutter). */
-  readonly freezeCount: number;
-  readonly freezeDurationS: number;
+interface WorkerCaps {
+  readonly h264: boolean;
+  readonly jpeg: boolean;
 }
 
-/** One canvas-painting sink for one track slot (display or camera). */
-interface Slot {
-  /** (Re)configure the H.264 decoder from an avcC record. */
-  configure(avcc: Uint8Array<ArrayBuffer>): void;
-  feed(isH264: boolean, key: boolean, timestampUs: number, bytes: Uint8Array<ArrayBuffer>): void;
-  metrics(): SlotMetrics;
-  dispose(): void;
+/** Per-view receiver of worker events, registered while a view runs.
+ *  Keyed by the unique view id, NOT the session: two viewports of the
+ *  same broadcast are independent pipelines. */
+interface WorkerViewHandlers {
+  onFirstFrame(slot: SlotKind): void;
+  onKeyframeRequest(): void;
+  onMetrics(msg: Extract<StreamWorkerEvent, { type: "metrics" }>): void;
 }
 
-function makeSlot(
-  canvasRef: React.RefObject<HTMLCanvasElement | null>,
-  onFirstFrame: () => void,
-  requestKeyframe: () => void,
-): Slot {
-  let disposed = false;
-  let marked = false;
-  let decoder: VideoDecoder | null = null;
-  /** avcC record of the current parameter sets (H.264 mode). Chunks before
-   *  the first config are undecodable and get dropped (needKey covers it). */
-  let description: Uint8Array<ArrayBuffer> | null = null;
-  let needKey = true;
-  let dropUntilKey = false;
-  /** Serialises async JPEG paints so a stale bitmap never lands last. */
-  let jpegSeq = 0;
-  let jpegPainted = 0;
-  // Stats-for-Nerds metrics (cheap counters; no per-frame allocations
-  // beyond the fps ring).
-  let fedBytes = 0;
-  let fedChunks = 0;
-  let fedKeyframes = 0;
-  let painted = 0;
-  const paintTimes: number[] = [];
-  let lastPaintMs = 0;
-  let avgGapMs = 0;
-  let freezeCount = 0;
-  let freezeDurationS = 0;
+let decodeWorker: Worker | null = null;
+let workerCapsPromise: Promise<WorkerCaps | null> | null = null;
+const workerViews = new Map<number, WorkerViewHandlers>();
+let nextWorkerViewId = 1;
 
-  const markPaint = () => {
-    const now = performance.now();
-    painted += 1;
-    paintTimes.push(now);
-    while (paintTimes.length > 0 && now - paintTimes[0]! > FPS_WINDOW_MS) {
-      paintTimes.shift();
-    }
-    if (lastPaintMs > 0) {
-      const gap = now - lastPaintMs;
-      // Freeze, spec-flavoured: an inter-frame gap far above the running
-      // average (and above human-visible stutter).
-      if (avgGapMs > 0 && gap > Math.max(3 * avgGapMs, 150)) {
-        freezeCount += 1;
-        freezeDurationS += gap / 1000;
-      }
-      avgGapMs = avgGapMs === 0 ? gap : avgGapMs * 0.9 + gap * 0.1;
-    }
-    lastPaintMs = now;
-    markContent();
-  };
+/** Ids of canvases already transferred to the worker: an element can be
+ *  transferred exactly once, then only re-BOUND to later sessions. */
+const transferredCanvases = new WeakMap<HTMLCanvasElement, number>();
+let nextCanvasId = 1;
 
-  const paintTarget = (width: number, height: number): CanvasRenderingContext2D | null => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-    if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width;
-      canvas.height = height;
-    }
-    return canvas.getContext("2d");
-  };
+function postToWorker(msg: StreamWorkerRequest, transfer?: Transferable[]) {
+  decodeWorker?.postMessage(msg, transfer ?? []);
+}
 
-  const markContent = () => {
-    if (!marked) {
-      marked = true;
-      onFirstFrame();
-    }
-  };
+/** localStorage key that opts back IN to decoding in the worker.
+ *
+ *      localStorage.setItem("fancy.streamDecodeWorker", "on")
+ *
+ *  The worker exists for a real reason: decode and paint off the main thread
+ *  is what stops WebKitGTK throttling playback in an unfocused window. It is
+ *  nevertheless OFF by default, because on WebKitGTK it is actively
+ *  destructive - measured on GNOME 50 / WebKitGTK 4.1 on 2026-08-30:
+ *
+ *  * Surfaces swap contents. Screen-share frames appear in the chat
+ *    wallpaper and the wallpaper appears in the share - in BOTH directions,
+ *    which no capture-side bug can produce; only the compositing side can.
+ *  * `WebCore: Worker` segfaults take the whole web process down, and with
+ *    it the entire UI: 15 in one day against zero in the three days before
+ *    the worker landed.
+ *  * Freezes: 274 (440 s) with the worker, 6 (1.3 s) without, same session
+ *    length and same encoder.
+ *
+ *  Two things are tangled here and both need attention before this flips
+ *  back. Ours: `bindCanvases` re-derives elements from React refs on every
+ *  batch, while `transferredCanvases`/`nextCanvasId` are module-global
+ *  across every view, so a remounted or reordered tile can bind a surface
+ *  another view still owns. WebKit's: OffscreenCanvas plus `VideoDecoder`
+ *  inside a worker scope is a lightly travelled path there, and the
+ *  segfaults are inside libc under WebKit, not in our code.
+ *
+ *  Restoring this means fixing the binding lifecycle AND confirming the web
+ *  process survives - the unfocused-window throttling it was written to
+ *  cure is the lesser bug. */
+const DECODE_WORKER_KEY = "fancy.streamDecodeWorker";
 
-  const paintVideoFrame = (frame: VideoFrame) => {
-    if (disposed) {
-      frame.close();
-      return;
-    }
-    const ctx = paintTarget(frame.displayWidth, frame.displayHeight);
-    ctx?.drawImage(frame, 0, 0);
-    frame.close();
-    // No canvas yet = the slot's tile mounts on first-content state (the
-    // camera PiP); flip the state and drop the frame so it appears.
-    if (ctx) markPaint();
-    else markContent();
-  };
+/** Whether the decode worker has been explicitly opted into. */
+function decodeWorkerEnabled(): boolean {
+  try {
+    return localStorage.getItem(DECODE_WORKER_KEY) === "on";
+  } catch {
+    // Private mode / storage denied: keep the safe default.
+    return false;
+  }
+}
 
-  const newDecoder = (): VideoDecoder | null => {
-    if (description === null) return null;
-    // WebKit's WebCodecs decodes H.264 only in AVCC mode: the avcC record
-    // is the `description`, and its bytes [1..4] are the exact
-    // profile/compat/level for the codec string.
-    const codec = `avc1.${[...description.subarray(1, 4)]
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("")
-      .toUpperCase()}`;
-    try {
-      // Timed: WebKit builds its whole GStreamer decode pipeline on first
-      // use, on this (main) thread - if the first share freezes the window,
-      // this number is the evidence.
-      const t0 = performance.now();
-      const dec = new VideoDecoder({
-        output: paintVideoFrame,
-        error: (e) => {
-          // A fatal error closes the decoder; rebuild on the next chunk
-          // and resync on a fresh IDR.
-          console.warn("[stream-view] VideoDecoder error:", e.message);
-          decoder = null;
-          needKey = true;
-          requestKeyframe();
-        },
-      });
-      dec.configure({ codec, description, optimizeForLatency: true });
-      const tookMs = performance.now() - t0;
-      if (tookMs > 50) {
-        console.info(`[stream-view] decoder init took ${tookMs.toFixed(0)}ms (${codec})`);
-      }
-      return dec;
-    } catch (e) {
-      console.warn(`[stream-view] VideoDecoder configure(${codec}) failed:`, e);
-      return null;
-    }
-  };
-
-  const feedChunk = (key: boolean, timestampUs: number, bytes: Uint8Array<ArrayBuffer>) => {
-    decoder ??= newDecoder();
-    if (decoder === null) {
-      // No parameter sets yet (joined before the config message): ask for
-      // an IDR, whose access unit carries them.
-      requestKeyframe();
-      return;
-    }
-    if (!key && decoder.decodeQueueSize > MAX_DECODE_QUEUE) {
-      // Falling behind: skip to the next keyframe instead of queueing lag.
-      dropUntilKey = true;
-    }
-    if ((needKey || dropUntilKey) && !key) {
-      requestKeyframe();
-      return;
-    }
-    needKey = false;
-    dropUntilKey = false;
-    try {
-      decoder.decode(
-        new EncodedVideoChunk({
-          type: key ? "key" : "delta",
-          timestamp: timestampUs,
-          data: bytes,
-        }),
+/**
+ * Spawn the decode worker (once) and resolve its capabilities; null means
+ * no usable worker (spawn failed, handshake timed out, or the worker scope
+ * lacks OffscreenCanvas) and views run the in-page fallback.
+ */
+function workerCapabilities(): Promise<WorkerCaps | null> {
+  workerCapsPromise ??= new Promise((resolve) => {
+    if (!decodeWorkerEnabled()) {
+      console.info(
+        `[stream-view] decoding in-page; set ${DECODE_WORKER_KEY}="on" to use the decode worker`,
       );
-    } catch (e) {
-      console.warn("[stream-view] decode() rejected chunk:", e);
-      decoder = null;
-      needKey = true;
-      requestKeyframe();
+      resolve(null);
+      return;
     }
-  };
-
-  const feedJpeg = (bytes: Uint8Array<ArrayBuffer>) => {
-    jpegSeq += 1;
-    const seq = jpegSeq;
-    createImageBitmap(new Blob([bytes], { type: "image/jpeg" }))
-      .then((bitmap) => {
-        // Async decodes can finish out of order; newer wins.
-        if (disposed || seq <= jpegPainted) {
-          bitmap.close();
-          return;
-        }
-        jpegPainted = seq;
-        const ctx = paintTarget(bitmap.width, bitmap.height);
-        ctx?.drawImage(bitmap, 0, 0);
-        bitmap.close();
-        if (ctx) markPaint();
-        else markContent();
-      })
-      .catch(() => {});
-  };
-
-  return {
-    configure(avcc) {
-      if (disposed) return;
-      description = avcc;
-      // New parameter sets invalidate the running decoder (resolution
-      // change); the next chunk rebuilds it and resyncs on a keyframe.
-      try {
-        decoder?.close();
-      } catch {
-        /* already closed */
+    let worker: Worker;
+    try {
+      worker = new StreamViewWorker();
+    } catch (e) {
+      console.warn("[stream-view] decode worker unavailable, decoding in-page:", e);
+      resolve(null);
+      return;
+    }
+    const fail = (why: string) => {
+      console.warn(`[stream-view] decode worker ${why}; decoding in-page`);
+      worker.terminate();
+      resolve(null);
+    };
+    const timeout = setTimeout(() => fail("handshake timed out"), 3000);
+    worker.onerror = (e) => {
+      clearTimeout(timeout);
+      fail(`failed: ${e.message}`);
+    };
+    worker.onmessage = (e: MessageEvent<StreamWorkerEvent>) => {
+      const msg = e.data;
+      if (msg.type !== "ready") return;
+      clearTimeout(timeout);
+      if (!msg.h264 && !msg.jpeg) {
+        fail("scope lacks OffscreenCanvas");
+        return;
       }
-      decoder = null;
-      needKey = true;
-    },
-    feed(isH264, key, timestampUs, bytes) {
-      if (disposed) return;
-      fedBytes += bytes.byteLength;
-      fedChunks += 1;
-      if (key) fedKeyframes += 1;
-      if (isH264) feedChunk(key, timestampUs, bytes);
-      else feedJpeg(bytes);
-    },
-    metrics() {
-      const now = performance.now();
-      while (paintTimes.length > 0 && now - paintTimes[0]! > FPS_WINDOW_MS) {
-        paintTimes.shift();
-      }
-      return {
-        painted,
-        fps: paintTimes.length / (FPS_WINDOW_MS / 1000),
-        width: canvasRef.current?.width ?? 0,
-        height: canvasRef.current?.height ?? 0,
-        queue: decoder?.decodeQueueSize ?? 0,
-        fedBytes,
-        fedChunks,
-        fedKeyframes,
-        freezeCount,
-        freezeDurationS,
+      worker.onerror = (err) => {
+        // Post-handshake errors: log them; running sessions keep their
+        // state (a crashed worker surfaces as a stalled view, and the
+        // existing keyframe/timeout machinery already reports that).
+        console.error("[stream-view] decode worker error:", err.message);
       };
-    },
-    dispose() {
-      disposed = true;
-      try {
-        decoder?.close();
-      } catch {
-        /* already closed by an error */
-      }
-      decoder = null;
-    },
-  };
+      worker.onmessage = (evt: MessageEvent<StreamWorkerEvent>) => {
+        const event = evt.data;
+        if (event.type === "ready") return;
+        const handlers = workerViews.get(event.view);
+        if (!handlers) return;
+        if (event.type === "first-frame") handlers.onFirstFrame(event.slot);
+        else if (event.type === "request-keyframe") handlers.onKeyframeRequest();
+        else handlers.onMetrics(event);
+      };
+      decodeWorker = worker;
+      resolve({ h264: msg.h264, jpeg: msg.jpeg });
+    };
+  });
+  return workerCapsPromise;
 }
 
 /** JS-side metrics of mounted native viewports, keyed by broadcaster
@@ -366,6 +260,7 @@ export function useNativeStreamView(
     if (!active || session <= 0) return;
     let disposed = false;
     let lastKeyframeRequest = 0;
+    let teardown: (() => void) | null = null;
 
     const requestKeyframe = () => {
       const now = Date.now();
@@ -374,102 +269,171 @@ export function useNativeStreamView(
       invoke("request_stream_keyframe", { session }).catch(() => {});
     };
 
-    const slots = {
-      display: makeSlot(canvases.current.display, () => setHasDisplay(true), requestKeyframe),
-      camera: makeSlot(canvases.current.camera, () => setHasCamera(true), requestKeyframe),
-    };
-    sessionMetrics.set(session, () => ({
-      display: slots.display.metrics(),
-      camera: slots.camera.metrics(),
-    }));
+    const setFirst = (slot: SlotKind) => (slot === "display" ? setHasDisplay : setHasCamera)(true);
 
     // Receive-side heartbeat, mirroring the Rust sink's sender-side one:
     // together they localise a stall (sent-but-not-received = IPC/channel;
-    // received-but-not-painted = decoder; neither = peer).
-    let received = 0;
-    let receivedBytes = 0;
-    const diagnostics = setInterval(() => {
-      const m = sessionMetrics.get(session)?.();
-      const d = m?.display;
-      console.info(
-        `[stream-view] session=${session} rx=${received}` +
-          ` rxMB=${(receivedBytes / 1e6).toFixed(1)}` +
-          ` painted=${d?.painted ?? 0} fps=${(d?.fps ?? 0).toFixed(1)}` +
-          ` queue=${d?.queue ?? 0} freezes=${d?.freezeCount ?? 0}`,
-      );
-    }, 5000);
+    // received-but-not-painted = decoder; neither = peer). `read` pulls
+    // from wherever the counters live (worker snapshot or local slots).
+    const heartbeat = (read: () => { rx: number; rxBytes: number; display: SlotMetrics }) =>
+      setInterval(() => {
+        const { rx, rxBytes, display } = read();
+        console.info(
+          `[stream-view] session=${session} rx=${rx}` +
+            ` rxMB=${(rxBytes / 1e6).toFixed(1)}` +
+            ` painted=${display.painted} fps=${display.fps.toFixed(1)}` +
+            ` queue=${display.queue} freezes=${display.freezeCount}`,
+        );
+      }, 5000);
 
-    const channel = new Channel<ArrayBuffer>();
-    channel.onmessage = (buf) => {
-      if (disposed || !(buf instanceof ArrayBuffer)) return;
-      receivedBytes += buf.byteLength;
-      // Each message batches length-prefixed records (Rust coalesces up to
-      // ~50 ms per message - one eval/fetch round-trip instead of one per
-      // frame, which used to saturate the GTK main thread).
-      const view = new DataView(buf);
-      let offset = 0;
-      while (offset + 4 + HEADER_LEN <= buf.byteLength) {
-        const recordLen = view.getUint32(offset, true);
-        offset += 4;
-        if (recordLen < HEADER_LEN || offset + recordLen > buf.byteLength) {
-          console.warn("[stream-view] malformed batch record; dropping remainder");
-          break;
+    /** Worker path: batches are transferred to the decode worker; this
+     *  side only flips tile state, rate-limits PLIs and mirrors metrics. */
+    const wireWorker = (channel: Channel<ArrayBuffer>) => {
+      const view = nextWorkerViewId++;
+      let latest = { display: EMPTY_SLOT_METRICS, camera: EMPTY_SLOT_METRICS, rx: 0, rxBytes: 0 };
+      workerViews.set(view, {
+        onFirstFrame: setFirst,
+        onKeyframeRequest: requestKeyframe,
+        onMetrics: (m) => {
+          latest = { display: m.display, camera: m.camera, rx: m.received, rxBytes: m.receivedBytes };
+        },
+      });
+      sessionMetrics.set(session, () => ({ display: latest.display, camera: latest.camera }));
+      postToWorker({ type: "start", view, session });
+
+      // A canvas element can be transferred exactly once, ever; later
+      // sessions on the same element re-BIND its worker-side surface.
+      // Tiles mount on first-content state, so refs may fill in late -
+      // retried per batch until both slots are bound.
+      const bound: { display: number | null; camera: number | null } = {
+        display: null,
+        camera: null,
+      };
+      const bindCanvases = () => {
+        for (const slot of ["display", "camera"] as const) {
+          const el = canvases.current[slot].current;
+          if (!el) continue;
+          let id = transferredCanvases.get(el);
+          if (id === undefined) {
+            try {
+              const off = el.transferControlToOffscreen();
+              id = nextCanvasId++;
+              transferredCanvases.set(el, id);
+              postToWorker({ type: "canvas", id, canvas: off }, [off]);
+            } catch (e) {
+              // Already consumed by a 2d context (in-page fallback ran on
+              // this element earlier). Unrecoverable for this element;
+              // remember that so the warning fires once.
+              transferredCanvases.set(el, -1);
+              console.warn("[stream-view] canvas not transferable to decode worker:", e);
+              continue;
+            }
+          }
+          if (id !== -1 && bound[slot] !== id) {
+            bound[slot] = id;
+            postToWorker({ type: "bind", view, slot, canvasId: id });
+          }
         }
-        received += 1;
-        const mid = String(view.getUint8(offset));
-        const flags = view.getUint8(offset + 1);
-        const keyframe = (flags & 1) !== 0;
-        const isH264 = (flags & 2) !== 0;
-        const isConfig = (flags & 4) !== 0;
-        const timestampUs = Number(view.getBigUint64(offset + 6, true));
-        const bytes = new Uint8Array(buf, offset + HEADER_LEN, recordLen - HEADER_LEN);
-        // The START announcement says what each mid carries; without one
-        // the first track is the display, the second the camera.
-        const contentMap = getTrackContentMap(session);
-        const content = contentMap[mid] ?? (mid === "0" ? "screen" : "camera");
-        // A camera goes to the camera slot only when a screen track exists
-        // beside it. The camera slot is the PiP, and the PiP is an *aside*:
-        // it mounts only next to a display track (`hasMedia &&
-        // hasCameraMedia` in the viewer components), and the display canvas
-        // itself stays hidden until the display slot paints. Routing a
-        // camera-ONLY share to the PiP slot therefore decodes every frame
-        // against a canvas that can never mount - `markContent` flips
-        // `hasCamera` and drops the frame "so the tile appears", but the
-        // tile's other condition can never come true - and the share is
-        // invisible to everyone, own preview and remote viewers alike. The
-        // webview family binds a camera-only stream to the main <video>, so
-        // the camera takes the display slot here too: a camera-only share
-        // IS the main view.
-        //
-        // When a screen track joins later (share extended), the updated map
-        // moves the camera to the PiP slot; the next IDR re-delivers its
-        // avcC to the new slot (configs are rebuilt from in-band SPS/PPS),
-        // and the slot's keyframe-request loop forces that IDR.
-        const asideCamera = content === "camera" && Object.values(contentMap).includes("screen");
-        const slot = asideCamera ? slots.camera : slots.display;
-        if (isConfig) slot.configure(bytes);
-        else slot.feed(isH264, keyframe, timestampUs, bytes);
-        offset += recordLen;
-      }
+      };
+      bindCanvases();
+
+      channel.onmessage = (buf) => {
+        if (disposed || !(buf instanceof ArrayBuffer)) return;
+        bindCanvases();
+        postToWorker(
+          { type: "batch", view, buf, contentMap: getTrackContentMap(session) },
+          [buf],
+        );
+      };
+
+      const diagnostics = heartbeat(() => ({
+        rx: latest.rx,
+        rxBytes: latest.rxBytes,
+        display: latest.display,
+      }));
+      return () => {
+        clearInterval(diagnostics);
+        workerViews.delete(view);
+        postToWorker({ type: "stop", view });
+      };
     };
 
-    const serverId = useAppStore.getState().activeServerId;
-    invoke("start_native_stream_view", {
-      session,
-      serverId,
-      mode: WEBVIEW_HAS_WEBCODECS ? NativeDeliveryMode.H264 : NativeDeliveryMode.Jpeg,
-      onFrame: channel,
-    }).catch((e) => {
-      console.error("[stream-view] start_native_stream_view failed:", e);
-      if (!disposed) setFailed(true);
-    });
+    /** In-page fallback: the pre-worker pipeline, for webviews without
+     *  worker OffscreenCanvas. Subject to page throttling by nature. */
+    const wireInPage = (channel: Channel<ArrayBuffer>) => {
+      const slotTarget = (ref: React.RefObject<HTMLCanvasElement | null>) => (w: number, h: number) => {
+        const canvas = ref.current;
+        if (!canvas) return null;
+        if (canvas.width !== w || canvas.height !== h) {
+          canvas.width = w;
+          canvas.height = h;
+        }
+        return canvas.getContext("2d");
+      };
+      const slots = {
+        display: makeSlot(slotTarget(canvases.current.display), () => setHasDisplay(true), requestKeyframe),
+        camera: makeSlot(slotTarget(canvases.current.camera), () => setHasCamera(true), requestKeyframe),
+      };
+      sessionMetrics.set(session, () => ({
+        display: slots.display.metrics(),
+        camera: slots.camera.metrics(),
+      }));
+
+      let received = 0;
+      let receivedBytes = 0;
+      channel.onmessage = (buf) => {
+        if (disposed || !(buf instanceof ArrayBuffer)) return;
+        receivedBytes += buf.byteLength;
+        const contentMap = getTrackContentMap(session);
+        received += forEachBatchRecord(buf, (record) => {
+          const slot = slots[routeSlot(record.mid, contentMap)];
+          if (record.isConfig) slot.configure(record.bytes);
+          else slot.feed(record.isH264, record.keyframe, record.timestampUs, record.bytes);
+        });
+      };
+
+      const diagnostics = heartbeat(() => ({
+        rx: received,
+        rxBytes: receivedBytes,
+        display: slots.display.metrics(),
+      }));
+      return () => {
+        clearInterval(diagnostics);
+        slots.display.dispose();
+        slots.camera.dispose();
+      };
+    };
+
+    // Async setup: the worker handshake resolves in milliseconds (and only
+    // once per page); the channel stays silent until the invoke below.
+    (async () => {
+      const caps = await workerCapabilities();
+      if (disposed) return;
+      const channel = new Channel<ArrayBuffer>();
+      let mode: NativeDeliveryMode;
+      if (caps) {
+        mode = caps.h264 ? NativeDeliveryMode.H264 : NativeDeliveryMode.Jpeg;
+        teardown = wireWorker(channel);
+      } else {
+        mode = WEBVIEW_HAS_WEBCODECS ? NativeDeliveryMode.H264 : NativeDeliveryMode.Jpeg;
+        teardown = wireInPage(channel);
+      }
+      const serverId = useAppStore.getState().activeServerId;
+      invoke("start_native_stream_view", {
+        session,
+        serverId,
+        mode,
+        onFrame: channel,
+      }).catch((e) => {
+        console.error("[stream-view] start_native_stream_view failed:", e);
+        if (!disposed) setFailed(true);
+      });
+    })();
 
     return () => {
       disposed = true;
-      clearInterval(diagnostics);
+      teardown?.();
       sessionMetrics.delete(session);
-      slots.display.dispose();
-      slots.camera.dispose();
       invoke("stop_native_stream_view", { session }).catch(() => {});
       setHasDisplay(false);
       setHasCamera(false);
@@ -517,12 +481,11 @@ function createNativeStatsSampler(session: number): StatsSampler {
       const contentMap = getTrackContentMap(session);
       const codecLabel = WEBVIEW_HAS_WEBCODECS ? "H264 (WebCodecs)" : "H264 → JPEG (Rust)";
       const videos: VideoTrackStats[] = (rust?.videos ?? []).map((v) => {
-        const content = contentMap[v.mid] ?? (v.mid === "0" ? "screen" : "camera");
-        // Slot attribution mirrors the frame routing above: a camera-only
-        // share paints in the display slot, so reading `metrics.camera` for
-        // it reports an idle slot for a track that is decoding fine.
-        const aside = content === "camera" && Object.values(contentMap).includes("screen");
-        const m = aside ? metrics?.camera : metrics?.display;
+        // Slot attribution mirrors the frame routing (nativeStreamCore's
+        // routeSlot): a camera-only share paints in the display slot, so
+        // reading `metrics.camera` for it would report an idle slot for a
+        // track that is decoding fine.
+        const m = routeSlot(v.mid, contentMap) === "camera" ? metrics?.camera : metrics?.display;
         return {
           mid: v.mid,
           frameWidth: m && m.width > 0 ? m.width : null,
@@ -602,10 +565,8 @@ registerStreamViewerStrategy({
 });
 
 // NOTE: no synchronous codec "warmup" here. WebKitGTK runs the first
-// WebCodecs call's GStreamer plugin-registry scan ON THE MAIN THREAD
-// (~3s), so probing at startup froze the whole window shortly after
-// joining a server. The first real decoder creation still pays that cost
-// once - but only when the user starts a share, behind the existing
-// "Setting up stream..." overlay, and the timing log in newDecoder
-// surfaces it. Moving decode into a Worker/OffscreenCanvas is the proper
-// fix (keeps the scan off the main thread entirely).
+// WebCodecs call's GStreamer plugin-registry scan on the CALLING thread
+// (~3s). On the worker path that thread is the decode worker's, so the
+// window stays responsive; only the in-page fallback still pays it on the
+// main thread, behind the "Setting up stream..." overlay, where the timing
+// log in nativeStreamCore's newDecoder surfaces it.

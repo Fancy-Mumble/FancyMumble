@@ -28,6 +28,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::server::get_server_info,
         super::server::get_welcome_text,
         super::server::ping_server,
+        super::server::reverse_dns,
         super::server::get_livery,
         // Asks a server what it looks like without joining it.
         super::livery_probe::probe_livery,
@@ -148,7 +149,10 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::files::starling_upload_file,
         super::files::starling_download_to_base64,
         super::files::starling_download_to_file,
+        super::files::starling_media_url,
         super::files::starling_list_files,
+        super::files::starling_manage_files,
+        super::files::starling_forget_file,
         super::files::starling_files_available,
         super::files::upload_file,
         super::files::upload_bytes,
@@ -237,6 +241,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         // -- images ----------------------------------------------------
         super::image::blur_image,
         super::image::process_background,
+        super::image::write_attachment_bytes,
         super::chat_background::pick_chat_background,
         super::chat_background::read_chat_background,
         super::chat_background::process_chat_background_image,
@@ -292,6 +297,8 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::screenshare::self_capture_exclusion,
         #[cfg(not(target_os = "android"))]
         super::screenshare::set_self_capture_exclusion,
+        #[cfg(not(target_os = "android"))]
+        super::screenshare::screen_broadcast_stats,
         // Real on Linux + Windows, loud stubs elsewhere (Android included).
         super::stream_view::start_native_stream_view,
         super::stream_view::stop_native_stream_view,

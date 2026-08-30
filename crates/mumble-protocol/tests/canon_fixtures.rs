@@ -271,11 +271,36 @@ fn a_file_upload_request_is_still_the_bytes_starling_reads() {
             filename: "sunset.png".to_owned(),
             content_type: "image/png".to_owned(),
             size: 4096,
-            sha256: Vec::new(),
+            ..Default::default()
         });
     assert_eq!(
         hex_of(&encode(&upload).expect("encodes")),
         fixture("file upload"),
+        "the canon encoding changed; Starling's half of this test decodes the          recorded bytes, so one of the two ends has drifted"
+    );
+}
+
+#[test]
+fn a_password_share_request_is_still_the_bytes_starling_reads() {
+    // The same frame with the two fields that decide who may reach the file.
+    // Pinned separately because they are absent from the frame above: they
+    // default to a session share, so the fixture that says "no visibility"
+    // cannot catch a change to how one is spelled.
+    let upload =
+        ControlMessage::FancyFileUpload(mumble_protocol::proto::fancy::files::UploadRequest {
+            request_id: "r-1".to_owned(),
+            channel: 4,
+            filename: "sunset.png".to_owned(),
+            content_type: "image/png".to_owned(),
+            size: 4096,
+            visibility: mumble_protocol::proto::fancy::files::Visibility::Password as i32,
+            ttl_seconds: 604_800,
+            password: "hunter2".to_owned(),
+            ..Default::default()
+        });
+    assert_eq!(
+        hex_of(&encode(&upload).expect("encodes")),
+        fixture("upload request in channel 4 with a password"),
         "the canon encoding changed; Starling's half of this test decodes the          recorded bytes, so one of the two ends has drifted"
     );
 }

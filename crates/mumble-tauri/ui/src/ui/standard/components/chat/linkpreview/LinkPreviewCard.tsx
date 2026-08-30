@@ -70,8 +70,13 @@ function EmbedCard({
 
   const imageSrc = previewSrc(embed.image, allowExternalResources);
   const thumbSrc = previewSrc(embed.thumbnail, allowExternalResources);
-  const hasLargeImage = embed.type === "image" && !!imageSrc;
   const hasVideo = embed.type === "video" && !!embed.video?.url;
+  // Any embed that came with an image shows it, not only one the server
+  // labelled `"image"`. A page's `og:image` is the picture on its card, and a
+  // server that fetched one has already decided it is worth carrying; hiding
+  // it behind the type left every ordinary link - which is type `"link"` -
+  // with a card of nothing but a title.
+  const hasLargeImage = !!imageSrc && !hasVideo;
   const showThumbnailOnSide = !!thumbSrc && !hasLargeImage && !hasVideo;
 
   return (
@@ -113,9 +118,6 @@ function EmbedCard({
             consented={videoConsented}
             onConsent={handleConsent}
           />
-        )}
-        {!hasVideo && !hasLargeImage && thumbSrc && !showThumbnailOnSide && (
-          <img className={styles.largeImage} src={thumbSrc} alt={embed.title ?? ""} loading="lazy" />
         )}
       </div>
       {showThumbnailOnSide && thumbSrc && (

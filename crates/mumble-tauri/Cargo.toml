@@ -62,6 +62,14 @@ tauri = { version = "2.10.1", features = [
 ] }
 tauri-plugin-store = "2"
 tauri-plugin-opener = "2"
+# The loopback origin shared media is played from: a small HTTP server of our
+# own, and the percent-decoding of a key out of a request path. A media element
+# will not load a custom scheme, so it has to be real HTTP - see
+# `state::media_server`.
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+percent-encoding = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = [
@@ -72,6 +80,7 @@ tokio = { version = "1", features = [
 ] }
 futures-util = { version = "0.3", default-features = false }
 tokio-util = { version = "0.7", features = ["io"] }
+dns-lookup = "2"
 rustls = { version = "0.23", features = ["ring"] }
 rcgen = "0.14.7"
 tracing = "0.1"

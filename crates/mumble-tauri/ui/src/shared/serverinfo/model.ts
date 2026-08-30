@@ -41,6 +41,8 @@ export interface ServerInfoModel {
   readonly clearCspViolations: () => void;
   readonly refreshStats: () => void;
   readonly udpActive: boolean;
+  /** Cipher encrypting UDP audio; null while audio rides the TCP tunnel. */
+  readonly udpCipher: string | null;
   readonly capabilities: FileServerCapabilities | null;
   readonly streamerMode: boolean;
 }
@@ -50,6 +52,7 @@ const STATS_POLL_MS = 2000;
 
 export function useServerInfoModel(): ServerInfoModel {
   const udpActive = useAppStore((s) => s.udpActive);
+  const udpCipher = useAppStore((s) => s.udpCipher);
   const capabilities = useAppStore((s) => s.fileServerCapabilities);
   const streamerMode = useAppStore((s) => s.streamerMode);
   const pluginInfos = useAppStore((s) => s.pluginInfos);
@@ -145,6 +148,7 @@ export function useServerInfoModel(): ServerInfoModel {
     clearCspViolations,
     refreshStats,
     udpActive,
+    udpCipher,
     capabilities,
     streamerMode,
   };

@@ -248,6 +248,9 @@ export const TID = {
   streamWatchTile: "stream-watch-tile",
   /** The focus view's bottom-drawer toggle (the drawer starts collapsed). */
   streamDrawerToggle: "stream-drawer-toggle",
+  /** Nebula's grab bar under the share stage: dragging it trades stage height
+   *  for conversation height. Carries the current height in `aria-valuenow`. */
+  streamStageResizeHandle: "stream-stage-resize-handle",
   /** Kebab/burger button opening the own-broadcast stream-config menu
    *  (stop / change source / quality), beside the stop-stream × button. */
   streamConfigMenu: "stream-config-menu",
@@ -272,6 +275,8 @@ export const TID = {
   streamStatsFreezes: "stream-stats-freezes",
   /** Connection-level "FPS" row in the stats panel (decoded frames/s). */
   streamStatsFps: "stream-stats-fps",
+  /** Sender-side uplink target row; present only while this client shares. */
+  streamStatsUplinkTarget: "stream-stats-uplink-target",
   /** Advisory banner on the own-broadcast preview when the Linux/GNOME
    *  compositor stops delivering fresh monitor frames (fullscreen scanout). */
   streamCaptureStallHint: "stream-capture-stall-hint",

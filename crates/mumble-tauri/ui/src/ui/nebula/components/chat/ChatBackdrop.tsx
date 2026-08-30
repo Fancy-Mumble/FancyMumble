@@ -11,6 +11,16 @@ import {
 const WATCHDOG_INTERVAL_MS = 1000;
 /** Samples without progress before the clip is restarted. */
 const WATCHDOG_STUCK_TICKS = 2;
+/**
+ * How long the window may sit unfocused before the wallpaper stops.
+ *
+ * Not immediate, because the client is often visible on a second screen while
+ * the reader works elsewhere, and a wallpaper that freezes the instant it
+ * loses focus reads as a stall. Long enough that an alt-tab and back never
+ * shows a stopped clip, short enough that a window left in the background
+ * stops costing anything.
+ */
+export const BLUR_GRACE_MS = 5000;
 
 /** Matches the OS "reduce motion" setting, and follows it if it changes. */
 function usePrefersReducedMotion(): boolean {
@@ -105,6 +115,12 @@ export function ChatBackdrop() {
   // A looping wallpaper decoding behind a window nobody is looking at is pure
   // heat. The element keeps its buffered frames, so coming back is instant.
   //
+  // Measured on WebKitGTK 2.52 with accelerated compositing off - which is how
+  // this app runs on Linux - a full-column clip costs most of a CPU core for
+  // as long as it is on screen, and the bill is paid per painted frame whether
+  // or not anyone is looking. So it is parked whenever the window is hidden,
+  // and again when the window has been unfocused for `BLUR_GRACE_MS`.
+  //
   // The rest keeps the clip going where `loop` alone did not. The attribute
   // is honoured, yet the wallpaper has been seen frozen on its still after one
   // pass, and a wallpaper that ran once is worse than none. So the element is
@@ -120,13 +136,50 @@ export function ChatBackdrop() {
       node.currentTime = 0;
       resume();
     };
-    const sync = () => (document.hidden ? node.pause() : resume());
+
+    // Parking is deliberate, so the watchdog must not read the frozen
+    // position as the stall it exists to repair - it would restart the very
+    // clip that was just stopped, and from the top. Tracked as our own intent
+    // rather than read off `node.paused`, which says nothing about who
+    // stopped the clip or why.
+    let parked = false;
+    let blurTimer: ReturnType<typeof setTimeout> | undefined;
+    const cancelPark = () => {
+      if (blurTimer === undefined) return;
+      clearTimeout(blurTimer);
+      blurTimer = undefined;
+    };
+    const park = () => {
+      parked = true;
+      node.pause();
+    };
+    const sync = () => {
+      cancelPark();
+      if (document.hidden) {
+        park();
+        return;
+      }
+      if (document.hasFocus()) {
+        parked = false;
+        resume();
+        return;
+      }
+      blurTimer = setTimeout(() => {
+        blurTimer = undefined;
+        park();
+      }, BLUR_GRACE_MS);
+    };
 
     let lastTime = -1;
     let stuckTicks = 0;
     const watchdog = setInterval(() => {
-      // Not moving for a reason: hidden, mid-seek, or still buffering.
-      if (document.hidden || node.seeking || node.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
+      // Not moving for a reason: parked, hidden, mid-seek, or still buffering.
+      if (
+        parked ||
+        document.hidden ||
+        node.seeking ||
+        node.readyState < HTMLMediaElement.HAVE_FUTURE_DATA
+      ) {
         stuckTicks = 0;
         return;
       }
@@ -143,10 +196,16 @@ export function ChatBackdrop() {
 
     node.addEventListener("ended", restart);
     document.addEventListener("visibilitychange", sync);
+    globalThis.addEventListener("blur", sync);
+    globalThis.addEventListener("focus", sync);
+    sync();
     return () => {
+      cancelPark();
       clearInterval(watchdog);
       node.removeEventListener("ended", restart);
       document.removeEventListener("visibilitychange", sync);
+      globalThis.removeEventListener("blur", sync);
+      globalThis.removeEventListener("focus", sync);
     };
   }, [playing, videoSrc]);
 

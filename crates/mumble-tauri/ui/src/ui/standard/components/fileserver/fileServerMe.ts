@@ -11,6 +11,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type { MyFilesResponse } from "@core/types";
 import { cachedPreviewText, cachedPreviewUrl, dropPreview } from "@core/features/fileserver/previewLoader";
 import type { FilePreviewSource } from "./FilePreview";
+import { useAppStore } from "@core/store";
+import { canonMyListFiles, canonForgetFile } from "@core/features/chat/starlingManage";
 
 /** Base URL + the caller's own session JWT (from the file-server config). */
 export interface FileServerCreds {
@@ -38,8 +40,17 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   });
 }
 
-/** List only the files the caller uploaded. */
+/**
+ * List only the files the caller uploaded.
+ *
+ * The canon has no session JWT to scope this with, so it matches on the
+ * account (or the certificate, for a guest) recorded when the file went up -
+ * see `starlingManage`. Same answer, same shape, different question.
+ */
 export function myListFiles(creds: FileServerCreds): Promise<MyFilesResponse> {
+  if (useAppStore.getState().fileServerKind === "canon") {
+    return withTimeout(canonMyListFiles(), 15000, "Listing files");
+  }
   return withTimeout(
     invoke<MyFilesResponse>("fileserver_my_list_files", {
       request: { baseUrl: creds.baseUrl, sessionJwt: creds.sessionJwt },
@@ -51,6 +62,9 @@ export function myListFiles(creds: FileServerCreds): Promise<MyFilesResponse> {
 
 /** Delete one of the caller's own files. */
 export function deleteMyFile(creds: FileServerCreds, fileId: string): Promise<void> {
+  if (useAppStore.getState().fileServerKind === "canon") {
+    return canonForgetFile(fileId);
+  }
   return invoke("fileserver_my_delete_file", {
     request: { baseUrl: creds.baseUrl, sessionJwt: creds.sessionJwt, fileId },
   });

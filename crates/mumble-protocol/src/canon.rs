@@ -431,6 +431,12 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
         ControlMessage::FancyFileList(request) => {
             return Some((FILES, files_envelope(Files::List(request.clone()))));
         }
+        ControlMessage::FancyFileManage(request) => {
+            return Some((FILES, files_envelope(Files::Manage(request.clone()))));
+        }
+        ControlMessage::FancyFileForget(request) => {
+            return Some((FILES, files_envelope(Files::Forget(request.clone()))));
+        }
         _ => return None,
     };
     Some((
@@ -1041,10 +1047,18 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 Some(Files::Share(share)) => Some(ControlMessage::FancyFileShare(share)),
                 Some(Files::Listing(listing)) => Some(ControlMessage::FancyFileListing(listing)),
                 Some(Files::Refused(refused)) => Some(ControlMessage::FancyFileRefused(refused)),
+                Some(Files::Managed(listing)) => Some(ControlMessage::FancyFileManaged(listing)),
                 // The request arms. A server sending one of those is either
                 // confused or newer than this client; either way there is
                 // nothing here that handles it, so it takes the unknown path.
-                Some(Files::Upload(_) | Files::Download(_) | Files::List(_)) | None => None,
+                Some(
+                    Files::Upload(_)
+                    | Files::Download(_)
+                    | Files::List(_)
+                    | Files::Manage(_)
+                    | Files::Forget(_),
+                )
+                | None => None,
             })
         }
         _ => Ok(None),
@@ -1209,14 +1223,20 @@ fn emoji_to_canon(emoji: Option<&mumble_tcp::pchat_reaction::Emoji>) -> Option<f
 /// One canon `Preview` as the client's own response message.
 ///
 /// The canon is deliberately smaller than the epoch-0 shape: it carries what a
-/// server can honestly extract from a page - title, description, site - and not
-/// the video/author/favicon/timestamp surface `Embed` has room for. Those are
-/// left unset rather than invented, so a client renders what was actually read.
+/// server can honestly extract from a page - title, description, site, and the
+/// picture it fetched - and not the video/author/favicon/timestamp surface
+/// `Embed` has room for. Those are left unset rather than invented, so a client
+/// renders what was actually read.
 ///
-/// `image_key` is not mapped either: it names an object in the files service,
-/// and nothing stores one yet (`PROTOCOL-MIGRATION.md` M2b). Putting a remote
-/// URL in `Media.url` would send every viewer to fetch it, which is the network
-/// probe that server-side previews exist to prevent.
+/// The image travels as `Media::preview_data` and **`Media::url` stays unset**,
+/// which is the whole point of the field: the bytes are what the server
+/// fetched, so the picture draws from a `data:` URL and no viewer ever contacts
+/// the origin. Filling in the remote URL as well would hand that host one
+/// request per member of the channel, which is the network probe server-side
+/// previews exist to prevent.
+///
+/// `image_key` is still not mapped: it names a *full-resolution* object in the
+/// files service, and nothing stores one yet (`PROTOCOL-MIGRATION.md` M2b).
 fn preview_response(preview: &fancy::feature::Preview) -> mumble_tcp::FancyLinkPreviewResponse {
     mumble_tcp::FancyLinkPreviewResponse {
         request_id: Some(preview.request_id.clone()),
@@ -1226,9 +1246,38 @@ fn preview_response(preview: &fancy::feature::Preview) -> mumble_tcp::FancyLinkP
             description: Some(preview.description.clone()),
             site_name: Some(preview.site.clone()),
             r#type: Some("link".to_owned()),
+            image: preview_image(preview),
             ..Default::default()
         }],
     }
+}
+
+/// The fetched thumbnail as canon media, or `None` when there is none.
+///
+/// Empty bytes and an unset image are the same thing to a reader - a card with
+/// no picture - so a `Media` with nothing in it is never constructed: a client
+/// that checks the field rather than its contents would otherwise draw a broken
+/// image for every page that offered none.
+fn preview_image(
+    preview: &fancy::feature::Preview,
+) -> Option<mumble_tcp::fancy_link_preview_response::embed::Media> {
+    if preview.image.is_empty() {
+        return None;
+    }
+    let dimension = |value: u32| i32::try_from(value).ok().filter(|size| *size > 0);
+    Some(mumble_tcp::fancy_link_preview_response::embed::Media {
+        preview_data: Some(preview.image.clone()),
+        preview_mime: Some(preview.image_mime.clone()),
+        preview_width: dimension(preview.image_width),
+        preview_height: dimension(preview.image_height),
+        // The size the client lays the picture out at is the size of the
+        // picture it was given: there is no larger one to fetch, so `width`
+        // and `height` describe these bytes too.
+        width: dimension(preview.image_width),
+        height: dimension(preview.image_height),
+        original_size: None,
+        url: None,
+    })
 }
 
 /// `0xRRGGBB` as the CSS the canon asks for.
@@ -1775,6 +1824,7 @@ mod tests {
                     description: "A page".to_owned(),
                     site: "Example".to_owned(),
                     image_key: String::new(),
+                    ..Default::default()
                 },
             )),
         };
@@ -1808,6 +1858,72 @@ mod tests {
         };
         assert_eq!(response.request_id.as_deref(), Some("r-3"));
         assert!(response.embeds.is_empty());
+    }
+
+    #[test]
+    fn a_previews_picture_arrives_as_bytes_and_never_as_a_url_to_go_and_fetch() {
+        // The privacy property of the whole feature, as a test: the client is
+        // given the picture, not somewhere to get it. A `Media::url` here would
+        // have every viewer of the message load the origin's image, which is
+        // the probe server-side previews exist to prevent.
+        let preview = fancy::feature::LinkPreviewEnvelope {
+            body: Some(fancy::feature::link_preview_envelope::Body::Preview(
+                fancy::feature::Preview {
+                    request_id: "r-4".to_owned(),
+                    url: "https://example.com/a".to_owned(),
+                    title: "Example Domain".to_owned(),
+                    image: vec![0xff, 0xd8, 0xff, 0xe0],
+                    image_mime: "image/jpeg".to_owned(),
+                    image_width: 640,
+                    image_height: 336,
+                    ..Default::default()
+                },
+            )),
+        };
+        let back = from_canon(LINK_PREVIEW, &preview.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::FancyLinkPreviewResponse(response) = back else {
+            panic!("expected a preview response");
+        };
+        let media = response
+            .embeds
+            .first()
+            .and_then(|embed| embed.image.as_ref())
+            .expect("the picture travels");
+        assert_eq!(
+            media.preview_data.as_deref(),
+            Some([0xff, 0xd8, 0xff, 0xe0].as_slice())
+        );
+        assert_eq!(media.preview_mime.as_deref(), Some("image/jpeg"));
+        assert_eq!(
+            (media.preview_width, media.preview_height),
+            (Some(640), Some(336))
+        );
+        assert_eq!(media.url, None, "a URL here is the network probe");
+    }
+
+    #[test]
+    fn a_preview_with_no_picture_carries_no_media_at_all() {
+        // An empty `Media` and no `Media` mean the same thing to a reader, and
+        // a client that checks the field rather than its contents would draw a
+        // broken image for every page that offered no picture.
+        let preview = fancy::feature::LinkPreviewEnvelope {
+            body: Some(fancy::feature::link_preview_envelope::Body::Preview(
+                fancy::feature::Preview {
+                    request_id: "r-5".to_owned(),
+                    title: "No Picture".to_owned(),
+                    ..Default::default()
+                },
+            )),
+        };
+        let back = from_canon(LINK_PREVIEW, &preview.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::FancyLinkPreviewResponse(response) = back else {
+            panic!("expected a preview response");
+        };
+        assert!(response.embeds.first().expect("an embed").image.is_none());
     }
 
     #[test]
@@ -1896,7 +2012,8 @@ mod tests {
             filename: "sunset.png".to_owned(),
             content_type: "image/png".to_owned(),
             size: 4096,
-            sha256: Vec::new(),
+            visibility: fancy::files::Visibility::Public as i32,
+            ..fancy::files::UploadRequest::default()
         });
         let (outer, payload) = to_canon(&asked).expect("files has a canon home");
         assert_eq!(outer, FILES);
@@ -1907,6 +2024,12 @@ mod tests {
         };
         assert_eq!(request.request_id, "r-7");
         assert_eq!(request.filename, "sunset.png");
+        assert_eq!(
+            request.visibility,
+            fancy::files::Visibility::Public as i32,
+            "the visibility travels with the ask: a share the server was never \
+             told to make public would come back as a link that is not one"
+        );
 
         let answer = fancy::files::FilesEnvelope {
             body: Some(fancy::files::files_envelope::Body::Grant(
@@ -1916,6 +2039,8 @@ mod tests {
                     url: "https://files.example/3/0189/sunset.png?expires=1&sig=aa".to_owned(),
                     method: "PUT".to_owned(),
                     expires_at_ms: 1,
+                    share_url: "https://files.example/s/3/0189/sunset.png".to_owned(),
+                    share_expires_at_ms: 0,
                 },
             )),
         };
@@ -1930,6 +2055,11 @@ mod tests {
             "the correlation is what tells one in-flight upload from another"
         );
         assert_eq!(grant.method, "PUT");
+        assert_eq!(
+            grant.share_url, "https://files.example/s/3/0189/sunset.png",
+            "and the lasting link comes back with it - the signed one expires, \
+             so it is not what a message can carry"
+        );
     }
 
     #[test]

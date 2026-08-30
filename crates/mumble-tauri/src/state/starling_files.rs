@@ -12,14 +12,24 @@
 //!
 //! # Why the handshake lives here and not in the frontend
 //!
-//! A grant is good for one object, once, for about a minute. Handing that to
-//! the webview would mean the URL crossing the IPC boundary, sitting in a JS
+//! A grant is good for one object until it expires. Handing that to the
+//! webview would mean the URL crossing the IPC boundary, sitting in a JS
 //! variable while a file dialog is open, and being re-sent on a retry after it
 //! has expired. Keeping both halves in the backend means the frontend asks to
 //! share a file and finds out whether it worked, which is all it ever needed
 //! to know.
+//!
+//! # Why a download grant is kept
+//!
+//! Reading is not writing: an upload grant is spent by the PUT it authorises,
+//! but a GET grant is only a signature over `(method, key, expiry)` that the
+//! listener re-checks per request. So one download URL answers as many
+//! requests as fit inside its lifetime - which is what makes playing a video
+//! affordable, because a player asking for the next few hundred kilobytes of
+//! it should not cost a round trip over the control connection each time.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use base64::engine::general_purpose::STANDARD;
@@ -41,6 +51,33 @@ use super::AppState;
 /// connection is carrying. Short enough that a server which does not do
 /// files at all leaves the composer waiting for a moment, not forever.
 const GRANT_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Now, on the clock a grant's expiry is written against.
+fn epoch_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| {
+            u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+        })
+}
+
+/// Why one attempt at a span did not produce bytes.
+enum MediaFetch {
+    /// The file server would not answer this URL. Worth one more attempt with
+    /// a freshly signed one; the link may simply have aged out.
+    Refused,
+    /// Anything else, said in the words it will be logged with.
+    Failed(String),
+}
+
+impl std::fmt::Display for MediaFetch {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Refused => formatter.write_str("the file server refused this link"),
+            Self::Failed(why) => formatter.write_str(why),
+        }
+    }
+}
 
 /// What the server said about one request for a URL.
 #[derive(Debug)]
@@ -67,7 +104,26 @@ pub(crate) struct StarlingFiles {
     /// which is why the probe is a listing, not an upload: it is free, it
     /// answers even for an empty channel, and a wrong guess costs nothing.
     available: Option<bool>,
+    /// Download URLs already minted, by key, with when each stops working.
+    ///
+    /// Per session because a grant is signed by the server that issued it, so
+    /// disconnecting or switching servers drops the lot with the state it
+    /// lives in.
+    download_urls: HashMap<String, CachedGrant>,
 }
+
+/// One signed download URL, and the moment it stops being one.
+struct CachedGrant {
+    url: String,
+    expires_at_ms: u64,
+}
+
+/// How much life a cached grant needs left before it is worth reusing.
+///
+/// A URL that expires mid-transfer fails the request that was using it, and a
+/// player treats that as the file having gone away rather than retrying. The
+/// margin is generous because minting a fresh one costs one round trip.
+const GRANT_REUSE_MARGIN_MS: u64 = 30_000;
 
 impl StarlingFiles {
     /// Register a waiter for `request_id` and hand back its receiver.
@@ -98,6 +154,49 @@ impl StarlingFiles {
     pub(crate) fn available(&self) -> Option<bool> {
         self.available
     }
+
+    /// A download URL for `key` that still has enough life left to use.
+    fn cached_download_url(&self, key: &str, now_ms: u64) -> Option<String> {
+        self.download_urls
+            .get(key)
+            .filter(|grant| grant.expires_at_ms > now_ms.saturating_add(GRANT_REUSE_MARGIN_MS))
+            .map(|grant| grant.url.clone())
+    }
+
+    /// Drop a cached URL the file server has since refused.
+    ///
+    /// A signed URL can stop working before the moment it said it would - a
+    /// server restarted onto a new signing key, a clock further off than the
+    /// margin allows - and a cache that keeps handing one out turns a
+    /// recoverable refusal into a video that never plays again.
+    fn forget_download_url(&mut self, key: &str) {
+        let _ = self.download_urls.remove(key);
+    }
+
+    /// Keep a freshly minted download URL for the next request for the same
+    /// object, and drop any that have since expired.
+    fn remember_download_url(&mut self, key: &str, url: &str, expires_at_ms: u64, now_ms: u64) {
+        self.download_urls
+            .retain(|_, grant| grant.expires_at_ms > now_ms);
+        let _ = self.download_urls.insert(
+            key.to_owned(),
+            CachedGrant {
+                url: url.to_owned(),
+                expires_at_ms,
+            },
+        );
+    }
+}
+
+/// A password share's link, and the password that opens it.
+///
+/// Carried from the card that asked the user for it, because this is the one
+/// download the session cannot authorise on its own.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct PasswordShare {
+    /// The share's own address, from the marker in the message.
+    pub url: String,
+    pub password: String,
 }
 
 /// What the caller gets back once a file has actually landed.
@@ -107,6 +206,19 @@ pub(crate) struct SharedUpload {
     pub key: String,
     /// The bytes that arrived.
     pub size: u64,
+    /// When the share stops answering, in unix seconds; `0` for never.
+    ///
+    /// Seconds because that is what every card in the client already renders
+    /// an expiry in, and the plugin path has always answered in.
+    #[serde(rename = "expiresAt")]
+    pub expires_at: u64,
+    /// The link this share can be reached at by anyone holding it.
+    ///
+    /// Empty for a session share, which has no such address. Unlike the URL
+    /// the bytes went up through, this one does not expire, so it is the one
+    /// that can be put in a message and still work next week.
+    #[serde(rename = "shareUrl")]
+    pub share_url: String,
 }
 
 impl AppState {
@@ -116,12 +228,19 @@ impl AppState {
     /// the bytes. The channel is told the file exists by the server once the
     /// upload lands - this does not announce anything itself, because a client
     /// that announced its own uploads could announce files it never sent.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "one upload, and every one of these is a property of it"
+    )]
     pub async fn starling_upload_file(
         &self,
         file_path: String,
         channel_id: u32,
         mime_type: Option<String>,
         upload_id: String,
+        visibility: fancy::files::Visibility,
+        ttl_seconds: u64,
+        password: String,
         app_handle: tauri::AppHandle,
     ) -> Result<SharedUpload, String> {
         let file = tokio::fs::File::open(&file_path)
@@ -147,6 +266,9 @@ impl AppState {
                 filename,
                 content_type,
                 size,
+                visibility,
+                ttl_seconds,
+                password,
             })
             .await
         {
@@ -194,22 +316,43 @@ impl AppState {
         Ok(SharedUpload {
             key: grant.key,
             size,
+            share_url: grant.share_url,
+            expires_at: grant.share_expires_at_ms / 1000,
         })
     }
 
-    /// Fetch one shared object and hand it back as base64.
+    /// A URL the bytes of one shared object can be fetched from.
     ///
-    /// Base64 rather than the URL because a signed URL put into the DOM
-    /// outlives the render that used it: it would sit in the page, still
-    /// valid, for anything that can read the document. This way it never
-    /// leaves the backend.
-    pub async fn starling_download_to_base64(&self, key: String) -> Result<String, String> {
+    /// Kept inside the backend: a signed URL put into the DOM outlives the
+    /// render that used it, sitting in the page and still valid for anything
+    /// that can read the document. Callers here are the download commands and
+    /// the `fancy-media` protocol handler, none of which hand it any further.
+    ///
+    /// Reused while one is still good, so streaming a video does not put a
+    /// control-connection round trip in front of every range request.
+    pub(crate) async fn starling_download_url(&self, key: &str) -> Result<String, String> {
+        if let Some(url) = self.cached_download_url(key) {
+            return Ok(url);
+        }
+        // One ask at a time for one object. A player opens several connections
+        // at once and every one of them wants this URL before any of them has
+        // it; letting each ask separately multiplies a single question by the
+        // number of connections, and the control plane answers questions at a
+        // limited rate.
+        let gate = self.download_url_gate(key);
+        let _held = gate.lock().await;
+        // Whoever held the gate first has usually just answered it.
+        if let Some(url) = self.cached_download_url(key) {
+            return Ok(url);
+        }
+
+        let now = epoch_ms();
         let request_id = uuid::Uuid::new_v4().to_string();
         let (handle, waiting) = self.expect_grant(&request_id)?;
         if let Err(error) = handle
             .send(command::SendFancyFileDownload {
                 request_id: request_id.clone(),
-                key,
+                key: key.to_owned(),
             })
             .await
         {
@@ -217,10 +360,131 @@ impl AppState {
             return Err(format!("Failed to ask for a download URL: {error}"));
         }
         let grant = self.wait_for_grant(&request_id, waiting).await?;
+        let url = grant.url.clone();
+        let _ = self.with_starling_files(|files| {
+            files.remember_download_url(key, &url, grant.expires_at_ms, now);
+        });
+        Ok(url)
+    }
 
+    /// The URL a media element should be pointed at for one shared object.
+    ///
+    /// Brings the loopback origin up on first use. The URL is only an address:
+    /// it carries this run's token, while the signed URL the bytes actually
+    /// come from is minted per request and never leaves the backend.
+    pub(crate) async fn starling_media_url(
+        &self,
+        key: String,
+        app_handle: tauri::AppHandle,
+    ) -> Result<String, String> {
+        let mut running = self.media_server.lock().await;
+        if running.is_none() {
+            *running = Some(super::media_server::start(app_handle).await?);
+        }
+        running
+            .as_ref()
+            .map(|server| server.url_for(&key))
+            .ok_or_else(|| "the media origin is not running".to_owned())
+    }
+
+    /// Fetch one span of one shared object, for the loopback media origin.
+    ///
+    /// The range is passed through rather than interpreted: the file server
+    /// decides what it can answer, and its `Content-Range` is what tells the
+    /// player how long the object really is. A `None` range asks for the whole
+    /// object, which is what a request with no `Range` header deserves.
+    pub(crate) async fn starling_media_range(
+        &self,
+        key: &str,
+        range: Option<&str>,
+    ) -> Result<super::media_server::FetchedSpan, String> {
+        match self.fetch_media_range(key, range).await {
+            Err(MediaFetch::Refused) => {
+                // The URL this was holding is no longer one the file server
+                // will answer. Mid-playback that is a video that stops for
+                // good, so the cached grant goes and a fresh one is asked for
+                // once - and only once, because a second refusal is the file
+                // being gone rather than the link being stale.
+                let _ = self.with_starling_files(|files| files.forget_download_url(key));
+                self.fetch_media_range(key, range)
+                    .await
+                    .map_err(|error| error.to_string())
+            }
+            other => other.map_err(|error| error.to_string()),
+        }
+    }
+
+    /// One attempt at one span.
+    async fn fetch_media_range(
+        &self,
+        key: &str,
+        range: Option<&str>,
+    ) -> Result<super::media_server::FetchedSpan, MediaFetch> {
+        let url = self
+            .starling_download_url(key)
+            .await
+            .map_err(MediaFetch::Failed)?;
+        let mut request = self.http_client.get(&url);
+        if let Some(range) = range {
+            request = request.header(reqwest::header::RANGE, range);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|e| MediaFetch::Failed(format!("download request failed: {e}")))?;
+        let status = response.status();
+        // What a stale signed URL looks like, and the one failure worth trying
+        // again with a fresh one.
+        if status == reqwest::StatusCode::FORBIDDEN || status == reqwest::StatusCode::NOT_FOUND {
+            return Err(MediaFetch::Refused);
+        }
+        // A range nobody can satisfy is an answer, not a failure: the length
+        // it carries is what stops a player seeking into nothing forever.
+        if !status.is_success() && status != reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
+            return Err(MediaFetch::Failed(format!("download failed: {status}")));
+        }
+        // A server that ignores `Range` answers a request for the first
+        // megabyte of a film with the whole film. Handing that on would spend
+        // the file - repeatedly, once per piece the player asks for - so it is
+        // refused instead, and the card falls back to naming the file and
+        // offering to save it.
+        if range.is_some() && status == reqwest::StatusCode::OK {
+            return Err(MediaFetch::Failed(
+                "this server does not serve ranges, so it cannot stream".to_owned(),
+            ));
+        }
+        let header = |name: reqwest::header::HeaderName| {
+            response
+                .headers()
+                .get(name)
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_owned)
+        };
+        let content_type = header(reqwest::header::CONTENT_TYPE);
+        let content_range = header(reqwest::header::CONTENT_RANGE);
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| MediaFetch::Failed(format!("download body: {e}")))?;
+        Ok(super::media_server::FetchedSpan {
+            status: status.as_u16(),
+            content_type,
+            content_range,
+            bytes: bytes.to_vec(),
+        })
+    }
+
+    /// Fetch one shared object and hand it back as base64.
+    ///
+    /// For the callers that want the whole thing in one piece - a file the
+    /// webview is about to decode itself. Anything that plays rather than
+    /// decodes should be pointed at the `fancy-media` scheme instead, which
+    /// moves the same bytes a range at a time.
+    pub async fn starling_download_to_base64(&self, key: String) -> Result<String, String> {
+        let url = self.starling_download_url(&key).await?;
         let response = self
             .http_client
-            .get(&grant.url)
+            .get(&url)
             .send()
             .await
             .map_err(|e| format!("download request failed: {e}"))?;
@@ -246,24 +510,15 @@ impl AppState {
         &self,
         key: String,
         dest_path: String,
+        share: Option<PasswordShare>,
     ) -> Result<u64, String> {
-        let request_id = uuid::Uuid::new_v4().to_string();
-        let (handle, waiting) = self.expect_grant(&request_id)?;
-        if let Err(error) = handle
-            .send(command::SendFancyFileDownload {
-                request_id: request_id.clone(),
-                key,
-            })
-            .await
-        {
-            self.forget_file_request(&request_id);
-            return Err(format!("Failed to ask for a download URL: {error}"));
-        }
-        let grant = self.wait_for_grant(&request_id, waiting).await?;
-
+        let url = match share {
+            Some(share) => self.redeem_share(&share).await?,
+            None => self.starling_download_url(&key).await?,
+        };
         let response = self
             .http_client
-            .get(&grant.url)
+            .get(&url)
             .send()
             .await
             .map_err(|e| format!("download request failed: {e}"))?;
@@ -286,6 +541,92 @@ impl AppState {
         }
         file.flush().await.map_err(|e| format!("write file: {e}"))?;
         Ok(written)
+    }
+
+    /// Trade a share's password for a URL that will hand over its bytes.
+    ///
+    /// A password share is sealed with a key derived from the password, so the
+    /// signed route every other download uses would hand back ciphertext: the
+    /// server cannot open its own object, which is the point of the mode. The
+    /// two steps here are the same two the password page in a browser takes -
+    /// post the password for a single-use ticket, then spend it.
+    async fn redeem_share(&self, share: &PasswordShare) -> Result<String, String> {
+        #[derive(serde::Deserialize)]
+        struct Ticket {
+            ticket: String,
+        }
+
+        let response = self
+            .http_client
+            .post(&share.url)
+            .bearer_auth(&share.password)
+            .send()
+            .await
+            .map_err(|e| format!("could not reach the share: {e}"))?;
+        if response.status() == reqwest::StatusCode::FORBIDDEN {
+            return Err("wrong password".to_owned());
+        }
+        if !response.status().is_success() {
+            let status = response.status();
+            return Err(format!("the share refused the password: {status}"));
+        }
+        let ticket: Ticket = response
+            .json()
+            .await
+            .map_err(|e| format!("could not read the share's answer: {e}"))?;
+        // The separator is always `?`: a share URL is the object's address and
+        // carries no query of its own.
+        Ok(format!("{}?ticket={}", share.url, ticket.ticket))
+    }
+
+    /// Ask for the caller's own uploads, or for every one of them.
+    ///
+    /// The answer arrives as the `starling-files-managed` event rather than as
+    /// a return value: the same event serves a refresh nobody asked for, and a
+    /// dashboard that only learned about files by calling would not see one
+    /// another operator had just removed.
+    pub async fn starling_manage_files(
+        &self,
+        everyone: bool,
+        limit: u32,
+    ) -> Result<String, String> {
+        let handle = {
+            let session = self.inner.snapshot();
+            let state = session.lock().map_err(|e| e.to_string())?;
+            state.conn.client_handle.clone().ok_or("Not connected")?
+        };
+        let request_id = uuid::Uuid::new_v4().to_string();
+        handle
+            .send(command::SendFancyFileManage {
+                request_id: request_id.clone(),
+                audience: if everyone {
+                    fancy::files::Audience::Everyone
+                } else {
+                    fancy::files::Audience::Mine
+                },
+                limit,
+            })
+            .await
+            .map_err(|e| format!("Failed to ask for the file list: {e}"))?;
+        Ok(request_id)
+    }
+
+    /// Ask for one stored file to be removed.
+    pub async fn starling_forget_file(&self, key: String) -> Result<String, String> {
+        let handle = {
+            let session = self.inner.snapshot();
+            let state = session.lock().map_err(|e| e.to_string())?;
+            state.conn.client_handle.clone().ok_or("Not connected")?
+        };
+        let request_id = uuid::Uuid::new_v4().to_string();
+        handle
+            .send(command::SendFancyFileForget {
+                request_id: request_id.clone(),
+                key,
+            })
+            .await
+            .map_err(|e| format!("Failed to ask for the file to be removed: {e}"))?;
+        Ok(request_id)
     }
 
     /// Ask what has been shared in a channel.
@@ -364,6 +705,38 @@ impl AppState {
         };
     }
 
+    /// A cached download URL for `key`, if one is still worth using.
+    fn cached_download_url(&self, key: &str) -> Option<String> {
+        let now = epoch_ms();
+        self.with_starling_files(|files| files.cached_download_url(key, now))
+            .flatten()
+    }
+
+    /// The gate that serialises asking for one object's download URL.
+    fn download_url_gate(&self, key: &str) -> Arc<tokio::sync::Mutex<()>> {
+        let mut locks = match self.download_url_locks.lock() {
+            Ok(locks) => locks,
+            // A poisoned map is not worth failing a preview over: an
+            // unshared gate only means two asks instead of one.
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        Arc::clone(
+            locks
+                .entry(key.to_owned())
+                .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(()))),
+        )
+    }
+
+    /// Run something against this session's file state, if it can be locked.
+    ///
+    /// `None` when the lock is poisoned, which every caller here treats the
+    /// same way as a cache miss: the grant is simply asked for again.
+    fn with_starling_files<T>(&self, act: impl FnOnce(&mut StarlingFiles) -> T) -> Option<T> {
+        let session = self.inner.snapshot();
+        let mut state = session.lock().ok()?;
+        Some(act(&mut state.starling_files))
+    }
+
     /// Stop listening for one request's answer.
     fn forget_file_request(&self, request_id: &str) {
         let session = self.inner.snapshot();
@@ -400,6 +773,63 @@ mod tests {
             second.try_recv().is_err(),
             "the second is still waiting for its own grant"
         );
+    }
+
+    #[test]
+    fn a_download_url_is_reused_until_it_is_nearly_spent() {
+        // The whole reason streaming is affordable: a player asks for the next
+        // piece of a video every second or so, and each ask would otherwise be
+        // a round trip over the control connection.
+        let mut files = StarlingFiles::default();
+        let now = 1_000_000;
+        files.remember_download_url("7/clip.mp4", "https://files/clip?sig=a", now + 900_000, now);
+
+        assert_eq!(
+            files.cached_download_url("7/clip.mp4", now).as_deref(),
+            Some("https://files/clip?sig=a"),
+        );
+        assert_eq!(
+            files.cached_download_url("7/other.mp4", now),
+            None,
+            "a grant is for one object"
+        );
+    }
+
+    #[test]
+    fn a_grant_close_to_expiry_is_not_handed_out_again() {
+        // A URL that dies mid-transfer fails the request using it, and a
+        // player reads that as the file having gone away rather than retrying.
+        let mut files = StarlingFiles::default();
+        let now = 1_000_000;
+        files.remember_download_url("7/clip.mp4", "https://files/clip?sig=a", now + 5_000, now);
+
+        assert_eq!(files.cached_download_url("7/clip.mp4", now), None);
+    }
+
+    #[test]
+    fn remembering_one_grant_forgets_the_grants_that_have_run_out() {
+        // Otherwise the map is a list of every file looked at this session.
+        let mut files = StarlingFiles::default();
+        files.remember_download_url("old", "https://files/old", 500, 0);
+        files.remember_download_url("new", "https://files/new", 2_000_000, 1_000_000);
+
+        assert!(!files.download_urls.contains_key("old"));
+        assert!(files.download_urls.contains_key("new"));
+    }
+
+    #[test]
+    fn a_refused_link_is_dropped_so_the_next_ask_mints_a_fresh_one() {
+        // Without this a link the server has stopped honouring is handed out
+        // for the rest of its stated lifetime, and a video that stops partway
+        // through never plays again.
+        let mut files = StarlingFiles::default();
+        let now = 1_000_000;
+        files.remember_download_url("7/clip.mp4", "https://files/clip?sig=a", now + 900_000, now);
+        assert!(files.cached_download_url("7/clip.mp4", now).is_some());
+
+        files.forget_download_url("7/clip.mp4");
+
+        assert_eq!(files.cached_download_url("7/clip.mp4", now), None);
     }
 
     #[test]

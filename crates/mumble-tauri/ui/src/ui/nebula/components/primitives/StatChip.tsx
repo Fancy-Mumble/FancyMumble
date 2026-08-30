@@ -1,13 +1,14 @@
 import { Box, type BoxProps } from "@mui/material";
 import { radius } from "../../tokens";
 
-type Tone = "neutral" | "dim" | "ok" | "accent" | "warn" | "bad";
+/** The tones a fact can carry; named so callers can hold one in a table. */
+export type StatChipTone = "neutral" | "dim" | "ok" | "accent" | "warn" | "bad";
 
 /**
  * The small pill the mock uses for facts: latency, "3/101 online", codec.
  * `Chip` is heavier than this needs to be - these carry no interaction.
  */
-export function StatChip({ tone = "neutral", children, sx, ...props }: BoxProps & { tone?: Tone }) {
+export function StatChip({ tone = "neutral", children, sx, ...props }: BoxProps & { tone?: StatChipTone }) {
   return (
     <Box
       component="span"

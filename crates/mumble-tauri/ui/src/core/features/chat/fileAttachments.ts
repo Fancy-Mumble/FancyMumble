@@ -67,6 +67,9 @@ const TEXT_EXTS = new Set([
   "toml",
 ]);
 
+/** What a "photo or video" picker offers, as extensions without the dot. */
+export const MEDIA_EXTENSIONS: readonly string[] = [...IMAGE_EXTS, ...VIDEO_EXTS];
+
 export function previewKindForFilename(filename: string): PreviewKind {
   const extension = filename.includes(".") ? filename.slice(filename.lastIndexOf(".") + 1).toLowerCase() : "";
   if (IMAGE_EXTS.has(extension)) return "image";

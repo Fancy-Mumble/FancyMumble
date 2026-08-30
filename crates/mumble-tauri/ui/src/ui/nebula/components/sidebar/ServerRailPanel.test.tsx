@@ -66,4 +66,42 @@ describe("ServerRailPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /Collapse the server list/ }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("offers no way to collapse the column it is", () => {
+    // Pinned, the panel is the screen's sidebar. A close button would take the
+    // list away and leave the screen with no server list at all.
+    panel({ pinned: true, onClose: undefined });
+    expect(screen.queryByRole("button", { name: /Collapse the server list/ })).toBeNull();
+    expect(screen.queryByText(/Hover a tile/)).toBeNull();
+  });
+
+  it("carries the search field it is given", () => {
+    panel({ pinned: true, search: <input aria-label="Search servers" /> });
+    expect(screen.getByLabelText("Search servers")).toBeTruthy();
+  });
+
+  it("says so when the search matches nothing", () => {
+    panel({ pinned: true, entries: [], empty: "No server matches that." });
+    expect(screen.getByText("No server matches that.")).toBeTruthy();
+  });
+
+  it("leaves an empty list to the add button when there is nothing to filter", () => {
+    // With no servers saved at all, "nothing matched" would be a lie about a
+    // search the user never ran.
+    panel({ pinned: true, entries: [] });
+    expect(screen.queryByText(/No server matches/)).toBeNull();
+    expect(screen.getByRole("button", { name: /Add a server/ })).toBeTruthy();
+  });
+
+  it("favourites a server from its row", () => {
+    const onToggleFavorite = vi.fn();
+    panel({ onToggleFavorite });
+    fireEvent.click(screen.getAllByRole("button", { name: "Add to favourites" })[1]);
+    expect(onToggleFavorite.mock.calls[0][0].host).toBe("kumo.jp");
+  });
+
+  it("draws no star where favouriting is not offered", () => {
+    panel();
+    expect(screen.queryByRole("button", { name: /favourites/ })).toBeNull();
+  });
 });

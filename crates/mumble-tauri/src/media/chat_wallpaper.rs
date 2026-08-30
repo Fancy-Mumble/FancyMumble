@@ -6,11 +6,18 @@
 //! dims the pixels, and encodes the result, so playback is a plain `<video>`
 //! with no filter at all.
 //!
-//! The codec is the same vendored OpenH264 the screenshare encoder already
-//! ships - nothing here depends on the system's GStreamer plugins, which is
-//! also why this works on machines whose *webview* cannot decode H.264 at all.
-//! Only H.264 in MP4 is processed; anything else falls back to the live CSS
-//! path, and the caller treats that as a degradation rather than an error.
+//! The result is also capped at `BAKE_MAX_FPS`, because what the webview pays
+//! for is painted frames: a 60 fps wallpaper costs about twice a 30 fps one,
+//! and on a blurred, dimmed backdrop nobody can tell them apart.
+//!
+//! The encoder is the vendored OpenH264 the screenshare path already ships, so
+//! writing the baked file needs nothing from the system. Decoding is the part
+//! that does: OpenH264 reads Constrained Baseline only, while most real clips
+//! are High profile with B-frames. Those are decoded by whichever of `ffmpeg`
+//! or `gst-launch-1.0` is present, which on Linux is close to certain - the
+//! webview plays the wallpaper through GStreamer in the first place. Only when
+//! a clip is beyond both does the caller fall back to the live CSS path, and
+//! it treats that as a degradation rather than an error.
 
 use std::io::{BufReader, BufWriter, Seek, Write};
 use std::path::Path;
@@ -27,6 +34,28 @@ use openh264::{OpenH264API, Timestamp};
 /// stays flat regardless of the source.
 const BAKE_MAX_WIDTH: usize = 960;
 const BAKE_MAX_HEIGHT: usize = 540;
+
+/// Frame rate ceiling of the baked stream.
+///
+/// The webview pays for a wallpaper once per *painted* frame, and that bill is
+/// close to linear in the clip's frame rate: measured on `WebKitGTK` 2.52 with
+/// accelerated compositing off, one full-column clip costs roughly 55% of a
+/// core at 60 fps, 27% at 30, and 12% at 10. Halving the frame rate of a
+/// blurred, dimmed backdrop is invisible - it is the one axis that buys back
+/// most of the cost while looking the same - whereas resolution barely moves
+/// the needle, because the blit is to the window, not to the source.
+///
+/// A source slower than this is left alone; nothing is ever interpolated up.
+const BAKE_MAX_FPS: f64 = 30.0;
+
+/// How far over the ceiling a clip may measure before it is decimated.
+///
+/// The source rate is derived from the container - frame count over duration -
+/// so a plain 30 fps clip routinely measures 30.3, and a strict comparison
+/// would drop one frame in thirty from a clip that is already exactly at the
+/// cap: all of the seam, none of the saving. Only a source meaningfully faster
+/// than the ceiling is worth touching.
+const BAKE_FPS_SLACK: f64 = 1.1;
 
 /// Refuse clips longer than this many frames (~7 minutes at 30 fps).
 ///
@@ -112,6 +141,19 @@ fn nal_type(nal: &[u8]) -> u8 {
 
 const NAL_SPS: u8 = 7;
 const NAL_PPS: u8 = 8;
+
+/// The first SPS and PPS NAL units in `annexb`, written into `sps`/`pps` if
+/// not already found. The parameter sets go in the container's `avcC` box, so
+/// they are collected once from the first frame the encoder produces.
+fn collect_sps_pps(annexb: &[u8], sps: &mut Vec<u8>, pps: &mut Vec<u8>) {
+    for nal in split_annexb(annexb) {
+        match nal_type(nal) {
+            NAL_SPS if sps.is_empty() => *sps = nal.to_vec(),
+            NAL_PPS if pps.is_empty() => *pps = nal.to_vec(),
+            _ => {}
+        }
+    }
+}
 
 /// Convert Annex B encoder output into one AVCC sample (4-byte prefixes),
 /// dropping SPS/PPS (those live in the container's `avcC` box instead).
@@ -356,6 +398,10 @@ struct VideoTrack {
     /// to the i-th of these regardless of B-frame reordering in the input.
     sorted_cts: Vec<u64>,
     fps: f64,
+    /// Coded size of the source, for sizing a bake that never reaches the
+    /// bundled decoder (the external path is told what to produce up front).
+    width: usize,
+    height: usize,
 }
 
 fn open_video_track<R: std::io::Read + Seek>(
@@ -423,6 +469,8 @@ fn open_video_track<R: std::io::Read + Seek>(
         headers,
         sorted_cts: Vec::new(),
         fps,
+        width: track.width() as usize,
+        height: track.height() as usize,
     })
 }
 
@@ -552,6 +600,146 @@ pub(crate) fn extract_poster(input: &Path) -> Result<Vec<u8>, String> {
 
 /// Bake `sigma`/`dim` into every frame of `input`, writing an H.264 MP4 to
 /// `output`. `progress` receives (done, total) as the bake advances.
+/// The H.264 encoder the bake writes with, sized for one output resolution.
+fn bake_encoder(bw: usize, bh: usize, out_fps: f64) -> Result<Encoder, String> {
+    let bitrate = ((bw * bh) as f32 * out_fps as f32 * 0.06).clamp(600_000.0, 4_000_000.0);
+    let config = EncoderConfig::new()
+        .bitrate(openh264::encoder::BitRate::from_bps(bitrate as u32))
+        .max_frame_rate(openh264::encoder::FrameRate::from_hz(out_fps as f32))
+        .usage_type(openh264::encoder::UsageType::CameraVideoRealTime)
+        .rate_control_mode(openh264::encoder::RateControlMode::Bitrate)
+        .skip_frames(false)
+        .complexity(openh264::encoder::Complexity::Medium);
+    Encoder::with_api_config(OpenH264API::from_source(), config)
+        .map_err(|e| format!("H.264 encoder init: {e}"))
+}
+
+/// The composition times of the frames the decimation kept.
+///
+/// Carrying each survivor's own time over is what keeps a decimated clip
+/// running at real speed: the frames that remain are simply shown for longer.
+/// A source whose times could not be read falls back to even spacing at its
+/// measured rate, which is the same thing for the constant-rate clips that
+/// fallback covers.
+fn kept_composition_times(
+    kept: &[usize],
+    source_cts: &[u64],
+    timescale: u32,
+    src_fps: f64,
+) -> Vec<u64> {
+    kept.iter()
+        .map(|index| {
+            source_cts
+                .get(*index)
+                .copied()
+                .unwrap_or_else(|| (*index as f64 * f64::from(timescale) / src_fps) as u64)
+        })
+        .collect()
+}
+
+/// Everything a finished bake hands the muxer.
+#[derive(Debug)]
+struct BakedStream {
+    /// One `(avcc sample bytes, keyframe)` per emitted frame.
+    samples: Vec<(Vec<u8>, bool)>,
+    /// The stream's SPS and PPS, for the container's `avcC` box.
+    params: (Vec<u8>, Vec<u8>),
+    /// The size every sample was encoded at.
+    dims: (usize, usize),
+}
+
+/// Blur, dim, encode and collect the frames of a bake.
+///
+/// Both decode paths - the bundled decoder and the external fallback - hand
+/// frames here already at their output size, so everything downstream of
+/// "produce pixels" lives in one place and behaves identically either way.
+struct BakeSink {
+    sigma: f32,
+    dim: f32,
+    out_fps: f64,
+    keyframe_interval: usize,
+    encoder: Option<Encoder>,
+    dims: (usize, usize),
+    scratch: Vec<u8>,
+    samples: Vec<(Vec<u8>, bool)>,
+    sps: Vec<u8>,
+    pps: Vec<u8>,
+}
+
+impl std::fmt::Debug for BakeSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BakeSink")
+            .field("dims", &self.dims)
+            .field("out_fps", &self.out_fps)
+            .field("frames", &self.samples.len())
+            .finish_non_exhaustive()
+    }
+}
+
+impl BakeSink {
+    fn new(sigma: f32, dim: f32, out_fps: f64) -> Self {
+        Self {
+            sigma,
+            dim,
+            out_fps,
+            keyframe_interval: ((out_fps * KEYFRAME_INTERVAL_SECS) as usize).max(1),
+            encoder: None,
+            dims: (0, 0),
+            scratch: Vec::new(),
+            samples: Vec::new(),
+            sps: Vec::new(),
+            pps: Vec::new(),
+        }
+    }
+
+    /// Process one RGB frame, already at its output size, shown at `millis`.
+    fn push(&mut self, rgb: &mut [u8], bw: usize, bh: usize, millis: u64) -> Result<(), String> {
+        self.scratch.resize(rgb.len(), 0);
+        blur_rgb(rgb, &mut self.scratch, bw, bh, self.sigma);
+        dim_rgb(rgb, self.dim);
+
+        if self.encoder.is_none() || self.dims != (bw, bh) {
+            self.encoder = Some(bake_encoder(bw, bh, self.out_fps)?);
+            self.dims = (bw, bh);
+        }
+        let emitted = self.samples.len();
+        let Some(enc) = self.encoder.as_mut() else {
+            return Err("encoder unavailable".to_owned());
+        };
+        // Counted in emitted frames, so the cadence is the one the output
+        // actually has rather than the source's.
+        if emitted.is_multiple_of(self.keyframe_interval) {
+            enc.force_intra_frame();
+        }
+
+        let yuv = YUVBuffer::from_vec(rgb_to_i420(rgb, bw, bh), bw, bh);
+        let bitstream = enc
+            .encode_at(&yuv, Timestamp::from_millis(millis))
+            .map_err(|e| format!("encode frame {emitted}: {e}"))?;
+        let annexb = bitstream.to_vec();
+        collect_sps_pps(&annexb, &mut self.sps, &mut self.pps);
+        let keyframe = matches!(bitstream.frame_type(), FrameType::IDR | FrameType::I);
+        self.samples
+            .push((annexb_to_avcc_sample(&annexb), keyframe));
+        Ok(())
+    }
+
+    /// Hand over the encoded stream, refusing one that cannot be muxed.
+    fn finish(self) -> Result<BakedStream, String> {
+        if self.samples.is_empty() {
+            return Err("could not decode any frame of that video".to_owned());
+        }
+        if self.sps.is_empty() || self.pps.is_empty() {
+            return Err("encoder produced no parameter sets".to_owned());
+        }
+        Ok(BakedStream {
+            samples: self.samples,
+            params: (self.sps, self.pps),
+            dims: self.dims,
+        })
+    }
+}
+
 pub(crate) fn bake_video(
     input: &Path,
     output: &Path,
@@ -572,100 +760,264 @@ pub(crate) fn bake_video(
     let mut track = open_video_track(&mut reader)?;
     let total = track.sample_count;
     let timescale = track.timescale.max(1);
-    let keyframe_interval = ((track.fps * KEYFRAME_INTERVAL_SECS) as usize).max(1);
+    // Frames are dropped, never resampled: each kept frame keeps its own
+    // composition time, so the clip still runs at real speed and its pacing -
+    // variable or not - survives at half the frames.
+    let out_fps = if track.fps > BAKE_MAX_FPS * BAKE_FPS_SLACK {
+        BAKE_MAX_FPS
+    } else {
+        track.fps
+    };
+    let src_fps = if track.fps > 0.0 {
+        track.fps
+    } else {
+        out_fps.max(1.0)
+    };
 
-    let mut encoder: Option<Encoder> = None;
-    let mut dims = (0usize, 0usize);
-    let mut scratch: Vec<u8> = Vec::new();
-    // (avcc sample bytes, keyframe) per emitted frame, plus the stream's
-    // parameter sets once known.
-    let mut samples: Vec<(Vec<u8>, bool)> = Vec::new();
-    let mut sps: Vec<u8> = Vec::new();
-    let mut pps: Vec<u8> = Vec::new();
-    let fps = track.fps;
+    let mut sink = BakeSink::new(sigma, dim, out_fps);
+    // Source positions of the frames actually kept. Their composition times
+    // can only be read afterwards - `decode_frames` is what collects them.
+    let mut kept_indices: Vec<usize> = Vec::new();
+    // Highest output slot emitted so far, so the decimation keeps the first
+    // frame of each one and drops the rest.
+    let mut last_slot: i64 = -1;
 
-    let _frames = decode_frames(&mut reader, &mut track, |index, frame| {
+    let decoded = decode_frames(&mut reader, &mut track, |index, frame| {
+        // Decimate before any pixel work: a dropped frame should cost nothing
+        // beyond the decode that had to happen anyway.
+        let slot = ((index as f64) * out_fps / src_fps).floor() as i64;
+        if slot <= last_slot {
+            if (index as u32).is_multiple_of(PROGRESS_STRIDE) {
+                progress(index as u32, total);
+            }
+            return Ok(true);
+        }
+        last_slot = slot;
+        kept_indices.push(index);
+
         let (sw, sh) = frame.dimensions();
         let mut rgb = vec![0u8; sw * sh * 3];
         frame.write_rgb8(&mut rgb);
-
         let (bw, bh) = bake_dimensions(sw, sh);
         let mut rgb = if (bw, bh) == (sw, sh) {
             rgb
         } else {
             resize_rgb(&rgb, sw, sh, bw, bh)
         };
-        scratch.resize(rgb.len(), 0);
-        blur_rgb(&mut rgb, &mut scratch, bw, bh, sigma);
-        dim_rgb(&mut rgb, dim);
-
-        if encoder.is_none() || dims != (bw, bh) {
-            let bitrate = ((bw * bh) as f32 * fps as f32 * 0.06).clamp(600_000.0, 4_000_000.0);
-            let config = EncoderConfig::new()
-                .bitrate(openh264::encoder::BitRate::from_bps(bitrate as u32))
-                .max_frame_rate(openh264::encoder::FrameRate::from_hz(fps as f32))
-                .usage_type(openh264::encoder::UsageType::CameraVideoRealTime)
-                .rate_control_mode(openh264::encoder::RateControlMode::Bitrate)
-                .skip_frames(false)
-                .complexity(openh264::encoder::Complexity::Medium);
-            encoder = Some(
-                Encoder::with_api_config(OpenH264API::from_source(), config)
-                    .map_err(|e| format!("H.264 encoder init: {e}"))?,
-            );
-            dims = (bw, bh);
-        }
-        let Some(enc) = encoder.as_mut() else {
-            return Err("encoder unavailable".to_owned());
-        };
-        if index.is_multiple_of(keyframe_interval) {
-            enc.force_intra_frame();
-        }
-
-        let yuv = YUVBuffer::from_vec(rgb_to_i420(&rgb, bw, bh), bw, bh);
-        let millis = index as u64 * 1000 / (fps.max(1.0) as u64).max(1);
-        let bitstream = enc
-            .encode_at(&yuv, Timestamp::from_millis(millis))
-            .map_err(|e| format!("encode frame {index}: {e}"))?;
-        let annexb = bitstream.to_vec();
-        if sps.is_empty() {
-            for nal in split_annexb(&annexb) {
-                match nal_type(nal) {
-                    NAL_SPS if sps.is_empty() => sps = nal.to_vec(),
-                    NAL_PPS if pps.is_empty() => pps = nal.to_vec(),
-                    _ => {}
-                }
-            }
-        }
-        let keyframe = matches!(bitstream.frame_type(), FrameType::IDR | FrameType::I);
-        samples.push((annexb_to_avcc_sample(&annexb), keyframe));
+        // Still the source frame's own moment: dropping frames changes how
+        // many are encoded, not when the ones that survive are shown.
+        let millis = (index as f64 * 1000.0 / src_fps) as u64;
+        sink.push(&mut rgb, bw, bh, millis)?;
 
         if (index as u32).is_multiple_of(PROGRESS_STRIDE) {
             progress(index as u32, total);
         }
         Ok(true)
-    })?;
+    });
 
-    if samples.is_empty() {
-        return Err("could not decode any frame of that video".to_owned());
-    }
-    if sps.is_empty() || pps.is_empty() {
-        return Err("encoder produced no parameter sets".to_owned());
+    // The bundled decoder is Constrained Baseline only, so an ordinary High
+    // profile clip - anything with B-frames, which is most of what a camera or
+    // an editor produces - fails here rather than on anything we can fix.
+    // Handing those to a system decoder is the difference between a wallpaper
+    // that costs a fifth of a core and one that costs most of one.
+    if let Err(bundled) = decoded {
+        return bake_via_external_decoder(input, output, sigma, dim, &track, &mut progress)
+            .map_err(|external| format!("{bundled}; {external}"));
     }
 
-    // Composition times of the input, reused for the output. The bake is
-    // frame-for-frame, so this preserves variable frame pacing exactly.
-    let default_duration = (f64::from(timescale) / fps).max(1.0) as u32;
+    let baked = sink.finish()?;
+    // Only reachable now: the decoder is what discovers the times.
+    let kept_cts = kept_composition_times(&kept_indices, &track.sorted_cts, timescale, src_fps);
+    let default_duration = (f64::from(timescale) / out_fps).max(1.0) as u32;
     write_baked_mp4(
         output,
         timescale,
-        dims,
-        (sps, pps),
-        &samples,
-        &track.sorted_cts,
+        baked.dims,
+        baked.params,
+        &baked.samples,
+        &kept_cts,
         default_duration,
     )?;
     progress(total, total);
     Ok(())
+}
+
+/// External decoders the bake falls back to, in preference order.
+///
+/// Both are asked for the same thing - raw RGB at the output size and rate -
+/// so which one answers makes no difference to anything downstream. On Linux
+/// `gst-launch-1.0` is close to guaranteed: `WebKitGTK` decodes the wallpaper
+/// through GStreamer in the first place, so a clip the webview can play is one
+/// GStreamer can read.
+const EXTERNAL_DECODERS: [&str; 2] = ["ffmpeg", "gst-launch-1.0"];
+
+/// The arguments that make `program` write raw RGB frames to its stdout.
+fn external_decode_args(
+    program: &str,
+    input: &Path,
+    (w, h): (usize, usize),
+    fps: f64,
+) -> Option<Vec<String>> {
+    let path = input.to_str()?;
+    // A whole number of frames per second: both tools take a rational rate,
+    // and the bake's ceiling is an integer anyway.
+    let rate = (fps.round() as u32).max(1);
+    match program {
+        "ffmpeg" => Some(vec![
+            "-v".to_owned(),
+            "error".to_owned(),
+            "-i".to_owned(),
+            path.to_owned(),
+            "-vf".to_owned(),
+            format!("fps={rate},scale={w}:{h}"),
+            "-pix_fmt".to_owned(),
+            "rgb24".to_owned(),
+            "-f".to_owned(),
+            "rawvideo".to_owned(),
+            "-".to_owned(),
+        ]),
+        "gst-launch-1.0" => Some(vec![
+            "-q".to_owned(),
+            "filesrc".to_owned(),
+            format!("location={path}"),
+            "!".to_owned(),
+            "decodebin".to_owned(),
+            "!".to_owned(),
+            "videoconvert".to_owned(),
+            "!".to_owned(),
+            "videoscale".to_owned(),
+            "!".to_owned(),
+            "videorate".to_owned(),
+            "!".to_owned(),
+            format!("video/x-raw,format=RGB,width={w},height={h},framerate={rate}/1"),
+            "!".to_owned(),
+            "fdsink".to_owned(),
+            "fd=1".to_owned(),
+        ]),
+        _ => None,
+    }
+}
+
+/// Start the first available external decoder for `input`.
+fn spawn_external_decoder(
+    input: &Path,
+    dims: (usize, usize),
+    fps: f64,
+) -> Result<std::process::Child, String> {
+    for program in EXTERNAL_DECODERS {
+        let Some(args) = external_decode_args(program, input, dims, fps) else {
+            continue;
+        };
+        let mut command = std::process::Command::new(program);
+        let _ = command
+            .args(&args)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .stdin(std::process::Stdio::null());
+        // Without this a bake would flash a console window on every Windows
+        // machine that has one of these tools on PATH.
+        #[cfg(windows)]
+        {
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            use std::os::windows::process::CommandExt as _;
+            let _ = command.creation_flags(CREATE_NO_WINDOW);
+        }
+        if let Ok(child) = command.spawn() {
+            return Ok(child);
+        }
+    }
+    Err("no system video decoder available (install ffmpeg or gstreamer)".to_owned())
+}
+
+/// Bake a clip the bundled decoder refuses, using a system decoder for the
+/// decode step only.
+///
+/// Everything else - the blur, the dim, the encoder and the muxer - is the
+/// same path a bundled-decode bake takes, so the two produce the same kind of
+/// file. The decoder is asked for the output size and rate directly, which is
+/// why there is no decimation here: the frames that arrive are the frames the
+/// output wants, evenly spaced.
+fn bake_via_external_decoder(
+    input: &Path,
+    output: &Path,
+    sigma: f32,
+    dim: f32,
+    track: &VideoTrack,
+    progress: &mut impl FnMut(u32, u32),
+) -> Result<(), String> {
+    let (bw, bh) = bake_dimensions(track.width, track.height);
+    let out_fps = if track.fps > BAKE_MAX_FPS * BAKE_FPS_SLACK {
+        BAKE_MAX_FPS
+    } else {
+        track.fps.max(1.0)
+    };
+    let expected = (f64::from(track.sample_count) * out_fps / track.fps.max(1.0)).ceil() as u32;
+
+    let mut child = spawn_external_decoder(input, (bw, bh), out_fps)?;
+    let Some(mut stdout) = child.stdout.take() else {
+        let _ = child.kill();
+        return Err("system decoder produced no output".to_owned());
+    };
+
+    let mut sink = BakeSink::new(sigma, dim, out_fps);
+    let mut frame = vec![0u8; bw * bh * 3];
+    let mut index = 0u32;
+    // A short read that is not a clean frame boundary means the decoder
+    // stopped mid-stream; a clean one means it finished.
+    while read_full(&mut stdout, &mut frame)? {
+        let millis = (f64::from(index) * 1000.0 / out_fps) as u64;
+        sink.push(&mut frame, bw, bh, millis)?;
+        index += 1;
+        if index.is_multiple_of(PROGRESS_STRIDE) {
+            progress(index, expected.max(index));
+        }
+        if index >= MAX_FRAMES {
+            break;
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+
+    let baked = sink.finish()?;
+    // The decoder was asked for a constant rate, so the frames are evenly
+    // spaced and their times follow from their ordinals.
+    let timescale = 1000u32;
+    let cts: Vec<u64> = (0..baked.samples.len())
+        .map(|i| (i as f64 * f64::from(timescale) / out_fps) as u64)
+        .collect();
+    let default_duration = (f64::from(timescale) / out_fps).max(1.0) as u32;
+    write_baked_mp4(
+        output,
+        timescale,
+        baked.dims,
+        baked.params,
+        &baked.samples,
+        &cts,
+        default_duration,
+    )?;
+    progress(expected, expected);
+    Ok(())
+}
+
+/// Fill `buffer` from `source`, reporting whether a whole one arrived.
+///
+/// `false` means the stream ended on a frame boundary, which is how a decoder
+/// that ran to completion looks. Anything else is a truncated frame.
+fn read_full(source: &mut impl std::io::Read, buffer: &mut [u8]) -> Result<bool, String> {
+    let mut filled = 0usize;
+    while filled < buffer.len() {
+        let read = source
+            .read(&mut buffer[filled..])
+            .map_err(|e| format!("read from system decoder: {e}"))?;
+        if read == 0 {
+            if filled == 0 {
+                return Ok(false);
+            }
+            return Err("system decoder stopped mid-frame".to_owned());
+        }
+        filled += read;
+    }
+    Ok(true)
 }
 
 /// Mux the encoded samples into an MP4 at `output`, reusing the source's
@@ -805,23 +1157,20 @@ mod tests {
         assert_eq!(bake_dimensions(3840, 1600), (960, 400));
     }
 
-    /// The first SPS and PPS NAL units in `annexb`, written into `sps`/`pps`
-    /// if not already found.
-    fn collect_sps_pps(annexb: &[u8], sps: &mut Vec<u8>, pps: &mut Vec<u8>) {
-        for nal in split_annexb(annexb) {
-            match nal_type(nal) {
-                NAL_SPS if sps.is_empty() => *sps = nal.to_vec(),
-                NAL_PPS if pps.is_empty() => *pps = nal.to_vec(),
-                _ => {}
-            }
-        }
+    /// Encode `frames` moving-gradient frames at `w`x`h` into a 30 fps H.264
+    /// MP4, exercising the same mux path the bake uses.
+    fn write_test_clip(path: &Path, w: usize, h: usize, frames: u32) {
+        write_test_clip_at(path, w, h, frames, 33);
     }
 
-    /// Encode `frames` moving-gradient frames at `w`x`h` into an H.264 MP4,
-    /// exercising the same mux path the bake uses.
-    fn write_test_clip(path: &Path, w: usize, h: usize, frames: u32) {
+    /// As `write_test_clip`, with an explicit per-frame duration in
+    /// milliseconds (the container's timescale is 1000), so a test can build a
+    /// source faster than the bake's frame-rate ceiling.
+    fn write_test_clip_at(path: &Path, w: usize, h: usize, frames: u32, frame_ms: u64) {
         let config = EncoderConfig::new()
-            .max_frame_rate(openh264::encoder::FrameRate::from_hz(30.0))
+            .max_frame_rate(openh264::encoder::FrameRate::from_hz(
+                1000.0 / frame_ms as f32,
+            ))
             .skip_frames(false);
         let mut encoder =
             Encoder::with_api_config(OpenH264API::from_source(), config).expect("encoder");
@@ -841,7 +1190,7 @@ mod tests {
             }
             let yuv = YUVBuffer::from_vec(rgb_to_i420(&rgb, w, h), w, h);
             let bitstream = encoder
-                .encode_at(&yuv, Timestamp::from_millis(u64::from(i) * 33))
+                .encode_at(&yuv, Timestamp::from_millis(u64::from(i) * frame_ms))
                 .expect("encode");
             let annexb = bitstream.to_vec();
             if sps.is_empty() {
@@ -880,8 +1229,8 @@ mod tests {
                 .write_sample(
                     1,
                     &Mp4Sample {
-                        start_time: i as u64 * 33,
-                        duration: 33,
+                        start_time: i as u64 * frame_ms,
+                        duration: frame_ms as u32,
                         rendering_offset: 0,
                         is_sync: *keyframe,
                         bytes: bytes.clone().into(),
@@ -911,7 +1260,7 @@ mod tests {
     }
 
     #[test]
-    fn bake_roundtrip_blurs_dims_and_keeps_every_frame() {
+    fn bake_roundtrip_blurs_dims_and_keeps_every_frame_under_the_fps_cap() {
         let dir = tempfile::tempdir().expect("tempdir");
         let input = dir.path().join("clip.mp4");
         let output = dir.path().join("baked.mp4");
@@ -938,7 +1287,10 @@ mod tests {
             Ok(true)
         })
         .expect("decode baked");
-        assert_eq!(decoded, 20, "the bake is frame-for-frame");
+        assert_eq!(
+            decoded, 20,
+            "a 30 fps source is already at the cap, so the bake is frame-for-frame"
+        );
 
         // The dim is in the pixels: the baked clip is darker than the source.
         let before = first_frame_brightness(&input);
@@ -950,6 +1302,141 @@ mod tests {
 
         // Progress reported and finished at the end.
         assert_eq!(reports.last(), Some(&(20, 20)));
+    }
+
+    #[test]
+    fn bake_halves_a_sixty_fps_source_and_keeps_its_length() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let input = dir.path().join("clip.mp4");
+        let output = dir.path().join("baked.mp4");
+        // 40 frames at 16 ms is 62.5 fps over 640 ms.
+        write_test_clip_at(&input, 128, 72, 40, 16);
+
+        bake_video(&input, &output, 4.0, 0.2, |_, _| {}).expect("bake");
+
+        let file = std::fs::File::open(&output).expect("open baked");
+        let size = file.metadata().expect("stat").len();
+        let mut reader = mp4::Mp4Reader::read_header(BufReader::new(file), size).expect("header");
+        let track = open_video_track(&mut reader).expect("baked has an H.264 track");
+
+        // Roughly every other frame, so the clip costs the webview about half
+        // as much. Not an exact count: the source rate is measured from the
+        // container, so the decimation lands within a frame of half.
+        assert!(
+            (18..=21).contains(&track.sample_count),
+            "a 62.5 fps source should be decimated to about the 30 fps ceiling, got {}",
+            track.sample_count
+        );
+
+        // ...and it still runs for as long as it did: dropped frames make the
+        // survivors last longer, they do not make the wallpaper play faster.
+        let duration_ms = reader.duration().as_millis();
+        assert!(
+            (600..=700).contains(&duration_ms),
+            "baked clip should still run ~640 ms, got {duration_ms} ms"
+        );
+    }
+
+    #[test]
+    fn external_decode_args_ask_for_raw_rgb_at_the_output_size() {
+        let path = Path::new("/tmp/clip.mp4");
+        let ffmpeg = external_decode_args("ffmpeg", path, (960, 540), 29.7).expect("ffmpeg args");
+        assert!(ffmpeg.contains(&"fps=30,scale=960:540".to_owned()));
+        assert!(ffmpeg.contains(&"rgb24".to_owned()));
+        assert!(ffmpeg.contains(&"rawvideo".to_owned()));
+
+        let gst = external_decode_args("gst-launch-1.0", path, (960, 540), 29.7).expect("gst args");
+        assert!(
+            gst.contains(&"video/x-raw,format=RGB,width=960,height=540,framerate=30/1".to_owned())
+        );
+        assert!(gst.contains(&"fd=1".to_owned()));
+
+        assert!(external_decode_args("some-other-tool", path, (960, 540), 30.0).is_none());
+    }
+
+    #[test]
+    fn read_full_separates_a_clean_end_from_a_truncated_frame() {
+        let mut buffer = [0u8; 4];
+
+        // Exactly two frames, then nothing: both read, then a clean end.
+        let mut source = &[1u8, 2, 3, 4, 5, 6, 7, 8][..];
+        assert!(read_full(&mut source, &mut buffer).expect("first"));
+        assert_eq!(buffer, [1, 2, 3, 4]);
+        assert!(read_full(&mut source, &mut buffer).expect("second"));
+        assert_eq!(buffer, [5, 6, 7, 8]);
+        assert!(!read_full(&mut source, &mut buffer).expect("end"));
+
+        // A decoder that died mid-frame is an error, not an end.
+        let mut short = &[1u8, 2, 3][..];
+        assert!(read_full(&mut short, &mut buffer).is_err());
+    }
+
+    /// Whether a system decoder the fallback can use is on this machine.
+    fn has_external_decoder() -> bool {
+        EXTERNAL_DECODERS.iter().any(|program| {
+            std::process::Command::new(program)
+                .arg("--version")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_ok_and(|status| status.success())
+        })
+    }
+
+    #[test]
+    fn a_high_profile_clip_bakes_through_the_system_decoder() {
+        // The bundled decoder is Baseline-only, so this is the shape of clip
+        // that used to fail outright: High profile, with B-frames.
+        if !has_external_decoder() {
+            eprintln!("skipping: no ffmpeg or gst-launch-1.0 on PATH");
+            return;
+        }
+        let dir = tempfile::tempdir().expect("tempdir");
+        let baseline = dir.path().join("baseline.mp4");
+        let high = dir.path().join("high.mp4");
+        let output = dir.path().join("baked.mp4");
+        write_test_clip(&baseline, 128, 72, 24);
+
+        // Re-encode the fixture to High profile with B-frames.
+        let transcoded = std::process::Command::new("ffmpeg")
+            .args(["-v", "error", "-y", "-i"])
+            .arg(&baseline)
+            .args([
+                "-c:v",
+                "libx264",
+                "-profile:v",
+                "high",
+                "-bf",
+                "2",
+                "-preset",
+                "ultrafast",
+            ])
+            .arg(&high)
+            .status();
+        if !transcoded.is_ok_and(|status| status.success()) {
+            eprintln!("skipping: ffmpeg could not build a High profile fixture");
+            return;
+        }
+
+        // The bundled decoder must actually refuse it, or this proves nothing.
+        let file = std::fs::File::open(&high).expect("open high");
+        let size = file.metadata().expect("stat").len();
+        let mut reader = mp4::Mp4Reader::read_header(BufReader::new(file), size).expect("header");
+        let mut track = open_video_track(&mut reader).expect("track");
+        let bundled = decode_frames(&mut reader, &mut track, |_, _| Ok(true));
+        assert!(
+            bundled.is_err(),
+            "fixture is not actually beyond the bundled decoder"
+        );
+
+        bake_video(&high, &output, 4.0, 0.3, |_, _| {}).expect("bake via the system decoder");
+
+        let file = std::fs::File::open(&output).expect("open baked");
+        let size = file.metadata().expect("stat").len();
+        let mut reader =
+            mp4::Mp4Reader::read_header(BufReader::new(file), size).expect("baked header");
+        let track = open_video_track(&mut reader).expect("baked track");
+        assert!(track.sample_count > 0, "the bake produced no frames");
     }
 
     #[test]

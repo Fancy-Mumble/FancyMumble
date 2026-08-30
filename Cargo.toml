@@ -97,6 +97,36 @@ opt-level = 3
 [profile.dev.package.nokhwa-core]
 opt-level = 3
 
+# -- Dev-profile overrides for the audio pipeline ---------------------
+# The outbound path runs 50 frames a second for as long as a microphone is
+# open, whether or not anyone is speaking: capture, RNNoise, gain, gate, and
+# an Opus encode for every frame that is not silence. `nnnoiseless` is a
+# pure-Rust GRU and `audiopus_sys` is C that the `cc` crate compiles at the
+# profile's own opt-level, so at 0 both run an order of magnitude slower than
+# shipped - enough that sitting idle in a voice channel costs more CPU under
+# `cargo tauri dev` than everything else the app does put together.
+#
+# These are third-party leaves: they never change, so optimizing them costs
+# one build and nothing afterwards.
+[profile.dev.package.nnnoiseless]
+opt-level = 3
+[profile.dev.package.opus]
+opt-level = 3
+[profile.dev.package.audiopus_sys]
+opt-level = 3
+[profile.dev.package.rubato]
+opt-level = 3
+[profile.dev.package.realfft]
+opt-level = 3
+[profile.dev.package.rustfft]
+opt-level = 3
+# The frame maths around them - RMS, gain, the gate, format conversion - is
+# per-sample loops in our own crate. Held at 2 rather than 3 deliberately:
+# it is a crate that gets edited, and 2 buys most of the speed for a fraction
+# of the compile time.
+[profile.dev.package.mumble-protocol]
+opt-level = 2
+
 # -- Release + debug-info profile (for profiling) --------------------
 # Fully optimized like `release`, but keeps debug symbols so heap/CPU
 # profilers (dhat via `--features dhat-heap`, perf, VTune, Superluminal)

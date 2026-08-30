@@ -165,6 +165,7 @@
     "accordionLiveDoc": "Live Doc",
     "transportUdp": "UDP (verschlüsselt)",
     "transportTcp": "TCP-Tunnel",
+    "encryptionUnknown": "unbekannt",
     "systemDefault": "System-Standard",
     "activationPtt": "Sprechtaste",
     "activationVad": "Sprachaktivierung",
@@ -172,6 +173,7 @@
     "disabled": "deaktiviert",
     "debug": {
       "transport": "Transport",
+      "encryption": "Verschlüsselung",
       "forceTcp": "TCP erzwingen",
       "inputDevice": "Eingabegerät",
       "bitrate": "Bitrate",

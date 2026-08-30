@@ -250,3 +250,20 @@ mod tests {
         assert_eq!(digest.len(), 16, "eight bytes as lowercase hex");
     }
 }
+
+/// The name the resolver has for an address, for the User Information sheet.
+///
+/// `None` when there is no PTR record - the resolver hands the address back
+/// in that case, which is not a name. The lookup blocks, so it runs on the
+/// blocking pool rather than on the runtime.
+#[tauri::command]
+pub(crate) async fn reverse_dns(address: String) -> Result<Option<String>, String> {
+    let ip: std::net::IpAddr = address.trim().parse().map_err(|e| format!("{e}"))?;
+    tokio::task::spawn_blocking(move || {
+        dns_lookup::lookup_addr(&ip)
+            .ok()
+            .filter(|name| name.parse::<std::net::IpAddr>().is_err())
+    })
+    .await
+    .map_err(|e| e.to_string())
+}

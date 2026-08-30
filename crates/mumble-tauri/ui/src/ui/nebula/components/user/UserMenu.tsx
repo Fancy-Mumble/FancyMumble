@@ -30,6 +30,7 @@ import {
   HeadphonesIcon,
   HeadphonesOffIcon,
   ImageIcon,
+  InfoIcon,
   MessageCircleIcon,
   MessageMinusIcon,
   MicIcon,
@@ -58,6 +59,8 @@ interface UserMenuProps {
   onClose: () => void;
   /** Open the conversation with this person; the menu omits "Message" without it. */
   onMessage?: (session: number) => void;
+  /** Open the User Information sheet; omitted from the menu without it. */
+  onInfo?: (session: number) => void;
 }
 
 /**
@@ -80,7 +83,7 @@ interface UserMenuProps {
  * their own copy of the target so dismissing the menu to show a dialog does
  * not take the dialog's subject with it.
  */
-export function UserMenu({ target, onClose, onMessage }: Readonly<UserMenuProps>) {
+export function UserMenu({ target, onClose, onMessage, onInfo }: Readonly<UserMenuProps>) {
   const [pending, setPending] = useState<Pending | null>(null);
   const [note, setNote] = useState<Note | null>(null);
 
@@ -91,6 +94,7 @@ export function UserMenu({ target, onClose, onMessage }: Readonly<UserMenuProps>
           target={target}
           onClose={onClose}
           onMessage={onMessage}
+          onInfo={onInfo}
           onConfirm={setPending}
           onNote={setNote}
         />
@@ -141,11 +145,19 @@ interface UserMenuSurfaceProps {
   target: UserMenuTarget;
   onClose: () => void;
   onMessage?: (session: number) => void;
+  onInfo?: (session: number) => void;
   onConfirm: (pending: Pending) => void;
   onNote: (note: Note) => void;
 }
 
-function UserMenuSurface({ target, onClose, onMessage, onConfirm, onNote }: Readonly<UserMenuSurfaceProps>) {
+function UserMenuSurface({
+  target,
+  onClose,
+  onMessage,
+  onInfo,
+  onConfirm,
+  onNote,
+}: Readonly<UserMenuSurfaceProps>) {
   const { user } = target;
   const channels = useAppStore((state) => state.channels);
   const ownSession = useAppStore((state) => state.ownSession);
@@ -214,6 +226,14 @@ function UserMenuSurface({ target, onClose, onMessage, onConfirm, onNote }: Read
             >
               That&rsquo;s you.
             </Typography>,
+            onInfo ? (
+              <MenuItem key="info" onClick={run(() => onInfo(user.session))}>
+                <Glyph>
+                  <InfoIcon width={13} height={13} />
+                </Glyph>
+                User information
+              </MenuItem>
+            ) : null,
           ]
         : [
             <Stack
@@ -257,6 +277,15 @@ function UserMenuSurface({ target, onClose, onMessage, onConfirm, onNote }: Read
                   <MessageCircleIcon width={13} height={13} />
                 </Glyph>
                 Message
+              </MenuItem>
+            ) : null,
+
+            onInfo ? (
+              <MenuItem key="info" onClick={run(() => onInfo(user.session))}>
+                <Glyph>
+                  <InfoIcon width={13} height={13} />
+                </Glyph>
+                User information
               </MenuItem>
             ) : null,
 
@@ -476,10 +505,11 @@ async function writeFriend(user: UserEntry, friend: Friend | null): Promise<Note
 
 // -- Moderation -----------------------------------------------------
 
-type ModerationAction = "mute" | "deafen" | "priority" | "kick" | "ban" | "reset_comment" | "remove_avatar";
+export type ModerationAction =
+  "mute" | "deafen" | "priority" | "kick" | "ban" | "reset_comment" | "remove_avatar";
 
 /** The backend command behind each immediate moderation action. */
-function invokeModeration(action: ModerationAction, user: UserEntry): Promise<unknown> {
+export function invokeModeration(action: ModerationAction, user: UserEntry): Promise<unknown> {
   switch (action) {
     case "mute":
       return invoke("mute_user", { session: user.session, muted: !user.mute });
@@ -509,7 +539,7 @@ type Pending =
   | { kind: "unregister"; user: UserEntry }
   | { kind: "delete-messages"; user: UserEntry; channelId: number | null };
 
-interface Note {
+export interface Note {
   severity: "success" | "error" | "info";
   message: string;
 }
@@ -627,7 +657,7 @@ interface MoveUserDialogProps {
  * this is a filtered dialog instead. Occupancy is shown because "which Gaming
  * channel" is nearly always answered by which one has people in it.
  */
-function MoveUserDialog({ user, onClose, onDone }: Readonly<MoveUserDialogProps>) {
+export function MoveUserDialog({ user, onClose, onDone }: Readonly<MoveUserDialogProps>) {
   const channels = useAppStore((state) => state.channels);
   const users = useAppStore((state) => state.users);
   const [query, setQuery] = useState("");

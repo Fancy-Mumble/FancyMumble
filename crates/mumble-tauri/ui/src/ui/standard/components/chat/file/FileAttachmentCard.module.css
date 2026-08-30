@@ -17,6 +17,29 @@
 
 /* ---- Inline media previews ---- */
 
+/* Anchors anything that rides on top of a picture. */
+.previewWrap {
+  position: relative;
+  display: block;
+}
+
+.previewOverlay {
+  position: absolute;
+  left: 0.5rem;
+  bottom: 0.5rem;
+  z-index: 1;
+}
+
+/* Where a flag goes when there is no picture to sit inside of. */
+.badgeRow {
+  padding: 0.75rem 1rem 0;
+}
+
+/* A session-only file draws no flag at all - don't leave its padding behind. */
+.badgeRow:empty {
+  display: none;
+}
+
 .previewImage {
   width: 100%;
   max-height: 260px;

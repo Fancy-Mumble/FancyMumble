@@ -39,7 +39,9 @@ export default defineConfig({
         "object-src 'none'",
         "style-src 'self' 'unsafe-inline'",
         "img-src * data: blob: asset: http://asset.localhost",
-        "media-src * data: blob:",
+        // `asset:` is spelled out because `*` does not cover a custom scheme
+        // in WebKit; a saved file played from one is refused under a bare `*`.
+        "media-src * data: blob: asset: http://asset.localhost",
         "font-src 'self' data:",
         "connect-src * ws: wss: ipc: http://ipc.localhost",
         "frame-src 'none'",

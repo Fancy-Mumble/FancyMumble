@@ -13,6 +13,7 @@ import {
   useCanonPreviewSrc,
 } from "@core/features/chat/starlingFiles";
 import { useAppStore } from "@core/store";
+import MediaPlayer from "@shared/mediaplayer/MediaPlayer";
 import { formatBytes } from "@core/utils/format";
 import { Button, TextField } from "../primitives";
 import styles from "./FileAttachmentCard.module.css";
@@ -28,21 +29,28 @@ export function FileAttachmentCard({ info }: { info: FileAttachmentInfo }) {
   const [password, setPassword] = useState("");
   const [askPassword, setAskPassword] = useState(false);
   const [savedPath, setSavedPath] = useState<string | null>(null);
+  /** Bumped by Retry, to mount a player that has not already failed. */
+  const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const kind = previewKindForFilename(info.filename);
   const expired = !!info.expiresAt && info.expiresAt * 1000 < Date.now();
-  // A canon attachment has no open link: the preview is bytes this client
-  // fetched against a URL the server signed for one look.
+  // A canon attachment has no open link: a picture is bytes this client
+  // fetched against a URL the server signed, and sound or video is an address
+  // the player pulls a range at a time. Saving does not move a player onto the
+  // saved copy - a webview's media stack cannot load `asset:` at all.
   const canon = isCanonAttachment(info);
   const canonSource = useCanonPreviewSrc(info);
-  const previewSource = savedPath
-    ? convertFileSrc(savedPath)
-    : canon
-      ? canonSource
-      : info.mode === "public"
-        ? info.url
-        : null;
+  const streams = canon && (kind === "audio" || kind === "video");
+  const previewSource = streams
+    ? canonSource
+    : savedPath
+      ? convertFileSrc(savedPath)
+      : canon
+        ? canonSource
+        : info.mode === "public"
+          ? info.url
+          : null;
 
   const download = async () => {
     if (info.mode === "password" && !askPassword) {
@@ -81,15 +89,14 @@ export function FileAttachmentCard({ info }: { info: FileAttachmentInfo }) {
   return (
     <section className={styles.fileCard}>
       {previewSource && kind === "image" && <img src={previewSource} alt={info.filename} loading="lazy" />}
-      {previewSource && kind === "audio" && (
-        <audio src={previewSource} controls preload="none">
-          <track kind="captions" />
-        </audio>
-      )}
-      {previewSource && kind === "video" && (
-        <video src={previewSource} controls preload="metadata">
-          <track kind="captions" />
-        </video>
+      {previewSource && (kind === "audio" || kind === "video") && (
+        <MediaPlayer
+          key={`${previewSource}#${attempt}`}
+          src={previewSource}
+          kind={kind}
+          label={info.filename}
+          onRetry={() => setAttempt((count) => count + 1)}
+        />
       )}
       <div className={styles.fileDetails}>
         <strong>{info.filename}</strong>

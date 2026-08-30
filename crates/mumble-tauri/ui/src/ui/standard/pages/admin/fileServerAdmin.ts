@@ -11,6 +11,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AdminDocumentsResponse, AdminFilesResponse } from "@core/types";
 import { cachedPreviewText, cachedPreviewUrl, dropPreview } from "@core/features/fileserver/previewLoader";
 import type { FilePreviewSource } from "../../components/fileserver/FilePreview";
+import { useAppStore } from "@core/store";
+import { canonAdminListFiles, canonForgetFile } from "@core/features/chat/starlingManage";
 
 /** Credentials every admin request needs (from the file-server config). */
 export interface AdminCreds {
@@ -64,8 +66,18 @@ export async function checkFileServerHealth(baseUrl: string): Promise<FileServer
   }
 }
 
-/** List every stored file plus aggregate storage stats. */
+/**
+ * List every stored file plus aggregate storage stats.
+ *
+ * Two servers answer this, and the dashboard renders one shape: the plugin
+ * over its HTTP API with the caller's session JWT, the canon over the control
+ * connection - see `starlingManage`. Which one is asked is decided here rather
+ * than in the page, so every view of this table stays one view.
+ */
 export function adminListFiles(creds: AdminCreds): Promise<AdminFilesResponse> {
+  if (useAppStore.getState().fileServerKind === "canon") {
+    return withTimeout(canonAdminListFiles(), 15000, "Listing files");
+  }
   return withTimeout(
     invoke<AdminFilesResponse>("fileserver_admin_list_files", {
       request: { baseUrl: creds.baseUrl, sessionJwt: creds.sessionJwt },
@@ -112,6 +124,9 @@ export function adminListCalendars(creds: AdminCreds): Promise<CalendarUsageResp
 
 /** Delete one stored file (blob + metadata). */
 export function adminDeleteFile(creds: AdminCreds, fileId: string): Promise<void> {
+  if (useAppStore.getState().fileServerKind === "canon") {
+    return canonForgetFile(fileId);
+  }
   return invoke("fileserver_admin_delete_file", {
     request: { baseUrl: creds.baseUrl, sessionJwt: creds.sessionJwt, fileId },
   });
