@@ -20,6 +20,11 @@ export interface VoiceSlice {
   voiceState: VoiceState;
   /** True when audio is transported over UDP (false = TCP tunnel). */
   udpActive: boolean;
+  /**
+   * Name of the cipher encrypting UDP audio ("OCB2-AES128" on a stock server,
+   * "XChaCha20-Poly1305" on Fancy 0.4.0+). Null on the TCP tunnel.
+   */
+  udpCipher: string | null;
   /** True while the user is in an active mobile call session. */
   inCall: boolean;
   /** Session IDs of users currently transmitting audio (talking). */
@@ -37,13 +42,14 @@ export interface VoiceSlice {
 /** State-only portion of {@link VoiceSlice}. */
 type VoiceState_ = Pick<
   VoiceSlice,
-  "voiceState" | "udpActive" | "inCall" | "talkingSessions" | "listenedChannels"
+  "voiceState" | "udpActive" | "udpCipher" | "inCall" | "talkingSessions" | "listenedChannels"
 >;
 
 /** Default voice state (also spread into the root `INITIAL` for resets). */
 export const voiceInitialState: VoiceState_ = {
   voiceState: "inactive",
   udpActive: false,
+  udpCipher: null,
   inCall: false,
   talkingSessions: new Set<number>(),
   listenedChannels: new Set<number>(),

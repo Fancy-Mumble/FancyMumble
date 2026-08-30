@@ -80,6 +80,37 @@ describe("ServerRail", () => {
     expect(onReorder).toHaveBeenCalledWith(["voice.kumo.gg:64738", "magical.rocks:64738"]);
   });
 
+  it("hands the column to the open list when it is pinned", () => {
+    // Tiles beside rows would be the same servers twice - the duplication the
+    // merge exists to end.
+    rail({ pinned: true });
+    expect(screen.queryByTestId("nebula-server-rail")).toBeNull();
+    const panel = screen.getByTestId("nebula-server-rail-panel");
+    expect(panel.textContent).toContain("magical.rocks");
+    expect(panel.textContent).toContain("voice.kumo.gg");
+  });
+
+  it("still carries a row to a new place when it is pinned", () => {
+    const onReorder = vi.fn();
+    rail({ pinned: true, onReorder });
+    fireEvent.pointerDown(screen.getByRole("button", { name: /magical.rocks/ }), {
+      button: 0,
+      clientY: 100,
+    });
+    fireEvent.pointerMove(window, { clientY: 300 });
+    fireEvent.pointerUp(window, { clientY: 300 });
+    expect(onReorder).toHaveBeenCalledWith(["voice.kumo.gg:64738", "magical.rocks:64738"]);
+  });
+
+  it("narrows the pinned rows without emptying the rail", () => {
+    // The search filters what is listed, not where the tiles are: a rail that
+    // vanished as you typed would stop being a fixed place to aim at.
+    const filtered = [entry("voice.kumo.gg", "saved")];
+    rail({ panelEntries: filtered, expanded: true });
+    expect(screen.getByTestId("nebula-server-rail-panel").textContent).not.toContain("magical.rocks");
+    expect(screen.getByRole("button", { name: /magical.rocks/ })).toBeTruthy();
+  });
+
   it("treats a press that never moved as a click, not a drag", () => {
     const onReorder = vi.fn();
     const onSelect = vi.fn();

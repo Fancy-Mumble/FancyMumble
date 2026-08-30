@@ -497,7 +497,13 @@
       "audioCodec": "Audio codec",
       "trackScreen": "Screen",
       "trackCamera": "Camera",
-      "trackVideo": "Video {{n}}"
+      "trackVideo": "Video {{n}}",
+      "uplinkHeading": "Uplink (your share)",
+      "uplinkTarget": "Send target",
+      "uplinkLoss": "Uplink loss",
+      "uplinkRtt": "Uplink RTT",
+      "uplinkPerTrack": "Per track",
+      "uplinkNoReports": "no reports"
     },
     "banner": {
       "isSharingScreen": "{{name}} is sharing their screen",

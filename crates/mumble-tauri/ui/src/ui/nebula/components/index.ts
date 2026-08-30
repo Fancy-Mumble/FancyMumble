@@ -32,6 +32,7 @@ export {
 // console - into the graph of a window that is showing a connect screen.
 // Both are loaded from their own modules, lazily, by `NebulaClientApp`.
 export { ProfileCard } from "./user/ProfileCard";
+export { UserInfoDialog } from "./user/UserInfoDialog";
 export { UserMenu, type UserMenuTarget } from "./user/UserMenu";
 export { NebulaRuntime } from "./runtime/NebulaRuntime";
 export { ConnectionOverlays } from "./runtime/ConnectionOverlays";

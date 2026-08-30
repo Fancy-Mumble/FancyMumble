@@ -109,6 +109,7 @@ const EFFECTS: {
     void invoke("set_disable_dual_path", { disabled: !on }).catch(() => undefined);
   },
   disableLinkPreviews: (off) => useAppStore.setState({ disableLinkPreviews: off }),
+  disableOsmMaps: (off) => useAppStore.setState({ disableOsmMaps: off }),
   enableExternalEmbeds: (on) => useAppStore.setState({ enableExternalEmbeds: on }),
   // Starting rich presence binds Discord's IPC slot, so both of these have to
   // reach the backend now rather than at the next launch.

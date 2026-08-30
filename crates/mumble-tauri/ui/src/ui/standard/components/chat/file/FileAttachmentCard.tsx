@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -12,6 +12,7 @@ import {
 } from "@core/features/chat/starlingFiles";
 import { formatBytes } from "@core/utils/format";
 import { MediaLightbox } from "../media/MediaPreview";
+import MediaPlayer from "@shared/mediaplayer/MediaPlayer";
 import { FilePasswordDialog } from "./FilePasswordDialog";
 import styles from "./FileAttachmentCard.module.css";
 
@@ -25,12 +26,21 @@ export {
 
 interface FileAttachmentCardProps {
   readonly info: FileAttachmentInfo;
+  /**
+   * The reach-of-this-file flag, drawn by the caller. A picture is the whole
+   * card when there is one, so the flag rides in its bottom-left corner
+   * rather than pushing the image down a line; anything else has no image to
+   * ride on and gets it above the row instead. The flag is told which of the
+   * two it got: a scrim it needs over a photograph would only look like dirt
+   * on the card.
+   */
+  readonly visibilityBadge?: (overlaid: boolean) => ReactNode;
 }
 
 /** HTML-comment marker used to embed a file attachment in a chat message
  *  body. Renderers detect the marker and render a {@link FileAttachmentCard}
  *  in place of the raw markdown link. Legacy clients see the inert comment. */
-export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
+export default function FileAttachmentCard({ info, visibilityBadge }: FileAttachmentCardProps) {
   const { t } = useTranslation("chat");
   const downloadFile = useAppStore((s) => s.downloadFile);
   const addDownload = useAppStore((s) => s.addDownload);
@@ -39,6 +49,8 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
   const [saved, setSaved] = useState(false);
   const [savedPath, setSavedPath] = useState<string | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  /** Bumped by Retry, to mount a player that has not already failed. */
+  const [attempt, setAttempt] = useState(0);
   // Native password prompt (replaces window.prompt): the open flag drives the
   // dialog and a stored resolver hands the entered value back to `onSave`.
   const [pwPromptOpen, setPwPromptOpen] = useState(false);
@@ -54,15 +66,23 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
 
   // Post-download: local asset URL (works for any access mode).
   // Pre-download: public files only - URL is a signed but open link. A canon
-  // attachment has no open link at all, so its preview is bytes this client
-  // fetched, held as an object URL.
-  const previewSrc = savedPath
-    ? convertFileSrc(savedPath)
-    : canon
-      ? canonSrc
-      : info.mode === "public" && previewable
-        ? info.url
-        : null;
+  // attachment has no open link at all: a picture is bytes this client
+  // fetched, and sound or video is an address on the loopback origin that the
+  // player pulls a range at a time.
+  //
+  // Saving does not move a canon player onto the saved copy: a webview's media
+  // stack cannot load `asset:` at all (see `state/media_server.rs`), so the
+  // local URL that works for a picture would silently break a video.
+  const streams = canon && (kind === "audio" || kind === "video");
+  const previewSrc = streams
+    ? canonSrc
+    : savedPath
+      ? convertFileSrc(savedPath)
+      : canon
+        ? canonSrc
+        : info.mode === "public" && previewable
+          ? info.url
+          : null;
 
   const handleOpenInBrowser = useCallback(() => {
     openUrl(info.url).catch(() => {
@@ -167,7 +187,16 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
         password = entered;
       }
       const written = canon
-        ? await saveCanonAttachment(info.key ?? "", dest)
+        ? await saveCanonAttachment(
+            info.key ?? "",
+            dest,
+            // A canon password share is sealed, so saving it takes the same
+            // two steps a browser does: the password buys a ticket, and the
+            // ticket buys the bytes. The other two modes need none of it.
+            info.mode === "password" && password !== undefined
+              ? { url: info.url, password }
+              : undefined,
+          )
         : await downloadFile({ url: info.url, destPath: dest, password });
       addDownload({
         filename: info.filename,
@@ -212,40 +241,36 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
         </button>
       );
     }
-    if (kind === "audio") {
+    if (kind === "audio" || kind === "video") {
+      // Our own controls rather than the platform's: see `MediaPlayer`. Retry
+      // remounts the player on a fresh source, which for a canon attachment
+      // means a freshly signed URL rather than the one that stopped working.
       return (
-        <div className={styles.previewAudioWrap}>
-          <audio
-            controls
-            preload="none"
+        <div className={kind === "audio" ? styles.previewAudioWrap : undefined}>
+          <MediaPlayer
+            key={`${previewSrc}#${attempt}`}
             src={previewSrc}
-            className={styles.previewAudio}
-            onError={handlePreviewError}
-          >
-            <track kind="captions" />
-          </audio>
+            kind={kind}
+            label={info.filename}
+            onRetry={() => {
+              handlePreviewError();
+              setAttempt((count) => count + 1);
+            }}
+          />
         </div>
-      );
-    }
-    if (kind === "video") {
-      return (
-        <video
-          controls
-          preload="metadata"
-          src={previewSrc}
-          className={styles.previewVideo}
-          onError={handlePreviewError}
-        >
-          <track kind="captions" />
-        </video>
       );
     }
     return null;
   })();
 
+  // Only a still picture can carry the flag: a player already owns its own
+  // bottom-left corner, and a card with no preview has no corner at all.
+  const overlaysPreview = !!visibilityBadge && !!preview && kind === "image";
+
   if (expired) {
     return (
       <div className={`${styles.card} ${styles.expiredCard}`}>
+        {visibilityBadge && <div className={styles.badgeRow}>{visibilityBadge(false)}</div>}
         <div className={styles.cardRow}>
           <div className={`${styles.icon} ${styles.expiredIcon}`} aria-hidden="true">
             <svg
@@ -282,7 +307,17 @@ export default function FileAttachmentCard({ info }: FileAttachmentCardProps) {
 
   return (
     <div className={styles.card}>
-      {preview}
+      {overlaysPreview ? (
+        <div className={styles.previewWrap}>
+          {preview}
+          <div className={styles.previewOverlay}>{visibilityBadge?.(true)}</div>
+        </div>
+      ) : (
+        <>
+          {visibilityBadge && <div className={styles.badgeRow}>{visibilityBadge(false)}</div>}
+          {preview}
+        </>
+      )}
       <div className={styles.cardRow}>
         <div className={styles.icon} aria-hidden="true">
           <svg

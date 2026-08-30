@@ -175,6 +175,7 @@
     "accordionLiveDoc": "实时文档",
     "transportUdp": "UDP（加密）",
     "transportTcp": "TCP 隧道",
+    "encryptionUnknown": "未知",
     "systemDefault": "系统默认",
     "activationPtt": "按住说话",
     "activationVad": "声音激活",
@@ -182,6 +183,7 @@
     "disabled": "已停用",
     "debug": {
       "transport": "传输方式",
+      "encryption": "加密方式",
       "forceTcp": "强制 TCP",
       "inputDevice": "输入设备",
       "bitrate": "比特率",

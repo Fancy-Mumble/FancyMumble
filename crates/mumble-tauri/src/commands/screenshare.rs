@@ -11,7 +11,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use fancy_screenshare::{
-    BroadcastSource, BroadcastState, CaptureSource, ScreenBroadcaster, SignalSink, SourceKind,
+    BroadcastSource, BroadcastState, CaptureSource, CongestionSnapshot, ScreenBroadcaster,
+    SignalSink, SourceKind,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
@@ -125,6 +126,53 @@ impl SignalSink for MumbleSignalSink {
             tracing::warn!("screenshare: emitting broadcast state failed: {e}");
         }
     }
+}
+
+/// What the broadcaster's uplink estimator currently believes, for Stats for
+/// Nerds. Polled by the frontend at 1 Hz, like the viewer's own stats.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BroadcastStats {
+    /// Total uplink target across all tracks, bits per second.
+    pub target_bps: u32,
+    /// What the shared content could use if the link allowed it.
+    pub ceiling_bps: u32,
+    /// Loss fraction from the SFU's last receiver report, 0.0 ..= 1.0.
+    pub fraction_lost: f32,
+    /// Smoothed round-trip time in milliseconds, once a report has carried one.
+    pub rtt_ms: Option<u32>,
+    /// Receiver reports folded in since the broadcast started. Zero here with
+    /// a live broadcast means the SFU is not reporting - the estimator is
+    /// running open-loop and the UI should say so rather than show a target
+    /// that nothing is validating.
+    pub reports: u64,
+    /// Per-track targets in track (mid) order.
+    pub track_targets_bps: Vec<u32>,
+}
+
+impl BroadcastStats {
+    fn from_parts(snapshot: CongestionSnapshot, track_targets_bps: Vec<u32>) -> Self {
+        Self {
+            target_bps: snapshot.target_bps,
+            ceiling_bps: snapshot.ceiling_bps,
+            fraction_lost: snapshot.fraction_lost,
+            rtt_ms: snapshot.rtt_ms,
+            reports: snapshot.reports,
+            track_targets_bps,
+        }
+    }
+}
+
+/// Uplink stats for the running broadcast, or `None` when nothing is being
+/// broadcast from this client.
+#[tauri::command]
+pub(crate) async fn screen_broadcast_stats() -> Result<Option<BroadcastStats>, String> {
+    let slot = broadcaster_slot()
+        .lock()
+        .map_err(|_| "broadcaster mutex poisoned")?;
+    Ok(slot
+        .as_ref()
+        .map(|b| BroadcastStats::from_parts(b.congestion(), b.track_targets())))
 }
 
 /// Route an incoming `SDP_ANSWER` to the Rust broadcaster when it is the one

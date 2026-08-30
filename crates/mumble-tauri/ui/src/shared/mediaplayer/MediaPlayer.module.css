@@ -1,0 +1,323 @@
+/* A player that looks the same everywhere.
+ *
+ * The native controls are drawn by the platform - GTK, WebKit and WebView2
+ * each draw their own, at their own size, in their own colours, and one of
+ * them writes the word "Error" over the timeline when a fetch fails. These
+ * are ours: same shape on every system, and able to say what went wrong. */
+
+.player {
+  position: relative;
+  width: 100%;
+  max-height: 320px;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #05070d;
+  line-height: 0;
+  /* Everything below is expressed against these, so a pack that wants a
+     different accent sets one variable rather than restyling the player. */
+  --mp-accent: var(--media-accent, #6aa4ff);
+  --mp-surface: rgba(8, 11, 18, 0.72);
+  --mp-on-surface: #eef2f8;
+  --mp-dim: rgba(238, 242, 248, 0.62);
+  --mp-track: rgba(238, 242, 248, 0.24);
+}
+
+.video {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  background: #05070d;
+}
+
+.audioBody {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+}
+
+/* ---- The bar ---- */
+
+.controls {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* A tall scrim, not a thin one: a bar over a bright frame is unreadable
+     otherwise, and video frames are frequently bright exactly at the bottom
+     edge where subtitles and captions live. */
+  padding: 2.25rem 0.625rem 0.5rem;
+  background: linear-gradient(
+    to top,
+    rgba(4, 6, 11, 0.95) 0%,
+    rgba(4, 6, 11, 0.88) 40%,
+    rgba(4, 6, 11, 0.55) 70%,
+    rgba(4, 6, 11, 0) 100%
+  );
+  opacity: 0;
+  transition: opacity 140ms ease;
+  line-height: 1;
+}
+
+/* Shown on hover, and whenever nothing is playing: a paused video with no
+   visible controls looks like a still image, and there is no hover at all on
+   a touch screen. */
+.player:hover .controls,
+.player:focus-within .controls,
+.controlsPinned {
+  opacity: 1;
+}
+
+/* An audio player has no picture to sit on, so its bar is the whole thing -
+   and it has to take the whole width, or the timeline collapses to nothing
+   between the two clocks. */
+.controlsStatic {
+  position: static;
+  flex: 1 1 auto;
+  min-width: 0;
+  opacity: 1;
+  background: none;
+  padding: 0;
+}
+
+.button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mp-on-surface);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.button:hover {
+  background: rgba(238, 242, 248, 0.14);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--mp-accent);
+  outline-offset: 1px;
+}
+
+.time {
+  flex: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mp-dim);
+  user-select: none;
+}
+
+/* ---- The timeline ----
+ *
+ * A div rather than an <input type=range>: the buffered span is drawn behind
+ * the played one, and a range input has nowhere to put it. The div carries
+ * the slider role and the arrow keys itself. */
+
+.scrubber {
+  position: relative;
+  flex: 1 1 auto;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.scrubber:focus-visible {
+  outline: 2px solid var(--mp-accent);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+.rail {
+  position: relative;
+  width: 100%;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--mp-track);
+  overflow: hidden;
+  transition: height 120ms ease;
+}
+
+.scrubber:hover .rail {
+  height: 5px;
+}
+
+.buffered,
+.played {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+}
+
+.buffered {
+  background: rgba(238, 242, 248, 0.28);
+}
+
+.played {
+  background: var(--mp-accent);
+}
+
+.knob {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform 120ms ease;
+  pointer-events: none;
+}
+
+.scrubber:hover .knob,
+.scrubber:focus-visible .knob {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* ---- Volume ---- */
+
+.volume {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.volumeRail {
+  width: 0;
+  opacity: 0;
+  transition:
+    width 140ms ease,
+    opacity 140ms ease;
+}
+
+.volume:hover .volumeRail,
+.volume:focus-within .volumeRail {
+  width: 56px;
+  opacity: 1;
+}
+
+.rate {
+  flex: none;
+  min-width: 30px;
+  height: 24px;
+  padding: 0 0.3rem;
+  border: none;
+  border-radius: 0.3rem;
+  background: transparent;
+  color: var(--mp-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.rate:hover {
+  background: rgba(238, 242, 248, 0.14);
+  color: var(--mp-on-surface);
+}
+
+/* ---- The big play button, before anything has been asked for ---- */
+
+.poster {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border: none;
+  width: 100%;
+  background: rgba(4, 6, 11, 0.35);
+  color: #fff;
+  cursor: pointer;
+}
+
+.posterDisc {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(8, 11, 18, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* ---- When it goes wrong ----
+ *
+ * The native player writes "Error" across the timeline and offers nothing to
+ * do about it. A stream that stopped is usually a link that aged out, and
+ * asking again is the whole fix, so that is what this offers. */
+
+.failure {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: rgba(4, 6, 11, 0.86);
+  color: var(--mp-on-surface);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.failureText {
+  font-size: 12px;
+  color: var(--mp-dim);
+  max-width: 24rem;
+}
+
+.retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid rgba(238, 242, 248, 0.24);
+  border-radius: 0.35rem;
+  background: transparent;
+  color: var(--mp-on-surface);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.retry:hover {
+  background: rgba(238, 242, 248, 0.12);
+}
+
+/* An audio player's failure has no picture to cover, and no height to spare. */
+.failureInline {
+  position: static;
+  flex: 1 1 auto;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  background: none;
+  padding: 0.25rem;
+  text-align: left;
+}
+
+.failureInline .failureText {
+  max-width: none;
+}
+
+.failureInline .retry {
+  flex: none;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .controls,
+  .rail,
+  .knob,
+  .volumeRail {
+    transition: none;
+  }
+}

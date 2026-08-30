@@ -11,7 +11,6 @@ import {
 import {
   BellIcon,
   BellOffIcon,
-  CheckIcon,
   EditIcon,
   HashIcon,
   Link2Icon,
@@ -20,7 +19,7 @@ import {
   RadioIcon,
   TrashIcon,
 } from "@ui/icons";
-import { radius } from "../../tokens";
+import { MenuCheckBox } from "./MenuCheckBox";
 
 interface ChannelMenuProps {
   /** Right-click target and where the menu was opened, or null when closed. */
@@ -129,8 +128,8 @@ export function ChannelMenu({
             <Divider key="mute-end" sx={DIVIDER} />,
           ]}
 
-      <MenuItem onClick={run(onToggleHideEmpty)}>
-        <CheckBox checked={hideEmpty} />
+      <MenuItem role="menuitemcheckbox" aria-checked={hideEmpty} onClick={run(onToggleHideEmpty)}>
+        <MenuCheckBox checked={hideEmpty} />
         Hide empty channels
       </MenuItem>
 
@@ -190,30 +189,6 @@ function Glyph({ children }: Readonly<{ children: React.ReactNode }>) {
       sx={(theme) => ({ display: "flex", flex: "none", color: theme.palette.nebula.muted })}
     >
       {children}
-    </Box>
-  );
-}
-
-/** The mock's tick box: filled with the accent when on, an empty chip when off. */
-function CheckBox({ checked }: Readonly<{ checked: boolean }>) {
-  return (
-    <Box
-      component="span"
-      aria-hidden
-      sx={(theme) => ({
-        width: 15,
-        height: 15,
-        borderRadius: radius("sm"),
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flex: "none",
-        color: "#fff",
-        background: checked ? theme.palette.nebula.accent : theme.palette.nebula.card2,
-        border: `1px solid ${checked ? theme.palette.nebula.accent : theme.palette.nebula.line2}`,
-      })}
-    >
-      {checked && <CheckIcon width={9} height={9} strokeWidth={3} />}
     </Box>
   );
 }

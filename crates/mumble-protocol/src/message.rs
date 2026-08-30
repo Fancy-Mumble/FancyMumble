@@ -236,6 +236,12 @@ pub enum TcpMessageType {
     FancyFileListing = 182,
     /// Fancy Mumble: the server declined a file request, and why.
     FancyFileRefused = 183,
+    /// Fancy Mumble: client asks for its own uploads, or for every one of them.
+    FancyFileManage = 184,
+    /// Fancy Mumble: the answer to that, with the disk stats for an operator.
+    FancyFileManaged = 185,
+    /// Fancy Mumble: client asks for one stored file to be removed.
+    FancyFileForget = 186,
     /// Fancy Mumble: generic plugin envelope (bidirectional).
     PluginMessage = 200,
     /// Fancy Mumble: server enumerates loaded plugins after `ServerSync`.
@@ -510,6 +516,12 @@ pub enum ControlMessage {
     FancyFileShare(fancy::files::Share),
     /// Fancy: the files shared in a channel.
     FancyFileListing(fancy::files::Listing),
+    /// Fancy: ask for the caller's own uploads, or for every one of them.
+    FancyFileManage(fancy::files::ManageRequest),
+    /// Fancy: the answer to that, with the disk stats for an operator.
+    FancyFileManaged(fancy::files::ManageListing),
+    /// Fancy: ask for one stored file to be removed.
+    FancyFileForget(fancy::files::ForgetRequest),
     /// Fancy: the server declined a file request, carrying a reason.
     FancyFileRefused(fancy::files::Refused),
     /// Fancy: generic plugin envelope (bidirectional).
@@ -554,6 +566,7 @@ message_type_mapping! {
     FancyLiveryQuery, FancyServerLivery, FancyLiveryUpdate,
     FancyFileUpload, FancyFileDownload, FancyFileList,
     FancyFileGrant, FancyFileShare, FancyFileListing, FancyFileRefused,
+    FancyFileManage, FancyFileManaged, FancyFileForget,
     FancyOperatorTicketRequest, FancyOperatorTicketReply,
     PchatReaction, PchatReactionDeliver, PchatReactionFetchResponse,
     WebRtcSignal, PchatSenderKeyDistribution,

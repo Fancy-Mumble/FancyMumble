@@ -1,6 +1,6 @@
 import { Box, IconButton, Typography } from "@mui/material";
 import type { UserEntry } from "@core/types";
-import { CloseIcon } from "@ui/icons";
+import { CloseIcon, InfoIcon } from "@ui/icons";
 import { SearchBox, TalkingBars, UserAvatar, Stack } from "../primitives";
 import { radius } from "../../tokens";
 
@@ -17,6 +17,8 @@ interface MemberPanelProps {
   onLeave: () => void;
   /** Right-click on a member row. */
   onContextMenu?: (user: UserEntry, event: React.MouseEvent) => void;
+  /** The (i) at the end of every row: open the User Information sheet. */
+  onInfo?: (session: number) => void;
   onClose: () => void;
 }
 
@@ -33,6 +35,7 @@ export function MemberPanel({
   onHover,
   onLeave,
   onContextMenu,
+  onInfo,
   onClose,
 }: Readonly<MemberPanelProps>) {
   return (
@@ -125,6 +128,20 @@ export function MemberPanel({
               <Box sx={{ ml: "auto", display: "flex" }}>
                 <TalkingBars talking={talkingSessions.has(member.session)} />
               </Box>
+            )}
+            {onInfo && (
+              <IconButton
+                size="small"
+                aria-label={`Information about ${member.name}`}
+                // The row itself opens the card; this opens the sheet instead.
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onInfo(member.session);
+                }}
+                sx={(theme) => ({ p: "2px", color: theme.palette.nebula.dim, flex: "none" })}
+              >
+                <InfoIcon width={13} height={13} />
+              </IconButton>
             )}
           </Stack>
         ))}

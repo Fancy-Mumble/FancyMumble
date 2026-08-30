@@ -426,6 +426,9 @@ export interface AppState
   /** Whether the user has opted out of requesting link previews. */
   disableLinkPreviews: boolean;
 
+  /** Whether the user has opted out of map tiles and IP geolocation lookups. */
+  disableOsmMaps: boolean;
+
   /** Whether the user allows external embed sources (e.g. YouTube IFrame API). */
   enableExternalEmbeds: boolean;
 
@@ -854,6 +857,7 @@ const INITIAL: Pick<
   | "serverHostAbiVersion"
   | "voiceState"
   | "udpActive"
+  | "udpCipher"
   | "inCall"
   | "talkingSessions"
   | "selectedDmUser"
@@ -1037,6 +1041,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
   // connection, so its slice sits outside INITIAL and survives disconnects.
   ...createPresenceSlice(set, get, store),
   disableLinkPreviews: false,
+  disableOsmMaps: false,
   enableExternalEmbeds: false,
   streamerMode: false,
 
@@ -2516,6 +2521,35 @@ function processPluginDataEvent(payload: {
   }
 }
 
+/**
+ * Note that this server shares files the canon way.
+ *
+ * The canon advertises nothing, so the answer is written in the shape the
+ * plugin would have broadcast - see `canonFileServerConfig` for which of those
+ * fields it actually knows.  A server running the plugin keeps it: that config
+ * is the richer of the two, and both cannot be true at once.
+ */
+function markCanonFileService(): void {
+  const state = useAppStore.getState();
+  if (state.fileServerKind === "plugin") return;
+  useAppStore.setState({
+    fileServerKind: "canon",
+    fileServerConfig: state.fileServerConfig ?? canonFileServerConfig(state.ownSession ?? 0),
+  });
+}
+
+/**
+ * Adopt whatever the backend already knows about this server's file service.
+ *
+ * Resolves to whether the question is settled at all: `false` means nobody has
+ * asked this connection yet, which is the caller's cue to ask.
+ */
+async function adoptCanonFileService(): Promise<boolean> {
+  const available = await invoke<boolean | null>("starling_files_available");
+  if (available === true) markCanonFileService();
+  return available !== null;
+}
+
 export async function initEventListeners(navigate: (path: string) => void): Promise<UnlistenFn[]> {
   navigateRef = navigate;
   const unlisteners: UnlistenFn[] = [];
@@ -2592,6 +2626,31 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
         }
       } catch (e) {
         console.error("HMR state restore (plugin broadcasts) failed:", e);
+      }
+      // The canon file service advertises nothing at all: it is found by
+      // asking, and the ask rides on the one-shot `ServerConfig` event, which
+      // fired long before this reload.  Without replaying it `fileServerConfig`
+      // stays null and every composer reports "this server has no file
+      // sharing" - on a connection whose files the backend is still perfectly
+      // able to move, and with no way back until a real reconnect.
+      //
+      // The backend remembers what the probe found, so it is asked rather than
+      // the server: `true` is an answer already in hand, and `null` means the
+      // reload landed before the question was ever put.  A `false` is the one
+      // case to leave alone - it is a request this connection made and never
+      // got an answer to.
+      try {
+        if (!(await adoptCanonFileService())) {
+          // Nobody has put the question to this server yet - the reload landed
+          // before `ServerConfig` did.  Ask, then read the backend's answer
+          // rather than waiting on the `starling-file-listing` event: this runs
+          // beside the `listen` registrations below, and a listing that beat
+          // them would arrive with nobody subscribed.
+          void invoke("starling_list_files", { channelId: 0, limit: 1 }).catch(() => {});
+          setTimeout(() => void adoptCanonFileService(), 1500);
+        }
+      } catch (e) {
+        console.error("HMR state restore (canon file service) failed:", e);
       }
     })
     .catch(() => {});
@@ -3042,17 +3101,11 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
     //
     // There is no capability message to read: a server without the service
     // says nothing at all, so the client asks for a channel listing on connect
-    // and this is the answer. Everything above reads `fileServerConfig` to
-    // decide whether attaching is possible, so the answer is written there in
-    // the shape the plugin would have advertised - see `canonFileServerConfig`
-    // for which of those fields the canon actually knows.
+    // and this is the answer. It is also a one-shot, which is why the reload
+    // path above re-adopts it from the backend rather than waiting for a
+    // second one that never comes - see `markCanonFileService`.
     await listen<{ channelId: number; files: unknown[] }>("starling-file-listing", () => {
-      const state = useAppStore.getState();
-      if (state.fileServerKind === "plugin") return;
-      useAppStore.setState({
-        fileServerKind: "canon",
-        fileServerConfig: state.fileServerConfig ?? canonFileServerConfig(state.ownSession ?? 0),
-      });
+      markCanonFileService();
     }),
 
     // New direct message arrived.
@@ -3261,10 +3314,17 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
       useAppStore.setState(updates);
     }),
 
-    // Audio transport mode changed (UDP vs TCP tunnel).
-    await listen<boolean>(TauriEvent.AudioTransportChanged, (event) => {
-      useAppStore.setState({ udpActive: event.payload });
-    }),
+    // Audio transport mode changed (UDP vs TCP tunnel).  The payload names the
+    // UDP cipher the server keyed us for; it is null on the TCP tunnel.
+    await listen<{ udp_active: boolean; cipher: string | null }>(
+      TauriEvent.AudioTransportChanged,
+      (event) => {
+        useAppStore.setState({
+          udpActive: event.payload.udp_active,
+          udpCipher: event.payload.cipher,
+        });
+      },
+    ),
 
     // Stream popout windows broadcast their open/close state so the main
     // window can hide its "is sharing" banner for sessions whose stream
@@ -3327,6 +3387,15 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
           return next;
         });
         void probeFileServerCapabilities();
+        // The plugin advertises itself; the canon does not - a server
+        // speaking it says nothing until asked. This is that ask: channel 0
+        // always exists, and the answer is read for whether the service
+        // exists at all, not for what it lists. See the `starling-file-
+        // listing` handler below for where the reply lands.
+        void invoke("starling_list_files", { channelId: 0, limit: 1 }).catch(() => {
+          // No canon service, or not connected to Starling at all - both are
+          // silence, and fileServerConfig simply stays what it already was.
+        });
       } catch (e) {
         console.error("get_server_config error:", e);
       }

@@ -126,6 +126,7 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
     clearCspViolations,
     refreshStats,
     udpActive,
+    udpCipher,
     capabilities,
     streamerMode,
   } = useServerInfoModel();
@@ -274,6 +275,12 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
                     label={t("infoPanel.debug.transport")}
                     value={udpActive ? t("infoPanel.transportUdp") : t("infoPanel.transportTcp")}
                   />
+                  {udpActive && (
+                    <DebugRow
+                      label={t("infoPanel.debug.encryption")}
+                      value={udpCipher ?? t("infoPanel.encryptionUnknown")}
+                    />
+                  )}
                   <DebugRow
                     label={t("infoPanel.debug.forceTcp")}
                     value={audioSettings?.force_tcp_audio ?? false}

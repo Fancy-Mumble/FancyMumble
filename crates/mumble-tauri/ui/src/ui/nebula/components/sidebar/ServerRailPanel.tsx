@@ -1,8 +1,8 @@
-import { Fragment } from "react";
-import { Box, Typography } from "@mui/material";
+import { Fragment, type ReactNode } from "react";
+import { Box, IconButton, Tooltip, Typography } from "@mui/material";
 import type { ServerPingResult } from "@core/types";
-import { CloseIcon, PlusIcon } from "@ui/icons";
-import { serverTint, type ServerRailEntry } from "../../selectors";
+import { CloseIcon, PlusIcon, StarIcon } from "@ui/icons";
+import { serverTint, type ServerGroup, type ServerRailEntry } from "../../selectors";
 import { UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
 
@@ -21,9 +21,24 @@ interface ServerRailPanelProps {
   dropBefore?: string | null;
   registerRowRef?: (key: string, element: HTMLElement | null) => void;
   onRowPointerDown?: (key: string) => (event: React.PointerEvent<HTMLElement>) => void;
-  onClose: () => void;
+  /**
+   * Pinned open as the screen's own column rather than floating over one.
+   *
+   * The connect screen has no second list to cover, so there the panel *is*
+   * the sidebar: it takes its own space, keeps the search field, and has
+   * nothing to collapse back into.
+   */
+  pinned?: boolean;
+  /** The field that filters the rows, supplied by whoever owns the query. */
+  search?: ReactNode;
+  /** Shown in place of the rows when there are none - see `ServerRail`. */
+  empty?: ReactNode;
+  /** Absent while the panel floats: there is then no room to collapse into. */
+  onClose?: () => void;
   onSelect: (entry: ServerRailEntry) => void;
   onAddServer: () => void;
+  /** Absent where favouriting is not offered; the star is then not drawn. */
+  onToggleFavorite?: (group: ServerGroup) => void;
 }
 
 /** Where the carried row would land, drawn without moving anything. */
@@ -97,6 +112,7 @@ function PanelRow({
   onPointerDown,
   onSelect,
   ghost = false,
+  reserveTrailing = false,
 }: Readonly<{
   entry: ServerRailEntry;
   active: boolean;
@@ -110,6 +126,8 @@ function PanelRow({
   onSelect: () => void;
   /** Drawn as the thing under the pointer rather than as a control. */
   ghost?: boolean;
+  /** Keeps the right edge clear for the star drawn over the row. */
+  reserveTrailing?: boolean;
 }>) {
   const { group, status, unread } = entry;
   const meta = subtitle(entry, ping, activeChannelName);
@@ -172,7 +190,10 @@ function PanelRow({
           display: "flex",
           alignItems: active && banner ? "flex-end" : "center",
           gap: "10px",
-          px: "10px",
+          pl: "10px",
+          // The star is drawn over the row rather than inside it - a button
+          // cannot hold another - so the row has to leave it the room.
+          pr: reserveTrailing ? "34px" : "10px",
           py: active && banner ? 0 : "9px",
           pb: active && banner ? "11px" : "9px",
           mt: active && banner ? "-16px" : 0,
@@ -219,12 +240,56 @@ function PanelRow({
     </Box>
   );
 }
+
+/**
+ * The favourite mark, drawn over its row.
+ *
+ * Outside the row rather than inside it because the row is a button, and a
+ * button cannot hold a second one. It stays invisible until the row is hovered
+ * or it is carrying state, so a resting list is a list of servers rather than a
+ * column of stars.
+ */
+function FavouriteStar({
+  group,
+  onToggle,
+}: Readonly<{ group: ServerGroup; onToggle: (group: ServerGroup) => void }>) {
+  const label = group.favorite ? "Remove from favourites" : "Add to favourites";
+  return (
+    <Tooltip title={label}>
+      <IconButton
+        size="small"
+        className="nebula-fav"
+        aria-label={label}
+        aria-pressed={group.favorite}
+        onClick={() => onToggle(group)}
+        sx={(theme) => ({
+          position: "absolute",
+          right: "6px",
+          // Measured from the bottom so the star lands on the name in both row
+          // shapes: the open server's row is taller and bottom-aligned under
+          // its banner, and a centred star would sit in the artwork.
+          bottom: "13px",
+          opacity: group.favorite ? 1 : 0,
+          color: group.favorite ? theme.palette.nebula.warn : theme.palette.nebula.dim,
+          "&:focus-visible": { opacity: 1 },
+        })}
+      >
+        <StarIcon width={13} height={13} fill={group.favorite ? "currentColor" : "none"} />
+      </IconButton>
+    </Tooltip>
+  );
+}
 /**
  * The rail, pinned open.
  *
- * It covers the sidebar rather than pushing it aside: the panel is a thing you
- * open, glance at and close, and shifting the whole window sideways for that
- * would cost more than it tells you.
+ * Opened from the rail it covers the sidebar rather than pushing it aside: the
+ * panel is a thing you open, glance at and close, and shifting the whole window
+ * sideways for that would cost more than it tells you.
+ *
+ * `pinned` is the other life. On the connect screen there is no second list for
+ * it to cover - the sidebar there listed the same servers this does - so the
+ * panel takes that column outright, search field and all, and the two lists
+ * that used to disagree about what they were for become one.
  */
 export function ServerRailPanel({
   entries,
@@ -237,54 +302,66 @@ export function ServerRailPanel({
   dropBefore,
   registerRowRef,
   onRowPointerDown,
+  pinned = false,
+  search,
+  empty,
   onClose,
   onSelect,
   onAddServer,
+  onToggleFavorite,
 }: Readonly<ServerRailPanelProps>) {
   return (
     <Box
+      component={pinned ? "nav" : "div"}
       aria-label="Servers"
       data-testid="nebula-server-rail-panel"
       sx={(theme) => ({
-        position: "absolute",
-        left: 0,
-        top: 0,
-        bottom: 0,
-        width: 266,
-        zIndex: 45,
+        // Pinned it is a column of the window, so it takes part in the layout;
+        // floating it is laid over one, anchored to the rail it came out of.
+        ...(pinned
+          ? { position: "relative", flex: "none", minHeight: 0 }
+          : { position: "absolute", left: 0, top: 0, bottom: 0, zIndex: 45 }),
+        // The sidebar's width when it is the sidebar, so the pane beside it
+        // does not shift as the user moves between screens.
+        width: pinned ? 290 : 266,
         display: "flex",
         flexDirection: "column",
         gap: "4px",
         px: "9px",
         py: "10px",
-        background: theme.palette.nebula.tint + "," + theme.palette.nebula.bg0,
-        borderRight: "1px solid " + theme.palette.nebula.line2,
-        boxShadow: "34px 0 70px rgba(2,6,18,.5)",
+        background: pinned
+          ? theme.palette.nebula.panel
+          : theme.palette.nebula.tint + "," + theme.palette.nebula.bg0,
+        borderRight: "1px solid " + (pinned ? theme.palette.nebula.line : theme.palette.nebula.line2),
+        // Nothing is underneath it to cast onto.
+        boxShadow: pinned ? "none" : "34px 0 70px rgba(2,6,18,.5)",
       })}
     >
       <Box sx={{ display: "flex", alignItems: "center", gap: "9px", px: "6px", pt: "5px", pb: "8px" }}>
-        <Box
-          component="button"
-          type="button"
-          aria-label="Collapse the server list"
-          onClick={onClose}
-          sx={(theme) => ({
-            all: "unset",
-            width: 30,
-            height: 30,
-            flex: "none",
-            display: "grid",
-            placeItems: "center",
-            cursor: "pointer",
-            borderRadius: radius("md"),
-            background: theme.palette.nebula.card2,
-            color: theme.palette.nebula.text,
-            "&:focus-visible": { outline: "2px solid " + theme.palette.nebula.accent, outlineOffset: 2 },
-          })}
-        >
-          <CloseIcon width={15} height={15} />
-        </Box>
-        <Typography sx={{ fontSize: 12, fontWeight: 600 }}>Servers</Typography>
+        {onClose && (
+          <Box
+            component="button"
+            type="button"
+            aria-label="Collapse the server list"
+            onClick={onClose}
+            sx={(theme) => ({
+              all: "unset",
+              width: 30,
+              height: 30,
+              flex: "none",
+              display: "grid",
+              placeItems: "center",
+              cursor: "pointer",
+              borderRadius: radius("md"),
+              background: theme.palette.nebula.card2,
+              color: theme.palette.nebula.text,
+              "&:focus-visible": { outline: "2px solid " + theme.palette.nebula.accent, outlineOffset: 2 },
+            })}
+          >
+            <CloseIcon width={15} height={15} />
+          </Box>
+        )}
+        <Typography sx={{ fontSize: pinned ? 15 : 12, fontWeight: 600 }}>Servers</Typography>
         <Box
           component="button"
           type="button"
@@ -303,58 +380,85 @@ export function ServerRailPanel({
         </Box>
       </Box>
 
-      {entries.map((entry) => (
-        <Fragment key={entry.group.key}>
-          {dropBefore === entry.group.key && <DropLine />}
-          <PanelRow
-            entry={entry}
-            active={entry.group.key === activeKey}
-            icon={icons?.get(entry.group.key)}
-            banner={banners?.get(entry.group.key)}
-            ping={pings?.get(entry.group.key)}
-            activeChannelName={activeChannelName}
-            dragging={dragKey === entry.group.key}
-            registerRef={(element) => registerRowRef?.(entry.group.key, element)}
-            onPointerDown={onRowPointerDown?.(entry.group.key)}
-            onSelect={() => {
-              if (dragKey) return;
-              onSelect(entry);
-            }}
-          />
-        </Fragment>
-      ))}
-      {dragKey && dropBefore === null && <DropLine />}
+      {search && <Box sx={{ pb: "4px" }}>{search}</Box>}
 
       <Box
-        component="button"
-        type="button"
-        onClick={onAddServer}
-        sx={(theme) => ({
-          all: "unset",
-          boxSizing: "border-box",
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
           display: "flex",
-          alignItems: "center",
-          gap: "9px",
-          px: "10px",
-          py: "9px",
-          cursor: "pointer",
-          borderRadius: radius("lg"),
-          border: "1px dashed " + theme.palette.nebula.line2,
-          color: theme.palette.nebula.dim,
-          fontSize: 11.5,
-          "&:hover": { borderColor: theme.palette.nebula.accentLine, color: theme.palette.nebula.accent },
-          "&:focus-visible": { outline: "2px solid " + theme.palette.nebula.accent, outlineOffset: 2 },
-        })}
+          flexDirection: "column",
+          gap: "4px",
+        }}
       >
-        <PlusIcon width={14} height={14} style={{ flex: "none" }} />
-        Add a server
+        {entries.map((entry) => (
+          <Fragment key={entry.group.key}>
+            {dropBefore === entry.group.key && <DropLine />}
+            <Box sx={{ position: "relative", "&:hover .nebula-fav": { opacity: 1 } }}>
+              <PanelRow
+                entry={entry}
+                active={entry.group.key === activeKey}
+                icon={icons?.get(entry.group.key)}
+                banner={banners?.get(entry.group.key)}
+                ping={pings?.get(entry.group.key)}
+                activeChannelName={activeChannelName}
+                dragging={dragKey === entry.group.key}
+                reserveTrailing={Boolean(onToggleFavorite)}
+                registerRef={(element) => registerRowRef?.(entry.group.key, element)}
+                onPointerDown={onRowPointerDown?.(entry.group.key)}
+                onSelect={() => {
+                  if (dragKey) return;
+                  onSelect(entry);
+                }}
+              />
+              {onToggleFavorite && <FavouriteStar group={entry.group} onToggle={onToggleFavorite} />}
+            </Box>
+          </Fragment>
+        ))}
+        {dragKey && dropBefore === null && <DropLine />}
+
+        {entries.length === 0 && empty && (
+          <Typography
+            sx={(theme) => ({ px: "8px", py: "10px", fontSize: 11.5, color: theme.palette.nebula.dim })}
+          >
+            {empty}
+          </Typography>
+        )}
+
+        <Box
+          component="button"
+          type="button"
+          onClick={onAddServer}
+          sx={(theme) => ({
+            all: "unset",
+            boxSizing: "border-box",
+            display: "flex",
+            alignItems: "center",
+            gap: "9px",
+            px: "10px",
+            py: "9px",
+            cursor: "pointer",
+            borderRadius: radius("lg"),
+            border: "1px dashed " + theme.palette.nebula.line2,
+            color: theme.palette.nebula.dim,
+            fontSize: 11.5,
+            "&:hover": { borderColor: theme.palette.nebula.accentLine, color: theme.palette.nebula.accent },
+            "&:focus-visible": { outline: "2px solid " + theme.palette.nebula.accent, outlineOffset: 2 },
+          })}
+        >
+          <PlusIcon width={14} height={14} style={{ flex: "none" }} />
+          Add a server
+        </Box>
       </Box>
 
-      <Typography
-        sx={(theme) => ({ mt: "auto", px: "6px", pb: "4px", fontSize: 10, color: theme.palette.nebula.dim })}
-      >
-        Hover a tile for the same card without pinning
-      </Typography>
+      {!pinned && (
+        <Typography
+          sx={(theme) => ({ px: "6px", pt: "6px", pb: "4px", fontSize: 10, color: theme.palette.nebula.dim })}
+        >
+          Hover a tile for the same card without pinning
+        </Typography>
+      )}
     </Box>
   );
 }

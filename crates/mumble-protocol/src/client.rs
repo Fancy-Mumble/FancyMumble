@@ -882,7 +882,7 @@ async fn handle_crypt_setup<H: EventHandler>(
 
     if force_tcp {
         info!("UDP disabled (force_tcp=true), using TCP tunnel for audio");
-        handler.on_audio_transport_changed(false);
+        handler.on_audio_transport_changed(false, None);
         return;
     }
 
@@ -928,7 +928,7 @@ async fn handle_force_tcp_change<H: EventHandler>(
         *udp_sender = None;
         *udp_resync_tx = None;
         info!("force_tcp enabled at runtime, switched to TCP tunnel");
-        handler.on_audio_transport_changed(false);
+        handler.on_audio_transport_changed(false, None);
     } else {
         // Re-enable UDP if we have stored crypto material.
         if let Some(crypto) = stored_crypto {
@@ -1054,7 +1054,7 @@ async fn start_udp<H: EventHandler>(
     }
 
     info!("UDP transport started with {cipher_name} encryption");
-    handler.on_audio_transport_changed(true);
+    handler.on_audio_transport_changed(true, Some(cipher_name));
 }
 
 /// Build a timestamped UDP ping message.

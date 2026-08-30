@@ -332,6 +332,7 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
     clearCspViolations,
     refreshStats,
     udpActive,
+    udpCipher,
     capabilities,
     streamerMode,
   } = useServerInfoModel();
@@ -479,6 +480,7 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
                   <Fold title="Audio transport">
                     <Facts mono>
                       <Fact mono label="Transport" value={udpActive ? "UDP (encrypted)" : "TCP tunnel"} />
+                      {udpActive && <Fact mono label="Encryption" value={udpCipher ?? "unknown"} />}
                       <Fact mono label="Force TCP" value={audioSettings?.force_tcp_audio ?? false} />
                     </Facts>
                   </Fold>

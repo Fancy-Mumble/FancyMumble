@@ -10,7 +10,14 @@
 import { htmlToMarkdown, markdownToHtml } from "@standard/components/chat/markdown/MarkdownInput";
 import { hslToHex } from "@core/utils/colorUtils";
 import { hueFromKey } from "@shared/profilecard/tint";
-import type { ChannelEntry, ConnectionStatus, SavedServer, SearchResult, UserEntry } from "@core/types";
+import type {
+  ChannelEntry,
+  ConnectionStatus,
+  KeyHolderEntry,
+  SavedServer,
+  SearchResult,
+  UserEntry,
+} from "@core/types";
 import {
   PERM_BAN,
   PERM_KICK,
@@ -120,6 +127,63 @@ export function groupOccupants(users: readonly UserEntry[]): ReadonlyMap<number,
 
 function byName(left: UserEntry, right: UserEntry) {
   return left.name.localeCompare(right.name);
+}
+
+export interface ChannelPresence {
+  /** People sitting in the channel right now. */
+  inVoice: number;
+  /** Everyone the channel counts as its own: the people in it, plus the people
+   *  who belong to it and are somewhere else. */
+  members: number;
+}
+
+/**
+ * How many people are in a channel, and how many belong to it.
+ *
+ * A plain channel has no membership beyond who is standing in it, so both
+ * numbers are the same. A persisted one does: the server names the people
+ * holding the key its history is stored under, and someone who has stepped out
+ * still belongs to the room their messages are kept in.
+ *
+ * Absent members are counted by key rather than by "offline", so the number
+ * does not drop when one of them connects and sits in a different channel -
+ * a membership that shrank whenever a member appeared would be worse than no
+ * membership at all.
+ */
+export function channelPresence(
+  users: readonly UserEntry[],
+  channelId: number,
+  keyHolders: readonly KeyHolderEntry[] = [],
+): ChannelPresence {
+  const present = users.filter((user) => user.channel_id === channelId);
+  const hereByHash = new Set(present.map((user) => user.hash).filter(Boolean));
+  const away = keyHolders.filter((holder) => !hereByHash.has(holder.cert_hash)).length;
+  return { inVoice: present.length, members: present.length + away };
+}
+
+/**
+ * The header's subtitle - "3 in voice · 5 members".
+ *
+ * The second half is dropped when it would only restate the first: on the
+ * ordinary channel, where everyone who belongs is present, "5 in voice ·
+ * 5 members" says one thing twice.
+ */
+export function presenceLabel(presence: ChannelPresence): string {
+  if (presence.members === 0) return "Nobody here";
+  const voice = `${presence.inVoice} in voice`;
+  if (presence.members <= presence.inVoice) return voice;
+  return `${voice} · ${presence.members} ${presence.members === 1 ? "member" : "members"}`;
+}
+
+/**
+ * Whether a channel's messages are end-to-end encrypted.
+ *
+ * Read off the announced protocol rather than off the persistence state:
+ * they agree today, but they are two different claims - one about where the
+ * history is kept, one about who can read it - and the header makes both.
+ */
+export function isEncryptedChannel(channel: ChannelEntry | null | undefined): boolean {
+  return channel?.pchat_protocol === "signal_v1" || channel?.pchat_protocol === "fancy_v1_full_archive";
 }
 
 export interface UserMenuInput {

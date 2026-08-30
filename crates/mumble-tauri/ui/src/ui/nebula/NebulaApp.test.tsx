@@ -1,12 +1,27 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@core/store";
 import NebulaApp from "./index";
 
-const { getSavedServersMock, getPreferencesMock, updatePreferencesMock } = vi.hoisted(() => ({
+const { getSavedServersMock, getPreferencesMock, updatePreferencesMock, dragDrop } = vi.hoisted(() => ({
   getSavedServersMock: vi.fn().mockResolvedValue([]),
   getPreferencesMock: vi.fn(),
   updatePreferencesMock: vi.fn(),
+  /** The shell's drag-drop subscriber, as the client last registered it. */
+  dragDrop: { handler: null as null | ((event: { payload: unknown }) => void) },
+}));
+
+// Files are dropped through the shell's own event, which has no source in
+// jsdom: hold the handler the client registers so a test can drop on it.
+vi.mock("@tauri-apps/api/webviewWindow", () => ({
+  getCurrentWebviewWindow: () => ({
+    onDragDropEvent: async (handler: (event: { payload: unknown }) => void) => {
+      dragDrop.handler = handler;
+      return () => {
+        if (dragDrop.handler === handler) dragDrop.handler = null;
+      };
+    },
+  }),
 }));
 
 const DEFAULT_PREFERENCES = {
@@ -16,6 +31,13 @@ const DEFAULT_PREFERENCES = {
   timeFormat: "auto",
   convertToLocalTime: true,
 };
+
+// The admin pages subscribe to backend events that have no source in jsdom.
+// Routing is what these tests are about, so the pane is stubbed down to the
+// page id the shell hands it.
+vi.mock("./components/admin/AdminScreen", () => ({
+  AdminScreen: ({ page }: { page: string }) => <div>admin pane: {page}</div>,
+}));
 
 vi.mock("@core/serverStorage", () => ({
   getSavedServers: getSavedServersMock,
@@ -99,6 +121,16 @@ describe("NebulaApp", () => {
     expect(await screen.findByRole("button", { name: /connect as zewiwin/i })).toBeTruthy();
   });
 
+  it("lists the servers once on the connect screen, in the open rail", async () => {
+    // The screen used to carry its own Servers column beside the rail, saying
+    // the same things about the same servers.
+    render(<NebulaApp />);
+    await screen.findByRole("heading", { name: "magical.rocks" });
+    expect(screen.getAllByTestId("nebula-server-rail-panel")).toHaveLength(1);
+    expect(screen.queryByTestId("nebula-server-rail")).toBeNull();
+    expect(screen.getByLabelText("Search servers")).toBeTruthy();
+  });
+
   it("shows the channel tree and the composer once connected", async () => {
     render(<NebulaApp />);
     useAppStore.setState({
@@ -132,6 +164,62 @@ describe("NebulaApp", () => {
     // Leaving means leaving the server, so it is live whenever there is a
     // session to leave - being in voice has nothing to do with it.
     expect(screen.getByRole("button", { name: "Disconnect from this server" })).toBeTruthy();
+  });
+
+  describe("dropping files", () => {
+    /**
+     * Connected, in a direct message with someone who is not registered.
+     *
+     * The classic DM is the case worth pinning: selecting one clears the
+     * selected channel, and the drop used to be turned away on that alone
+     * while the overlay still said "Drop files to send".
+     */
+    function openDirectMessage() {
+      useAppStore.setState({
+        status: "connected",
+        sessions: [OPEN_SESSION as never],
+        activeServerId: "sess",
+        channels: [{ id: 0, parent_id: null, name: "Root", user_count: 2, position: 0 } as never],
+        selectedChannel: null,
+        currentChannel: 0,
+        selectedDmUser: 9,
+        ownSession: 7,
+        users: [
+          { session: 7, name: "ZewiWin", channel_id: 0, texture_size: null } as never,
+          { session: 9, name: "Lorelando", channel_id: 0, texture_size: null } as never,
+        ],
+        fileServerConfig: { canShareFiles: true, canShareFilesPublic: false } as never,
+      });
+    }
+
+    function drop(paths: string[]) {
+      act(() => dragDrop.handler?.({ payload: { type: "drop", paths, position: { x: 0, y: 0 } } }));
+    }
+
+    it("stages a file dropped into a direct message straight away, no question asked", async () => {
+      render(<NebulaApp />);
+      openDirectMessage();
+      expect(await screen.findByLabelText("Message @Lorelando")).toBeTruthy();
+      await waitFor(() => expect(dragDrop.handler).not.toBeNull());
+
+      drop(["/home/zewi/notes.pdf"]);
+      // It lands in the tray directly - no dialog, nothing pressed first.
+      expect(await screen.findByText("notes.pdf")).toBeTruthy();
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("turns away a drop that holds no file on disk, and says so", async () => {
+      render(<NebulaApp />);
+      openDirectMessage();
+      await waitFor(() => expect(dragDrop.handler).not.toBeNull());
+
+      // An image dragged out of a browser, or out of this chat, arrives as a
+      // URL - which the uploader cannot stream from. Silence would look like
+      // the drop did nothing.
+      drop(["http://magical.rocks/files/dusk.png"]);
+      expect(await screen.findByText("Only files from this computer can be dropped here")).toBeTruthy();
+      expect(screen.queryByRole("dialog", { name: "Share files" })).toBeNull();
+    });
   });
 
   it("asks before leaving a server, then disconnects the session", async () => {
@@ -273,7 +361,7 @@ describe("NebulaApp", () => {
     });
 
     fireEvent.click(await screen.findByRole("button", { name: "More" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Sound & devices" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Settings" }));
 
     expect(await screen.findByRole("button", { name: "Profile" })).toBeTruthy();
     for (const page of ["Voice", "Personalize", "Privacy", "Shortcuts", "Advanced"])
@@ -282,6 +370,34 @@ describe("NebulaApp", () => {
     // would have anything to show.
     expect(screen.queryByRole("button", { name: "Account" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Plugins" })).toBeNull();
+  });
+
+  it("returns to settings after a visit to administration", async () => {
+    // Administration is a section *of* settings rather than its own surface, so
+    // the admin page outlives the screen it was opened on. The menu's Settings
+    // has to clear it, or it reopens on the admin page every time after.
+    render(<NebulaApp />);
+    useAppStore.setState({
+      status: "connected",
+      sessions: [OPEN_SESSION as never],
+      activeServerId: "sess",
+      channels: [
+        { id: 0, parent_id: null, name: "Root", user_count: 0, position: 0, permissions: 0x1 } as never,
+      ],
+      ownSession: 7,
+      users: [{ session: 7, name: "ZewiWin", channel_id: 0, texture_size: null } as never],
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "More" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Server admin" }));
+    expect(await screen.findByText("admin pane: users")).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Back/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "More" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Settings" }));
+
+    expect(await screen.findByRole("button", { name: "Profile" })).toBeTruthy();
+    expect(screen.queryByText("admin pane: users")).toBeNull();
   });
 
   /** The client, connected, with a channel selected and two more to move to. */
@@ -358,6 +474,49 @@ describe("NebulaApp", () => {
       expect(await screen.findByLabelText("Members")).toBeTruthy();
       fireEvent.keyDown(document.body, { key: "u", ctrlKey: true });
       await waitFor(() => expect(screen.queryByLabelText("Members")).toBeNull());
+    });
+  });
+
+  // Full-app coverage for the wiring `NebulaClientApp` does itself, on top of
+  // what `Composer.test.tsx` already proves about the props once they arrive -
+  // a store that says a channel can share files and be polled must actually
+  // reach the composer saying so, not just the component in isolation.
+  //
+  // Every field the ternaries in `NebulaClientApp` actually branch on
+  // (`fileServerConfig`, `selectedDmUser`) is set explicitly by each test
+  // here rather than left to `connectedClient()`'s defaults: the store is a
+  // module singleton that outlives any one `it()`, and an earlier test in
+  // this file (`selectedDmUser: 9`, in "dropping files" above) leaking
+  // forward silently switches these from channel to DM context otherwise.
+  describe("attaching and polling once a channel can do both", () => {
+    it("does not block the attach button once the store has a real file-server config", async () => {
+      await connectedClient();
+      useAppStore.setState({
+        selectedDmUser: null,
+        fileServerConfig: { canShareFiles: true, canShareFilesPublic: false } as never,
+      });
+      expect(await screen.findByLabelText("Attach files")).toBeTruthy();
+      fireEvent.click(screen.getByLabelText("Attach files"));
+      expect(screen.queryByRole("dialog", { name: "Files" })).toBeNull();
+    });
+
+    it("still says why when the server has no file sharing at all", async () => {
+      await connectedClient();
+      useAppStore.setState({ selectedDmUser: null, fileServerConfig: null });
+      const button = await screen.findByLabelText("This server has no file sharing");
+      fireEvent.click(button);
+      expect(screen.getByText(/no file sharing/)).toBeTruthy();
+    });
+
+    it("offers Create a poll from the attach menu in a channel with a file server", async () => {
+      await connectedClient();
+      useAppStore.setState({
+        selectedDmUser: null,
+        fileServerConfig: { canShareFiles: true, canShareFilesPublic: false } as never,
+      });
+      const button = await screen.findByLabelText("Attach files");
+      fireEvent.contextMenu(button);
+      expect(screen.getByText("Create a poll")).toBeTruthy();
     });
   });
 

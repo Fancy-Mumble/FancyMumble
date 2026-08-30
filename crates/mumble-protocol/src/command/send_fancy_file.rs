@@ -31,6 +31,16 @@ pub struct SendFancyFileUpload {
     pub content_type: String,
     /// How many bytes are coming. Checked against the grant at `PUT` time.
     pub size: u64,
+    /// Who should be able to reach the file once it is up.
+    pub visibility: fancy::files::Visibility,
+    /// How long the share should last, in seconds. `0` means never expires.
+    pub ttl_seconds: u64,
+    /// The password for a password share, and empty for the other two.
+    ///
+    /// Sent once and never again: the server keeps a hash to check guesses
+    /// against and derives the file's encryption key from the same secret, so
+    /// nothing here can be asked for a second time.
+    pub password: String,
 }
 
 impl CommandAction for SendFancyFileUpload {
@@ -47,6 +57,9 @@ impl CommandAction for SendFancyFileUpload {
                     // sending a digest it did not compute would be a claim the
                     // server would be right to check and find wrong.
                     sha256: Vec::new(),
+                    visibility: self.visibility as i32,
+                    ttl_seconds: self.ttl_seconds,
+                    password: self.password.clone(),
                 },
             )],
             ..Default::default()
@@ -98,6 +111,59 @@ impl CommandAction for SendFancyFileList {
                 limit: self.limit,
                 before_key: String::new(),
             })],
+            ..Default::default()
+        }
+    }
+}
+
+/// Ask for the caller's own uploads, or for every one of them.
+///
+/// One command for both because they are the same question asked with a
+/// different reach: what a person may manage. The server decides which of the
+/// two the asker may have.
+#[derive(Debug)]
+pub struct SendFancyFileManage {
+    /// Correlates the answer. Minted by the caller.
+    pub request_id: String,
+    /// Whose files, as the canon's `Audience`.
+    pub audience: fancy::files::Audience,
+    /// How many to return. The server caps this whatever is asked.
+    pub limit: u32,
+}
+
+impl CommandAction for SendFancyFileManage {
+    fn execute(&self, _state: &ServerState) -> CommandOutput {
+        CommandOutput {
+            tcp_messages: vec![ControlMessage::FancyFileManage(
+                fancy::files::ManageRequest {
+                    request_id: self.request_id.clone(),
+                    audience: self.audience as i32,
+                    limit: self.limit,
+                },
+            )],
+            ..Default::default()
+        }
+    }
+}
+
+/// Ask for one stored file to be removed.
+#[derive(Debug)]
+pub struct SendFancyFileForget {
+    /// Correlates the answer. Minted by the caller.
+    pub request_id: String,
+    /// The stored key, as it arrived in a listing.
+    pub key: String,
+}
+
+impl CommandAction for SendFancyFileForget {
+    fn execute(&self, _state: &ServerState) -> CommandOutput {
+        CommandOutput {
+            tcp_messages: vec![ControlMessage::FancyFileForget(
+                fancy::files::ForgetRequest {
+                    request_id: self.request_id.clone(),
+                    key: self.key.clone(),
+                },
+            )],
             ..Default::default()
         }
     }

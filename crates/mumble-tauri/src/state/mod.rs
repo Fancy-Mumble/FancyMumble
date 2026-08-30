@@ -36,6 +36,7 @@ mod account;
 mod audit;
 pub(crate) mod hash_names;
 pub(crate) mod local_cache;
+pub(crate) mod media_server;
 mod messaging;
 pub mod offload;
 mod offload_ops;
@@ -291,6 +292,17 @@ pub struct AppState {
     start_time: Instant,
     http_client: reqwest::Client,
     pub(super) upload_cancels: Mutex<HashMap<String, CancellationToken>>,
+    /// The loopback origin shared media is played from, once something has
+    /// asked for a URL. Started on demand rather than at boot: most sessions
+    /// never look at a video, and an unused listener is still an open port.
+    pub(crate) media_server: tokio::sync::Mutex<Option<media_server::MediaServer>>,
+    /// Held while one object's download URL is being asked for.
+    ///
+    /// A player opens several connections at once, and every one of them wants
+    /// the same URL before any of them has it. Without this they each ask the
+    /// server separately, which is both wasteful and - on a rate-limited
+    /// control plane - how the answer stops coming at all.
+    pub(crate) download_url_locks: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
     /// Image sources pending pickup by freshly-opened image popout windows.
     /// Keyed by random id; each entry is consumed once by `take_popout_image`.
     pub(crate) popout_images: Mutex<HashMap<String, crate::commands::popout::PopoutImagePayload>>,
@@ -339,6 +351,8 @@ impl AppState {
             start_time: Instant::now(),
             http_client: file_server::new_http_client(),
             upload_cancels: Mutex::new(HashMap::new()),
+            media_server: tokio::sync::Mutex::new(None),
+            download_url_locks: Mutex::new(HashMap::new()),
             popout_images: Mutex::new(HashMap::new()),
             popout_streams: Mutex::new(HashMap::new()),
             popout_dms: Mutex::new(HashMap::new()),

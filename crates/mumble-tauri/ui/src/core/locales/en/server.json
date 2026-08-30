@@ -175,6 +175,7 @@
     "accordionLiveDoc": "Live Doc",
     "transportUdp": "UDP (encrypted)",
     "transportTcp": "TCP tunnel",
+    "encryptionUnknown": "unknown",
     "systemDefault": "System default",
     "activationPtt": "Push to Talk",
     "activationVad": "Voice Activation",
@@ -182,6 +183,7 @@
     "disabled": "disabled",
     "debug": {
       "transport": "Transport",
+      "encryption": "Encryption",
       "forceTcp": "Force TCP",
       "inputDevice": "Input Device",
       "bitrate": "Bitrate",

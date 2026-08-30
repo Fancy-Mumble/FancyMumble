@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Box, Divider, Menu, MenuItem, Tooltip, Typography } from "@mui/material";
+import { useRef, useState } from "react";
+import { Box, Menu, MenuItem, Switch, Tooltip, Typography } from "@mui/material";
 import type { Theme } from "@mui/material/styles";
 import { useAppStore } from "@core/store";
 import { selectMicLive, selectSelfDeafened } from "@core/store/voiceSelectors";
@@ -11,7 +11,9 @@ import {
   MicIcon,
   MicOffIcon,
   ScreenShareIcon,
+  SettingsIcon,
   ShieldIcon,
+  UserXIcon,
   WebcamIcon,
 } from "@ui/icons";
 import { SectionLabel, Stack, UserAvatar } from "../primitives";
@@ -27,6 +29,9 @@ interface VoiceDockProps {
   /** Channel the user is joined to, or null when only browsing. */
   channelName: string | null;
   latencyMs: number | null;
+  /** The list filter: on when channels nobody is in are folded away. */
+  hideEmpty: boolean;
+  onToggleHideEmpty: () => void;
   onOpenSettings: () => void;
   /** Carries the click so the card opens beside the avatar it came from. */
   onOpenProfile: (event: React.MouseEvent) => void;
@@ -61,6 +66,8 @@ export function VoiceDock({
   textureSize,
   channelName,
   latencyMs,
+  hideEmpty,
+  onToggleHideEmpty,
   onOpenSettings,
   onOpenProfile,
   onContextMenuProfile,
@@ -73,7 +80,8 @@ export function VoiceDock({
   const voiceState = useAppStore((state) => state.voiceState);
   const ownSession = useAppStore((state) => state.ownSession);
   const broadcastingOwnSession = useAppStore((state) => state.broadcastingOwnSession);
-  const [overflow, setOverflow] = useState<HTMLElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const card = useRef<HTMLDivElement>(null);
 
   // Read from the store rather than from `useScreenShare`: that hook owns the
   // capture and only one component may. All the dock needs to know is whether
@@ -83,6 +91,7 @@ export function VoiceDock({
 
   return (
     <Box
+      ref={card}
       sx={(theme) => ({
         flex: "none",
         m: DOCK_INSET,
@@ -135,12 +144,7 @@ export function VoiceDock({
           </Typography>
         </Stack>
 
-        <DockButton
-          label="More"
-          active={!!overflow}
-          width={28}
-          onClick={(event) => setOverflow(event.currentTarget)}
-        >
+        <DockButton label="More" active={open} width={28} onClick={() => setOpen(true)}>
           <KebabMenuIcon width={15} height={15} />
         </DockButton>
       </Stack>
@@ -185,59 +189,94 @@ export function VoiceDock({
         )}
       </Stack>
 
-      {/* What is left over: the picker the row has no space for, and the two
-          destinations - devices and administration - that are settings rather
-          than voice controls. */}
+      {/* What is left over: the picker the row has no space for, the filter on
+          the list this card sits under, and the two destinations - settings and
+          administration - that are not voice controls.
+
+          The mock draws it as a sheet grown out of this card - as wide as the
+          dock and flush against its top edge - rather than a popover that
+          happens to open nearby, so it is anchored to the card, not to the
+          button that summoned it. */}
       <Menu
-        anchorEl={overflow}
-        open={!!overflow}
-        onClose={() => setOverflow(null)}
-        anchorOrigin={{ vertical: "top", horizontal: "right" }}
+        anchorEl={card.current}
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorOrigin={{ vertical: "top", horizontal: "left" }}
         transformOrigin={{ vertical: "bottom", horizontal: "left" }}
-        // The two boxes already meet corner to corner, but a 14px surface
-        // radius against the button's 10px leaves ~6px of daylight between the
-        // arcs. Tucking the paper back by that much is what makes them touch.
-        slotProps={{ paper: { sx: { mt: "6px", ml: "-6px" } } }}
+        marginThreshold={0}
+        slotProps={{
+          paper: {
+            sx: {
+              width: card.current?.offsetWidth,
+              mt: "-4px",
+              p: "6px",
+              "& .MuiMenuItem-root": { fontSize: 13.5, p: "8px 12px", gap: "12px" },
+            },
+          },
+        }}
       >
-        {onShareCamera && <SectionLabel sx={{ p: "7px 10px 4px" }}>SHARE</SectionLabel>}
+        {onShareCamera && <Group first>SHARE</Group>}
         {onShareCamera && (
           <MenuItem
             onClick={() => {
-              setOverflow(null);
+              setOpen(false);
               onShareCamera();
             }}
           >
             <MenuGlyph>
-              <WebcamIcon width={14} height={14} />
+              <WebcamIcon width={15} height={15} />
             </MenuGlyph>
             Share your camera
           </MenuItem>
         )}
-        {onShareCamera && <Divider sx={{ m: "5px 8px" }} />}
 
-        <SectionLabel sx={{ p: "7px 10px 4px" }}>AUDIO</SectionLabel>
+        <Group first={!onShareCamera}>APP</Group>
         <MenuItem
           onClick={() => {
-            setOverflow(null);
+            setOpen(false);
             onOpenSettings();
           }}
         >
           <MenuGlyph>
-            <HeadphonesIcon width={14} height={14} />
+            <SettingsIcon width={15} height={15} />
           </MenuGlyph>
-          Sound &amp; devices
+          Settings
         </MenuItem>
 
-        {onOpenAdmin && <Divider sx={{ m: "5px 8px" }} />}
+        <Group>CHANNEL LIST</Group>
+        <MenuItem
+          role="menuitemcheckbox"
+          aria-checked={hideEmpty}
+          onClick={() => {
+            setOpen(false);
+            onToggleHideEmpty();
+          }}
+        >
+          <MenuGlyph>
+            <UserXIcon width={15} height={15} />
+          </MenuGlyph>
+          Hide empty channels
+          {/* The row is the control; the switch only shows its state, so it is
+              kept out of the tab order and off the accessibility tree. */}
+          <Switch
+            checked={hideEmpty}
+            readOnly
+            tabIndex={-1}
+            slotProps={{ input: { "aria-hidden": true, tabIndex: -1 } }}
+            sx={{ ml: "auto", pointerEvents: "none" }}
+          />
+        </MenuItem>
+
+        {onOpenAdmin && <Group>SERVER</Group>}
         {onOpenAdmin && (
           <MenuItem
             onClick={() => {
-              setOverflow(null);
+              setOpen(false);
               onOpenAdmin();
             }}
           >
             <MenuGlyph>
-              <ShieldIcon width={14} height={14} />
+              <ShieldIcon width={15} height={15} />
             </MenuGlyph>
             Server admin
           </MenuItem>
@@ -332,6 +371,14 @@ function DockButton({
       </Box>
     </Tooltip>
   );
+}
+
+/**
+ * A group heading in the sheet. The mock separates groups with air rather
+ * than rules, so every heading but the first carries the gap above it.
+ */
+function Group({ first = false, children }: Readonly<{ first?: boolean; children: React.ReactNode }>) {
+  return <SectionLabel sx={{ p: first ? "4px 12px 4px" : "14px 12px 4px" }}>{children}</SectionLabel>;
 }
 
 /** The muted glyph a menu row leads with, as the canvas draws its menus. */

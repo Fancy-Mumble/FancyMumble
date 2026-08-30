@@ -18,13 +18,7 @@ export type Screen = "chat" | "messages" | "connect" | "settings";
 
 /** Full-window surfaces that cover the shell while open. */
 export type Surface =
-  | "downloads"
-  | "pinned"
-  | "server-info"
-  | "screen-share"
-  | "camera-share"
-  | "public-servers"
-  | null;
+  "downloads" | "pinned" | "server-info" | "screen-share" | "camera-share" | "public-servers" | null;
 
 export function useScreenRouting() {
   const [screen, setScreen] = useState<Screen>("chat");
@@ -222,6 +216,14 @@ export function useUserMenu() {
   const close = useCallback(() => setTarget(null), []);
 
   return { target, open, close };
+}
+
+/** Which person's User Information sheet is open, by session. */
+export function useUserInfo() {
+  const [session, setSession] = useState<number | null>(null);
+  const open = useCallback((session: number) => setSession(session), []);
+  const close = useCallback(() => setSession(null), []);
+  return { session, open, close };
 }
 
 /**

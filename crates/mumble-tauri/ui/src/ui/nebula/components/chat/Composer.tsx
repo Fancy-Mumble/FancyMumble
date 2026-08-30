@@ -7,13 +7,19 @@ import { sendPluginInteraction, useAppStore } from "@core/store";
 import { parseMentionTrigger, type MentionTrigger } from "@core/utils/mentions";
 import { collectSlashCommands, filterSlashCommands } from "@core/plugins/tier1/manifest";
 import { extractSlashQuery, parseSlashLine } from "@core/plugins/tier1/slashParser";
-import { AttachIcon, CloseIcon, PlusIcon, PollIcon, SendIcon, UploadIcon } from "@ui/icons";
+import { AttachIcon, ChevronDownIcon, CloseIcon, ImageIcon, PollIcon, SendIcon, UploadIcon } from "@ui/icons";
 import { FormatBar, type FormatAction } from "./FormatBar";
 import { PopoverPanel, PopoverScrim } from "./popover/PopoverPanel";
 import { GIF_POPOVER_WIDTH, GifPopover } from "./popover/GifPopover";
 import { EMOJI_POPOVER_WIDTH, EmojiPopover } from "./popover/EmojiPopover";
 import { POLL_POPOVER_WIDTH, PollPopover } from "./popover/PollPopover";
-import { FILE_SHARE_POPOVER_WIDTH, FileSharePopover } from "./popover/FileSharePopover";
+import {
+  AttachmentTray,
+  DEFAULT_SHARE_OPTIONS,
+  extension,
+  shareOptionsReady,
+  type ShareOptions,
+} from "./AttachmentTray";
 import MentionAutocomplete, {
   candidateInsertText,
   handleMentionKey,
@@ -23,18 +29,31 @@ import { useMentionCandidates } from "@standard/components/chat/mention/useMenti
 import SlashCommandMenu, { handleSlashKey } from "@standard/components/plugin/SlashCommandMenu";
 import MarkdownInput, { type MarkdownInputApi } from "@standard/components/chat/markdown/MarkdownInput";
 import type { ChatMessage } from "@core/types";
-import type { FileShareChoice, StagedAttachment, UploadPlaceholder } from "@core/features/chat/useFileUpload";
+import type { StagedAttachment, UploadPlaceholder } from "@core/features/chat/useFileUpload";
 import { formatBytes } from "@core/utils/format";
 import { composerHtml, plainText } from "../../selectors";
 import { glassChrome } from "../../theme";
 import { NEBULA_MONO, radius } from "../../tokens";
+
+/** What the paperclip asks the picker for. */
+export type AttachKind = "any" | "media";
 
 interface ComposerProps {
   /** Placeholder target, e.g. "#Gaming" or "@Lorelando". */
   target: string;
   disabled?: boolean;
   onSend: (html: string) => void | Promise<void>;
-  onAttach?: () => void;
+  /** Open the file picker. Files it returns land in the tray straight away. */
+  onAttach?: (kind: AttachKind) => void;
+  /**
+   * Images pasted or dropped into the browser itself, staged the moment they
+   * land - no picker, no question asked first.
+   *
+   * Distinct from `onAttach`: those files already have a path on disk, and a
+   * paste is bytes the webview is holding instead. The composer only reads
+   * them off the clipboard; where they end up on disk is not its concern.
+   */
+  onAttachFiles?: (files: File[]) => void;
   /**
    * Why files cannot be sent here, or null when they can.
    *
@@ -45,15 +64,17 @@ interface ComposerProps {
   attachBlocked?: string | null;
   /** Post a poll. Absent in DMs, which have no channel to poll. */
   onCreatePoll?: (question: string, options: string[], multiple: boolean) => void;
-  /** The file waiting on a share decision, if one has been picked. */
-  pendingFile?: string | null;
+  /** Whether this server lets a file be reached by link, which is what makes visibility a choice. */
   canSharePublic?: boolean;
-  /** Send the picked file with the chosen visibility. */
-  onShare?: (choice: FileShareChoice) => void;
+  /** Whether this server honours a lifetime on a share at all. */
+  canExpire?: boolean;
+  /** How the staged files go up, as chosen on the tray. */
+  shareOptions?: ShareOptions;
+  onShareOptionsChange?: (next: ShareOptions) => void;
   /** Messages this one is replying to, drawn above the text. */
   quotes?: readonly ChatMessage[];
   onRemoveQuote?: (messageId: string) => void;
-  /** Files picked and answered for, waiting on the message that sends them. */
+  /** Files picked or dropped, waiting on the message that sends them. */
   attachments?: readonly StagedAttachment[];
   onRemoveAttachment?: (id: string) => void;
   /** Uploads in flight, drawn as a tray above the text. */
@@ -90,16 +111,13 @@ const PANEL_INSET = `${PANEL_INSET_PX}px`;
  * the inset edge to edge.
  */
 const PANEL_MAX_WIDTH = 1360;
-/** The four panels that can hang off the composer. */
-type PopoverKind = "emoji" | "gif" | "poll" | "share";
+/** The panels that can hang off the composer; "notice" is the one that only says why files cannot be sent. */
+type PopoverKind = "emoji" | "gif" | "poll" | "notice";
 
 /** A panel that only has a sentence to say is narrower than one you act in. */
 const NOTICE_POPOVER_WIDTH = 300;
 const PANEL_RADIUS = "16px";
 const PANEL_BLUR = "blur(32px) saturate(160%)";
-/** The square a staged file is previewed in, and the disc that removes it. */
-const TILE_PX = 54;
-const TILE_CLOSE_PX = 17;
 
 const POPUP = {
   position: "absolute",
@@ -146,11 +164,13 @@ export function Composer({
   disabled = false,
   onSend,
   onAttach,
+  onAttachFiles,
   attachBlocked = null,
   onCreatePoll,
-  pendingFile = null,
   canSharePublic = false,
-  onShare,
+  canExpire = false,
+  shareOptions = DEFAULT_SHARE_OPTIONS,
+  onShareOptionsChange,
   quotes = [],
   onRemoveQuote,
   attachments = [],
@@ -178,16 +198,18 @@ export function Composer({
    */
   const [popover, setPopover] = useState<{ kind: PopoverKind; left: number } | null>(null);
   /**
-   * The attach button, while its menu is open.
+   * The element the attach menu hangs off, while it is open.
    *
-   * The canvas hangs a small menu off the paperclip rather than wiring it
-   * straight to one destination - files and polls are both things you attach,
-   * and the row has space for one button, not two. Holding the element rather
-   * than a boolean gives the menu its anchor and gives whatever it opens the
-   * same anchor, so a popover chosen from the menu still lines up with the
-   * paperclip instead of with the menu row that was clicked.
+   * The paperclip itself goes straight to the picker - that is what it is
+   * pressed for nineteen times in twenty. The rest of what can be attached
+   * lives in a small menu behind the chevron beside it, or behind a
+   * right-click on the clip. Holding the element rather than a boolean gives
+   * the menu its anchor and gives whatever it opens the same anchor, so a
+   * poll opened from the menu still lines up with the row's buttons.
    */
   const [attachMenu, setAttachMenu] = useState<HTMLElement | null>(null);
+  /** The paperclip itself, for a panel that opens without it being pressed. */
+  const attachButton = useRef<HTMLButtonElement>(null);
   /**
    * The run of the draft that is selected, or null when none is.
    *
@@ -203,12 +225,8 @@ export function Composer({
   const shell = useRef<HTMLDivElement>(null);
 
   /** Anchor a popover to one of the row's buttons, clamped inside the pane. */
-  const openPopoverFrom = (kind: PopoverKind, button: HTMLElement | null, width: number) => {
-    const anchor = button?.getBoundingClientRect();
-    const box = shell.current?.getBoundingClientRect();
-    const room = (box?.width ?? width) - width - 20;
-    setPopover({ kind, left: Math.max(0, Math.min((anchor?.left ?? 0) - (box?.left ?? 0), room)) });
-  };
+  const openPopoverFrom = (kind: PopoverKind, button: HTMLElement | null, width: number) =>
+    setPopover({ kind, left: popoverLeft(shell.current, button, width) });
   /** The same, for the button that was just pressed. */
   const openPopover = (kind: PopoverKind, event: React.MouseEvent<HTMLElement>, width: number) =>
     openPopoverFrom(kind, event.currentTarget, width);
@@ -366,6 +384,68 @@ export function Composer({
     else editor.current?.toggleList(action.list);
   }, []);
 
+  /** Pull every image off a clipboard's `DataTransfer`, staging each. */
+  const stageClipboardImages = useCallback(
+    (clip: DataTransfer): boolean => {
+      if (!onAttachFiles) return false;
+      const found: File[] = [];
+      const items = clip.items;
+      if (items?.length) {
+        for (const item of items) {
+          if (item.kind === "file" && item.type.startsWith("image/")) {
+            const file = item.getAsFile();
+            if (file) found.push(file);
+          }
+        }
+      }
+      if (found.length === 0 && clip.files?.length) {
+        for (const file of clip.files) if (file.type.startsWith("image/")) found.push(file);
+      }
+      if (found.length === 0) return false;
+      onAttachFiles(found);
+      return true;
+    },
+    [onAttachFiles],
+  );
+
+  /**
+   * The one paste path WebKitGTK actually carries an image on.
+   *
+   * Linux's webview leaves `clipboardData` empty for a pasted image - the
+   * async Clipboard API is the only route a screenshot or a copied photo
+   * reaches this composer by, so a paste that the synchronous path found
+   * nothing on always tries this before giving up.
+   */
+  const readClipboardImageAsync = useCallback(async () => {
+    if (!onAttachFiles || !navigator.clipboard?.read) return;
+    try {
+      const items = await navigator.clipboard.read();
+      const found: File[] = [];
+      for (const item of items) {
+        const type = item.types.find((candidate) => candidate.startsWith("image/"));
+        if (!type) continue;
+        const blob = await item.getType(type);
+        found.push(new File([blob], "clipboard.png", { type }));
+      }
+      if (found.length > 0) onAttachFiles(found);
+    } catch {
+      // No permission, or nothing image-shaped on the clipboard - a normal
+      // text paste falls through here just as often as a denied one does.
+    }
+  }, [onAttachFiles]);
+
+  const handlePaste = useCallback(
+    (event: React.ClipboardEvent<Element>) => {
+      const clip = event.clipboardData;
+      if (clip && stageClipboardImages(clip)) {
+        event.preventDefault();
+        return;
+      }
+      void readClipboardImageAsync();
+    },
+    [stageClipboardImages, readClipboardImageAsync],
+  );
+
   const submit = () => {
     const text = draft.trim();
     // A reply with nothing typed is still a message: the quote is the content,
@@ -399,10 +479,19 @@ export function Composer({
   const dropping = dropActive;
   // The border lights up while there is something to send, which is also when
   // the panel has grown a row it did not have at rest.
-  const sendable = draft.trim().length > 0 || quotes.length > 0 || attachments.length > 0;
+  const sendable =
+    (draft.trim().length > 0 || quotes.length > 0 || attachments.length > 0) &&
+    shareOptionsReady(shareOptions, attachments);
   const uploading = uploads.some((upload) => upload.state === "uploading");
 
   const onKeyDownCapture = (event: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    // The shortcut the menu prints beside "Browse files…", taken here so the
+    // editor's own Ctrl+U and Ctrl+B keep their letters.
+    if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "o" && onAttach) {
+      event.preventDefault();
+      if (!attachBlocked) onAttach("any");
+      return true;
+    }
     // An open list owns the arrow keys and Enter. Only once nothing is open
     // does Enter go back to meaning send.
     if (slashOpen) {
@@ -580,52 +669,21 @@ export function Composer({
           </Tray>
         )}
 
-        {/* Staged files are tiles on one scrolling line, because what you need
-            to check about a picked file is that it is the right one - which is
-            a look at the picture, not a filename in a list. The row ends in a
-            dashed square rather than sending you back to the paperclip. */}
+        {/* Staged files are tiles on one scrolling line, with the choices
+            about the batch folded away beside them - see AttachmentTray. */}
         {attachments.length > 0 && (
           <Tray>
-            <Stack
-              direction="row"
-              alignItems="center"
-              gap="8px"
-              sx={{ px: "4px", py: "6px", overflowX: "auto" }}
-            >
-              {attachments.map((file) => (
-                <AttachmentTile key={file.id} file={file} onRemove={() => onRemoveAttachment?.(file.id)} />
-              ))}
-              <Tooltip title="Add another file">
-                <Box
-                  component="button"
-                  type="button"
-                  aria-label="Add another file"
-                  disabled={disabled}
-                  onClick={(event: React.MouseEvent<HTMLElement>) =>
-                    openPopover("share", event, FILE_SHARE_POPOVER_WIDTH)
-                  }
-                  sx={(theme) => ({
-                    all: "unset",
-                    cursor: "pointer",
-                    flex: "none",
-                    boxSizing: "border-box",
-                    width: 44,
-                    height: TILE_PX,
-                    display: "grid",
-                    placeItems: "center",
-                    borderRadius: radius("md"),
-                    border: `1px dashed ${theme.palette.nebula.washLine}`,
-                    color: theme.palette.nebula.dim,
-                    "&:hover": {
-                      borderColor: theme.palette.nebula.accentLine,
-                      color: theme.palette.nebula.accent,
-                    },
-                  })}
-                >
-                  <PlusIcon width={14} height={14} />
-                </Box>
-              </Tooltip>
-            </Stack>
+            <AttachmentTray
+              attachments={attachments}
+              disabled={disabled}
+              target={target}
+              canSharePublic={canSharePublic}
+              canExpire={canExpire}
+              options={shareOptions}
+              onOptionsChange={(next) => onShareOptionsChange?.(next)}
+              onRemove={(id) => onRemoveAttachment?.(id)}
+              onAddMore={() => onAttach?.("any")}
+            />
           </Tray>
         )}
 
@@ -649,22 +707,42 @@ export function Composer({
           gap="9px"
           sx={{ minHeight: 54, flex: "none", px: "15px", py: "11px" }}
         >
-          {/* One button for everything that gets attached. With only one
-              destination there is nothing to choose between, so it opens that
-              destination rather than a menu of one. */}
+          {/* The paperclip is the picker. Pressed, it opens the file dialog
+              and whatever comes back lands in the tray - no panel between
+              the click and the file. The other ways in sit behind the
+              chevron beside it and behind a right-click on the clip. */}
           <BareButton
-            label={attachBlocked ?? "Attach a file"}
+            label={attachBlocked ?? "Attach files"}
             disabled={disabled}
             muted={!!attachBlocked}
-            active={!!attachMenu}
+            buttonRef={attachButton}
             onClick={(event) => {
-              if (attachBlocked) openPopover("share", event, NOTICE_POPOVER_WIDTH);
-              else if (!onCreatePoll) openPopover("share", event, FILE_SHARE_POPOVER_WIDTH);
-              else setAttachMenu(event.currentTarget);
+              if (attachBlocked) openPopover("notice", event, NOTICE_POPOVER_WIDTH);
+              else onAttach?.("any");
+            }}
+            onContextMenu={(event) => {
+              // Blocked stops files, not the menu: a poll is not a file, and a
+              // server with nothing to say about file sharing still has one.
+              if (!attachBlocked || onCreatePoll) {
+                event.preventDefault();
+                setAttachMenu(event.currentTarget);
+              }
             }}
           >
             <AttachIcon width={16} height={16} />
           </BareButton>
+          {(!attachBlocked || onCreatePoll) && (
+            <BareButton
+              label="More ways to attach"
+              disabled={disabled}
+              active={!!attachMenu}
+              size={16}
+              sx={{ height: 28, ml: "-6px", borderRadius: radius("sm") }}
+              onClick={(event) => setAttachMenu(event.currentTarget)}
+            >
+              <ChevronDownIcon width={10} height={10} strokeWidth={2.2} />
+            </BareButton>
+          )}
           {/* A word, not a glyph: the canvas gives GIF a small chip of its own
               because there is no picture of "GIF" anyone reads faster. */}
           <Box
@@ -695,31 +773,60 @@ export function Composer({
             onClose={() => setAttachMenu(null)}
             anchorOrigin={{ vertical: "top", horizontal: "left" }}
             transformOrigin={{ vertical: "bottom", horizontal: "left" }}
+            slotProps={{ paper: { sx: { width: 226 } } }}
           >
-            <MenuItem
-              onClick={() => {
-                const anchor = attachMenu;
-                setAttachMenu(null);
-                openPopoverFrom("share", anchor, FILE_SHARE_POPOVER_WIDTH);
-              }}
+            {!attachBlocked && (
+              <MenuItem
+                onClick={() => {
+                  setAttachMenu(null);
+                  onAttach?.("any");
+                }}
+              >
+                <MenuGlyph>
+                  <AttachIcon width={14} height={14} />
+                </MenuGlyph>
+                Browse files…
+                <MenuHint>{BROWSE_SHORTCUT}</MenuHint>
+              </MenuItem>
+            )}
+            {!attachBlocked && (
+              <MenuItem
+                onClick={() => {
+                  setAttachMenu(null);
+                  onAttach?.("media");
+                }}
+              >
+                <MenuGlyph>
+                  <ImageIcon width={14} height={14} />
+                </MenuGlyph>
+                Photo or video
+              </MenuItem>
+            )}
+            {onCreatePoll && (
+              <MenuItem
+                onClick={() => {
+                  setAttachMenu(null);
+                  openPopoverFrom("poll", attachButton.current, POLL_POPOVER_WIDTH);
+                }}
+              >
+                <MenuGlyph>
+                  <PollIcon width={14} height={14} />
+                </MenuGlyph>
+                Create a poll
+              </MenuItem>
+            )}
+            <Typography
+              sx={(theme) => ({
+                px: "10px",
+                pt: "7px",
+                pb: "4px",
+                fontSize: 10.5,
+                lineHeight: 1.4,
+                color: theme.palette.nebula.dim,
+              })}
             >
-              <MenuGlyph>
-                <AttachIcon width={14} height={14} />
-              </MenuGlyph>
-              Upload a file
-            </MenuItem>
-            <MenuItem
-              onClick={() => {
-                const anchor = attachMenu;
-                setAttachMenu(null);
-                openPopoverFrom("poll", anchor, POLL_POPOVER_WIDTH);
-              }}
-            >
-              <MenuGlyph>
-                <PollIcon width={14} height={14} />
-              </MenuGlyph>
-              Create a poll
-            </MenuItem>
+              {attachBlocked ? `${attachBlocked}.` : "Or just drag files in, or paste from the clipboard."}
+            </Typography>
           </Menu>
 
           {/* The text shares the row with the tools rather than taking one of
@@ -807,6 +914,7 @@ export function Composer({
               onSubmit={submit}
               onSelectionChange={(start, end) => updateTrigger(draftRef.current, start, end)}
               onKeyDownCapture={onKeyDownCapture}
+              onPaste={handlePaste}
               mentionResolver={mentionName}
             />
           </Box>
@@ -880,7 +988,7 @@ export function Composer({
               onClose={() => setPopover(null)}
             />
           )}
-          {popover.kind === "share" && attachBlocked && (
+          {popover.kind === "notice" && attachBlocked && (
             <PopoverPanel
               width={NOTICE_POPOVER_WIDTH}
               left={popover.left}
@@ -891,19 +999,6 @@ export function Composer({
                 {attachBlocked}.
               </Typography>
             </PopoverPanel>
-          )}
-          {popover.kind === "share" && !attachBlocked && onAttach && (
-            <FileSharePopover
-              left={popover.left}
-              filename={pendingFile}
-              canSharePublic={canSharePublic}
-              onBrowse={onAttach}
-              onSubmit={(choice) => {
-                setPopover(null);
-                onShare?.(choice);
-              }}
-              onClose={() => setPopover(null)}
-            />
           )}
           {popover.kind === "emoji" ? (
             <EmojiPopover
@@ -977,138 +1072,6 @@ function TrayClose({ label, onClick }: Readonly<{ label: string; onClick: () => 
     <BareButton label={label} onClick={onClick} size={20} sx={{ ml: "auto", borderRadius: radius("sm") }}>
       <CloseIcon width={10} height={10} />
     </BareButton>
-  );
-}
-
-/**
- * The cross that sits *on* a tile rather than beside it.
- *
- * A staged file is a picture, and a picture has no margin to put a button in -
- * so this one is a disc on the corner, dark enough to stay a cross over
- * whatever the photograph happens to be doing underneath it.
- */
-function TileClose({ label, onClick }: Readonly<{ label: string; onClick: () => void }>) {
-  return (
-    <Box
-      component="button"
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      sx={{
-        all: "unset",
-        cursor: "pointer",
-        position: "absolute",
-        right: "4px",
-        top: "4px",
-        width: TILE_CLOSE_PX,
-        height: TILE_CLOSE_PX,
-        display: "grid",
-        placeItems: "center",
-        borderRadius: "50%",
-        background: "rgba(8,11,18,.78)",
-        backdropFilter: "blur(6px)",
-        WebkitBackdropFilter: "blur(6px)",
-        color: "#dfe4ec",
-        "&:hover": { background: "rgba(8,11,18,.92)", color: "#ffffff" },
-      }}
-    >
-      <CloseIcon width={9} height={9} />
-    </Box>
-  );
-}
-
-/**
- * One staged file, drawn as what it is.
- *
- * An image is its own label, so it gets the square and nothing else. Anything
- * without a picture gets the opposite treatment - a type badge, the name and
- * the size - because for those, three facts *are* the file.
- */
-function AttachmentTile({ file, onRemove }: Readonly<{ file: StagedAttachment; onRemove: () => void }>) {
-  const remove = `Remove ${file.filename}`;
-
-  if (file.previewUrl) {
-    return (
-      <Box
-        sx={(theme) => ({
-          position: "relative",
-          flex: "none",
-          width: TILE_PX,
-          height: TILE_PX,
-          borderRadius: radius("md"),
-          overflow: "hidden",
-          border: `1px solid ${theme.palette.nebula.line}`,
-        })}
-      >
-        <Box
-          component="img"
-          src={file.previewUrl}
-          alt={file.filename}
-          sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-        />
-        <TileClose label={remove} onClick={onRemove} />
-      </Box>
-    );
-  }
-
-  return (
-    <Stack
-      direction="row"
-      alignItems="center"
-      gap="9px"
-      sx={(theme) => ({
-        position: "relative",
-        flex: "none",
-        boxSizing: "border-box",
-        height: TILE_PX,
-        pl: "8px",
-        // Room for the disc on the corner, so a long name never runs under it.
-        pr: "30px",
-        borderRadius: radius("md"),
-        background: theme.palette.nebula.card2,
-        border: `1px solid ${theme.palette.nebula.line}`,
-      })}
-    >
-      <Box
-        aria-hidden
-        sx={(theme) => ({
-          width: 34,
-          height: 38,
-          flex: "none",
-          display: "grid",
-          placeItems: "center",
-          borderRadius: radius("sm"),
-          background: theme.palette.nebula.panel,
-          border: `1px solid ${theme.palette.nebula.line2}`,
-          fontFamily: NEBULA_MONO,
-          fontSize: 8.5,
-          fontWeight: 600,
-          color: theme.palette.nebula.muted,
-        })}
-      >
-        {extension(file.filename)}
-      </Box>
-      <Stack sx={{ minWidth: 0 }}>
-        <Typography
-          sx={{
-            fontSize: 11.5,
-            fontWeight: 500,
-            maxWidth: 130,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {file.filename}
-        </Typography>
-        {file.sizeBytes !== undefined && (
-          <Typography sx={(theme) => ({ fontSize: 10, mt: "1px", color: theme.palette.nebula.dim })}>
-            {formatBytes(file.sizeBytes)}
-          </Typography>
-        )}
-      </Stack>
-      <TileClose label={remove} onClick={onRemove} />
-    </Stack>
   );
 }
 
@@ -1221,6 +1184,19 @@ function uploadProgressLine(upload: UploadPlaceholder): string {
 }
 
 /**
+ * Where a popover's left edge goes, in pixels from the shell's left edge.
+ *
+ * Under the button that opened it, clamped so the panel stays inside the
+ * pane; a missing button puts it at the pane's edge.
+ */
+function popoverLeft(shell: HTMLElement | null, button: HTMLElement | null, width: number): number {
+  const anchor = button?.getBoundingClientRect();
+  const box = shell?.getBoundingClientRect();
+  const room = (box?.width ?? width) - width - 20;
+  return Math.max(0, Math.min((anchor?.left ?? 0) - (box?.left ?? 0), room));
+}
+
+/**
  * A tool on the composer's second row.
  *
  * Bare on purpose: the panel is the only container the design allows, so an
@@ -1230,15 +1206,18 @@ function uploadProgressLine(upload: UploadPlaceholder): string {
 function BareButton({
   label,
   onClick,
+  onContextMenu,
   disabled = false,
   muted = false,
   active = false,
   size = 28,
   sx,
+  buttonRef,
   children,
 }: Readonly<{
   label: string;
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onContextMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   disabled?: boolean;
   /** Drawn as unavailable, but still pressable so it can say why. */
   muted?: boolean;
@@ -1246,17 +1225,21 @@ function BareButton({
   active?: boolean;
   size?: number;
   sx?: SxProps<Theme>;
+  /** The element, for a popover that has to find the button unpressed. */
+  buttonRef?: React.Ref<HTMLButtonElement>;
   children: React.ReactNode;
 }>) {
   return (
     <Tooltip title={label}>
       <Box
+        ref={buttonRef}
         component="button"
         type="button"
         aria-label={label}
         aria-expanded={active || undefined}
         disabled={disabled}
         onClick={onClick}
+        onContextMenu={onContextMenu}
         sx={[
           (theme: Theme) => ({
             all: "unset",
@@ -1280,6 +1263,28 @@ function BareButton({
         {children}
       </Box>
     </Tooltip>
+  );
+}
+
+/** What the menu prints beside "Browse files…". */
+const BROWSE_SHORTCUT = navigator.platform.startsWith("Mac") ? "⌘O" : "Ctrl+O";
+
+/** The shortcut a menu row ends with, small and pushed to the edge. */
+function MenuHint({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <Box
+      component="span"
+      aria-hidden
+      sx={(theme) => ({
+        ml: "auto",
+        pl: "12px",
+        fontSize: 10,
+        fontVariantNumeric: "tabular-nums",
+        color: theme.palette.nebula.dim,
+      })}
+    >
+      {children}
+    </Box>
   );
 }
 
@@ -1310,15 +1315,4 @@ function ReplyGlyph() {
       <path d="M4 9h10a6 6 0 016 6v3" />
     </svg>
   );
-}
-
-/** The file's kind, for the tray's type badge. */
-function extension(filename: string): string {
-  const dot = filename.lastIndexOf(".");
-  return dot === -1
-    ? "FILE"
-    : filename
-        .slice(dot + 1)
-        .toUpperCase()
-        .slice(0, 4);
 }

@@ -1,7 +1,7 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Box, Portal, Tooltip } from "@mui/material";
 import { ChevronRightIcon, LogOutIcon, PlusIcon } from "@ui/icons";
-import { reorderServerRail, serverTint, type ServerRailEntry } from "../../selectors";
+import { reorderServerRail, serverTint, type ServerGroup, type ServerRailEntry } from "../../selectors";
 import { UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
 import type { ServerPingResult } from "@core/types";
@@ -63,9 +63,24 @@ interface ServerRailProps {
   /** The server whose screen is open, so the rail can say where you are. */
   activeKey: string | null;
   expanded: boolean;
+  /**
+   * The list is this screen's sidebar, not a panel over one.
+   *
+   * The connect screen has no other left column - what it had listed the same
+   * servers - so there the rail hands its whole job to the open list: the
+   * column of tiles gives way to it rather than sitting beside a second copy
+   * of itself.
+   */
+  pinned?: boolean;
+  /** The field that filters the open list, for whoever owns the query. */
+  search?: ReactNode;
+  /** The rows to list, already filtered. The tiles always show every server. */
+  panelEntries?: readonly ServerRailEntry[];
   onToggleExpanded: () => void;
   onSelect: (entry: ServerRailEntry) => void;
   onAddServer: () => void;
+  /** Absent where favouriting is not offered; the star is then not drawn. */
+  onToggleFavorite?: (group: ServerGroup) => void;
   /** Absent while nothing is connected - there is then nothing to leave. */
   onDisconnect?: () => void;
   /** The new order, by host:port, after a tile is dropped. */
@@ -249,12 +264,19 @@ export function ServerRail({
   onCancelConnect,
   activeKey,
   expanded,
+  pinned = false,
+  search,
+  panelEntries,
   onToggleExpanded,
   onSelect,
   onAddServer,
+  onToggleFavorite,
   onDisconnect,
   onReorder,
 }: Readonly<ServerRailProps>) {
+  // Pinned, the list is simply always open; there is no tile column left to
+  // collapse back into.
+  const open = expanded || pinned;
   // Hovering a tile opens its card; the card stays open while the pointer is
   // travelling towards it, which is the only reason the close is delayed.
   const [hovered, setHovered] = useState<{ key: string; top: number } | null>(null);
@@ -280,7 +302,7 @@ export function ServerRail({
   // the drag would be measured against boxes nobody can see.
   const tileRefs = useRef(new Map<string, HTMLElement>());
   const rowRefs = useRef(new Map<string, HTMLElement>());
-  const visibleRefs = () => (expanded ? rowRefs.current : tileRefs.current);
+  const visibleRefs = () => (open ? rowRefs.current : tileRefs.current);
   const gesture = useRef<{ key: string; startY: number; moved: boolean } | null>(null);
   const [drag, setDrag] = useState<{
     key: string;
@@ -347,11 +369,77 @@ export function ServerRail({
       window.removeEventListener("pointerup", end);
       window.removeEventListener("pointercancel", end);
     };
-  }, [entries, expanded, onReorder]);
+  }, [entries, open, onReorder]);
 
   const dragKey = drag?.key ?? null;
   const dropBefore = drag ? dropTarget(drag) : null;
   const draggedEntry = entries.find((candidate) => candidate.group.key === dragKey) ?? null;
+
+  // Whatever is being carried, as a portal: it belongs to the gesture rather
+  // than to the column the gesture started in, and the pinned panel drags too.
+  const ghost =
+    drag && draggedEntry ? (
+      <DragGhost y={drag.y} left={drag.left} width={drag.width} height={drag.height}>
+        {open ? (
+          <ServerRailRowGhost
+            entry={draggedEntry}
+            active={draggedEntry.group.key === activeKey}
+            icon={icons?.get(draggedEntry.group.key)}
+            banner={banners?.get(draggedEntry.group.key)}
+            ping={pings?.get(draggedEntry.group.key)}
+            activeChannelName={activeChannelName}
+          />
+        ) : (
+          <UserAvatar
+            name={draggedEntry.group.label}
+            size={TILE}
+            square
+            src={icons?.get(draggedEntry.group.key)}
+            gradient={serverTint(draggedEntry.group.key)}
+          />
+        )}
+      </DragGhost>
+    ) : null;
+
+  const panel = (
+    <ServerRailPanel
+      // The tiles always show every server, so the rail stays a fixed place to
+      // aim at; only the rows answer to the search field.
+      entries={panelEntries ?? entries}
+      activeKey={activeKey}
+      icons={icons}
+      banners={banners}
+      pings={pings}
+      activeChannelName={activeChannelName}
+      dragKey={dragKey}
+      dropBefore={dropBefore}
+      pinned={pinned}
+      search={search}
+      // Only the filter can empty a list that has servers in it; with none
+      // saved at all the add button below is the whole answer.
+      empty={entries.length > 0 ? "No server matches that." : undefined}
+      registerRowRef={(key, element) => {
+        if (element) rowRefs.current.set(key, element);
+        else rowRefs.current.delete(key);
+      }}
+      onRowPointerDown={beginGesture}
+      onClose={pinned ? undefined : onToggleExpanded}
+      onSelect={onSelect}
+      onAddServer={onAddServer}
+      onToggleFavorite={onToggleFavorite}
+    />
+  );
+
+  // Pinned, the open list is the column. Drawing the tiles beside it would put
+  // the same servers on the screen twice - which is the thing that made the
+  // two lists worth merging in the first place.
+  if (pinned)
+    return (
+      <>
+        {ghost}
+        {panel}
+      </>
+    );
 
   return (
     <Box
@@ -422,28 +510,7 @@ export function ServerRail({
       ))}
       {dragKey && dropBefore === null && <DropLine />}
 
-      {drag && draggedEntry && (
-        <DragGhost y={drag.y} left={drag.left} width={drag.width} height={drag.height}>
-          {expanded ? (
-            <ServerRailRowGhost
-              entry={draggedEntry}
-              active={draggedEntry.group.key === activeKey}
-              icon={icons?.get(draggedEntry.group.key)}
-              banner={banners?.get(draggedEntry.group.key)}
-              ping={pings?.get(draggedEntry.group.key)}
-              activeChannelName={activeChannelName}
-            />
-          ) : (
-            <UserAvatar
-              name={draggedEntry.group.label}
-              size={TILE}
-              square
-              src={icons?.get(draggedEntry.group.key)}
-              gradient={serverTint(draggedEntry.group.key)}
-            />
-          )}
-        </DragGhost>
-      )}
+      {ghost}
 
       <RailButton label="Add a server" onClick={onAddServer} dashed>
         <PlusIcon width={15} height={15} />
@@ -457,7 +524,7 @@ export function ServerRail({
 
       {/* The pinned panel says everything the card would, so the two never
           show together. */}
-      {!expanded && hoveredEntry && hovered && (
+      {!open && hoveredEntry && hovered && (
         <ServerRailCard
           entry={hoveredEntry}
           icon={icons?.get(hoveredEntry.group.key)}
@@ -477,26 +544,7 @@ export function ServerRail({
         />
       )}
 
-      {expanded && (
-        <ServerRailPanel
-          entries={entries}
-          activeKey={activeKey}
-          icons={icons}
-          banners={banners}
-          pings={pings}
-          activeChannelName={activeChannelName}
-          dragKey={dragKey}
-          dropBefore={dropBefore}
-          registerRowRef={(key, element) => {
-            if (element) rowRefs.current.set(key, element);
-            else rowRefs.current.delete(key);
-          }}
-          onRowPointerDown={beginGesture}
-          onClose={onToggleExpanded}
-          onSelect={onSelect}
-          onAddServer={onAddServer}
-        />
-      )}
+      {expanded && panel}
     </Box>
   );
 }

@@ -69,7 +69,28 @@ const DESIGNS: { id: UiDesignId; label: string }[] = [
 let bakeChain: Promise<void> = Promise.resolve();
 let bakeGeneration = 0;
 
-function queueVideoBake(fileName: string, posterName: string | null, sigma: number, dim: number) {
+/**
+ * Whether the record's bake is usable for the parameters now in force.
+ *
+ * The same test `ChatBackdrop` applies when it chooses which file to play: a
+ * bake stamped with different blur/dim values is yesterday's look, so it counts
+ * as missing.
+ */
+function isBakeCurrent(data: PersonalizationData): boolean {
+  return (
+    data.chatBgVideoBaked != null &&
+    data.chatBgVideoBakedSigma === data.chatBgBlurSigma &&
+    data.chatBgVideoBakedDim === data.chatBgDim
+  );
+}
+
+function queueVideoBake(
+  fileName: string,
+  posterName: string | null,
+  sigma: number,
+  dim: number,
+  onFailed?: (reason: string) => void,
+) {
   const generation = ++bakeGeneration;
   bakeChain = bakeChain.then(async () => {
     if (generation !== bakeGeneration) return;
@@ -90,9 +111,18 @@ function queueVideoBake(fileName: string, posterName: string | null, sigma: numb
         chatBgVideoBakedDim: dim,
         chatBgBlurred: poster ? toStoreRef(poster) : null,
       });
-    } catch {
-      // Not bakeable (WebM, an exotic stream, a clip past the length cap):
-      // the live CSS filter keeps rendering the current look instead.
+    } catch (error) {
+      // Not bakeable (WebM, an exotic stream, H.264 the bundled decoder will
+      // not take, a clip past the length cap): the live CSS filter keeps
+      // rendering the current look instead.
+      //
+      // Said out loud rather than swallowed, because the fallback is the
+      // expensive path - a clip playing under a live blur costs several times
+      // what the baked file does, for as long as the wallpaper is on screen -
+      // and a wallpaper that quietly never optimizes looks exactly like one
+      // that did.
+      if (generation === bakeGeneration)
+        onFailed?.(error instanceof Error ? error.message : String(error));
     }
   });
 }
@@ -129,7 +159,21 @@ export function PersonalizeSettings() {
     let active = true;
     void loadPersonalization()
       .then((loaded) => {
-        if (active) setData(loaded);
+        if (!active) return;
+        setData(loaded);
+        // A wallpaper set before the bake could handle its codec - or while it
+        // was failing - is stuck on the live-filter path, which costs several
+        // times what the baked file does for as long as it is on screen.
+        // Nothing else ever revisits that decision, so opening this page is
+        // where it gets another go.
+        if (loaded.chatBgVideo && !isBakeCurrent(loaded))
+          queueVideoBake(
+            loaded.chatBgVideo,
+            isStoreRef(loaded.chatBgOriginal) ? storeRefName(loaded.chatBgOriginal) : null,
+            loaded.chatBgBlurSigma,
+            loaded.chatBgDim,
+            reportBakeFailure,
+          );
       })
       .catch(() => {
         if (active) setData({ ...PERSONALIZATION_DEFAULTS });
@@ -205,7 +249,13 @@ export function PersonalizeSettings() {
         chatBgBlurred: null,
         chatBgVideoBaked: null,
       });
-      queueVideoBake(picked.fileName, posterName, data.chatBgBlurSigma, data.chatBgDim);
+      queueVideoBake(
+        picked.fileName,
+        posterName,
+        data.chatBgBlurSigma,
+        data.chatBgDim,
+        reportBakeFailure,
+      );
 
       // Advisory only: an unplayable wallpaper still shows its poster, but
       // saying so here beats a silently motionless background.
@@ -234,6 +284,18 @@ export function PersonalizeSettings() {
     }
   };
 
+  /**
+   * Say that the clip could not be optimized.
+   *
+   * The wallpaper still plays and still looks right - what is lost is the
+   * cheap path, so this is a notice rather than an error.
+   */
+  const reportBakeFailure = (reason: string) => {
+    setVideoNotice(
+      `That clip could not be optimized (${reason}). It will still play, but costs noticeably more while it is on screen.`,
+    );
+  };
+
   /** Forget the wallpaper: stored files, cached blobs, and the record. */
   const clearBackground = async () => {
     setVideoNotice(null);
@@ -258,7 +320,13 @@ export function PersonalizeSettings() {
     const saved = await patch(changes);
     if (saved && next.chatBgVideo) {
       const poster = isStoreRef(next.chatBgOriginal) ? storeRefName(next.chatBgOriginal) : null;
-      queueVideoBake(next.chatBgVideo, poster, next.chatBgBlurSigma, next.chatBgDim);
+      queueVideoBake(
+        next.chatBgVideo,
+        poster,
+        next.chatBgBlurSigma,
+        next.chatBgDim,
+        reportBakeFailure,
+      );
     }
   };
 

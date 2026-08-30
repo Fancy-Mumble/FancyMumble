@@ -30,7 +30,7 @@ vi.mock("@core/features/settings/chatBackground", () => ({
   useStoredBackgroundUrl: (name: string | null) => (name === null ? null : (store.get(name) ?? null)),
 }));
 
-const { ChatBackdrop } = await import("./ChatBackdrop");
+const { ChatBackdrop, BLUR_GRACE_MS } = await import("./ChatBackdrop");
 const { PERSONALIZATION_DEFAULTS, savePersonalization } = await import("@standard/personalizationStorage");
 
 /** Seed a record and mount the backdrop over it. */
@@ -170,6 +170,81 @@ describe("Nebula animated chat background", () => {
     expect(video.currentTime).toBe(0);
     expect(play).toHaveBeenCalledTimes(1);
     play.mockRestore();
+  });
+
+  it("parks the clip once the window has been unfocused, and resumes on focus", async () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
+    const focused = vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    try {
+      await mount({
+        chatBgVideo: "video-raw.mp4",
+        chatBgOriginal: "bgstore:image-poster.jpg",
+      });
+      await vi.waitFor(() => {
+        expect(query<HTMLVideoElement>("video")).not.toBeNull();
+      });
+
+      // Unfocused but still on screen: the clip is given its grace period.
+      focused.mockReturnValue(false);
+      pause.mockClear();
+      fireEvent.blur(window);
+      vi.advanceTimersByTime(BLUR_GRACE_MS - 1000);
+      expect(pause).not.toHaveBeenCalled();
+
+      // Grace spent: a window nobody is looking at stops paying for frames.
+      vi.advanceTimersByTime(1000);
+      expect(pause).toHaveBeenCalledTimes(1);
+
+      // Back in front: playing again, from where it stopped.
+      focused.mockReturnValue(true);
+      play.mockClear();
+      fireEvent.focus(window);
+      expect(play).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+      focused.mockRestore();
+      pause.mockRestore();
+      play.mockRestore();
+    }
+  });
+
+  it("leaves a parked clip alone instead of restarting it", async () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
+    const focused = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    try {
+      await mount({
+        chatBgVideo: "video-raw.mp4",
+        chatBgOriginal: "bgstore:image-poster.jpg",
+      });
+      const video = await vi.waitFor(() => {
+        const node = query<HTMLVideoElement>("video");
+        expect(node).not.toBeNull();
+        return node as HTMLVideoElement;
+      });
+      Object.defineProperty(video, "readyState", { value: HTMLMediaElement.HAVE_ENOUGH_DATA });
+      Object.defineProperty(video, "seeking", { value: false });
+
+      // Parked, so its position is frozen on purpose.
+      vi.advanceTimersByTime(BLUR_GRACE_MS);
+      expect(pause).toHaveBeenCalled();
+      video.currentTime = 12;
+      play.mockClear();
+
+      // The watchdog exists for a clip that stopped on its own; this one did
+      // not, and must not be seeked back to the start behind the reader.
+      vi.advanceTimersByTime(5000);
+      expect(video.currentTime).toBe(12);
+      expect(play).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      focused.mockRestore();
+      pause.mockRestore();
+      play.mockRestore();
+    }
   });
 
   it("restarts a clip that stopped advancing while it claims to play", async () => {

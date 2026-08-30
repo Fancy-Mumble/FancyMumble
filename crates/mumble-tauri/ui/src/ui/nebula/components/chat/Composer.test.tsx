@@ -10,11 +10,9 @@ function user(partial: Partial<UserEntry> & { session: number; name: string }): 
   return { channel_id: 1, texture_size: null, ...partial } as UserEntry;
 }
 
-/** A staged file. The share answer travels with it but is the shell's to use. */
-function staged(
-  partial: Omit<StagedAttachment, "choice" | "filePath"> & { filePath?: string },
-): StagedAttachment {
-  return { filePath: `/tmp/${partial.filename}`, choice: { mode: "session" }, ...partial };
+/** A staged file, as the shell hands it to the composer. */
+function staged(partial: Omit<StagedAttachment, "filePath"> & { filePath?: string }): StagedAttachment {
+  return { filePath: `/tmp/${partial.filename}`, ...partial };
 }
 
 function draw(props: Partial<React.ComponentProps<typeof Composer>> = {}) {
@@ -104,26 +102,44 @@ describe("Composer", () => {
     fireEvent.click(screen.getByLabelText("This server has no file sharing"));
     expect(screen.getByRole("dialog", { name: "Files" })).toBeTruthy();
     expect(screen.getByText(/no file sharing/)).toBeTruthy();
-
-    cleanup();
-    const onAttach = vi.fn();
-    render(withNebulaTheme(<Composer target="#Gaming" onSend={vi.fn()} onAttach={onAttach} />));
-    fireEvent.click(screen.getByLabelText("Attach a file"));
-    expect(screen.getByRole("dialog", { name: "Share files" })).toBeTruthy();
-    fireEvent.click(screen.getByText("Browse files…"));
-    expect(onAttach).toHaveBeenCalled();
   });
 
-  it("puts everything that gets attached behind the one paperclip", () => {
-    draw({ onCreatePoll: vi.fn(), onAttach: vi.fn() });
-    // A channel can be polled, so there are two destinations and the button
-    // asks which.
-    fireEvent.click(screen.getByLabelText("Attach a file"));
-    expect(screen.getByText("Upload a file")).toBeTruthy();
-    expect(screen.getByText("Create a poll")).toBeTruthy();
+  it("goes straight to the picker - no panel in the way", () => {
+    // The paperclip used to open a share dialog first; now the click itself
+    // is the ask, the same way any other picker button works.
+    const onAttach = vi.fn();
+    draw({ onAttach });
+    fireEvent.click(screen.getByLabelText("Attach files"));
+    expect(onAttach).toHaveBeenCalledWith("any");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
 
-    fireEvent.click(screen.getByText("Upload a file"));
-    expect(screen.getByRole("dialog", { name: "Share files" })).toBeTruthy();
+  it("keeps everything else that can be attached behind the chevron", () => {
+    draw({ onCreatePoll: vi.fn(), onAttach: vi.fn() });
+    fireEvent.click(screen.getByLabelText("More ways to attach"));
+    expect(screen.getByText("Browse files…")).toBeTruthy();
+    expect(screen.getByText("Photo or video")).toBeTruthy();
+    expect(screen.getByText("Create a poll")).toBeTruthy();
+  });
+
+  it("narrows the picker to media from the chevron menu", () => {
+    const onAttach = vi.fn();
+    draw({ onAttach });
+    fireEvent.click(screen.getByLabelText("More ways to attach"));
+    fireEvent.click(screen.getByText("Photo or video"));
+    expect(onAttach).toHaveBeenCalledWith("media");
+  });
+
+  it("stages a pasted image without being asked anything first", () => {
+    const onAttachFiles = vi.fn();
+    const { field } = draw({ onAttachFiles });
+    const file = new File(["x"], "shot.png", { type: "image/png" });
+    const clipboardData = {
+      items: [{ kind: "file", type: "image/png", getAsFile: () => file }],
+      files: [file],
+    };
+    fireEvent.paste(field, { clipboardData });
+    expect(onAttachFiles).toHaveBeenCalledWith([file]);
   });
 
   it("offers an emoji picker, on the bar rather than in the row", () => {
@@ -253,12 +269,13 @@ describe("Composer", () => {
   });
 
   it("offers one more file from the tray rather than sending you back up", () => {
+    const onAttach = vi.fn();
     draw({
-      onAttach: vi.fn(),
+      onAttach,
       attachments: [staged({ id: "a1", filename: "dusk.png" })],
     });
     fireEvent.click(screen.getByLabelText("Add another file"));
-    expect(screen.getByRole("dialog", { name: "Share files" })).toBeTruthy();
+    expect(onAttach).toHaveBeenCalledWith("any");
   });
 
   it("gives each reply its own row rather than a cluster of chips", () => {
@@ -434,7 +451,7 @@ describe("Composer", () => {
 
   it("gives each popover the width the canvas fixes it at", () => {
     draw({ onCreatePoll: vi.fn() });
-    fireEvent.click(screen.getByLabelText("Attach a file"));
+    fireEvent.click(screen.getByLabelText("More ways to attach"));
     fireEvent.click(screen.getByText("Create a poll"));
     // Fixed, never stretched to the pane - a poll editor spanning an
     // ultrawide footer is unusable.

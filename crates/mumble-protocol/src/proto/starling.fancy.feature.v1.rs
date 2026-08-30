@@ -288,6 +288,20 @@ pub struct PluginDescriptor {
     pub version: ::prost::alloc::string::String,
     #[prost(bool, tag = "4")]
     pub enabled: bool,
+    /// What the plugin says about itself, as JSON: description, author, tags, and
+    /// the client manifest a Fancy client renders its slash commands and settings
+    /// panels from.
+    ///
+    /// Opaque here, and it stays opaque: the server neither parses nor validates
+    /// it beyond checking that it *is* JSON and fits the size cap. Carried on the
+    /// descriptor because a registry without it tells a client a plugin exists and
+    /// nothing it would need to draw anything.
+    ///
+    /// Upstream's `PluginRegistryEntry` also carries a `plugin_slot`. Deliberately
+    /// absent: it is the index of the plugin among those currently loaded, so it
+    /// changes whenever anything is enabled or disabled. Clients key on `name`.
+    #[prost(string, tag = "5")]
+    pub info_json: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Registry {
@@ -308,6 +322,18 @@ pub struct Opaque {
     pub recipients: ::prost::alloc::vec::Vec<u32>,
     #[prost(uint32, tag = "4")]
     pub sender: u32,
+    /// Which of the plugin's own message kinds this is, as the plugin names them
+    /// (`"friends.open"`, `"PluginActivated"`).
+    ///
+    /// Not a hole in the opacity rule, and worth being precise about why: the
+    /// server treats this as a string it copies, never as something it switches
+    /// on. A plugin needs it to tell one of its own messages from another, and
+    /// upstream's `PluginMessage` (wire 200) carries exactly this field for
+    /// exactly that reason. Without it every message a plugin receives is an
+    /// undifferentiated blob and the plugin has to invent its own framing inside
+    /// `payload` to get the field back.
+    #[prost(string, tag = "5")]
+    pub payload_type: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Admin {
@@ -786,7 +812,7 @@ pub mod link_preview_envelope {
 ///
 /// **Several URLs, one request.** A chat message carries as many links as
 /// somebody typed, and a canon that took one per request would have the client
-/// either send N frames - through a rate limiter that counts frames - or drop
+/// either send N frames (through a rate limiter that counts frames) or drop
 /// all but the first, which is what the epoch-0 translation did.
 ///
 /// The answers come back one `Preview` (or `PreviewError`) per URL, each
@@ -801,6 +827,14 @@ pub struct PreviewRequest {
 }
 /// Fetched by the server, never by the client, so a chat link cannot be used to
 /// probe a viewer's network. The fetch is SSRF-guarded on the server side.
+///
+/// The picture travels the same way and for the same reason. `image` carries the
+/// bytes themselves, fetched and downscaled here, because the alternative -
+/// naming the origin's URL and letting each viewer load it - hands that origin
+/// one request per member of the channel, which is the probe the whole service
+/// exists to prevent. It is a thumbnail and not the original: a preview is a
+/// card in a chat log, and the megabyte behind an `og:image` buys nothing at
+/// that size while every recipient pays for it.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Preview {
     #[prost(string, tag = "1")]
@@ -811,10 +845,24 @@ pub struct Preview {
     pub title: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub description: ::prost::alloc::string::String,
+    /// Reserved for a full-resolution image held by the files service, which
+    /// nothing stores yet. `image` below is the thumbnail every client renders.
     #[prost(string, tag = "5")]
     pub image_key: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub site: ::prost::alloc::string::String,
+    /// The downscaled preview image, empty when the page offered none, when the
+    /// fetch failed, or when the operator has switched images off.
+    #[prost(bytes = "vec", tag = "7")]
+    pub image: ::prost::alloc::vec::Vec<u8>,
+    /// The MIME type of `image` (`image/jpeg`), empty when `image` is.
+    #[prost(string, tag = "8")]
+    pub image_mime: ::prost::alloc::string::String,
+    /// The size of `image` itself, not of the original the page pointed at.
+    #[prost(uint32, tag = "9")]
+    pub image_width: u32,
+    #[prost(uint32, tag = "10")]
+    pub image_height: u32,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PreviewError {

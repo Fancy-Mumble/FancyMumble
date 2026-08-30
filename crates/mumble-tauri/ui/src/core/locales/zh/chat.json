@@ -480,7 +480,13 @@
       "audioCodec": "音频编解码器",
       "trackScreen": "屏幕",
       "trackCamera": "摄像头",
-      "trackVideo": "视频 {{n}}"
+      "trackVideo": "视频 {{n}}",
+      "uplinkHeading": "上行（你的共享）",
+      "uplinkTarget": "发送目标",
+      "uplinkLoss": "上行丢包",
+      "uplinkRtt": "上行 RTT",
+      "uplinkPerTrack": "每条轨道",
+      "uplinkNoReports": "无报告"
     },
     "banner": {
       "isSharingScreen": "{{name}} 正在共享屏幕",

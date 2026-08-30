@@ -348,9 +348,12 @@ impl EventHandler for TauriEventHandler {
         }
     }
 
-    fn on_audio_transport_changed(&mut self, udp_active: bool) {
-        info!(udp_active, "audio transport changed");
-        let _ = self.app.emit("audio-transport-changed", udp_active);
+    fn on_audio_transport_changed(&mut self, udp_active: bool, cipher: Option<&'static str>) {
+        info!(udp_active, cipher, "audio transport changed");
+        let _ = self.app.emit(
+            "audio-transport-changed",
+            AudioTransportPayload { udp_active, cipher },
+        );
     }
 
     fn on_ping_stats(

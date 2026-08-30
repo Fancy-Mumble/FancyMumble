@@ -62,6 +62,15 @@ pub(crate) struct PacketStats {
     pub resync: u32,
 }
 
+/// Payload emitted via the `audio-transport-changed` event.
+#[derive(Clone, Serialize)]
+pub(crate) struct AudioTransportPayload {
+    /// True when audio rides encrypted UDP, false for the TCP tunnel.
+    pub udp_active: bool,
+    /// The UDP cipher this connection was keyed for; `None` on the TCP tunnel.
+    pub cipher: Option<&'static str>,
+}
+
 /// Payload emitted via the `crypto-stats` event on each Ping exchange.
 #[derive(Clone, Serialize)]
 pub(crate) struct CryptoStatsPayload {

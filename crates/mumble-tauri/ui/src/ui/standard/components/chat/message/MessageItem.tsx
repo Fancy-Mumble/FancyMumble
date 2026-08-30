@@ -4,20 +4,15 @@ import { useTranslation } from "react-i18next";
 import { marked } from "marked";
 import type { ChatMessage, UserEntry, TimeFormat } from "@core/types";
 import type { PollPayload } from "../poll/PollCreator";
-import {
-  useAppStore,
-  requestLinkPreview,
-  decodeLiveDocInviteMarker,
-  FANCY_LIVEDOC_MARKER_RE,
-} from "@core/store";
+import { useAppStore, decodeLiveDocInviteMarker, FANCY_LIVEDOC_MARKER_RE } from "@core/store";
 import { parseComment } from "@core/profileFormat";
 import { ProfilePreviewCard } from "../../../pages/settings/ProfilePreviewCard";
 import { useUserComment } from "@core/lazyBlobs";
 import { useUserStats } from "../../../hooks/useUserStats";
 import { isMobile } from "@core/utils/platform";
 import { formatTimestamp, colorFor } from "@core/utils/format";
-import { extractUrlsFromMessage } from "@core/utils/extractUrls";
 import { extractOffloadInfo } from "@core/messageOffload";
+import { useLinkPreviews } from "@core/features/chat/useLinkPreviews";
 import { containsSelfMention } from "@core/utils/mentions";
 import { TID } from "@core/testids";
 import PollCard, { getPoll } from "../poll/PollCard";
@@ -241,8 +236,7 @@ export default memo(function MessageItem({
   const offloaded = offloadInfo !== null;
   const pureMedia = !offloaded && isPureMedia(msg.body);
 
-  const linkEmbeds = useAppStore((s) => (msg.message_id ? s.linkEmbeds.get(msg.message_id) : undefined));
-  const disableLinkPreviews = useAppStore((s) => s.disableLinkPreviews);
+  const linkEmbeds = useLinkPreviews(msg.message_id, msg.body);
   const currentChannel = useAppStore((s) => s.currentChannel);
 
   const watchMarkerMatch = WATCH_RE.exec(msg.body);
@@ -276,14 +270,6 @@ export default memo(function MessageItem({
     markSelfMentionNotified(key);
     globalThis.dispatchEvent(new CustomEvent("fancy:self-mention"));
   }, [selfMention, msg.message_id, msg.sender_session, msg.timestamp]);
-
-  useEffect(() => {
-    if (!msg.message_id) return;
-    if (disableLinkPreviews) return;
-    const urls = extractUrlsFromMessage(msg.body);
-    if (urls.length === 0) return;
-    requestLinkPreview(urls, msg.message_id);
-  }, [msg.message_id, msg.body, disableLinkPreviews]);
 
   // Always resolve a displayable timestamp: prefer server-side, fall back to local time.
   const displayTimestamp = msg.timestamp ?? Date.now();
@@ -502,7 +488,7 @@ export default memo(function MessageItem({
         {!offloaded && !isRestoring && !WATCH_RE.test(msg.body) && (
           <WatchStartButton body={msg.body} channelId={msg.channel_id} />
         )}
-        {!disableLinkPreviews && linkEmbeds && linkEmbeds.length > 0 && (
+        {linkEmbeds && linkEmbeds.length > 0 && (
           <LinkPreviewCard embeds={linkEmbeds} allowExternalResources />
         )}
         {children}

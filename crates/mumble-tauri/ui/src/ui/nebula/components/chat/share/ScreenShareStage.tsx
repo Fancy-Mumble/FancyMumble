@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Box, Snackbar, Typography } from "@mui/material";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "@core/store";
@@ -16,6 +16,8 @@ import { FEED_BADGE, feedSummary, type StreamFeed } from "./feeds";
 import { StreamSurface, usesNativeSurface } from "./StreamSurface";
 import { useFeedStats } from "./useFeedStats";
 import { copyStreamFrame, type ScreenshotOutcome } from "./streamScreenshot";
+import { StageResizeHandle } from "./StageResizeHandle";
+import { CONVERSATION_MIN, clampStageHeight, readStageHeight, writeStageHeight } from "./stageHeight";
 
 // Heavy and off screen at rest: the panel pulls in a chart.
 const StreamStatsPanel = lazy(() => import("@standard/components/chat/stream/StreamStatsPanel"));
@@ -49,8 +51,6 @@ const OVERLAY_TEXT = "#cfd5e0";
 const RAIL_WIDTH = 116;
 const RAIL_WIDTH_EXPANDED = 156;
 const TILE_HEIGHT = 68;
-/** Height of the stage while it sits above the conversation. */
-const STAGE_HEIGHT = 324;
 
 const SCREENSHOT_MESSAGE: Record<ScreenshotOutcome, string> = {
   copied: "Frame copied to the clipboard",
@@ -88,8 +88,18 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
   const [menuOpen, setMenuOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [shot, setShot] = useState<ScreenshotOutcome | null>(null);
+  // The split between picture and conversation, the user's to set; see
+  // stageHeight.ts for why it is remembered per device.
+  const [stageHeight, setStageHeight] = useState(readStageHeight);
+  // What the handle last applied, ahead of the render that shows it: the
+  // release that ends a drag can land before that render does.
+  const latestStageHeight = useRef(stageHeight);
+  useEffect(() => {
+    latestStageHeight.current = stageHeight;
+  }, [stageHeight]);
 
   const wrapper = useRef<HTMLDivElement>(null);
+  const stage = useRef<HTMLDivElement>(null);
   const media = useRef<HTMLVideoElement | HTMLCanvasElement | null>(null);
 
   const focused = feeds.find((feed) => feed.key === focusKey) ?? feeds[0]!;
@@ -167,6 +177,47 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
     void copyStreamFrame(media.current).then(setShot);
   }, []);
 
+  // How tall the stage may get before the conversation under it is squeezed
+  // past CONVERSATION_MIN: the column's remaining room, less the panel's own
+  // chrome around the stage (padding, the grab bar, an open stats panel).
+  const stageRoom = useCallback(() => {
+    const panel = wrapper.current;
+    const grid = stage.current;
+    const column = panel?.parentElement;
+    if (!panel || !grid || !column) return Number.POSITIVE_INFINITY;
+    const chrome = panel.offsetHeight - grid.offsetHeight;
+    return (
+      column.getBoundingClientRect().bottom - panel.getBoundingClientRect().top - chrome - CONVERSATION_MIN
+    );
+  }, []);
+
+  const resizeStage = useCallback(
+    (height: number) => {
+      const next = clampStageHeight(height, stageRoom());
+      latestStageHeight.current = next;
+      setStageHeight(next);
+      return next;
+    },
+    [stageRoom],
+  );
+  const commitStageHeight = useCallback(() => writeStageHeight(latestStageHeight.current), []);
+
+  // A height remembered on a large display must not swallow the conversation
+  // on a small one, so the stage is refitted to the column when it mounts and
+  // whenever the column changes size - and only shown, never stored, that
+  // way: the preference stays what the user chose. Not while fullscreen, when
+  // the column's geometry says nothing about the stage.
+  useLayoutEffect(() => {
+    if (expanded) return;
+    const column = wrapper.current?.parentElement;
+    if (!column) return;
+    const fit = () => setStageHeight((height) => clampStageHeight(height, stageRoom()));
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(column);
+    return () => observer.disconnect();
+  }, [expanded, stageRoom]);
+
   const popOut = useCallback(() => {
     setMenuOpen(false);
     if (ownSession === null || !activeServerId) return;
@@ -228,12 +279,13 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
       })}
     >
       <Box
+        ref={stage}
         sx={{
           display: "grid",
           gridTemplateColumns: showRail ? `1fr ${expanded ? RAIL_WIDTH_EXPANDED : RAIL_WIDTH}px` : "1fr",
           gap: expanded ? "8px" : "6px",
           minHeight: 0,
-          ...(expanded ? { flex: 1 } : { height: STAGE_HEIGHT }),
+          ...(expanded ? { flex: 1 } : { height: stageHeight }),
         }}
       >
         <Box
@@ -550,6 +602,15 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
             onClose={() => setStatsOpen(false)}
           />
         </Suspense>
+      )}
+
+      {!expanded && (
+        <StageResizeHandle
+          height={stageHeight}
+          maxHeight={stageRoom}
+          onChange={resizeStage}
+          onCommit={commitStageHeight}
+        />
       )}
 
       <Snackbar

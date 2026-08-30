@@ -165,6 +165,7 @@
     "accordionLiveDoc": "Live Doc",
     "transportUdp": "UDP (chiffré)",
     "transportTcp": "Tunnel TCP",
+    "encryptionUnknown": "inconnu",
     "systemDefault": "Défaut système",
     "activationPtt": "Appuyer pour parler",
     "activationVad": "Activation vocale",
@@ -172,6 +173,7 @@
     "disabled": "désactivé",
     "debug": {
       "transport": "Transport",
+      "encryption": "Chiffrement",
       "forceTcp": "Forcer TCP",
       "inputDevice": "Périphérique d'entrée",
       "bitrate": "Débit",

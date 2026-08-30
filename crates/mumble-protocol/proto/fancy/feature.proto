@@ -217,6 +217,19 @@ message PluginDescriptor {
   string name = 2;
   string version = 3;
   bool enabled = 4;
+  // What the plugin says about itself, as JSON: description, author, tags, and
+  // the client manifest a Fancy client renders its slash commands and settings
+  // panels from.
+  //
+  // Opaque here, and it stays opaque: the server neither parses nor validates
+  // it beyond checking that it *is* JSON and fits the size cap. Carried on the
+  // descriptor because a registry without it tells a client a plugin exists and
+  // nothing it would need to draw anything.
+  //
+  // Upstream's `PluginRegistryEntry` also carries a `plugin_slot`. Deliberately
+  // absent: it is the index of the plugin among those currently loaded, so it
+  // changes whenever anything is enabled or disabled. Clients key on `name`.
+  string info_json = 5;
 }
 
 message Registry {
@@ -232,6 +245,17 @@ message Opaque {
   bytes payload = 2;
   repeated uint32 recipients = 3;
   uint32 sender = 4;
+  // Which of the plugin's own message kinds this is, as the plugin names them
+  // (`"friends.open"`, `"PluginActivated"`).
+  //
+  // Not a hole in the opacity rule, and worth being precise about why: the
+  // server treats this as a string it copies, never as something it switches
+  // on. A plugin needs it to tell one of its own messages from another, and
+  // upstream's `PluginMessage` (wire 200) carries exactly this field for
+  // exactly that reason. Without it every message a plugin receives is an
+  // undifferentiated blob and the plugin has to invent its own framing inside
+  // `payload` to get the field back.
+  string payload_type = 5;
 }
 
 message Admin {
@@ -522,7 +546,7 @@ message LinkPreviewEnvelope {
 //
 // **Several URLs, one request.** A chat message carries as many links as
 // somebody typed, and a canon that took one per request would have the client
-// either send N frames - through a rate limiter that counts frames - or drop
+// either send N frames (through a rate limiter that counts frames) or drop
 // all but the first, which is what the epoch-0 translation did.
 //
 // The answers come back one `Preview` (or `PreviewError`) per URL, each
@@ -535,13 +559,31 @@ message PreviewRequest {
 
 // Fetched by the server, never by the client, so a chat link cannot be used to
 // probe a viewer's network. The fetch is SSRF-guarded on the server side.
+//
+// The picture travels the same way and for the same reason. `image` carries the
+// bytes themselves, fetched and downscaled here, because the alternative -
+// naming the origin's URL and letting each viewer load it - hands that origin
+// one request per member of the channel, which is the probe the whole service
+// exists to prevent. It is a thumbnail and not the original: a preview is a
+// card in a chat log, and the megabyte behind an `og:image` buys nothing at
+// that size while every recipient pays for it.
 message Preview {
   string request_id = 1;
   string url = 2;
   string title = 3;
   string description = 4;
+  // Reserved for a full-resolution image held by the files service, which
+  // nothing stores yet. `image` below is the thumbnail every client renders.
   string image_key = 5;
   string site = 6;
+  // The downscaled preview image, empty when the page offered none, when the
+  // fetch failed, or when the operator has switched images off.
+  bytes image = 7;
+  // The MIME type of `image` (`image/jpeg`), empty when `image` is.
+  string image_mime = 8;
+  // The size of `image` itself, not of the original the page pointed at.
+  uint32 image_width = 9;
+  uint32 image_height = 10;
 }
 
 message PreviewError {
