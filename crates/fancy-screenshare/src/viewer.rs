@@ -749,6 +749,20 @@ struct H264PassThrough {
     sink: Arc<dyn ViewerSink>,
     clock: RtpClock,
     avcc: AvccStream,
+    /// Set when a new decoder configuration has been emitted and no keyframe
+    /// has been forwarded since. A freshly configured `VideoDecoder` holds no
+    /// reference frames, so a delta chunk fed to it decodes against nothing.
+    /// WebKit does not reject that - it segfaults, taking the whole web
+    /// process (and with it the entire UI) down.
+    ///
+    /// This used to be unreachable: parameter sets only ever accompanied an
+    /// IDR, so a reconfigure was always followed by a key chunk. Live bitrate
+    /// retuning broke that invariant - cros-codecs answers `tune()` by
+    /// starting a new sequence, which re-emits SPS/PPS on an ordinary P
+    /// frame - so the rule is now enforced here rather than assumed.
+    awaiting_key: bool,
+    /// Asks the SFU for an IDR so the gate above can open again.
+    pli: tokio::sync::mpsc::Sender<()>,
 }
 
 impl SampleDelivery for H264PassThrough {
@@ -757,9 +771,20 @@ impl SampleDelivery for H264PassThrough {
         let converted = self.avcc.convert(&sample.data);
         if let Some(config) = converted.config {
             self.sink.on_decoder_config(&self.mid, config);
+            self.awaiting_key = true;
         }
         if converted.data.is_empty() {
             return true; // parameter sets only; nothing to decode
+        }
+        if self.awaiting_key {
+            if !converted.keyframe {
+                // Nothing can decode this yet. Ask for an IDR and drop it;
+                // the alternative is handing the decoder a chunk with no
+                // reference frames.
+                let _ = self.pli.try_send(());
+                return true;
+            }
+            self.awaiting_key = false;
         }
         self.sink.on_frame(ViewerFrame {
             mid: self.mid.clone(),
@@ -799,6 +824,10 @@ fn make_delivery(
             sink: Arc::clone(sink),
             clock: RtpClock::new(),
             avcc: AvccStream::new(),
+            // The first configuration is emitted with the stream's first
+            // frame, which is always an IDR, so the gate opens immediately.
+            awaiting_key: true,
+            pli: pli.clone(),
         })),
         DeliveryMode::Jpeg => {
             // Decode off the async runtime: openh264's decoder is a
@@ -869,7 +898,30 @@ async fn consume_video_track(
     // drops every keyframe as "incomplete" - observed as `keyframes=1`
     // forever and an undecodable delta-only feed. 2048 packets (~2.4 MB)
     // covers 4K keyframes with room for genuine reordering on top.
-    let mut samples = SampleBuilder::new(2048, H264Packet::default(), 90000);
+    //
+    // The time bound exists because the packet bound alone is a trap: one
+    // UNFILLED sequence gap (a packet lost with no RTX to resend it - e.g.
+    // part of the large initial IDR racing the just-established DTLS) makes
+    // the builder buffer EVERYTHING behind the gap until 2048 packets force
+    // eviction - at a keep-alive-ish ~55 packets/s that is a ~35 s freeze,
+    // observed as a viewer stuck "Connecting…" and then a 30-second-late
+    // flood of samples. The window must beat that bound by a lot, but stay
+    // ABOVE the transfer time of the largest legitimate access unit: a
+    // multi-hundred-KB IDR takes the best part of a second to traverse a
+    // modest uplink, and a window sized for "reordering" (500 ms was tried)
+    // evicts such an IDR half-arrived - every keyframe then dies in the
+    // builder and the viewer PLI-loops. Two seconds clears any sanely
+    // sized IDR while capping a genuine-gap stall at the same two seconds
+    // (the push-without-pop watchdog below asks for a resync meanwhile).
+    let mut samples = SampleBuilder::new(2048, H264Packet::default(), 90000)
+        .with_max_time_delay(Duration::from_secs(2));
+    // Push-without-pop watchdog: an eviction resumes the sample flow, but
+    // what pops right after a dropped gap is undecodable delta debris, and
+    // nothing else in this loop would ask for a recovery IDR (the JS layer
+    // only requests keyframes for chunks it actually receives). More pushed
+    // packets than any real AU without a single pop = the builder is stuck
+    // on a gap; ask for an IDR (rate-limited by the PLI task).
+    let mut pushed_since_pop = 0u32;
     let mut buf = vec![0u8; 1600];
     loop {
         if stop.load(Ordering::SeqCst) {
@@ -879,9 +931,24 @@ async fn consume_video_track(
             break; // peer closed or track ended
         };
         samples.push(packet);
+        let mut popped = false;
         while let Some(sample) = samples.pop() {
+            popped = true;
             if !delivery.deliver(sample) {
                 return; // delivery sink gone (decode thread died)
+            }
+        }
+        if popped {
+            pushed_since_pop = 0;
+        } else {
+            pushed_since_pop += 1;
+            if pushed_since_pop.is_multiple_of(512) {
+                tracing::debug!(
+                    %mid,
+                    pushed_since_pop,
+                    "screenshare: viewer sample flow stalled (seq gap?); requesting keyframe"
+                );
+                let _ = pli_tx.try_send(());
             }
         }
     }

@@ -351,6 +351,14 @@ impl EncodePipeline for CameraPipeline {
         "camera"
     }
 
+    fn set_bitrate(&mut self, bps: u32) {
+        self.encoder.set_bitrate(bps);
+    }
+
+    fn content_bitrate(&self) -> Option<u32> {
+        self.encoder.content_bitrate()
+    }
+
     fn next_frame(
         &mut self,
         _wait: std::time::Duration,

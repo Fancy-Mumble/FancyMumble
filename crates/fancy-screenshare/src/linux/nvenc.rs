@@ -55,6 +55,7 @@ const NV_ENC_CREATE_BITSTREAM_BUFFER_VER: u32 = struct_ver(1);
 const NV_ENC_LOCK_INPUT_BUFFER_VER: u32 = struct_ver(1);
 const NV_ENC_LOCK_BITSTREAM_VER: u32 = struct_ver(1) | HI;
 const NV_ENC_PIC_PARAMS_VER: u32 = struct_ver(6) | HI;
+const NV_ENC_RECONFIGURE_PARAMS_VER: u32 = struct_ver(1) | HI;
 
 const NV_ENC_SUCCESS: i32 = 0;
 const NV_ENC_DEVICE_TYPE_CUDA: u32 = 0x1;
@@ -183,6 +184,32 @@ struct InitializeParams {
 }
 const _: () = assert!(size_of::<InitializeParams>() == 1808);
 
+/// `NV_ENC_RECONFIGURE_PARAMS`: re-initialisation parameters for a LIVE
+/// session, which is how the bitrate moves without destroying the encoder
+/// (destroying it would cost an IDR - the burst a congested uplink can least
+/// afford at the moment the target drops).
+///
+/// The C struct opens with a `uint32_t version` followed by an 8-aligned
+/// `NV_ENC_INITIALIZE_PARAMS`, so the compiler inserts four bytes of padding
+/// that must be spelled out here; the trailing bitfield needs four more to
+/// round the whole thing up. Both the total size and the member offset are
+/// asserted below against values read out of `ffnvcodec/nvEncodeAPI.h` (API
+/// 12.1) with a C probe, the same way every other layout in this file is
+/// pinned.
+#[repr(C)]
+struct ReconfigureParams {
+    version: u32,
+    _pad0: u32,
+    re_init: InitializeParams,
+    /// `resetEncoder:1, forceIDR:1, reserved:30`. Always zero: resetting
+    /// would clear the rate-control state (and is only legal on an IDR), and
+    /// forcing an IDR is precisely what this path exists to avoid.
+    flags: u32,
+    _pad1: u32,
+}
+const _: () = assert!(size_of::<ReconfigureParams>() == 1824);
+const _: () = assert!(std::mem::offset_of!(ReconfigureParams, re_init) == 8);
+
 /// `NV_ENC_CREATE_INPUT_BUFFER`.
 #[repr(C)]
 struct CreateInputBuffer {
@@ -304,6 +331,7 @@ type PfnLockBitstream = Option<unsafe extern "C" fn(*mut c_void, *mut LockBitstr
 type PfnLockInput = Option<unsafe extern "C" fn(*mut c_void, *mut LockInputBuffer) -> NvStatus>;
 type PfnDestroyEncoder = Option<unsafe extern "C" fn(*mut c_void) -> NvStatus>;
 type PfnLastError = Option<unsafe extern "C" fn(*mut c_void) -> *const c_char>;
+type PfnReconfigure = Option<unsafe extern "C" fn(*mut c_void, *mut ReconfigureParams) -> NvStatus>;
 
 /// `NV_ENCODE_API_FUNCTION_LIST` - the driver fills the pointer slots in
 /// `NvEncodeAPICreateInstance`; slot order is ABI (append-only in the
@@ -344,7 +372,7 @@ struct FunctionList {
     nv_enc_open_encode_session_ex: PfnOpenSessionEx,
     nv_enc_register_resource: *mut c_void,
     nv_enc_unregister_resource: *mut c_void,
-    nv_enc_reconfigure_encoder: *mut c_void,
+    nv_enc_reconfigure_encoder: PfnReconfigure,
     reserved1: *mut c_void,
     nv_enc_create_mv_buffer: *mut c_void,
     nv_enc_destroy_mv_buffer: *mut c_void,
@@ -358,6 +386,9 @@ struct FunctionList {
     reserved2: [*mut c_void; 275],
 }
 const _: () = assert!(size_of::<FunctionList>() == 2552);
+// The reconfigure slot is the first typed entry past a long run of untyped
+// ones, so its offset is what actually proves that run is counted correctly.
+const _: () = assert!(std::mem::offset_of!(FunctionList, nv_enc_reconfigure_encoder) == 264);
 
 // ─── runtime library loading ────────────────────────────────────────────────
 
@@ -565,6 +596,10 @@ struct Session {
     frame_index: u64,
     /// First frame after (re)creation always gets IDR + headers.
     fresh: bool,
+    /// The config this session was initialised with, kept alive so a retune
+    /// can re-poke its rate-control fields and hand the whole thing back to
+    /// `nvEncReconfigureEncoder`. `None` until `configure_session` succeeds.
+    config: Option<Box<PresetConfig>>,
 }
 
 impl Session {
@@ -593,12 +628,47 @@ impl Session {
     }
 }
 
+/// Write the CBR target into a config blob's rate-control fields.
+fn poke_rate_control(cfg: &mut [u8; 3584], bitrate: u32) {
+    let bytes = bitrate.to_ne_bytes();
+    cfg[cfg_off::AVERAGE_BITRATE..cfg_off::AVERAGE_BITRATE + 4].copy_from_slice(&bytes);
+    cfg[cfg_off::MAX_BITRATE..cfg_off::MAX_BITRATE + 4].copy_from_slice(&bytes);
+}
+
+/// Fill the session geometry NVENC needs, for both the initial
+/// `nvEncInitializeEncoder` and any later `nvEncReconfigureEncoder`.
+///
+/// A reconfigure whose geometry disagrees with the original is rejected (or
+/// silently resets the encoder), so both paths must produce identical params
+/// apart from the config contents - which is why this is one function rather
+/// than two similar blocks that could drift.
+fn fill_init_params(init: &mut InitializeParams, w: u32, h: u32, fps: u32, config: *mut EncConfig) {
+    init.version = NV_ENC_INITIALIZE_PARAMS_VER;
+    init.encode_guid = NV_ENC_CODEC_H264_GUID;
+    init.preset_guid = NV_ENC_PRESET_P4_GUID;
+    init.encode_width = w;
+    init.encode_height = h;
+    init.dar_width = w;
+    init.dar_height = h;
+    init.frame_rate_num = fps;
+    init.frame_rate_den = 1;
+    init.enable_encode_async = 0; // synchronous on Linux
+    init.enable_ptd = 1; // driver decides picture types (we force IDRs)
+    init.encode_config = config;
+    init.max_encode_width = w;
+    init.max_encode_height = h;
+    init.tuning_info = NV_ENC_TUNING_INFO_LOW_LATENCY;
+}
+
 /// Stateful NVENC H.264 encoder consuming RGBA frames; interface-identical
 /// to the VA-API tier so the pipeline can swap tiers freely.
 pub(crate) struct NvencEncoder {
     settings: EncodeSettings,
     _ctx: CudaCtx,
     session: Option<Session>,
+    /// Live rate-control target from the congestion controller, or 0 before
+    /// one has arrived (then [`scaled_bitrate`] alone decides).
+    target_bps: u32,
 }
 
 impl std::fmt::Debug for NvencEncoder {
@@ -665,6 +735,7 @@ impl NvencEncoder {
                 destroy: libs.cu_ctx_destroy,
             },
             session: None,
+            target_bps: 0,
         })
     }
 
@@ -680,6 +751,7 @@ impl NvencEncoder {
             dims: (w, h),
             frame_index: 0,
             fresh: true,
+            config: None,
         };
         match self.configure_session(libs, &mut session, w, h) {
             Ok(bitrate) => {
@@ -703,10 +775,11 @@ impl NvencEncoder {
         w: u32,
         h: u32,
     ) -> Result<u32, String> {
-        let bitrate = self.initialize_encoder(libs, session.encoder, w, h)?;
+        let (bitrate, config) = self.initialize_encoder(libs, session.encoder, w, h)?;
         let (input, output) = create_io_buffers(libs, session.encoder, w, h)?;
         session.input = input;
         session.output = output;
+        session.config = Some(config);
         Ok(bitrate)
     }
 
@@ -719,7 +792,7 @@ impl NvencEncoder {
         encoder: *mut c_void,
         w: u32,
         h: u32,
-    ) -> Result<u32, String> {
+    ) -> Result<(u32, Box<PresetConfig>), String> {
         let get_preset = libs
             .fns
             .nv_enc_get_encode_preset_config_ex
@@ -743,7 +816,7 @@ impl NvencEncoder {
             return Err(nv_err(libs, encoder, "nvEncGetEncodePresetConfigEx", r));
         }
 
-        let bitrate = scaled_bitrate(&self.settings, w, h);
+        let bitrate = self.effective_bitrate(w, h);
         let cfg = &mut preset.preset_cfg.bytes;
         cfg[..4].copy_from_slice(&NV_ENC_CONFIG_VER.to_ne_bytes());
         let poke_u32 = |cfg: &mut [u8; 3584], off: usize, v: u32| {
@@ -754,8 +827,7 @@ impl NvencEncoder {
         poke_u32(cfg, cfg_off::GOP_LENGTH, NVENC_INFINITE_GOPLENGTH);
         poke_u32(cfg, cfg_off::FRAME_INTERVAL_P, 1);
         poke_u32(cfg, cfg_off::RC_MODE, NV_ENC_PARAMS_RC_CBR);
-        poke_u32(cfg, cfg_off::AVERAGE_BITRATE, bitrate);
-        poke_u32(cfg, cfg_off::MAX_BITRATE, bitrate);
+        poke_rate_control(cfg, bitrate);
 
         let fps = self.settings.max_fps.clamp(1.0, 240.0).round() as u32;
         let init_fn = libs
@@ -764,28 +836,75 @@ impl NvencEncoder {
             .ok_or("nvEncInitializeEncoder missing")?;
         // SAFETY: zeroed + fully filled below.
         let mut init: Box<InitializeParams> = unsafe { Box::new(std::mem::zeroed()) };
-        init.version = NV_ENC_INITIALIZE_PARAMS_VER;
-        init.encode_guid = NV_ENC_CODEC_H264_GUID;
-        init.preset_guid = NV_ENC_PRESET_P4_GUID;
-        init.encode_width = w;
-        init.encode_height = h;
-        init.dar_width = w;
-        init.dar_height = h;
-        init.frame_rate_num = fps;
-        init.frame_rate_den = 1;
-        init.enable_encode_async = 0; // synchronous on Linux
-        init.enable_ptd = 1; // driver decides picture types (we force IDRs)
-        init.encode_config = &mut preset.preset_cfg;
-        init.max_encode_width = w;
-        init.max_encode_height = h;
-        init.tuning_info = NV_ENC_TUNING_INFO_LOW_LATENCY;
+        fill_init_params(&mut init, w, h, fps, &mut preset.preset_cfg);
         // SAFETY: live encoder, valid init struct (config points into
         // `preset`, alive for the duration of the call).
         let r = unsafe { init_fn(encoder, init.as_mut()) };
         if r != NV_ENC_SUCCESS {
             return Err(nv_err(libs, encoder, "nvEncInitializeEncoder", r));
         }
-        Ok(bitrate)
+        Ok((bitrate, preset))
+    }
+
+    /// The target for a `w` x `h` frame, never above what the content needs.
+    fn effective_bitrate(&self, w: u32, h: u32) -> u32 {
+        let ceiling = scaled_bitrate(&self.settings, w, h);
+        if self.target_bps == 0 {
+            ceiling
+        } else {
+            self.target_bps.min(ceiling)
+        }
+    }
+
+    /// Retarget rate control on the live session.
+    ///
+    /// `nvEncReconfigureEncoder` takes a full re-initialisation, so the
+    /// geometry handed back must match what the session was created with -
+    /// hence the shared [`fill_init_params`]. Only the rate-control fields of
+    /// the retained config change, and both `resetEncoder` and `forceIDR`
+    /// stay clear, so the encoder keeps its reference chain and its
+    /// rate-control state and emits no keyframe.
+    pub(crate) fn set_bitrate(&mut self, bps: u32) {
+        if self.target_bps == bps {
+            return;
+        }
+        self.target_bps = bps;
+        let Ok(libs) = libs() else { return };
+        let Some(reconfigure) = libs.fns.nv_enc_reconfigure_encoder else {
+            tracing::debug!("screenshare: NVENC driver has no reconfigure entry point");
+            return;
+        };
+        let settings = self.settings;
+        let fps = settings.max_fps.clamp(1.0, 240.0).round() as u32;
+        let Some(session) = self.session.as_mut() else {
+            return; // no session yet; creation will pick the target up
+        };
+        let (w, h) = session.dims;
+        let effective = bps.min(scaled_bitrate(&settings, w, h));
+        let encoder = session.encoder;
+        let Some(config) = session.config.as_mut() else {
+            return;
+        };
+        poke_rate_control(&mut config.preset_cfg.bytes, effective);
+
+        // SAFETY: zeroed + fully filled below.
+        let mut re: Box<ReconfigureParams> = unsafe { Box::new(std::mem::zeroed()) };
+        re.version = NV_ENC_RECONFIGURE_PARAMS_VER;
+        re.flags = 0;
+        let cfg_ptr: *mut EncConfig = &mut config.preset_cfg;
+        fill_init_params(&mut re.re_init, w, h, fps, cfg_ptr);
+        // SAFETY: live encoder handle and a version-stamped params struct
+        // whose config pointer targets the session-owned config, which
+        // outlives the call.
+        let r = unsafe { reconfigure(encoder, re.as_mut()) };
+        if r == NV_ENC_SUCCESS {
+            tracing::debug!(bps = effective, "screenshare: NVENC retuned");
+        } else {
+            tracing::warn!(
+                "screenshare: {}",
+                nv_err(libs, encoder, "nvEncReconfigureEncoder", r)
+            );
+        }
     }
 
     /// Encode one RGBA frame (interface-identical to the VA-API tier).

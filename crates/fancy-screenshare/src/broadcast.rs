@@ -25,8 +25,8 @@
 //! protocol / frontend dependency so the Tauri and Qt clients share it.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant, SystemTime};
 
 use bytes::Bytes;
 use tokio::runtime::Runtime;
@@ -43,6 +43,8 @@ use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtcp::payload_feedbacks::full_intra_request::FullIntraRequest;
 use webrtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication;
+use webrtc::rtcp::receiver_report::ReceiverReport;
+use webrtc::rtcp::reception_report::ReceptionReport;
 use webrtc::rtp::codecs::h264::H264Payloader;
 use webrtc::rtp::header::Header;
 use webrtc::rtp::packet::Packet;
@@ -54,6 +56,9 @@ use webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirecti
 use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 
+use crate::congestion::{
+    BitrateAllocator, CongestionController, CongestionSnapshot, FeedbackSample, TrackBudget,
+};
 use crate::encode::{EncodeSettings, EncodedFrame};
 use crate::pipeline::{create_pipeline, EncodePipeline};
 use crate::sources::{self, SourceKind};
@@ -131,6 +136,10 @@ pub struct ScreenBroadcaster {
     sink: Arc<dyn SignalSink>,
     /// The sources being captured, in track (mid) order.
     sources: Vec<BroadcastSource>,
+    /// Uplink estimate, fed by the SFU's receiver reports.
+    controller: Arc<Mutex<CongestionController>>,
+    /// Splits that estimate across the tracks.
+    allocator: Arc<BitrateAllocator>,
 }
 
 impl std::fmt::Debug for ScreenBroadcaster {
@@ -229,15 +238,26 @@ impl ScreenBroadcaster {
             }
         });
 
+        // One estimator per broadcast: bandwidth is a property of the path,
+        // not of a track, so screen and camera share it and the allocator
+        // splits the result.
+        let controller = Arc::new(Mutex::new(CongestionController::new(Instant::now())));
+        let kinds: Vec<SourceKind> = sources.iter().map(|s| s.kind).collect();
+        let allocator = Arc::new(BitrateAllocator::new(&kinds));
+
         // One RTCP keyframe flag per track: a viewer's PLI for the camera
         // track must not force IDRs on the (much more expensive) screen track.
-        let keyframe_flags = Self::spawn_keyframe_listener(&runtime, &pc, sources.len());
+        // The same listener folds receiver reports into the estimate.
+        let keyframe_flags =
+            Self::spawn_feedback_listener(&runtime, &pc, sources.len(), &controller);
+        Self::spawn_budget_ticker(&runtime, &controller, &allocator, &stop);
 
         let capture_threads = sources
             .iter()
             .zip(tracks)
             .zip(keyframe_flags)
-            .map(|((source, track), keyframe_flag)| {
+            .zip(allocator.budgets().iter().cloned())
+            .map(|(((source, track), keyframe_flag), budget)| {
                 // The user's stream settings are display-oriented; the
                 // "screen share" text mode caps at 5 fps, which would turn a
                 // CAMERA track into a slideshow. A webcam never benefits from
@@ -253,13 +273,17 @@ impl ScreenBroadcaster {
                     settings
                 };
                 Self::spawn_capture_thread(
-                    *source,
-                    settings,
-                    track,
-                    Arc::clone(&stop),
+                    CaptureTask {
+                        source: *source,
+                        settings,
+                        track,
+                        stop: Arc::clone(&stop),
+                        sink: Arc::clone(&sink),
+                        rt: runtime.handle().clone(),
+                        keyframe_flag,
+                        budget,
+                    },
                     &sink,
-                    runtime.handle().clone(),
-                    keyframe_flag,
                 )
             })
             .collect();
@@ -272,7 +296,30 @@ impl ScreenBroadcaster {
             capture_threads,
             sink,
             sources,
+            controller,
+            allocator,
         })
+    }
+
+    /// What the uplink estimator currently believes, for the stats UI.
+    ///
+    /// Cheap enough to poll at 1 Hz: it copies a handful of scalars out from
+    /// behind the controller's mutex. Returns the default snapshot if the
+    /// mutex is poisoned - stats must never take a broadcast down.
+    pub fn congestion(&self) -> CongestionSnapshot {
+        self.controller
+            .lock()
+            .map(|c| c.snapshot())
+            .unwrap_or_default()
+    }
+
+    /// Per-track send targets in bits per second, in track (mid) order.
+    pub fn track_targets(&self) -> Vec<u32> {
+        self.allocator
+            .budgets()
+            .iter()
+            .map(|b| b.target_bps())
+            .collect()
     }
 
     /// The capture sources this broadcast is streaming, in track (mid) order.
@@ -495,19 +542,23 @@ impl ScreenBroadcaster {
         Ok((pc, tracks))
     }
 
-    /// Listen for RTCP PLI/FIR from the SFU and flag keyframe requests.
-    /// Returns one flag per track (sender order == transceiver add order ==
-    /// source order), each polled by its own capture loop.
-    fn spawn_keyframe_listener(
+    /// Listen for RTCP from the SFU: flag keyframe requests (PLI/FIR) and
+    /// fold receiver reports into the congestion estimate.
+    ///
+    /// Returns one keyframe flag per track (sender order == transceiver add
+    /// order == source order), each polled by its own capture loop.
+    fn spawn_feedback_listener(
         runtime: &Runtime,
         pc: &Arc<RTCPeerConnection>,
         track_count: usize,
+        controller: &Arc<Mutex<CongestionController>>,
     ) -> Vec<Arc<AtomicBool>> {
         let flags: Vec<Arc<AtomicBool>> = (0..track_count)
             .map(|_| Arc::new(AtomicBool::new(false)))
             .collect();
         let senders_pc = Arc::clone(pc);
         let listener_flags = flags.clone();
+        let listener_controller = Arc::clone(controller);
         let _detached = runtime.spawn(async move {
             let paired = senders_pc
                 .get_senders()
@@ -515,36 +566,57 @@ impl ScreenBroadcaster {
                 .into_iter()
                 .zip(listener_flags);
             for (sender, flag) in paired {
-                let _detached = tokio::spawn(watch_sender_keyframes(sender, flag));
+                let _detached = tokio::spawn(watch_sender_feedback(
+                    sender,
+                    flag,
+                    Arc::clone(&listener_controller),
+                ));
             }
         });
         flags
     }
 
+    /// Re-split the uplink estimate across the tracks once a second, and log
+    /// what the link is doing every five.
+    ///
+    /// Deliberately a slow tick rather than a recalculation per report: the
+    /// controller already rate-limits itself to one move per RTT, and the
+    /// capture loops only act on a change of more than a few percent, so a
+    /// faster tick would just burn wake-ups.
+    fn spawn_budget_ticker(
+        runtime: &Runtime,
+        controller: &Arc<Mutex<CongestionController>>,
+        allocator: &Arc<BitrateAllocator>,
+        stop: &Arc<AtomicBool>,
+    ) {
+        let controller = Arc::clone(controller);
+        let allocator = Arc::clone(allocator);
+        let stop = Arc::clone(stop);
+        let _detached = runtime.spawn(async move {
+            let mut ticks = 0u32;
+            while !stop.load(Ordering::SeqCst) {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                let Some(snapshot) = budget_tick(&controller, &allocator) else {
+                    return;
+                };
+                ticks += 1;
+                if ticks.is_multiple_of(5) {
+                    log_uplink_estimate(&snapshot);
+                }
+            }
+        });
+    }
+
     /// The blocking capture -> encode -> write loop on its own OS thread.
     fn spawn_capture_thread(
-        source: BroadcastSource,
-        settings: EncodeSettings,
-        track: Arc<TrackLocalStaticRTP>,
-        stop: Arc<AtomicBool>,
+        task: CaptureTask,
         sink: &Arc<dyn SignalSink>,
-        rt: tokio::runtime::Handle,
-        keyframe_flag: Arc<AtomicBool>,
     ) -> std::thread::JoinHandle<()> {
-        let thread_sink = Arc::clone(sink);
         let sink = Arc::clone(sink);
         std::thread::Builder::new()
             .name("screenshare-capture".into())
             .spawn(move || {
-                capture_loop(
-                    source,
-                    settings,
-                    &track,
-                    &stop,
-                    &thread_sink,
-                    &rt,
-                    &keyframe_flag,
-                );
+                capture_loop(&task);
             })
             .unwrap_or_else(|e| {
                 // Spawning a thread only fails under resource exhaustion; the
@@ -712,9 +784,22 @@ impl SendLeg {
         let write_start = Instant::now();
         let failed = rt.block_on(async {
             let mut failed = 0u32;
-            for packet in &packets {
-                if track.write_rtp_with_extensions(packet, &[]).await.is_err() {
-                    failed += 1;
+            // Pace large frames: a keyframe's few hundred RTP packets
+            // written back-to-back leave as one wire-speed burst, and a
+            // burst that overflows any queue on the path tail-drops the
+            // very packets the frame needs to be complete - observed as
+            // keyframes dying in transit while deltas survive. Spreading
+            // the burst a few milliseconds wide is what real WebRTC
+            // pacers do; the cost is ~2 ms per 32 packets, well under a
+            // frame interval for anything but the largest IDRs.
+            const PACE_CHUNK: usize = 32;
+            for (i, chunk) in packets.chunks(PACE_CHUNK).enumerate() {
+                if i > 0 {
+                    tokio::time::sleep(Duration::from_millis(2)).await;
+                }
+                for packet in chunk {
+                    let err = track.write_rtp_with_extensions(packet, &[]).await.is_err();
+                    failed += u32::from(err);
                 }
             }
             failed
@@ -788,9 +873,17 @@ impl SendLeg {
 /// decided by [`create_pipeline`]. A failing source fails the WHOLE
 /// broadcast (the embedder tears down and reports), keeping partial-share
 /// states out of the UI.
-/// One sender's RTCP read loop: set `flag` whenever the SFU asks for a
-/// keyframe (PLI or FIR), until the sender closes. One task per track.
-async fn watch_sender_keyframes(sender: Arc<RTCRtpSender>, flag: Arc<AtomicBool>) {
+/// One sender's RTCP read loop, until the sender closes. One task per track.
+///
+/// Two jobs: set `flag` whenever the SFU asks for a keyframe (PLI or FIR),
+/// and fold every receiver report into the shared uplink estimate. Both
+/// arrive on the same stream and nothing filters them - the reports were
+/// always here, they were simply never read.
+async fn watch_sender_feedback(
+    sender: Arc<RTCRtpSender>,
+    flag: Arc<AtomicBool>,
+    controller: Arc<Mutex<CongestionController>>,
+) {
     while let Ok((packets, _)) = sender.read_rtcp().await {
         for packet in packets {
             let any = packet.as_any();
@@ -798,20 +891,144 @@ async fn watch_sender_keyframes(sender: Arc<RTCRtpSender>, flag: Arc<AtomicBool>
                 || any.downcast_ref::<FullIntraRequest>().is_some();
             if is_keyframe_request {
                 flag.store(true, Ordering::SeqCst);
+                continue;
+            }
+            if let Some(report) = any.downcast_ref::<ReceiverReport>() {
+                note_receiver_report(&controller, report);
             }
         }
     }
 }
 
-fn capture_loop(
+/// Fold one receiver report into the estimate.
+///
+/// A report block per SSRC; we take the WORST loss among them. The blocks
+/// describe one path, so the worst is the one that is actually hurting, and
+/// averaging would let a healthy track mask a dying one.
+fn note_receiver_report(controller: &Mutex<CongestionController>, report: &ReceiverReport) {
+    let Some(worst) = report
+        .reports
+        .iter()
+        .max_by_key(|block| block.fraction_lost)
+    else {
+        return;
+    };
+    let sample = FeedbackSample {
+        // RFC 3550: fraction_lost is the loss fraction scaled by 256.
+        fraction_lost: f32::from(worst.fraction_lost) / 256.0,
+        rtt: rtt_from_report(worst),
+    };
+    if let Ok(mut ctrl) = controller.lock() {
+        ctrl.on_feedback(sample, Instant::now());
+    }
+}
+
+/// Round-trip time from a reception report block, per RFC 3550 section 6.4.1:
+/// `RTT = now - last_sender_report - delay_since_last_sender_report`, all in
+/// the middle 32 bits of an NTP timestamp (16.16 fixed-point seconds).
+///
+/// `None` when the receiver has not yet heard a sender report from us
+/// (`last_sender_report == 0`), or when the arithmetic yields something
+/// implausible - a stale or wrapped report must not poison the control
+/// interval.
+fn rtt_from_report(block: &ReceptionReport) -> Option<Duration> {
+    if block.last_sender_report == 0 {
+        return None;
+    }
+    let elapsed = ntp_middle_32(SystemTime::now())
+        .wrapping_sub(block.last_sender_report)
+        .wrapping_sub(block.delay);
+    // 16.16 fixed point: 65536 units == 1 s. Anything past 10 s is nonsense.
+    if elapsed == 0 || elapsed > 10 * 65_536 {
+        return None;
+    }
+    Some(Duration::from_secs_f64(f64::from(elapsed) / 65_536.0))
+}
+
+/// The middle 32 bits of the NTP timestamp for `now` - the representation
+/// RTCP reports carry, being the low 16 bits of the seconds and the high 16
+/// of the fraction.
+fn ntp_middle_32(now: SystemTime) -> u32 {
+    /// Seconds between the NTP epoch (1900) and the Unix epoch (1970).
+    const NTP_EPOCH_OFFSET_SECS: u64 = 2_208_988_800;
+    let since = now
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = since.as_secs().wrapping_add(NTP_EPOCH_OFFSET_SECS);
+    let frac = (u64::from(since.subsec_nanos()) << 32) / 1_000_000_000;
+    ((secs.wrapping_shl(32) | frac) >> 16) as u32
+}
+
+/// One tick of the budget loop: refresh the ceiling from what the tracks
+/// report their content can use, then split the estimate across them.
+///
+/// `None` means the controller's mutex is poisoned and the loop should end;
+/// there is no useful estimate to distribute after that.
+fn budget_tick(
+    controller: &Mutex<CongestionController>,
+    allocator: &BitrateAllocator,
+) -> Option<CongestionSnapshot> {
+    let ceiling = allocator.total_ceiling();
+    let snapshot = {
+        let mut ctrl = controller.lock().ok()?;
+        if ceiling > 0 {
+            ctrl.set_ceiling(ceiling);
+        }
+        ctrl.snapshot()
+    };
+    allocator.apply(snapshot.target_bps);
+    Some(snapshot)
+}
+
+/// Periodic one-line summary of what the uplink is doing.
+fn log_uplink_estimate(snapshot: &CongestionSnapshot) {
+    tracing::debug!(
+        target_kbps = snapshot.target_bps / 1000,
+        ceiling_kbps = snapshot.ceiling_bps / 1000,
+        loss_pct = snapshot.fraction_lost * 100.0,
+        rtt_ms = snapshot.rtt_ms,
+        reports = snapshot.reports,
+        "screenshare: uplink estimate",
+    );
+}
+
+/// Whether a new target differs enough from the applied one to be worth a
+/// retune. Encoders re-plan rate control on every change, so chasing every
+/// few-hundred-bit wobble costs more than it buys.
+fn moved_materially(applied_bps: u32, target_bps: u32) -> bool {
+    if applied_bps == 0 {
+        return true;
+    }
+    let delta = applied_bps.abs_diff(target_bps);
+    u64::from(delta) * 100 >= u64::from(applied_bps) * 5
+}
+
+/// Everything one capture thread needs, bundled: the positional list grew
+/// past what a reader can hold, and every field is per-track state that
+/// travels together anyway.
+struct CaptureTask {
     source: BroadcastSource,
     settings: EncodeSettings,
-    track: &TrackLocalStaticRTP,
-    stop: &AtomicBool,
-    sink: &Arc<dyn SignalSink>,
-    rt: &tokio::runtime::Handle,
-    keyframe_flag: &AtomicBool,
-) {
+    track: Arc<TrackLocalStaticRTP>,
+    stop: Arc<AtomicBool>,
+    sink: Arc<dyn SignalSink>,
+    rt: tokio::runtime::Handle,
+    /// Set by the RTCP listener when the SFU asks this track for an IDR.
+    keyframe_flag: Arc<AtomicBool>,
+    /// This track's slice of the uplink estimate.
+    budget: Arc<TrackBudget>,
+}
+
+fn capture_loop(task: &CaptureTask) {
+    let source = task.source;
+    let settings = task.settings;
+    let track = &task.track;
+    let stop = &task.stop;
+    let sink = &task.sink;
+    let rt = &task.rt;
+    let keyframe_flag = &task.keyframe_flag;
+    let budget = &task.budget;
+
     let mut pipeline: Box<dyn EncodePipeline> =
         match create_pipeline(source.kind, source.id, settings) {
             Ok(p) => p,
@@ -850,9 +1067,24 @@ fn capture_loop(
     const IDLE_REPEAT: Duration = Duration::from_millis(90);
     let mut last_emit = Instant::now();
     let mut stall = StallWatch::new(source.kind);
+    // Bitrate currently programmed into the encoder; 0 = never set.
+    let mut applied_bps = 0u32;
 
     while !stop.load(Ordering::SeqCst) {
         let tick_start = Instant::now();
+
+        // Tell the allocator what this content can use, then take whatever
+        // share of the uplink it granted us. Retuning the live encoder is
+        // deliberately NOT a re-creation: that would force an IDR, and a
+        // keyframe burst is the last thing a shrinking uplink needs.
+        if let Some(ceiling) = pipeline.content_bitrate() {
+            budget.set_ceiling(ceiling);
+        }
+        let target = budget.target_bps();
+        if moved_materially(applied_bps, target) {
+            pipeline.set_bitrate(target);
+            applied_bps = target;
+        }
 
         let force = keyframe_flag.swap(false, Ordering::SeqCst)
             || last_keyframe.elapsed() >= PERIODIC_KEYFRAME;
@@ -979,8 +1211,65 @@ impl StallWatch {
 
 #[cfg(test)]
 mod tests {
-    use super::{RtpStamper, RTP_PAYLOAD_MTU};
-    use std::time::{Duration, Instant};
+    use super::{moved_materially, ntp_middle_32, rtt_from_report, RtpStamper, RTP_PAYLOAD_MTU};
+    use std::time::{Duration, Instant, SystemTime};
+    use webrtc::rtcp::reception_report::ReceptionReport;
+
+    /// A reception report block that claims we sent a sender report `ago`
+    /// before now and the receiver sat on it for `held`.
+    fn report_block(ago: Duration, held: Duration) -> ReceptionReport {
+        let now = ntp_middle_32(SystemTime::now());
+        let ago_units = (ago.as_secs_f64() * 65_536.0) as u32;
+        let held_units = (held.as_secs_f64() * 65_536.0) as u32;
+        ReceptionReport {
+            last_sender_report: now.wrapping_sub(ago_units),
+            delay: held_units,
+            ..ReceptionReport::default()
+        }
+    }
+
+    #[test]
+    fn rtt_is_the_round_trip_minus_the_receivers_own_delay() {
+        // 200 ms since our SR left, of which the receiver held it for 50 ms.
+        let block = report_block(Duration::from_millis(200), Duration::from_millis(50));
+        let rtt = rtt_from_report(&block).expect("a report with an LSR yields an RTT");
+        let ms = rtt.as_millis();
+        assert!((130..=170).contains(&ms), "expected ~150 ms, got {ms} ms");
+    }
+
+    #[test]
+    fn no_rtt_before_the_receiver_has_heard_a_sender_report() {
+        let block = ReceptionReport::default();
+        assert!(rtt_from_report(&block).is_none());
+    }
+
+    #[test]
+    fn an_implausible_rtt_is_discarded_rather_than_believed() {
+        // A report referring to an SR from a minute ago is stale or wrapped;
+        // believing it would freeze the control interval at its maximum.
+        let block = report_block(Duration::from_secs(60), Duration::ZERO);
+        assert!(rtt_from_report(&block).is_none());
+    }
+
+    #[test]
+    fn ntp_middle_32_advances_by_one_unit_per_1_over_65536_second() {
+        let base = SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
+        let a = ntp_middle_32(base);
+        let b = ntp_middle_32(base + Duration::from_secs(1));
+        assert_eq!(b.wrapping_sub(a), 65_536, "one second is 65536 units");
+    }
+
+    #[test]
+    fn the_first_target_always_applies() {
+        assert!(moved_materially(0, 1_000_000));
+    }
+
+    #[test]
+    fn small_wobbles_do_not_retune_the_encoder() {
+        assert!(!moved_materially(4_000_000, 4_100_000), "2.5 % is noise");
+        assert!(moved_materially(4_000_000, 4_300_000), "7.5 % is real");
+        assert!(moved_materially(4_000_000, 3_000_000), "a drop is real");
+    }
 
     /// One Annex-B access unit of `len` payload bytes, NAL type 1 (non-IDR
     /// slice) so the payloader neither buffers it as a parameter set nor

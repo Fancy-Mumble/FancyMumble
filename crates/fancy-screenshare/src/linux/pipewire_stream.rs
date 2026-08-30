@@ -70,6 +70,13 @@ struct LoopState {
     logged_data_type: bool,
     /// Failed dmabuf imports, for rate-limited logging.
     import_errors: u32,
+    /// Producer-side 5 s summary (frames delivered / import cost), so a low
+    /// send fps is attributable: few frames = the compositor's cadence,
+    /// slow imports = our GL readback.
+    stats_window: Option<std::time::Instant>,
+    stats_frames: u32,
+    stats_import: Duration,
+    stats_import_max: Duration,
 }
 
 /// Consumes the portal's PipeWire node on a dedicated loop thread.
@@ -196,8 +203,12 @@ fn run_loop(
     // EGL-enumerated modifiers (empty when EGL/the extension is missing) -
     // generic guesses like LINEAR intersect to nothing on NVIDIA, which is
     // why anything less than real enumeration falls back to shared memory.
-    let modifiers: &[u64] =
-        super::egl_modifiers::dmabuf_modifiers(super::egl_modifiers::DRM_FOURCC_XRGB8888);
+    let modifiers: &[u64] = if capture_forced_to_shm() {
+        tracing::info!("screenshare: DMA-BUF capture disabled by {CAPTURE_ENV}; offering SHM only");
+        &[]
+    } else {
+        super::egl_modifiers::dmabuf_modifiers(super::egl_modifiers::DRM_FOURCC_XRGB8888)
+    };
     let dmabuf_pod = if modifiers.is_empty() {
         None
     } else {
@@ -219,6 +230,10 @@ fn run_loop(
         importer: None,
         logged_data_type: false,
         import_errors: 0,
+        stats_window: None,
+        stats_frames: 0,
+        stats_import: Duration::ZERO,
+        stats_import_max: Duration::ZERO,
     };
 
     let loop_weak_state = mainloop.downgrade();
@@ -326,6 +341,16 @@ fn on_param_changed(
         width = state.info.size().width,
         height = state.info.size().height,
         modifier = state.info.modifier(),
+        framerate = format!(
+            "{}/{}",
+            state.info.framerate().num,
+            state.info.framerate().denom
+        ),
+        max_framerate = format!(
+            "{}/{}",
+            state.info.max_framerate().num,
+            state.info.max_framerate().denom
+        ),
         "screenshare: pipewire format negotiated",
     );
     if state.dmabuf_offered {
@@ -360,6 +385,7 @@ fn on_process(stream: &pw::stream::StreamRef, state: &mut LoopState) {
             "screenshare: pipewire buffer type (DmaBuf = scanout-capable)",
         );
     }
+    let import_start = std::time::Instant::now();
     let frame = if data.type_() == pw::spa::buffer::DataType::DmaBuf {
         let Some(frame) = import_dmabuf_frame(state, data, width, height) else {
             return;
@@ -375,6 +401,28 @@ fn on_process(stream: &pw::stream::StreamRef, state: &mut LoopState) {
         };
         frame
     };
+    let took = import_start.elapsed();
+    state.stats_frames += 1;
+    state.stats_import += took;
+    state.stats_import_max = state.stats_import_max.max(took);
+    let window = state
+        .stats_window
+        .get_or_insert_with(std::time::Instant::now);
+    if window.elapsed() >= Duration::from_secs(5) {
+        tracing::info!(
+            fps = format!(
+                "{:.1}",
+                f64::from(state.stats_frames) / window.elapsed().as_secs_f64()
+            ),
+            import_avg_ms = (state.stats_import / state.stats_frames.max(1)).as_millis() as u64,
+            import_max_ms = state.stats_import_max.as_millis() as u64,
+            "screenshare: capture producer (compositor delivery / frame import)",
+        );
+        state.stats_window = Some(std::time::Instant::now());
+        state.stats_frames = 0;
+        state.stats_import = Duration::ZERO;
+        state.stats_import_max = Duration::ZERO;
+    }
     if let Ok(mut slot) = state.shared.slot.lock() {
         slot.frame = Some(frame);
     }
@@ -392,19 +440,43 @@ fn build_buffers_pod() -> Result<Vec<u8>, String> {
     let object = pw::spa::pod::Object {
         type_: pw::spa::utils::SpaTypes::ObjectParamBuffers.as_raw(),
         id: pw::spa::param::ParamType::Buffers.as_raw(),
-        properties: vec![pw::spa::pod::Property {
-            key: pw::spa::sys::SPA_PARAM_BUFFERS_dataType,
-            flags: pw::spa::pod::PropertyFlags::empty(),
-            value: pw::spa::pod::Value::Choice(pw::spa::pod::ChoiceValue::Int(
-                pw::spa::utils::Choice(
-                    pw::spa::utils::ChoiceFlags::empty(),
-                    pw::spa::utils::ChoiceEnum::Flags {
-                        default: data_types,
-                        flags: vec![data_types],
-                    },
-                ),
-            )),
-        }],
+        properties: vec![
+            pw::spa::pod::Property {
+                key: pw::spa::sys::SPA_PARAM_BUFFERS_dataType,
+                flags: pw::spa::pod::PropertyFlags::empty(),
+                value: pw::spa::pod::Value::Choice(pw::spa::pod::ChoiceValue::Int(
+                    pw::spa::utils::Choice(
+                        pw::spa::utils::ChoiceFlags::empty(),
+                        pw::spa::utils::ChoiceEnum::Flags {
+                            default: data_types,
+                            flags: vec![data_types],
+                        },
+                    ),
+                )),
+            },
+            // Ask for a deep buffer pool. `on_process` holds the newest
+            // buffer for the whole GL import (~5-8 ms measured) because the
+            // dmabuf belongs to the buffer; with the producer's minimal
+            // 2-3 buffer default, a held buffer can leave the compositor
+            // without a free one at a vsync, and it silently skips that
+            // frame - delivery then hovers below the refresh rate with
+            // every pipeline stage looking healthy. Extra dmabufs are
+            // cheap; the producer clamps to what it supports.
+            pw::spa::pod::Property {
+                key: pw::spa::sys::SPA_PARAM_BUFFERS_buffers,
+                flags: pw::spa::pod::PropertyFlags::empty(),
+                value: pw::spa::pod::Value::Choice(pw::spa::pod::ChoiceValue::Int(
+                    pw::spa::utils::Choice(
+                        pw::spa::utils::ChoiceFlags::empty(),
+                        pw::spa::utils::ChoiceEnum::Range {
+                            default: 8,
+                            min: 2,
+                            max: 16,
+                        },
+                    ),
+                )),
+            },
+        ],
     };
     let (cursor, _size) = pw::spa::pod::serialize::PodSerializer::serialize(
         std::io::Cursor::new(Vec::new()),
@@ -430,6 +502,28 @@ enum ModifierSpec<'a> {
 /// DmaBuf-capable `SPA_PARAM_Buffers` answer) is what unlocks Mutter's
 /// direct-scanout recording - SHM monitor streams freeze on fullscreen
 /// surfaces (mutter#3074).
+/// Names the capture buffer type, so a suspected import bug can be bisected
+/// in one restart instead of a rebuild.
+///
+/// `shm` forces plain shared memory by simply not offering any DMA-BUF
+/// modifiers, which is the same path taken on a machine whose EGL cannot
+/// enumerate them - so it exercises a route that already ships, rather than a
+/// debug-only one. Anything else (or unset) keeps the normal negotiation,
+/// which prefers DMA-BUF and falls back to SHM by itself.
+///
+/// | Value  | Capture                                   |
+/// |--------|-------------------------------------------|
+/// | unset  | DMA-BUF when EGL enumerates modifiers, else SHM |
+/// | `shm`  | SHM only                                  |
+const CAPTURE_ENV: &str = "FANCY_SCREENSHARE_CAPTURE";
+
+/// Whether [`CAPTURE_ENV`] asks for shared-memory capture.
+fn capture_forced_to_shm() -> bool {
+    std::env::var(CAPTURE_ENV)
+        .map(|v| v.trim().eq_ignore_ascii_case("shm"))
+        .unwrap_or(false)
+}
+
 fn build_format_pod(formats: &[VideoFormat], spec: &ModifierSpec<'_>) -> Result<Vec<u8>, String> {
     use pw::spa::pod::{ChoiceValue, Property, PropertyFlags, Value};
     use pw::spa::utils::{Choice, ChoiceEnum, ChoiceFlags, Id, SpaTypes};
@@ -547,7 +641,11 @@ fn size_and_framerate_props() -> [pw::spa::pod::Property; 2] {
             value: Value::Choice(ChoiceValue::Fraction(Choice(
                 ChoiceFlags::empty(),
                 ChoiceEnum::Range {
-                    default: Fraction { num: 30, denom: 1 },
+                    // The default is what a producer that does not impose
+                    // its own rate falls back to - ask for 60, not 30, so
+                    // the offer never invites throttling below the pipeline
+                    // cap (`EncodeSettings::max_fps`).
+                    default: Fraction { num: 60, denom: 1 },
                     min: Fraction { num: 0, denom: 1 },
                     max: Fraction {
                         num: 1000,
@@ -607,7 +705,7 @@ fn import_dmabuf_frame(
             }
         });
     }
-    let importer = state.importer.as_ref()?.as_ref()?;
+    let importer = state.importer.as_mut()?.as_mut()?;
     let plane = super::egl_import::DmabufPlane {
         #[allow(
             clippy::cast_possible_truncation,

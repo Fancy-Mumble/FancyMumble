@@ -56,6 +56,32 @@ pub(crate) trait EncodePipeline {
         Ok(None)
     }
 
+    /// Retarget the encoder's rate control, in bits per second.
+    ///
+    /// Called by the capture loop whenever the congestion controller's target
+    /// for this track has moved materially (see
+    /// [`crate::congestion`]). Implementations must retune the LIVE encoder:
+    /// re-creating it would force an IDR, and a keyframe burst is exactly what
+    /// a congested uplink cannot afford at the moment the target drops.
+    ///
+    /// Defaulted to a no-op so a backend that cannot retune (or has not been
+    /// taught to yet) keeps working at its construction-time bitrate, exactly
+    /// as `encode_repeat` is defaulted.
+    fn set_bitrate(&mut self, _bps: u32) {}
+
+    /// What the content currently being encoded can actually use, in bits
+    /// per second, or `None` before the first frame has fixed the encode
+    /// dimensions.
+    ///
+    /// This is the ceiling the congestion controller ramps toward and never
+    /// past - beyond it the extra bitrate buys no visible quality, and
+    /// spending it would only build queues on the uplink. Defaulted to `None`
+    /// ("no opinion"), which leaves the controller at its conservative
+    /// starting estimate.
+    fn content_bitrate(&self) -> Option<u32> {
+        None
+    }
+
     /// Release OS resources (capture sessions, encoder devices). Idempotent.
     fn shutdown(&mut self);
 }
@@ -214,6 +240,14 @@ impl CpuPipeline {
 impl EncodePipeline for CpuPipeline {
     fn name(&self) -> &'static str {
         "cpu"
+    }
+
+    fn set_bitrate(&mut self, bps: u32) {
+        self.encoder.set_bitrate(bps);
+    }
+
+    fn content_bitrate(&self) -> Option<u32> {
+        self.encoder.content_bitrate()
     }
 
     fn next_frame(

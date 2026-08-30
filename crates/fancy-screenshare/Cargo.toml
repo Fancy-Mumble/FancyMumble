@@ -20,6 +20,11 @@ fast_image_resize = "5"
 # H.264 encoder (Cisco openh264, compiled from vendored source with cc -
 # builds on MSVC and MinGW alike, unlike libvpx).
 openh264 = "0.8"
+# The safe wrapper exposes no bitrate setter, so the live retune in
+# `encode::openh264_retune` reaches SetOption through the -sys layer.
+# Already in the tree as openh264's own dependency; naming it here adds
+# no crate, only the ability to name its constants and structs.
+openh264-sys2 = "0.8"
 # Webcam capture for the "Device" source kind (Media Foundation on Windows,
 # V4L2 on Linux, AVFoundation on macOS - per-OS backends behind one API,
 # mirroring the screen pipelines' layering). `decoding` pulls the MJPEG

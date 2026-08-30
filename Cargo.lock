@@ -1747,6 +1747,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "dns-lookup"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf5597a4b7fe5275fc9dcf88ce26326bc8e4cb87d0130f33752d4c5f717793cf"
+dependencies = [
+ "cfg-if 1.0.4",
+ "libc",
+ "socket2 0.6.2",
+ "windows-sys 0.60.2",
+]
+
+[[package]]
 name = "doc-comment"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2127,6 +2139,7 @@ dependencies = [
  "libloading 0.8.9",
  "nokhwa",
  "openh264",
+ "openh264-sys2",
  "pipewire",
  "rand 0.10.2",
  "serde",
@@ -3053,6 +3066,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 
 [[package]]
+name = "httpdate"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
+
+[[package]]
 name = "hyper"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3065,6 +3084,7 @@ dependencies = [
  "http",
  "http-body",
  "httparse",
+ "httpdate",
  "itoa",
  "pin-project-lite",
  "pin-utils",
@@ -4199,6 +4219,7 @@ dependencies = [
  "chrono",
  "cpal",
  "dhat",
+ "dns-lookup",
  "fancy-audio-device",
  "fancy-presence",
  "fancy-screenshare",
@@ -4206,6 +4227,9 @@ dependencies = [
  "futures-util",
  "gtk",
  "hound",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "image",
  "mimalloc",
  "mp4",
@@ -4215,6 +4239,7 @@ dependencies = [
  "objc2-foundation 0.2.2",
  "oboe",
  "openh264",
+ "percent-encoding",
  "png 0.18.1",
  "prost 0.14.3",
  "quick-xml 0.39.2",

@@ -24,6 +24,10 @@ pub mod broadcast;
 mod camera;
 #[cfg(windows)]
 mod camera_directshow;
+/// Sender-side congestion control: the loss-driven AIMD controller and the
+/// per-track bitrate allocator that split its estimate across the tracks of
+/// one broadcast.
+mod congestion;
 pub mod encode;
 #[cfg(all(windows, feature = "gpu"))]
 mod gpu_windows;
@@ -40,6 +44,7 @@ pub mod sources;
 pub mod viewer;
 
 pub use broadcast::{BroadcastSource, BroadcastState, ScreenBroadcaster, SignalSink};
+pub use congestion::CongestionSnapshot;
 #[cfg(all(target_os = "linux", feature = "portal-probe"))]
 pub use linux::portal_probe_main;
 pub use sources::{CaptureSource, SourceKind};
