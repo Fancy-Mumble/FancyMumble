@@ -131,6 +131,9 @@ pub(crate) struct GpuPipeline {
     out_height: u32,
     frame_duration_100ns: i64,
     started_at: Instant,
+    /// Kept so the congestion controller's target can be clamped to what this
+    /// content can use (the encoder was only ever handed the value once).
+    settings: EncodeSettings,
 }
 
 impl std::fmt::Debug for GpuPipeline {
@@ -226,6 +229,7 @@ impl GpuPipeline {
             out_height,
             frame_duration_100ns: (10_000_000.0 / fps) as i64,
             started_at: Instant::now(),
+            settings: *settings,
         })
     }
 
@@ -483,6 +487,37 @@ impl GpuPipeline {
 impl crate::pipeline::EncodePipeline for GpuPipeline {
     fn name(&self) -> &'static str {
         "windows-gpu"
+    }
+
+    fn set_bitrate(&mut self, bps: u32) {
+        let effective = bps.min(scaled_bitrate(
+            self.out_width,
+            self.out_height,
+            &self.settings,
+        ));
+        // The same live knob `submit` already uses for CODECAPI_AVEncVideoForceKeyFrame:
+        // Media Foundation accepts a mean-bitrate change mid-stream without
+        // re-creating the MFT, so no IDR is forced.
+        let rate = variant_u32(effective);
+        let applied = unsafe {
+            self.codec_api
+                .SetValue(&CODECAPI_AVEncCommonMeanBitRate, &rate)
+        };
+        match applied {
+            Ok(()) => tracing::debug!(bps = effective, "screenshare: MF encoder retuned"),
+            Err(e) => tracing::warn!(bps = effective, "screenshare: MF retune failed: {e}"),
+        }
+    }
+
+    fn content_bitrate(&self) -> Option<u32> {
+        if self.out_width == 0 || self.out_height == 0 {
+            return None;
+        }
+        Some(scaled_bitrate(
+            self.out_width,
+            self.out_height,
+            &self.settings,
+        ))
     }
 
     fn next_frame(

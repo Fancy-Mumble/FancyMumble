@@ -12,6 +12,8 @@
 !.env.sample
 
 # ---- Node / frontend (crates/mumble-tauri/ui) ----
+# Any node_modules, including the stray vitest cache a root-level test run leaves.
+node_modules/
 crates/mumble-tauri/ui/node_modules/
 crates/mumble-tauri/ui/dist/
 crates/mumble-tauri/ui/.vite/

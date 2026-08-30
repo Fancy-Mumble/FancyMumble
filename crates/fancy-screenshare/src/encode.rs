@@ -32,6 +32,12 @@ pub trait VideoEncoder: Send {
         rgba: &[u8],
         force_keyframe: bool,
     ) -> Result<Option<EncodedFrame>, String>;
+
+    /// Retarget rate control on the LIVE encoder, in bits per second.
+    ///
+    /// Defaulted to a no-op: a tier that cannot retune keeps its
+    /// construction-time bitrate rather than failing a broadcast.
+    fn set_bitrate(&mut self, _bps: u32) {}
 }
 
 /// Target encode parameters for screen content.
@@ -63,15 +69,22 @@ impl Default for EncodeSettings {
 }
 
 /// Bitrate scaled with the actual pixel rate: `settings.bitrate_bps` is the
-/// budget for 1080p@30, and larger/faster content gets proportionally more.
+/// budget for 1080p@60, and larger/faster content gets proportionally more.
 /// Without this (and with frame skipping, see the encoder config below) real
 /// screen content starves the rate controller. Shared by every encoder tier
 /// so quality is consistent when the pipeline picks a different backend.
+///
+/// The 1080p60 reference (not p30) and the 12 Mbit ceiling are deliberate
+/// restraint: there is no congestion control on the broadcaster leg yet, so
+/// a target beyond what a residential uplink sustains builds queues for a
+/// minute and then collapses into chronic loss - observed as a share that
+/// runs cleanly for ~45 s and then freezes with every keyframe dying in
+/// transit. Real adaptation (RTCP receiver-report driven) is the follow-up.
 pub(crate) fn scaled_bitrate(settings: &EncodeSettings, w: u32, h: u32) -> u32 {
-    let reference = 1920.0 * 1080.0 * 30.0;
+    let reference = 1920.0 * 1080.0 * 60.0;
     let px_rate = f64::from(w) * f64::from(h) * f64::from(settings.max_fps.clamp(1.0, 60.0));
     let scaled = f64::from(settings.bitrate_bps) * (px_rate / reference).max(0.25);
-    scaled.clamp(1_000_000.0, 20_000_000.0) as u32
+    scaled.clamp(1_000_000.0, 12_000_000.0) as u32
 }
 
 /// H.264 encoder backed by openh264. Re-initialises itself transparently
@@ -83,6 +96,9 @@ pub struct H264Encoder {
     /// Dimensions the current `encoder` was initialised with (even-aligned).
     dims: (u32, u32),
     frame: I420Frame,
+    /// Live rate-control target from the congestion controller, or 0 before
+    /// one has arrived (then [`scaled_bitrate`] decides, as it always did).
+    target_bps: u32,
 }
 
 impl std::fmt::Debug for H264Encoder {
@@ -101,6 +117,7 @@ impl H264Encoder {
             encoder: None,
             dims: (0, 0),
             frame: I420Frame::default(),
+            target_bps: 0,
         }
     }
 
@@ -111,11 +128,9 @@ impl H264Encoder {
                 .unwrap_or(4)
                 .min(8);
             let config = EncoderConfig::new()
-                .bitrate(openh264::encoder::BitRate::from_bps(scaled_bitrate(
-                    &self.settings,
-                    w,
-                    h,
-                )))
+                .bitrate(openh264::encoder::BitRate::from_bps(
+                    self.effective_bitrate(w, h),
+                ))
                 .max_frame_rate(openh264::encoder::FrameRate::from_hz(self.settings.max_fps))
                 // CameraVideoRealTime, deliberately: ScreenContentRealTime's
                 // screen-coding tools cost ~7x the encode time on typical
@@ -146,6 +161,71 @@ impl H264Encoder {
             self.dims = (w, h);
         }
         Ok(())
+    }
+
+    /// What this encoder's current content can use, in bits per second, or
+    /// `None` before the first frame has fixed the dimensions. This is the
+    /// ceiling the congestion controller must not ramp past: beyond it the
+    /// extra bitrate buys nothing.
+    pub fn content_bitrate(&self) -> Option<u32> {
+        let (w, h) = self.dims;
+        if w == 0 || h == 0 {
+            None
+        } else {
+            Some(scaled_bitrate(&self.settings, w, h))
+        }
+    }
+
+    /// What this encoder should target for a `w` x `h` frame: the congestion
+    /// controller's number once it has one, never above what the content can
+    /// use, and the pixel-rate curve alone until then.
+    fn effective_bitrate(&self, w: u32, h: u32) -> u32 {
+        let ceiling = scaled_bitrate(&self.settings, w, h);
+        if self.target_bps == 0 {
+            ceiling
+        } else {
+            self.target_bps.min(ceiling)
+        }
+    }
+}
+
+/// Live rate-control retune for openh264.
+///
+/// The safe wrapper has no bitrate setter, so this reaches the C API's
+/// `SetOption` through `Encoder::raw_api`. Re-creating the encoder instead
+/// would force an IDR - a multi-hundred-KB burst at exactly the moment a
+/// congested uplink can least afford one, which is the failure this whole
+/// controller exists to avoid.
+mod openh264_retune {
+    #![allow(
+        unsafe_code,
+        reason = "one FFI SetOption call whose only argument is a stack \
+                  SBitrateInfo we own; the C side copies it and the return \
+                  code is checked"
+    )]
+
+    use openh264::encoder::Encoder;
+    use openh264_sys2::{SBitrateInfo, ENCODER_OPTION_BITRATE, SPATIAL_LAYER_ALL};
+
+    /// Apply `bps` to a live encoder. Returns the C return code on failure.
+    pub(super) fn set_bitrate(encoder: &mut Encoder, bps: u32) -> Result<(), i32> {
+        let mut info = SBitrateInfo {
+            iLayer: SPATIAL_LAYER_ALL,
+            iBitrate: i32::try_from(bps).unwrap_or(i32::MAX),
+        };
+        // SAFETY: `raw_api` hands back the initialised encoder's function
+        // table; `SetOption(ENCODER_OPTION_BITRATE, ...)` reads one
+        // `SBitrateInfo` through the pointer and does not retain it.
+        let rc = unsafe {
+            encoder
+                .raw_api()
+                .set_option(ENCODER_OPTION_BITRATE, std::ptr::addr_of_mut!(info).cast())
+        };
+        if rc == 0 {
+            Ok(())
+        } else {
+            Err(rc)
+        }
     }
 }
 
@@ -186,6 +266,30 @@ impl VideoEncoder for H264Encoder {
             openh264::encoder::FrameType::IDR | openh264::encoder::FrameType::I
         );
         Ok(Some(EncodedFrame { data, keyframe }))
+    }
+
+    fn set_bitrate(&mut self, bps: u32) {
+        if self.target_bps == bps {
+            return;
+        }
+        self.target_bps = bps;
+        // Before the first frame there is no encoder yet; `ensure_encoder`
+        // will pick the new target up when it builds one.
+        let (w, h) = self.dims;
+        if w == 0 || h == 0 {
+            return;
+        }
+        let effective = self.effective_bitrate(w, h);
+        let Some(encoder) = self.encoder.as_mut() else {
+            return;
+        };
+        match openh264_retune::set_bitrate(encoder, effective) {
+            Ok(()) => tracing::debug!(bps = effective, "screenshare: openh264 retuned"),
+            // Non-fatal by design: this is the fallback tier, the one that
+            // exists because the others failed. A share at the wrong bitrate
+            // beats no share.
+            Err(rc) => tracing::warn!(rc, bps = effective, "screenshare: openh264 retune failed"),
+        }
     }
 }
 
@@ -320,6 +424,101 @@ impl YUVSource for I420Frame {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Encode `frames` noisy frames and return the total byte count. Noise is
+    /// the encoder's worst case, which is what makes the rate controller's
+    /// behaviour actually visible.
+    fn encode_noise_bytes(encoder: &mut H264Encoder, w: u32, h: u32, frames: u32) -> usize {
+        let mut rgba = vec![0u8; (w * h * 4) as usize];
+        let mut total = 0usize;
+        for i in 0..frames {
+            fill_bench_frame(&mut rgba, w, i, true);
+            if let Ok(Some(frame)) = encoder.encode_rgba(w, h, &rgba, false) {
+                total += frame.data.len();
+            }
+        }
+        total
+    }
+
+    #[test]
+    fn content_bitrate_is_unknown_before_the_first_frame() {
+        let encoder = H264Encoder::new(EncodeSettings::default());
+        assert_eq!(encoder.content_bitrate(), None);
+    }
+
+    #[test]
+    fn content_bitrate_matches_the_curve_once_dimensions_are_known() {
+        let settings = EncodeSettings::default();
+        let mut encoder = H264Encoder::new(settings);
+        let (w, h) = (640, 360);
+        let rgba = vec![0u8; (w * h * 4) as usize];
+        let _first = encoder.encode_rgba(w, h, &rgba, true);
+        assert_eq!(
+            encoder.content_bitrate(),
+            Some(scaled_bitrate(&settings, w, h))
+        );
+    }
+
+    #[test]
+    fn a_lower_target_shrinks_the_stream() {
+        // 640x360 at the default settings asks for the 1 Mbit floor of the
+        // curve; drop the live target well under it and the encoder must
+        // actually spend fewer bits on the same content.
+        let (w, h) = (640, 360);
+        let mut high = H264Encoder::new(EncodeSettings::default());
+        let mut low = H264Encoder::new(EncodeSettings::default());
+        // Prime both so the encoders exist, then retune only one.
+        let _ = encode_noise_bytes(&mut high, w, h, 2);
+        let _ = encode_noise_bytes(&mut low, w, h, 2);
+        low.set_bitrate(300_000);
+
+        let high_bytes = encode_noise_bytes(&mut high, w, h, 30);
+        let low_bytes = encode_noise_bytes(&mut low, w, h, 30);
+        assert!(
+            low_bytes < high_bytes,
+            "retuned encoder should emit less ({low_bytes} vs {high_bytes} bytes)"
+        );
+    }
+
+    #[test]
+    fn a_retune_does_not_force_a_keyframe() {
+        // The whole point of retuning in place: a shrinking uplink must not
+        // be handed an IDR burst.
+        let (w, h) = (640, 360);
+        let mut encoder = H264Encoder::new(EncodeSettings::default());
+        let mut rgba = vec![0u8; (w * h * 4) as usize];
+        fill_bench_frame(&mut rgba, w, 0, true);
+        let first = encoder.encode_rgba(w, h, &rgba, false);
+        assert!(
+            matches!(first, Ok(Some(ref f)) if f.keyframe),
+            "first frame is always an IDR"
+        );
+
+        encoder.set_bitrate(500_000);
+        for i in 1..6 {
+            fill_bench_frame(&mut rgba, w, i, true);
+            let frame = encoder.encode_rgba(w, h, &rgba, false);
+            assert!(
+                matches!(frame, Ok(Some(ref f)) if !f.keyframe),
+                "frame {i} after a retune must stay a delta frame"
+            );
+        }
+    }
+
+    #[test]
+    fn the_target_never_exceeds_what_the_content_needs() {
+        let settings = EncodeSettings::default();
+        let (w, h) = (640, 360);
+        let mut encoder = H264Encoder::new(settings);
+        let rgba = vec![0u8; (w * h * 4) as usize];
+        let _prime = encoder.encode_rgba(w, h, &rgba, true);
+        encoder.set_bitrate(50_000_000);
+        assert_eq!(
+            encoder.effective_bitrate(w, h),
+            scaled_bitrate(&settings, w, h),
+            "a target above the curve is clamped to the curve"
+        );
+    }
 
     /// Manual stage benchmark: per-stage cost of a 1080p frame for noise
     /// (worst case) and flat-cell board content (e2e-like). Run with

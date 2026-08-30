@@ -11,6 +11,8 @@
 //! (Chromium's zero-copy path) can later slot in as a different
 //! `VideoFrame` impl without touching the encoder.
 
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use cros_codecs::backend::vaapi::encoder::VaapiBackend;
@@ -195,6 +197,9 @@ pub(crate) struct VaapiEncoder {
     settings: EncodeSettings,
     inner: Option<Inner>,
     timestamp: u64,
+    /// Live rate-control target from the congestion controller, or 0 before
+    /// one has arrived (then [`scaled_bitrate`] alone decides).
+    target_bps: u32,
 }
 
 impl std::fmt::Debug for VaapiEncoder {
@@ -210,8 +215,23 @@ impl VaapiEncoder {
     /// exists. Cheap enough to run once per broadcast; fails cleanly on
     /// machines without a (working) driver so callers can fall back.
     pub(crate) fn probe(settings: EncodeSettings) -> Result<Self, String> {
-        let display = libva::Display::open()
-            .ok_or_else(|| "no VA display (no /dev/dri render node or libva driver)".to_owned())?;
+        let mut errors: Vec<String> = Vec::new();
+        for node in render_nodes_by_preference() {
+            match Self::probe_node(&node, settings) {
+                Ok(encoder) => return Ok(encoder),
+                Err(e) => errors.push(format!("{}: {e}", node.display())),
+            }
+        }
+        if errors.is_empty() {
+            return Err("no /dev/dri render node".to_owned());
+        }
+        Err(errors.join("; "))
+    }
+
+    /// Probe ONE render node for an H.264 encode entrypoint.
+    fn probe_node(node: &Path, settings: EncodeSettings) -> Result<Self, String> {
+        let display = libva::Display::open_drm_display(node)
+            .map_err(|e| format!("open_drm_display: {e:?}"))?;
         let entrypoints = display
             .query_config_entrypoints(libva::VAProfile::VAProfileH264Main)
             .map_err(|e| format!("vaQueryConfigEntrypoints: {e}"))?;
@@ -220,11 +240,25 @@ impl VaapiEncoder {
         let low_power = entrypoints.contains(&libva::VAEntrypoint::VAEntrypointEncSliceLP);
         let full_power = entrypoints.contains(&libva::VAEntrypoint::VAEntrypointEncSlice);
         if !low_power && !full_power {
-            return Err("VA driver has no H.264 encode entrypoint".to_owned());
+            return Err("no H.264 encode entrypoint".to_owned());
         }
+        let node_name = node.display().to_string();
         match display.query_vendor_string() {
-            Ok(vendor) => tracing::info!(vendor, low_power, "screenshare: VA-API encoder ready"),
-            Err(_) => tracing::info!(low_power, "screenshare: VA-API encoder ready"),
+            Ok(vendor) => {
+                tracing::info!(
+                    vendor,
+                    low_power,
+                    node = node_name,
+                    "screenshare: VA-API encoder ready"
+                );
+            }
+            Err(_) => {
+                tracing::info!(
+                    low_power,
+                    node = node_name,
+                    "screenshare: VA-API encoder ready"
+                );
+            }
         }
         Ok(Self {
             display,
@@ -232,6 +266,7 @@ impl VaapiEncoder {
             settings,
             inner: None,
             timestamp: 0,
+            target_bps: 0,
         })
     }
 
@@ -244,6 +279,20 @@ impl VaapiEncoder {
         self.inner = None;
 
         let fps = self.settings.max_fps.clamp(1.0, 240.0).round() as u32;
+        // ~2 s GOP. cros-codecs' LowDelay predictor emits a real IDR (new
+        // SPS/PPS, frame_num 0) ONLY when its intra counter wraps - its
+        // `force_keyframe` yields a mid-sequence I-slice without parameter
+        // sets, which no joiner can sync on. Recreating the encoder per
+        // demanded keyframe produced real IDRs but at COLD rate control:
+        // multi-hundred-KB bursts that take longer to traverse a modest
+        // uplink than any viewer-side reordering window tolerates - every
+        // IDR died in transit, each loss PLI'd for the next (a storm that
+        // saturated the uplink and stalled shares for ~30 s). A short
+        // planned GOP is how streaming encoders solve this: the warm rate
+        // controller budgets for the periodic IDR (a few times a P frame,
+        // not tens of), and a PLI simply means the viewer resyncs at the
+        // next wrap, at most one GOP away.
+        let intra_period = u16::try_from((fps * 2).clamp(30, 256)).unwrap_or(256);
         let config = EncoderConfig {
             resolution: Resolution {
                 width: w,
@@ -251,13 +300,11 @@ impl VaapiEncoder {
             },
             profile: Profile::Main,
             level: pick_level(w, h, self.settings.max_fps),
-            pred_structure: PredictionStructure::LowDelay { limit: 2048 },
+            pred_structure: PredictionStructure::LowDelay {
+                limit: intra_period,
+            },
             initial_tunings: Tunings {
-                rate_control: RateControl::ConstantBitrate(u64::from(scaled_bitrate(
-                    &self.settings,
-                    w,
-                    h,
-                ))),
+                rate_control: RateControl::ConstantBitrate(u64::from(self.effective_bitrate(w, h))),
                 framerate: fps,
                 min_quality: 1,
                 max_quality: 51,
@@ -291,6 +338,55 @@ impl VaapiEncoder {
         Ok(())
     }
 
+    /// The target for a `w` x `h` frame: the controller's number once it has
+    /// one, never above what the content can use.
+    fn effective_bitrate(&self, w: u32, h: u32) -> u32 {
+        let ceiling = scaled_bitrate(&self.settings, w, h);
+        if self.target_bps == 0 {
+            ceiling
+        } else {
+            self.target_bps.min(ceiling)
+        }
+    }
+
+    /// Retarget rate control on the live encoder.
+    ///
+    /// cros-codecs applies this at the next frame boundary and, critically,
+    /// does NOT force a keyframe: `apply_tunings` calls `new_sequence`, so the
+    /// next frame is an ordinary P slice that merely carries fresh SPS/PPS.
+    /// That is why [`patch_zero_nal_headers`] reads the real slice type out of
+    /// the RBSP instead of inferring IDR-ness from the presence of an SPS -
+    /// otherwise every retune would masquerade as a keyframe and, on radeonsi,
+    /// stamp a P slice with an IDR NAL header.
+    ///
+    /// The rate-control VARIANT may never change (cros-codecs rejects that);
+    /// we only ever move the CBR target, so the variant is constant by
+    /// construction.
+    pub(crate) fn set_bitrate(&mut self, bps: u32) {
+        if self.target_bps == bps {
+            return;
+        }
+        self.target_bps = bps;
+        let fps = self.settings.max_fps.clamp(1.0, 240.0).round() as u32;
+        let Some((w, h)) = self.inner.as_ref().map(|i| i.dims) else {
+            return; // no encoder yet; ensure_encoder will pick the target up
+        };
+        let effective = self.effective_bitrate(w, h);
+        let tunings = Tunings {
+            rate_control: RateControl::ConstantBitrate(u64::from(effective)),
+            framerate: fps,
+            min_quality: 1,
+            max_quality: 51,
+        };
+        let Some(inner) = self.inner.as_mut() else {
+            return;
+        };
+        match inner.encoder.tune(tunings) {
+            Ok(()) => tracing::debug!(bps = effective, "screenshare: VA-API retuned"),
+            Err(e) => tracing::warn!(bps = effective, "screenshare: VA-API retune failed: {e}"),
+        }
+    }
+
     /// Encode one RGBA frame; `Ok(None)` only if the encoder queued it
     /// without emitting (not expected in blocking mode).
     pub(crate) fn encode_rgba(
@@ -305,6 +401,12 @@ impl VaapiEncoder {
         if w == 0 || h == 0 || rgba.len() < (width as usize) * (height as usize) * 4 {
             return Err("frame too small".to_owned());
         }
+        // `force_keyframe` is deliberately NOT forwarded to cros-codecs
+        // and no longer recreates the encoder: IDRs come from the planned
+        // GOP (see `ensure_encoder`), so a demanded keyframe is satisfied
+        // by the next wrap, at most one GOP (~2 s) away. Forwarding the
+        // flag would produce an unsyncable mid-sequence I-slice instead.
+        let _ = force_keyframe;
         self.ensure_encoder(w, h)?;
 
         let mut nv12 = Vec::new();
@@ -316,7 +418,8 @@ impl VaapiEncoder {
         };
 
         let inner = self.inner.as_mut().ok_or("encoder missing after init")?;
-        let force = force_keyframe || inner.fresh;
+        // First frame after creation/resize: must come out as an IDR.
+        let fresh = inner.fresh;
         inner.fresh = false;
 
         let meta = FrameMetadata {
@@ -340,7 +443,7 @@ impl VaapiEncoder {
                     },
                 ],
             },
-            force_keyframe: force,
+            force_keyframe: false,
         };
         self.timestamp = self.timestamp.wrapping_add(1);
 
@@ -360,8 +463,197 @@ impl VaapiEncoder {
         if data.is_empty() {
             return Ok(None);
         }
+        patch_zero_nal_headers(&mut data, fresh);
         let keyframe = contains_idr(&data);
+        if fresh && !keyframe {
+            // Undecodable stream; the error demotes the broadcast to the
+            // openh264 tier instead of sending it (see GpuPipelineLinux).
+            return Err("first frame yielded no IDR".to_owned());
+        }
         Ok(Some(EncodedFrame { data, keyframe }))
+    }
+}
+
+/// Repair slice NAL headers the driver left as `0x00`.
+///
+/// cros-codecs supplies no packed slice header (its `h264/vaapi.rs` carries
+/// a TODO in place of one), and without it radeonsi writes the slice NAL's
+/// header byte as zero: `00 00 00 01 00 <slice RBSP>` - an invalid NAL every
+/// decoder rejects, while the RBSP itself is sound (ffmpeg's `h264_vaapi` on
+/// the same driver emits the identical RBSP behind a proper header). Rewrite
+/// each zeroed header to what the frame is known to be: type 5 (IDR) when
+/// the access unit starts a sequence - the caller forced it, or the encoder
+/// wrote an SPS, which cros-codecs does exactly on IDRs - else type 1
+/// (non-IDR slice), both as reference pictures. Headers the driver filled in
+/// are left alone, so this is a no-op on drivers without the bug.
+fn patch_zero_nal_headers(data: &mut [u8], forced_idr: bool) {
+    let mut idr = forced_idr;
+    let mut i = 0;
+    while i < data.len() {
+        let rest = &data[i..];
+        let header_at = if rest.starts_with(&[0, 0, 1]) {
+            i + 3
+        } else if rest.starts_with(&[0, 0, 0, 1]) {
+            i + 4
+        } else {
+            i += 1;
+            continue;
+        };
+        match data.get(header_at).copied() {
+            Some(b) if b & 0x1f == 7 => idr = true, // SPS: a sequence starts
+            Some(0) => {
+                // Read the slice type out of the RBSP rather than trusting
+                // the SPS: a live retune emits fresh parameter sets on an
+                // ordinary P frame (see `VaapiEncoder::set_bitrate`), so
+                // "this unit carries an SPS" no longer implies "this is an
+                // IDR". The `idr` flag stays the fallback for a slice header
+                // that will not parse.
+                let intra = data
+                    .get(header_at + 1..)
+                    .and_then(slice_type_is_intra)
+                    .unwrap_or(idr);
+                let repaired = if intra { 0x65 } else { 0x41 };
+                if let Some(slot) = data.get_mut(header_at) {
+                    *slot = repaired;
+                }
+            }
+            _ => {}
+        }
+        i = header_at;
+    }
+}
+
+/// Render nodes worth trying for VA-API encode, best first.
+///
+/// `libva::Display::open` takes the FIRST `/dev/dri` render node. On a hybrid
+/// machine that is the integrated GPU even when every display - and so every
+/// buffer the compositor hands us - lives on the discrete one. The result is
+/// silent and expensive: capture on one GPU, encode on another, with a CPU
+/// bounce in between, and none of it visible in any log.
+///
+/// So the node that drives a connected display is tried first. If none can
+/// encode (NVIDIA's VA driver is a decode-only shim, for instance) the ladder
+/// simply moves on to NVENC, which is the right answer on exactly that
+/// hardware.
+fn render_nodes_by_preference() -> Vec<PathBuf> {
+    let dri = Path::new("/dev/dri");
+    let drm = Path::new("/sys/class/drm");
+    let mut nodes: Vec<String> = std::fs::read_dir(dri)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|name| name.starts_with("renderD"))
+        .collect();
+    nodes.sort();
+    let ranked = rank_render_nodes(&nodes, &display_owning_devices(drm), |name| {
+        pci_device_of(drm, name)
+    });
+    ranked.into_iter().map(|n| dri.join(n)).collect()
+}
+
+/// PCI device paths of the GPUs that drive at least one connected display.
+fn display_owning_devices(drm: &Path) -> HashSet<PathBuf> {
+    let mut owners = HashSet::new();
+    let Ok(entries) = std::fs::read_dir(drm) else {
+        return owners;
+    };
+    for entry in entries.flatten() {
+        let Ok(name) = entry.file_name().into_string() else {
+            continue;
+        };
+        // Connector directories are "card0-DP-1"; the card itself has no dash.
+        if !name.starts_with("card") || !name.contains('-') {
+            continue;
+        }
+        let status = std::fs::read_to_string(drm.join(&name).join("status"));
+        if status.map(|s| s.trim() != "connected").unwrap_or(true) {
+            continue;
+        }
+        let Some((card, _)) = name.split_once('-') else {
+            continue;
+        };
+        if let Some(device) = pci_device_of(drm, card) {
+            let _ = owners.insert(device);
+        }
+    }
+    owners
+}
+
+/// The canonical PCI device a DRM node belongs to.
+fn pci_device_of(drm: &Path, node: &str) -> Option<PathBuf> {
+    std::fs::canonicalize(drm.join(node).join("device")).ok()
+}
+
+/// Order `nodes` so those on a display-owning GPU come first, preserving the
+/// original order within each group.
+///
+/// Split out from the filesystem walk so the ranking itself is testable: the
+/// hardware it exists for (a hybrid laptop, or a desktop with an unused iGPU)
+/// is exactly the hardware CI does not have.
+fn rank_render_nodes(
+    nodes: &[String],
+    display_owners: &HashSet<PathBuf>,
+    device_of: impl Fn(&str) -> Option<PathBuf>,
+) -> Vec<String> {
+    let (preferred, rest): (Vec<String>, Vec<String>) = nodes.iter().cloned().partition(|node| {
+        device_of(node)
+            .map(|dev| display_owners.contains(&dev))
+            .unwrap_or(false)
+    });
+    preferred.into_iter().chain(rest).collect()
+}
+
+/// Whether a slice NAL's RBSP describes an intra slice.
+///
+/// `slice_header()` opens with two unsigned Exp-Golomb values,
+/// `first_mb_in_slice` then `slice_type` (H.264 7.3.3). Types 2, 4, 7 and 9
+/// are I slices - the 5..9 forms only additionally assert that every slice in
+/// the picture shares the type (Table 7-6).
+///
+/// `None` when the bits run out. Emulation-prevention bytes are not unescaped
+/// because they can only follow two consecutive zero bytes, which these first
+/// few bits never produce.
+fn slice_type_is_intra(rbsp: &[u8]) -> Option<bool> {
+    let mut bits = BitReader::new(rbsp);
+    let _first_mb_in_slice = bits.read_ue()?;
+    let slice_type = bits.read_ue()?;
+    Some(matches!(slice_type, 2 | 4 | 7 | 9))
+}
+
+/// Minimal MSB-first bit reader for the head of a slice header.
+struct BitReader<'a> {
+    data: &'a [u8],
+    /// Next bit position, counted from the first bit of `data`.
+    pos: usize,
+}
+
+impl<'a> BitReader<'a> {
+    fn new(data: &'a [u8]) -> Self {
+        Self { data, pos: 0 }
+    }
+
+    fn bit(&mut self) -> Option<u32> {
+        let byte = *self.data.get(self.pos / 8)?;
+        let shift = 7 - (self.pos % 8);
+        self.pos += 1;
+        Some(u32::from((byte >> shift) & 1))
+    }
+
+    /// Read one unsigned Exp-Golomb code.
+    fn read_ue(&mut self) -> Option<u32> {
+        let mut zeros = 0u32;
+        while self.bit()? == 0 {
+            zeros += 1;
+            if zeros > 31 {
+                return None; // not a plausible slice header
+            }
+        }
+        let mut suffix = 0u32;
+        for _ in 0..zeros {
+            suffix = (suffix << 1) | self.bit()?;
+        }
+        Some((1u32 << zeros) - 1 + suffix)
     }
 }
 
@@ -493,6 +785,176 @@ mod tests {
         assert!(super::contains_idr(&data));
         let no_idr = [0u8, 0, 0, 1, 0x67, 0xAA, 0, 0, 1, 0x41, 0x22];
         assert!(!super::contains_idr(&no_idr));
+    }
+
+    /// The hybrid machine this exists for: renderD128 is the unused iGPU,
+    /// renderD129 drives the displays. Taking the first node - what
+    /// `Display::open` does - picks the wrong GPU.
+    #[test]
+    fn the_display_owning_gpu_is_tried_first() {
+        let nodes = vec!["renderD128".to_owned(), "renderD129".to_owned()];
+        let amd = std::path::PathBuf::from("/sys/devices/pci0000:00/0000:0e:00.0");
+        let nvidia = std::path::PathBuf::from("/sys/devices/pci0000:00/0000:03:00.0");
+        let owners: std::collections::HashSet<_> = [nvidia.clone()].into_iter().collect();
+        let ranked = super::rank_render_nodes(&nodes, &owners, |node| match node {
+            "renderD128" => Some(amd.clone()),
+            "renderD129" => Some(nvidia.clone()),
+            _ => None,
+        });
+        assert_eq!(ranked, vec!["renderD129", "renderD128"]);
+    }
+
+    #[test]
+    fn a_single_gpu_machine_keeps_its_order() {
+        let nodes = vec!["renderD128".to_owned()];
+        let dev = std::path::PathBuf::from("/sys/devices/pci0000:00/0000:00:02.0");
+        let owners: std::collections::HashSet<_> = [dev.clone()].into_iter().collect();
+        let ranked = super::rank_render_nodes(&nodes, &owners, |_| Some(dev.clone()));
+        assert_eq!(ranked, vec!["renderD128"]);
+    }
+
+    /// No connected display anywhere (headless, or sysfs unreadable): every
+    /// node stays a candidate, in its original order, so the probe degrades to
+    /// exactly what it did before rather than finding nothing.
+    #[test]
+    fn without_display_owners_nothing_is_dropped() {
+        let nodes = vec!["renderD128".to_owned(), "renderD129".to_owned()];
+        let owners = std::collections::HashSet::new();
+        let ranked = super::rank_render_nodes(&nodes, &owners, |_| None);
+        assert_eq!(ranked, vec!["renderD128", "renderD129"]);
+    }
+
+    #[test]
+    fn slice_type_is_read_from_the_rbsp() {
+        // ue(0) = "1", then ue(7) = "0001000" -> slice_type 7 (I, all slices).
+        assert_eq!(super::slice_type_is_intra(&[0b1000_1000]), Some(true));
+        // ue(0) = "1", then ue(5) = "00110" -> slice_type 5 (P, all slices).
+        assert_eq!(super::slice_type_is_intra(&[0b1001_1010]), Some(false));
+        // ue(0), ue(2) = "011" -> slice_type 2 (I).
+        assert_eq!(super::slice_type_is_intra(&[0b1011_0000]), Some(true));
+        // ue(0), ue(0) = "1" -> slice_type 0 (P).
+        assert_eq!(super::slice_type_is_intra(&[0b1100_0000]), Some(false));
+        // Nothing to read.
+        assert_eq!(super::slice_type_is_intra(&[]), None);
+    }
+
+    /// The regression that live retuning would otherwise introduce: cros-codecs
+    /// answers a `tune()` by starting a new sequence, so the very next frame is
+    /// an ordinary P slice that happens to carry SPS/PPS. Inferring IDR-ness
+    /// from the SPS would both mislabel the frame to the SFU and, on radeonsi,
+    /// write an IDR NAL header onto a P slice.
+    #[test]
+    fn a_p_slice_carrying_new_parameter_sets_is_not_an_idr() {
+        let mut retuned = vec![
+            0, 0, 0, 1, 0x67, 0xAA, // SPS, re-emitted after the retune
+            0, 0, 0, 1, 0x68, 0xBB, // PPS
+            0, 0, 0, 0, 1, 0x00, 0x9A, // zeroed header over a P slice header
+        ];
+        super::patch_zero_nal_headers(&mut retuned, false);
+        assert_eq!(retuned[17], 0x41, "a P slice must stay a P slice");
+        assert!(
+            !super::contains_idr(&retuned),
+            "and must not be reported as a keyframe"
+        );
+    }
+
+    #[test]
+    fn zeroed_nal_headers_are_rewritten() {
+        // An IDR access unit as radeonsi emits it: synthesized SPS/PPS with
+        // real headers, then the driver's slice with a zeroed header byte
+        // (behind the stray zero cros-codecs prepends to each segment).
+        let mut idr = vec![
+            0, 0, 0, 1, 0x67, 0xAA, // SPS
+            0, 0, 0, 1, 0x68, 0xBB, // PPS
+            0, 0, 0, 0, 1, 0x00, 0x88, 0x80, // zeroed slice header
+        ];
+        super::patch_zero_nal_headers(&mut idr, false); // the SPS alone implies IDR
+        assert_eq!(idr[17], 0x65);
+        assert!(super::contains_idr(&idr));
+
+        // A delta frame: lone zeroed slice, no parameter sets.
+        let mut delta = vec![0, 0, 0, 0, 1, 0x00, 0x9A];
+        super::patch_zero_nal_headers(&mut delta, false);
+        assert_eq!(delta[5], 0x41);
+
+        // Forced keyframe with no SPS in the unit still gets the IDR type.
+        let mut forced = vec![0, 0, 0, 1, 0x00, 0x88];
+        super::patch_zero_nal_headers(&mut forced, true);
+        assert_eq!(forced[4], 0x65);
+
+        // A driver without the bug: nothing is touched.
+        let good = [0u8, 0, 0, 1, 0x65, 0x88, 0, 0, 1, 0x41, 0x9A];
+        let mut copy = good.to_vec();
+        super::patch_zero_nal_headers(&mut copy, true);
+        assert_eq!(copy, good);
+    }
+
+    /// The VA-API bitstream contract end to end, on real hardware: the
+    /// stream opens with a full IDR access unit (SPS, PPS and a type-5
+    /// slice), a demanded keyframe mid-sequence yields NO mid-sequence
+    /// I-slice (IDRs come only from the planned GOP), and no NAL may keep
+    /// the zeroed header radeonsi writes when no packed slice header is
+    /// supplied.
+    #[test]
+    #[ignore = "needs a VA-API H.264 encode device"]
+    fn forced_keyframes_are_idrs_on_a_real_device() {
+        fn nal_types(data: &[u8]) -> Vec<u8> {
+            let mut out = Vec::new();
+            let mut i = 0;
+            while i < data.len() {
+                let rest = &data[i..];
+                let at = if rest.starts_with(&[0, 0, 1]) {
+                    i + 3
+                } else if rest.starts_with(&[0, 0, 0, 1]) {
+                    i + 4
+                } else {
+                    i += 1;
+                    continue;
+                };
+                if let Some(b) = data.get(at) {
+                    out.push(b & 0x1f);
+                }
+                i = at;
+            }
+            out
+        }
+
+        let mut enc =
+            super::VaapiEncoder::probe(crate::encode::EncodeSettings::default()).expect("probe");
+        let (w, h) = (640u32, 480u32);
+        for i in 0..8u8 {
+            // Changing content so the encoder has real deltas to code.
+            let mut rgba = vec![0u8; (w * h * 4) as usize];
+            for (p, px) in rgba.chunks_exact_mut(4).enumerate() {
+                px[0] = ((p % 251) as u8).wrapping_add(i * 29);
+                px[1] = ((p / 7 % 253) as u8).wrapping_add(i * 11);
+                px[2] = i * 29;
+                px[3] = 255;
+            }
+            let force = i == 3 || i == 6;
+            let frame = enc
+                .encode_rgba(w, h, &rgba, force)
+                .expect("encode")
+                .expect("blocking encode always emits");
+            let nals = nal_types(&frame.data);
+            assert!(
+                !nals.contains(&0),
+                "frame {i}: zeroed NAL header survived: {nals:?}"
+            );
+            if i == 0 {
+                assert!(frame.keyframe, "first frame not a keyframe");
+                assert!(
+                    nals.contains(&7) && nals.contains(&8) && nals.contains(&5),
+                    "frame {i}: IDR unit lacks SPS/PPS/IDR: {nals:?}"
+                );
+            } else {
+                // Demanded keyframes are answered by the GOP, not by an
+                // (unsyncable) mid-sequence I-slice; within one GOP of the
+                // start every later frame is a plain P slice.
+                assert!(!frame.keyframe, "frame {i}: unexpected keyframe");
+                assert_eq!(nals, vec![1], "frame {i}: expected one P slice: {nals:?}");
+            }
+        }
     }
 
     #[test]

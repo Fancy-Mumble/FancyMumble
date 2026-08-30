@@ -43,7 +43,7 @@ use std::time::Instant;
 
 pub use portal::set_restore_last_pick;
 
-use crate::encode::{EncodeSettings, EncodedFrame, H264Encoder, VideoEncoder};
+use crate::encode::{scaled_bitrate, EncodeSettings, EncodedFrame, H264Encoder, VideoEncoder};
 use crate::pipeline::{EncodePipeline, FrameScaler, StageTimings};
 use crate::sources::SourceKind;
 
@@ -99,6 +99,38 @@ enum EncoderTier {
     Vaapi(vaapi::VaapiEncoder),
     Nvenc(nvenc::NvencEncoder),
     Cpu(Box<H264Encoder>),
+}
+
+/// Driver name of a GPU that drives a connected display (`nvidia`, `amdgpu`,
+/// `i915`, ...), or `None` when nothing is connected or sysfs is unreadable.
+///
+/// This is how the tier ladder learns which GPU the compositor's buffers
+/// actually live on. A hybrid machine has several render nodes and no way to
+/// tell them apart from `/dev/dri` alone.
+fn display_gpu_driver() -> Option<String> {
+    let drm = std::path::Path::new("/sys/class/drm");
+    for entry in std::fs::read_dir(drm).ok()?.flatten() {
+        let name = entry.file_name().into_string().ok()?;
+        // Connector directories are "card0-DP-1"; the card itself has no dash.
+        let Some((card, _)) = name.split_once('-') else {
+            continue;
+        };
+        if !card.starts_with("card") {
+            continue;
+        }
+        let connected = std::fs::read_to_string(drm.join(&name).join("status"))
+            .map(|s| s.trim() == "connected")
+            .unwrap_or(false);
+        if !connected {
+            continue;
+        }
+        if let Ok(driver) = std::fs::canonicalize(drm.join(card).join("device").join("driver")) {
+            if let Some(base) = driver.file_name().and_then(|n| n.to_str()) {
+                return Some(base.to_owned());
+            }
+        }
+    }
+    None
 }
 
 /// The environment variable that names where the encoder ladder starts.
@@ -236,6 +268,26 @@ impl GpuPipelineLinux {
         // absence.
         let mut passed_over: Vec<String> = Vec::new();
 
+        // On a machine whose displays hang off an NVIDIA card, NVENC is the
+        // right tier and VA-API is a trap: NVIDIA's VA driver is a decode-only
+        // shim, so the VA-API probe walks past it to whatever OTHER GPU can
+        // encode - typically an unused iGPU. Capture then happens on one GPU
+        // and encode on another, which is silent, slow, and (with a compositor
+        // that hands out tiled NVIDIA buffers) a source of corrupt frames.
+        // Only the DEFAULT order is affected; an explicit preference is still
+        // obeyed, so `FANCY_SCREENSHARE_ENCODER=vaapi` can still force it.
+        if preference == EncoderPreference::Vaapi
+            && display_gpu_driver().as_deref() == Some("nvidia")
+        {
+            match nvenc::NvencEncoder::probe(settings) {
+                Ok(nvenc) => {
+                    tracing::info!("screenshare: using NVENC (the displays are on the NVIDIA GPU)");
+                    return EncoderTier::Nvenc(nvenc);
+                }
+                Err(err) => passed_over.push(format!("NVENC (display GPU): {err}")),
+            }
+        }
+
         if preference == EncoderPreference::Vaapi {
             match vaapi::VaapiEncoder::probe(settings) {
                 Ok(vaapi) => return EncoderTier::Vaapi(vaapi),
@@ -298,6 +350,25 @@ impl GpuPipelineLinux {
 }
 
 impl EncodePipeline for GpuPipelineLinux {
+    fn set_bitrate(&mut self, bps: u32) {
+        match &mut self.encoder {
+            EncoderTier::Vaapi(vaapi) => vaapi.set_bitrate(bps),
+            EncoderTier::Nvenc(nvenc) => nvenc.set_bitrate(bps),
+            EncoderTier::Cpu(cpu) => cpu.set_bitrate(bps),
+        }
+    }
+
+    fn content_bitrate(&self) -> Option<u32> {
+        // The tier encodes exactly what the scaler produced, so the scaled
+        // frame's dimensions are the ones the curve must be evaluated at.
+        let img = self.last_scaled.as_ref()?;
+        Some(scaled_bitrate(
+            &self.settings,
+            img.width() & !1,
+            img.height() & !1,
+        ))
+    }
+
     fn name(&self) -> &'static str {
         match self.encoder {
             EncoderTier::Vaapi(_) => "linux-pipewire-vaapi",
@@ -487,5 +558,109 @@ mod tests {
         assert_eq!(EncoderPreference::parse("vaapi-off"), None);
         assert_eq!(EncoderPreference::parse(""), None);
         assert_eq!(EncoderPreference::parse("gpu"), None);
+    }
+}
+
+#[cfg(test)]
+mod perf_probe {
+    use super::*;
+    use std::time::Instant;
+
+    fn frames(w: u32, h: u32) -> Vec<Vec<u8>> {
+        (0..3u32)
+            .map(|i| {
+                let mut rgba = vec![0u8; (w * h * 4) as usize];
+                for (p, px) in rgba.chunks_exact_mut(4).enumerate() {
+                    px[0] = ((p % 251) as u8).wrapping_add((i * 29) as u8);
+                    px[1] = ((p / 7 % 253) as u8).wrapping_add((i * 11) as u8);
+                    px[2] = (i * 97) as u8;
+                    px[3] = 255;
+                }
+                rgba
+            })
+            .collect()
+    }
+
+    fn stats(label: &str, times: &[f64]) {
+        let avg = times.iter().sum::<f64>() / times.len() as f64;
+        let max = times.iter().copied().fold(0.0f64, f64::max);
+        println!("{label}: avg={avg:.2}ms max={max:.2}ms n={}", times.len());
+    }
+
+    #[test]
+    #[ignore = "manual perf probe"]
+    fn stage_timings_1920x1200() {
+        let (w, h) = (1920u32, 1200u32);
+        let inputs = frames(w, h);
+
+        // 1. Fresh 9.2MB alloc + the alpha-force loop (read_frame's tail).
+        let mut t = Vec::new();
+        for i in 0..120 {
+            let start = Instant::now();
+            let mut rgba = vec![7u8; (w * h * 4) as usize];
+            for px in rgba.chunks_exact_mut(4) {
+                px[3] = 255;
+            }
+            let _ = std::hint::black_box(rgba.len());
+            t.push(start.elapsed().as_secs_f64() * 1e3);
+            let _ = std::hint::black_box(i);
+        }
+        stats("alloc+alpha", &t);
+
+        // 2. RGBA -> NV12 with a fresh Vec each frame (encode_rgba today).
+        let mut t = Vec::new();
+        for i in 0..120usize {
+            let src = &inputs[i % 3];
+            let start = Instant::now();
+            let mut nv12 = Vec::new();
+            vaapi::rgba_to_nv12_for_tests(w as usize, w as usize, h as usize, src, &mut nv12);
+            let _ = std::hint::black_box(nv12.len());
+            t.push(start.elapsed().as_secs_f64() * 1e3);
+        }
+        stats("rgba->nv12 (fresh alloc)", &t);
+
+        // 3. VA-API tier: full encode_rgba round trip.
+        match vaapi::VaapiEncoder::probe(EncodeSettings::default()) {
+            Ok(mut enc) => {
+                let mut t = Vec::new();
+                for i in 0..120usize {
+                    let src = &inputs[i % 3];
+                    let start = Instant::now();
+                    let out = enc.encode_rgba(w, h, src, i == 0).expect("vaapi encode");
+                    let _ = std::hint::black_box(out);
+                    t.push(start.elapsed().as_secs_f64() * 1e3);
+                }
+                stats("vaapi encode_rgba (incl nv12+copy)", &t);
+            }
+            Err(e) => println!("vaapi probe failed: {e}"),
+        }
+
+        // 4. NVENC tier: full encode_rgba round trip.
+        match nvenc::NvencEncoder::probe(EncodeSettings::default()) {
+            Ok(mut enc) => {
+                let mut t = Vec::new();
+                for i in 0..120usize {
+                    let src = &inputs[i % 3];
+                    let start = Instant::now();
+                    let out = enc.encode_rgba(w, h, src, i == 0).expect("nvenc encode");
+                    let _ = std::hint::black_box(out);
+                    t.push(start.elapsed().as_secs_f64() * 1e3);
+                }
+                stats("nvenc encode_rgba", &t);
+            }
+            Err(e) => println!("nvenc probe failed: {e}"),
+        }
+
+        // 5. Scaler pass-through sanity (max_dim 1920, frame edge 1920).
+        let mut scaler = FrameScaler::new(1920);
+        let img = image::RgbaImage::from_raw(w, h, inputs[0].clone()).unwrap();
+        let start = Instant::now();
+        let out = scaler.downscale(img);
+        println!(
+            "scaler pass-through: {:.2}ms ({}x{})",
+            start.elapsed().as_secs_f64() * 1e3,
+            out.width(),
+            out.height()
+        );
     }
 }
