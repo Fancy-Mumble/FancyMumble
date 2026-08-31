@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { LocalPlayerEvent, PlayerAdapter } from "./PlayerAdapter";
 import { useWatchSend } from "./useWatchSend";
+import { applyWatchSyncEvent } from "./watchStore";
 import type { WatchPlaybackState, WatchSession } from "./watchTypes";
 
 /** Drift in seconds at which we re-sync the local adapter. */
@@ -78,13 +79,21 @@ export function useWatchSync({ adapter, session, ownSession }: Args): UseWatchSy
       if (!isImportant && now - lastHeartbeatRef.current < HOST_HEARTBEAT_MS) return;
       lastHeartbeatRef.current = now;
       lastSentRef.current = { state: event.state, currentTime: event.currentTime };
-      void sendState(session.sessionId, {
-        type: "state",
+      const outgoing = {
+        type: "state" as const,
         state: event.state,
         currentTime: event.currentTime,
         updatedAtMs: now,
         hostSession: session.hostSession,
-      });
+      };
+      // Apply locally as well as sending. The server does not echo to the
+      // sender, so the host's own store would otherwise never learn that the
+      // host started playing - and a surface drawing from `session.state`
+      // would show a paused session over a running video. Only the host takes
+      // this path, and the inbound-state effect below ignores the host, so
+      // there is no loop.
+      applyWatchSyncEvent({ sessionId: session.sessionId, actor: session.hostSession, event: outgoing });
+      void sendState(session.sessionId, outgoing);
     };
     // Adapters expose `setOnLocalEvent` so the same instance can be
     // re-bound across host/non-host transitions without a remount.

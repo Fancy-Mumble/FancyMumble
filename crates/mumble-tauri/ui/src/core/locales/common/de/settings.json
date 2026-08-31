@@ -178,7 +178,8 @@
     "persistDms": "DM-Verlauf speichern",
     "persistDmsHint": "Mit Freunden ausgetauschte Direktnachrichten werden auf diesem Gerät gespeichert und mit AES-GCM verschlüsselt. Deaktivieren, um DMs nur im Arbeitsspeicher zu behalten; vorhandener Verlauf wird beim Deaktivieren entfernt.",
     "disconnectWarning": "Trennung bestätigen",
-    "disconnectWarningHint": "Vor dem Trennen von einem Server um Bestätigung bitten."
+    "disconnectWarningHint": "Vor dem Trennen von einem Server um Bestätigung bitten.",
+    "logFiles": "Logdateien"
   },
   "shortcuts": {
     "panelTitle": "Tastenkürzel",
@@ -427,6 +428,7 @@
     "identityLabel": "Identität",
     "manageIdentities": "Identitäten verwalten",
     "viewingOtherIdentity": "Du siehst das Profil einer anderen Identität. Änderungen werden lokal gespeichert, aber erst dann an den Server übertragen, wenn du dich mit dieser Identität verbindest.",
+    "tooLarge": "Dein Profil ist zu groß für diesen Server. Versuche ein kleineres Bannerbild oder eine kürzere Biografie.",
     "sectionUsername": "Standard-Nutzername",
     "usernameHint": "Wird vorausgefüllt, wenn du einen neuen Server hinzufügst.",
     "usernamePlaceholder": "Dein Nutzername",
@@ -565,7 +567,8 @@
       "totp_not_enabled": "2FA ist nicht aktiviert.",
       "totp_wrong_code": "Der Code ist ungültig. Prüfe deine Authenticator-App und die Geräteuhr.",
       "totp_generation_failed": "Der Server konnte keinen 2FA-Schlüssel erzeugen.",
-      "unknown": "Der Vorgang ist fehlgeschlagen: {{code}}"
+      "unknown": "Der Vorgang ist fehlgeschlagen: {{code}}",
+      "timeout": "Der Server hat nicht geantwortet. Möglicherweise unterstützt er das noch nicht, oder die Anfrage ging verloren."
     }
   },
   "avatarEditor": {
@@ -704,7 +707,22 @@
     "verifying": "Prüfe…",
     "saved": "Gespeichert",
     "saving": "Speichere…",
-    "saveChanges": "Änderungen speichern"
+    "saveChanges": "Änderungen speichern",
+    "collapseFilters": "Schnellfilter einklappen",
+    "countNote": "{{count}} Einträge geladen",
+    "endlessOff": "Seitenweise, 25 Zeilen auf einmal.",
+    "endlessOn": "Lädt beim Scrollen nach.",
+    "endlessScroll": "Endloses Scrollen",
+    "endOfResults": "Ende der Ergebnisse",
+    "expandFilters": "Schnellfilter ausklappen",
+    "filterCategory": "Kategorien",
+    "nextPage": "Weiter",
+    "pageDashboard": "Übersicht",
+    "pageOf": "Seite {{page}} von {{pages}}",
+    "pageResults": "Ergebnisse",
+    "prevPage": "Zurück",
+    "quickFilters": "Schnellfilter",
+    "resultsLabel": "Ergebnisse"
   },
   "registeredUsers": {
     "title": "Registrierte Nutzer",
@@ -731,7 +749,8 @@
     "actionUnregister": "{{name}} deregistrieren",
     "actionsAriaLabel": "Aktionen für {{name}}",
     "statusBar_one": "{{filtered}} von {{total}} Nutzer",
-    "statusBar_other": "{{filtered}} von {{total}} Nutzern"
+    "statusBar_other": "{{filtered}} von {{total}} Nutzern",
+    "renameAriaLabel": "Benutzername"
   },
   "banList": {
     "title": "Banliste",
@@ -767,7 +786,18 @@
     "saveChanges": "Änderungen speichern",
     "inheritAcls": "ACLs vom übergeordneten Kanal erben",
     "tabRules": "ACL-Regeln ({{count}})",
-    "tabGroups": "Gruppen ({{count}})"
+    "tabGroups": "Gruppen ({{count}})",
+    "cancelDelete": "Abbrechen",
+    "tabUsers": "Benutzer ({{count}})",
+    "privateBadge": "privat",
+    "deleteChannel": "Kanal löschen",
+    "confirmDeleteChannel": "Kanal „{{name}}“ und alles darunter löschen? Das lässt sich nicht rückgängig machen.",
+    "accessAllUsers": "Alle Benutzer haben Zugriff auf diesen Kanal.",
+    "accessAllRegistered": "Alle registrierten Benutzer haben Zugriff auf diesen Kanal.",
+    "accessViaGroup": "Mitglieder von @{{group}}",
+    "accessNoneExplicit": "Es sind keine bestimmten Benutzer freigeschaltet; der Zugriff wird von übergeordneten ACLs geerbt.",
+    "accessUsersHeading": "Benutzer mit Zugriff",
+    "accessOnlineHint": "online"
   },
   "roles": {
     "title": "Serverrollen",
@@ -1219,7 +1249,10 @@
     "unavailable": "Servereinstellungen sind nicht verfügbar. Dieser Server unterstützt möglicherweise keine Laufzeiteinstellungen, oder du hast keine Berechtigung, sie zu ändern.",
     "save": "Änderungen speichern",
     "saving": "Wird gespeichert…",
-    "saved": "Gespeichert"
+    "saved": "Gespeichert",
+    "modeRich": "Rich Text",
+    "modeSource": "HTML",
+    "richTextLossy": "Dieser Willkommenstext nutzt Markup, das der visuelle Editor nicht halten kann — ein Tabellenlayout oder Styling, für das er keine Bedienelemente hat. Ihn dort zu bearbeiten würde die Teile umschreiben, die er nicht zeigen kann, deshalb wird er als HTML bearbeitet."
   },
   "fileServer": {
     "title": "Dateiserver-Speicher",
@@ -1315,6 +1348,71 @@
       "expires": "Läuft ab",
       "actions": "Aktionen"
     },
-    "root": "Stamm"
+    "root": "Stamm",
+    "calendars": {
+      "empty": "Noch keine Benutzerkalender gespeichert.",
+      "size": "Größe",
+      "title": "Aktive Kalender",
+      "updated": "Aktualisiert",
+      "user": "Benutzer (Server:ID)"
+    }
+  },
+  "livery": {
+    "accent": "Akzent",
+    "address": "Operator-API",
+    "addTag": "+ Tag hinzufügen",
+    "artwork": "Artwork",
+    "aura": "Aura",
+    "badImageType": "Diese Datei ist kein PNG, JPEG oder WebP.",
+    "banner": "Banner",
+    "cancel": "Abbrechen",
+    "clampLead": "Beibehalten, aber zur besseren Lesbarkeit aufgehellt:",
+    "clampRenders": "wird dargestellt als",
+    "clampTail": "damit Text lesbar bleibt. Der gespeicherte Wert ist unverändert.",
+    "clear": "Löschen",
+    "close": "Schließen",
+    "colours": "App-Farben",
+    "coloursNote": "optional — nur ein Banner ist ein gängiges Setup",
+    "connectAs": "Verbinden als",
+    "dark": "Dunkel",
+    "darkMode": "Dunkler Modus",
+    "digest": "Digest",
+    "displayName": "Anzeigename",
+    "displayNameHint": "Wird angezeigt neben",
+    "displayNameHintTail": "— niemals anstelle davon.",
+    "dropHint": "zum Ersetzen ablegen",
+    "focusY": "Fokus Y",
+    "icon": "Symbol",
+    "identity": "Identität",
+    "light": "Hell",
+    "lightMode": "Heller Modus",
+    "lightStock": "Oberfläche & Aura sind für Hell nicht gesetzt — Betrachter sehen Standardfarben.",
+    "motd": "Nachricht des Tages",
+    "noBanner": "Kein Banner",
+    "plainText": "Klartext",
+    "previewTitle": "VERBINDUNGSVORSCHAU",
+    "remove": "Entfernen",
+    "removeIcon": "Symbol entfernen",
+    "removeTag": "Tag entfernen",
+    "replace": "Ersetzen",
+    "resized": "Auf {{width}}×{{height}} skaliert, {{before}} → {{after}}.",
+    "save": "Änderungen speichern",
+    "saveMeta": "Es werden nur ausgefüllte Felder gesendet",
+    "stock": "Standard",
+    "surface": "Oberfläche",
+    "tagHref": "https:// (optional)",
+    "tagHrefLabel": "Link",
+    "tagLabel": "Beschriftung",
+    "tagline": "Slogan",
+    "tags": "Tags",
+    "tagsHint": "Tags tragen einen Ton, keine Farbe — sie passen sich dem Theme jedes Betrachters an.",
+    "ticketDenied": "diese Verbindung kann keine automatische Upload-Berechtigung erhalten",
+    "ticketNoAddress": "dieser Server hat keine Operator-API-Adresse veröffentlicht",
+    "ticketUnreachable": "der Server war für eine automatische Upload-Berechtigung nicht erreichbar",
+    "title": "Livery",
+    "token": "Token",
+    "tokenHint": "Wird nicht gespeichert — jede Sitzung neu eingeben.",
+    "use": "Verwenden",
+    "version": "Version"
   }
 }

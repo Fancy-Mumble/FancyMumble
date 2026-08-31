@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Alert, Box, Button, CssBaseline, Dialog, DialogContent, Snackbar, Typography } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
@@ -10,12 +11,21 @@ import { getSavedServers, getServerPassword, markServerJoined, updateServer } fr
 import { getUserRelations, userRelationIdentity, type UserRelation } from "@core/userRelationsStorage";
 import { PERM_WRITE } from "@core/utils/permissions";
 import { applyMentionsToHtml, type MentionResolver } from "@core/utils/mentions";
-import type { AudioSettings, ChannelEntry, ChatMessage, SavedServer, UserEntry } from "@core/types";
+import type {
+  AudioSettings,
+  ChannelEntry,
+  ChatMessage,
+  SavedServer,
+  ServerSwitcher,
+  UserEntry,
+} from "@core/types";
 import ChannelEditorDialog from "@standard/components/sidebar/channel/ChannelEditorDialog";
 import DownloadsPanel from "@standard/components/chat/download/DownloadsPanel";
 import TypingIndicator from "@standard/components/chat/typing/TypingIndicator";
-import PinnedMessagesPanel from "@standard/components/chat/pinned/PinnedMessagesPanel";
 import PublicServerList from "@standard/components/server/PublicServerList";
+import { PinnedPanel } from "./components/chat/pinned/PinnedPanel";
+import { LiveDocDock } from "./components/chat/livedoc/LiveDocDock";
+import { useNebulaLiveDoc } from "./components/chat/livedoc/useNebulaLiveDoc";
 import { Lightbox, type LightboxHandle } from "@standard/components/elements/Lightbox";
 import { usePersistentChat } from "@standard/components/security/PersistentChatOverlays";
 import { usePolls } from "@standard/components/chat/poll/usePolls";
@@ -31,19 +41,22 @@ import type { MessageScope } from "@core/messageOffload";
 import {
   ChannelList,
   ChannelMenu,
+  ChannelPasswordDialog,
   ChatBackdrop,
   ChatHeader,
   Composer,
   ConnectScreen,
   ConnectionOverlays,
-  DirectMessageList,
+  FriendsPanel,
   MemberPanel,
   MessageList,
   MessageRow,
   MiniMode,
+  MoveUsersDialog,
   NebulaRuntime,
   GlobalSearch,
   LeaveServerDialog,
+  PurgeHistoryDialog,
   ProfileCard,
   QuickConnect,
   SearchBox,
@@ -51,7 +64,9 @@ import {
   ServerList,
   ServerRail,
   SettingsNav,
+  SettingsSearch,
   useSettingsNavContext,
+  visibleSettingsPages,
   SidebarShell,
   TitleBar,
   UserInfoDialog,
@@ -59,7 +74,8 @@ import {
   VoiceDock,
   Stack,
 } from "./components";
-import type { SettingsPageId } from "./components";
+import type { SettingsPageId, SettingsSearchTarget } from "./components";
+import type { SettingsHighlight } from "./components/settings/SettingsScreen";
 import { useAdminCapabilities, useAdminNavEntries, type AdminPageId } from "./components/admin";
 /**
  * The two surfaces the client is not, loaded when they are asked for.
@@ -75,10 +91,23 @@ const SettingsScreen = lazy(() =>
 const AdminScreen = lazy(() =>
   import("./components/admin/AdminScreen").then((m) => ({ default: m.AdminScreen })),
 );
+// The live-doc surfaces are Standard's, and heavy: an editor, a ribbon and a
+// citation stack that a session which never opens a document should not pay
+// for. Only the banner and the launch dialog are reachable without the dock,
+// which loads its own panels the same way.
+const LiveDocBanner = lazy(() => import("@standard/components/chat/livedoc/LiveDocBanner"));
+const LiveDocLaunchDialog = lazy(() => import("@standard/components/chat/livedoc/LiveDocLaunchDialog"));
+// The channel's own details, which are a deliberate click rather than
+// something the window shows at rest: the description editor and the key
+// takeover it carries are of no use to a session that never opens it.
+const ChannelInfoPanel = lazy(() =>
+  import("./components/chat/ChannelInfoPanel").then((m) => ({ default: m.ChannelInfoPanel })),
+);
 
 import { AddServerDialog } from "./components/connect/AddServerDialog";
 import { ScreenShareStrip } from "./components/chat/ScreenShareStrip";
 import { MessageMenu, type MessageMenuTarget } from "./components/chat/MessageMenu";
+import { WatchDock } from "./components/chat/watch/WatchDock";
 import {
   useFirstUnreadId,
   useHideEmptyChannels,
@@ -100,7 +129,6 @@ import {
   channelPresence,
   groupSavedServers,
   isEncryptedChannel,
-  listDirectConversations,
   orderChannels,
   plainText,
   presenceLabel,
@@ -110,14 +138,18 @@ import {
   type GlobalSearchRow,
   type ServerGroup,
 } from "./selectors";
+import { dmChannelLabel } from "./friends";
+import { useSavedFriends } from "./useFriends";
 import { shortcutLabel, useNebulaShortcuts } from "./shortcuts";
+import { useChatDisplay } from "./useChatDisplay";
+import { useTimeDisplay } from "./useTimeDisplay";
 import { useLeaveServer } from "./useLeaveServer";
 import { useNebulaEventBridge } from "./useNebulaEventBridge";
 import { useNebulaTheme } from "./useNebulaAppearance";
 import { useServerLiveries } from "./useServerLivery";
 import { radius } from "./tokens";
 
-/** Pinned messages have no "unseen" concept in Nebula's chrome. */
+/** Nothing unseen: a channel with no new pins, and what "Mark read" leaves. */
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 
 /** A file chosen from the picker or a drop, before the share question. */
@@ -176,6 +208,19 @@ function matchesServer(group: ServerGroup, needle: string): boolean {
  * settings surface, which owns the flows there is no second version of.
  */
 export default function NebulaClientApp() {
+  const { t } = useTranslation([
+    "nebulaCommon",
+    "nebulaChat",
+    "nebulaSidebar",
+    "nebulaUser",
+    "nebulaSettings",
+    "settings",
+    "sidebar",
+    "common",
+  ]);
+  // A second handle on the catalogue for the pure selectors: they say what
+  // they find in `nebulaCommon`, and their `t` is typed to that namespace.
+  const { t: tSelectors } = useTranslation("nebulaCommon");
   const status = useAppStore((state) => state.status);
   const sessions = useAppStore((state) => state.sessions);
   const sessionUnreadTotals = useAppStore((state) => state.sessionUnreadTotals);
@@ -227,6 +272,9 @@ export default function NebulaClientApp() {
   const [channelSidebarOpen, setChannelSidebarOpen] = useState(true);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [settingsPage, setSettingsPage] = useState<SettingsPageId>("profile");
+  // What the settings search last sent us to, for the page to light up. The
+  // nonce is what makes picking the same result twice flash twice.
+  const [settingsHighlight, setSettingsHighlight] = useState<SettingsHighlight | null>(null);
   const settingsNavContext = useSettingsNavContext();
   // Administration is a *section of settings*, not a separate surface, so the
   // two share one nav and one content area. Null means a settings page is
@@ -248,6 +296,11 @@ export default function NebulaClientApp() {
   // gated on voice being live rather than on being in a channel - connected
   // users are always in one.
   const { mini, setMini } = useMiniMode(voiceState !== "inactive");
+  // Text size, density and whether the message actions stay up: three fields
+  // of the personalization record the conversation obeys, read once here
+  // rather than by every row.
+  const chatDisplay = useChatDisplay();
+  const timeDisplay = useTimeDisplay();
   const miniCardRef = useMiniWindow(mini);
   const leave = useLeaveServer();
 
@@ -275,6 +328,11 @@ export default function NebulaClientApp() {
     { mode: "edit"; channel: ChannelEntry } | { mode: "create"; parentId: number; tempOnly: boolean } | null
   >(null);
   const [deletingChannel, setDeletingChannel] = useState<ChannelEntry | null>(null);
+  /** The channel asking for a password, held while the prompt is up. */
+  const [passwordChannel, setPasswordChannel] = useState<ChannelEntry | null>(null);
+  /** The room being emptied of its occupants, and the one being emptied of its history. */
+  const [movingUsersFrom, setMovingUsersFrom] = useState<ChannelEntry | null>(null);
+  const [purgingChannel, setPurgingChannel] = useState<ChannelEntry | null>(null);
 
   const reloadServers = useCallback(() => {
     void getSavedServers()
@@ -317,6 +375,31 @@ export default function NebulaClientApp() {
   const activeDmUser = users.find((user) => user.session === selectedDmUser) ?? null;
   const ownUser = users.find((user) => user.session === ownSession) ?? null;
 
+  /**
+   * Entering a channel, asking for its password first where it wants one.
+   *
+   * Every way into a room goes through here rather than calling the store
+   * directly, because a restricted channel refuses the plain join silently:
+   * the request is simply not honoured and the tree does not move, which reads
+   * as the client having ignored the click.
+   *
+   * A hidden room is the exception. Private rooms and meeting rooms deny entry
+   * to everyone and grant it to their invitees by id, so an invited user has
+   * no password to give - and older servers mark those `is_enter_restricted`
+   * all the same. Prompting them would demand a secret that does not exist.
+   */
+  const enterChannel = useCallback(
+    (id: number) => {
+      const channel = channels.find((entry) => entry.id === id);
+      if (channel?.is_enter_restricted && !channel.hidden) {
+        setPasswordChannel(channel);
+        return;
+      }
+      void useAppStore.getState().joinChannel(id);
+    },
+    [channels],
+  );
+
   const orderedChannels = useMemo(
     () =>
       orderChannels({
@@ -354,7 +437,7 @@ export default function NebulaClientApp() {
     onToggleActivationMode: toggleActivationMode,
     onMoveChannelUp: () => moveSelection(-1),
     onMoveChannelDown: () => moveSelection(1),
-    onJumpToRootChannel: () => void useAppStore.getState().joinChannel(0),
+    onJumpToRootChannel: () => enterChannel(0),
     onToggleChannelSidebar: () => setChannelSidebarOpen((open) => !open),
     onToggleMemberPanel: () => memberPanel.setOpen((open) => !open),
     onOpenQuickSearch: () => {
@@ -399,27 +482,13 @@ export default function NebulaClientApp() {
     );
   }, [conversationMessages, search.chatQuery]);
 
-  const conversations = useMemo(
-    () =>
-      listDirectConversations({
-        users,
-        ownSession,
-        history: new Map(
-          selectedDmUser === null ? [] : [[selectedDmUser, dmMessages] as [number, typeof dmMessages]],
-        ),
-        unreadCounts: dmUnreadCounts,
-        query: search.channelQuery,
-      }),
-    [dmMessages, dmUnreadCounts, ownSession, search.channelQuery, selectedDmUser, users],
-  );
-
   // The sidebar chooses a server; the connect screen chooses which of that
   // server's identities to arrive as.
   const serverGroups = useMemo(() => groupSavedServers(savedServers, sessions), [savedServers, sessions]);
   // The rail order is the user arrangement, loaded once and written back on
   // every drop so a restart finds the tiles where they were left.
   const [railOrder, setRailOrder] = useState<readonly string[]>([]);
-  const [serverSwitcher, setServerSwitcher] = useState<"rail" | "titlebar">("rail");
+  const [serverSwitcher, setServerSwitcher] = useState<ServerSwitcher>("rail");
   useEffect(() => {
     let live = true;
     const load = () => {
@@ -471,10 +540,10 @@ export default function NebulaClientApp() {
    * The two used to list the same servers side by side - the same names, the
    * same occupancy, the same identity counts - so the rail's own list now takes
    * that column outright rather than being a second copy of it. With the
-   * switcher in the title bar there is no rail to open, and the sidebar below
-   * stays.
+   * switcher in the title bar alone there is no rail to open, and the sidebar
+   * below stays; with both surfaces on, the rail is there and pins as usual.
    */
-  const serverListPinned = screen === "connect" && serverSwitcher === "rail";
+  const serverListPinned = screen === "connect" && serverSwitcher !== "titlebar";
   const visibleGroups = useMemo(() => {
     const needle = search.channelQuery.trim().toLocaleLowerCase();
     if (!needle) return serverGroups;
@@ -535,6 +604,33 @@ export default function NebulaClientApp() {
     }
     return icons;
   }, [railEntries, liveries]);
+
+  /**
+   * What to call the server you are on, for the title bar.
+   *
+   * The same precedence the connect card and the rail tile use - the operator's
+   * chosen name first, then the name saved for the address, then the address
+   * itself - so the window agrees with every other place the server is named.
+   * `session.label` is deliberately absent from it: it reads "you@host:port",
+   * which names the *login*, and the title bar is naming the place.
+   */
+  /**
+   * Every waiting direct message, summed.
+   *
+   * One number, because Friends is one destination wherever it is drawn - the
+   * title bar or the rail. Which conversation it came from is the Friends
+   * screen's own business.
+   */
+  const friendsUnread = useMemo(
+    () => Object.values(dmUnreadCounts).reduce((total, count) => total + count, 0),
+    [dmUnreadCounts],
+  );
+
+  const activeServerName = useMemo(() => {
+    if (status !== "connected" || !activeServerId) return undefined;
+    const group = railEntries.find((entry) => entry.session?.id === activeServerId)?.group;
+    return liveries[activeServerId]?.displayName || group?.label || activeSession?.host;
+  }, [activeServerId, activeSession?.host, liveries, railEntries, status]);
 
   const toggleFavorite = useCallback(
     (group: ServerGroup) => {
@@ -606,6 +702,64 @@ export default function NebulaClientApp() {
     () =>
       activeChannel === null ? null : channelPresence(users, activeChannel.id, keyHolders[activeChannel.id]),
     [activeChannel, keyHolders, users],
+  );
+
+  /**
+   * What has arrived in the two panels behind the kebab since they were last
+   * opened.
+   *
+   * Both are a click further in than anything on the header, so without a mark
+   * on the menu the only way to find out a pin arrived - or that the download
+   * you started has landed - is to go and look. The store already keeps both
+   * tallies for Standard; nothing here reset them, so the pinned panel was
+   * also being handed an empty set and drawing every pin as already seen.
+   */
+  const unseenPinIds = useAppStore((state) => state.unseenPinIds);
+  const clearUnseenPins = useAppStore((state) => state.clearUnseenPins);
+  const unseenDownloadCount = useAppStore((state) => state.unseenDownloadCount);
+  const markDownloadsSeen = useAppStore((state) => state.markDownloadsSeen);
+  const unseenPins = (selectedChannel === null ? undefined : unseenPinIds.get(selectedChannel)) ?? EMPTY_IDS;
+
+  /**
+   * Which pins were new at the moment the panel was opened.
+   *
+   * Opening it is what marks them read, so the live set is empty by the time
+   * the panel renders - reading it there would mark nothing. The snapshot is
+   * what the panel highlights, so the badge clears and the rows it was about
+   * still say which ones they were.
+   */
+  const [pinsNewOnOpen, setPinsNewOnOpen] = useState<ReadonlySet<string>>(EMPTY_IDS);
+  const openPinned = useCallback(() => {
+    setPinsNewOnOpen(unseenPins);
+    if (selectedChannel !== null) clearUnseenPins(selectedChannel);
+    setSurface("pinned");
+  }, [unseenPins, selectedChannel, clearUnseenPins, setSurface]);
+  const openDownloads = useCallback(() => {
+    markDownloadsSeen();
+    setSurface("downloads");
+  }, [markDownloadsSeen, setSurface]);
+
+  /**
+   * The friend a `__dm:` channel is with, when the open conversation is one.
+   *
+   * A friend chat starts as a direct message and becomes a channel: the plugin
+   * provisions the pair's persisted, encrypted room and the store selects it,
+   * clearing `selectedDmUser`. From then on the conversation is a channel whose
+   * *name* is the two user ids in it, so the header has to be told who that is
+   * or it would announce `__dm:3-7`. Non-null is also what marks the pane as a
+   * one-to-one chat: a friend room has no roster to open and no voice to join.
+   */
+  const savedFriends = useSavedFriends();
+  const friendChatName = useMemo(
+    () =>
+      activeChannel === null
+        ? null
+        : dmChannelLabel(activeChannel, {
+            users,
+            friends: savedFriends,
+            ownUserId: ownUser?.user_id ?? null,
+          }),
+    [activeChannel, ownUser?.user_id, savedFriends, users],
   );
 
   /**
@@ -705,7 +859,9 @@ export default function NebulaClientApp() {
           multiple: true,
           directory: false,
           filters:
-            kind === "media" ? [{ name: "Photo or video", extensions: [...MEDIA_EXTENSIONS] }] : undefined,
+            kind === "media"
+              ? [{ name: t("nebulaChat:composer.photoOrVideo"), extensions: [...MEDIA_EXTENSIONS] }]
+              : undefined,
         });
         const paths = typeof picked === "string" ? [picked] : (picked ?? []);
         if (paths.length > 0) stageFiles(paths.map(pickedFile));
@@ -793,6 +949,22 @@ export default function NebulaClientApp() {
   const [dropNotice, setDropNotice] = useState<string | null>(null);
 
   /**
+   * Live Docs for the open conversation.
+   *
+   * The notice channel is the drop notice's: both are a sentence about
+   * something the pane just refused to do, and one snackbar saying it is
+   * enough.
+   */
+  const liveDoc = useNebulaLiveDoc({
+    channelId: selectedChannel,
+    isDm: activeDmUser !== null,
+    onNotice: setDropNotice,
+  });
+  // A document is published to a channel, so a direct message has nowhere to
+  // put one - and a server without the plugin has nothing to put it in.
+  const canOpenLiveDoc = liveDoc.available && selectedChannel !== null && activeDmUser === null;
+
+  /**
    * Files dragged onto the window.
    *
    * Tauri's own event rather than the DOM's: a dropped `File` carries no path,
@@ -820,7 +992,7 @@ export default function NebulaClientApp() {
             // The overlay said "drop files": a drop that held none is answered
             // rather than swallowed, or it looks like nothing happened.
             if (files.length === 0) {
-              setDropNotice("Only files from this computer can be dropped here");
+              setDropNotice(t("nebulaCommon:app.localFilesOnly"));
               return;
             }
             stageFiles(files.map(pickedFile));
@@ -966,7 +1138,7 @@ export default function NebulaClientApp() {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <MiniMode
-          serverLabel={activeSession?.label ?? "Connected"}
+          serverLabel={activeSession?.label ?? t("nebulaUser:card.presenceConnected")}
           channelName={joinedChannel.name}
           occupants={channelOccupants(users, joinedChannel.id)}
           ownSession={ownSession}
@@ -983,8 +1155,29 @@ export default function NebulaClientApp() {
           onContextMenuUser={userMenu.open}
           cardRef={miniCardRef}
         />
-        <UserMenu target={userMenu.target} onClose={userMenu.close} onInfo={userInfo.open} />
+        <UserMenu
+          target={userMenu.target}
+          onClose={userMenu.close}
+          onInfo={userInfo.open}
+          onJoinChannel={enterChannel}
+        />
         <UserInfoDialog session={userInfo.session} onClose={userInfo.close} />
+        {/* Following someone into a restricted room has to be answerable from
+            here too, or the entry on their menu would do nothing at all in
+            this window. */}
+        <ChannelPasswordDialog
+          channel={passwordChannel}
+          onConfirm={(password) => {
+            const channel = passwordChannel;
+            setPasswordChannel(null);
+            if (channel)
+              void useAppStore
+                .getState()
+                .joinChannelWithPassword(channel.id, password)
+                .catch(() => {});
+          }}
+          onCancel={() => setPasswordChannel(null)}
+        />
       </ThemeProvider>
     );
 
@@ -1019,22 +1212,24 @@ export default function NebulaClientApp() {
           })}
         >
           <TitleBar
-            serverLabel={status === "connected" ? (activeSession?.label ?? activeSession?.host) : undefined}
+            serverLabel={activeServerName}
             friendsActive={screen === "messages"}
             onOpenFriends={() => openScreen("messages")}
-            onOpenChat={() => openScreen("chat")}
-            onQuickConnect={setQuickConnectAnchor}
+            friendsUnread={friendsUnread}
+            /* The rail's own add-server button is the one that stays; up here
+               it would be a second plus in the same window. */
+            onQuickConnect={serverSwitcher === "titlebar" ? setQuickConnectAnchor : undefined}
             quickConnectOpen={quickConnectAnchor !== null}
             onDisconnect={status === "connected" ? () => leave.request(activeSession) : undefined}
             entries={railEntries}
             icons={railIcons}
             activeKey={selectedGroup?.key ?? null}
             onSelectServer={openServer}
-            tabs={serverSwitcher === "titlebar"}
+            tabs={serverSwitcher !== "rail"}
           />
 
           <Stack direction="row" sx={{ flex: 1, minHeight: 0 }}>
-            {serverSwitcher === "rail" && (
+            {serverSwitcher !== "titlebar" && (
               <ServerRail
                 entries={railEntries}
                 panelEntries={visibleRailEntries}
@@ -1052,7 +1247,7 @@ export default function NebulaClientApp() {
                     <SearchBox
                       value={search.channelQuery}
                       onChange={search.setChannelQuery}
-                      placeholder="Search servers"
+                      placeholder={t("nebulaCommon:app.searchServers")}
                       inputRef={channelSearchRef}
                     />
                   ) : undefined
@@ -1065,6 +1260,17 @@ export default function NebulaClientApp() {
                 }}
                 onToggleFavorite={toggleFavorite}
                 onDisconnect={status === "connected" ? () => leave.request(activeSession) : undefined}
+                /* Only when the strip is off: with tabs up top, Friends is up
+                   there beside them. */
+                friends={
+                  serverSwitcher === "rail"
+                    ? {
+                        active: screen === "messages",
+                        unread: friendsUnread,
+                        onOpen: () => openScreen("messages"),
+                      }
+                    : undefined
+                }
                 onReorder={reorderRail}
               />
             )}
@@ -1074,14 +1280,14 @@ export default function NebulaClientApp() {
                   <SearchBox
                     value={search.channelQuery}
                     onChange={search.setChannelQuery}
-                    placeholder="Search channels"
+                    placeholder={t("nebulaCommon:app.searchChannels")}
                     hint={shortcutLabel(shortcuts.openQuickSearch)}
                     inputRef={channelSearchRef}
                   />
                 }
                 footer={
                   <VoiceDock
-                    name={ownUser?.name ?? activeSession?.username ?? "You"}
+                    name={ownUser?.name ?? activeSession?.username ?? t("nebulaChat:share.you")}
                     session={ownSession}
                     textureSize={ownUser?.texture_size ?? null}
                     channelName={joinedChannel?.name ?? null}
@@ -1116,7 +1322,7 @@ export default function NebulaClientApp() {
                   unreadCounts={unreadCounts}
                   ownSession={ownSession}
                   onSelect={(channel) => void useAppStore.getState().selectChannel(channel.id)}
-                  onJoin={(channel) => void useAppStore.getState().joinChannel(channel.id)}
+                  onJoin={(channel) => enterChannel(channel.id)}
                   onContextMenu={(channel, event) => {
                     event.preventDefault();
                     setChannelMenu({ channel, x: event.clientX, y: event.clientY });
@@ -1130,35 +1336,23 @@ export default function NebulaClientApp() {
             )}
 
             {screen === "messages" && (
-              <SidebarShell
-                title="Messages"
-                search={
-                  <SearchBox
-                    value={search.channelQuery}
-                    onChange={search.setChannelQuery}
-                    placeholder="Search people"
-                    inputRef={channelSearchRef}
-                  />
-                }
-              >
-                <DirectMessageList
-                  conversations={conversations}
-                  selectedSession={selectedDmUser}
-                  onSelect={(session) => void useAppStore.getState().selectDmUser(session)}
-                  onHover={hovered.hover}
-                  onLeave={hovered.clear}
-                  onContextMenu={userMenu.open}
-                />
-              </SidebarShell>
+              <FriendsPanel
+                query={search.channelQuery}
+                onQueryChange={search.setChannelQuery}
+                searchRef={channelSearchRef}
+                onContextMenuUser={openUserMenuFor}
+                onHoverUser={hovered.hover}
+                onLeaveUser={hovered.clear}
+              />
             )}
 
             {/* Only where the rail is not drawing this list itself. With the
                 rail on, the connect screen's column *is* the open rail. */}
             {screen === "connect" && !serverListPinned && (
               <SidebarShell
-                title="Servers"
+                title={t("nebulaSidebar:servers.title")}
                 action={{
-                  label: "+ Add",
+                  label: t("nebulaCommon:app.addServer"),
                   onClick: () => {
                     setAddServerFor(null);
                     setAddServerOpen(true);
@@ -1168,7 +1362,7 @@ export default function NebulaClientApp() {
                   <SearchBox
                     value={search.channelQuery}
                     onChange={search.setChannelQuery}
-                    placeholder="Search servers"
+                    placeholder={t("nebulaCommon:app.searchServers")}
                     inputRef={channelSearchRef}
                   />
                 }
@@ -1190,7 +1384,26 @@ export default function NebulaClientApp() {
             )}
 
             {screen === "settings" && (
-              <SidebarShell back={{ label: "Back", onClick: () => openScreen("chat") }}>
+              <SidebarShell
+                back={{ label: t("nebulaCommon:app.back"), onClick: () => openScreen("chat") }}
+                search={
+                  <SettingsSearch
+                    pages={visibleSettingsPages(settingsNavContext).map((entry) => ({
+                      id: entry.id,
+                      label: t(entry.labelKey),
+                    }))}
+                    onSelect={(target: SettingsSearchTarget) => {
+                      setAdminPage(null);
+                      setSettingsPage(target.page);
+                      setSettingsHighlight((current) => ({
+                        term: target.term,
+                        titles: target.titles,
+                        nonce: (current?.nonce ?? 0) + 1,
+                      }));
+                    }}
+                  />
+                }
+              >
                 <SettingsNav
                   active={settingsPage}
                   context={settingsNavContext}
@@ -1202,6 +1415,7 @@ export default function NebulaClientApp() {
                   onSelect={(id) => {
                     setAdminPage(null);
                     setSettingsPage(id);
+                    setSettingsHighlight(null);
                   }}
                   onOpenAdmin={(id) => setAdminPage(id as AdminPageId)}
                 />
@@ -1232,7 +1446,9 @@ export default function NebulaClientApp() {
                   ) : (
                     <SettingsScreen
                       page={settingsPage}
+                      highlight={settingsHighlight}
                       onEditIdentityProfile={() => setSettingsPage("profile")}
+                      onNavigate={setSettingsPage}
                     />
                   )}
                 </Suspense>
@@ -1257,15 +1473,20 @@ export default function NebulaClientApp() {
               ) : (
                 <>
                   <ChatHeader
-                    title={activeDmUser?.name ?? activeChannel?.name ?? "Choose a conversation"}
-                    subtitle={
-                      activeDmUser
-                        ? "Direct message"
-                        : presence
-                          ? presenceLabel(presence)
-                          : "Pick a channel on the left"
+                    title={
+                      activeDmUser?.name ??
+                      friendChatName ??
+                      activeChannel?.name ??
+                      t("nebulaCommon:app.chooseConversation")
                     }
-                    memberCount={activeDmUser ? undefined : presence?.members}
+                    subtitle={
+                      activeDmUser || friendChatName
+                        ? t("nebulaCommon:app.directMessage")
+                        : presence
+                          ? presenceLabel(tSelectors, presence)
+                          : t("nebulaCommon:app.pickChannel")
+                    }
+                    memberCount={activeDmUser || friendChatName ? undefined : presence?.members}
                     persisted={persistent.isPersisted}
                     encrypted={!activeDmUser && isEncryptedChannel(activeChannel)}
                     trustLevel={persistent.trustLevel}
@@ -1279,23 +1500,74 @@ export default function NebulaClientApp() {
                           }
                         : undefined
                     }
-                    canJoinVoice={!!activeChannel && activeChannel.id !== currentChannel}
-                    onJoinVoice={() =>
-                      activeChannel && void useAppStore.getState().joinChannel(activeChannel.id)
+                    /* A friend room is peeked rather than joined - moving into
+                       it would take the user out of the channel they are
+                       actually in - so it is never offered as voice. */
+                    canJoinVoice={
+                      !!activeChannel && friendChatName === null && activeChannel.id !== currentChannel
                     }
+                    onJoinVoice={() => activeChannel && enterChannel(activeChannel.id)}
                     onToggleSearch={() => search.setChatOpen(!search.chatOpen)}
                     onShowMembers={() => memberPanel.setOpen(true)}
                     onShareScreen={() => setSurface("screen-share")}
-                    onShowPinned={() => setSurface("pinned")}
+                    onShowPinned={openPinned}
+                    pinnedOpen={surface === "pinned"}
                     onShowInfo={() => setSurface("server-info")}
-                    onShowDownloads={() => setSurface("downloads")}
+                    onShowDownloads={openDownloads}
+                    /* A direct message is not a channel, so it has nothing to
+                       describe - and `activeChannel` would be whatever room
+                       the reader is standing in rather than the conversation
+                       on screen. */
+                    onShowChannelInfo={
+                      activeDmUser || !activeChannel ? undefined : () => setSurface("channel-info")
+                    }
+                    hasNewPins={unseenPins.size > 0}
+                    hasNewDownloads={unseenDownloadCount > 0}
+                    onShowDocs={liveDoc.available ? liveDoc.openLibrary : undefined}
                   />
+
+                  {/* Hung from the header's pin rather than filed beside the
+                      roster: the pins are read at a glance and put away, and a
+                      column would narrow the conversation they point into. */}
+                  {surface === "pinned" && (
+                    <PinnedPanel
+                      messages={visibleMessages}
+                      unseenIds={pinsNewOnOpen}
+                      time={timeDisplay}
+                      onClose={() => setSurface(null)}
+                      onJump={(messageId) => {
+                        jumpToMessage(messageId);
+                        setSurface(null);
+                      }}
+                      onMarkRead={() => setPinsNewOnOpen(EMPTY_IDS)}
+                      onUnpin={(message) =>
+                        message.message_id &&
+                        void useAppStore
+                          .getState()
+                          .pinMessage(message.channel_id, message.message_id, true)
+                      }
+                    />
+                  )}
 
                   <ScreenShareStrip
                     pickerRequested={surface === "screen-share"}
                     cameraRequested={surface === "camera-share"}
                     onPickerClosed={() => setSurface(null)}
                   />
+
+                  {/* Someone else's document, offered before it is joined. It
+                      sits where the document would open rather than with the
+                      channel's banners, because that is what it is about. */}
+                  {liveDoc.announce && !liveDoc.session && (
+                    <Suspense fallback={null}>
+                      <LiveDocBanner
+                        announce={liveDoc.announce}
+                        onJoin={() => void liveDoc.joinAnnounced()}
+                      />
+                    </Suspense>
+                  )}
+
+                  <LiveDocDock doc={liveDoc} onCreateDoc={canOpenLiveDoc ? liveDoc.openLaunch : undefined} />
 
                   {/* A key-share request is about a person who just walked in,
                       not about the history below, so it is pinned here rather
@@ -1312,154 +1584,176 @@ export default function NebulaClientApp() {
                         autoFocus
                         value={search.chatQuery}
                         onChange={search.setChatQuery}
-                        placeholder="Search this conversation"
+                        placeholder={t("nebulaCommon:app.searchConversation")}
                       />
                     </Box>
                   )}
 
-                  {bootstrapStage ? (
-                    <Stack sx={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-                      <Typography sx={{ fontSize: 12.5 }}>{bootstrapStage}</Typography>
-                    </Stack>
-                  ) : visibleMessages.length === 0 ? (
-                    // The banners still belong here: a channel whose history has
-                    // not been fetched yet is empty, and its sentinel is the
-                    // thing that would fetch it.
-                    <Stack sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-                      <Box sx={{ px: "26px", pt: "12px" }}>{chatBanners}</Box>
-                      <Stack sx={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 0.5 }}>
-                        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>
-                          {activeDmUser
-                            ? `Start a conversation with ${activeDmUser.name}`
-                            : activeChannel
-                              ? `This is the start of #${activeChannel.name}`
-                              : "Nothing selected"}
-                        </Typography>
-                        <Typography
-                          sx={(muiTheme) => ({ fontSize: 12, color: muiTheme.palette.nebula.muted })}
-                        >
-                          Messages and shared moments will appear here.
-                        </Typography>
+                  {/* The conversation, put away while a document has the pane.
+                      Kept mounted rather than dropped: the scroll position, the
+                      draft in the composer and the staged attachments are each
+                      worth more than the render, and unmounting loses all three. */}
+                  <Stack
+                    sx={{
+                      flex: 1,
+                      minHeight: 0,
+                      // The watch dock hangs off this, so it is the pane the
+                      // session floats over rather than the whole window.
+                      position: "relative",
+                      display: liveDoc.hidesChat ? "none" : "flex",
+                    }}
+                  >
+                    <WatchDock />
+                    {bootstrapStage ? (
+                      <Stack sx={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+                        <Typography sx={{ fontSize: 12.5 }}>{bootstrapStage}</Typography>
                       </Stack>
-                    </Stack>
-                  ) : (
-                    <MessageList
-                      messages={visibleMessages}
-                      users={users}
-                      firstUnreadId={firstUnreadId}
-                      header={chatBanners}
-                      jumpTo={jumpTo}
-                      renderMessage={(message, avatar, grouped) => (
-                        <MessageRow
-                          message={message}
-                          avatar={avatar}
-                          grouped={grouped}
-                          onOpenProfile={openProfile}
-                          onHoverProfile={hovered.hover}
-                          onLeaveProfile={hovered.clear}
-                          onContextMenuProfile={openUserMenuFor}
-                          onVote={handlePollVote}
-                          onOpenImage={(src) => lightboxRef.current?.open(src)}
-                          allMessageIds={conversationMessageIds}
-                          onQuote={quoteMessage}
-                          onJumpTo={jumpToMessage}
-                          onContextMenu={(target, at, editable) =>
-                            setMessageMenu({ message: target, x: at.x, y: at.y, editable })
-                          }
-                          selected={
-                            selection.active && message.message_id
-                              ? selection.selected.has(message.message_id)
-                              : null
-                          }
-                          onToggleSelected={selection.toggle}
-                          editing={!!message.message_id && editingMessageId === message.message_id}
-                          onEditingChange={(next) =>
-                            setEditingMessageId(next ? (message.message_id ?? null) : null)
-                          }
-                        />
-                      )}
-                    />
-                  )}
+                    ) : visibleMessages.length === 0 ? (
+                      // The banners still belong here: a channel whose history has
+                      // not been fetched yet is empty, and its sentinel is the
+                      // thing that would fetch it.
+                      <Stack sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+                        <Box sx={{ px: "26px", pt: "12px" }}>{chatBanners}</Box>
+                        <Stack sx={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 0.5 }}>
+                          <Typography sx={{ fontWeight: 600, fontSize: 14 }}>
+                            {activeDmUser
+                              ? t("nebulaCommon:app.startWith", { name: activeDmUser.name })
+                              : activeChannel
+                                ? t("nebulaCommon:app.startOfChannel", { channel: activeChannel.name })
+                                : t("nebulaCommon:app.nothingSelected")}
+                          </Typography>
+                          <Typography
+                            sx={(muiTheme) => ({ fontSize: 12, color: muiTheme.palette.nebula.muted })}
+                          >
+                            {t("nebulaCommon:app.emptyHint")}
+                          </Typography>
+                        </Stack>
+                      </Stack>
+                    ) : (
+                      <MessageList
+                        messages={visibleMessages}
+                        users={users}
+                        firstUnreadId={firstUnreadId}
+                        header={chatBanners}
+                        jumpTo={jumpTo}
+                        display={chatDisplay}
+                        renderMessage={(message, avatar, grouped) => (
+                          <MessageRow
+                            message={message}
+                            avatar={avatar}
+                            grouped={grouped}
+                            compact={chatDisplay.compact}
+                            alwaysShowActions={chatDisplay.alwaysShowActions}
+                            onOpenProfile={openProfile}
+                            onHoverProfile={hovered.hover}
+                            onLeaveProfile={hovered.clear}
+                            onContextMenuProfile={openUserMenuFor}
+                            onVote={handlePollVote}
+                            onOpenImage={(src) => lightboxRef.current?.open(src)}
+                            time={timeDisplay}
+                            allMessageIds={conversationMessageIds}
+                            onQuote={quoteMessage}
+                            onJumpTo={jumpToMessage}
+                            onContextMenu={(target, at, editable) =>
+                              setMessageMenu({ message: target, x: at.x, y: at.y, editable })
+                            }
+                            selected={
+                              selection.active && message.message_id
+                                ? selection.selected.has(message.message_id)
+                                : null
+                            }
+                            onToggleSelected={selection.toggle}
+                            editing={!!message.message_id && editingMessageId === message.message_id}
+                            onEditingChange={(next) =>
+                              setEditingMessageId(next ? (message.message_id ?? null) : null)
+                            }
+                          />
+                        )}
+                      />
+                    )}
 
-                  {selection.active && (
-                    <Stack
-                      direction="row"
-                      alignItems="center"
-                      gap={1}
-                      sx={(muiTheme) => ({
-                        mx: "34px",
-                        mt: "8px",
-                        px: "14px",
-                        py: "8px",
-                        borderRadius: radius("md"),
-                        background: muiTheme.palette.nebula.card,
-                        border: `1px solid ${muiTheme.palette.nebula.line}`,
-                      })}
-                    >
-                      <Typography sx={{ fontSize: 12 }}>{selection.selected.size} selected</Typography>
-                      <Button
-                        size="small"
-                        color="error"
-                        disabled={selection.selected.size === 0 || selectedChannel === null}
-                        onClick={() => {
-                          const ids = [...selection.selected];
-                          selection.clear();
-                          if (selectedChannel !== null && ids.length > 0) {
-                            void useAppStore
-                              .getState()
-                              .deletePchatMessages(selectedChannel, { messageIds: ids });
-                          }
-                        }}
-                        sx={{ ml: "auto" }}
+                    {selection.active && (
+                      <Stack
+                        direction="row"
+                        alignItems="center"
+                        gap={1}
+                        sx={(muiTheme) => ({
+                          mx: "34px",
+                          mt: "8px",
+                          px: "14px",
+                          py: "8px",
+                          borderRadius: radius("md"),
+                          background: muiTheme.palette.nebula.card,
+                          border: `1px solid ${muiTheme.palette.nebula.line}`,
+                        })}
                       >
-                        Delete
-                      </Button>
-                      <Button size="small" onClick={selection.clear}>
-                        Cancel
-                      </Button>
-                    </Stack>
-                  )}
+                        <Typography sx={{ fontSize: 12 }}>{selection.selected.size} selected</Typography>
+                        <Button
+                          size="small"
+                          color="error"
+                          disabled={selection.selected.size === 0 || selectedChannel === null}
+                          onClick={() => {
+                            const ids = [...selection.selected];
+                            selection.clear();
+                            if (selectedChannel !== null && ids.length > 0) {
+                              void useAppStore
+                                .getState()
+                                .deletePchatMessages(selectedChannel, { messageIds: ids });
+                            }
+                          }}
+                          sx={{ ml: "auto" }}
+                        >
+                          {t("sidebar:userMenu.deleteConfirm")}
+                        </Button>
+                        <Button size="small" onClick={selection.clear}>
+                          {t("common:actions.cancel")}
+                        </Button>
+                      </Stack>
+                    )}
 
-                  {selectedChannel !== null && !activeDmUser && (
-                    <Box sx={{ px: "34px" }}>
-                      <TypingIndicator channelId={selectedChannel} />
-                    </Box>
-                  )}
+                    {selectedChannel !== null && !activeDmUser && (
+                      <Box sx={{ px: "34px" }}>
+                        <TypingIndicator channelId={selectedChannel} />
+                      </Box>
+                    )}
 
-                  <Composer
-                    target={activeDmUser ? `@${activeDmUser.name}` : `#${activeChannel?.name ?? "channel"}`}
-                    disabled={(!activeChannel && !activeDmUser) || persistent.sendBlocked}
-                    onSend={send}
-                    onAttach={canAttach ? (kind) => void pickAttachment(kind) : undefined}
-                    onAttachFiles={canAttach ? stagePastedFiles : undefined}
-                    attachBlocked={
-                      activeChannel || activeDmUser
-                        ? fileServerConfig
-                          ? fileServerConfig.canShareFiles
-                            ? null
-                            : "This server does not let you share files"
-                          : "This server has no file sharing"
-                        : "Pick a conversation first"
-                    }
-                    onCreatePoll={
-                      selectedChannel !== null && !activeDmUser
-                        ? (question, options, multiple) => void handlePollCreate(question, options, multiple)
-                        : undefined
-                    }
-                    canSharePublic={fileServerConfig?.canShareFilesPublic ?? false}
-                    canExpire={fileServerConfig?.deleteOnTtl ?? false}
-                    shareOptions={shareOptions}
-                    onShareOptionsChange={setShareOptions}
-                    quotes={pendingQuotes}
-                    onRemoveQuote={(id) =>
-                      setPendingQuotes((prev) => prev.filter((quote) => quote.message_id !== id))
-                    }
-                    attachments={staged}
-                    onRemoveAttachment={(id) => setStaged((prev) => prev.filter((file) => file.id !== id))}
-                    uploads={uploads.placeholders}
-                    onCancelUpload={uploads.cancel}
-                    dropActive={canAttach && dragOverWindow}
-                  />
+                    <Composer
+                      target={activeDmUser ? `@${activeDmUser.name}` : `#${activeChannel?.name ?? "channel"}`}
+                      disabled={(!activeChannel && !activeDmUser) || persistent.sendBlocked}
+                      onSend={send}
+                      onAttach={canAttach ? (kind) => void pickAttachment(kind) : undefined}
+                      onAttachFiles={canAttach ? stagePastedFiles : undefined}
+                      attachBlocked={
+                        activeChannel || activeDmUser
+                          ? fileServerConfig
+                            ? fileServerConfig.canShareFiles
+                              ? null
+                              : t("nebulaCommon:app.noFileSharingAllowed")
+                            : t("nebulaCommon:app.noFileSharing")
+                          : t("nebulaCommon:app.pickConversationFirst")
+                      }
+                      onCreatePoll={
+                        selectedChannel !== null && !activeDmUser
+                          ? (question, options, multiple) =>
+                              void handlePollCreate(question, options, multiple)
+                          : undefined
+                      }
+                      onOpenLiveDoc={canOpenLiveDoc ? liveDoc.openLaunch : undefined}
+                      canSharePublic={fileServerConfig?.canShareFilesPublic ?? false}
+                      canExpire={fileServerConfig?.deleteOnTtl ?? false}
+                      shareOptions={shareOptions}
+                      onShareOptionsChange={setShareOptions}
+                      quotes={pendingQuotes}
+                      onRemoveQuote={(id) =>
+                        setPendingQuotes((prev) => prev.filter((quote) => quote.message_id !== id))
+                      }
+                      attachments={staged}
+                      onRemoveAttachment={(id) => setStaged((prev) => prev.filter((file) => file.id !== id))}
+                      uploads={uploads.placeholders}
+                      onCancelUpload={uploads.cancel}
+                      dropActive={canAttach && dragOverWindow}
+                    />
+                  </Stack>
                   <Snackbar
                     open={dropNotice !== null}
                     autoHideDuration={4000}
@@ -1495,20 +1789,17 @@ export default function NebulaClientApp() {
             )}
 
             {surface === "server-info" && <ServerInfoPanel onClose={() => setSurface(null)} />}
+
+            {surface === "channel-info" && selectedChannel !== null && (
+              /* The fallback holds the slot's width rather than drawing a
+                 spinner: a local chunk resolves in a frame or two, and the
+                 chat must not widen and narrow again on the way. */
+              <Suspense fallback={<Box sx={{ width: 320, flex: "none" }} />}>
+                <ChannelInfoPanel channelId={selectedChannel} onClose={() => setSurface(null)} />
+              </Suspense>
+            )}
           </Stack>
 
-          {surface === "pinned" && (
-            <PinnedMessagesPanel
-              messages={visibleMessages}
-              unseenIds={EMPTY_IDS}
-              onClose={() => setSurface(null)}
-              onNavigate={() => setSurface(null)}
-              onUnpin={(message) =>
-                message.message_id &&
-                void useAppStore.getState().pinMessage(message.channel_id, message.message_id, true)
-              }
-            />
-          )}
           {surface === "public-servers" && (
             <FullSurface onClose={() => setSurface(null)}>
               <PublicServerList
@@ -1531,6 +1822,19 @@ export default function NebulaClientApp() {
                 <DownloadsPanel />
               </DialogContent>
             </Dialog>
+          )}
+
+          {/* Naming a new document, or picking one to reopen. Standard's
+              dialog: the choice it collects - title, visibility, a seed - is
+              the same question whichever pack asks it. */}
+          {liveDoc.launchOpen && (
+            <Suspense fallback={null}>
+              <LiveDocLaunchDialog
+                open={liveDoc.launchOpen}
+                onSubmit={(choice) => void liveDoc.submitLaunch(choice)}
+                onCancel={liveDoc.closeLaunch}
+              />
+            </Suspense>
           )}
 
           <QuickConnect
@@ -1561,6 +1865,7 @@ export default function NebulaClientApp() {
             sessions={sessions}
             ownSession={ownSession}
             serverLabel={activeSession?.host ?? activeSession?.label ?? ""}
+            time={timeDisplay}
             onClose={() => setSwitcherOpen(false)}
             onSelect={openSearchRow}
           />
@@ -1592,6 +1897,7 @@ export default function NebulaClientApp() {
             onClose={userMenu.close}
             onMessage={openConversation}
             onInfo={userInfo.open}
+            onJoinChannel={enterChannel}
           />
           <UserInfoDialog session={userInfo.session} onClose={userInfo.close} />
 
@@ -1599,12 +1905,23 @@ export default function NebulaClientApp() {
             target={channelMenu}
             listening={!!channelMenu && listenedChannels.has(channelMenu.channel.id)}
             notificationsMuted={!!channelMenu && mutedPushChannels.has(channelMenu.channel.id)}
+            occupantCount={channelMenu ? channelOccupants(users, channelMenu.channel.id).length : 0}
             hideEmpty={hideEmpty}
             onToggleHideEmpty={toggleHideEmpty}
+            onJoin={(channel) => enterChannel(channel.id)}
+            /* The panel describes whatever is selected, so a channel asked
+               about from the tree is selected first - otherwise the menu would
+               open a panel about a different room. */
+            onShowInfo={(channel) => {
+              void useAppStore.getState().selectChannel(channel.id);
+              setSurface("channel-info");
+            }}
             onEdit={(channel) => setChannelDialog({ mode: "edit", channel })}
             onCreate={(parent, tempOnly) =>
               setChannelDialog({ mode: "create", parentId: parent.id, tempOnly })
             }
+            onMoveAllUsers={setMovingUsersFrom}
+            onPurgeHistory={setPurgingChannel}
             onDelete={setDeletingChannel}
             onEditPermissions={(channel) => {
               // The permission editor is channel-scoped, so it is handed the
@@ -1636,13 +1953,13 @@ export default function NebulaClientApp() {
           <Dialog open={!!deletingChannel} onClose={() => setDeletingChannel(null)} maxWidth="xs">
             <DialogContent>
               <Typography sx={{ fontWeight: 600, fontSize: 14, mb: 0.5 }}>
-                Delete #{deletingChannel?.name}?
+                {t("nebulaCommon:app.deleteChannelTitle", { channel: deletingChannel?.name })}
               </Typography>
               <Typography sx={(muiTheme) => ({ fontSize: 12, color: muiTheme.palette.nebula.muted })}>
-                Its sub-channels and stored messages go with it. This cannot be undone.
+                {t("nebulaCommon:app.deleteChannelBody")}
               </Typography>
               <Stack direction="row" gap={1} sx={{ justifyContent: "flex-end", mt: 2 }}>
-                <Button onClick={() => setDeletingChannel(null)}>Cancel</Button>
+                <Button onClick={() => setDeletingChannel(null)}>{t("common:actions.cancel")}</Button>
                 <Button
                   variant="contained"
                   color="error"
@@ -1652,11 +1969,55 @@ export default function NebulaClientApp() {
                     if (id != null) void useAppStore.getState().deleteChannel(id);
                   }}
                 >
-                  Delete
+                  {t("sidebar:userMenu.deleteConfirm")}
                 </Button>
               </Stack>
             </DialogContent>
           </Dialog>
+
+          {/* The three things done to a channel from outside it. Each holds
+              its own copy of the subject, because the menu that raised it has
+              closed by the time it is on screen. */}
+          <ChannelPasswordDialog
+            channel={passwordChannel}
+            onConfirm={(password) => {
+              const channel = passwordChannel;
+              setPasswordChannel(null);
+              if (!channel) return;
+              void useAppStore
+                .getState()
+                .joinChannelWithPassword(channel.id, password)
+                // The join is what may be refused; selecting the channel is
+                // reading it, which a wrong password does not stop.
+                .catch(() => {})
+                .finally(() => void useAppStore.getState().selectChannel(channel.id));
+            }}
+            onCancel={() => setPasswordChannel(null)}
+          />
+
+          <MoveUsersDialog
+            source={movingUsersFrom}
+            channels={channels}
+            onConfirm={(targetId) => {
+              const from = movingUsersFrom?.id;
+              setMovingUsersFrom(null);
+              if (from != null) void useAppStore.getState().moveChannelUsers(from, targetId);
+            }}
+            onCancel={() => setMovingUsersFrom(null)}
+          />
+
+          <PurgeHistoryDialog
+            channel={purgingChannel}
+            onConfirm={() => {
+              const id = purgingChannel?.id;
+              setPurgingChannel(null);
+              // Everything up to now, which is what "purge" means here: the
+              // server deletes by time range, and an open range would race
+              // whatever arrives while the request is in flight.
+              if (id != null) void useAppStore.getState().deletePchatMessages(id, { timeTo: Date.now() });
+            }}
+            onCancel={() => setPurgingChannel(null)}
+          />
 
           <LeaveServerDialog
             session={leave.pending}
@@ -1688,6 +2049,7 @@ export default function NebulaClientApp() {
             onQuote={quoteMessage}
             onEdit={(target) => setEditingMessageId(target.message_id ?? null)}
             onSelect={selection.begin}
+            allMessageIds={conversationMessageIds}
           />
 
           {reactionTarget && (

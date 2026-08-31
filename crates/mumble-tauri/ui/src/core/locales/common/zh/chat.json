@@ -1135,5 +1135,22 @@
     "colAccess": "访问方式",
     "colUploaded": "上传时间",
     "colExpires": "过期时间"
+  },
+  "scheduled": {
+    "title": "定时消息",
+    "refresh": "刷新",
+    "messagePlaceholder": "稍后发送的消息…",
+    "deliverAt": "发送时间",
+    "schedule": "安排",
+    "loading": "加载中…",
+    "none": "没有定时消息。",
+    "cancel": "取消",
+    "deliversAt": "将于 {{time}} 发送",
+    "invalidTime": "请选择有效的日期和时间。",
+    "timeInPast": "发送时间必须是将来的时间。",
+    "statusPending": "待发送",
+    "statusDelivered": "已发送",
+    "statusCancelled": "已取消",
+    "statusRejected": "已拒绝"
   }
 }

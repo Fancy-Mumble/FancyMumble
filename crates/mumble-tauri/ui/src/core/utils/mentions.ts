@@ -13,6 +13,7 @@
  * for notifications without needing to re-parse the raw markup.
  */
 
+import type { AclGroup, UserEntry } from "../types";
 import { escapeHtml } from "./html";
 
 // -- Wire format helpers -----------------------------------------------
@@ -211,4 +212,67 @@ export function containsSelfMention(html: string, ctx: SelfMentionContext): bool
     }
   }
   return false;
+}
+
+// -- Chip inspection (receive side) ------------------------------------
+
+/** Every chip `applyMentionsToHtml` can emit, as one selector. */
+export const MENTION_CHIP_SELECTOR =
+  "[data-mention-session], [data-mention-role], [data-mention-everyone], [data-mention-here]";
+
+/** What a chip in a rendered body points at. */
+export type MentionChip =
+  | { readonly kind: "user"; readonly session: number }
+  | { readonly kind: "role"; readonly role: string }
+  | { readonly kind: "everyone" }
+  | { readonly kind: "here" };
+
+/**
+ * Read back the mention a chip element stands for.
+ *
+ * The attributes are written once, above, and read by every pack that renders
+ * a message body, so which one means what is settled here rather than
+ * separately in each design's message row.
+ */
+export function readMentionChip(el: HTMLElement): MentionChip | null {
+  if (el.dataset.mentionSession) {
+    const session = Number(el.dataset.mentionSession);
+    return Number.isFinite(session) ? { kind: "user", session } : null;
+  }
+  if (el.dataset.mentionRole) return { kind: "role", role: el.dataset.mentionRole };
+  if (el.dataset.mentionEveryone) return { kind: "everyone" };
+  if (el.dataset.mentionHere) return { kind: "here" };
+  return null;
+}
+
+// -- Who a mention stands for ------------------------------------------
+
+/** Maximum number of members a role/everyone/here popover lists. */
+export const MAX_DISPLAYED_MEMBERS = 30;
+
+/**
+ * The members an `@everyone`/`@here` chip stands for.
+ *
+ * The currently selected channel is the scope, matching how the renderer
+ * treats `@everyone` - everyone in *this* channel, not on the server.
+ */
+export function membersForChannelMention(
+  users: readonly UserEntry[],
+  selectedChannel: number | null,
+): readonly UserEntry[] {
+  if (selectedChannel == null) return users;
+  return users.filter((u) => u.channel_id === selectedChannel);
+}
+
+/** The connected members of a role, resolved through the root channel's ACL. */
+export function membersForRole(
+  users: readonly UserEntry[],
+  groupName: string,
+  groups: readonly AclGroup[],
+): readonly UserEntry[] {
+  const group = groups.find((g) => g.name === groupName);
+  if (!group) return [];
+  const memberIds = new Set<number>([...group.add, ...group.inherited_members]);
+  for (const id of group.remove) memberIds.delete(id);
+  return users.filter((u) => u.user_id != null && memberIds.has(u.user_id));
 }

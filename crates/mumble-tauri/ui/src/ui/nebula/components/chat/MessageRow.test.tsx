@@ -1,12 +1,16 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@core/store";
 import { registerPoll } from "@core/features/chat/poll/model";
 import { encodeFileAttachmentMarker } from "@core/features/chat/fileAttachments";
-import type { ChatMessage } from "@core/types";
+import type { ChatMessage, UserEntry } from "@core/types";
 import { withNebulaTheme } from "../../testTheme";
 import { MessageRow } from "./MessageRow";
+
+function user(session: number, name: string, channel_id = 1): UserEntry {
+  return { session, name, channel_id, texture_size: null } as UserEntry;
+}
 
 const openUrlMock = vi.fn((_url: string) => Promise.resolve());
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: (url: string) => openUrlMock(url) }));
@@ -45,6 +49,29 @@ describe("MessageRow", () => {
       linkEmbeds: new Map(),
       disableLinkPreviews: false,
     });
+  });
+
+  it("offers starting a watch-together session on the strip, not only on right-click", async () => {
+    useAppStore.setState({
+      sendMessage: vi.fn().mockResolvedValue(undefined),
+      watchSessions: new Map(),
+      watchSessionsVersion: 0,
+    });
+    // The strip is the only affordance the row has, so a video that can only
+    // be started from the context menu is one nobody finds.
+    const url = "https://www.youtube.com/watch?v=eKqZWVcYs7E&amp;list=RDfr0Kca_jWsw";
+    draw(message({ body: `<a href="${url}">${url}</a>` }), { alwaysShowActions: true });
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Watch together"));
+    });
+
+    expect(useAppStore.getState().watchSessions.size).toBe(1);
+  });
+
+  it("keeps the strip clear of it where the message carries no video", () => {
+    draw(message({ body: "just words" }), { alwaysShowActions: true });
+    expect(screen.queryByLabelText("Watch together")).toBeNull();
   });
 
   it("asks the server for a preview of a link in the body and draws what comes back", async () => {
@@ -259,5 +286,102 @@ describe("MessageRow", () => {
     // never place the first one - the row has to offer it.
     fireEvent.click(screen.getByLabelText("Add reaction"));
     expect(screen.getByRole("tablist")).toBeTruthy();
+  });
+
+  it("drops the avatar in compact mode, and keeps the author", () => {
+    const roomy = draw(message()).container;
+    expect(roomy.querySelector(".MuiAvatar-root")).toBeTruthy();
+
+    const tight = draw(message(), { compact: true }).container;
+    expect(tight.querySelector(".MuiAvatar-root")).toBeNull();
+    // The name is how you know who is talking; only the picture goes.
+    expect(tight.textContent).toContain("Lorelando");
+  });
+
+  it("pins the action strip into the flow when it is always shown", () => {
+    draw(message(), { alwaysShowActions: true });
+
+    // Up without a hover...
+    const pill = screen.getByLabelText("Copy message").closest("div")!;
+    expect(getComputedStyle(pill).position).not.toBe("absolute");
+    // ...and not floating over the message above, which is what the hover pill
+    // does and what makes it wrong for every row at once.
+    expect(getComputedStyle(pill).bottom.startsWith("calc(100% + ")).toBe(false);
+  });
+
+  it("does not draw the strip twice when a pinned row is hovered", () => {
+    const { container } = draw(message(), { alwaysShowActions: true });
+    fireEvent.mouseEnter(container.firstElementChild!);
+    expect(screen.getAllByLabelText("Copy message")).toHaveLength(1);
+  });
+
+  it("opens the mentioned person rather than leaving their name as prose", () => {
+    useAppStore.setState({ users: [user(42, "Zewi")] });
+    const onOpenProfile = vi.fn();
+    draw(
+      message({
+        body: 'hi <span class="mention mention-user" data-mention-session="42">@Zewi</span>',
+      }),
+      { onOpenProfile },
+    );
+
+    fireEvent.click(screen.getByText("@Zewi"));
+    expect(onOpenProfile).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ currentTarget: expect.anything() }),
+    );
+  });
+
+  it("lists who an @everyone reaches, scoped to the channel it was said in", () => {
+    useAppStore.setState({
+      selectedChannel: 1,
+      users: [user(1, "Zewi"), user(2, "Kayo"), user(3, "Elsewhere", 2)],
+    });
+    draw(
+      message({
+        body: '<span class="mention mention-everyone" data-mention-everyone="1">@everyone</span>',
+      }),
+    );
+
+    fireEvent.click(screen.getByText("@everyone"));
+    expect(screen.getByText("Zewi")).toBeTruthy();
+    expect(screen.getByText("Kayo")).toBeTruthy();
+    // `@everyone` means everyone *here*, which is the scope the sender's
+    // renderer used - not everyone on the server.
+    expect(screen.queryByText("Elsewhere")).toBeNull();
+  });
+
+  it("says so when the person a mention names has since disconnected", () => {
+    useAppStore.setState({ users: [] });
+    const onOpenProfile = vi.fn();
+    draw(
+      message({
+        body: '<span class="mention mention-user" data-mention-session="42">@Zewi</span>',
+      }),
+      { onOpenProfile },
+    );
+
+    fireEvent.click(screen.getByText("@Zewi"));
+    // A card cannot be opened on somebody who is gone, and a chip that simply
+    // does nothing reads as broken rather than as empty.
+    expect(onOpenProfile).not.toHaveBeenCalled();
+    expect(screen.getByText("This person is no longer connected.")).toBeTruthy();
+  });
+
+  it("reads the clock the way the Language & format page was set", () => {
+    // Server time, so the reading is the same on every machine this runs on:
+    // 1_700_000_000_000 is 22:13 UTC.
+    const at = message({ timestamp: 1_700_000_000_000 });
+
+    const twentyFour = draw(at, {
+      time: { timeFormat: "24h", localTime: false, systemUses24h: undefined },
+    }).container;
+    expect(twentyFour.textContent).toContain("22:13");
+
+    const twelve = draw(at, {
+      time: { timeFormat: "12h", localTime: false, systemUses24h: undefined },
+    }).container;
+    expect(twelve.textContent).toContain("10:13");
+    expect(twelve.textContent).not.toContain("22:13");
   });
 });

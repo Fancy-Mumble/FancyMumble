@@ -19,7 +19,9 @@
     "hide": "Masquer",
     "open": "Ouvrir",
     "collapse": "Réduire",
-    "optional": "(facultatif)"
+    "optional": "(facultatif)",
+    "more": "Plus",
+    "leave": "Quitter"
   },
   "confirmDialog": {
     "confirmLabel": "Confirmer",

@@ -178,7 +178,8 @@
     "dangerConfirmBtn": "Yes, reset everything",
     "dangerResetBtn": "Reset all data",
     "disconnectWarning": "Disconnect confirmation",
-    "disconnectWarningHint": "Ask for confirmation before disconnecting from a server."
+    "disconnectWarningHint": "Ask for confirmation before disconnecting from a server.",
+    "logFiles": "Log files"
   },
   "shortcuts": {
     "panelTitle": "Shortcuts",
@@ -427,6 +428,7 @@
     "identityLabel": "Identity",
     "manageIdentities": "Manage identities",
     "viewingOtherIdentity": "Viewing profile for a different identity. Changes are saved locally but will not be applied to the server until you connect with this identity.",
+    "tooLarge": "Your profile is too large for this server. Try a smaller banner image or a shorter bio.",
     "sectionUsername": "Default Username",
     "usernameHint": "Pre-filled when you add a new server.",
     "usernamePlaceholder": "Your username",
@@ -705,7 +707,22 @@
     "verifying": "Verifying…",
     "saved": "Saved",
     "saving": "Saving…",
-    "saveChanges": "Save changes"
+    "saveChanges": "Save changes",
+    "collapseFilters": "Collapse quick filters",
+    "countNote": "{{count}} entries loaded",
+    "endlessOff": "Paged, 25 rows at a time.",
+    "endlessOn": "Loads more as you scroll.",
+    "endlessScroll": "Endless scrolling",
+    "endOfResults": "End of results",
+    "expandFilters": "Expand quick filters",
+    "filterCategory": "Categories",
+    "nextPage": "Next",
+    "pageDashboard": "Dashboard",
+    "pageOf": "Page {{page}} of {{pages}}",
+    "pageResults": "Results",
+    "prevPage": "Previous",
+    "quickFilters": "Quick filters",
+    "resultsLabel": "Results"
   },
   "registeredUsers": {
     "title": "Registered Users",
@@ -732,7 +749,8 @@
     "actionUnregister": "Unregister {{name}}",
     "actionsAriaLabel": "Actions for {{name}}",
     "statusBar_one": "{{filtered}} of {{total}} user",
-    "statusBar_other": "{{filtered}} of {{total}} users"
+    "statusBar_other": "{{filtered}} of {{total}} users",
+    "renameAriaLabel": "User name"
   },
   "banList": {
     "title": "Ban List",
@@ -778,7 +796,8 @@
     "accessViaGroup": "Members of @{{group}}",
     "accessNoneExplicit": "No specific users are granted access; access is inherited from parent ACLs.",
     "accessUsersHeading": "Users with access",
-    "accessOnlineHint": "online"
+    "accessOnlineHint": "online",
+    "cancelDelete": "Cancel"
   },
   "roles": {
     "title": "Server Roles",
@@ -1229,6 +1248,9 @@
     "loading": "Loading server settings…",
     "unavailable": "Server settings aren't available. This server may not support runtime settings, or you may not have permission to change them.",
     "save": "Save changes",
+    "modeRich": "Rich text",
+    "modeSource": "HTML",
+    "richTextLossy": "This welcome text uses markup the visual editor cannot hold — a table layout, or styling it has no control for. Editing it there would rewrite the parts it cannot show, so it is edited as HTML.",
     "saving": "Saving…",
     "saved": "Saved"
   },
@@ -1326,6 +1348,71 @@
       "expires": "Expires",
       "actions": "Actions"
     },
-    "root": "Root"
+    "root": "Root",
+    "calendars": {
+      "empty": "No user calendars stored yet.",
+      "size": "Size",
+      "title": "Active calendars",
+      "updated": "Updated",
+      "user": "User (server:id)"
+    }
+  },
+  "livery": {
+    "accent": "accent",
+    "address": "Operator API",
+    "addTag": "+ Add tag",
+    "artwork": "Artwork",
+    "aura": "aura",
+    "badImageType": "That file isn't a PNG, JPEG or WebP.",
+    "banner": "Banner",
+    "cancel": "Cancel",
+    "clampLead": "Kept, but lightened for readability:",
+    "clampRenders": "renders as",
+    "clampTail": "so text stays legible. The stored value is unchanged.",
+    "clear": "Clear",
+    "close": "Close",
+    "colours": "App colours",
+    "coloursNote": "optional — banner alone is a common setup",
+    "connectAs": "Connect as",
+    "dark": "Dark",
+    "darkMode": "Dark mode",
+    "digest": "digest",
+    "displayName": "Display name",
+    "displayNameHint": "Shown next to",
+    "displayNameHintTail": "— never instead of it.",
+    "dropHint": "drop to replace",
+    "focusY": "Focus Y",
+    "icon": "Icon",
+    "identity": "Identity",
+    "light": "Light",
+    "lightMode": "Light mode",
+    "lightStock": "Surface & aura not set for light — viewers get stock colours.",
+    "motd": "Message of the day",
+    "noBanner": "No banner",
+    "plainText": "plain text",
+    "previewTitle": "CONNECT PREVIEW",
+    "remove": "Remove",
+    "removeIcon": "Remove icon",
+    "removeTag": "Remove tag",
+    "replace": "Replace",
+    "resized": "Resized to {{width}}×{{height}}, {{before}} → {{after}}.",
+    "save": "Save changes",
+    "saveMeta": "Only filled fields are sent",
+    "stock": "stock",
+    "surface": "surface",
+    "tagHref": "https:// (optional)",
+    "tagHrefLabel": "Link",
+    "tagLabel": "Label",
+    "tagline": "Tagline",
+    "tags": "Tags",
+    "tagsHint": "Tags carry a tone, not a colour — they adapt to each viewer's theme.",
+    "ticketDenied": "this connection cannot get an automatic upload credential",
+    "ticketNoAddress": "this server has not published an operator API address",
+    "ticketUnreachable": "could not reach the server for an automatic upload credential",
+    "title": "Livery",
+    "token": "Token",
+    "tokenHint": "Not stored — retyped each session.",
+    "use": "Use",
+    "version": "version"
   }
 }

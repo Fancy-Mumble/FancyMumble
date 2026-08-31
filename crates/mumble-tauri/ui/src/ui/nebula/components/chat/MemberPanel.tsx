@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Box, IconButton, Typography } from "@mui/material";
 import type { UserEntry } from "@core/types";
 import { CloseIcon, InfoIcon } from "@ui/icons";
@@ -38,10 +39,11 @@ export function MemberPanel({
   onInfo,
   onClose,
 }: Readonly<MemberPanelProps>) {
+  const { t } = useTranslation(["nebulaChat", "sidebar", "nebulaChrome"]);
   return (
     <Stack
       component="aside"
-      aria-label="Members"
+      aria-label={t("sidebar:sidebarTabs.members")}
       sx={(theme) => ({
         width: 260,
         flex: "none",
@@ -51,8 +53,13 @@ export function MemberPanel({
       })}
     >
       <Stack direction="row" alignItems="center" sx={{ px: "14px", pt: "14px", pb: "8px" }}>
-        <Typography sx={{ fontSize: 15, fontWeight: 600 }}>Members</Typography>
-        <IconButton size="small" aria-label="Close members" sx={{ ml: "auto" }} onClick={onClose}>
+        <Typography sx={{ fontSize: 15, fontWeight: 600 }}>{t("sidebar:sidebarTabs.members")}</Typography>
+        <IconButton
+          size="small"
+          aria-label={t("nebulaChat:members.close")}
+          sx={{ ml: "auto" }}
+          onClick={onClose}
+        >
           <CloseIcon width={13} height={13} />
         </IconButton>
       </Stack>
@@ -77,13 +84,13 @@ export function MemberPanel({
               "&:hover": { background: theme.palette.nebula.hover },
             })}
           >
-            {option === "channel" ? "This channel" : "Server"}
+            {option === "channel" ? t("nebulaChat:members.scopeChannel") : t("nebulaChat:members.scopeServer")}
           </Box>
         ))}
       </Stack>
 
       <Box sx={{ px: "12px", pb: "6px" }}>
-        <SearchBox value={query} onChange={onQueryChange} placeholder="Find a member" />
+        <SearchBox value={query} onChange={onQueryChange} placeholder={t("nebulaChat:members.find")} />
       </Box>
 
       <Box
@@ -122,7 +129,7 @@ export function MemberPanel({
             </Typography>
             {member.session === ownSession ? (
               <Typography sx={(theme) => ({ ml: "auto", fontSize: 9.5, color: theme.palette.nebula.dim })}>
-                you
+                {t("nebulaChrome:miniMode.you")}
               </Typography>
             ) : (
               <Box sx={{ ml: "auto", display: "flex" }}>
@@ -132,7 +139,7 @@ export function MemberPanel({
             {onInfo && (
               <IconButton
                 size="small"
-                aria-label={`Information about ${member.name}`}
+                aria-label={t("nebulaChat:members.info", { name: member.name })}
                 // The row itself opens the card; this opens the sheet instead.
                 onClick={(event) => {
                   event.stopPropagation();

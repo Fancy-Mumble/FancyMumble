@@ -145,6 +145,7 @@ fancy_message_support! {
     FancyPluginAdminAck            => ServerOnly,
 
     // -- Runtime server settings (server-processed) -- 0.4.x ---------
+    FancyServerSettingsQuery       => ServerOnly,
     FancyServerSettings            => ServerOnly,
     FancyServerSettingsUpdate      => ServerOnly,
 
@@ -287,10 +288,6 @@ mod tests {
         "FancyPluginAdminInstall",
         "FancyPluginAdminUninstall",
         "FancyPluginAdminAck",
-        // Operator settings. `SERVER_CONFIG` carries livery on the same
-        // envelope, so this one is a body away rather than a service away.
-        "FancyServerSettings",
-        "FancyServerSettingsUpdate",
         // The audit *tail*; queries and their answers are carried.
         "FancyAuditEvent",
         // The forum, whole.

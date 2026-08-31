@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button, Dialog, DialogContent } from "@mui/material";
 import { useAppStore } from "@core/store";
 import { useScreenShare } from "@standard/components/chat/stream/useScreenShare";
@@ -41,6 +42,7 @@ export function ScreenShareStrip({
   cameraRequested = false,
   onPickerClosed,
 }: Readonly<ScreenShareStripProps>) {
+  const { t } = useTranslation(["nebulaChat", "common"]);
   const share = useScreenShare();
   const users = useAppStore((state) => state.users);
   const currentChannel = useAppStore((state) => state.currentChannel);
@@ -109,12 +111,13 @@ export function ScreenShareStrip({
     () =>
       buildFeeds(
         sessions.map((session) => media.get(session)).filter((entry) => entry !== undefined),
-        (session) => users.find((user) => user.session === session)?.name ?? "Someone",
+        (session) => users.find((user) => user.session === session)?.name ?? t("nebulaChat:share.someone"),
         ownSession,
         ownDisplayKind,
         usesNativeSurface(),
+        t("nebulaChat:share.you"),
       ),
-    [media, ownDisplayKind, ownSession, sessions, users],
+    [media, ownDisplayKind, ownSession, sessions, users, t],
   );
 
   return (
@@ -152,7 +155,7 @@ export function ScreenShareStrip({
             sx={{ ml: "auto" }}
             onClick={() => useAppStore.setState({ webrtcError: null })}
           >
-            Dismiss
+            {t("common:actions.dismiss")}
           </Button>
         </Stack>
       )}

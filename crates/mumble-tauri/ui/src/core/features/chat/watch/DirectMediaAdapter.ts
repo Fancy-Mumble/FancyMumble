@@ -21,7 +21,7 @@ export class DirectMediaAdapter implements PlayerAdapter {
     this.onLocalEvent = args.onLocalEvent;
     this.video = document.createElement("video");
     this.video.src = args.sourceUrl;
-    this.video.controls = true;
+    this.video.controls = args.controls !== false;
     this.video.style.width = "100%";
     this.video.style.maxHeight = "60vh";
     this.video.style.background = "#000";
@@ -62,6 +62,12 @@ export class DirectMediaAdapter implements PlayerAdapter {
 
   currentTime(): number {
     return this.video.currentTime;
+  }
+
+  duration(): number {
+    // NaN until the browser has the metadata, Infinity for a live stream.
+    const value = this.video.duration;
+    return Number.isFinite(value) ? value : 0;
   }
 
   setOnLocalEvent(cb: ((event: LocalPlayerEvent) => void) | undefined): void {

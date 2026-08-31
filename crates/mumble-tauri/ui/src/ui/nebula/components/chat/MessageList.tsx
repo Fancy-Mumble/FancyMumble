@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Stack } from "../primitives";
 import { Box, Divider, Typography } from "@mui/material";
 import { useUserAvatars } from "@core/lazyBlobs";
@@ -11,6 +12,7 @@ import {
   tailCountToInclude,
 } from "@core/features/chat/chatWindowing";
 import { groupMessagesByDay } from "../../selectors";
+import { DEFAULT_CHAT_DISPLAY, type ChatDisplay } from "../../useChatDisplay";
 import { radius } from "../../tokens";
 
 /**
@@ -43,6 +45,14 @@ interface MessageListProps {
    * has to flash it again, or the click reads as broken.
    */
   jumpTo?: { messageId: string; nonce: number } | null;
+  /**
+   * Text size and density, from the personalization record.
+   *
+   * The size is set on the column rather than on each row: the rows draw their
+   * bodies at the inherited size, and their own furniture - names, timestamps,
+   * badges - is chrome that the mock sizes rather than the reader.
+   */
+  display?: ChatDisplay;
   renderMessage: (message: ChatMessage, avatar: string | null, grouped: boolean) => React.ReactNode;
 }
 
@@ -69,8 +79,13 @@ export function MessageList({
   firstUnreadId,
   header,
   jumpTo,
+  display = DEFAULT_CHAT_DISPLAY,
   renderMessage,
 }: Readonly<MessageListProps>) {
+  const { t } = useTranslation("nebulaCommon");
+  // Compact mode is the reader asking for more conversation per screen, so the
+  // air between messages goes the way the avatars do.
+  const rowGap = display.compact ? "9px" : "19px";
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedToBottom = useRef(true);
 
@@ -124,7 +139,7 @@ export function MessageList({
     });
   }, [users, windowed]);
   const avatars = useUserAvatars(senders);
-  const sections = useMemo(() => groupMessagesByDay(windowed), [windowed]);
+  const sections = useMemo(() => groupMessagesByDay(t, windowed), [t, windowed]);
 
   // Reading position is held across three different kinds of change, and they
   // want opposite things: an arriving message should follow the reader down if
@@ -201,12 +216,13 @@ export function MessageList({
           px: "20px",
           display: "flex",
           flexDirection: "column",
-          gap: "19px",
+          gap: rowGap,
+          fontSize: `${display.fontSizePx}px`,
         }}
       >
         {header}
         {sections.map((section) => (
-          <Stack key={section.key} gap="19px">
+          <Stack key={section.key} gap={rowGap}>
             <Box sx={{ display: "flex", justifyContent: "center" }}>
               <Typography
                 sx={(theme) => ({
@@ -226,7 +242,7 @@ export function MessageList({
               <Stack
                 key={message.message_id ?? `${message.timestamp}-${index}`}
                 data-message-id={message.message_id ?? undefined}
-                gap="19px"
+                gap={rowGap}
               >
                 {firstUnreadId && message.message_id === firstUnreadId && <UnreadRule />}
                 {renderMessage(

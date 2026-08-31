@@ -18,7 +18,16 @@ export type Screen = "chat" | "messages" | "connect" | "settings";
 
 /** Full-window surfaces that cover the shell while open. */
 export type Surface =
-  "downloads" | "pinned" | "server-info" | "screen-share" | "camera-share" | "public-servers" | null;
+  | "downloads"
+  | "pinned"
+  | "server-info"
+  // Beside the conversation in the same slot as the server details, so opening
+  // one closes the other rather than stacking two 320px asides on a chat.
+  | "channel-info"
+  | "screen-share"
+  | "camera-share"
+  | "public-servers"
+  | null;
 
 export function useScreenRouting() {
   const [screen, setScreen] = useState<Screen>("chat");

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Button,
@@ -32,6 +33,7 @@ interface AddServerDialogProps {
  * having a second variant.
  */
 export function AddServerDialog({ open, preset, onClose, onAdded }: Readonly<AddServerDialogProps>) {
+  const { t } = useTranslation(["nebulaConnect", "common", "server"]);
   const [label, setLabel] = useState("");
   const [host, setHost] = useState("");
   const [port, setPort] = useState("64738");
@@ -57,7 +59,7 @@ export function AddServerDialog({ open, preset, onClose, onAdded }: Readonly<Add
   const save = async () => {
     const parsedPort = Number.parseInt(port, 10);
     if (!host.trim() || !username.trim() || !Number.isFinite(parsedPort)) {
-      setError("Address, port and username are required.");
+      setError(t("nebulaConnect:addServer.required"));
       return;
     }
     setSaving(true);
@@ -81,23 +83,29 @@ export function AddServerDialog({ open, preset, onClose, onAdded }: Readonly<Add
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ pb: 0 }}>
-        <SectionLabel>{preset ? "NEW IDENTITY" : "NEW SERVER"}</SectionLabel>
+        <SectionLabel>
+          {preset
+            ? t("nebulaConnect:addServer.eyebrowIdentity")
+            : t("nebulaConnect:addServer.eyebrowServer")}
+        </SectionLabel>
         <Typography sx={{ fontSize: 15, fontWeight: 600 }}>
-          {preset ? `Join ${preset.label} as someone else` : "Add a server"}
+          {preset
+            ? t("nebulaConnect:addServer.titleIdentity", { server: preset.label })
+            : t("nebulaConnect:addServer.titleServer")}
         </Typography>
       </DialogTitle>
       <DialogContent>
         <Stack gap={1.5} sx={{ mt: 1 }}>
           <TextField
             size="small"
-            label="Display name"
+            label={t("nebulaConnect:addServer.displayName")}
             value={label}
             onChange={(event) => setLabel(event.target.value)}
           />
           <Stack direction="row" gap={1.5}>
             <TextField
               size="small"
-              label="Address"
+              label={t("nebulaConnect:addServer.address")}
               sx={{ flex: 2 }}
               disabled={!!preset}
               value={host}
@@ -105,7 +113,7 @@ export function AddServerDialog({ open, preset, onClose, onAdded }: Readonly<Add
             />
             <TextField
               size="small"
-              label="Port"
+              label={t("server:edit.portField")}
               sx={{ flex: 1 }}
               disabled={!!preset}
               value={port}
@@ -114,19 +122,19 @@ export function AddServerDialog({ open, preset, onClose, onAdded }: Readonly<Add
           </Stack>
           <TextField
             size="small"
-            label="Username"
+            label={t("server:edit.usernameField")}
             value={username}
             onChange={(event) => setUsername(event.target.value)}
           />
           <TextField
             select
             size="small"
-            label="Certificate"
+            label={t("nebulaConnect:addServer.certificate")}
             value={certLabel}
             onChange={(event) => setCertLabel(event.target.value)}
-            helperText="Optional. A certificate lets the server recognise you across reconnects."
+            helperText={t("nebulaConnect:addServer.certificateHelp")}
           >
-            <MenuItem value="">Connect anonymously</MenuItem>
+            <MenuItem value="">{t("nebulaConnect:addServer.anonymous")}</MenuItem>
             {certificates.map((name) => (
               <MenuItem key={name} value={name}>
                 {name}
@@ -141,9 +149,9 @@ export function AddServerDialog({ open, preset, onClose, onAdded }: Readonly<Add
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose}>{t("common:actions.cancel")}</Button>
         <Button variant="contained" disabled={saving} onClick={() => void save()}>
-          Save
+          {t("server:edit.save")}
         </Button>
       </DialogActions>
     </Dialog>

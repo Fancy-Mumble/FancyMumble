@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Box, Divider, Menu, MenuItem, Typography } from "@mui/material";
 import type { ServerPingResult } from "@core/types";
 import { PlusIcon, SearchIcon } from "@ui/icons";
@@ -41,6 +42,16 @@ export function QuickConnect({
   onAddByAddress,
   onBrowsePublic,
 }: Readonly<QuickConnectProps>) {
+  const { t } = useTranslation(["nebulaConnect", "nebulaCommon", "server"]);
+
+  /** `12/50 online`, or just the head count when the server caps at nothing. */
+  const occupancy = (ping: ServerPingResult) => {
+    const users = ping.user_count ?? 0;
+    return ping.max_user_count
+      ? t("nebulaConnect:status.onlineOfMax", { users, max: ping.max_user_count })
+      : t("nebulaConnect:status.online", { users });
+  };
+
   return (
     <Menu
       open={anchorEl !== null}
@@ -49,17 +60,21 @@ export function QuickConnect({
       anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
       transformOrigin={{ vertical: "top", horizontal: "left" }}
       slotProps={{
-        list: { dense: true, sx: { py: "6px", width: 260 }, "aria-label": "Quick connect" },
+        list: { dense: true, sx: { py: "6px", width: 260 }, "aria-label": t("nebulaCommon:quickConnect") },
         paper: { sx: { mt: "6px" } },
       }}
     >
-      <SectionLabel sx={{ px: "14px", pt: "4px", pb: "2px" }}>OPEN AS NEW TAB</SectionLabel>
+      <SectionLabel sx={{ px: "14px", pt: "4px", pb: "2px" }}>
+        {t("nebulaConnect:quickConnect.sectionOpenAsNewTab")}
+      </SectionLabel>
 
       {targets.length === 0 && (
         <Typography
           sx={(theme) => ({ px: "14px", py: "8px", fontSize: 11.5, color: theme.palette.nebula.muted })}
         >
-          {savedCount === 0 ? "No servers saved yet." : "Every saved login is already open."}
+          {savedCount === 0
+            ? t("nebulaConnect:quickConnect.noneSaved")
+            : t("nebulaConnect:quickConnect.allOpen")}
         </Typography>
       )}
 
@@ -68,12 +83,18 @@ export function QuickConnect({
         const ping = pings.get(group.key);
         const joined = formatLastJoined(identity.last_joined ?? null);
         const subtitle = [
-          !ping ? "checking…" : ping.online ? occupancy(ping) : "offline",
-          joined && `last joined ${joined}`,
+          !ping
+            ? t("nebulaConnect:status.checkingEllipsis")
+            : ping.online
+              ? occupancy(ping)
+              : t("nebulaConnect:status.offline"),
+          joined && t("nebulaConnect:quickConnect.lastJoined", { when: joined }),
           // Only worth saying when the address has a choice of logins: it names
           // the one this row is about to use, which matters most when the other
           // one is the tab you are already sitting in.
-          group.identities.length > 1 ? `as ${identity.username}` : null,
+          group.identities.length > 1
+            ? t("nebulaConnect:quickConnect.asIdentity", { username: identity.username })
+            : null,
         ]
           .filter(Boolean)
           .join(" · ");
@@ -106,24 +127,19 @@ export function QuickConnect({
         <ActionIcon>
           <PlusIcon width={13} height={13} />
         </ActionIcon>
-        <Typography sx={{ fontSize: 12.5 }}>Add server by address…</Typography>
+        <Typography sx={{ fontSize: 12.5 }}>{t("nebulaConnect:quickConnect.addByAddress")}</Typography>
       </MenuItem>
 
       <MenuItem onClick={onBrowsePublic} sx={{ px: "12px", py: "7px", gap: 1.25 }}>
         <ActionIcon>
           <SearchIcon width={13} height={13} />
         </ActionIcon>
-        <Typography sx={{ fontSize: 12.5 }}>Browse public servers</Typography>
+        <Typography sx={{ fontSize: 12.5 }}>{t("server:publicServersLink")}</Typography>
       </MenuItem>
     </Menu>
   );
 }
 
-/** `12/50 online`, or just the head count when the server caps at nothing. */
-function occupancy(ping: ServerPingResult): string {
-  const users = ping.user_count ?? 0;
-  return `${users}${ping.max_user_count ? `/${ping.max_user_count}` : ""} online`;
-}
 
 /**
  * The tile an action row wears where a server row wears its avatar, so both

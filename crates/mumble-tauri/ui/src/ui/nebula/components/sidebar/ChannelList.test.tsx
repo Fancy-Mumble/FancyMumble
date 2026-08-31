@@ -68,7 +68,7 @@ describe("ChannelList speaker states", () => {
     show([member(1, "Jonas", { mute: true, deaf: true }), member(2, "ZewiWin", { self_mute: true })]);
     expect(screen.getByLabelText("Server muted")).toBeTruthy();
     expect(screen.getByLabelText("Server deafened")).toBeTruthy();
-    expect(screen.getByLabelText("Muted (self)")).toBeTruthy();
+    expect(screen.getByLabelText("Self muted")).toBeTruthy();
   });
 
   it("reads a suppressed user as server muted", () => {
@@ -79,7 +79,7 @@ describe("ChannelList speaker states", () => {
   it("shows only the badge the user cannot lift when both are set", () => {
     show([member(1, "Jonas", { mute: true, self_mute: true })]);
     expect(screen.getByLabelText("Server muted")).toBeTruthy();
-    expect(screen.queryByLabelText("Muted (self)")).toBeNull();
+    expect(screen.queryByLabelText("Self muted")).toBeNull();
   });
 
   it("leaves a plain member unbadged", () => {
@@ -90,8 +90,8 @@ describe("ChannelList speaker states", () => {
   it("badges your own row too, leaving the 'you' marker at the edge", () => {
     show([member(9, "ZewiWin", { self_deaf: true, self_mute: true })], 9);
     expect(screen.getByText("you")).toBeTruthy();
-    expect(screen.getByLabelText("Muted (self)")).toBeTruthy();
-    expect(screen.getByLabelText("Deafened (self)")).toBeTruthy();
+    expect(screen.getByLabelText("Self muted")).toBeTruthy();
+    expect(screen.getByLabelText("Self deafened")).toBeTruthy();
   });
 });
 

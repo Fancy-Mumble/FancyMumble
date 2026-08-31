@@ -1963,7 +1963,9 @@ message Setting {
   // "plugin.fancy-live-doc.file_server_url").
   optional string key = 1;
   // Input type driving the client's field component:
-  // "string" | "text" | "bool" | "int" | "enum" | "country" | "password".
+  // "string" | "text" | "html" | "bool" | "int" | "enum" | "country" |
+  // "password".  "html" is a value the client renders as markup and so edits
+  // as formatted text; "text" is a paragraph shown as typed.
   optional string type = 2;
   // Group/section the setting belongs to (e.g. "General", "Registration", or
   // a plugin's display name).

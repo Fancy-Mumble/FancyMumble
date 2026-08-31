@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, Tooltip, Typography } from "@mui/material";
 import type { FileAttachmentInfo } from "@core/features/chat/fileAttachments";
 import { formatDuration } from "@core/utils/format";
@@ -25,6 +26,7 @@ export function AttachmentVisibilityBadge({
   info,
   overlay = false,
 }: Readonly<{ info: FileAttachmentInfo; overlay?: boolean }>) {
+  const { t } = useTranslation("nebulaChat");
   const [copied, setCopied] = useState(false);
   if (info.mode === "session") return null;
 
@@ -34,7 +36,10 @@ export function AttachmentVisibilityBadge({
       ? formatDuration(Math.max(0, info.expiresAt - Date.now() / 1000))
       : null;
 
-  const label = info.mode === "password" ? "Password protected" : "Public link";
+  const label =
+    info.mode === "password"
+      ? t("attachment.passwordProtected")
+      : t("attachment.publicLink");
   const canCopy = !expired && !!info.url;
 
   const copyLink = async () => {
@@ -49,7 +54,17 @@ export function AttachmentVisibilityBadge({
   };
 
   return (
-    <Tooltip title={canCopy ? (copied ? "Copied" : "Copy link") : expired ? "This link has expired" : label}>
+    <Tooltip
+      title={
+        canCopy
+          ? copied
+            ? t("attachment.copied")
+            : t("attachment.copyLink")
+          : expired
+            ? t("attachment.linkHasExpired")
+            : label
+      }
+    >
       <Stack
         component={canCopy ? "button" : "div"}
         direction="row"
@@ -95,7 +110,7 @@ export function AttachmentVisibilityBadge({
           )}
         </Box>
         <Typography component="span" sx={{ fontSize: "inherit", fontWeight: "inherit", color: "inherit" }}>
-          {expired ? "Link expired" : copied ? "Copied" : label}
+          {expired ? t("attachment.linkExpired") : copied ? t("attachment.copied") : label}
         </Typography>
         {expiresIn && !copied && (
           <Typography

@@ -19,6 +19,32 @@ impl AppState {
         guard.server_settings.clone()
     }
 
+    /// Ask the server to send them, for a client that was told nothing.
+    ///
+    /// The epoch-0 fork broadcast the schema to every root-Write admin after
+    /// `ServerSync`, so the cache above was already full by the time anyone
+    /// opened the screen. An epoch-1 server answers a question instead, and a
+    /// client that never asked saw an empty cache and reported it as "this
+    /// server may not support runtime settings".
+    ///
+    /// The answer arrives asynchronously as a `server-settings` event, the same
+    /// one the broadcast raises, so the caller waits on the event rather than
+    /// on this.
+    pub async fn request_server_settings(&self) -> Result<(), String> {
+        let handle = {
+            let session = self.inner.snapshot();
+            let state = session.lock().map_err(|e| e.to_string())?;
+            state.conn.client_handle.clone()
+        };
+        let handle = handle.ok_or("Not connected")?;
+
+        handle
+            .send(command::RequestServerSettings)
+            .await
+            .map_err(|e| format!("Failed to ask for the server settings: {e}"))?;
+        Ok(())
+    }
+
     /// Admin path: send changed settings to the server to apply at runtime.
     /// Only the `key` and `value` of each setting are sent; the rest of the
     /// schema is owned by the server.

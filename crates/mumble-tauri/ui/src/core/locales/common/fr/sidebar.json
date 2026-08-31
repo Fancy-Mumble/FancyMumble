@@ -80,7 +80,19 @@
     "forever": "0 = illimité",
     "saving": "Enregistrement...",
     "create": "Créer",
-    "save": "Enregistrer"
+    "save": "Enregistrer",
+    "hiddenLabel": "Salon masqué (seuls les utilisateurs invités le voient)",
+    "inviteesLabel": "Inviter des utilisateurs",
+    "inviteesPlaceholder": "Ajouter un utilisateur par nom ou identifiant",
+    "expiryModeLabel": "Suppression automatique",
+    "expiryNone": "Jamais",
+    "expiryAbsolute": "Après un délai fixe",
+    "expirySliding": "Après inactivité",
+    "expiryAfterLabel": "Supprimer après",
+    "unitSeconds": "secondes",
+    "unitHours": "heures",
+    "unitDays": "jours",
+    "unitWeeks": "semaines"
   },
   "channelSidebar": {
     "endCall": "Raccrocher",

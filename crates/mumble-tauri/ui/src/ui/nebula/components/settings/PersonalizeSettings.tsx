@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, Typography } from "@mui/material";
 import { getSelectedUiDesign, getUiDesignOverride, setSelectedUiDesign } from "@ui/selection";
-import type { UiDesignId } from "@core/types";
+import type { ServerSwitcher, UiDesignId } from "@core/types";
 import {
   loadPersonalization,
   PERSONALIZATION_DEFAULTS,
   savePersonalization,
   type BubbleStyle,
   type ChannelViewerStyle,
+  type FontSize,
   type PersonalizationData,
 } from "@standard/personalizationStorage";
 import { applyTheme, THEMES, type ThemeId } from "@standard/themes";
@@ -27,33 +29,47 @@ import {
   useResolvedBackgroundSource,
 } from "@core/features/settings/chatBackground";
 import { Stack } from "../primitives";
-import { GroupTitle, PageTitle, SegmentedGroup, SliderRow } from "./controls";
+import { GroupTitle, PageTitle, SegmentedGroup, SliderRow, ToggleCard } from "./controls";
 import { usePreferenceSettings } from "./usePreferenceSettings";
 import { radius } from "../../tokens";
 
-const MESSAGE_STYLES: { id: BubbleStyle; label: string }[] = [
-  { id: "bubbles", label: "Bubbles" },
-  { id: "flat", label: "Flat" },
-  { id: "compact", label: "Compact" },
-];
+const MESSAGE_STYLES = [
+  { id: "bubbles", labelKey: "settings:personalize.bubbleStyleBubbles" },
+  { id: "flat", labelKey: "settings:personalize.bubbleStyleFlat" },
+  { id: "compact", labelKey: "settings:personalize.bubbleStyleCompact" },
+] as const satisfies readonly { id: BubbleStyle; labelKey: string }[];
 
-/** Where the servers are listed. Both draw the same set. */
-const SERVER_SWITCHERS: { id: "rail" | "titlebar"; label: string }[] = [
-  { id: "rail", label: "Sidebar" },
-  { id: "titlebar", label: "Title bar" },
-];
+/**
+ * The three stored text sizes.
+ *
+ * "Large" is the custom pixel value rather than a size of its own - that is
+ * what the record means, and `chatFontSizePx` reads it the same way - so the
+ * expert slider below writes both fields and the pill follows it.
+ */
+const TEXT_SIZES = [
+  { id: "small", labelKey: "settings:personalize.fontSizeSmall" },
+  { id: "medium", labelKey: "settings:personalize.fontSizeMedium" },
+  { id: "large", labelKey: "settings:personalize.fontSizeLarge" },
+] as const satisfies readonly { id: FontSize; labelKey: string }[];
 
-const CHANNEL_VIEWERS: { id: ChannelViewerStyle; label: string }[] = [
-  { id: "classic", label: "Classic" },
-  { id: "flat", label: "Flat" },
-  { id: "modern", label: "Modern" },
-];
+/** Where the servers are listed. All three draw the same set. */
+const SERVER_SWITCHERS = [
+  { id: "rail", labelKey: "nebulaSettings:personalize.serverSwitcherRail" },
+  { id: "titlebar", labelKey: "nebulaSettings:personalize.serverSwitcherTitlebar" },
+  { id: "both", labelKey: "nebulaSettings:personalize.serverSwitcherBoth" },
+] as const satisfies readonly { id: ServerSwitcher; labelKey: string }[];
 
-const DESIGNS: { id: UiDesignId; label: string }[] = [
-  { id: "standard", label: "Standard" },
-  { id: "aurora", label: "Aurora" },
-  { id: "nebula", label: "Nebula" },
-];
+const CHANNEL_VIEWERS = [
+  { id: "classic", labelKey: "settings:personalize.channelViewerClassic" },
+  { id: "flat", labelKey: "settings:personalize.channelViewerFlat" },
+  { id: "modern", labelKey: "settings:personalize.channelViewerModern" },
+] as const satisfies readonly { id: ChannelViewerStyle; labelKey: string }[];
+
+const DESIGNS = [
+  { id: "standard", labelKey: "nebulaSettings:personalize.designStandard" },
+  { id: "aurora", labelKey: "nebulaSettings:personalize.designAurora" },
+  { id: "nebula", labelKey: "nebulaSettings:personalize.designNebula" },
+] as const satisfies readonly { id: UiDesignId; labelKey: string }[];
 
 /**
  * The bake pipeline: at most one backend bake in flight, always finishing on
@@ -136,6 +152,7 @@ function queueVideoBake(
  * cards - dropping eight themes to match an illustration would be a regression.
  */
 export function PersonalizeSettings() {
+  const { t } = useTranslation(["nebulaSettings", "settings"]);
   const [data, setData] = useState<PersonalizationData | null>(null);
   const { prefs, set } = usePreferenceSettings();
   const [design, setDesign] = useState<UiDesignId>("nebula");
@@ -202,7 +219,9 @@ export function PersonalizeSettings() {
       await savePersonalization(next);
       return true;
     } catch (error) {
-      setBackgroundError(error instanceof Error ? error.message : "Could not save that setting.");
+      setBackgroundError(
+        error instanceof Error ? error.message : t("nebulaSettings:personalize.saveFailed"),
+      );
       return false;
     }
   };
@@ -240,7 +259,7 @@ export function PersonalizeSettings() {
         // The backend cannot open this container (WebM); the webview is the
         // only decoder left, and its verdict is final.
         const src = await storedBackgroundUrl(picked.fileName);
-        if (!src) throw new Error("That video could not be stored.");
+        if (!src) throw new Error(t("nebulaSettings:personalize.videoNotStored"));
         posterName = await captureAndStorePoster(src);
       }
       await patch({
@@ -265,7 +284,9 @@ export function PersonalizeSettings() {
         const verdict = await probeVideoPlayback(src);
         if (!verdict.playable)
           setVideoNotice(
-            `${verdict.reason ?? "This system cannot play that video."} The still frame will show instead.`,
+            t("nebulaSettings:personalize.videoNotice", {
+              reason: verdict.reason ?? t("nebulaSettings:personalize.videoUnplayable"),
+            }),
           );
       })();
     } catch (error) {
@@ -278,7 +299,9 @@ export function PersonalizeSettings() {
         chatBgVideo: null,
         chatBgVideoBaked: null,
       });
-      setBackgroundError(error instanceof Error ? error.message : "Could not use that file.");
+      setBackgroundError(
+        error instanceof Error ? error.message : t("nebulaSettings:personalize.fileUnusable"),
+      );
     } finally {
       setBackgroundBusy(false);
     }
@@ -291,9 +314,7 @@ export function PersonalizeSettings() {
    * cheap path, so this is a notice rather than an error.
    */
   const reportBakeFailure = (reason: string) => {
-    setVideoNotice(
-      `That clip could not be optimized (${reason}). It will still play, but costs noticeably more while it is on screen.`,
-    );
+    setVideoNotice(t("nebulaSettings:personalize.bakeFailed", { reason }));
   };
 
   /** Forget the wallpaper: stored files, cached blobs, and the record. */
@@ -332,10 +353,16 @@ export function PersonalizeSettings() {
 
   return (
     <Box sx={{ maxWidth: 640 }}>
-      <PageTitle title="Personalize" />
+      <PageTitle title={t("settings:personalize.panelTitle")} />
 
-      <GroupTitle>Theme</GroupTitle>
-      <Stack direction="row" gap={1.125} flexWrap="wrap" role="radiogroup" aria-label="Theme">
+      <GroupTitle>{t("settings:personalize.theme")}</GroupTitle>
+      <Stack
+        direction="row"
+        gap={1.125}
+        flexWrap="wrap"
+        role="radiogroup"
+        aria-label={t("settings:personalize.theme")}
+      >
         {THEMES.map((theme) => {
           const active = data.theme === theme.id;
           return (
@@ -381,20 +408,65 @@ export function PersonalizeSettings() {
         })}
       </Stack>
 
-      <GroupTitle hint="Bubbles shows every message in a rounded card; Flat is one continuous river.">
-        Message style
+      <GroupTitle hint={t("nebulaSettings:personalize.messageStyleHint")}>
+        {t("nebulaSettings:personalize.messageStyle")}
       </GroupTitle>
       <SegmentedGroup
-        ariaLabel="Message style"
-        options={MESSAGE_STYLES}
+        ariaLabel={t("nebulaSettings:personalize.messageStyle")}
+        options={MESSAGE_STYLES.map((option) => ({ id: option.id, label: t(option.labelKey) }))}
         value={data.bubbleStyle}
         onChange={(id) => void patch({ bubbleStyle: id })}
       />
 
-      <GroupTitle>Chat background</GroupTitle>
+      <GroupTitle hint={t("nebulaSettings:personalize.textSizeHint")}>
+        {t("nebulaSettings:personalize.textSize")}
+      </GroupTitle>
+      <SegmentedGroup
+        ariaLabel={t("nebulaSettings:personalize.textSize")}
+        options={TEXT_SIZES.map((option) => ({ id: option.id, label: t(option.labelKey) }))}
+        value={data.fontSize}
+        onChange={(id) => void patch({ fontSize: id })}
+      />
+      {/*
+        Expert-only, as in Standard: it is the same choice as the pills above,
+        offered a pixel at a time, and a page that asks the question twice at
+        every level of detail is a page nobody reads.
+      */}
+      {prefs !== null && prefs.userMode !== "normal" && (
+        <Box sx={{ mt: "14px", maxWidth: 320 }}>
+          <SliderRow
+            label={t("nebulaSettings:personalize.customSize")}
+            value={data.fontSizeCustomPx}
+            display={t("nebulaSettings:personalize.customSizePx", { value: data.fontSizeCustomPx })}
+            min={10}
+            max={24}
+            step={1}
+            onChange={(value) => setData({ ...data, fontSizeCustomPx: value, fontSize: "large" })}
+            onCommit={(value) => void patch({ fontSizeCustomPx: value, fontSize: "large" })}
+          />
+        </Box>
+      )}
+
+      <GroupTitle>{t("nebulaSettings:personalize.messageList")}</GroupTitle>
+      <Stack gap={1}>
+        <ToggleCard
+          title={t("nebulaSettings:personalize.compactMode")}
+          hint={t("nebulaSettings:personalize.compactModeHint")}
+          checked={data.compactMode}
+          onChange={() => void patch({ compactMode: !data.compactMode })}
+        />
+        <ToggleCard
+          title={t("settings:personalize.alwaysShowMessageActions")}
+          hint={t("nebulaSettings:personalize.alwaysShowActionsHint")}
+          checked={data.alwaysShowMessageActions}
+          onChange={() => void patch({ alwaysShowMessageActions: !data.alwaysShowMessageActions })}
+        />
+      </Stack>
+
+      <GroupTitle>{t("nebulaSettings:personalize.chatBackground")}</GroupTitle>
       <Stack direction="row" gap={1.25} flexWrap="wrap">
         <BackgroundTile
-          label="Default"
+          label={t("nebulaSettings:personalize.backgroundDefault")}
           active={!data.chatBgOriginal && !data.chatBgVideo}
           onClick={() => void clearBackground()}
         >
@@ -415,7 +487,11 @@ export function PersonalizeSettings() {
 
         {(data.chatBgOriginal || data.chatBgVideo) && (
           <BackgroundTile
-            label={data.chatBgVideo ? "Current (video)" : "Current"}
+            label={
+              data.chatBgVideo
+                ? t("nebulaSettings:personalize.backgroundCurrentVideo")
+                : t("nebulaSettings:personalize.backgroundCurrent")
+            }
             active
             onClick={() => void chooseBackground()}
           >
@@ -452,7 +528,9 @@ export function PersonalizeSettings() {
           "&:hover": { borderColor: theme.palette.nebula.accentLine },
         })}
       >
-        {backgroundBusy ? "Preparing background…" : "Choose an image or video — shown blurred behind chat"}
+        {backgroundBusy
+          ? t("nebulaSettings:personalize.backgroundPreparing")
+          : t("nebulaSettings:personalize.backgroundChoose")}
       </Box>
 
       {bakePercent !== null && (
@@ -483,7 +561,7 @@ export function PersonalizeSettings() {
 
       <Stack direction="row" gap={3} sx={{ mt: "14px" }}>
         <SliderRow
-          label="Blur"
+          label={t("nebulaSettings:personalize.blur")}
           value={data.chatBgBlurSigma}
           display={`${data.chatBgBlurSigma}`}
           min={0}
@@ -492,9 +570,11 @@ export function PersonalizeSettings() {
           onCommit={(value) => void commitEffectSlider({ chatBgBlurSigma: value })}
         />
         <SliderRow
-          label="Opacity"
+          label={t("nebulaSettings:personalize.opacity")}
           value={data.chatBgOpacity}
-          display={`${Math.round(data.chatBgOpacity * 100)}%`}
+          display={t("nebulaSettings:personalize.percent", {
+            value: Math.round(data.chatBgOpacity * 100),
+          })}
           min={0}
           max={1}
           step={0.01}
@@ -502,9 +582,9 @@ export function PersonalizeSettings() {
           onCommit={(value) => void patch({ chatBgOpacity: value })}
         />
         <SliderRow
-          label="Dim"
+          label={t("nebulaSettings:personalize.dim")}
           value={data.chatBgDim}
-          display={`${Math.round(data.chatBgDim * 100)}%`}
+          display={t("nebulaSettings:personalize.percent", { value: Math.round(data.chatBgDim * 100) })}
           min={0}
           max={1}
           step={0.01}
@@ -513,20 +593,20 @@ export function PersonalizeSettings() {
         />
       </Stack>
 
-      <GroupTitle hint="The rail keeps every server in view; the title bar keeps the window taller.">
-        Server list
+      <GroupTitle hint={t("nebulaSettings:personalize.serverListHint")}>
+        {t("nebulaSettings:personalize.serverList")}
       </GroupTitle>
       <SegmentedGroup
-        ariaLabel="Server list"
-        options={SERVER_SWITCHERS}
+        ariaLabel={t("nebulaSettings:personalize.serverList")}
+        options={SERVER_SWITCHERS.map((option) => ({ id: option.id, label: t(option.labelKey) }))}
         value={prefs?.serverSwitcher ?? "rail"}
         onChange={(id) => set({ serverSwitcher: id })}
       />
 
-      <GroupTitle>Channel viewer</GroupTitle>
+      <GroupTitle>{t("nebulaSettings:personalize.channelViewer")}</GroupTitle>
       <SegmentedGroup
-        ariaLabel="Channel viewer"
-        options={CHANNEL_VIEWERS}
+        ariaLabel={t("nebulaSettings:personalize.channelViewer")}
+        options={CHANNEL_VIEWERS.map((option) => ({ id: option.id, label: t(option.labelKey) }))}
         value={data.channelViewerStyle}
         onChange={(id) => void patch({ channelViewerStyle: id })}
       />
@@ -534,15 +614,15 @@ export function PersonalizeSettings() {
       <GroupTitle
         hint={
           designOverride
-            ? `Pinned to "${designOverride}" by the development URL override.`
-            : "Standard has the broadest feature coverage; Aurora and Nebula are design betas."
+            ? t("nebulaSettings:personalize.designPinned", { design: designOverride })
+            : t("nebulaSettings:personalize.designHint")
         }
       >
-        Interface design
+        {t("settings:personalize.uiDesign")}
       </GroupTitle>
       <SegmentedGroup
-        ariaLabel="Interface design"
-        options={DESIGNS}
+        ariaLabel={t("settings:personalize.uiDesign")}
+        options={DESIGNS.map((option) => ({ id: option.id, label: t(option.labelKey) }))}
         value={design}
         onChange={(id) => {
           if (designOverride) return;

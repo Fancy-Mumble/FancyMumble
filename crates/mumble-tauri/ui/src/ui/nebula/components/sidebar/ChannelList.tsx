@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, Tooltip, Typography } from "@mui/material";
 import type { ChannelEntry, UserEntry } from "@core/types";
 import { LockIcon, VolumeIcon } from "@ui/icons";
@@ -51,6 +52,7 @@ export function ChannelList({
   onLeaveUser,
   onContextMenuUser,
 }: Readonly<ChannelListProps>) {
+  const { t } = useTranslation("nebulaSidebar");
   const occupantsByChannel = useMemo(() => groupOccupants(users), [users]);
 
   return (
@@ -130,7 +132,7 @@ export function ChannelList({
                 <Stack direction="row" alignItems="center" gap={0.75} sx={{ ml: "auto" }}>
                   {unread > 0 && <StatusDot status="online" size={5} />}
                   {channel.user_count > 0 && (
-                    <Tooltip title={`${channel.user_count} in voice`}>
+                    <Tooltip title={t("channels.inVoice", { count: channel.user_count })}>
                       <Box
                         component="span"
                         onClick={(event) => {
@@ -245,11 +247,12 @@ function OccupantRow({
 }
 
 function ChannelGlyph({ channel, active }: Readonly<{ channel: ChannelEntry; active: boolean }>) {
+  const { t } = useTranslation("nebulaSidebar");
   if (channel.is_enter_restricted)
     return (
       <Box
         component="span"
-        aria-label="Restricted channel"
+        aria-label={t("channels.restricted")}
         sx={(theme) => ({ display: "flex", color: theme.palette.nebula.warn })}
       >
         <LockIcon width={12} height={12} />

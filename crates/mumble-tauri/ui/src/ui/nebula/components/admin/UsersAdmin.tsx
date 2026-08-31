@@ -301,6 +301,7 @@ export function UsersAdmin({ onOpenRole }: Readonly<{ onOpenRole?: (roleName: st
   return (
     <AdminPage
       wide
+      fill
       title={t("registeredUsers.title")}
       toolbar={
         <>
@@ -318,6 +319,7 @@ export function UsersAdmin({ onOpenRole }: Readonly<{ onOpenRole?: (roleName: st
       }
     >
       <DataTable
+        stickyHeader
         columns={columns}
         rows={filtered}
         rowKey={(user) => String(user.user_id)}

@@ -242,6 +242,13 @@ pub enum TcpMessageType {
     FancyFileManaged = 185,
     /// Fancy Mumble: client asks for one stored file to be removed.
     FancyFileForget = 186,
+    /// Fancy Mumble: an admin asks for the editable server settings.
+    ///
+    /// A local tag that never reaches a wire, like the livery pair above.
+    /// Epoch 0 broadcast 152 after `ServerSync` and never modelled asking,
+    /// so there is no epoch-0 message to translate from; the canon carries
+    /// the question inside outer type 1013, beside the answer.
+    FancyServerSettingsQuery = 187,
     /// Fancy Mumble: generic plugin envelope (bidirectional).
     PluginMessage = 200,
     /// Fancy Mumble: server enumerates loaded plugins after `ServerSync`.
@@ -435,6 +442,12 @@ pub enum ControlMessage {
     FancyPluginAdminUninstall(mumble_tcp::FancyPluginAdminUninstall),
     /// Fancy: server status reply for an admin plugin action.
     FancyPluginAdminAck(mumble_tcp::FancyPluginAdminAck),
+    /// Fancy: an admin asks for the editable server settings.
+    ///
+    /// Carries the canon type rather than an epoch-0 twin, for the reason
+    /// `FancyLiveryQuery` does: epoch 0 had no question, only the broadcast
+    /// that answers it.
+    FancyServerSettingsQuery(fancy::domain::ConfigQuery),
     /// Fancy: server advertises the editable server-settings schema.
     FancyServerSettings(mumble_tcp::FancyServerSettings),
     /// Fancy: admin submits changed server settings.
@@ -583,7 +596,7 @@ message_type_mapping! {
     FancyPluginAdminListRequest, FancyPluginAdminList,
     FancyPluginAdminSetEnabled, FancyPluginAdminInstall,
     FancyPluginAdminUninstall, FancyPluginAdminAck,
-    FancyServerSettings, FancyServerSettingsUpdate,
+    FancyServerSettingsQuery, FancyServerSettings, FancyServerSettingsUpdate,
     FancyAccountSettings, FancyAccountSettingsUpdate, FancyAccountAck,
     FancyForumPost, FancyForumFetch, FancyForumFetchResponse, FancyForumDelete,
     FancyScheduledMessage, FancyScheduledMessageList,

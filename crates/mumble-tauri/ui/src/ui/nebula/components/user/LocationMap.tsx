@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Box } from "@mui/material";
 import { divIcon, type GridLayer } from "leaflet";
 import {
@@ -36,8 +37,9 @@ const TILEJSON = "https://tiles.openfreemap.org/planet";
 /** Deepest tile the source has; the rest is scaled from it. */
 const MAX_DATA_ZOOM = 14;
 
-/** What the data's terms ask for, wherever it is shown. */
-const CREDIT = "© OpenStreetMap contributors · OpenFreeMap";
+/** What the data's terms ask for, wherever it is shown - the project names
+ *  stay as they are, and only the word around them is translated. */
+const CREDIT_KEY = "map.attribution";
 
 /** The mock's faint graph-paper grid over the map. */
 const GRID = (line: string) =>
@@ -208,6 +210,7 @@ interface LocationMapProps {
  * source cannot be reached.
  */
 export default function LocationMap({ lat, lng, dark, accent }: Readonly<LocationMapProps>) {
+  const { t } = useTranslation("nebulaUser");
   const [loaded, setLoaded] = useState(false);
   const onLoad = useCallback(() => setLoaded(true), []);
   const icon = useMemo(() => pinIcon(accent), [accent]);
@@ -290,7 +293,7 @@ export default function LocationMap({ lat, lng, dark, accent }: Readonly<Locatio
           pointerEvents: "none",
         }}
       >
-        {CREDIT}
+        {t(CREDIT_KEY)}
       </span>
     </Box>
   );

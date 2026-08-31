@@ -1135,5 +1135,22 @@
     "colAccess": "Zugriff",
     "colUploaded": "Hochgeladen",
     "colExpires": "Läuft ab"
+  },
+  "scheduled": {
+    "title": "Geplante Nachrichten",
+    "refresh": "Aktualisieren",
+    "messagePlaceholder": "Nachricht für später…",
+    "deliverAt": "Zustellen am",
+    "schedule": "Planen",
+    "loading": "Lädt…",
+    "none": "Keine geplanten Nachrichten.",
+    "cancel": "Abbrechen",
+    "deliversAt": "Zustellung {{time}}",
+    "invalidTime": "Bitte wähle ein gültiges Datum und eine gültige Uhrzeit.",
+    "timeInPast": "Der Zustellzeitpunkt muss in der Zukunft liegen.",
+    "statusPending": "Ausstehend",
+    "statusDelivered": "Zugestellt",
+    "statusCancelled": "Abgebrochen",
+    "statusRejected": "Abgelehnt"
   }
 }

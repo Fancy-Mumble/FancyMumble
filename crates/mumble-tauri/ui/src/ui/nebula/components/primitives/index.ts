@@ -6,6 +6,8 @@ export { TalkingBars } from "./TalkingBars";
 export { UserAvatar } from "./UserAvatar";
 export { SearchBox } from "./SearchBox";
 export { RichTextField, type RichTextFieldProps, type RichTextTool } from "./RichTextField";
+export { HtmlSourceField, type HtmlSourceFieldProps } from "./HtmlSourceField";
+export { richTextSurvives, richTextExtensions, type RichTextPreset } from "./richText";
 export { PriorityBadge, VoiceStateBadges, speakerState } from "./SpeakerBadges";
 export { StatChip, type StatChipTone } from "./StatChip";
 export { LinkGuard } from "./LinkGuard";

@@ -394,6 +394,25 @@ export function glassChrome(theme: Theme) {
   } as const;
 }
 
+/**
+ * The glass a panel that hangs over the conversation is cut from.
+ *
+ * `floatingSurface` paints the scheme's own colour, which is right for a menu
+ * sitting on the window; this is for the surfaces that float over the
+ * wallpaper, where what is behind them is the point. One recipe rather than
+ * two, so the composer's popovers and the pinned panel cannot drift apart in
+ * blur or hairline.
+ */
+export function washPanel(theme: Theme) {
+  const { nebula } = theme.palette;
+  return {
+    background: nebula.wash,
+    WebkitBackdropFilter: "blur(36px) saturate(160%)",
+    backdropFilter: "blur(36px) saturate(160%)",
+    border: `1px solid ${nebula.washLine}`,
+  } as const;
+}
+
 /** Shared recipe for the mock's floating surfaces (menus, cards, panels). */
 export function floatingSurface(theme: Theme) {
   const { nebula } = theme.palette;

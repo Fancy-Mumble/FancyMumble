@@ -126,7 +126,20 @@ export function AdminScreen({
   }
 
   return (
-    <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", px: "52px", py: "38px" }}>
+    <Box
+      sx={{
+        flex: 1,
+        minHeight: 0,
+        overflowY: "auto",
+        // A column, so a page can opt into filling the pane (`AdminPage fill`)
+        // and hand the leftover height to a table that scrolls under a pinned
+        // header instead of scrolling the whole pane out from under it.
+        display: "flex",
+        flexDirection: "column",
+        px: "52px",
+        py: "38px",
+      }}
+    >
       <Suspense fallback={null}>{content}</Suspense>
     </Box>
   );

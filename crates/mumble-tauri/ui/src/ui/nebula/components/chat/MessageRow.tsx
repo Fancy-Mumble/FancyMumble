@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, InputBase, Tooltip, Typography } from "@mui/material";
+import type { Theme } from "@mui/material/styles";
 import DOMPurify from "dompurify";
 import { useAppStore } from "@core/store";
 import type { ChatMessage } from "@core/types";
@@ -7,29 +9,42 @@ import { getReactions, hasReacted } from "@core/features/chat/reaction/reactionS
 import { decodeFileAttachmentPayload } from "@core/features/chat/fileAttachments";
 import { useLinkPreviews } from "@core/features/chat/useLinkPreviews";
 import { getPoll } from "@core/features/chat/poll/model";
+import { useWatchStart } from "@core/features/chat/watch/useWatchStart";
+import { MENTION_CHIP_SELECTOR, readMentionChip } from "@core/utils/mentions";
 import {
   CheckIcon,
   CopyIcon,
   EditIcon,
   EmojiPlusIcon,
   PinIcon,
+  PlayIcon,
   QuoteIcon,
   TrashIcon,
   WarningIcon,
 } from "@ui/icons";
 import ReactionBar from "@standard/components/chat/reaction/ReactionBar";
 import EmojiPicker from "@standard/components/elements/EmojiPicker";
-import LinkPreviewCard from "@standard/components/chat/linkpreview/LinkPreviewCard";
-import WatchTogetherCard from "@standard/components/chat/watch/WatchTogetherCard";
+import LinkPreviewCard from "./LinkPreviewCard";
+import { WatchMarker } from "./watch/WatchMarker";
 import PollCard from "@standard/components/chat/poll/PollCard";
 import FileAttachmentCard from "@standard/components/chat/file/FileAttachmentCard";
 import { AttachmentVisibilityBadge } from "./AttachmentVisibilityBadge";
 import ReadReceiptIndicator from "@standard/components/chat/readreceipt/ReadReceiptIndicator";
 import QuoteBlock from "@standard/components/elements/QuoteBlock";
-import { composerHtml, editableText, formatTime, messageContent, plainText } from "../../selectors";
+import {
+  composerHtml,
+  DEFAULT_TIME_DISPLAY,
+  editableText,
+  formatTime,
+  messageContent,
+  plainText,
+  type TimeDisplay,
+} from "../../selectors";
+import { MentionPopover, type MentionTarget } from "./MentionPopover";
 import { LinkGuard, UserAvatar, Stack } from "../primitives";
 import { floatingSurface } from "../../theme";
 import { radius } from "../../tokens";
+import type { HoverEvent } from "../../clientState";
 
 const WATCH_MARKER = /<!--\s*FANCY_WATCH:([^\s]+)\s*-->/;
 
@@ -66,12 +81,44 @@ function sanitizeBody(html: string): string {
   return wrapper.innerHTML;
 }
 
+/**
+ * The mention chip, in the window's own colours.
+ *
+ * `applyMentionsToHtml` gives every mention a class and nothing else, so a
+ * body that was not styled for them printed "@lorelando" as ordinary prose -
+ * which is also how it behaved. `@everyone` and `@here` take the warning
+ * colour they take everywhere: those are the two that reach a whole room.
+ */
+function mentionSx(theme: Theme) {
+  const { nebula } = theme.palette;
+  return {
+    "& .mention": {
+      display: "inline-block",
+      px: "4px",
+      mx: "1px",
+      borderRadius: radius("sm"),
+      fontWeight: 500,
+      cursor: "pointer",
+      color: nebula.accent,
+      background: nebula.accentSoft,
+    },
+    "& .mention:hover": { background: nebula.accentLine },
+    "& .mention-everyone, & .mention-here": {
+      color: nebula.warn,
+      background: `color-mix(in srgb, ${nebula.warn} 18%, transparent)`,
+    },
+    "& .mention-everyone:hover, & .mention-here:hover": {
+      background: `color-mix(in srgb, ${nebula.warn} 32%, transparent)`,
+    },
+  } as const;
+}
+
 interface MessageRowProps {
   message: ChatMessage;
   avatar?: string | null;
   /** True when the previous message shares this sender and day. */
   grouped: boolean;
-  onOpenProfile: (session: number, event: React.MouseEvent) => void;
+  onOpenProfile: (session: number, event: HoverEvent) => void;
   onHoverProfile?: (session: number, event: React.MouseEvent) => void;
   onLeaveProfile?: () => void;
   /** Right-click on the author - the same menu their row in any list opens. */
@@ -80,6 +127,13 @@ interface MessageRowProps {
   onVote?: (pollId: string, selected: number[]) => void;
   /** Open the lightbox on an image inside the body. */
   onOpenImage?: (src: string) => void;
+  /**
+   * The clock settings this row reads its timestamp under.
+   *
+   * A prop rather than a hook per row: the settings are one record read once
+   * at the top of the client, and a busy channel mounts hundreds of these.
+   */
+  time?: TimeDisplay;
   /** Every id in the conversation, for the read-receipt watermark comparison. */
   allMessageIds?: readonly string[];
   /** Start a reply quoting this message. */
@@ -88,6 +142,16 @@ interface MessageRowProps {
   onJumpTo?: (messageId: string) => void;
   /** Right-click anywhere on the message. */
   onContextMenu?: (message: ChatMessage, at: { x: number; y: number }, editable: boolean) => void;
+  /** Compact mode: no avatar column, and the row is tighter for it. */
+  compact?: boolean;
+  /**
+   * Keep the action strip up on every message rather than on hover.
+   *
+   * Not the same strip left switched on: hovering hangs the pill *over* the row
+   * above, which is right for the one row under the pointer and unreadable on
+   * all of them at once. Pinned, it sits in the flow under its own message.
+   */
+  alwaysShowActions?: boolean;
   /** Selection mode: null when off, otherwise whether this row is picked. */
   selected?: boolean | null;
   onToggleSelected?: (messageId: string) => void;
@@ -120,15 +184,19 @@ export function MessageRow({
   onContextMenuProfile,
   onVote,
   onOpenImage,
+  time = DEFAULT_TIME_DISPLAY,
   allMessageIds,
   onQuote,
   onJumpTo,
   onContextMenu,
+  compact = false,
+  alwaysShowActions = false,
   selected = null,
   onToggleSelected,
   editing = false,
   onEditingChange,
 }: Readonly<MessageRowProps>) {
+  const { t } = useTranslation(["nebulaChat", "chat"]);
   // The avatar and the name are two handles on one person, so they carry the
   // same hover, the same click and the same menu.
   const authorHandlers =
@@ -143,9 +211,14 @@ export function MessageRow({
   const [hovered, setHovered] = useState(false);
   /** Anchor for the reaction picker, or null while it is closed. */
   const [picker, setPicker] = useState<{ x: number; y: number } | null>(null);
+  /** The mention chip whose member list is open, or null while none is. */
+  const [mention, setMention] = useState<MentionTarget | null>(null);
   const ownSession = useAppStore((state) => state.ownSession);
   const users = useAppStore((state) => state.users);
   const embeds = useLinkPreviews(message.message_id, message.body);
+  // The card carries its own "Watch together" where it has one, so the hover
+  // strip stands down rather than offering the same thing twice on one row.
+  const hasEmbeds = !!embeds && embeds.length > 0;
   const allowExternal = useAppStore((state) => state.enableExternalEmbeds);
   const reactionVersion = useAppStore((state) => state.reactionVersion);
   // Read polls through the store as well as the module map: the map is what
@@ -190,11 +263,37 @@ export function MessageRow({
     void useAppStore.getState().editMessage(message.channel_id, message.message_id, composerHtml(trimmed));
   };
 
-  // An image in a body is a thumbnail of something larger; clicking it used to
-  // do nothing at all. The handler sits on the container because the body is
-  // set as HTML and has no elements of ours to bind to.
-  const openImageUnder = (event: React.MouseEvent) => {
+  /**
+   * What a click inside the message body lands on.
+   *
+   * One handler on the container rather than listeners on the elements: the
+   * body is set as HTML, so there is nothing of ours in there to bind to.
+   *
+   * A mention chip answers first, because it can sit inside anything. Naming
+   * one person opens that person's card - the same card their row in any list
+   * opens - and everything else is a list of people, which the panel draws.
+   * An image is a thumbnail of something larger and opens the lightbox.
+   */
+  const onBodyClick = (event: React.MouseEvent) => {
     const target = event.target as HTMLElement;
+    const chipElement = target.closest?.<HTMLElement>(MENTION_CHIP_SELECTOR) ?? null;
+    const chip = chipElement && readMentionChip(chipElement);
+    if (chip && chipElement) {
+      event.preventDefault();
+      if (chip.kind === "user" && users.some((user) => user.session === chip.session)) {
+        // The card is placed beside the word that named them, not beside the
+        // whole message - `currentTarget` here is the body, which is neither.
+        onOpenProfile(chip.session, {
+          clientX: event.clientX,
+          clientY: event.clientY,
+          currentTarget: chipElement,
+        });
+        return;
+      }
+      const rect = chipElement.getBoundingClientRect();
+      setMention({ chip, at: { x: rect.left, y: rect.bottom + 6 } });
+      return;
+    }
     if (target.tagName !== "IMG") return;
     const src = (target as HTMLImageElement).currentSrc || (target as HTMLImageElement).src;
     if (src) onOpenImage?.(src);
@@ -244,9 +343,13 @@ export function MessageRow({
           visibilityBadge={(overlaid) => <AttachmentVisibilityBadge info={attachment} overlay={overlaid} />}
         />
       )}
-      {watchSessionId && <WatchTogetherCard sessionId={watchSessionId} mountKey={message.message_id ?? ""} />}
-      {embeds && embeds.length > 0 && (
-        <LinkPreviewCard embeds={embeds} allowExternalResources={allowExternal} />
+      {watchSessionId && <WatchMarker sessionId={watchSessionId} />}
+      {hasEmbeds && (
+        <LinkPreviewCard
+          embeds={embeds!}
+          allowExternalResources={allowExternal}
+          channelId={message.channel_id}
+        />
       )}
       {reactions.length > 0 && (
         <ReactionBar
@@ -257,6 +360,7 @@ export function MessageRow({
           onAdd={(event) => setPicker({ x: event.clientX, y: event.clientY })}
         />
       )}
+      <MentionPopover target={mention} onClose={() => setMention(null)} />
       {picker && (
         <EmojiPicker
           anchorX={picker.x}
@@ -279,8 +383,9 @@ export function MessageRow({
         {...rowHandlers}
         sx={{ position: "relative", ...(rowHandlers.sx ?? {}) }}
       >
-        {hovered && !editing && (
+        {hovered && !editing && !alwaysShowActions && (
           <RowActions
+            watchOnCard={hasEmbeds}
             message={message}
             align="right"
             onEdit={canEdit ? () => onEditingChange?.(true) : undefined}
@@ -299,7 +404,7 @@ export function MessageRow({
           hasBody && (
             <LinkGuard>
               <Box
-                onClick={openImageUnder}
+                onClick={onBodyClick}
                 sx={(theme) => ({
                   maxWidth: "min(620px, 78%)",
                   px: "14px",
@@ -320,6 +425,7 @@ export function MessageRow({
                   // as one, not so far that it starts a column of its own.
                   "& ul, & ol": { my: "4px", pl: "22px" },
                   "& li": { my: "2px" },
+                  ...mentionSx(theme),
                 })}
                 dangerouslySetInnerHTML={{ __html: body }}
               />
@@ -329,11 +435,22 @@ export function MessageRow({
         <Box sx={{ maxWidth: "min(620px, 78%)", width: "100%", display: "flex", justifyContent: "flex-end" }}>
           {extras}
         </Box>
+        {alwaysShowActions && !editing && (
+          <RowActions
+            watchOnCard={hasEmbeds}
+            pinned
+            message={message}
+            align="right"
+            onEdit={canEdit ? () => onEditingChange?.(true) : undefined}
+            onQuote={message.message_id ? () => onQuote?.(message) : undefined}
+            onReact={message.message_id ? openReactionPicker : undefined}
+          />
+        )}
         <Stack direction="row" alignItems="center" gap={0.75}>
           <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })}>
-            {formatTime(message.timestamp)}
-            {message.edited_at ? " · edited" : ""}
-            {message.send_failed ? " · failed" : ""}
+            {formatTime(message.timestamp, time)}
+            {message.edited_at ? t("nebulaChat:row.edited") : ""}
+            {message.send_failed ? t("nebulaChat:row.failed") : ""}
           </Typography>
           {/* The tick used to be printed as text and meant nothing; it now says
               whether anyone has actually read this far. */}
@@ -357,32 +474,42 @@ export function MessageRow({
   return (
     <Stack
       direction="row"
-      gap={1.5}
+      gap={compact ? 1 : 1.5}
       {...rowHandlers}
       sx={{ position: "relative", minWidth: 0, ...(rowHandlers.sx ?? {}) }}
     >
-      {hovered && !editing && (
+      {hovered && !editing && !alwaysShowActions && (
         <RowActions
+          watchOnCard={hasEmbeds}
           message={message}
           align="right"
           onQuote={message.message_id ? () => onQuote?.(message) : undefined}
           onReact={message.message_id ? openReactionPicker : undefined}
         />
       )}
-      <Box sx={{ width: 38, flex: "none" }}>
-        {!grouped && (
-          <Box
-            component="button"
-            onClick={(event) =>
-              message.sender_session != null && onOpenProfile(message.sender_session, event)
-            }
-            {...authorHandlers}
-            sx={{ all: "unset", cursor: "pointer", display: "flex" }}
-          >
-            <UserAvatar name={message.sender_name} session={message.sender_session} src={avatar} size={38} />
-          </Box>
-        )}
-      </Box>
+      {/* Compact mode drops the column rather than leaving a 38px gutter with
+          nothing in it: the width is the avatar, not an indent. */}
+      {!compact && (
+        <Box sx={{ width: 38, flex: "none" }}>
+          {!grouped && (
+            <Box
+              component="button"
+              onClick={(event) =>
+                message.sender_session != null && onOpenProfile(message.sender_session, event)
+              }
+              {...authorHandlers}
+              sx={{ all: "unset", cursor: "pointer", display: "flex" }}
+            >
+              <UserAvatar
+                name={message.sender_name}
+                session={message.sender_session}
+                src={avatar}
+                size={38}
+              />
+            </Box>
+          )}
+        </Box>
+      )}
       <Box sx={{ minWidth: 0, flex: 1 }}>
         {!grouped && (
           <Stack direction="row" alignItems="baseline" gap={1}>
@@ -402,8 +529,8 @@ export function MessageRow({
               {message.sender_name}
             </Typography>
             <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })}>
-              {formatTime(message.timestamp)}
-              {message.edited_at ? " · edited" : ""}
+              {formatTime(message.timestamp, time)}
+              {message.edited_at ? t("nebulaChat:row.edited") : ""}
             </Typography>
             {message.plugin_name && (
               <Typography
@@ -425,7 +552,7 @@ export function MessageRow({
         {hasBody && (
           <LinkGuard>
             <Box
-              onClick={openImageUnder}
+              onClick={onBodyClick}
               sx={(theme) => ({
                 mt: grouped ? 0 : "2px",
                 lineHeight: 1.55,
@@ -449,12 +576,23 @@ export function MessageRow({
                 // as one, not so far that it starts a column of its own.
                 "& ul, & ol": { my: "4px", pl: "22px" },
                 "& li": { my: "2px" },
+                ...mentionSx(theme),
               })}
               dangerouslySetInnerHTML={{ __html: body }}
             />
           </LinkGuard>
         )}
         {extras}
+        {alwaysShowActions && !editing && (
+          <RowActions
+            watchOnCard={hasEmbeds}
+            pinned
+            message={message}
+            align="left"
+            onQuote={message.message_id ? () => onQuote?.(message) : undefined}
+            onReact={message.message_id ? openReactionPicker : undefined}
+          />
+        )}
       </Box>
     </Stack>
   );
@@ -472,6 +610,7 @@ function BodyEditor({
   onCommit,
   onCancel,
 }: Readonly<{ initial: string; onCommit: (text: string) => void; onCancel: () => void }>) {
+  const { t } = useTranslation(["nebulaChat", "chat"]);
   const [draft, setDraft] = useState(initial);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -500,7 +639,7 @@ function BodyEditor({
             onCommit(draft);
           }
         }}
-        inputProps={{ "aria-label": "Edit message" }}
+        inputProps={{ "aria-label": t("nebulaChat:row.editMessage") }}
         sx={(theme) => ({
           width: "100%",
           px: "14px",
@@ -513,7 +652,7 @@ function BodyEditor({
         })}
       />
       <Typography sx={(theme) => ({ fontSize: 10, color: theme.palette.nebula.dim })}>
-        Enter saves · Esc cancels
+        {t("nebulaChat:row.editHint")}
       </Typography>
     </Stack>
   );
@@ -536,62 +675,103 @@ function RowActions({
   onQuote,
   onReact,
   align,
+  pinned = false,
+  watchOnCard = false,
 }: Readonly<{
   message: ChatMessage;
   onEdit?: () => void;
   onQuote?: () => void;
   onReact?: (event: React.MouseEvent) => void;
+  /** True where the link preview under the message already offers it. */
+  watchOnCard?: boolean;
   /** Which edge of the bubble the pill hangs from. */
   align: "left" | "right";
+  /**
+   * Drawn in the flow under its own message instead of floating over the row
+   * above - what "always show message actions" asks for. Floating is only safe
+   * for the one row the pointer is on.
+   */
+  pinned?: boolean;
 }>) {
+  const { t } = useTranslation(["nebulaChat", "chat"]);
   const canModerate = message.is_own && !!message.message_id;
+  /**
+   * Starting a watch-together session, on the strip rather than only in the
+   * right-click menu.
+   *
+   * The strip is the only affordance a message has - there is no kebab that
+   * opens the menu - so an action that lives in the menu alone is an action
+   * nobody finds. It appears on the two or three messages a day that carry a
+   * video and on no others, which is what keeps the strip short.
+   */
+  const {
+    canStart: canWatchTogether,
+    busy: watchBusy,
+    start: startWatch,
+  } = useWatchStart(message.body, message.channel_id);
   return (
     <Stack
       direction="row"
       alignItems="center"
       gap="14px"
       sx={(theme) => ({
-        position: "absolute",
-        // Above the row, not half over it: hanging into the message put the pill
-        // on top of the first line, where it swallowed clicks meant for a link.
-        bottom: `calc(100% + ${PILL_GAP}px)`,
-        ...(align === "right" ? { right: 0 } : { left: 0 }),
-        zIndex: 2,
-        height: 34,
+        ...(pinned
+          ? { alignSelf: align === "right" ? "flex-end" : "flex-start", mt: "5px", height: 30 }
+          : {
+              position: "absolute",
+              // Above the row, not half over it: hanging into the message put
+              // the pill on top of the first line, where it swallowed clicks
+              // meant for a link.
+              bottom: `calc(100% + ${PILL_GAP}px)`,
+              ...(align === "right" ? { right: 0 } : { left: 0 }),
+              zIndex: 2,
+              height: 34,
+              backdropFilter: "blur(30px)",
+              WebkitBackdropFilter: "blur(30px)",
+              // The gap is air to look at, not to walk through: the pointer
+              // crossing it has to stay inside the row, or the row stops being
+              // hovered and the pill is gone before it is reached. This bridges
+              // it, invisibly.
+              "&::after": {
+                content: '""',
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: "100%",
+                height: `${PILL_GAP}px`,
+              },
+            }),
+        width: "fit-content",
         px: "12px",
         borderRadius: radius("lg"),
         ...floatingSurface(theme),
-        backdropFilter: "blur(30px)",
-        WebkitBackdropFilter: "blur(30px)",
         color: theme.palette.nebula.muted,
-        // The gap is air to look at, not to walk through: the pointer crossing
-        // it has to stay inside the row, or the row stops being hovered and the
-        // pill is gone before it is reached. This bridges it, invisibly.
-        "&::after": {
-          content: '""',
-          position: "absolute",
-          left: 0,
-          right: 0,
-          top: "100%",
-          height: `${PILL_GAP}px`,
-        },
       })}
     >
-      {onReact && <PillButton label="Add reaction" onClick={onReact} icon={EmojiPlusIcon} />}
-      {onQuote && <PillButton label="Reply to message" onClick={onQuote} icon={QuoteIcon} />}
-      {onEdit && <PillButton label="Edit message" onClick={onEdit} icon={EditIcon} />}
+      {onReact && <PillButton label={t("chat:reactions.add")} onClick={onReact} icon={EmojiPlusIcon} />}
+      {onQuote && (
+        <PillButton label={t("nebulaChat:row.replyToMessage")} onClick={onQuote} icon={QuoteIcon} />
+      )}
+      {onEdit && <PillButton label={t("nebulaChat:row.editMessage")} onClick={onEdit} icon={EditIcon} />}
       <PillButton
-        label="Copy message"
+        label={t("chat:inlineActions.copy")}
         onClick={() => void navigator.clipboard?.writeText(plainText(message.body))}
         icon={CopyIcon}
       />
       {message.message_id && (
         <PillButton
-          label={message.pinned ? "Unpin message" : "Pin message"}
+          label={message.pinned ? t("chat:pinned.unpinAriaLabel") : t("nebulaChat:row.pinMessage")}
           onClick={() =>
             void useAppStore.getState().pinMessage(message.channel_id, message.message_id!, !!message.pinned)
           }
           icon={message.pinned ? CheckIcon : PinIcon}
+        />
+      )}
+      {canWatchTogether && !watchOnCard && (
+        <PillButton
+          label={watchBusy ? t("chat:contextMenu.watchTogetherBusy") : t("chat:contextMenu.watchTogether")}
+          onClick={() => void startWatch()}
+          icon={PlayIcon}
         />
       )}
       {canModerate && (
@@ -602,7 +782,7 @@ function RowActions({
             sx={(theme) => ({ width: "1px", height: 14, background: theme.palette.nebula.line2 })}
           />
           <PillButton
-            label="Delete message"
+            label={t("chat:contextMenu.deleteMessage")}
             onClick={() =>
               void useAppStore
                 .getState()

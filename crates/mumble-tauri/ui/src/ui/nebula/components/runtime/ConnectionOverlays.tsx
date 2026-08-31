@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Alert,
   Box,
@@ -19,6 +20,7 @@ import { radius } from "../../tokens";
 
 /** Password / two-factor challenge raised mid-connect by the backend. */
 function ConnectionChallenge() {
+  const { t } = useTranslation(["nebulaConnect", "common"]);
   const passwordRequired = useAppStore((state) => state.passwordRequired);
   const passwordAttempted = useAppStore((state) => state.passwordAttempted);
   const totpRequired = useAppStore((state) => state.totpRequired);
@@ -55,9 +57,9 @@ function ConnectionChallenge() {
   return (
     <Dialog open onClose={() => useAppStore.getState().dismissPasswordPrompt()} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ pb: 0 }}>
-        <SectionLabel>SECURE CONNECTION</SectionLabel>
+        <SectionLabel>{t("nebulaConnect:challenge.eyebrow")}</SectionLabel>
         <Typography sx={{ fontSize: 15, fontWeight: 600 }}>
-          {isTotp ? "Two-factor authentication" : "Server password required"}
+          {isTotp ? t("nebulaConnect:challenge.titleTotp") : t("nebulaConnect:challenge.titlePassword")}
         </Typography>
       </DialogTitle>
       <Box
@@ -70,18 +72,19 @@ function ConnectionChallenge() {
         <DialogContent>
           <Stack gap={1.5}>
             <Typography sx={{ fontSize: 12 }}>
-              Connect as <strong>{pending.username}</strong> to{" "}
-              <strong>
-                {pending.host}:{pending.port}
-              </strong>
-              .
+              {t("nebulaConnect:challenge.intro", {
+                username: pending.username,
+                target: `${pending.host}:${pending.port}`,
+              })}
             </Typography>
             {passwordAttempted && error && <Alert severity="error">{error}</Alert>}
             <TextField
               autoFocus
               fullWidth
               size="small"
-              label={isTotp ? "Six-digit authentication code" : "Server password"}
+              label={
+                isTotp ? t("nebulaConnect:challenge.codeLabel") : t("nebulaConnect:challenge.passwordLabel")
+              }
               type={isTotp ? "text" : "password"}
               value={secret}
               onChange={(event) =>
@@ -103,15 +106,19 @@ function ConnectionChallenge() {
                     onChange={(event) => setRemember(event.target.checked)}
                   />
                 }
-                label={<Typography sx={{ fontSize: 12 }}>Remember for this saved server</Typography>}
+                label={
+                  <Typography sx={{ fontSize: 12 }}>{t("nebulaConnect:challenge.remember")}</Typography>
+                }
               />
             )}
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => useAppStore.getState().dismissPasswordPrompt()}>Cancel</Button>
+          <Button onClick={() => useAppStore.getState().dismissPasswordPrompt()}>
+            {t("common:actions.cancel")}
+          </Button>
           <Button variant="contained" type="submit" disabled={isTotp ? secret.length !== 6 : !secret}>
-            Connect securely
+            {t("nebulaConnect:challenge.submit")}
           </Button>
         </DialogActions>
       </Box>
@@ -121,6 +128,7 @@ function ConnectionChallenge() {
 
 /** Banner shown while the client is waiting out a reconnect backoff. */
 function ReconnectBanner() {
+  const { t } = useTranslation(["nebulaConnect", "common"]);
   const scheduled = useAppStore((state) => state.reconnectScheduled);
   const lostAt = useAppStore((state) => state.connectionLostAt);
   const nextAt = useAppStore((state) => state.nextReconnectAt);
@@ -178,16 +186,22 @@ function ReconnectBanner() {
         })}
       />
       <Box>
-        <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>Connection interrupted</Typography>
+        <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{t("nebulaConnect:reconnect.title")}</Typography>
         <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.muted })}>
-          {retryIn === null ? "Waiting to reconnect" : `Retrying in ${retryIn}s`} · attempt {attempts + 1}
+          {t("nebulaConnect:reconnect.detail", {
+            state:
+              retryIn === null
+                ? t("nebulaConnect:reconnect.waiting")
+                : t("nebulaConnect:reconnect.retryIn", { seconds: retryIn }),
+            attempt: attempts + 1,
+          })}
         </Typography>
       </Box>
       <Button size="small" variant="contained" onClick={retry}>
-        Retry now
+        {t("nebulaConnect:reconnect.retryNow")}
       </Button>
       <Button size="small" onClick={() => void useAppStore.getState().disconnect()}>
-        Cancel
+        {t("common:actions.cancel")}
       </Button>
     </Stack>
   );

@@ -81,7 +81,7 @@ function renderSheet(overrides: Partial<UserInfoSheetProps> = {}) {
     location: { state: "located", lat: 51.9, lng: 8.38, place: "Gütersloh, North Rhine-Westphalia, DE" },
     reverseDns: "dyn-c200.hsi.magenta.de",
     groups: ["admin", "mods"],
-    bans: { count: 1, note: "expired 12 Jun" },
+    bans: { count: 1, note: { key: "nebulaUser:info.bansExpired", date: "12 Jun" } },
     admin: true,
     streamerMode: false,
     actions: ADMIN,
@@ -109,7 +109,7 @@ describe("UserInfoSheet", () => {
     expect(screen.getByText("Yes · id 6")).toBeTruthy();
     expect(screen.getByText("Fancy Mumble 0.4.0")).toBeTruthy();
     expect(screen.getByText("Linux 6.9")).toBeTruthy();
-    expect(screen.getByText("Weak / none")).toBeTruthy();
+    expect(screen.getByText("Weak / None")).toBeTruthy();
   });
 
   it("puts the address, its name, the place, the groups and the map under Network", () => {

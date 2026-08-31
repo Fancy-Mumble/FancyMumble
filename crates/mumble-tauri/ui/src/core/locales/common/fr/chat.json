@@ -1135,5 +1135,22 @@
     "colAccess": "Accès",
     "colUploaded": "Téléversé",
     "colExpires": "Expiration"
+  },
+  "scheduled": {
+    "title": "Messages programmés",
+    "refresh": "Actualiser",
+    "messagePlaceholder": "Message à envoyer plus tard…",
+    "deliverAt": "Livrer le",
+    "schedule": "Programmer",
+    "loading": "Chargement…",
+    "none": "Aucun message programmé.",
+    "cancel": "Annuler",
+    "deliversAt": "Livraison {{time}}",
+    "invalidTime": "Veuillez choisir une date et une heure valides.",
+    "timeInPast": "L’heure de livraison doit être dans le futur.",
+    "statusPending": "En attente",
+    "statusDelivered": "Livré",
+    "statusCancelled": "Annulé",
+    "statusRejected": "Rejeté"
   }
 }

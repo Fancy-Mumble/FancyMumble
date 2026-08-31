@@ -394,11 +394,18 @@ message Setting {
 
   enum Kind {
     STRING = 0;
-    // Multi-line: the welcome text is a paragraph, not a field.
+    // Multi-line, and plain: a paragraph somebody types, shown as typed.
     TEXT = 1;
     BOOL = 2;
     INT = 3;
     CHOICE = 4;
+    // The value is markup, and whatever renders it renders it as markup -- the
+    // welcome text, which every client puts through an allow-list on the way to
+    // the screen. Stated by the server rather than guessed at from the key,
+    // because a client that guesses shows a formatting toolbar over a setting
+    // that is not HTML, or raw tags to an operator writing prose, and which of
+    // those it does depends on what the setting happens to be called.
+    HTML = 5;
   }
 }
 

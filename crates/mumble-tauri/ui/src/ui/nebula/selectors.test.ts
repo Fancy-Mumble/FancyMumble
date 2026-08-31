@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { useTranslation } from "react-i18next";
 import { hexToHsl } from "@core/utils/colorUtils";
 import type { ChannelEntry, ConnectionStatus, SearchResult, UserEntry } from "@core/types";
 import {
@@ -10,7 +11,6 @@ import {
   groupMessagesByDay,
   groupSavedServers,
   isEncryptedChannel,
-  listDirectConversations,
   orderChannels,
   preferredIdentity,
   presenceLabel,
@@ -51,6 +51,10 @@ function user(session: number, name: string, channelId = 0): UserEntry {
     priority_speaker: false,
   } as UserEntry;
 }
+
+/** The suite-wide react-i18next mock answers from the real English
+ *  catalogue, so these assertions stay written in English. */
+const { t } = useTranslation("nebulaCommon");
 
 describe("orderChannels", () => {
   const tree = [
@@ -143,19 +147,19 @@ describe("channelPresence", () => {
 
 describe("presenceLabel", () => {
   it("says both numbers when they differ", () => {
-    expect(presenceLabel({ inVoice: 3, members: 5 })).toBe("3 in voice · 5 members");
+    expect(presenceLabel(t, { inVoice: 3, members: 5 })).toBe("3 in voice · 5 members");
   });
 
   it("drops the membership when it only restates who is present", () => {
-    expect(presenceLabel({ inVoice: 5, members: 5 })).toBe("5 in voice");
+    expect(presenceLabel(t, { inVoice: 5, members: 5 })).toBe("5 in voice");
   });
 
   it("counts one member singly", () => {
-    expect(presenceLabel({ inVoice: 0, members: 1 })).toBe("0 in voice · 1 member");
+    expect(presenceLabel(t, { inVoice: 0, members: 1 })).toBe("0 in voice · 1 member");
   });
 
   it("says an empty channel is empty", () => {
-    expect(presenceLabel({ inVoice: 0, members: 0 })).toBe("Nobody here");
+    expect(presenceLabel(t, { inVoice: 0, members: 0 })).toBe("Nobody here");
   });
 });
 
@@ -177,39 +181,14 @@ describe("groupMessagesByDay", () => {
   const at = (iso: string) => ({ timestamp: new Date(iso).getTime() });
 
   it("labels the current and previous day by name", () => {
-    const sections = groupMessagesByDay([at("2026-08-21T10:00:00"), at("2026-08-22T10:00:00")], now);
+    const sections = groupMessagesByDay(t, [at("2026-08-21T10:00:00"), at("2026-08-22T10:00:00")], now);
     expect(sections.map((section) => section.label)).toEqual(["Yesterday", "Today"]);
   });
 
   it("keeps timestamp-less legacy messages in the open section", () => {
-    const sections = groupMessagesByDay([at("2026-08-22T10:00:00"), { timestamp: null }], now);
+    const sections = groupMessagesByDay(t, [at("2026-08-22T10:00:00"), { timestamp: null }], now);
     expect(sections).toHaveLength(1);
     expect(sections[0].messages).toHaveLength(2);
-  });
-});
-
-describe("listDirectConversations", () => {
-  it("floats unread threads above everything else", () => {
-    const result = listDirectConversations({
-      users: [user(1, "Adam"), user(2, "Zoe"), user(3, "Me")],
-      ownSession: 3,
-      history: new Map(),
-      unreadCounts: { 2: 4 },
-      query: "",
-    });
-    expect(result.map((entry) => entry.user.name)).toEqual(["Zoe", "Adam"]);
-    expect(result[0].unread).toBe(4);
-  });
-
-  it("never lists the local user as a conversation partner", () => {
-    const result = listDirectConversations({
-      users: [user(1, "Adam"), user(3, "Me")],
-      ownSession: 3,
-      history: new Map(),
-      unreadCounts: {},
-      query: "",
-    });
-    expect(result.map((entry) => entry.user.session)).toEqual([1]);
   });
 });
 
@@ -466,7 +445,7 @@ describe("quickSwitchTargets", () => {
   const input = { channels, users, sessions, ownSession: 7, query: "" };
 
   it("offers channels, then people, then the servers that are open", () => {
-    expect(quickSwitchTargets(input).map((target) => [target.kind, target.label])).toEqual([
+    expect(quickSwitchTargets({ ...input, t }).map((target) => [target.kind, target.label])).toEqual([
       ["channel", "Root"],
       ["channel", "Gaming"],
       ["person", "Ada"],
@@ -477,13 +456,13 @@ describe("quickSwitchTargets", () => {
   it("matches the detail line as well as the name", () => {
     // The address is not in any label, so finding a server by it proves the
     // detail line is searched too.
-    expect(quickSwitchTargets({ ...input, query: "magical.rocks:64738" })).toHaveLength(1);
-    expect(quickSwitchTargets({ ...input, query: "gam" }).map((target) => target.label)).toEqual(["Gaming"]);
+    expect(quickSwitchTargets({ ...input, t, query: "magical.rocks:64738" })).toHaveLength(1);
+    expect(quickSwitchTargets({ ...input, t, query: "gam" }).map((target) => target.label)).toEqual(["Gaming"]);
   });
 
   it("keeps the list short enough to scan", () => {
     const many = Array.from({ length: 40 }, (_, index) => channel({ id: index + 2 }));
-    expect(quickSwitchTargets({ ...input, channels: many, limit: 5 })).toHaveLength(5);
+    expect(quickSwitchTargets({ ...input, t, channels: many, limit: 5 })).toHaveLength(5);
   });
 });
 
@@ -516,7 +495,7 @@ describe("globalSearchRows", () => {
   }
 
   it("rests on somewhere to go before anything is typed", () => {
-    expect(globalSearchRows(input).map((row) => [row.kind, row.title])).toEqual([
+    expect(globalSearchRows({ ...input, t }).map((row) => [row.kind, row.title])).toEqual([
       ["channel", "Root"],
       ["channel", "Gaming"],
       ["person", "Ada"],
@@ -525,12 +504,13 @@ describe("globalSearchRows", () => {
   });
 
   it("says how busy a channel is and which server it is on", () => {
-    const gaming = globalSearchRows({ ...input, query: "gam" })[0];
+    const gaming = globalSearchRows({ ...input, t, query: "gam" })[0];
     expect(gaming).toMatchObject({ kind: "channel", meta: "3 people here", subtitle: "magical.rocks" });
   });
 
   it("counts one occupant as a person, not as people", () => {
     const rows = globalSearchRows({
+      t,
       ...input,
       channels: [channel({ id: 1, name: "Gaming", user_count: 1 })],
       query: "gam",
@@ -539,12 +519,13 @@ describe("globalSearchRows", () => {
   });
 
   it("places someone still on the roster in voice, and anyone else in a message", () => {
-    const [present] = globalSearchRows({ ...input, query: "Ada" });
+    const [present] = globalSearchRows({ ...input, t, query: "Ada" });
     expect(present).toMatchObject({ subtitle: "in voice · # Gaming", online: true, opens: "person" });
 
     // A message from someone who has since left still names them, but there is
     // no seat to send the reader to.
     const departed = globalSearchRows({
+      t,
       ...input,
       users: [user(7, "ZewiWin", 1)],
       results: [{ category: "user", score: 0, title: "Ada", subtitle: null, id: 8, string_id: null }],
@@ -556,13 +537,14 @@ describe("globalSearchRows", () => {
   it("keeps matching locally while the backend has answered with nothing", () => {
     // The backend is a debounce and an IPC round trip behind the keystroke; a
     // channel the window already knows about must not disappear in the gap.
-    expect(globalSearchRows({ ...input, query: "Gaming", results: [] }).map((row) => row.title)).toEqual([
+    expect(globalSearchRows({ ...input, t, query: "Gaming", results: [] }).map((row) => row.title)).toEqual([
       "Gaming",
     ]);
   });
 
   it("does not list a channel twice when both sources find it", () => {
     const rows = globalSearchRows({
+      t,
       ...input,
       query: "Gaming",
       results: [{ category: "channel", score: 0, title: "Gaming", subtitle: null, id: 1, string_id: null }],
@@ -572,6 +554,7 @@ describe("globalSearchRows", () => {
 
   it("lays a message out as its sender, its place and its time", () => {
     const rows = globalSearchRows({
+      t,
       ...input,
       query: "game",
       results: [messageResult({ sender_name: "enot", sender_session: 8, timestamp: 1_787_403_060_000 })],
@@ -589,6 +572,7 @@ describe("globalSearchRows", () => {
 
   it("sends a direct message to the conversation, not to the channel that shares its number", () => {
     const rows = globalSearchRows({
+      t,
       ...input,
       query: "game",
       results: [messageResult({ sender_name: "enot", sender_session: 8, dm: true })],
@@ -600,6 +584,7 @@ describe("globalSearchRows", () => {
     // A message that says exactly what was typed is what was being looked for;
     // a channel that merely contains those letters must not bury it.
     const rows = globalSearchRows({
+      t,
       ...input,
       channels: [channel({ id: 1, name: "latest testing protocols" })],
       query: "test",
@@ -611,6 +596,7 @@ describe("globalSearchRows", () => {
 
   it("ranks inside a group by the match as well", () => {
     const rows = globalSearchRows({
+      t,
       ...input,
       channels: [channel({ id: 1, name: "Gaming and other pastimes" }), channel({ id: 2, name: "Gaming" })],
       query: "Gaming",
@@ -622,7 +608,7 @@ describe("globalSearchRows", () => {
   });
 
   it("keeps the canonical order while nothing has been typed", () => {
-    expect([...new Set(globalSearchRows(input).map((row) => row.kind))]).toEqual([
+    expect([...new Set(globalSearchRows({ ...input, t }).map((row) => row.kind))]).toEqual([
       "channel",
       "person",
       "server",
@@ -634,7 +620,7 @@ describe("globalSearchRows", () => {
     // with them, and the people and messages never appeared. More channels
     // here than the local matcher's own cap, which was where they were lost.
     const many = Array.from({ length: 60 }, (_, index) => channel({ id: index + 1 }));
-    const rows = globalSearchRows({ ...input, channels: many });
+    const rows = globalSearchRows({ ...input, t, channels: many });
     expect(rows.filter((row) => row.kind === "channel")).toHaveLength(6);
     expect(rows.some((row) => row.kind === "person")).toBe(true);
     expect(rows.some((row) => row.kind === "server")).toBe(true);

@@ -48,7 +48,7 @@ const RESET_STORES = ["preferences.json", "servers.json", "shortcuts.json", "pro
  * the app in a state the user cannot explain.
  */
 export function AdvancedSettings() {
-  const { t } = useTranslation(["settings", "common"]);
+  const { t } = useTranslation(["settings", "nebulaSettings", "common"]);
   const { prefs, set, toggle } = usePreferenceSettings();
   const [minimalUi, setMinimalUi] = useState(false);
   const [confirmingMinimal, setConfirmingMinimal] = useState(false);
@@ -90,7 +90,7 @@ export function AdvancedSettings() {
       const { save } = await import("@tauri-apps/plugin-dialog");
       const dest = await save({
         defaultPath: "fancy-mumble-logs.log.zst",
-        filters: [{ name: "zstd log archive", extensions: ["zst"] }],
+        filters: [{ name: t("nebulaSettings:advanced.logArchive"), extensions: ["zst"] }],
       });
       if (!dest) return;
       await invoke("export_logs", { destPath: dest });

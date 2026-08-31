@@ -222,6 +222,30 @@ describe("slider commits over an animated wallpaper", () => {
   });
 });
 
+describe("how the message river is drawn", () => {
+  it("writes the text-size preset the chat reads", async () => {
+    await renderPage();
+    fireEvent.click(screen.getByRole("radio", { name: "Small" }));
+
+    await waitFor(() => expect(writes.at(-1)?.fontSize).toBe("small"));
+  });
+
+  it("keeps the per-pixel size behind expert mode", async () => {
+    await renderPage();
+    expect(screen.queryByLabelText("Custom size")).toBeNull();
+  });
+
+  it("writes compact mode and always-visible actions", async () => {
+    await renderPage();
+
+    fireEvent.click(screen.getByLabelText("Compact mode"));
+    await waitFor(() => expect(writes.at(-1)?.compactMode).toBe(true));
+
+    fireEvent.click(screen.getByLabelText("Always show message actions"));
+    await waitFor(() => expect(writes.at(-1)?.alwaysShowMessageActions).toBe(true));
+  });
+});
+
 describe("failure honesty", () => {
   it("says so when the record write is refused instead of looking like it worked", async () => {
     pickChatBackground.mockResolvedValue({ kind: "image", fileName: "image-a.jpg" });

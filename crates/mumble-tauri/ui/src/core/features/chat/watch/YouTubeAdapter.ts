@@ -15,6 +15,7 @@ export class YouTubeAdapter implements PlayerAdapter {
   private readonly mountId: string;
   private readonly videoId: string;
   private onLocalEvent?: (event: LocalPlayerEvent) => void;
+  private readonly controls: boolean;
   private readonly mountDiv: HTMLDivElement;
   private player: YTPlayer | null = null;
   private suppressEvents = false;
@@ -22,6 +23,7 @@ export class YouTubeAdapter implements PlayerAdapter {
 
   constructor(args: PlayerAdapterArgs) {
     this.onLocalEvent = args.onLocalEvent;
+    this.controls = args.controls !== false;
     this.videoId = extractYouTubeId(args.sourceUrl);
     this.mountId = `yt-${Math.random().toString(36).slice(2)}`;
     this.mountDiv = document.createElement("div");
@@ -62,6 +64,11 @@ export class YouTubeAdapter implements PlayerAdapter {
     return this.player?.getCurrentTime?.() ?? 0;
   }
 
+  duration(): number {
+    // 0 before the video is cued, which is the same answer we want.
+    return this.player?.getDuration?.() ?? 0;
+  }
+
   setOnLocalEvent(cb: ((event: LocalPlayerEvent) => void) | undefined): void {
     this.onLocalEvent = cb;
   }
@@ -83,7 +90,7 @@ export class YouTubeAdapter implements PlayerAdapter {
     await new Promise<void>((resolve) => {
       this.player = new YT.Player(this.mountId, {
         videoId: this.videoId,
-        playerVars: { playsinline: 1, rel: 0 },
+        playerVars: { playsinline: 1, rel: 0, controls: this.controls ? 1 : 0 },
         events: {
           onReady: () => resolve(),
           onStateChange: this.handleStateChange,
@@ -143,6 +150,7 @@ interface YTPlayer {
   pauseVideo(): void;
   seekTo(seconds: number, allowSeekAhead: boolean): void;
   getCurrentTime(): number;
+  getDuration(): number;
   destroy(): void;
 }
 

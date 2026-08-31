@@ -301,5 +301,34 @@
     "youLabel": "Du",
     "openSettings": "Einstellungen öffnen",
     "noMatches": "Keine Freunde entsprechen deiner Suche."
+  },
+  "onboarding": {
+    "subtitle": "Richten wir Fancy Mumble in ein paar schnellen Schritten ein.",
+    "stepOf": "Schritt {{current}} von {{total}}",
+    "next": "Weiter",
+    "back": "Zurück",
+    "finish": "Los geht's",
+    "steps": {
+      "identity": "Identität",
+      "interface": "Oberfläche",
+      "appearance": "Aussehen",
+      "ready": "Fertig"
+    },
+    "identity": {
+      "title": "Wie sollen wir dich nennen?",
+      "hint": "Diesen Namen sehen die anderen. Pro Server kannst du später einen anderen Namen verwenden."
+    },
+    "interface": {
+      "title": "Wähle deine Oberfläche",
+      "hint": "Du kannst jederzeit in den Einstellungen wechseln."
+    },
+    "appearance": {
+      "title": "Wähle ein Theme",
+      "hint": "Mach es zu deinem — in den Einstellungen gibt es noch viel mehr."
+    },
+    "ready": {
+      "title": "Alles bereit, {{name}}!",
+      "hint": "Leg los und verbinde dich mit deinem ersten Server."
+    }
   }
 }

@@ -7,8 +7,10 @@
  * component body. Keeping them pure means the layout decisions they encode
  * (ordering, indent depth, what counts as "today") are testable on their own.
  */
+import type { useTranslation } from "react-i18next";
 import { htmlToMarkdown, markdownToHtml } from "@standard/components/chat/markdown/MarkdownInput";
 import { hslToHex } from "@core/utils/colorUtils";
+import { formatTimestamp } from "@core/utils/format";
 import { hueFromKey } from "@shared/profilecard/tint";
 import type {
   ChannelEntry,
@@ -16,6 +18,7 @@ import type {
   KeyHolderEntry,
   SavedServer,
   SearchResult,
+  TimeFormat,
   UserEntry,
 } from "@core/types";
 import {
@@ -47,6 +50,16 @@ export interface ChannelFilter {
  * A channel survives the filter when it matches on its own, and its ancestors
  * are always kept so a deep match never appears detached from its parent.
  */
+/**
+ * The `t` the label-producing selectors take.
+ *
+ * They stay pure - the sentence is still decided here and only its wording
+ * comes from outside - so their tests need no i18n runtime, just a stub.  The
+ * type is derived from the hook so a caller's `t` always fits: everything
+ * these functions say lives in `nebulaCommon`.
+ */
+export type SelectorT = ReturnType<typeof useTranslation<"nebulaCommon">>["t"];
+
 export function orderChannels(input: ChannelFilter): OrderedChannel[] {
   const candidates = input.channels.filter((channel) => !channel.detached);
   const byId = new Map(candidates.map((channel) => [channel.id, channel]));
@@ -168,11 +181,11 @@ export function channelPresence(
  * ordinary channel, where everyone who belongs is present, "5 in voice ·
  * 5 members" says one thing twice.
  */
-export function presenceLabel(presence: ChannelPresence): string {
-  if (presence.members === 0) return "Nobody here";
-  const voice = `${presence.inVoice} in voice`;
+export function presenceLabel(t: SelectorT, presence: ChannelPresence): string {
+  if (presence.members === 0) return t("presence.nobodyHere");
+  const voice = t("presence.inVoice", { count: presence.inVoice });
   if (presence.members <= presence.inVoice) return voice;
-  return `${voice} · ${presence.members} ${presence.members === 1 ? "member" : "members"}`;
+  return t("presence.withMembers", { voice, count: presence.members });
 }
 
 /**
@@ -291,6 +304,7 @@ function dayKey(date: Date): string {
  * changes just because a sender's client is old.
  */
 export function groupMessagesByDay<T extends { timestamp?: number | null }>(
+  t: SelectorT,
   messages: readonly T[],
   now: Date = new Date(),
 ): DaySection<T>[] {
@@ -310,9 +324,9 @@ export function groupMessagesByDay<T extends { timestamp?: number | null }>(
     }
     const label =
       key === today
-        ? "Today"
+        ? t("day.today")
         : key === yesterday
-          ? "Yesterday"
+          ? t("day.yesterday")
           : new Date(stamp ?? now.getTime()).toLocaleDateString(undefined, {
               weekday: "short",
               day: "numeric",
@@ -321,57 +335,6 @@ export function groupMessagesByDay<T extends { timestamp?: number | null }>(
     sections.push({ key, label, messages: [message] });
   }
   return sections;
-}
-
-export interface DirectConversation {
-  user: UserEntry;
-  /** Rendered preview of the most recent message, or null when there is none. */
-  preview: string | null;
-  timestamp: number | null;
-  unread: number;
-}
-
-/**
- * The Messages list: everyone with DM history first (most recent first), then
- * the rest of the server so a conversation can be started with anyone.
- */
-export function listDirectConversations(input: {
-  users: readonly UserEntry[];
-  ownSession: number | null;
-  /** Known thread tails, keyed by partner session. The store only keeps the
-   *  open conversation in memory, so most entries are absent and the row falls
-   *  back to a name-only preview. */
-  history: ReadonlyMap<number, readonly { body: string; timestamp?: number | null }[]>;
-  unreadCounts: ReadonlyMap<number, number> | Record<number, number>;
-  query: string;
-}): DirectConversation[] {
-  const counts: ReadonlyMap<number, number> =
-    input.unreadCounts instanceof Map
-      ? input.unreadCounts
-      : new Map(Object.entries(input.unreadCounts).map(([key, value]) => [Number(key), value]));
-  const unreadOf = (session: number) => counts.get(session) ?? 0;
-  const needle = input.query.trim().toLocaleLowerCase();
-
-  return input.users
-    .filter((user) => user.session !== input.ownSession)
-    .filter((user) => !needle || user.name.toLocaleLowerCase().includes(needle))
-    .map((user) => {
-      const thread = input.history.get(user.session) ?? [];
-      const last = thread.at(-1);
-      return {
-        user,
-        preview: last ? plainText(last.body) : null,
-        timestamp: last?.timestamp ?? null,
-        unread: unreadOf(user.session),
-      };
-    })
-    .sort(
-      (left, right) =>
-        Number(right.unread > 0) - Number(left.unread > 0) ||
-        Number(right.timestamp != null) - Number(left.timestamp != null) ||
-        (right.timestamp ?? 0) - (left.timestamp ?? 0) ||
-        left.user.name.localeCompare(right.user.name),
-    );
 }
 
 /** Message bodies are HTML; sidebar previews want one line of text. */
@@ -455,9 +418,43 @@ export function editableText(body: string): string {
 }
 
 /** `18:06` in the user's locale, matching the mock's message stamps. */
-export function formatTime(timestamp: number | null | undefined): string {
+/**
+ * The clock settings a timestamp is read under.
+ *
+ * Three separate preferences decide what "14:05" should say, and a reading
+ * that consults none of them is not a shorter answer but a different one: the
+ * user picked 12-hour and got 24, or asked for the server's time and got their
+ * own. They travel together because they are only ever used together.
+ */
+export interface TimeDisplay {
+  /** "12h", "24h", or "auto" - follow the operating system. */
+  timeFormat: TimeFormat;
+  /** False reads the stamp in UTC, which is what "show server time" asks for. */
+  localTime: boolean;
+  /** What the OS reports for "auto"; undefined falls back to `Intl`. */
+  systemUses24h: boolean | undefined;
+}
+
+/** What the clock reads as before the stored preferences have arrived. */
+export const DEFAULT_TIME_DISPLAY: TimeDisplay = {
+  timeFormat: "auto",
+  localTime: true,
+  systemUses24h: undefined,
+};
+
+/**
+ * A message's time of day, under the reader's own settings.
+ *
+ * The formatting itself is core's, shared with Standard: a clock that differs
+ * between two designs of the same client is a bug in whichever one you are not
+ * looking at. Nebula's Language & format page writes exactly these fields.
+ */
+export function formatTime(
+  timestamp: number | null | undefined,
+  display: TimeDisplay = DEFAULT_TIME_DISPLAY,
+): string {
   if (!timestamp) return "";
-  return new Date(timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return formatTimestamp(timestamp, display.timeFormat, display.localTime, display.systemUses24h);
 }
 
 export interface ServerGroup {
@@ -776,6 +773,8 @@ export interface QuickSwitchTarget {
 
 /** Everything the quick switcher can reach, before the query narrows it. */
 export interface QuickSwitchInput {
+  /** Rides in the input so the whole matching chain can name what it found. */
+  t: SelectorT;
   channels: readonly ChannelEntry[];
   users: readonly UserEntry[];
   sessions: readonly (GroupableSession & { label?: string })[];
@@ -798,6 +797,7 @@ export interface QuickSwitchInput {
  * open with yourself.
  */
 export function quickSwitchTargets(input: QuickSwitchInput): QuickSwitchTarget[] {
+  const { t } = input;
   const targets: QuickSwitchTarget[] = [
     ...input.channels
       .filter((channel) => !channel.detached)
@@ -806,7 +806,7 @@ export function quickSwitchTargets(input: QuickSwitchInput): QuickSwitchTarget[]
         kind: "channel" as const,
         id: channel.id,
         label: channel.name,
-        detail: channel.user_count === 1 ? "1 person here" : `${channel.user_count} people here`,
+        detail: t("jump.peopleHere", { count: channel.user_count }),
       })),
     ...input.users
       .filter((user) => user.session !== input.ownSession)
@@ -815,7 +815,7 @@ export function quickSwitchTargets(input: QuickSwitchInput): QuickSwitchTarget[]
         kind: "person" as const,
         id: user.session,
         label: user.name,
-        detail: "Direct message",
+        detail: t("app.directMessage"),
       })),
     ...input.sessions.filter(isLive).map((session) => ({
       key: `server-${session.id}`,
@@ -885,6 +885,8 @@ export interface GlobalSearchRow {
 
 /** Everything the global search draws from, for one query. */
 export interface GlobalSearchInput {
+  /** Rides in the input so the whole matching chain can name what it found. */
+  t: SelectorT;
   /** What `super_search` answered with. Empty while the query is blank - the
    *  backend has nothing to fuzzy-match against and returns nothing. */
   results: readonly SearchResult[];
@@ -895,6 +897,8 @@ export interface GlobalSearchInput {
   /** How the server the results came from is named under a channel. */
   serverLabel: string;
   query: string;
+  /** The clock a matched message's time is read under. */
+  time?: TimeDisplay;
 }
 
 /** Kinds in the order the mock heads them, and the tie-break when two groups
@@ -930,11 +934,12 @@ function substringScore(query: string, text: string): number | null {
   return haystack.length - needle.length;
 }
 
-function occupancy(count: number): string {
-  return count === 1 ? "1 person here" : `${count} people here`;
+function occupancy(t: SelectorT, count: number): string {
+  return t("jump.peopleHere", { count });
 }
 
 function channelRow(
+  t: SelectorT,
   id: number,
   fallbackName: string,
   channel: ChannelEntry | undefined,
@@ -949,7 +954,7 @@ function channelRow(
     title: channel?.name ?? fallbackName,
     context: null,
     subtitle: serverLabel,
-    meta: occupancy(count),
+    meta: occupancy(t, count),
     occupied: count > 0,
     score,
     opens: "channel",
@@ -959,6 +964,7 @@ function channelRow(
 }
 
 function personRow(
+  t: SelectorT,
   session: number,
   fallbackName: string,
   user: UserEntry | undefined,
@@ -976,7 +982,7 @@ function personRow(
     // Everyone on a Mumble server occupies a channel, so a person the roster
     // still knows is by definition reachable in voice; one who has left is
     // only somebody to write to.
-    subtitle: seat ? `in voice · # ${seat.name}` : "Direct message",
+    subtitle: seat ? t("jump.inVoiceChannel", { channel: seat.name }) : t("app.directMessage"),
     meta: "",
     occupied: false,
     score,
@@ -1020,11 +1026,11 @@ function matchedRows(input: GlobalSearchInput): GlobalSearchRow[] {
     if (result.category === "channel") {
       const channel = input.channels.find((entry) => entry.id === result.id);
       if (channel?.detached) continue;
-      rows.push(channelRow(result.id, result.title, channel, input.serverLabel, result.score));
+      rows.push(channelRow(input.t, result.id, result.title, channel, input.serverLabel, result.score));
     } else if (result.category === "user") {
       if (result.id === input.ownSession) continue;
       const user = input.users.find((entry) => entry.session === result.id);
-      rows.push(personRow(result.id, result.title, user, input.channels, result.score));
+      rows.push(personRow(input.t, result.id, result.title, user, input.channels, result.score));
     } else {
       const message = result.message;
       if (!message) continue;
@@ -1038,7 +1044,7 @@ function matchedRows(input: GlobalSearchInput): GlobalSearchRow[] {
         title: message.sender_name,
         context: message.context,
         subtitle: plainText(result.title),
-        meta: formatTime(message.timestamp),
+        meta: formatTime(message.timestamp, input.time),
         occupied: false,
         score: result.score,
         opens: message.dm ? "person" : "channel",
@@ -1080,6 +1086,7 @@ function localRows(input: GlobalSearchInput): GlobalSearchRow[] {
     if (target.kind === "channel") {
       const id = Number(target.id);
       return channelRow(
+        input.t,
         id,
         target.label,
         input.channels.find((channel) => channel.id === id),
@@ -1090,6 +1097,7 @@ function localRows(input: GlobalSearchInput): GlobalSearchRow[] {
     if (target.kind === "person") {
       const session = Number(target.id);
       return personRow(
+        input.t,
         session,
         target.label,
         input.users.find((user) => user.session === session),

@@ -80,7 +80,19 @@
     "forever": "0 = 永久",
     "saving": "保存中…",
     "create": "创建",
-    "save": "保存"
+    "save": "保存",
+    "hiddenLabel": "隐藏频道（只有受邀用户可以看到）",
+    "inviteesLabel": "邀请用户",
+    "inviteesPlaceholder": "按名称或 ID 添加用户",
+    "expiryModeLabel": "自动删除",
+    "expiryNone": "永不",
+    "expiryAbsolute": "在固定时间后",
+    "expirySliding": "在闲置之后",
+    "expiryAfterLabel": "删除延迟",
+    "unitSeconds": "秒",
+    "unitHours": "小时",
+    "unitDays": "天",
+    "unitWeeks": "周"
   },
   "channelSidebar": {
     "endCall": "结束通话",
