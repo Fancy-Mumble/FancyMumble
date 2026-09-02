@@ -18,6 +18,7 @@
 @import "./themes/midnight-pretenders.css";
 @import "./themes/ply.css";
 @import "./themes/guardbase.css";
+@import "./themes/aurora.css";
 
 :root {
   /* -- Glass effect ---------------------------------------------- */

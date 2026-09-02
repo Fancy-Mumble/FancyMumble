@@ -44,6 +44,22 @@ export interface LightboxProps {
   readonly systemUses24h?: boolean;
 }
 
+/**
+ * A media URL reduced to the form the browser would load it as.
+ *
+ * Only ever used to compare two spellings of one picture, so a `data:` URI -
+ * which `URL` will happily parse and which can be megabytes long - is returned
+ * untouched, and anything unparseable falls back to itself.
+ */
+function resolveSrc(src: string): string {
+  if (src.startsWith("data:")) return src;
+  try {
+    return new URL(src, document.baseURI).href;
+  } catch {
+    return src;
+  }
+}
+
 function getItemDisplaySrc(item: MediaItem, resolved: Map<string, string>): string {
   if (item.offloadedMessageId) {
     const key = `${item.offloadedMessageId}:${item.offloadedMediaIndex ?? 0}`;
@@ -582,7 +598,18 @@ export const Lightbox = forwardRef<LightboxHandle, LightboxProps>(function Light
 
   const handleOpenLightbox = useCallback(
     (src: string) => {
-      const idx = allMedia.findIndex((m) => m.src === src);
+      const exact = allMedia.findIndex((m) => m.src === src);
+      if (exact >= 0) {
+        setLightboxIndex(exact);
+        return;
+      }
+      // A caller that read the src off a live `<img>` hands over the URL the
+      // browser resolved, which is not always the string the gallery was built
+      // from: a relative path, a bare host and a space in a filename all come
+      // back changed. Comparing what both sides resolve to is the difference
+      // between opening the picture and the click appearing to do nothing.
+      const wanted = resolveSrc(src);
+      const idx = allMedia.findIndex((m) => !!m.src && resolveSrc(m.src) === wanted);
       if (idx >= 0) setLightboxIndex(idx);
     },
     [allMedia],

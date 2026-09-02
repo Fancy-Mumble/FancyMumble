@@ -1,0 +1,79 @@
+{
+  "challenge": {
+    "eyebrow": "安全连接",
+    "titleTotp": "双重验证",
+    "titlePassword": "需要服务器密码",
+    "titleUsername": "以其他名称连接",
+    "intro": "以 {{username}} 身份连接到 {{target}}。",
+    "usernameIntro": "{{host}} 不接受该名称。换一个名称，将立即重新尝试连接。",
+    "codeLabel": "六位验证码",
+    "passwordLabel": "服务器密码",
+    "remember": "记住此已保存服务器的密码",
+    "submit": "安全连接"
+  },
+  "reconnect": {
+    "title": "连接中断",
+    "waiting": "等待重新连接",
+    "retryIn": "{{seconds}} 秒后重试",
+    "detail": "{{state}} · 第 {{attempt}} 次尝试",
+    "retryNow": "立即重试"
+  },
+  "quickConnect": {
+    "sectionOpenAsNewTab": "在新标签页中打开",
+    "noneSaved": "尚未保存任何服务器。",
+    "allOpen": "所有已保存的登录都已打开。",
+    "lastJoined": "上次加入 {{when}}",
+    "asIdentity": "以 {{username}} 身份",
+    "addByAddress": "通过地址添加服务器…"
+  },
+  "addServer": {
+    "eyebrowIdentity": "新身份",
+    "eyebrowEdit": "已保存的服务器",
+    "eyebrowServer": "新服务器",
+    "titleIdentity": "以其他身份加入 {{server}}",
+    "titleServer": "添加服务器",
+    "displayName": "显示名称",
+    "address": "地址",
+    "certificate": "证书",
+    "certificateHelp": "可选。证书可让服务器在重新连接后仍认出你。",
+    "anonymous": "匿名连接",
+    "required": "地址、端口和用户名为必填项。"
+  },
+  "leave": {
+    "title": "离开此服务器？",
+    "body": "你将从 {{server}} 断开连接并退出语音。",
+    "leaving": "正在离开…"
+  },
+  "status": {
+    "checkingEllipsis": "检查中…",
+    "offline": "离线",
+    "online": "{{users}} 人在线",
+    "onlineOfMax": "{{users}}/{{max}} 人在线",
+    "checking": "检查中",
+    "latency": "{{ms}} 毫秒",
+    "version": "Mumble {{version}}"
+  },
+  "screen": {
+    "pickTitle": "选择服务器",
+    "pickBody": "从列表中选择一个，或添加新地址。",
+    "joinAs": "以此身份加入",
+    "newIdentity": "+ 新身份",
+    "editIdentity": "编辑 {{username}} 的已保存信息",
+    "certificate": "证书 · {{label}}",
+    "noCertificate": "无证书",
+    "connecting": "连接中…",
+    "connectAs": "以 {{username}} 身份连接",
+    "autoConnect": "自动连接",
+    "autoConnectAria": "启动时自动连接到此服务器"
+  },
+  "livery": {
+    "probing": "正在检查此服务器是否有品牌外观",
+    "live": "正在显示此服务器的品牌外观，来自实时连接",
+    "cached": "正在显示此服务器的品牌外观，已确认为最新",
+    "fetching": "正在加载此服务器的品牌外观",
+    "failed": "此服务器设置了品牌外观，但无法加载",
+    "absent": "此服务器未设置品牌外观",
+    "unverified": "此服务器未提供品牌外观",
+    "unreachable": "无法连接此服务器以检查其品牌外观"
+  }
+}

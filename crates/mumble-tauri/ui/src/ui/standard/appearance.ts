@@ -1,5 +1,5 @@
 import { loadPersonalization } from "./personalizationStorage";
-import { applyTheme, DEFAULT_THEME } from "./themes";
+import { applyColorMode, applyTheme, DEFAULT_THEME } from "./themes";
 import { applyFont } from "@core/utils/fonts";
 import { detectBackdropFilterSupport, isMobile } from "@core/utils/platform";
 
@@ -18,6 +18,7 @@ export function initializeStandardAppearance(): void {
   void loadPersonalization()
     .then((personalization) => {
       applyTheme(personalization.theme);
+      applyColorMode(personalization.colorMode);
       applyFont(personalization.fontFamily);
     })
     .catch(() => applyTheme(DEFAULT_THEME));

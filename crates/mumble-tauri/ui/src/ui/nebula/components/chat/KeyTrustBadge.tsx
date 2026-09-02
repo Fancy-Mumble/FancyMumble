@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Tooltip } from "@mui/material";
 import type { KeyTrustLevel } from "@core/types";
 import { DatabaseIcon, LockIcon, ShieldCheckIcon, ShieldIcon, WarningIcon } from "@ui/icons";
@@ -10,35 +11,35 @@ import { StatChip, type StatChipTone } from "../primitives";
  * apart without reading the colour - the tone is there to make disputed
  * impossible to miss, not to be the only thing that distinguishes it.
  */
-const TRUST: Record<
-  KeyTrustLevel,
-  { label: string; tone: StatChipTone; Icon: typeof ShieldIcon; hint: string }
-> = {
+const TRUST = {
   Verified: {
-    label: "Verified",
+    labelKey: "sidebar:keyTrust.labelVerified",
     tone: "ok",
     Icon: ShieldCheckIcon,
-    hint: "This channel's key is the one you have seen before.",
+    hintKey: "nebulaChat:trust.verifiedHint",
   },
   ManuallyVerified: {
-    label: "Manually verified",
+    labelKey: "nebulaChat:trust.manuallyVerified",
     tone: "ok",
     Icon: ShieldCheckIcon,
-    hint: "You compared this channel's fingerprint yourself.",
+    hintKey: "nebulaChat:trust.manuallyVerifiedHint",
   },
   Unverified: {
-    label: "Unverified",
+    labelKey: "sidebar:keyTrust.labelUnverified",
     tone: "neutral",
     Icon: ShieldIcon,
-    hint: "Nobody has checked this channel's key yet.",
+    hintKey: "nebulaChat:trust.unverifiedHint",
   },
   Disputed: {
-    label: "Disputed",
+    labelKey: "sidebar:keyTrust.labelDisputed",
     tone: "bad",
     Icon: WarningIcon,
-    hint: "Two different keys claim this channel. Compare the fingerprints before trusting it.",
+    hintKey: "nebulaChat:trust.disputedHint",
   },
-};
+} as const satisfies Record<
+  KeyTrustLevel,
+  { labelKey: string; tone: StatChipTone; Icon: typeof ShieldIcon; hintKey: string }
+>;
 
 interface KeyTrustBadgeProps {
   /** Whether the channel's messages are end-to-end encrypted at all. */
@@ -58,12 +59,13 @@ interface KeyTrustBadgeProps {
  * silence is the ordinary case and does not deserve a chip.
  */
 export function KeyTrustBadge({ encrypted, level, onVerify }: Readonly<KeyTrustBadgeProps>) {
+  const { t } = useTranslation(["nebulaChat", "sidebar"]);
   if (!encrypted && !level) return null;
 
   const trust = level ? TRUST[level] : null;
   const Icon = trust?.Icon ?? LockIcon;
-  const label = trust?.label ?? "Encrypted";
-  const hint = trust?.hint ?? "Messages here are end-to-end encrypted.";
+  const label = trust ? t(trust.labelKey) : t("nebulaChat:trust.encrypted");
+  const hint = trust ? t(trust.hintKey) : t("nebulaChat:trust.encryptedHint");
   const action = onVerify
     ? ({
         component: "button",
@@ -74,7 +76,7 @@ export function KeyTrustBadge({ encrypted, level, onVerify }: Readonly<KeyTrustB
     : {};
 
   return (
-    <Tooltip title={onVerify ? `${hint} Click to compare fingerprints.` : hint}>
+    <Tooltip title={onVerify ? t("nebulaChat:trust.clickToCompare", { hint }) : hint}>
       <StatChip tone={trust?.tone ?? "neutral"} {...action}>
         <Icon width={12} height={12} aria-hidden="true" />
         {label}
@@ -91,11 +93,12 @@ export function KeyTrustBadge({ encrypted, level, onVerify }: Readonly<KeyTrustB
  * unable to tell which of the two it was answering.
  */
 export function HistoryBadge() {
+  const { t } = useTranslation("nebulaChat");
   return (
-    <Tooltip title="This channel keeps its history on the server, so messages are here when you come back.">
+    <Tooltip title={t("trust.historyHint")}>
       <StatChip tone="neutral">
         <DatabaseIcon width={12} height={12} aria-hidden="true" />
-        History saved
+        {t("trust.historySaved")}
       </StatChip>
     </Tooltip>
   );

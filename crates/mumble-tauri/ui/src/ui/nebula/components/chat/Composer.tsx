@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Stack } from "../primitives";
 import { Box, IconButton, Menu, MenuItem, Tooltip, Typography } from "@mui/material";
 import { alpha, type SxProps, type Theme } from "@mui/material/styles";
@@ -7,7 +8,16 @@ import { sendPluginInteraction, useAppStore } from "@core/store";
 import { parseMentionTrigger, type MentionTrigger } from "@core/utils/mentions";
 import { collectSlashCommands, filterSlashCommands } from "@core/plugins/tier1/manifest";
 import { extractSlashQuery, parseSlashLine } from "@core/plugins/tier1/slashParser";
-import { AttachIcon, ChevronDownIcon, CloseIcon, ImageIcon, PollIcon, SendIcon, UploadIcon } from "@ui/icons";
+import {
+  AttachIcon,
+  ChevronDownIcon,
+  CloseIcon,
+  FileTextIcon,
+  ImageIcon,
+  PollIcon,
+  SendIcon,
+  UploadIcon,
+} from "@ui/icons";
 import { FormatBar, type FormatAction } from "./FormatBar";
 import { PopoverPanel, PopoverScrim } from "./popover/PopoverPanel";
 import { GIF_POPOVER_WIDTH, GifPopover } from "./popover/GifPopover";
@@ -20,20 +30,24 @@ import {
   shareOptionsReady,
   type ShareOptions,
 } from "./AttachmentTray";
-import MentionAutocomplete, {
+// The keys and the wire format a mention becomes are shared with Standard;
+// only the list itself is redrawn here.
+import {
   candidateInsertText,
   handleMentionKey,
   type MentionCandidate,
 } from "@standard/components/chat/mention/MentionAutocomplete";
+import MentionAutocomplete from "./MentionAutocomplete";
 import { useMentionCandidates } from "@standard/components/chat/mention/useMentionCandidates";
-import SlashCommandMenu, { handleSlashKey } from "@standard/components/plugin/SlashCommandMenu";
+import { handleSlashKey } from "@standard/components/plugin/SlashCommandMenu";
+import SlashCommandMenu from "./SlashCommandMenu";
 import MarkdownInput, { type MarkdownInputApi } from "@standard/components/chat/markdown/MarkdownInput";
 import type { ChatMessage } from "@core/types";
 import type { StagedAttachment, UploadPlaceholder } from "@core/features/chat/useFileUpload";
 import { formatBytes } from "@core/utils/format";
 import { composerHtml, plainText } from "../../selectors";
 import { glassChrome } from "../../theme";
-import { NEBULA_MONO, radius } from "../../tokens";
+import { CHAT_COLUMN_INSET_PX, CHAT_COLUMN_MAX_WIDTH, NEBULA_MONO, radius } from "../../tokens";
 
 /** What the paperclip asks the picker for. */
 export type AttachKind = "any" | "media";
@@ -64,6 +78,9 @@ interface ComposerProps {
   attachBlocked?: string | null;
   /** Post a poll. Absent in DMs, which have no channel to poll. */
   onCreatePoll?: (question: string, options: string[], multiple: boolean) => void;
+  /** Open a Live Doc for this channel. Absent in DMs and wherever the server
+   *  has no live-doc plugin loaded, which is what hides the entry. */
+  onOpenLiveDoc?: () => void;
   /** Whether this server lets a file be reached by link, which is what makes visibility a choice. */
   canSharePublic?: boolean;
   /** Whether this server honours a lifetime on a share at all. */
@@ -101,7 +118,7 @@ interface ComposerProps {
  * artboard's two.
  */
 /** The inset that lets the wallpaper show around all four sides. */
-const PANEL_INSET_PX = 10;
+const PANEL_INSET_PX = CHAT_COLUMN_INSET_PX;
 const PANEL_INSET = `${PANEL_INSET_PX}px`;
 /**
  * Where the composer stops growing.
@@ -110,7 +127,7 @@ const PANEL_INSET = `${PANEL_INSET_PX}px`;
  * text across a metre of glass; below it nothing changes, so a laptop keeps
  * the inset edge to edge.
  */
-const PANEL_MAX_WIDTH = 1360;
+const PANEL_MAX_WIDTH = CHAT_COLUMN_MAX_WIDTH;
 /** The panels that can hang off the composer; "notice" is the one that only says why files cannot be sent. */
 type PopoverKind = "emoji" | "gif" | "poll" | "notice";
 
@@ -125,6 +142,9 @@ const POPUP = {
   left: PANEL_INSET,
   right: PANEL_INSET,
   zIndex: 20,
+  // The lists inside are in flow, so the gap above the composer is the
+  // slot's to keep - the surfaces themselves are reusable anywhere.
+  pb: "6px",
 } as const;
 
 /**
@@ -159,6 +179,10 @@ const FORMAT_BAR = {
  * Standard's too. What is Nebula's is the pill around them, and the bookkeeping
  * that decides when a list should open.
  */
+/** The namespaces this composer reads, so the helper below takes the same `t`. */
+const COMPOSER_NS = ["nebulaChat", "chat", "settings"] as const;
+type ComposerT = ReturnType<typeof useTranslation<typeof COMPOSER_NS>>["t"];
+
 export function Composer({
   target,
   disabled = false,
@@ -167,6 +191,7 @@ export function Composer({
   onAttachFiles,
   attachBlocked = null,
   onCreatePoll,
+  onOpenLiveDoc,
   canSharePublic = false,
   canExpire = false,
   shareOptions = DEFAULT_SHARE_OPTIONS,
@@ -188,6 +213,7 @@ export function Composer({
    * on it anyway, and a boolean also serves the placeholder and the caret,
    * which are drawn by the editor and coloured from out here.
    */
+  const { t } = useTranslation(COMPOSER_NS);
   const [focused, setFocused] = useState(false);
   /**
    * Which popover is open and where its icon is.
@@ -208,6 +234,9 @@ export function Composer({
    * poll opened from the menu still lines up with the row's buttons.
    */
   const [attachMenu, setAttachMenu] = useState<HTMLElement | null>(null);
+  // Anything the menu could still offer once files are refused: a poll and a
+  // document are neither of them a file.
+  const hasAttachMenu = !attachBlocked || Boolean(onCreatePoll) || Boolean(onOpenLiveDoc);
   /** The paperclip itself, for a panel that opens without it being pressed. */
   const attachButton = useRef<HTMLButtonElement>(null);
   /**
@@ -606,14 +635,14 @@ export function Composer({
             ? `linear-gradient(0deg,${alpha(theme.palette.nebula.accent, 0.09)},${alpha(
                 theme.palette.nebula.accent,
                 0.09,
-              )}),${theme.palette.nebula.wash}`
-            : theme.palette.nebula.wash,
+              )}),${theme.palette.nebula.input}`
+            : theme.palette.nebula.input,
           // Stronger than `accentLine`, which is the weight a *resting* accent
           // edge is drawn at - a selected card, a hovered row. This edge is
           // saying where the keyboard is pointed, and over a light scheme's
           // near-white wash a resting weight barely separates from the
           // hairline it replaces.
-          border: `1px solid ${lit ? alpha(theme.palette.nebula.accent, 0.6) : theme.palette.nebula.washLine}`,
+          border: `1px solid ${lit ? alpha(theme.palette.nebula.accent, 0.6) : theme.palette.nebula.line2}`,
           // Enough to lift the panel off the river behind it without the long
           // throw a floating menu gets - it is docked, not floating.
           boxShadow: lit
@@ -660,7 +689,7 @@ export function Composer({
                     {plainText(quote.body)}
                   </Typography>
                   <TrayClose
-                    label={`Stop replying to ${quote.sender_name}`}
+                    label={t("nebulaChat:composer.stopReplying", { name: quote.sender_name })}
                     onClick={() => quote.message_id && onRemoveQuote?.(quote.message_id)}
                   />
                 </Stack>
@@ -712,7 +741,7 @@ export function Composer({
               the click and the file. The other ways in sit behind the
               chevron beside it and behind a right-click on the clip. */}
           <BareButton
-            label={attachBlocked ?? "Attach files"}
+            label={attachBlocked ?? t("nebulaChat:composer.attachFiles")}
             disabled={disabled}
             muted={!!attachBlocked}
             buttonRef={attachButton}
@@ -721,9 +750,10 @@ export function Composer({
               else onAttach?.("any");
             }}
             onContextMenu={(event) => {
-              // Blocked stops files, not the menu: a poll is not a file, and a
-              // server with nothing to say about file sharing still has one.
-              if (!attachBlocked || onCreatePoll) {
+              // Blocked stops files, not the menu: neither a poll nor a
+              // document is a file, and a server with nothing to say about
+              // file sharing still has both.
+              if (hasAttachMenu) {
                 event.preventDefault();
                 setAttachMenu(event.currentTarget);
               }
@@ -731,9 +761,9 @@ export function Composer({
           >
             <AttachIcon width={16} height={16} />
           </BareButton>
-          {(!attachBlocked || onCreatePoll) && (
+          {hasAttachMenu && (
             <BareButton
-              label="More ways to attach"
+              label={t("nebulaChat:composer.moreWaysToAttach")}
               disabled={disabled}
               active={!!attachMenu}
               size={16}
@@ -748,7 +778,7 @@ export function Composer({
           <Box
             component="button"
             type="button"
-            aria-label="Insert a GIF"
+            aria-label={t("nebulaChat:composer.insertGif")}
             disabled={disabled}
             onClick={(event) => openPopover("gif", event, GIF_POPOVER_WIDTH)}
             sx={(theme) => ({
@@ -760,7 +790,10 @@ export function Composer({
               fontSize: 10,
               fontWeight: 600,
               letterSpacing: "0.03em",
-              color: theme.palette.nebula.muted,
+              // The one badge several skins invert outright - Midnight runs cyan
+              // on a bottle-green chip, Mobel and Ply leave it as plain type.
+              background: theme.palette.nebula.gifBg,
+              color: theme.palette.nebula.gifText,
               "&:hover": { background: theme.palette.nebula.hover, color: theme.palette.nebula.text },
             })}
           >
@@ -785,7 +818,7 @@ export function Composer({
                 <MenuGlyph>
                   <AttachIcon width={14} height={14} />
                 </MenuGlyph>
-                Browse files…
+                {t("nebulaChat:composer.browseFiles")}
                 <MenuHint>{BROWSE_SHORTCUT}</MenuHint>
               </MenuItem>
             )}
@@ -799,7 +832,7 @@ export function Composer({
                 <MenuGlyph>
                   <ImageIcon width={14} height={14} />
                 </MenuGlyph>
-                Photo or video
+                {t("nebulaChat:composer.photoOrVideo")}
               </MenuItem>
             )}
             {onCreatePoll && (
@@ -812,7 +845,20 @@ export function Composer({
                 <MenuGlyph>
                   <PollIcon width={14} height={14} />
                 </MenuGlyph>
-                Create a poll
+                {t("nebulaChat:composer.createPoll")}
+              </MenuItem>
+            )}
+            {onOpenLiveDoc && (
+              <MenuItem
+                onClick={() => {
+                  setAttachMenu(null);
+                  onOpenLiveDoc();
+                }}
+              >
+                <MenuGlyph>
+                  <FileTextIcon width={14} height={14} />
+                </MenuGlyph>
+                {t("nebulaChat:composer.newDocument")}
               </MenuItem>
             )}
             <Typography
@@ -825,7 +871,9 @@ export function Composer({
                 color: theme.palette.nebula.dim,
               })}
             >
-              {attachBlocked ? `${attachBlocked}.` : "Or just drag files in, or paste from the clipboard."}
+              {attachBlocked
+                ? t("nebulaChat:composer.blockedNote", { reason: attachBlocked })
+                : t("nebulaChat:composer.dragHint")}
             </Typography>
           </Menu>
 
@@ -919,10 +967,12 @@ export function Composer({
             />
           </Box>
 
-          <Tooltip title={uploading ? "Waiting for the upload to finish" : "Send"}>
+          <Tooltip
+            title={uploading ? t("nebulaChat:composer.waitingForUpload") : t("chat:pendingAttachments.send")}
+          >
             <span>
               <IconButton
-                aria-label="Send message"
+                aria-label={t("settings:shortcuts.builtinSendMessage")}
                 disabled={disabled || !sendable || uploading}
                 onClick={submit}
                 sx={(theme) => ({
@@ -970,7 +1020,9 @@ export function Composer({
             <Box sx={(theme) => ({ display: "flex", color: theme.palette.nebula.accent })}>
               <UploadIcon width={20} height={20} />
             </Box>
-            <Typography sx={{ fontSize: 14, fontWeight: 600 }}>Drop files to send</Typography>
+            <Typography sx={{ fontSize: 14, fontWeight: 600 }}>
+              {t("nebulaChat:composer.dropFiles")}
+            </Typography>
           </Stack>
         </Box>
       )}
@@ -992,7 +1044,7 @@ export function Composer({
             <PopoverPanel
               width={NOTICE_POPOVER_WIDTH}
               left={popover.left}
-              title="Files"
+              title={t("nebulaChat:composer.files")}
               onClose={() => setPopover(null)}
             >
               <Typography sx={{ px: "14px", py: "14px", fontSize: 13, lineHeight: 1.5 }}>
@@ -1083,6 +1135,7 @@ function TrayClose({ label, onClick }: Readonly<{ label: string; onClick: () => 
  * what keeps the progress attached to the name it belongs to.
  */
 function UploadRow({ upload, onCancel }: Readonly<{ upload: UploadPlaceholder; onCancel: () => void }>) {
+  const { t } = useTranslation(COMPOSER_NS);
   const failed = upload.state === "error";
   // A failure stops the bar where it stopped. Filling it would say the file
   // got there, which is the opposite of what the row underneath says.
@@ -1101,7 +1154,7 @@ function UploadRow({ upload, onCancel }: Readonly<{ upload: UploadPlaceholder; o
           overflow: "hidden",
           borderRadius: radius("md"),
           border: `1px solid ${theme.palette.nebula.line}`,
-          background: theme.palette.nebula.card2,
+          background: theme.palette.nebula.tile,
           fontFamily: NEBULA_MONO,
           fontSize: 9,
           fontWeight: 600,
@@ -1139,7 +1192,7 @@ function UploadRow({ upload, onCancel }: Readonly<{ upload: UploadPlaceholder; o
             color: failed ? theme.palette.nebula.bad : theme.palette.nebula.dim,
           })}
         >
-          {failed ? (upload.errorMessage ?? "Upload failed") : uploadProgressLine(upload)}
+          {failed ? (upload.errorMessage ?? t("chat:upload.failed")) : uploadProgressLine(t, upload)}
         </Typography>
         <Box
           aria-hidden
@@ -1161,7 +1214,10 @@ function UploadRow({ upload, onCancel }: Readonly<{ upload: UploadPlaceholder; o
           />
         </Box>
       </Stack>
-      <TrayClose label={`Cancel upload of ${upload.filename}`} onClick={onCancel} />
+      <TrayClose
+        label={t("nebulaChat:composer.cancelUpload", { filename: upload.filename })}
+        onClick={onCancel}
+      />
     </Stack>
   );
 }
@@ -1173,11 +1229,13 @@ function UploadRow({ upload, onCancel }: Readonly<{ upload: UploadPlaceholder; o
  * estimate only once there is a rate to estimate from - and each is simply
  * left out until it is true, rather than stood in for by a zero.
  */
-function uploadProgressLine(upload: UploadPlaceholder): string {
+function uploadProgressLine(t: ComposerT, upload: UploadPlaceholder): string {
   return [
     upload.totalBytes === undefined ? null : formatBytes(upload.totalBytes),
-    `${upload.progress ?? 0}%`,
-    upload.etaSeconds === undefined ? null : `${upload.etaSeconds}s left`,
+    t("nebulaChat:composer.percent", { value: upload.progress ?? 0 }),
+    upload.etaSeconds === undefined
+      ? null
+      : t("nebulaChat:composer.etaSeconds", { seconds: upload.etaSeconds }),
   ]
     .filter(Boolean)
     .join(" · ");

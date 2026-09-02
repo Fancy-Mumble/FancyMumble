@@ -223,7 +223,7 @@ describe("simulated plugin-data event processing", () => {
     const original: PollPayload = {
       type: "poll",
       id: "roundtrip-reg",
-      question: "Does round-trip work? ??",
+      question: "Does round-trip work? 🎯",
       options: ["Definitely", "Maybe", "No way"],
       multiple: true,
       creator: 55,
@@ -236,7 +236,7 @@ describe("simulated plugin-data event processing", () => {
 
     const stored = useAppStore.getState().polls.get("roundtrip-reg");
     expect(stored).toBeDefined();
-    expect(stored!.question).toBe("Does round-trip work? ??");
+    expect(stored!.question).toBe("Does round-trip work? 🎯");
     expect(stored!.options).toEqual(["Definitely", "Maybe", "No way"]);
     expect(stored!.multiple).toBe(true);
     expect(stored!.channelId).toBe(7);

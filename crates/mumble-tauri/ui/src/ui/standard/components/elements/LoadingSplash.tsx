@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./LoadingSplash.module.css";
-import enCommon from "@core/locales/en/common.json";
+import enCommon from "@core/locales/common/en/common.json";
 
 export const __TEST_FUNNY_MESSAGES: readonly string[] = (
   enCommon as unknown as { loadingSplash: { messages: string[] } }

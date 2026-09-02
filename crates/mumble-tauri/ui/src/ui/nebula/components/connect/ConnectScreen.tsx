@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { Box, Button, CircularProgress, Switch, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, IconButton, Switch, Tooltip, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import { getPreferences, updatePreferences } from "@core/preferencesStorage";
 import { TID } from "@core/testids";
@@ -14,12 +15,13 @@ import {
 } from "../../liveryCache";
 import {
   LIVERY_BUSY,
-  LIVERY_TITLE,
+  LIVERY_TITLE_KEYS,
   LIVERY_TONE,
   resolveLivery,
   type LiveryStatus,
   type ProbeState,
 } from "../../liveryStatus";
+import { EditIcon } from "@ui/icons";
 import { serverTint } from "../../selectors";
 import { UserAvatar, Stack } from "../primitives";
 import { SectionLabel, StatChip } from "../primitives";
@@ -72,12 +74,13 @@ const DOT_COLOURS: Record<"ok" | "warn" | "bad" | "muted", string> = {
 };
 
 function LiveryDot({ status }: Readonly<{ status: LiveryStatus }>) {
+  const { t } = useTranslation("nebulaConnect");
   const tone = LIVERY_TONE[status];
   return (
     <Box
       component="span"
       role="img"
-      aria-label={LIVERY_TITLE[status]}
+      aria-label={t(LIVERY_TITLE_KEYS[status])}
       data-testid={TID.connectLiveryStatus}
       data-livery-status={status}
       sx={() => {
@@ -126,6 +129,15 @@ interface ConnectScreenProps {
   error: string | null;
   onConnect: (identity: SavedServer) => void;
   onAddIdentity: () => void;
+  /**
+   * Change what is saved for one identity - its label, address, name,
+   * certificate or password.
+   *
+   * On the row rather than on the server as a whole, because an identity *is*
+   * the saved record: there is nothing stored about a server that is not
+   * stored on one of these.
+   */
+  onEditIdentity?: (identity: SavedServer) => void;
 }
 
 /**
@@ -144,7 +156,9 @@ export function ConnectScreen({
   error,
   onConnect,
   onAddIdentity,
+  onEditIdentity,
 }: Readonly<ConnectScreenProps>) {
+  const { t } = useTranslation(["nebulaConnect", "server"]);
   const [ping, setPing] = useState<ServerPingResult | null>(null);
   /** What this address said last, from disk or from the fetch below. */
   const [cached, setCached] = useState<CachedLivery | null>(null);
@@ -263,9 +277,9 @@ export function ConnectScreen({
   if (!server)
     return (
       <Stack sx={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 1 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: 15 }}>Pick a server</Typography>
+        <Typography sx={{ fontWeight: 600, fontSize: 15 }}>{t("screen.pickTitle")}</Typography>
         <Typography sx={(theme) => ({ fontSize: 12, color: theme.palette.nebula.muted })}>
-          Choose one from the list, or add a new address.
+          {t("screen.pickBody")}
         </Typography>
       </Stack>
     );
@@ -350,7 +364,7 @@ export function ConnectScreen({
         />
         <Box
           component="span"
-          title={LIVERY_TITLE[resolved.status]}
+          title={t(LIVERY_TITLE_KEYS[resolved.status])}
           sx={{
             position: "absolute",
             top: 14,
@@ -442,7 +456,7 @@ export function ConnectScreen({
         <Stack direction="row" gap={1} sx={{ mt: "12px", flexWrap: "wrap", justifyContent: "center" }}>
           {ping === null ? (
             <StatChip>
-              <CircularProgress size={9} thickness={6} color="inherit" /> checking
+              <CircularProgress size={9} thickness={6} color="inherit" /> {t("status.checking")}
             </StatChip>
           ) : ping.online ? (
             <StatChip tone="ok">
@@ -455,8 +469,9 @@ export function ConnectScreen({
                   background: theme.palette.nebula.ok,
                 })}
               />
-              {ping.user_count ?? 0}
-              {ping.max_user_count ? `/${ping.max_user_count}` : ""} online
+              {ping.max_user_count
+                ? t("status.onlineOfMax", { users: ping.user_count ?? 0, max: ping.max_user_count })
+                : t("status.online", { users: ping.user_count ?? 0 })}
             </StatChip>
           ) : (
             <StatChip tone="dim">
@@ -469,11 +484,13 @@ export function ConnectScreen({
                   background: theme.palette.nebula.dim,
                 })}
               />
-              offline
+              {t("status.offline")}
             </StatChip>
           )}
-          {ping?.latency_ms != null && <StatChip>{ping.latency_ms} ms</StatChip>}
-          {ping?.server_version && <StatChip>Mumble {ping.server_version}</StatChip>}
+          {ping?.latency_ms != null && <StatChip>{t("status.latency", { ms: ping.latency_ms })}</StatChip>}
+          {ping?.server_version && (
+            <StatChip>{t("status.version", { version: ping.server_version })}</StatChip>
+          )}
           {livery?.tags.map((tag) => (
             <StatChip key={tag.label} tone={TAG_TONE[tag.tone]}>
               {tag.href ? (
@@ -521,7 +538,7 @@ export function ConnectScreen({
         )}
 
         <Stack direction="row" alignItems="center" sx={{ width: "100%", mt: "20px", mb: "8px" }}>
-          <SectionLabel>JOIN AS</SectionLabel>
+          <SectionLabel>{t("screen.joinAs")}</SectionLabel>
           <Box
             component="button"
             onClick={onAddIdentity}
@@ -534,7 +551,7 @@ export function ConnectScreen({
               color: theme.palette.nebula.accent,
             })}
           >
-            + New identity
+            {t("screen.newIdentity")}
           </Box>
         </Stack>
 
@@ -564,9 +581,25 @@ export function ConnectScreen({
                     {entry.username}
                   </Typography>
                   <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.muted })}>
-                    {entry.cert_label ? `certificate · ${entry.cert_label}` : "no certificate"}
+                    {entry.cert_label
+                      ? t("screen.certificate", { label: entry.cert_label })
+                      : t("screen.noCertificate")}
                   </Typography>
                 </Box>
+                {onEditIdentity && (
+                  <Tooltip title={t("server:edit.title")}>
+                    <IconButton
+                      aria-label={t("nebulaConnect:screen.editIdentity", { username: entry.username })}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onEditIdentity(entry);
+                      }}
+                      sx={{ flex: "none" }}
+                    >
+                      <EditIcon width={13} height={13} />
+                    </IconButton>
+                  </Tooltip>
+                )}
                 <Box
                   sx={(theme) => ({
                     width: 16,
@@ -590,7 +623,7 @@ export function ConnectScreen({
             onClick={() => onConnect(identity)}
             sx={{ flex: 1, height: 42, borderRadius: radius("lg"), fontSize: 13, fontWeight: 600 }}
           >
-            {connecting ? "Connecting…" : `Connect as ${identity.username}`}
+            {connecting ? t("screen.connecting") : t("screen.connectAs", { username: identity.username })}
           </Button>
           <Stack
             direction="row"
@@ -608,9 +641,9 @@ export function ConnectScreen({
                 setAutoConnectId(next);
                 void updatePreferences({ autoConnectServerId: next });
               }}
-              slotProps={{ input: { "aria-label": "Connect to this server automatically at launch" } }}
+              slotProps={{ input: { "aria-label": t("screen.autoConnectAria") } }}
             />
-            Auto-connect
+            {t("screen.autoConnect")}
           </Stack>
         </Stack>
 

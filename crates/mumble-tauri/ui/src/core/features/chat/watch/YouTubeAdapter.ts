@@ -15,6 +15,7 @@ export class YouTubeAdapter implements PlayerAdapter {
   private readonly mountId: string;
   private readonly videoId: string;
   private onLocalEvent?: (event: LocalPlayerEvent) => void;
+  private readonly controls: boolean;
   private readonly mountDiv: HTMLDivElement;
   private player: YTPlayer | null = null;
   private suppressEvents = false;
@@ -22,6 +23,7 @@ export class YouTubeAdapter implements PlayerAdapter {
 
   constructor(args: PlayerAdapterArgs) {
     this.onLocalEvent = args.onLocalEvent;
+    this.controls = args.controls !== false;
     this.videoId = extractYouTubeId(args.sourceUrl);
     this.mountId = `yt-${Math.random().toString(36).slice(2)}`;
     this.mountDiv = document.createElement("div");
@@ -62,6 +64,60 @@ export class YouTubeAdapter implements PlayerAdapter {
     return this.player?.getCurrentTime?.() ?? 0;
   }
 
+  duration(): number {
+    // 0 before the video is cued, which is the same answer we want.
+    return this.player?.getDuration?.() ?? 0;
+  }
+
+  buffered(): number {
+    // YouTube reports a fraction of the whole, not a position.
+    const fraction = this.player?.getVideoLoadedFraction?.() ?? 0;
+    return fraction * this.duration();
+  }
+
+  volume(): number {
+    return (this.player?.getVolume?.() ?? 100) / 100;
+  }
+
+  setVolume(value: number): void {
+    this.player?.setVolume?.(Math.round(Math.min(1, Math.max(0, value)) * 100));
+  }
+
+  muted(): boolean {
+    return this.player?.isMuted?.() ?? false;
+  }
+
+  setMuted(value: boolean): void {
+    if (value) this.player?.mute?.();
+    else this.player?.unMute?.();
+  }
+
+  rate(): number {
+    return this.player?.getPlaybackRate?.() ?? 1;
+  }
+
+  setRate(value: number): void {
+    this.player?.setPlaybackRate?.(value);
+  }
+
+  quality(): string | null {
+    // `hd1080` and friends; `auto` and `unknown` mean it will not say yet.
+    const raw = this.player?.getPlaybackQuality?.();
+    if (!raw || raw === "auto" || raw === "unknown") return null;
+    const lines: Record<string, string> = {
+      tiny: "144p",
+      small: "240p",
+      medium: "360p",
+      large: "480p",
+      hd720: "720p",
+      hd1080: "1080p",
+      hd1440: "1440p",
+      hd2160: "2160p",
+      highres: "4320p",
+    };
+    return lines[raw] ?? null;
+  }
+
   setOnLocalEvent(cb: ((event: LocalPlayerEvent) => void) | undefined): void {
     this.onLocalEvent = cb;
   }
@@ -83,7 +139,7 @@ export class YouTubeAdapter implements PlayerAdapter {
     await new Promise<void>((resolve) => {
       this.player = new YT.Player(this.mountId, {
         videoId: this.videoId,
-        playerVars: { playsinline: 1, rel: 0 },
+        playerVars: { playsinline: 1, rel: 0, controls: this.controls ? 1 : 0 },
         events: {
           onReady: () => resolve(),
           onStateChange: this.handleStateChange,
@@ -143,6 +199,16 @@ interface YTPlayer {
   pauseVideo(): void;
   seekTo(seconds: number, allowSeekAhead: boolean): void;
   getCurrentTime(): number;
+  getDuration(): number;
+  getVideoLoadedFraction(): number;
+  getVolume(): number;
+  setVolume(volume: number): void;
+  isMuted(): boolean;
+  mute(): void;
+  unMute(): void;
+  getPlaybackRate(): number;
+  setPlaybackRate(rate: number): void;
+  getPlaybackQuality(): string;
   destroy(): void;
 }
 

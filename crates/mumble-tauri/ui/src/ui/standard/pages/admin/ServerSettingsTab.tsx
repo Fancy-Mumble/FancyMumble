@@ -26,6 +26,8 @@ import { COUNTRIES, countryName } from "@core/utils/countries";
 import { SelectInput, TextArea, TextInput } from "../../components/elements/TextInput";
 import { Toggle } from "../settings/SharedControls";
 import { useServerSettingsStore } from "@core/features/admin/serverSettingsStore";
+import { isRichTextSetting } from "@core/features/admin/serverSettingKinds";
+import { BioEditor } from "../settings/BioEditor";
 import styles from "./ServerSettingsTab.module.css";
 import tabStyles from "../../components/elements/TabbedPage.module.css";
 
@@ -154,10 +156,39 @@ function CountryField({ setting, value, onChange }: FieldProps) {
   );
 }
 
+/**
+ * How long a welcome text may get.
+ *
+ * Every connecting client is sent this in its `ServerSync`, so it is paid for
+ * on every join rather than once - generous enough for a page of house rules,
+ * short enough that it is not where somebody pastes a picture.
+ */
+const HTML_MAX_LENGTH = 16_000;
+
+/**
+ * A setting whose value is markup, edited as what it renders as.
+ *
+ * The same editor this UI writes bios and channel descriptions with, so the
+ * three surfaces that produce HTML produce the same HTML - and the allow-list
+ * every client puts this through on the way to the screen is what decides what
+ * survives, not this toolbar.
+ */
+function HtmlField({ setting, value, onChange }: FieldProps) {
+  return (
+    <BioEditor
+      value={value}
+      onChange={onChange}
+      ariaLabel={label(setting)}
+      maxLength={HTML_MAX_LENGTH}
+    />
+  );
+}
+
 /** The component-map factory: maps a setting `type` to a form control. */
 const FIELD_FACTORY: Record<string, FieldComponent> = {
   string: TextField,
   text: CodeField,
+  html: HtmlField,
   bool: BoolField,
   int: IntField,
   enum: EnumField,
@@ -165,8 +196,16 @@ const FIELD_FACTORY: Record<string, FieldComponent> = {
   password: PasswordField,
 };
 
-function fieldFor(type: string): FieldComponent {
-  return FIELD_FACTORY[type] ?? TextField;
+/**
+ * The control for one setting.
+ *
+ * Keyed on the declared type, except that a server which says only "text" for
+ * a value that has always been markup still gets the editor - see
+ * `isRichTextSetting`.
+ */
+function fieldFor(setting: ServerSetting): FieldComponent {
+  if (isRichTextSetting(setting)) return HtmlField;
+  return FIELD_FACTORY[setting.type] ?? TextField;
 }
 
 function originalValue(s: ServerSetting): string {
@@ -296,7 +335,7 @@ export function ServerSettingsTab({ setFooter }: Readonly<ServerSettingsTabProps
           <h3 className={styles.groupTitle}>{group}</h3>
           <div className={styles.grid}>
             {items.map((s) => {
-              const Field = fieldFor(s.type);
+              const Field = fieldFor(s);
               return (
                 <div key={s.key} className={styles.row}>
                   <div className={styles.labelCol}>

@@ -1,0 +1,19 @@
+﻿{
+  "miniMode": {
+    "expand": "展开窗口",
+    "latency": "{{ms}} 毫秒",
+    "you": "你"
+  },
+  "search": {
+    "placeholder": "搜索频道、用户和消息",
+    "close": "关闭搜索",
+    "empty": "暂无可跳转的内容。",
+    "noMatch": "没有匹配“{{query}}”的结果。",
+    "headingChannel": "频道",
+    "headingPerson": "用户",
+    "headingMessage": "消息",
+    "headingServer": "服务器",
+    "results_one": "{{count}} 个结果",
+    "results_other": "{{count}} 个结果"
+  }
+}

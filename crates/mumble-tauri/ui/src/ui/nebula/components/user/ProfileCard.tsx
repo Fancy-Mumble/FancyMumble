@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useTheme } from "@mui/material";
 import { useAppStore } from "@core/store";
@@ -63,6 +64,7 @@ function useDismissOnOutsideClick(active: boolean, onClose: () => void): void {
  * a click was going to show.
  */
 export function ProfileCard({ user, anchor, pinned = true, onClose, onMessage }: Readonly<ProfileCardProps>) {
+  const { t } = useTranslation("nebulaUser");
   const tokens = nebulaCardTokens(useTheme().palette.nebula);
   const model = useUserCardModel(user, tokens);
   useDismissOnOutsideClick(pinned, onClose);
@@ -104,7 +106,7 @@ export function ProfileCard({ user, anchor, pinned = true, onClose, onMessage }:
         },
       }}
       trailing={{
-        label: volume === 0 ? "Unmute locally" : "Mute locally",
+        label: volume === 0 ? t("card.unmuteLocally") : t("card.muteLocally"),
         icon: MicOffGlyph,
         active: volume === 0,
         onClick: () => applyVolume(volume === 0 ? 100 : 0),

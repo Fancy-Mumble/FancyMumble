@@ -248,6 +248,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::chat_background::extract_chat_background_poster,
         super::chat_background::store_chat_background_poster,
         super::chat_background::bake_chat_background_video,
+        super::chat_background::prune_chat_backgrounds,
         super::chat_background::clear_chat_background,
         // -- popouts / overlays / window -------------------------------
         super::popout::open_image_popout,

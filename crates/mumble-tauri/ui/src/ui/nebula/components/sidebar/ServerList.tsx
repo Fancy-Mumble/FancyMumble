@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Box, IconButton, Tooltip, Typography } from "@mui/material";
 import type { ServerPingResult } from "@core/types";
 import { StarIcon } from "@ui/icons";
@@ -29,6 +30,7 @@ export function ServerList({
   onSelect,
   onToggleFavorite,
 }: Readonly<ServerListProps>) {
+  const { t } = useTranslation(["nebulaSidebar", "nebulaConnect", "server"]);
   return (
     <Box
       component="ul"
@@ -47,14 +49,17 @@ export function ServerList({
       {groups.map((group) => {
         const active = group.key === selectedKey;
         const ping = pings.get(group.key);
-        const identities = `${group.identities.length} ${
-          group.identities.length === 1 ? "identity" : "identities"
-        }`;
+        const identities = t("nebulaSidebar:servers.identities", { count: group.identities.length });
         const presence = !ping
-          ? "checking…"
+          ? t("nebulaSidebar:servers.checking")
           : ping.online
-            ? `${ping.user_count ?? 0}${ping.max_user_count ? `/${ping.max_user_count}` : ""} online`
-            : "offline";
+            ? ping.max_user_count
+              ? t("nebulaConnect:status.onlineOfMax", {
+                  users: ping.user_count ?? 0,
+                  max: ping.max_user_count,
+                })
+              : t("nebulaConnect:status.online", { users: ping.user_count ?? 0 })
+            : t("nebulaConnect:status.offline");
 
         return (
           <Stack
@@ -83,14 +88,24 @@ export function ServerList({
                 {group.label}
               </Typography>
               <Typography sx={(theme) => ({ fontSize: 11, color: theme.palette.nebula.muted })} noWrap>
-                {group.sessionId ? "connected" : presence} · {identities}
+                {group.sessionId ? t("nebulaSidebar:servers.connected") : presence} · {identities}
               </Typography>
             </Box>
-            <Tooltip title={group.favorite ? "Remove from favourites" : "Add to favourites"}>
+            <Tooltip
+              title={
+                group.favorite
+                  ? t("server:list.removeFromFavorites")
+                  : t("server:list.addToFavorites")
+              }
+            >
               <IconButton
                 size="small"
                 className="nebula-fav"
-                aria-label={group.favorite ? "Remove from favourites" : "Add to favourites"}
+                aria-label={
+                  group.favorite
+                    ? t("server:list.removeFromFavorites")
+                    : t("server:list.addToFavorites")
+                }
                 aria-pressed={group.favorite}
                 onClick={(event) => {
                   event.stopPropagation();

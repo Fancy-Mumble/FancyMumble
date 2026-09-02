@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { LocalPlayerEvent, PlayerAdapter } from "./PlayerAdapter";
 import { useWatchSend } from "./useWatchSend";
+import { applyWatchSyncEvent } from "./watchStore";
 import type { WatchPlaybackState, WatchSession } from "./watchTypes";
 
 /** Drift in seconds at which we re-sync the local adapter. */
@@ -39,6 +40,14 @@ interface Args {
   session: WatchSession;
   /** Local user's session ID, or null when not yet known. */
   ownSession: number | null;
+  /**
+   * Whether to apply the host's state to the local player. Default true.
+   *
+   * A viewer who has stepped out of sync deliberately passes false, which
+   * only stops inbound state - they keep receiving it, so the drift warning
+   * and a later resync still work.
+   */
+  follow?: boolean;
 }
 
 interface UseWatchSyncResult {
@@ -54,7 +63,7 @@ interface UseWatchSyncResult {
   end: () => Promise<void>;
 }
 
-export function useWatchSync({ adapter, session, ownSession }: Args): UseWatchSyncResult {
+export function useWatchSync({ adapter, session, ownSession, follow = true }: Args): UseWatchSyncResult {
   const { sendState, sendStateRequest, sendLeave, sendEnd } = useWatchSend();
   const lastHeartbeatRef = useRef(0);
   const lastSentRef = useRef<{ state: WatchPlaybackState; currentTime: number } | null>(null);
@@ -78,13 +87,21 @@ export function useWatchSync({ adapter, session, ownSession }: Args): UseWatchSy
       if (!isImportant && now - lastHeartbeatRef.current < HOST_HEARTBEAT_MS) return;
       lastHeartbeatRef.current = now;
       lastSentRef.current = { state: event.state, currentTime: event.currentTime };
-      void sendState(session.sessionId, {
-        type: "state",
+      const outgoing = {
+        type: "state" as const,
         state: event.state,
         currentTime: event.currentTime,
         updatedAtMs: now,
         hostSession: session.hostSession,
-      });
+      };
+      // Apply locally as well as sending. The server does not echo to the
+      // sender, so the host's own store would otherwise never learn that the
+      // host started playing - and a surface drawing from `session.state`
+      // would show a paused session over a running video. Only the host takes
+      // this path, and the inbound-state effect below ignores the host, so
+      // there is no loop.
+      applyWatchSyncEvent({ sessionId: session.sessionId, actor: session.hostSession, event: outgoing });
+      void sendState(session.sessionId, outgoing);
     };
     // Adapters expose `setOnLocalEvent` so the same instance can be
     // re-bound across host/non-host transitions without a remount.
@@ -92,20 +109,21 @@ export function useWatchSync({ adapter, session, ownSession }: Args): UseWatchSy
     return () => adapter.setOnLocalEvent(undefined);
   }, [adapter, isHost, sendState, session.sessionId, session.hostSession]);
 
-  // Apply remote authoritative state to the local adapter (non-hosts only).
+  // Apply remote authoritative state to the local adapter (non-hosts only,
+  // and only while this viewer is still following the host).
   // Always follow the host - jumping in the video on the host's side is
   // an authoritative seek, not "drift".  The `outOfSync` flag is reserved
   // for the manual "Resync" button and is currently never raised
   // automatically because every state event causes a re-seek.
   useEffect(() => {
-    if (!adapter || isHost) return;
+    if (!adapter || isHost || !follow) return;
     if (session.updatedAtMs === lastAppliedAtRef.current) return;
     lastAppliedAtRef.current = session.updatedAtMs;
     const expected = projectExpectedTime(session);
     const drift = Math.abs(adapter.currentTime() - expected);
     setOutOfSync(false);
     void applyRemoteState(adapter, session.state, expected, drift);
-  }, [adapter, isHost, session]);
+  }, [adapter, isHost, session, follow]);
 
   const requestState = useCallback(
     () => sendStateRequest(session.sessionId),
